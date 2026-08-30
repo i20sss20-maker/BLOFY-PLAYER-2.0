@@ -41,6 +41,9 @@ interface BlofyDao {
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY name")
     fun streams(providerId: String, kind: String, categoryId: String?): Flow<List<StreamEntity>>
 
+    @Query("SELECT * FROM streams WHERE key = :contentKey LIMIT 1")
+    suspend fun stream(contentKey: String): StreamEntity?
+
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND favorite = 1 ORDER BY name")
     fun favorites(providerId: String): Flow<List<StreamEntity>>
 
