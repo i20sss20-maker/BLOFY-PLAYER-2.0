@@ -71,7 +71,36 @@ jobs:
             http://127.0.0.1:8080/api/v1/activation/check)
           test "$code" = "403"
           grep -q 'activation_code_mismatch' /tmp/bad-code.json
-      - name: Verify admin state changes
+      - name: Verify active expiry and reactivation lifecycle
+        run: |
+          curl --fail --silent -X PATCH \
+            -H 'authorization: Bearer ci-test-admin-token-1234567890' \
+            -H 'content-type: application/json' \
+            -d '{"status":"active","days":30}' \
+            http://127.0.0.1:8080/api/v1/admin/devices/BLOFY-AB12-CD34 | grep -q '"status":"active"'
+
+          curl --fail --silent \
+            -H 'content-type: application/json' \
+            -d '{"deviceId":"BLOFY-AB12-CD34","activationCode":"123456","appVersion":"ci","platform":"android"}' \
+            http://127.0.0.1:8080/api/v1/activation/check | grep -q '"status":"active"'
+
+          curl --fail --silent -X PATCH \
+            -H 'authorization: Bearer ci-test-admin-token-1234567890' \
+            -H 'content-type: application/json' \
+            -d '{"status":"expired"}' \
+            http://127.0.0.1:8080/api/v1/admin/devices/BLOFY-AB12-CD34 | grep -q '"status":"expired"'
+
+          curl --fail --silent \
+            -H 'content-type: application/json' \
+            -d '{"deviceId":"BLOFY-AB12-CD34","activationCode":"123456","appVersion":"ci","platform":"android"}' \
+            http://127.0.0.1:8080/api/v1/activation/check | grep -q '"status":"expired"'
+
+          curl --fail --silent -X PATCH \
+            -H 'authorization: Bearer ci-test-admin-token-1234567890' \
+            -H 'content-type: application/json' \
+            -d '{"status":"active","days":365}' \
+            http://127.0.0.1:8080/api/v1/admin/devices/BLOFY-AB12-CD34 | grep -q '"status":"active"'
+      - name: Verify blocked state
         run: |
           curl --fail --silent -X PATCH \
             -H 'authorization: Bearer ci-test-admin-token-1234567890' \
