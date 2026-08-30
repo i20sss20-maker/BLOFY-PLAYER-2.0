@@ -56,7 +56,8 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Saved-playlist switch/update/delete UI
 - [x] Edit existing saved playlist credentials/details in place
 - [x] QR/barcode on login
-- [ ] Real activation backend/status/expiry flow
+- [x] Activation client flow is backend-ready: configurable endpoint, trial/active/expired/blocked states, expiry, cached offline entitlement and Connect gating
+- [ ] Deploy/configure the real BLOFY activation backend endpoint (external service work)
 
 ## Themes / device classes
 - [x] BLOFY theme profile foundation
