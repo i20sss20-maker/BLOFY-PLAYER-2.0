@@ -1,11 +1,14 @@
 package tv.blofy.player.ui.settings
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.InputType
 import android.view.Gravity
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -14,6 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.core.security.ParentalGate
+import tv.blofy.player.core.security.ParentalPinManager
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
@@ -62,32 +67,26 @@ class SettingsActivity : AppCompatActivity() {
         listOf(ts, hls, cronet, http).forEach { row1.addView(it, LinearLayout.LayoutParams(220, 76).apply { marginEnd = 12 }) }
         root.addView(row1)
 
-        val row2 = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 14, 0, 0)
-        }
-        redirectsButton = actionButton("Redirects") {
-            updateProvider { copy(allowCrossProtocolRedirects = !allowCrossProtocolRedirects) }
-        }
+        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 14, 0, 0) }
+        redirectsButton = actionButton("Redirects") { updateProvider { copy(allowCrossProtocolRedirects = !allowCrossProtocolRedirects) } }
         val refresh = actionButton("تحديث القائمة الآن") { refreshLibrary() }
-        val playlists = actionButton("إدارة القوائم") {
-            startActivity(Intent(this, ProviderManagerActivity::class.java))
-        }
+        val playlists = actionButton("إدارة القوائم") { startActivity(Intent(this, ProviderManagerActivity::class.java)) }
         row2.addView(redirectsButton, LinearLayout.LayoutParams(250, 76).apply { marginEnd = 12 })
         row2.addView(refresh, LinearLayout.LayoutParams(260, 76).apply { marginEnd = 12 })
         row2.addView(playlists, LinearLayout.LayoutParams(280, 76))
         root.addView(row2)
 
-        val row3 = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 14, 0, 0)
-        }
+        val row3 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 14, 0, 0) }
         themeButton = actionButton("الثيم: ${theme.id.uppercase()}") {
             val next = ThemeManager.toggle(this)
             themeButton.text = "الثيم: ${next.id.uppercase()}"
             recreate()
         }
-        row3.addView(themeButton, LinearLayout.LayoutParams(260, 76))
+        val pinButton = actionButton(if (ParentalPinManager.hasPin(this)) "تغيير PIN" else "إنشاء PIN") { changePin() }
+        val clearPin = actionButton("إزالة PIN") { clearPin() }
+        row3.addView(themeButton, LinearLayout.LayoutParams(260, 76).apply { marginEnd = 12 })
+        row3.addView(pinButton, LinearLayout.LayoutParams(230, 76).apply { marginEnd = 12 })
+        row3.addView(clearPin, LinearLayout.LayoutParams(220, 76))
         root.addView(row3)
 
         setContentView(root)
@@ -106,10 +105,39 @@ class SettingsActivity : AppCompatActivity() {
         super.onResume()
         lifecycleScope.launch {
             val active = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
-            if (active != null) {
-                provider = active
-                refreshStatus()
+            if (active != null) { provider = active; refreshStatus() }
+        }
+    }
+
+    private fun changePin() {
+        val openNewPin = {
+            val input = EditText(this).apply {
+                inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+                hint = "4 إلى 6 أرقام"
+                isSingleLine = true
             }
+            val dialog = AlertDialog.Builder(this).setTitle("PIN جديد").setView(input).setPositiveButton("حفظ", null).setNegativeButton("إلغاء", null).create()
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    if (ParentalPinManager.setPin(this, input.text.toString())) {
+                        status.text = "تم حفظ PIN"
+                        dialog.dismiss()
+                    } else input.error = "أدخل 4 إلى 6 أرقام"
+                }
+            }
+            dialog.show()
+        }
+        if (ParentalPinManager.hasPin(this)) ParentalGate.requirePin(this) { openNewPin() } else openNewPin()
+    }
+
+    private fun clearPin() {
+        if (!ParentalPinManager.hasPin(this)) {
+            status.text = "لا يوجد PIN محفوظ"
+            return
+        }
+        ParentalGate.requirePin(this) {
+            ParentalPinManager.clear(this)
+            status.text = "تمت إزالة PIN"
         }
     }
 
@@ -141,14 +169,9 @@ class SettingsActivity : AppCompatActivity() {
         status.text = "جاري تحديث القنوات والأفلام والمسلسلات..."
         lifecycleScope.launch {
             runCatching {
-                withContext(Dispatchers.IO) {
-                    PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(provider)
-                }
-            }.onSuccess {
-                status.text = "اكتمل التحديث  •  ${provider.name}"
-            }.onFailure {
-                status.text = "تعذر التحديث: ${it.message ?: "خطأ اتصال"}"
-            }
+                withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(provider) }
+            }.onSuccess { status.text = "اكتمل التحديث  •  ${provider.name}" }
+                .onFailure { status.text = "تعذر التحديث: ${it.message ?: "خطأ اتصال"}" }
         }
     }
 
