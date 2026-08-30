@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
@@ -28,20 +29,24 @@ import tv.blofy.player.ui.playlist.PlaylistActivity
 class LoginActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var theme: ThemeProfile
+    private lateinit var deviceKind: DeviceClass.Kind
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         theme = ThemeManager.current(this)
+        deviceKind = DeviceClass.detect(this)
+        val phone = deviceKind == DeviceClass.Kind.PHONE
+        val tv = deviceKind == DeviceClass.Kind.TV
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(54, 36, 54, 36)
+            gravity = if (phone) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.CENTER
+            setPadding(if (phone) 24 else 54, if (phone) 24 else 36, if (phone) 24 else 54, if (phone) 24 else 36)
             setBackgroundColor(theme.background)
         }
         root.addView(TextView(this).apply {
             text = "BLOFY PLAYER"
-            textSize = 36f
+            textSize = if (phone) 29f else 36f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         })
@@ -60,7 +65,7 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }
         val code = TextView(this).apply {
-            textSize = 30f
+            textSize = if (phone) 25f else 30f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             setPadding(0, 6, 0, 8)
@@ -78,7 +83,8 @@ class LoginActivity : AppCompatActivity() {
         }
         root.addView(device)
         root.addView(code)
-        root.addView(qr, LinearLayout.LayoutParams(220, 220))
+        val qrSize = if (phone) 180 else 220
+        root.addView(qr, LinearLayout.LayoutParams(qrSize, qrSize))
         root.addView(status)
 
         val addPlaylist = actionButton("إضافة قائمة التشغيل") {
@@ -87,18 +93,18 @@ class LoginActivity : AppCompatActivity() {
         val connect = actionButton("اتصال") {
             lifecycleScope.launch {
                 val hasProvider = BlofyDatabase.get(applicationContext).dao().providers().first().isNotEmpty()
-                if (hasProvider) {
-                    startActivity(Intent(this@LoginActivity, HomeActivity::class.java))
-                } else {
+                if (hasProvider) startActivity(Intent(this@LoginActivity, HomeActivity::class.java))
+                else {
                     status.text = "أضف قائمة تشغيل أولاً"
-                    addPlaylist.requestFocus()
+                    if (tv) addPlaylist.requestFocus()
                 }
             }
         }
-        root.addView(addPlaylist, LinearLayout.LayoutParams(420, 74))
-        root.addView(connect, LinearLayout.LayoutParams(420, 74).apply { topMargin = 10 })
+        val buttonWidth = if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 420
+        root.addView(addPlaylist, LinearLayout.LayoutParams(buttonWidth, if (phone) 64 else 74))
+        root.addView(connect, LinearLayout.LayoutParams(buttonWidth, if (phone) 64 else 74).apply { topMargin = 10 })
         setContentView(root)
-        addPlaylist.requestFocus()
+        if (tv) addPlaylist.requestFocus()
 
         lifecycleScope.launch {
             val identity = withContext(Dispatchers.IO) {
@@ -124,22 +130,21 @@ class LoginActivity : AppCompatActivity() {
     private fun createQr(value: String): Bitmap {
         val matrix = QRCodeWriter().encode(value, BarcodeFormat.QR_CODE, 360, 360)
         return Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.RGB_565).apply {
-            for (y in 0 until matrix.height) {
-                for (x in 0 until matrix.width) {
-                    setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
-                }
-            }
+            for (y in 0 until matrix.height) for (x in 0 until matrix.width) setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
         }
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
+        val tv = deviceKind == DeviceClass.Kind.TV
         text = label
         isAllCaps = false
         textSize = 16f
-        isFocusable = true
+        isFocusable = tv
+        isFocusableInTouchMode = tv
         setTextColor(Color.WHITE)
         background = buttonBackground(false)
         setOnFocusChangeListener { view, focused ->
+            if (!tv) return@setOnFocusChangeListener
             view.background = buttonBackground(focused)
             view.animate().scaleX(if (focused) theme.focusScale else 1f).scaleY(if (focused) theme.focusScale else 1f).setDuration(theme.motionMs).start()
         }
