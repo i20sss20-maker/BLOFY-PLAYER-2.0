@@ -18,6 +18,7 @@
 
         <activity android:name=".ui.details.SeriesDetailsActivity" android:exported="false" />
         <activity android:name=".ui.details.MovieDetailsActivity" android:exported="false" />
+        <activity android:name=".ui.library.RecentChannelsActivity" android:exported="false" />
         <activity android:name=".ui.library.LibraryActivity" android:exported="false" />
         <activity android:name=".ui.search.SearchActivity" android:exported="false" />
         <activity android:name=".ui.settings.SettingsActivity" android:exported="false" />
