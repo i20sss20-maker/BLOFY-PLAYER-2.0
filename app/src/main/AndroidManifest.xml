@@ -16,6 +16,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Blofy">
 
+        <activity android:name=".ui.mobile.MobileContentActivity" android:exported="false" />
         <activity android:name=".ui.catchup.CatchupActivity" android:exported="false" />
         <activity android:name=".ui.details.SeriesDetailsActivity" android:exported="false" />
         <activity android:name=".ui.details.MovieDetailsActivity" android:exported="false" />
