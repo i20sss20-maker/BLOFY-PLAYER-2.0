@@ -16,9 +16,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Blofy">
 
-        <activity
-            android:name=".ui.playlist.PlaylistActivity"
-            android:exported="false" />
+        <activity android:name=".ui.settings.SettingsActivity" android:exported="false" />
+        <activity android:name=".ui.series.EpisodesActivity" android:exported="false" />
+        <activity android:name=".ui.browser.ContentBrowserActivity" android:exported="false" />
+        <activity android:name=".ui.playlist.PlaylistActivity" android:exported="false" />
 
         <activity
             android:name=".ui.player.PlayerActivity"
