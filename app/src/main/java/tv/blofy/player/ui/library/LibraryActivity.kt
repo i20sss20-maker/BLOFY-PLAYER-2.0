@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
+import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
@@ -72,7 +73,7 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
         val row = TextView(this).apply {
-            text = "${kindLabel(stream.kind)}   •   ${stream.name}"
+            text = "${if (stream.locked) "🔒 " else ""}${kindLabel(stream.kind)}   •   ${stream.name}"
             textSize = 18f
             setTextColor(Color.WHITE)
             setPadding(24, 17, 24, 17)
@@ -84,9 +85,17 @@ class LibraryActivity : AppCompatActivity() {
                 view.background = rowBackground(focused)
                 view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(100).start()
             }
-            setOnClickListener { open(providerId, liveFormat, stream, resumeMs) }
+            setOnClickListener { guardedOpen(providerId, liveFormat, stream, resumeMs) }
         }
         list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
+    }
+
+    private fun guardedOpen(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
+        if (stream.locked) {
+            ParentalGate.requirePin(this) { open(providerId, liveFormat, stream, resumeMs) }
+        } else {
+            open(providerId, liveFormat, stream, resumeMs)
+        }
     }
 
     private fun open(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
@@ -114,6 +123,7 @@ class LibraryActivity : AppCompatActivity() {
                     putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
                     putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
                     putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
+                    putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
                 })
             }
         }
