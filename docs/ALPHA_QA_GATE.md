@@ -3,10 +3,10 @@
 This checklist is the release gate for the first real-device Alpha. A green CI build is necessary but not sufficient. Every item below must be tested on real providers/devices before calling the Alpha validated.
 
 ## Build identity
-- [ ] Android CI is green on the exact tested commit.
+- [x] Android CI is green on the exact tested commit (`af08bd4`, Android CI #250).
 - [ ] Settings shows the expected build/version.
 - [ ] Settings shows whether FFmpeg is bundled.
-- [ ] If testing the FFmpeg build, APK contains `libffmpegJNI.so`.
+- [x] FFmpeg CI verifies the APK contains `libffmpegJNI.so` before publishing the artifact (`af08bd4`, FFmpeg Native #57).
 
 ## Activation
 - [ ] New device receives the expected trial state.
