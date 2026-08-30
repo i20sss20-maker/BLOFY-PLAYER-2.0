@@ -52,6 +52,8 @@ data class StreamEntity(
     val rating: String? = null,
     val duration: String? = null,
     val backdrop: String? = null,
+    val archiveEnabled: Boolean = false,
+    val archiveDurationDays: Int = 0,
     val favorite: Boolean = false,
     val locked: Boolean = false
 )
