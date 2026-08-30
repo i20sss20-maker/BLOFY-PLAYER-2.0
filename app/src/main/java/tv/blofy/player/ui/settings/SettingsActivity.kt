@@ -18,7 +18,7 @@ import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
-import tv.blofy.player.ui.playlist.PlaylistActivity
+import tv.blofy.player.ui.playlist.ProviderManagerActivity
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var provider: ProviderEntity
@@ -67,8 +67,8 @@ class SettingsActivity : AppCompatActivity() {
             updateProvider { copy(allowCrossProtocolRedirects = !allowCrossProtocolRedirects) }
         }
         val refresh = actionButton("تحديث القائمة الآن") { refreshLibrary() }
-        val playlists = actionButton("إضافة / إدارة قائمة") {
-            startActivity(Intent(this, PlaylistActivity::class.java))
+        val playlists = actionButton("إدارة القوائم") {
+            startActivity(Intent(this, ProviderManagerActivity::class.java))
         }
         row2.addView(redirectsButton, LinearLayout.LayoutParams(250, 76).apply { marginEnd = 12 })
         row2.addView(refresh, LinearLayout.LayoutParams(260, 76).apply { marginEnd = 12 })
@@ -84,6 +84,17 @@ class SettingsActivity : AppCompatActivity() {
                 return@launch
             }
             refreshStatus()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch {
+            val active = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
+            if (active != null) {
+                provider = active
+                refreshStatus()
+            }
         }
     }
 
@@ -127,7 +138,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshStatus() {
-        status.text = "${provider.name}  •  ${provider.liveFormat.uppercase()}  •  ${provider.preferredTransport.uppercase()}"
+        status.text = "${provider.name}  •  ${provider.providerType.uppercase()}  •  ${provider.liveFormat.uppercase()}  •  ${provider.preferredTransport.uppercase()}"
         redirectsButton.text = if (provider.allowCrossProtocolRedirects) "Redirects: تشغيل" else "Redirects: إيقاف"
     }
 
