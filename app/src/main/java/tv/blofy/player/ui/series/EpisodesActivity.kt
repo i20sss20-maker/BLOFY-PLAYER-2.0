@@ -1,5 +1,6 @@
 package tv.blofy.player.ui.series
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -11,13 +12,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
+import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
@@ -66,19 +67,7 @@ class EpisodesActivity : AppCompatActivity() {
 
             val adapter = FocusTextAdapter<EpisodeEntity>(
                 label = { "الموسم ${it.season}  •  الحلقة ${it.episode}  •  ${it.title}" },
-                onClick = { episode ->
-                    lifecycleScope.launch {
-                        val resume = dao.watchState(episode.key)?.positionMs ?: 0L
-                        val url = ContentUrlResolver.episode(provider, episode)
-                        startActivity(Intent(this@EpisodesActivity, PlayerActivity::class.java).apply {
-                            putExtra(PlayerActivity.EXTRA_URL, url)
-                            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)
-                            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
-                            putExtra(PlayerActivity.EXTRA_KIND, "episode")
-                            putExtra(PlayerActivity.EXTRA_RESUME_MS, resume)
-                        })
-                    }
-                }
+                onClick = { episode -> openEpisode(provider, episode) }
             )
             list.adapter = adapter
             dao.episodes(providerId, seriesId).collect {
@@ -86,6 +75,35 @@ class EpisodesActivity : AppCompatActivity() {
                 adapter.submit(it)
             }
         }
+    }
+
+    private fun openEpisode(provider: ProviderEntity, episode: EpisodeEntity) {
+        lifecycleScope.launch {
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val resume = dao.watchState(episode.key)?.positionMs ?: 0L
+            val url = ContentUrlResolver.episode(provider, episode)
+            if (resume > 15_000L) {
+                AlertDialog.Builder(this@EpisodesActivity)
+                    .setTitle(episode.title)
+                    .setMessage("هل تريد استئناف الحلقة أو البدء من البداية؟")
+                    .setPositiveButton("استئناف") { _, _ -> launchEpisode(provider, episode, url, resume) }
+                    .setNegativeButton("من البداية") { _, _ -> launchEpisode(provider, episode, url, 0L) }
+                    .show()
+            } else {
+                launchEpisode(provider, episode, url, resume)
+            }
+        }
+    }
+
+    private fun launchEpisode(provider: ProviderEntity, episode: EpisodeEntity, url: String, resume: Long) {
+        startActivity(Intent(this, PlayerActivity::class.java).apply {
+            putExtra(PlayerActivity.EXTRA_URL, url)
+            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(PlayerActivity.EXTRA_KIND, "episode")
+            putExtra(PlayerActivity.EXTRA_RESUME_MS, resume)
+            putExtra(PlayerActivity.EXTRA_TITLE, episode.title)
+        })
     }
 
     companion object {
