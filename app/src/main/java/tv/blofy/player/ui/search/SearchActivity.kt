@@ -22,6 +22,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
+import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
@@ -104,7 +105,7 @@ class SearchActivity : AppCompatActivity() {
             }
             items.take(100).forEach { stream ->
                 val row = TextView(this@SearchActivity).apply {
-                    text = "${kindLabel(stream.kind)}   •   ${stream.name}"
+                    text = "${if (stream.locked) "🔒 " else ""}${kindLabel(stream.kind)}   •   ${stream.name}"
                     textSize = 18f
                     setTextColor(Color.WHITE)
                     setPadding(24, 17, 24, 17)
@@ -116,11 +117,19 @@ class SearchActivity : AppCompatActivity() {
                         view.background = rowBackground(focused)
                         view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(100).start()
                     }
-                    setOnClickListener { openStream(provider.id, provider.liveFormat, stream) }
+                    setOnClickListener { guardedOpen(provider.id, provider.liveFormat, stream) }
                 }
                 results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
             }
             if (moveFocus) results.getChildAt(0)?.requestFocus()
+        }
+    }
+
+    private fun guardedOpen(providerId: String, liveFormat: String, stream: StreamEntity) {
+        if (stream.locked) {
+            ParentalGate.requirePin(this) { openStream(providerId, liveFormat, stream) }
+        } else {
+            openStream(providerId, liveFormat, stream)
         }
     }
 
