@@ -13,6 +13,7 @@ import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.library.LibraryActivity
+import tv.blofy.player.ui.library.RecentChannelsActivity
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 
@@ -52,6 +53,7 @@ class HomeActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, 16, 0, 0)
         }
+        addAction(secondary, "آخر القنوات", Intent(this, RecentChannelsActivity::class.java))
         addAction(secondary, "متابعة المشاهدة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE))
         addAction(secondary, "المفضلة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addAction(secondary, "الإعدادات", Intent(this, SettingsActivity::class.java))
