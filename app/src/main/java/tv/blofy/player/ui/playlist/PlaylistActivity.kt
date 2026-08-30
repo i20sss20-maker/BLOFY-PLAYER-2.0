@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -22,21 +23,23 @@ import java.util.UUID
 class PlaylistActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         val editingProviderId = intent.getStringExtra(EXTRA_PROVIDER_ID)
+        val device = DeviceClass.detect(this)
+        val phone = device == DeviceClass.Kind.PHONE
+        val tv = device == DeviceClass.Kind.TV
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(60, 48, 60, 48)
+            gravity = if (phone) Gravity.TOP else Gravity.CENTER
+            setPadding(if (phone) 22 else 60, if (phone) 24 else 48, if (phone) 22 else 60, if (phone) 24 else 48)
             setBackgroundColor(Color.rgb(5, 5, 10))
         }
-        val title = TextView(this).apply {
+        root.addView(TextView(this).apply {
             text = if (editingProviderId == null) "إضافة قائمة تشغيل" else "تعديل قائمة التشغيل"
-            textSize = 30f
+            textSize = if (phone) 25f else 30f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-        }
-        root.addView(title)
+        })
         root.addView(TextView(this).apply {
             text = "Xtream Codes أو M3U مباشر"
             textSize = 15f
@@ -45,7 +48,7 @@ class PlaylistActivity : AppCompatActivity() {
             setPadding(0, 6, 0, 22)
         })
 
-        fun field(hintText: String, password: Boolean = false) = EditText(this).apply {
+        fun field(hintText: String, passwordField: Boolean = false) = EditText(this).apply {
             hint = hintText
             isSingleLine = true
             setTextColor(Color.WHITE)
@@ -53,8 +56,8 @@ class PlaylistActivity : AppCompatActivity() {
             setPadding(20, 0, 20, 0)
             background = fieldBackground(false)
             isFocusable = true
-            setOnFocusChangeListener { view, focused -> view.background = fieldBackground(focused) }
-            if (password) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setOnFocusChangeListener { view, focused -> if (tv) view.background = fieldBackground(focused) }
+            if (passwordField) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
 
         val name = field("اسم القائمة")
@@ -62,7 +65,7 @@ class PlaylistActivity : AppCompatActivity() {
         val username = field("اسم المستخدم — اتركه فارغًا لـ M3U")
         val password = field("كلمة المرور — اتركها فارغة لـ M3U", true)
         listOf(name, url, username, password).forEach {
-            root.addView(it, LinearLayout.LayoutParams(650, 68).apply { topMargin = 12 })
+            root.addView(it, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 650, if (phone) 62 else 68).apply { topMargin = 12 })
         }
 
         val status = TextView(this).apply {
@@ -76,24 +79,19 @@ class PlaylistActivity : AppCompatActivity() {
             text = if (editingProviderId == null) "حفظ القائمة" else "حفظ التعديلات"
             isAllCaps = false
             textSize = 16f
-            isFocusable = true
+            isFocusable = tv
+            isFocusableInTouchMode = tv
             setTextColor(Color.WHITE)
             background = buttonBackground(false)
-            setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused) }
+            setOnFocusChangeListener { view, focused -> if (tv) view.background = buttonBackground(focused) }
             setOnClickListener {
                 val baseUrl = url.text.toString().trim()
                 val user = username.text.toString().trim()
                 val pass = password.text.toString()
                 val isM3u = user.isBlank() && pass.isBlank()
                 val partialXtream = user.isBlank() xor pass.isBlank()
-                if (baseUrl.isBlank()) {
-                    status.text = "أدخل رابط القائمة"
-                    return@setOnClickListener
-                }
-                if (partialXtream) {
-                    status.text = "أدخل اسم المستخدم وكلمة المرور معًا، أو اتركهما معًا لـ M3U"
-                    return@setOnClickListener
-                }
+                if (baseUrl.isBlank()) { status.text = "أدخل رابط القائمة"; return@setOnClickListener }
+                if (partialXtream) { status.text = "أدخل اسم المستخدم وكلمة المرور معًا، أو اتركهما معًا لـ M3U"; return@setOnClickListener }
                 isEnabled = false
                 status.text = if (isM3u) "جاري قراءة M3U وحفظها محليًا..." else "جاري تحميل Xtream وحفظها محليًا..."
                 lifecycleScope.launch {
@@ -131,15 +129,13 @@ class PlaylistActivity : AppCompatActivity() {
                 }
             }
         }
-        root.addView(save, LinearLayout.LayoutParams(380, 78).apply { topMargin = 18 })
+        root.addView(save, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 380, if (phone) 66 else 78).apply { topMargin = 18 })
         setContentView(root)
         name.requestFocus()
 
         if (editingProviderId != null) {
             lifecycleScope.launch {
-                val provider = withContext(Dispatchers.IO) {
-                    BlofyDatabase.get(applicationContext).dao().provider(editingProviderId)
-                } ?: return@launch
+                val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: return@launch
                 name.setText(provider.name)
                 url.setText(provider.baseUrl)
                 username.setText(provider.username)
@@ -161,7 +157,5 @@ class PlaylistActivity : AppCompatActivity() {
         setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(52, 44, 68))
     }
 
-    companion object {
-        const val EXTRA_PROVIDER_ID = "provider_id"
-    }
+    companion object { const val EXTRA_PROVIDER_ID = "provider_id" }
 }
