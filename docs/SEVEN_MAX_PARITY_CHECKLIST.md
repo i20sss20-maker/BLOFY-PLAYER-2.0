@@ -80,8 +80,8 @@ This file locks the implementation targets confirmed or strongly supported by th
 ## BLOFY additions (not claimed as 7 Max parity)
 - [x] Playback diagnostics foundation (TTFF/buffering/errors)
 - [x] Diagnostics upload/control cloud: redacted playback metrics upload from the player plus authenticated admin diagnostics query on the BLOFY service
-- [ ] Remote provider-profile configuration (database + safe Android client foundation added; service route/admin controls and Connect-time apply remain)
-- [ ] BLOFY web activation/playlist management portal
+- [x] Remote provider-profile configuration: database, authenticated device endpoint, admin GET/PATCH controls, safe Android client, and Connect-time application
+- [x] BLOFY web activation/playlist management portal: same-origin RTL web UI, device/code authentication, AES-256-GCM encrypted playlist storage, add/edit/delete/active controls, and two-way app/portal synchronization
 
 ## Release gate
-The Android implementation is parity-ready for Alpha QA. Remaining unchecked parity items require production deployment or physical-device/server validation rather than additional core feature construction.
+The Android implementation and BLOFY service feature set are ready for Alpha QA. Remaining unchecked items require production deployment or physical-device/server validation rather than additional core feature construction.
