@@ -46,14 +46,22 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 setTextColor(Color.WHITE)
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = "مسلسل  •  المواسم والحلقات محلية بعد المزامنة"
+                text = buildList {
+                    add("مسلسل")
+                    stream.year?.takeIf { it.isNotBlank() }?.let(::add)
+                    stream.genre?.takeIf { it.isNotBlank() }?.let(::add)
+                    stream.duration?.takeIf { it.isNotBlank() }?.let(::add)
+                    stream.rating?.takeIf { it.isNotBlank() }?.let { add("★ $it") }
+                }.joinToString("  •  ")
                 textSize = 16f
                 setTextColor(Color.rgb(190, 165, 225))
-                setPadding(0, 8, 0, 26)
+                setPadding(0, 8, 0, 22)
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = "لا يوجد تشغيل تلقائي في صفحة التفاصيل. افتح الحلقات، اختر الموسم والحلقة، ثم يبدأ التشغيل بالرابط الأصلي للحلقة."
+                text = stream.plot?.takeIf { it.isNotBlank() }
+                    ?: "لا يوجد تشغيل تلقائي في صفحة التفاصيل. افتح الحلقات، اختر الموسم والحلقة، ثم يبدأ التشغيل بالرابط الأصلي للحلقة."
                 textSize = 17f
+                maxLines = 5
                 setTextColor(Color.rgb(220, 220, 225))
                 setPadding(0, 0, 0, 30)
             })
