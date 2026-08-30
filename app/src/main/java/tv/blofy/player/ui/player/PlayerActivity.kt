@@ -48,9 +48,13 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var hud: LinearLayout
     private lateinit var titleView: TextView
     private lateinit var epgView: TextView
+    private lateinit var channelNumberView: TextView
     private lateinit var audioButton: Button
     private lateinit var subtitleButton: Button
+    private lateinit var favoriteButton: Button
     private var epgJob: Job? = null
+    private var digitBuffer = ""
+    private var digitGeneration = 0
 
     private val providerId by lazy { intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty() }
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty() }
@@ -76,6 +80,7 @@ class PlayerActivity : AppCompatActivity() {
         buildPlayerUi()
         session.play(url, intent.getLongExtra(EXTRA_RESUME_MS, 0L))
         updateTitle(currentTitle)
+        refreshFavoriteState()
         if (kind == "live") observeEpg()
     }
 
@@ -89,6 +94,23 @@ class PlayerActivity : AppCompatActivity() {
             setShutterBackgroundColor(Color.BLACK)
         }
         root.addView(playerView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+
+        channelNumberView = TextView(this).apply {
+            textSize = 34f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(24, 10, 24, 10)
+            background = GradientDrawable().apply {
+                cornerRadius = 18f
+                setColor(Color.argb(225, 43, 18, 76))
+                setStroke(2, Color.rgb(185, 140, 255))
+            }
+            visibility = View.GONE
+        }
+        root.addView(channelNumberView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
+            topMargin = 34
+            marginEnd = 42
+        })
 
         hud = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -120,11 +142,13 @@ class PlayerActivity : AppCompatActivity() {
         }
         audioButton = controlButton("الصوت") { showTrackDialog(C.TRACK_TYPE_AUDIO) }
         subtitleButton = controlButton("الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
-        controls.addView(audioButton, LinearLayout.LayoutParams(210, 74).apply { marginEnd = 14 })
-        controls.addView(subtitleButton, LinearLayout.LayoutParams(210, 74))
+        favoriteButton = controlButton("☆ المفضلة") { toggleFavorite() }
+        controls.addView(audioButton, LinearLayout.LayoutParams(190, 74).apply { marginEnd = 12 })
+        controls.addView(subtitleButton, LinearLayout.LayoutParams(190, 74).apply { marginEnd = 12 })
+        controls.addView(favoriteButton, LinearLayout.LayoutParams(210, 74))
         if (kind == "live") {
             controls.addView(TextView(this).apply {
-                text = "  CH+/CH− للتبديل"
+                text = "  CH+/CH− للتبديل  •  اكتب رقم القناة مباشرة"
                 textSize = 15f
                 setTextColor(Color.rgb(185, 140, 255))
                 gravity = Gravity.CENTER_VERTICAL
@@ -174,11 +198,42 @@ class PlayerActivity : AppCompatActivity() {
                 if (kind == "live") switchLive(-1) else return super.dispatchKeyEvent(event)
                 true
             }
+            RemoteAction.DIGIT -> {
+                if (kind == "live" && routed.digit != null) {
+                    handleChannelDigit(routed.digit)
+                    true
+                } else super.dispatchKeyEvent(event)
+            }
             RemoteAction.OK -> {
                 if (hud.visibility == View.VISIBLE) hideHud() else showHud()
                 true
             }
             else -> super.dispatchKeyEvent(event)
+        }
+    }
+
+    private fun handleChannelDigit(digit: Int) {
+        if (digitBuffer.length >= 4) digitBuffer = ""
+        digitBuffer += digit.toString()
+        channelNumberView.text = digitBuffer
+        channelNumberView.visibility = View.VISIBLE
+        val generation = ++digitGeneration
+        channelNumberView.postDelayed({
+            if (generation != digitGeneration || isFinishing) return@postDelayed
+            val number = digitBuffer.toIntOrNull()
+            digitBuffer = ""
+            channelNumberView.visibility = View.GONE
+            if (number != null && number > 0) playChannelNumber(number)
+        }, 900L)
+    }
+
+    private fun playChannelNumber(number: Int) {
+        lifecycleScope.launch {
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val provider = dao.provider(providerId) ?: return@launch
+            val list = dao.streams(providerId, "live", categoryId).first()
+            val target = list.getOrNull(number - 1) ?: return@launch
+            playLiveStream(provider, target)
         }
     }
 
@@ -216,8 +271,27 @@ class PlayerActivity : AppCompatActivity() {
         currentTitle = stream.name
         updateTitle(stream.name)
         session.play(ContentUrlResolver.live(provider, profile, stream))
+        refreshFavoriteState()
         observeEpg()
         if (hud.visibility != View.VISIBLE) showHudBriefly()
+    }
+
+    private fun refreshFavoriteState() {
+        if (currentContentKey.isBlank() || !::favoriteButton.isInitialized) return
+        lifecycleScope.launch {
+            val item = BlofyDatabase.get(applicationContext).dao().stream(currentContentKey)
+            favoriteButton.text = if (item?.favorite == true) "★ في المفضلة" else "☆ المفضلة"
+        }
+    }
+
+    private fun toggleFavorite() {
+        if (currentContentKey.isBlank()) return
+        lifecycleScope.launch {
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val item = dao.stream(currentContentKey) ?: return@launch
+            dao.setFavorite(currentContentKey, !item.favorite)
+            favoriteButton.text = if (!item.favorite) "★ في المفضلة" else "☆ المفضلة"
+        }
     }
 
     private fun observeEpg() {
@@ -299,6 +373,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        digitGeneration++
         epgJob?.cancel()
         if (::session.isInitialized) session.release()
         super.onDestroy()
