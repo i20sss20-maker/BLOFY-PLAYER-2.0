@@ -1,5 +1,6 @@
 package tv.blofy.player.ui.home
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
@@ -7,6 +8,8 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import tv.blofy.player.ui.browser.ContentBrowserActivity
+import tv.blofy.player.ui.settings.SettingsActivity
 
 class HomeActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,11 +34,18 @@ class HomeActivity : AppCompatActivity() {
         })
 
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("البث المباشر", "الأفلام", "المسلسلات", "الإعدادات").forEach { label ->
+        val actions = listOf(
+            "البث المباشر" to Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_LIVE),
+            "الأفلام" to Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_MOVIE),
+            "المسلسلات" to Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_SERIES),
+            "الإعدادات" to Intent(this, SettingsActivity::class.java)
+        )
+        actions.forEach { (label, intent) ->
             row.addView(Button(this).apply {
                 text = label
                 isAllCaps = false
                 isFocusable = true
+                setOnClickListener { startActivity(intent) }
             }, LinearLayout.LayoutParams(0, 110, 1f).apply { marginEnd = 14 })
         }
         root.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
