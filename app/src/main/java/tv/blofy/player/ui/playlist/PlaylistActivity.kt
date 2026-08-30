@@ -13,7 +13,9 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -117,6 +119,13 @@ class PlaylistActivity : AppCompatActivity() {
                             )
                             dao.upsertProvider(provider)
                             PlaylistManager(XtreamClient.api, dao).syncAll(provider)
+
+                            val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+                            if (endpoint.isNotBlank()) {
+                                runCatching {
+                                    PortalPlaylistClient.pushProvider(applicationContext, endpoint, provider)
+                                }
+                            }
                         }
                     }.onSuccess {
                         status.text = "تم حفظ القائمة"
