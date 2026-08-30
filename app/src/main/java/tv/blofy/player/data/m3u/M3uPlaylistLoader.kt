@@ -21,10 +21,7 @@ class M3uPlaylistLoader(
         .build()
 ) {
     suspend fun load(provider: ProviderEntity): ParsedM3u = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(provider.baseUrl)
-            .header("User-Agent", "BLOFY PLAYER/2.0")
-            .build()
+        val request = Request.Builder().url(provider.baseUrl).header("User-Agent", "BLOFY PLAYER/2.0").build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("M3U HTTP ${response.code}")
             parse(provider, response.body?.string().orEmpty())
@@ -60,33 +57,19 @@ class M3uPlaylistLoader(
                 val seriesId = stableId("series|${seriesName.lowercase()}")
                 val category = entry.meta.group.ifBlank { "Series" }
                 val categoryId = stableId("series-category|$category")
-                categories.putIfAbsent(
-                    "series:$categoryId",
-                    CategoryEntity("${provider.id}:series:$categoryId", provider.id, categoryId, "series", category, categories.size)
-                )
+                categories.putIfAbsent("series:$categoryId", CategoryEntity("${provider.id}:series:$categoryId", provider.id, categoryId, "series", category, categories.size))
                 if (seriesSeen.add(seriesId)) {
                     streams[seriesId] = StreamEntity(
-                        key = "${provider.id}:series:$seriesId",
-                        providerId = provider.id,
-                        remoteId = seriesId,
-                        categoryId = categoryId,
-                        kind = "series",
-                        name = seriesName,
-                        icon = entry.meta.logo,
+                        key = "${provider.id}:series:$seriesId", providerId = provider.id, remoteId = seriesId,
+                        categoryId = categoryId, kind = "series", name = seriesName, icon = entry.meta.logo,
                         streamType = "m3u-series"
                     )
                 }
                 val episodeId = stableId(entry.url)
                 episodes += EpisodeEntity(
-                    key = "${provider.id}:episode:$episodeId",
-                    providerId = provider.id,
-                    seriesId = seriesId,
-                    remoteId = episodeId,
-                    season = season,
-                    episode = episodeNo,
-                    title = entry.meta.name,
-                    extension = extension(entry.url) ?: "mp4",
-                    directSource = entry.url
+                    key = "${provider.id}:episode:$episodeId", providerId = provider.id, seriesId = seriesId,
+                    remoteId = episodeId, season = season, episode = episodeNo, title = entry.meta.name,
+                    extension = extension(entry.url) ?: "mp4", directSource = entry.url
                 )
                 return@forEach
             }
@@ -94,37 +77,26 @@ class M3uPlaylistLoader(
             val kind = if (looksLikeMovie(entry)) "movie" else "live"
             val category = entry.meta.group.ifBlank { if (kind == "movie") "Movies" else "Live" }
             val categoryId = stableId("$kind-category|$category")
-            categories.putIfAbsent(
-                "$kind:$categoryId",
-                CategoryEntity("${provider.id}:$kind:$categoryId", provider.id, categoryId, kind, category, categories.size)
-            )
+            categories.putIfAbsent("$kind:$categoryId", CategoryEntity("${provider.id}:$kind:$categoryId", provider.id, categoryId, kind, category, categories.size))
             val streamId = stableId(entry.url)
             streams["$kind:$streamId"] = StreamEntity(
-                key = "${provider.id}:$kind:$streamId",
-                providerId = provider.id,
-                remoteId = streamId,
-                categoryId = categoryId,
-                kind = kind,
-                name = entry.meta.name.ifBlank { "BLOFY" },
-                icon = entry.meta.logo,
-                extension = extension(entry.url),
-                directSource = entry.url,
-                epgChannelId = entry.meta.tvgId,
-                streamType = "m3u"
+                key = "${provider.id}:$kind:$streamId", providerId = provider.id, remoteId = streamId,
+                categoryId = categoryId, kind = kind, name = entry.meta.name.ifBlank { "BLOFY" },
+                icon = entry.meta.logo, extension = extension(entry.url), directSource = entry.url,
+                epgChannelId = entry.meta.tvgId, streamType = "m3u"
             )
         }
 
-        ParsedM3u(categories.values.toList(), streams.values.toList(), episodes.sortedWith(compareBy<EpisodeEntity> { it.seriesId }.thenBy { it.season }.thenBy { it.episode }))
+        return ParsedM3u(
+            categories.values.toList(),
+            streams.values.toList(),
+            episodes.sortedWith(compareBy<EpisodeEntity> { it.seriesId }.thenBy { it.season }.thenBy { it.episode })
+        )
     }
 
     private fun parseMetadata(line: String): Metadata {
         val name = line.substringAfter(',', "").trim()
-        return Metadata(
-            name = name,
-            group = attribute(line, "group-title").orEmpty(),
-            logo = attribute(line, "tvg-logo"),
-            tvgId = attribute(line, "tvg-id")
-        )
+        return Metadata(name, attribute(line, "group-title").orEmpty(), attribute(line, "tvg-logo"), attribute(line, "tvg-id"))
     }
 
     private fun attribute(line: String, name: String): String? =
@@ -136,21 +108,14 @@ class M3uPlaylistLoader(
         return extension(entry.url)?.lowercase() in setOf("mp4", "mkv", "avi", "mov", "webm", "m4v")
     }
 
-    private fun extension(url: String): String? = runCatching {
-        URI(url).path.substringAfterLast('.', "").takeIf { it.length in 2..5 }
-    }.getOrNull()
+    private fun extension(url: String): String? = runCatching { URI(url).path.substringAfterLast('.', "").takeIf { it.length in 2..5 } }.getOrNull()
 
     private fun stableId(value: String): String {
         val digest = MessageDigest.getInstance("SHA-1").digest(value.toByteArray())
         return digest.take(8).joinToString("") { "%02x".format(it) }
     }
 
-    data class ParsedM3u(
-        val categories: List<CategoryEntity>,
-        val streams: List<StreamEntity>,
-        val episodes: List<EpisodeEntity>
-    )
-
+    data class ParsedM3u(val categories: List<CategoryEntity>, val streams: List<StreamEntity>, val episodes: List<EpisodeEntity>)
     private data class Entry(val meta: Metadata, val url: String)
     private data class Metadata(val name: String, val group: String = "", val logo: String? = null, val tvgId: String? = null)
 
