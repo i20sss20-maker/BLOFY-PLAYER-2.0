@@ -15,6 +15,7 @@ import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.library.RecentChannelsActivity
+import tv.blofy.player.ui.mobile.MobileContentActivity
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 
@@ -47,9 +48,9 @@ class HomeActivity : AppCompatActivity() {
         })
 
         val primary = actionRow(phone)
-        addAction(primary, "البث المباشر", Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_LIVE))
-        addAction(primary, "الأفلام", Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_MOVIE))
-        addAction(primary, "المسلسلات", Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_SERIES))
+        addAction(primary, "البث المباشر", contentIntent("live"))
+        addAction(primary, "الأفلام", contentIntent("movie"))
+        addAction(primary, "المسلسلات", contentIntent("series"))
         addAction(primary, "البحث", Intent(this, SearchActivity::class.java))
         root.addView(primary, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
@@ -62,6 +63,14 @@ class HomeActivity : AppCompatActivity() {
 
         setContentView(root)
         if (deviceKind == DeviceClass.Kind.TV) primary.getChildAt(0)?.requestFocus()
+    }
+
+    private fun contentIntent(kind: String): Intent {
+        return if (deviceKind == DeviceClass.Kind.TV) {
+            Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, kind)
+        } else {
+            Intent(this, MobileContentActivity::class.java).putExtra(MobileContentActivity.EXTRA_KIND, kind)
+        }
     }
 
     private fun actionRow(phone: Boolean) = LinearLayout(this).apply {
