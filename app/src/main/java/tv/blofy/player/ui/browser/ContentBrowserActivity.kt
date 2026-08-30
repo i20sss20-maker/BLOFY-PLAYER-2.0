@@ -45,7 +45,9 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var previewTitle: TextView? = null
     private var currentCategoryId: String? = null
     private var lastPreviewKey: String? = null
+    private var resumedOnce = false
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND) ?: KIND_LIVE }
+    private val statePrefs by lazy { getSharedPreferences("blofy_browser_state", MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,7 +87,12 @@ class ContentBrowserActivity : AppCompatActivity() {
         streamAdapter = FocusTextAdapter(
             label = { it.name },
             onClick = ::openStream,
-            onFocus = { if (kind == KIND_LIVE) schedulePreview(it) }
+            onFocus = {
+                if (kind == KIND_LIVE) {
+                    rememberStream(it)
+                    schedulePreview(it)
+                }
+            }
         )
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
@@ -102,8 +109,13 @@ class ContentBrowserActivity : AppCompatActivity() {
             }
             dao.categories(provider.id, kind).collect { items ->
                 categoryAdapter.submit(items)
-                if (items.isEmpty()) loadStreams(null)
-                else loadStreams(items.first().remoteId)
+                if (items.isEmpty()) {
+                    loadStreams(null)
+                } else {
+                    val saved = savedCategoryId()
+                    val initial = items.firstOrNull { it.remoteId == saved }?.remoteId ?: items.first().remoteId
+                    if (currentCategoryId != initial) loadStreams(initial)
+                }
             }
         }
     }
@@ -139,14 +151,20 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun loadStreams(categoryId: String?) {
         if (!::provider.isInitialized) return
+        if (currentCategoryId == categoryId && streamsJob?.isActive == true) return
         currentCategoryId = categoryId
+        rememberCategory(categoryId)
         lastPreviewKey = null
         stopPreview()
         streamsJob?.cancel()
         streamsJob = lifecycleScope.launch {
             BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, categoryId).collect { items ->
                 streamAdapter.submit(items)
-                if (kind == KIND_LIVE && items.isNotEmpty()) schedulePreview(items.first(), immediate = true)
+                if (kind == KIND_LIVE && items.isNotEmpty() && previewSession == null) {
+                    val savedKey = savedStreamKey()
+                    val target = items.firstOrNull { it.key == savedKey } ?: items.first()
+                    schedulePreview(target, immediate = true)
+                }
             }
         }
     }
@@ -168,6 +186,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             previewView?.player = previewSession?.player
         }
         lastPreviewKey = stream.key
+        rememberStream(stream)
         previewTitle?.text = stream.name
         previewSession?.play(url)
     }
@@ -190,6 +209,7 @@ class ContentBrowserActivity : AppCompatActivity() {
                 putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
             })
             else -> {
+                rememberStream(stream)
                 val profile = profile(provider)
                 val url = ContentUrlResolver.live(provider, profile, stream)
                 stopPreview()
@@ -214,8 +234,40 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (kind == KIND_LIVE && ::provider.isInitialized) lastPreviewKey = null
+        if (resumedOnce && kind == KIND_LIVE && ::provider.isInitialized) {
+            lastPreviewKey = null
+            restartSavedPreview()
+        }
+        resumedOnce = true
     }
+
+    private fun restartSavedPreview() {
+        lifecycleScope.launch {
+            val items = BlofyDatabase.get(applicationContext).dao()
+                .streams(provider.id, KIND_LIVE, currentCategoryId).first()
+            val target = items.firstOrNull { it.key == savedStreamKey() } ?: items.firstOrNull()
+            if (target != null) schedulePreview(target, immediate = true)
+        }
+    }
+
+    private fun rememberCategory(categoryId: String?) {
+        if (!::provider.isInitialized || kind != KIND_LIVE) return
+        statePrefs.edit().putString(categoryKey(), categoryId).apply()
+    }
+
+    private fun rememberStream(stream: StreamEntity) {
+        if (!::provider.isInitialized || kind != KIND_LIVE) return
+        statePrefs.edit().putString(streamKey(), stream.key).apply()
+    }
+
+    private fun savedCategoryId(): String? =
+        if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.getString(categoryKey(), null) else null
+
+    private fun savedStreamKey(): String? =
+        if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.getString(streamKey(), null) else null
+
+    private fun categoryKey() = "${provider.id}:live:last_category"
+    private fun streamKey() = "${provider.id}:live:last_stream"
 
     override fun onDestroy() {
         streamsJob?.cancel()
