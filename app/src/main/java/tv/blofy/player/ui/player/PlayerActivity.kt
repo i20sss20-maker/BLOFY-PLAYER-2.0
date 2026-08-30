@@ -18,8 +18,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.Format
-import androidx.media3.common.Tracks
+import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
@@ -62,28 +63,39 @@ class PlayerActivity : AppCompatActivity() {
     private var epgJob: Job? = null
     private var digitBuffer = ""
     private var digitGeneration = 0
+    private var autoNextTriggered = false
 
     private val providerId by lazy { intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty() }
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty() }
     private val categoryId by lazy { intent.getStringExtra(EXTRA_CATEGORY_ID) }
+    private val seriesId by lazy { intent.getStringExtra(EXTRA_SERIES_ID).orEmpty() }
     private var currentContentKey = ""
     private var currentStreamId = ""
     private var currentTitle = ""
+    private var currentSeason = 0
+    private var currentEpisode = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val url = intent.getStringExtra(EXTRA_URL).orEmpty()
-        if (url.isBlank()) {
-            finish()
-            return
-        }
+        if (url.isBlank()) { finish(); return }
 
         currentContentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
         currentStreamId = intent.getStringExtra(EXTRA_STREAM_ID).orEmpty()
         currentTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
+        currentSeason = intent.getIntExtra(EXTRA_SEASON, 0)
+        currentEpisode = intent.getIntExtra(EXTRA_EPISODE, 0)
 
         val profile = profileFromIntent()
         session = BlofyPlaybackSession(this, profile, kind.ifBlank { "unknown" })
+        session.player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED && kind == "episode" && !autoNextTriggered) {
+                    autoNextTriggered = true
+                    playAdjacentEpisode(1, automatic = true)
+                }
+            }
+        })
         buildPlayerUi()
         session.play(url, intent.getLongExtra(EXTRA_RESUME_MS, 0L))
         updateTitle(currentTitle)
@@ -155,13 +167,18 @@ class PlayerActivity : AppCompatActivity() {
         subtitleButton = controlButton("الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
         qualityButton = controlButton("الجودة") { showVideoQualityDialog() }
         externalButton = controlButton("خارجي") { launchExternalPlayer() }
-        favoriteButton = controlButton("☆ المفضلة") { toggleFavorite() }
-        controls.addView(audioButton, LinearLayout.LayoutParams(160, 72).apply { marginEnd = 10 })
-        controls.addView(subtitleButton, LinearLayout.LayoutParams(160, 72).apply { marginEnd = 10 })
-        controls.addView(qualityButton, LinearLayout.LayoutParams(160, 72).apply { marginEnd = 10 })
-        controls.addView(externalButton, LinearLayout.LayoutParams(160, 72).apply { marginEnd = 10 })
-        controls.addView(favoriteButton, LinearLayout.LayoutParams(190, 72))
-        if (kind == "live") {
+        favoriteButton = controlButton("☆ المفضلة") { toggleFavorite() }.apply {
+            visibility = if (kind == "episode") View.GONE else View.VISIBLE
+        }
+        controls.addView(audioButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
+        controls.addView(subtitleButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
+        controls.addView(qualityButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
+        controls.addView(externalButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
+        controls.addView(favoriteButton, LinearLayout.LayoutParams(180, 72).apply { marginEnd = 8 })
+        if (kind == "episode") {
+            controls.addView(controlButton("السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(140, 72).apply { marginEnd = 8 })
+            controls.addView(controlButton("التالي") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(140, 72))
+        } else if (kind == "live") {
             controls.addView(TextView(this).apply {
                 text = "  CH+/CH−  •  رقم القناة"
                 textSize = 14f
@@ -188,11 +205,7 @@ class PlayerActivity : AppCompatActivity() {
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         return when (routed.action) {
             RemoteAction.BACK -> {
-                if (hud.visibility == View.VISIBLE) {
-                    hideHud(); true
-                } else {
-                    finish(); true
-                }
+                if (hud.visibility == View.VISIBLE) { hideHud(); true } else { finish(); true }
             }
             RemoteAction.PLAY_PAUSE -> {
                 if (session.player.isPlaying) session.player.pause() else session.player.play(); true
@@ -206,24 +219,66 @@ class PlayerActivity : AppCompatActivity() {
                 true
             }
             RemoteAction.CHANNEL_NEXT -> {
-                if (kind == "live") switchLive(1) else return super.dispatchKeyEvent(event)
+                when (kind) {
+                    "live" -> switchLive(1)
+                    "episode" -> playAdjacentEpisode(1)
+                    else -> return super.dispatchKeyEvent(event)
+                }
                 true
             }
             RemoteAction.CHANNEL_PREVIOUS -> {
-                if (kind == "live") switchLive(-1) else return super.dispatchKeyEvent(event)
+                when (kind) {
+                    "live" -> switchLive(-1)
+                    "episode" -> playAdjacentEpisode(-1)
+                    else -> return super.dispatchKeyEvent(event)
+                }
                 true
             }
             RemoteAction.DIGIT -> {
-                if (kind == "live" && routed.digit != null) {
-                    handleChannelDigit(routed.digit)
-                    true
-                } else super.dispatchKeyEvent(event)
+                if (kind == "live" && routed.digit != null) { handleChannelDigit(routed.digit); true } else super.dispatchKeyEvent(event)
             }
             RemoteAction.OK -> {
-                if (hud.visibility == View.VISIBLE) hideHud() else showHud()
-                true
+                if (hud.visibility == View.VISIBLE) hideHud() else showHud(); true
             }
             else -> super.dispatchKeyEvent(event)
+        }
+    }
+
+    private fun playAdjacentEpisode(delta: Int, automatic: Boolean = false) {
+        if (kind != "episode" || providerId.isBlank() || seriesId.isBlank()) {
+            autoNextTriggered = false
+            return
+        }
+        lifecycleScope.launch {
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val provider = dao.provider(providerId) ?: run { autoNextTriggered = false; return@launch }
+            val items = dao.episodes(providerId, seriesId).first().sortedWith(compareBy({ it.season }, { it.episode }))
+            val currentIndex = items.indexOfFirst { it.key == currentContentKey }
+            val targetIndex = currentIndex + delta
+            val target = items.getOrNull(targetIndex)
+            if (target == null) {
+                autoNextTriggered = false
+                if (!automatic) Toast.makeText(this@PlayerActivity, if (delta > 0) "هذه آخر حلقة" else "هذه أول حلقة", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (automatic) markCurrentCompleted()
+            currentContentKey = target.key
+            currentTitle = target.title
+            currentSeason = target.season
+            currentEpisode = target.episode
+            updateTitle("S${target.season} E${target.episode} • ${target.title}")
+            session.play(ContentUrlResolver.episode(provider, target), 0L)
+            autoNextTriggered = false
+            showHudBriefly()
+        }
+    }
+
+    private fun markCurrentCompleted() {
+        if (currentContentKey.isBlank()) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val duration = session.player.duration.coerceAtLeast(0L)
+            ContentRepository(BlofyDatabase.get(applicationContext).dao())
+                .saveResume(currentContentKey, providerId, "episode", duration, duration)
         }
     }
 
@@ -294,7 +349,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun refreshFavoriteState() {
-        if (currentContentKey.isBlank() || !::favoriteButton.isInitialized) return
+        if (currentContentKey.isBlank() || !::favoriteButton.isInitialized || kind == "episode") return
         lifecycleScope.launch {
             val item = BlofyDatabase.get(applicationContext).dao().stream(currentContentKey)
             favoriteButton.text = if (item?.favorite == true) "★ في المفضلة" else "☆ المفضلة"
@@ -302,7 +357,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun toggleFavorite() {
-        if (currentContentKey.isBlank()) return
+        if (currentContentKey.isBlank() || kind == "episode") return
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val item = dao.stream(currentContentKey) ?: return@launch
@@ -318,9 +373,7 @@ class PlayerActivity : AppCompatActivity() {
             val resolvedProvider = provider ?: dao.provider(providerId) ?: return@launch
             if (resolvedProvider.providerType.equals("m3u", true)) return@launch
             val resolvedStream = stream ?: dao.stream(currentContentKey) ?: return@launch
-            runCatching {
-                PlaylistManager(XtreamClient.api, dao).syncShortEpg(resolvedProvider, resolvedStream.remoteId)
-            }
+            runCatching { PlaylistManager(XtreamClient.api, dao).syncShortEpg(resolvedProvider, resolvedStream.remoteId) }
         }
     }
 
@@ -333,11 +386,8 @@ class PlayerActivity : AppCompatActivity() {
                 val current = items.firstOrNull { now in it.startMs until it.endMs } ?: items.firstOrNull()
                 val next = current?.let { c -> items.firstOrNull { it.startMs >= c.endMs } }
                 epgView.text = buildString {
-                    if (current != null) {
-                        append(time(current.startMs)).append("–").append(time(current.endMs)).append("  ").append(current.title)
-                    } else {
-                        append("لا تتوفر معلومات البرنامج")
-                    }
+                    if (current != null) append(time(current.startMs)).append("–").append(time(current.endMs)).append("  ").append(current.title)
+                    else append("لا تتوفر معلومات البرنامج")
                     if (next != null) append("   •   التالي: ").append(time(next.startMs)).append(" ").append(next.title)
                 }
             }
@@ -356,9 +406,7 @@ class PlayerActivity : AppCompatActivity() {
         val entries = mutableListOf<TrackEntry>()
         groups.forEach { group ->
             for (index in 0 until group.length) {
-                if (group.isTrackSupported(index)) {
-                    entries += TrackEntry(group, index, trackLabel(group.getTrackFormat(index), trackType))
-                }
+                if (group.isTrackSupported(index)) entries += TrackEntry(group, index, trackLabel(group.getTrackFormat(index), trackType))
             }
         }
         val isText = trackType == C.TRACK_TYPE_TEXT
@@ -374,30 +422,22 @@ class PlayerActivity : AppCompatActivity() {
             .setTitle(if (isText) "الترجمة" else "المسار الصوتي")
             .setItems(labels.toTypedArray()) { dialog, which ->
                 if (isText && which == 0) {
-                    session.player.trackSelectionParameters = session.player.trackSelectionParameters
-                        .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+                    session.player.trackSelectionParameters = session.player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
                 } else {
                     val entry = entries[which - if (isText) 1 else 0]
                     val override = TrackSelectionOverride(entry.group.mediaTrackGroup, listOf(entry.index))
-                    session.player.trackSelectionParameters = session.player.trackSelectionParameters
-                        .buildUpon()
-                        .setTrackTypeDisabled(trackType, false)
-                        .setOverrideForType(override)
-                        .build()
+                    session.player.trackSelectionParameters = session.player.trackSelectionParameters.buildUpon()
+                        .setTrackTypeDisabled(trackType, false).setOverrideForType(override).build()
                 }
                 dialog.dismiss()
-            }
-            .show()
+            }.show()
     }
 
     private fun showVideoQualityDialog() {
         val entries = mutableListOf<TrackEntry>()
         session.player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO && it.length > 0 }.forEach { group ->
             for (index in 0 until group.length) {
-                if (group.isTrackSupported(index)) {
-                    val format = group.getTrackFormat(index)
-                    entries += TrackEntry(group, index, videoLabel(format))
-                }
+                if (group.isTrackSupported(index)) entries += TrackEntry(group, index, videoLabel(group.getTrackFormat(index)))
             }
         }
         if (entries.isEmpty()) {
@@ -405,21 +445,16 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
         val labels = listOf("تلقائي (Auto)") + entries.map { it.label }
-        AlertDialog.Builder(this)
-            .setTitle("الجودة")
-            .setItems(labels.toTypedArray()) { dialog, which ->
-                val builder = session.player.trackSelectionParameters.buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
-                if (which == 0) {
-                    builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO)
-                } else {
-                    val entry = entries[which - 1]
-                    builder.setOverrideForType(TrackSelectionOverride(entry.group.mediaTrackGroup, listOf(entry.index)))
-                }
-                session.player.trackSelectionParameters = builder.build()
-                dialog.dismiss()
+        AlertDialog.Builder(this).setTitle("الجودة").setItems(labels.toTypedArray()) { dialog, which ->
+            val builder = session.player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+            if (which == 0) builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+            else {
+                val entry = entries[which - 1]
+                builder.setOverrideForType(TrackSelectionOverride(entry.group.mediaTrackGroup, listOf(entry.index)))
             }
-            .show()
+            session.player.trackSelectionParameters = builder.build()
+            dialog.dismiss()
+        }.show()
     }
 
     private fun videoLabel(format: Format): String {
@@ -438,9 +473,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun launchExternalPlayer() {
         val url = session.player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
-        if (url.isBlank() || !ExternalPlayerLauncher.launch(this, url, currentTitle)) {
-            Toast.makeText(this, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
-        }
+        if (url.isBlank() || !ExternalPlayerLauncher.launch(this, url, currentTitle)) Toast.makeText(this, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
     }
 
     private fun trackLabel(format: Format, type: Int): String {
@@ -467,8 +500,7 @@ class PlayerActivity : AppCompatActivity() {
         val position = session.player.currentPosition.coerceAtLeast(0L)
         val duration = session.player.duration.coerceAtLeast(0L)
         lifecycleScope.launch(Dispatchers.IO) {
-            ContentRepository(BlofyDatabase.get(applicationContext).dao())
-                .saveResume(currentContentKey, providerId, kind, position, duration)
+            ContentRepository(BlofyDatabase.get(applicationContext).dao()).saveResume(currentContentKey, providerId, kind, position, duration)
         }
     }
 
@@ -486,7 +518,6 @@ class PlayerActivity : AppCompatActivity() {
     )
 
     private fun Int.floorMod(size: Int): Int = ((this % size) + size) % size
-
     private data class TrackEntry(val group: Tracks.Group, val index: Int, val label: String)
 
     companion object {
@@ -499,5 +530,8 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_STREAM_ID = "stream_id"
         const val EXTRA_CATEGORY_ID = "category_id"
         const val EXTRA_TITLE = "title"
+        const val EXTRA_SERIES_ID = "series_id"
+        const val EXTRA_SEASON = "season"
+        const val EXTRA_EPISODE = "episode"
     }
 }
