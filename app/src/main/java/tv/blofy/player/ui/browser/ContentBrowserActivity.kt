@@ -24,10 +24,12 @@ import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
+import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -46,6 +48,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var currentCategoryId: String? = null
     private var lastPreviewKey: String? = null
     private var resumedOnce = false
+    private val epgRefreshAt = mutableMapOf<String, Long>()
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND) ?: KIND_LIVE }
     private val statePrefs by lazy { getSharedPreferences("blofy_browser_state", MODE_PRIVATE) }
 
@@ -189,6 +192,21 @@ class ContentBrowserActivity : AppCompatActivity() {
         rememberStream(stream)
         previewTitle?.text = stream.name
         previewSession?.play(url)
+        refreshShortEpg(stream)
+    }
+
+    private fun refreshShortEpg(stream: StreamEntity) {
+        if (!::provider.isInitialized || provider.providerType.equals("m3u", true)) return
+        val now = System.currentTimeMillis()
+        val last = epgRefreshAt[stream.remoteId] ?: 0L
+        if (now - last < 120_000L) return
+        epgRefreshAt[stream.remoteId] = now
+        lifecycleScope.launch {
+            runCatching {
+                PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao())
+                    .syncShortEpg(provider, stream.remoteId)
+            }
+        }
     }
 
     private fun stopPreview() {
@@ -210,6 +228,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             })
             else -> {
                 rememberStream(stream)
+                refreshShortEpg(stream)
                 val profile = profile(provider)
                 val url = ContentUrlResolver.live(provider, profile, stream)
                 stopPreview()
