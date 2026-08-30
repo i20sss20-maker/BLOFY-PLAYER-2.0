@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -24,14 +25,16 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var provider: ProviderEntity
     private lateinit var status: TextView
     private lateinit var redirectsButton: Button
+    private lateinit var themeButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val theme = ThemeManager.current(this)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(56, 40, 56, 40)
-            setBackgroundColor(Color.rgb(5, 5, 10))
+            setBackgroundColor(theme.background)
         }
         root.addView(TextView(this).apply {
             text = "إعدادات BLOFY"
@@ -41,7 +44,7 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = "إعدادات المزود مستقلة حتى لا يؤثر سيرفر على الآخر"
             textSize = 14f
-            setTextColor(Color.rgb(185, 140, 255))
+            setTextColor(theme.accent)
             setPadding(0, 6, 0, 12)
         })
         status = TextView(this).apply {
@@ -74,6 +77,18 @@ class SettingsActivity : AppCompatActivity() {
         row2.addView(refresh, LinearLayout.LayoutParams(260, 76).apply { marginEnd = 12 })
         row2.addView(playlists, LinearLayout.LayoutParams(280, 76))
         root.addView(row2)
+
+        val row3 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 14, 0, 0)
+        }
+        themeButton = actionButton("الثيم: ${theme.id.uppercase()}") {
+            val next = ThemeManager.toggle(this)
+            themeButton.text = "الثيم: ${next.id.uppercase()}"
+            recreate()
+        }
+        row3.addView(themeButton, LinearLayout.LayoutParams(260, 76))
+        root.addView(row3)
 
         setContentView(root)
         ts.requestFocus()
@@ -143,8 +158,9 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
+        val theme = ThemeManager.current(this@SettingsActivity)
         cornerRadius = 18f
-        setColor(if (focused) Color.rgb(72, 34, 120) else Color.rgb(20, 17, 31))
-        setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(50, 42, 66))
+        setColor(if (focused) theme.accent else theme.surface)
+        setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else theme.accent)
     }
 }
