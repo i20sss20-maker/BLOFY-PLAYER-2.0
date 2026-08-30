@@ -39,3 +39,20 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
   allow_cross_protocol_redirects BOOLEAN,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS device_playlists (
+  id UUID PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  provider_type TEXT NOT NULL CHECK (provider_type IN ('xtream','m3u')),
+  base_url_enc TEXT NOT NULL,
+  username_enc TEXT,
+  password_enc TEXT,
+  active BOOLEAN NOT NULL DEFAULT FALSE,
+  revision BIGINT NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_playlists_device ON device_playlists(device_id, updated_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_device_playlists_one_active ON device_playlists(device_id) WHERE active = TRUE;
