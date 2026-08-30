@@ -35,7 +35,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Audio/subtitle track selection
 - [x] Favorite toggle in HUD
 - [x] Video quality selector (Auto/available video tracks)
-- [ ] Full TV remote state-machine polish across every screen
+- [x] TV remote/focus polish: centralized key routing, adapter focus retention, Home focus memory, Settings focus memory, provider-row/action focus restoration, player HUD D-pad behavior
 - [x] Catch-up/archive flow for Xtream channels that advertise archive support
 
 ## Movies / Series
@@ -57,7 +57,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Edit existing saved playlist credentials/details in place
 - [x] QR/barcode on login
 - [x] Activation client flow is backend-ready: configurable endpoint, trial/active/expired/blocked states, expiry, cached offline entitlement and Connect gating
-- [ ] Deploy/configure the real BLOFY activation backend endpoint (external service work)
+- [ ] Deploy/configure the real BLOFY activation backend endpoint (external service work; app contract is complete)
 
 ## Themes / device classes
 - [x] BLOFY theme profile foundation
