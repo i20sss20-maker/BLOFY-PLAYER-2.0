@@ -27,18 +27,18 @@ object TransportFactory {
         return DefaultDataSource.Factory(appContext, upstream)
     }
 
-    private fun createCronet(context: Context, profile: ProviderProfile): HttpDataSource.Factory? =
-        runCatching {
+    private fun createCronet(context: Context, profile: ProviderProfile): HttpDataSource.Factory? {
+        return runCatching {
             val engine = CronetEngine.Builder(context)
                 .enableHttp2(true)
                 .enableQuic(true)
                 .build()
-            CronetDataSource.Factory(engine, cronetExecutor)
+            val factory: CronetDataSource.Factory = CronetDataSource.Factory(engine, cronetExecutor)
                 .setUserAgent("BLOFY PLAYER/2.0")
-                .setConnectTimeoutMs(profile.connectTimeoutMs)
-                .setReadTimeoutMs(profile.readTimeoutMs)
-                .setDefaultRequestProperties(profile.headers)
+            factory.setDefaultRequestProperties(profile.headers)
+            factory
         }.getOrNull()
+    }
 
     private fun createHttp(profile: ProviderProfile): HttpDataSource.Factory =
         DefaultHttpDataSource.Factory()
