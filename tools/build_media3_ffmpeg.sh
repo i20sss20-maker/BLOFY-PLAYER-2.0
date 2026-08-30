@@ -3,7 +3,7 @@ set -euo pipefail
 
 MEDIA3_VERSION="${MEDIA3_VERSION:-1.6.1}"
 FFMPEG_VERSION="${FFMPEG_VERSION:-n6.0}"
-ANDROID_ABI="${ANDROID_ABI:-21}"
+ANDROID_ABI="${ANDROID_ABI:-23}"
 HOST_PLATFORM="${HOST_PLATFORM:-linux-x86_64}"
 WORK_ROOT="${WORK_ROOT:-$PWD/.ffmpeg-build}"
 OUT_DIR="${OUT_DIR:-$PWD/build/ffmpeg-native}"
@@ -15,7 +15,9 @@ if [[ -z "$NDK_PATH" || ! -d "$NDK_PATH" ]]; then
 fi
 
 # Decoder names follow FFmpeg decoder names. dca covers DTS-family audio.
-DEFAULT_DECODERS=(ac3 eac3 dca aac mp3 opus vorbis flac)
+# Keep this list audio-only: BLOFY uses Media3/MediaCodec for video and FFmpeg
+# as the compatibility renderer for audio formats that boxes frequently miss.
+DEFAULT_DECODERS=(ac3 eac3 dca truehd aac mp3 opus vorbis flac)
 if [[ -n "${ENABLED_DECODERS:-}" ]]; then
   # shellcheck disable=SC2206
   DECODERS=(${ENABLED_DECODERS})
@@ -31,6 +33,11 @@ FFMPEG_DIR="$WORK_ROOT/ffmpeg"
 
 git clone --depth 1 --branch "$MEDIA3_VERSION" https://github.com/androidx/media.git "$MEDIA3_DIR"
 git clone --depth 1 --branch "$FFMPEG_VERSION" https://github.com/FFmpeg/FFmpeg.git "$FFMPEG_DIR"
+
+# Make Android SDK resolution deterministic inside CI/native build hosts.
+if [[ -n "${ANDROID_HOME:-}" ]]; then
+  printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$MEDIA3_DIR/local.properties"
+fi
 
 FFMPEG_MODULE_PATH="$MEDIA3_DIR/libraries/decoder_ffmpeg/src/main"
 JNI_DIR="$FFMPEG_MODULE_PATH/jni"
@@ -57,6 +64,12 @@ if [[ -z "$AAR" || ! -f "$AAR" ]]; then
   echo "FFmpeg decoder AAR was not produced" >&2
   exit 3
 fi
+
+# Refuse a Java-only AAR. The release artifact must contain the JNI decoder.
+unzip -l "$AAR" | grep -Eiq 'jni/.*/lib(ffmpeg|ffmpegJNI).*\.so|libffmpegJNI\.so' || {
+  echo "FFmpeg AAR does not contain the expected JNI library" >&2
+  exit 4
+}
 
 DEST="$OUT_DIR/media3-decoder-ffmpeg-${MEDIA3_VERSION}.aar"
 cp "$AAR" "$DEST"
