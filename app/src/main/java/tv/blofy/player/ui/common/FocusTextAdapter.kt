@@ -10,7 +10,8 @@ import androidx.recyclerview.widget.RecyclerView
 class FocusTextAdapter<T>(
     private val label: (T) -> String,
     private val onClick: (T) -> Unit,
-    private val onFocus: ((T) -> Unit)? = null
+    private val onFocus: ((T) -> Unit)? = null,
+    private val onLongClick: ((T) -> Unit)? = null
 ) : RecyclerView.Adapter<FocusTextAdapter<T>.Holder>() {
     private val items = mutableListOf<T>()
 
@@ -28,6 +29,7 @@ class FocusTextAdapter<T>(
             setPadding(22, 0, 22, 0)
             isFocusable = true
             isClickable = true
+            isLongClickable = true
             background = background(false)
             setOnFocusChangeListener { v, focused ->
                 v.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(110).start()
@@ -43,6 +45,10 @@ class FocusTextAdapter<T>(
         holder.text.text = label(item)
         holder.text.tag = position
         holder.text.setOnClickListener { onClick(item) }
+        holder.text.setOnLongClickListener {
+            onLongClick?.invoke(item)
+            onLongClick != null
+        }
     }
 
     override fun getItemCount(): Int = items.size
