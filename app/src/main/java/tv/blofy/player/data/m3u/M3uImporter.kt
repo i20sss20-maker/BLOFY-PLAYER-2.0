@@ -1,5 +1,6 @@
 package tv.blofy.player.data.m3u
 
+import kotlinx.coroutines.flow.first
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import tv.blofy.player.data.local.BlofyDao
@@ -32,8 +33,7 @@ class M3uImporter(
 
         listOf("live", "movie").forEach { kind ->
             val kindEntries = entries.filter { it.kind == kind }
-            val oldFlags = dao.streams(provider.id, kind, null)
-            val favorites = kotlinx.coroutines.flow.first(oldFlags).associate { it.key to (it.favorite to it.locked) }
+            val favorites = dao.streams(provider.id, kind, null).first().associate { it.key to (it.favorite to it.locked) }
             val groups = kindEntries.map { it.group }.distinct()
 
             dao.clearCategories(provider.id, kind)
