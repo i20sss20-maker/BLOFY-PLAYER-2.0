@@ -1,0 +1,12 @@
+<resources>
+    <style name="Theme.Blofy" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@color/blofy_black</item>
+        <item name="android:colorAccent">@color/blofy_purple</item>
+        <item name="colorPrimary">@color/blofy_purple</item>
+        <item name="colorSecondary">@color/blofy_purple_soft</item>
+        <item name="android:navigationBarColor">@color/blofy_black</item>
+        <item name="android:statusBarColor">@color/blofy_black</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
