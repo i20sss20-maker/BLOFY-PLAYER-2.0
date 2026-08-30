@@ -13,7 +13,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] direct_source retained as data, not primary Xtream route
 - [ ] FFmpeg audio extension for AC3/EAC3/DTS-class compatibility (requires locally built Media3 FFmpeg native module; not available from Google Maven)
 - [x] External-player launch path (system/VLC/MX if installed)
-- [ ] Automatic VLC fallback after Media3 failure
+- [x] Automatic VLC/MX/external fallback after Media3 failure and one same-URL retry
 - [x] Read-only playback cache policy (streaming does not write new spans)
 
 ## Local-first data
