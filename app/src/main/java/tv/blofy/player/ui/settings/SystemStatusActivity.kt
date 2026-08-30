@@ -61,6 +61,7 @@ class SystemStatusActivity : AppCompatActivity() {
             }
             body.text = buildString {
                 appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                appendLine("Build: ${BuildConfig.BUILD_SHA.take(12)}")
                 appendLine("Device class: ${device.name}")
                 appendLine("FFmpeg native: ${if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "مدمج" else "غير مدمج"}")
                 appendLine("Activation endpoint: ${if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) "غير مضبوط" else "مضبوط"}")
