@@ -30,3 +30,12 @@ CREATE TABLE IF NOT EXISTS playback_diagnostics (
 
 CREATE INDEX IF NOT EXISTS idx_playback_diag_device_created ON playback_diagnostics(device_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_playback_diag_provider_created ON playback_diagnostics(provider_key, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS provider_profiles (
+  provider_key TEXT PRIMARY KEY,
+  live_format TEXT CHECK (live_format IN ('ts','m3u8')),
+  preferred_transport TEXT CHECK (preferred_transport IN ('cronet','http')),
+  preferred_engine TEXT CHECK (preferred_engine IN ('media3','vlc')),
+  allow_cross_protocol_redirects BOOLEAN,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
