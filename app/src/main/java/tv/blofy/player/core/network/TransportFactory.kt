@@ -1,6 +1,7 @@
 package tv.blofy.player.core.network
 
 import android.content.Context
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -12,6 +13,7 @@ import tv.blofy.player.core.provider.ProviderProfile
  * Cronet is intentionally isolated behind this boundary so it can be enabled per provider
  * without changing Live/Movie/Series code.
  */
+@UnstableApi
 object TransportFactory {
     fun create(context: Context, profile: ProviderProfile): DataSource.Factory {
         val http = DefaultHttpDataSource.Factory()
