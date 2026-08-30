@@ -16,19 +16,20 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.playback.ExternalPlayerLauncher
+import tv.blofy.player.core.security.ParentalGate
+import tv.blofy.player.core.security.ParentalPinManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.player.PlayerActivity
 
 class MovieDetailsActivity : AppCompatActivity() {
     private lateinit var favoriteButton: Button
+    private lateinit var lockButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         val contentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
-        if (providerId.isBlank() || contentKey.isBlank()) {
-            finish(); return
-        }
+        if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }
 
         val root = FrameLayout(this).apply { setBackgroundColor(Color.rgb(5, 5, 10)) }
         val panel = LinearLayout(this).apply {
@@ -66,8 +67,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 setPadding(0, 8, 0, 22)
             })
             panel.addView(TextView(this@MovieDetailsActivity).apply {
-                text = stream.plot?.takeIf { it.isNotBlank() }
-                    ?: "التشغيل يبدأ فقط عند اختيارك. BLOFY يستخدم رابط الفيلم الأصلي وامتداده المحفوظ من المزود."
+                text = stream.plot?.takeIf { it.isNotBlank() } ?: "التشغيل يبدأ فقط عند اختيارك."
                 textSize = 17f
                 maxLines = 5
                 setTextColor(Color.rgb(220, 220, 225))
@@ -79,28 +79,49 @@ class MovieDetailsActivity : AppCompatActivity() {
             val play = actionButton(if (resumeMs > 30_000L) "استئناف" else "تشغيل") {
                 openPlayer(provider.id, stream.key, stream.name, url, resumeMs)
             }
-            row.addView(play, LinearLayout.LayoutParams(220, 82).apply { marginEnd = 12 })
-
+            row.addView(play, LinearLayout.LayoutParams(190, 82).apply { marginEnd = 10 })
             if (resumeMs > 30_000L) {
-                row.addView(actionButton("من البداية") {
-                    openPlayer(provider.id, stream.key, stream.name, url, 0L)
-                }, LinearLayout.LayoutParams(210, 82).apply { marginEnd = 12 })
+                row.addView(actionButton("من البداية") { openPlayer(provider.id, stream.key, stream.name, url, 0L) }, LinearLayout.LayoutParams(190, 82).apply { marginEnd = 10 })
             }
-
             row.addView(actionButton("مشغل خارجي") {
-                if (!ExternalPlayerLauncher.launch(this@MovieDetailsActivity, url, stream.name)) {
-                    Toast.makeText(this@MovieDetailsActivity, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
-                }
-            }, LinearLayout.LayoutParams(220, 82).apply { marginEnd = 12 })
+                if (!ExternalPlayerLauncher.launch(this@MovieDetailsActivity, url, stream.name)) Toast.makeText(this@MovieDetailsActivity, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(190, 82).apply { marginEnd = 10 })
 
-            favoriteButton = actionButton(if (stream.favorite) "★ في المفضلة" else "☆ المفضلة") {
+            favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
                 lifecycleScope.launch {
                     val current = dao.stream(contentKey) ?: return@launch
                     dao.setFavorite(contentKey, !current.favorite)
-                    favoriteButton.text = if (!current.favorite) "★ في المفضلة" else "☆ المفضلة"
+                    favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(220, 82))
+            row.addView(favoriteButton, LinearLayout.LayoutParams(185, 82).apply { marginEnd = 10 })
+
+            lockButton = actionButton(if (stream.locked) "🔒 مقفل" else "🔓 قفل") {
+                lifecycleScope.launch {
+                    val current = dao.stream(contentKey) ?: return@launch
+                    if (current.locked) {
+                        ParentalGate.requirePin(this@MovieDetailsActivity) {
+                            lifecycleScope.launch {
+                                dao.setLocked(contentKey, false)
+                                lockButton.text = "🔓 قفل"
+                            }
+                        }
+                    } else {
+                        if (!ParentalPinManager.hasPin(this@MovieDetailsActivity)) {
+                            ParentalGate.requirePin(this@MovieDetailsActivity) {
+                                lifecycleScope.launch {
+                                    dao.setLocked(contentKey, true)
+                                    lockButton.text = "🔒 مقفل"
+                                }
+                            }
+                        } else {
+                            dao.setLocked(contentKey, true)
+                            lockButton.text = "🔒 مقفل"
+                        }
+                    }
+                }
+            }
+            row.addView(lockButton, LinearLayout.LayoutParams(175, 82))
             panel.addView(row)
             play.requestFocus()
         }
@@ -120,7 +141,7 @@ class MovieDetailsActivity : AppCompatActivity() {
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
-        textSize = 16f
+        textSize = 15f
         isFocusable = true
         setTextColor(Color.WHITE)
         background = buttonBackground(false)
