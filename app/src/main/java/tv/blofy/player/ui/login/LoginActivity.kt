@@ -15,21 +15,25 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.core.identity.ActivationManager
+import tv.blofy.player.core.theme.ThemeManager
+import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var status: TextView
+    private lateinit var theme: ThemeProfile
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        theme = ThemeManager.current(this)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(54, 48, 54, 48)
-            setBackgroundColor(Color.rgb(5, 5, 10))
+            setBackgroundColor(theme.background)
         }
         root.addView(TextView(this).apply {
             text = "BLOFY PLAYER"
@@ -40,7 +44,7 @@ class LoginActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = "فعّل جهازك ثم أضف قائمة التشغيل"
             textSize = 16f
-            setTextColor(Color.rgb(185, 140, 255))
+            setTextColor(theme.accent)
             gravity = Gravity.CENTER
             setPadding(0, 10, 0, 26)
         })
@@ -59,7 +63,7 @@ class LoginActivity : AppCompatActivity() {
         }
         status = TextView(this).apply {
             textSize = 14f
-            setTextColor(Color.rgb(190, 165, 225))
+            setTextColor(theme.accent)
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 22)
         }
@@ -103,7 +107,7 @@ class LoginActivity : AppCompatActivity() {
 
     private suspend fun refreshProviderStatus() {
         val provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
-        status.text = if (provider == null) "لا توجد قائمة محفوظة" else "القائمة المحفوظة: ${provider.name}"
+        status.text = if (provider == null) "لا توجد قائمة محفوظة" else "القائمة النشطة: ${provider.name}"
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
@@ -115,14 +119,14 @@ class LoginActivity : AppCompatActivity() {
         background = buttonBackground(false)
         setOnFocusChangeListener { view, focused ->
             view.background = buttonBackground(focused)
-            view.animate().scaleX(if (focused) 1.04f else 1f).scaleY(if (focused) 1.04f else 1f).setDuration(100).start()
+            view.animate().scaleX(if (focused) theme.focusScale else 1f).scaleY(if (focused) theme.focusScale else 1f).setDuration(theme.motionMs).start()
         }
         setOnClickListener { action() }
     }
 
     private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = 20f
-        setColor(if (focused) Color.rgb(73, 34, 122) else Color.rgb(20, 17, 31))
-        setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(50, 42, 66))
+        setColor(if (focused) theme.accent else theme.surface)
+        setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else theme.accent)
     }
 }
