@@ -11,7 +11,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
 
-@UnstableApi
+@OptIn(UnstableApi::class)
 class BlofyPlaybackSession(
     context: Context,
     private val profile: ProviderProfile
