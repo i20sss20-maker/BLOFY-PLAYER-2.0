@@ -4,6 +4,8 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -12,6 +14,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -28,6 +32,7 @@ import tv.blofy.player.ui.player.PlayerActivity
 class SearchActivity : AppCompatActivity() {
     private lateinit var input: EditText
     private lateinit var results: LinearLayout
+    private var searchJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,9 +54,26 @@ class SearchActivity : AppCompatActivity() {
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             isFocusable = true
             setOnEditorActionListener { _, _, _ ->
-                runSearch(text?.toString().orEmpty())
+                searchJob?.cancel()
+                runSearch(text?.toString().orEmpty(), moveFocus = true)
                 true
             }
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    searchJob?.cancel()
+                    val query = s?.toString().orEmpty()
+                    if (query.isBlank()) {
+                        results.removeAllViews()
+                        return
+                    }
+                    searchJob = lifecycleScope.launch {
+                        delay(180L)
+                        runSearch(query, moveFocus = false)
+                    }
+                }
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
         }
         results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -60,10 +82,10 @@ class SearchActivity : AppCompatActivity() {
         input.requestFocus()
     }
 
-    private fun runSearch(query: String) {
+    private fun runSearch(query: String, moveFocus: Boolean) {
         val normalized = query.trim()
         if (normalized.isEmpty()) {
-            showMessage("اكتب كلمة للبحث")
+            results.removeAllViews()
             return
         }
         lifecycleScope.launch {
@@ -74,6 +96,7 @@ class SearchActivity : AppCompatActivity() {
                 return@launch
             }
             val items = withContext(Dispatchers.IO) { ContentRepository(dao).search(provider.id, normalized) }
+            if (input.text?.toString()?.trim() != normalized) return@launch
             results.removeAllViews()
             if (items.isEmpty()) {
                 showMessage("لا توجد نتائج")
@@ -97,7 +120,7 @@ class SearchActivity : AppCompatActivity() {
                 }
                 results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
             }
-            results.getChildAt(0)?.requestFocus()
+            if (moveFocus) results.getChildAt(0)?.requestFocus()
         }
     }
 
@@ -152,5 +175,10 @@ class SearchActivity : AppCompatActivity() {
             setTextColor(Color.LTGRAY)
             setPadding(0, 24, 0, 0)
         })
+    }
+
+    override fun onDestroy() {
+        searchJob?.cancel()
+        super.onDestroy()
     }
 }
