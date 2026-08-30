@@ -25,10 +25,10 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Install Android NDK r26b and CMake
+      - name: Install Media3-matched Android NDK and CMake
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.1.10909125" "cmake;3.22.1"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;25.1.8937393" "cmake;3.22.1"
 
       - name: Checkout AndroidX Media3 1.6.1
         run: |
@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euxo pipefail
           FFMPEG_MODULE_PATH="$RUNNER_TEMP/media3/libraries/decoder_ffmpeg/src/main"
-          NDK_PATH="$ANDROID_HOME/ndk/26.1.10909125"
+          NDK_PATH="$ANDROID_HOME/ndk/25.1.8937393"
           test -d "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
           cd "$FFMPEG_MODULE_PATH/jni"
           git clone --depth 1 --branch release/6.0 https://github.com/FFmpeg/FFmpeg.git ffmpeg
