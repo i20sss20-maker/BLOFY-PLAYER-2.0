@@ -13,19 +13,20 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import tv.blofy.player.core.security.ParentalGate
+import tv.blofy.player.core.security.ParentalPinManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.series.EpisodesActivity
 
 class SeriesDetailsActivity : AppCompatActivity() {
     private lateinit var favoriteButton: Button
+    private lateinit var lockButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         val contentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
-        if (providerId.isBlank() || contentKey.isBlank()) {
-            finish(); return
-        }
+        if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }
 
         val root = FrameLayout(this).apply { setBackgroundColor(Color.rgb(5, 5, 10)) }
         val panel = LinearLayout(this).apply {
@@ -58,8 +59,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 setPadding(0, 8, 0, 22)
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = stream.plot?.takeIf { it.isNotBlank() }
-                    ?: "لا يوجد تشغيل تلقائي في صفحة التفاصيل. افتح الحلقات، اختر الموسم والحلقة، ثم يبدأ التشغيل بالرابط الأصلي للحلقة."
+                text = stream.plot?.takeIf { it.isNotBlank() } ?: "اختر الموسم والحلقة لبدء التشغيل."
                 textSize = 17f
                 maxLines = 5
                 setTextColor(Color.rgb(220, 220, 225))
@@ -74,16 +74,43 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     putExtra(EpisodesActivity.EXTRA_SERIES_NAME, stream.name)
                 })
             }
-            row.addView(episodes, LinearLayout.LayoutParams(230, 82).apply { marginEnd = 14 })
+            row.addView(episodes, LinearLayout.LayoutParams(220, 82).apply { marginEnd = 12 })
 
-            favoriteButton = actionButton(if (stream.favorite) "★ في المفضلة" else "☆ المفضلة") {
+            favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
                 lifecycleScope.launch {
                     val current = dao.stream(contentKey) ?: return@launch
                     dao.setFavorite(contentKey, !current.favorite)
-                    favoriteButton.text = if (!current.favorite) "★ في المفضلة" else "☆ المفضلة"
+                    favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(230, 82))
+            row.addView(favoriteButton, LinearLayout.LayoutParams(220, 82).apply { marginEnd = 12 })
+
+            lockButton = actionButton(if (stream.locked) "🔒 مقفل" else "🔓 قفل") {
+                lifecycleScope.launch {
+                    val current = dao.stream(contentKey) ?: return@launch
+                    if (current.locked) {
+                        ParentalGate.requirePin(this@SeriesDetailsActivity) {
+                            lifecycleScope.launch {
+                                dao.setLocked(contentKey, false)
+                                lockButton.text = "🔓 قفل"
+                            }
+                        }
+                    } else {
+                        if (!ParentalPinManager.hasPin(this@SeriesDetailsActivity)) {
+                            ParentalGate.requirePin(this@SeriesDetailsActivity) {
+                                lifecycleScope.launch {
+                                    dao.setLocked(contentKey, true)
+                                    lockButton.text = "🔒 مقفل"
+                                }
+                            }
+                        } else {
+                            dao.setLocked(contentKey, true)
+                            lockButton.text = "🔒 مقفل"
+                        }
+                    }
+                }
+            }
+            row.addView(lockButton, LinearLayout.LayoutParams(200, 82))
             panel.addView(row)
             episodes.requestFocus()
         }
