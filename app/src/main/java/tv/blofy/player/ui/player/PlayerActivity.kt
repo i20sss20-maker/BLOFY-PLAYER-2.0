@@ -3,6 +3,7 @@ package tv.blofy.player.ui.player
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.ViewGroup
+import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
@@ -17,7 +18,7 @@ import tv.blofy.player.core.remote.RemoteKeyRouter
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 
-@OptIn(UnstableApi::class)
+@OptIn(markerClass = [UnstableApi::class])
 class PlayerActivity : AppCompatActivity() {
     private lateinit var session: BlofyPlaybackSession
     private lateinit var playerView: PlayerView
