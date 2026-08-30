@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BLOFY PLAYER — إدارة الجهاز</title>
+  <style>
+    :root{color-scheme:dark;--bg:#05050a;--surface:#12101e;--surface2:#1b1630;--accent:#8b5cf6;--text:#fff;--muted:#b9accf;--danger:#ef4444}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#1e1135 0,#05050a 36%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;min-height:100vh}
+    main{width:min(980px,calc(100% - 28px));margin:36px auto}.brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}.logo{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,#a78bfa,#6d28d9);display:grid;place-items:center;font-weight:900}.brand h1{font-size:24px;margin:0}.brand p{margin:4px 0 0;color:var(--muted);font-size:13px}
+    .card{background:rgba(18,16,30,.94);border:1px solid #32274a;border-radius:22px;padding:20px;margin-bottom:18px;box-shadow:0 18px 50px rgba(0,0,0,.2)}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.full{grid-column:1/-1}label{font-size:13px;color:var(--muted);display:block;margin:0 0 6px}input,select{width:100%;height:48px;border-radius:13px;border:1px solid #43355e;background:#0b0912;color:white;padding:0 13px;font-size:15px;outline:none}input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,92,246,.15)}
+    button{border:0;border-radius:13px;padding:0 18px;height:46px;font-weight:700;cursor:pointer;background:var(--accent);color:white}button.secondary{background:#2a223b}button.danger{background:#4a1720;color:#fecaca}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.status{min-height:22px;color:#c4b5fd;font-size:14px;margin-top:10px}.hidden{display:none!important}
+    .playlist{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;border:1px solid #35294c;background:#0c0a14;border-radius:16px;padding:15px;margin-top:10px}.playlist h3{margin:0 0 5px;font-size:16px}.playlist p{margin:0;color:var(--muted);font-size:13px;word-break:break-all}.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#2d2050;color:#ddd6fe;font-size:11px;margin-inline-start:6px}.badge.active{background:#17452f;color:#bbf7d0}
+    .empty{text-align:center;padding:32px;color:var(--muted)}@media(max-width:680px){main{margin:18px auto}.grid{grid-template-columns:1fr}.full{grid-column:auto}.playlist{grid-template-columns:1fr}.playlist .actions{margin-top:0}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand"><div class="logo">B</div><div><h1>BLOFY PLAYER</h1><p>تفعيل الجهاز وإدارة قوائم التشغيل</p></div></div>
+
+  <section class="card" id="loginCard">
+    <h2>دخول الجهاز</h2>
+    <p style="color:var(--muted)">أدخل رقم الجهاز والرمز الظاهرين في شاشة BLOFY PLAYER.</p>
+    <div class="grid">
+      <div><label>رقم الجهاز</label><input id="deviceId" autocomplete="off" placeholder="BLOFY-66HL-GB09" /></div>
+      <div><label>رمز التفعيل</label><input id="activationCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" /></div>
+    </div>
+    <div class="actions"><button id="loginBtn">دخول</button></div><div id="loginStatus" class="status"></div>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><h2 style="margin:0">قوائم التشغيل</h2><p id="deviceLabel" style="color:var(--muted);margin:6px 0 0"></p></div><div class="actions" style="margin:0"><button id="newBtn">+ إضافة قائمة</button><button class="secondary" id="logoutBtn">خروج</button></div></div>
+      <div id="listStatus" class="status"></div><div id="playlistList"></div>
+    </div>
+
+    <div class="card hidden" id="editor">
+      <h2 id="editorTitle">إضافة قائمة</h2>
+      <div class="grid">
+        <div><label>اسم القائمة</label><input id="name" placeholder="قائمتي" /></div>
+        <div><label>النوع</label><select id="providerType"><option value="xtream">Xtream Codes</option><option value="m3u">M3U / M3U8</option></select></div>
+        <div class="full"><label>رابط السيرفر / القائمة</label><input id="baseUrl" inputmode="url" placeholder="https://example.com" /></div>
+        <div class="xtream"><label>اسم المستخدم</label><input id="username" autocomplete="off" /></div>
+        <div class="xtream"><label>كلمة المرور</label><input id="password" type="password" autocomplete="off" /></div>
+        <div class="full"><label><input id="active" type="checkbox" checked style="width:auto;height:auto;margin-left:7px" /> اجعلها القائمة النشطة</label></div>
+      </div>
+      <div class="actions"><button id="saveBtn">حفظ</button><button class="secondary" id="cancelBtn">إلغاء</button></div><div id="editorStatus" class="status"></div>
+    </div>
+  </section>
+</main>
+<script>
+const $=id=>document.getElementById(id);let auth=null,currentId=null,items=[];
+function payload(extra={}){return {...auth,...extra}}
+async function api(path,method='POST',body={}){const r=await fetch(path,{method,headers:{'content-type':'application/json'},body:JSON.stringify(payload(body))});const text=await r.text();let data={};try{data=text?JSON.parse(text):{}}catch{}if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data}
+function showStatus(el,msg,bad=false){el.textContent=msg||'';el.style.color=bad?'#fca5a5':'#c4b5fd'}
+async function login(){auth={deviceId:$('deviceId').value.trim(),activationCode:$('activationCode').value.trim()};showStatus($('loginStatus'),'جاري التحقق...');try{await load();$('loginCard').classList.add('hidden');$('app').classList.remove('hidden');$('deviceLabel').textContent=auth.deviceId;sessionStorage.setItem('blofyDevice',JSON.stringify(auth));showStatus($('loginStatus'),'')}catch(e){auth=null;showStatus($('loginStatus'),'تعذر الدخول: '+e.message,true)}}
+async function load(){const data=await api('/api/v1/portal/playlists/list');items=data.items||[];render();}
+function render(){const root=$('playlistList');root.innerHTML='';if(!items.length){root.innerHTML='<div class="empty">لا توجد قوائم محفوظة</div>';return}items.forEach(x=>{const el=document.createElement('div');el.className='playlist';el.innerHTML=`<div><h3>${escapeHtml(x.name)} <span class="badge">${escapeHtml(x.providerType.toUpperCase())}</span>${x.active?'<span class="badge active">نشطة</span>':''}</h3><p>${escapeHtml(x.baseUrl)}</p></div><div class="actions"><button class="secondary edit">تعديل</button><button class="danger del">حذف</button></div>`;el.querySelector('.edit').onclick=()=>edit(x);el.querySelector('.del').onclick=()=>removeItem(x);root.appendChild(el)})}
+function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function typeUi(){document.querySelectorAll('.xtream').forEach(x=>x.classList.toggle('hidden',$('providerType').value!=='xtream'))}
+function openEditor(){currentId=null;$('editorTitle').textContent='إضافة قائمة';['name','baseUrl','username','password'].forEach(i=>$(i).value='');$('providerType').value='xtream';$('active').checked=true;typeUi();$('editor').classList.remove('hidden');$('editor').scrollIntoView({behavior:'smooth'})}
+function edit(x){currentId=x.id;$('editorTitle').textContent='تعديل القائمة';$('name').value=x.name||'';$('providerType').value=x.providerType;$('baseUrl').value=x.baseUrl||'';$('username').value=x.username||'';$('password').value=x.password||'';$('active').checked=!!x.active;typeUi();$('editor').classList.remove('hidden');$('editor').scrollIntoView({behavior:'smooth'})}
+async function save(){showStatus($('editorStatus'),'جاري الحفظ...');try{await api('/api/v1/portal/playlists','POST',{id:currentId||undefined,name:$('name').value,providerType:$('providerType').value,baseUrl:$('baseUrl').value,username:$('username').value,password:$('password').value,active:$('active').checked});showStatus($('editorStatus'),'تم الحفظ');$('editor').classList.add('hidden');await load()}catch(e){showStatus($('editorStatus'),'فشل الحفظ: '+e.message,true)}}
+async function removeItem(x){if(!confirm('حذف '+x.name+'؟'))return;try{await api('/api/v1/portal/playlists/'+encodeURIComponent(x.id),'DELETE');await load()}catch(e){showStatus($('listStatus'),'فشل الحذف: '+e.message,true)}}
+function logout(){sessionStorage.removeItem('blofyDevice');auth=null;$('app').classList.add('hidden');$('loginCard').classList.remove('hidden')}
+$('loginBtn').onclick=login;$('newBtn').onclick=openEditor;$('logoutBtn').onclick=logout;$('saveBtn').onclick=save;$('cancelBtn').onclick=()=> $('editor').classList.add('hidden');$('providerType').onchange=typeUi;
+try{const saved=JSON.parse(sessionStorage.getItem('blofyDevice')||'null');if(saved?.deviceId&&saved?.activationCode){$('deviceId').value=saved.deviceId;$('activationCode').value=saved.activationCode;login()}}catch{}
+</script>
+</body>
+</html>
