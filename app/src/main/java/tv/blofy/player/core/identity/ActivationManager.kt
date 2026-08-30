@@ -13,10 +13,24 @@ class ActivationManager(
         if (existing != null) return existing
         val created = ActivationEntity(
             deviceId = DeviceIdentity.deviceId(context),
-            activationCode = DeviceIdentity.activationCode(context)
+            activationCode = DeviceIdentity.activationCode(context),
+            lastCheckAt = System.currentTimeMillis()
         )
         dao.upsertActivation(created)
         return created
+    }
+
+    suspend fun refresh(api: ActivationApi, appVersion: String): ActivationCheckResponse {
+        val current = ensureIdentity()
+        val response = api.check(
+            ActivationCheckRequest(
+                deviceId = current.deviceId,
+                activationCode = current.activationCode,
+                appVersion = appVersion
+            )
+        )
+        applyRemoteStatus(response.canUse(), response.expiresAt)
+        return response
     }
 
     suspend fun applyRemoteStatus(activated: Boolean, expiresAt: Long?): ActivationEntity {
@@ -28,5 +42,10 @@ class ActivationManager(
         )
         dao.upsertActivation(updated)
         return updated
+    }
+
+    fun cachedCanUse(state: ActivationEntity, nowMs: Long = System.currentTimeMillis()): Boolean {
+        if (!state.activated) return false
+        return state.expiresAt == null || state.expiresAt > nowMs
     }
 }
