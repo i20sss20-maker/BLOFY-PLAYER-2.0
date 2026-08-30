@@ -19,7 +19,6 @@ import tv.blofy.player.data.local.BlofyDatabase
 class PlayerActivity : AppCompatActivity() {
     private lateinit var session: BlofyPlaybackSession
     private lateinit var playerView: PlayerView
-    private val remote = RemoteKeyRouter()
 
     private val contentKey by lazy { intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty() }
     private val providerId by lazy { intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty() }
@@ -55,21 +54,22 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val routed = RemoteKeyRouter.route(event)
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
-        return when (remote.map(event.keyCode)) {
+        return when (routed.action) {
             RemoteAction.BACK -> {
                 finish(); true
             }
             RemoteAction.PLAY_PAUSE -> {
                 if (session.player.isPlaying) session.player.pause() else session.player.play(); true
             }
-            RemoteAction.SEEK_FORWARD -> {
+            RemoteAction.FAST_FORWARD -> {
                 session.player.seekTo(session.player.currentPosition + 10_000L); true
             }
-            RemoteAction.SEEK_BACK -> {
+            RemoteAction.REWIND -> {
                 session.player.seekTo((session.player.currentPosition - 10_000L).coerceAtLeast(0L)); true
             }
-            RemoteAction.MENU, RemoteAction.OK -> {
+            RemoteAction.OK -> {
                 if (playerView.isControllerFullyVisible) playerView.hideController() else playerView.showController(); true
             }
             else -> super.dispatchKeyEvent(event)
