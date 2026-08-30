@@ -14,8 +14,20 @@ interface BlofyDao {
     @Query("SELECT * FROM providers WHERE enabled = 1 ORDER BY updatedAt DESC")
     fun providers(): Flow<List<ProviderEntity>>
 
+    @Query("SELECT * FROM providers ORDER BY updatedAt DESC")
+    fun allProviders(): Flow<List<ProviderEntity>>
+
     @Query("SELECT * FROM providers WHERE id = :providerId LIMIT 1")
     suspend fun provider(providerId: String): ProviderEntity?
+
+    @Query("UPDATE providers SET enabled = 0")
+    suspend fun disableAllProviders()
+
+    @Query("UPDATE providers SET enabled = 1, updatedAt = :updatedAt WHERE id = :providerId")
+    suspend fun activateProvider(providerId: String, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("DELETE FROM providers WHERE id = :providerId")
+    suspend fun deleteProvider(providerId: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertCategories(items: List<CategoryEntity>)
