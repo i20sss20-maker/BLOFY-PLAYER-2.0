@@ -61,7 +61,12 @@ class BlofyPlaybackSession(
                         retryHandler.post { retrySameUrl() }
                     } else {
                         val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
-                        if (failedUrl.isNotBlank()) retryHandler.post { onTerminalError?.invoke(failedUrl) }
+                        if (failedUrl.isNotBlank()) {
+                            retryHandler.post {
+                                if (onTerminalError != null) onTerminalError.invoke(failedUrl)
+                                else if (profile.allowVlcFallback) ExternalPlayerLauncher.launchPreferred(appContext, failedUrl)
+                            }
+                        }
                     }
                 }
             })
