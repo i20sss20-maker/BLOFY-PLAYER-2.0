@@ -23,8 +23,10 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationRemoteClient
+import tv.blofy.player.core.provider.RemoteProviderProfileClient
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
+import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
@@ -154,8 +156,8 @@ class LoginActivity : AppCompatActivity() {
     private fun connect() {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val hasProvider = dao.providers().first().isNotEmpty()
-            if (!hasProvider) {
+            val activeProvider = dao.providers().first().firstOrNull()
+            if (activeProvider == null) {
                 status.text = "أضف قائمة تشغيل أولاً"
                 if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
                 return@launch
@@ -177,6 +179,7 @@ class LoginActivity : AppCompatActivity() {
             result.onSuccess { remote ->
                 if (remote.canUse()) {
                     status.text = activationLabel(remote)
+                    applyRemoteProviderProfile(endpoint, dao, activeProvider.id)
                     openHome()
                 } else {
                     status.text = activationLabel(remote)
@@ -191,6 +194,12 @@ class LoginActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private suspend fun applyRemoteProviderProfile(endpoint: String, dao: BlofyDao, providerId: String) {
+        val current = dao.providerById(providerId) ?: return
+        val updated = RemoteProviderProfileClient.applyIfAvailable(applicationContext, endpoint, current)
+        if (updated != current) dao.upsertProvider(updated)
     }
 
     private fun activationLabel(remote: ActivationCheckResponse): String = when (remote.state()) {
