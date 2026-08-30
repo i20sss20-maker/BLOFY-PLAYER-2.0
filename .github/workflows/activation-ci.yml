@@ -100,6 +100,23 @@ jobs:
             -H 'content-type: application/json' \
             -d '{"status":"active","days":365}' \
             http://127.0.0.1:8080/api/v1/admin/devices/BLOFY-AB12-CD34 | grep -q '"status":"active"'
+      - name: Verify playback diagnostics ingestion and admin query
+        run: |
+          code=$(curl --silent --output /tmp/diag-accepted.json --write-out '%{http_code}' \
+            -H 'content-type: application/json' \
+            -d '{"deviceId":"BLOFY-AB12-CD34","activationCode":"123456","providerKey":"provider-ci","contentKind":"live","redactedUrl":"https://example.test/live/***/***/123.ts","ttffMs":842,"bufferingCount":2,"errorCode":"ERROR_CODE_IO_NETWORK_CONNECTION_FAILED","errorMessage":"ci-network-error","appVersion":"ci"}' \
+            http://127.0.0.1:8080/api/v1/diagnostics/playback)
+          test "$code" = "202"
+          grep -q '"accepted":true' /tmp/diag-accepted.json
+
+          curl --fail --silent \
+            -H 'authorization: Bearer ci-test-admin-token-1234567890' \
+            'http://127.0.0.1:8080/api/v1/admin/diagnostics?deviceId=BLOFY-AB12-CD34&providerKey=provider-ci&limit=10' \
+            > /tmp/diag-list.json
+          grep -q '"ttffMs":842' /tmp/diag-list.json
+          grep -q '"bufferingCount":2' /tmp/diag-list.json
+          grep -q 'ERROR_CODE_IO_NETWORK_CONNECTION_FAILED' /tmp/diag-list.json
+          grep -q 'https://example.test/live/\*\*\*/\*\*\*/123.ts' /tmp/diag-list.json
       - name: Verify blocked state
         run: |
           curl --fail --silent -X PATCH \
