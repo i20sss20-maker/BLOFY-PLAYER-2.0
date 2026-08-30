@@ -36,7 +36,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Favorite toggle in HUD
 - [x] Video quality selector (Auto/available video tracks)
 - [ ] Full TV remote state-machine polish across every screen
-- [ ] Catch-up/archive flow
+- [x] Catch-up/archive flow for Xtream channels that advertise archive support
 
 ## Movies / Series
 - [x] Dedicated movie details screen
@@ -45,7 +45,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Resume / start-over
 - [x] Seasons and episodes separated
 - [x] Local Xtream movie/series metadata (plot, year, genre, duration, rating, backdrop when supplied)
-- [ ] Next/previous episode from player and automatic next episode on natural end
+- [x] Next/previous episode from player and automatic next episode on natural end
 
 ## Playlists / identity
 - [x] Xtream playlist add/save
@@ -71,7 +71,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Favorites
 - [x] Continue watching
 - [x] Locked flag persisted
-- [ ] PIN/parental-lock UI and enforcement
+- [x] PIN/parental-lock UI and enforcement across Browser/Search/Library guarded entry paths
 
 ## BLOFY additions (not claimed as 7 Max parity)
 - [x] Playback diagnostics foundation (TTFF/buffering/errors)
