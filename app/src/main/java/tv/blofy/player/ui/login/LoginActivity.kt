@@ -23,11 +23,14 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationRemoteClient
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.provider.RemoteProviderProfileClient
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
+import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
 
@@ -136,29 +139,67 @@ class LoginActivity : AppCompatActivity() {
     private fun connect() {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val activeProvider = dao.providers().first().firstOrNull()
-            if (activeProvider == null) {
-                status.text = "أضف قائمة تشغيل أولاً"
-                if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
+            val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+
+            if (endpoint.isBlank()) {
+                if (dao.providers().first().isEmpty()) {
+                    status.text = "أضف قائمة تشغيل أولاً"
+                    if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
+                    return@launch
+                }
+                openHome()
                 return@launch
             }
-            val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
-            if (endpoint.isBlank()) { openHome(); return@launch }
+
             status.text = "جاري التحقق من تفعيل الجهاز..."
             val manager = ActivationManager(applicationContext, dao)
-            val result = runCatching { withContext(Dispatchers.IO) { manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME) } }
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
+                }
+            }
             result.onSuccess { remote ->
-                if (remote.canUse()) {
+                if (!remote.canUse()) {
                     status.text = activationLabel(remote)
-                    applyRemoteProviderProfile(endpoint, dao, activeProvider.id)
-                    openHome()
-                } else status.text = activationLabel(remote)
+                    return@onSuccess
+                }
+
+                status.text = "${activationLabel(remote)} • مزامنة القوائم..."
+                val portalSync = runCatching {
+                    PortalPlaylistClient.sync(applicationContext, endpoint, dao)
+                }.getOrNull()
+
+                val activeProvider = dao.providers().first().firstOrNull()
+                if (activeProvider == null) {
+                    status.text = "الجهاز مفعل • أضف قائمة من التطبيق أو الموقع"
+                    if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
+                    return@onSuccess
+                }
+
+                if (portalSync?.changedProviderIds?.contains(activeProvider.id) == true) {
+                    status.text = "تغيرت بيانات القائمة • جاري تحديث المحتوى..."
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            PlaylistManager(XtreamClient.api, dao).syncAll(activeProvider)
+                        }
+                    }.onFailure {
+                        status.text = "تم حفظ القائمة لكن تعذر تحديث المحتوى"
+                    }
+                }
+
+                applyRemoteProviderProfile(endpoint, dao, activeProvider.id)
+                openHome()
             }.onFailure {
                 val cached = withContext(Dispatchers.IO) { dao.activation() }
-                if (cached != null && manager.cachedCanUse(cached)) {
-                    status.text = "تعذر الوصول لخادم التفعيل • استخدام الصلاحية المحفوظة"
+                val localProvider = dao.providers().first().firstOrNull()
+                if (cached != null && manager.cachedCanUse(cached) && localProvider != null) {
+                    status.text = "تعذر الوصول لخادم التفعيل • استخدام الصلاحية والقائمة المحفوظة"
                     openHome()
-                } else status.text = "تعذر التحقق من التفعيل"
+                } else if (cached != null && manager.cachedCanUse(cached)) {
+                    status.text = "الصلاحية محفوظة لكن لا توجد قائمة محلية"
+                } else {
+                    status.text = "تعذر التحقق من التفعيل"
+                }
             }
         }
     }
