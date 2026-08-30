@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import tv.blofy.player.ui.browser.ContentBrowserActivity
+import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 
@@ -34,24 +35,32 @@ class HomeActivity : AppCompatActivity() {
             setPadding(0, 4, 0, 28)
         })
 
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val actions = listOf(
-            "البث المباشر" to Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_LIVE),
-            "الأفلام" to Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_MOVIE),
-            "المسلسلات" to Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_SERIES),
-            "البحث" to Intent(this, SearchActivity::class.java),
-            "الإعدادات" to Intent(this, SettingsActivity::class.java)
-        )
-        actions.forEach { (label, intent) ->
-            row.addView(Button(this).apply {
-                text = label
-                isAllCaps = false
-                isFocusable = true
-                setOnClickListener { startActivity(intent) }
-            }, LinearLayout.LayoutParams(0, 110, 1f).apply { marginEnd = 14 })
+        val primary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        addAction(primary, "البث المباشر", Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_LIVE))
+        addAction(primary, "الأفلام", Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_MOVIE))
+        addAction(primary, "المسلسلات", Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_SERIES))
+        addAction(primary, "البحث", Intent(this, SearchActivity::class.java))
+        root.addView(primary, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        val secondary = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 14, 0, 0)
         }
-        root.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        addAction(secondary, "متابعة المشاهدة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE))
+        addAction(secondary, "المفضلة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
+        addAction(secondary, "الإعدادات", Intent(this, SettingsActivity::class.java))
+        root.addView(secondary, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
         setContentView(root)
-        row.getChildAt(0)?.requestFocus()
+        primary.getChildAt(0)?.requestFocus()
+    }
+
+    private fun addAction(row: LinearLayout, label: String, intent: Intent) {
+        row.addView(Button(this).apply {
+            text = label
+            isAllCaps = false
+            isFocusable = true
+            setOnClickListener { startActivity(intent) }
+        }, LinearLayout.LayoutParams(0, 110, 1f).apply { marginEnd = 14 })
     }
 }
