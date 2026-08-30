@@ -1,6 +1,7 @@
 package tv.blofy.player.core.playback
 
 import android.content.Context
+import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -14,7 +15,7 @@ import tv.blofy.player.core.diagnostics.PlaybackMetric
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
 
-@OptIn(UnstableApi::class)
+@OptIn(markerClass = [UnstableApi::class])
 class BlofyPlaybackSession(
     context: Context,
     private val profile: ProviderProfile,
