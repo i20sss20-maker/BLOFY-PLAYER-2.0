@@ -30,47 +30,112 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var theme: ThemeProfile
     private lateinit var deviceKind: DeviceClass.Kind
+    private lateinit var deviceView: TextView
+    private lateinit var codeView: TextView
+    private lateinit var qrView: ImageView
+    private lateinit var addPlaylist: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         theme = ThemeManager.current(this)
         deviceKind = DeviceClass.detect(this)
-        val phone = deviceKind == DeviceClass.Kind.PHONE
-        val tv = deviceKind == DeviceClass.Kind.TV
+        val root = if (theme.id == "cinema" && deviceKind == DeviceClass.Kind.TV) buildCinemaTvLogin() else buildVisionLogin()
+        setContentView(root)
+        if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
 
+        lifecycleScope.launch {
+            val identity = withContext(Dispatchers.IO) {
+                ActivationManager(applicationContext, BlofyDatabase.get(applicationContext).dao()).ensureIdentity()
+            }
+            deviceView.text = identity.deviceId
+            codeView.text = identity.activationCode
+            qrView.setImageBitmap(createQr("BLOFY://activate/${identity.deviceId}?code=${identity.activationCode}"))
+            refreshProviderStatus()
+        }
+    }
+
+    private fun buildVisionLogin(): LinearLayout {
+        val phone = deviceKind == DeviceClass.Kind.PHONE
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = if (phone) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.CENTER
             setPadding(if (phone) 24 else 54, if (phone) 24 else 36, if (phone) 24 else 54, if (phone) 24 else 36)
             setBackgroundColor(theme.background)
         }
-        root.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"
-            textSize = if (phone) 29f else 36f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-        })
-        root.addView(TextView(this).apply {
-            text = "فعّل جهازك ثم أضف قائمة التشغيل"
-            textSize = 16f
-            setTextColor(theme.accent)
-            gravity = Gravity.CENTER
-            setPadding(0, 8, 0, 16)
-        })
+        root.addView(title("BLOFY PLAYER", if (phone) 29f else 36f))
+        root.addView(subtitle("فعّل جهازك ثم أضف قائمة التشغيل"))
+        createIdentityViews(phone)
+        root.addView(deviceView)
+        root.addView(codeView)
+        val qrSize = if (phone) 180 else 220
+        root.addView(qrView, LinearLayout.LayoutParams(qrSize, qrSize))
+        root.addView(status)
+        addPlaylist = actionButton("إضافة قائمة التشغيل") { startActivity(Intent(this, PlaylistActivity::class.java)) }
+        val connect = actionButton("اتصال") { connect() }
+        val buttonWidth = if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 420
+        root.addView(addPlaylist, LinearLayout.LayoutParams(buttonWidth, if (phone) 64 else 74))
+        root.addView(connect, LinearLayout.LayoutParams(buttonWidth, if (phone) 64 else 74).apply { topMargin = 10 })
+        return root
+    }
 
-        val device = TextView(this).apply {
+    private fun buildCinemaTvLogin(): LinearLayout {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(48, 42, 48, 42)
+            setBackgroundColor(theme.background)
+        }
+        createIdentityViews(false)
+
+        val identityPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(36, 28, 36, 28)
+            background = panelBackground()
+        }
+        identityPanel.addView(title("BLOFY", 40f))
+        identityPanel.addView(subtitle("CINEMA • DEVICE ACTIVATION"))
+        identityPanel.addView(qrView, LinearLayout.LayoutParams(250, 250))
+        identityPanel.addView(deviceView)
+        identityPanel.addView(codeView)
+        root.addView(identityPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = 30 })
+
+        val actionPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(42, 36, 42, 36)
+            background = panelBackground()
+        }
+        actionPanel.addView(title("مرحبًا بك", 32f))
+        actionPanel.addView(TextView(this).apply {
+            text = "أضف قائمتك مرة واحدة، وبعدها اتصال يفتح البيانات المحلية مباشرة."
+            textSize = 17f
+            setTextColor(Color.rgb(215, 210, 225))
+            setPadding(0, 10, 0, 28)
+        })
+        actionPanel.addView(status)
+        addPlaylist = actionButton("إضافة / إدارة قائمة التشغيل") { startActivity(Intent(this, PlaylistActivity::class.java)) }
+        val connect = actionButton("اتصال بـ BLOFY") { connect() }
+        actionPanel.addView(addPlaylist, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 82))
+        actionPanel.addView(connect, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 82).apply { topMargin = 14 })
+        root.addView(actionPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        return root
+    }
+
+    private fun createIdentityViews(phone: Boolean) {
+        deviceView = TextView(this).apply {
             text = "جاري إنشاء هوية الجهاز..."
             textSize = 17f
             setTextColor(Color.LTGRAY)
             gravity = Gravity.CENTER
         }
-        val code = TextView(this).apply {
+        codeView = TextView(this).apply {
             textSize = if (phone) 25f else 30f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             setPadding(0, 6, 0, 8)
         }
-        val qr = ImageView(this).apply {
+        qrView = ImageView(this).apply {
             contentDescription = "رمز تفعيل BLOFY"
             setBackgroundColor(Color.WHITE)
             setPadding(10, 10, 10, 10)
@@ -81,39 +146,16 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, 8, 0, 16)
         }
-        root.addView(device)
-        root.addView(code)
-        val qrSize = if (phone) 180 else 220
-        root.addView(qr, LinearLayout.LayoutParams(qrSize, qrSize))
-        root.addView(status)
+    }
 
-        val addPlaylist = actionButton("إضافة قائمة التشغيل") {
-            startActivity(Intent(this, PlaylistActivity::class.java))
-        }
-        val connect = actionButton("اتصال") {
-            lifecycleScope.launch {
-                val hasProvider = BlofyDatabase.get(applicationContext).dao().providers().first().isNotEmpty()
-                if (hasProvider) startActivity(Intent(this@LoginActivity, HomeActivity::class.java))
-                else {
-                    status.text = "أضف قائمة تشغيل أولاً"
-                    if (tv) addPlaylist.requestFocus()
-                }
-            }
-        }
-        val buttonWidth = if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 420
-        root.addView(addPlaylist, LinearLayout.LayoutParams(buttonWidth, if (phone) 64 else 74))
-        root.addView(connect, LinearLayout.LayoutParams(buttonWidth, if (phone) 64 else 74).apply { topMargin = 10 })
-        setContentView(root)
-        if (tv) addPlaylist.requestFocus()
-
+    private fun connect() {
         lifecycleScope.launch {
-            val identity = withContext(Dispatchers.IO) {
-                ActivationManager(applicationContext, BlofyDatabase.get(applicationContext).dao()).ensureIdentity()
+            val hasProvider = BlofyDatabase.get(applicationContext).dao().providers().first().isNotEmpty()
+            if (hasProvider) startActivity(Intent(this@LoginActivity, HomeActivity::class.java))
+            else {
+                status.text = "أضف قائمة تشغيل أولاً"
+                if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
             }
-            device.text = identity.deviceId
-            code.text = identity.activationCode
-            qr.setImageBitmap(createQr("BLOFY://activate/${identity.deviceId}?code=${identity.activationCode}"))
-            refreshProviderStatus()
         }
     }
 
@@ -151,8 +193,29 @@ class LoginActivity : AppCompatActivity() {
         setOnClickListener { action() }
     }
 
+    private fun title(value: String, size: Float) = TextView(this).apply {
+        text = value
+        textSize = size
+        setTextColor(Color.WHITE)
+        gravity = Gravity.CENTER
+    }
+
+    private fun subtitle(value: String) = TextView(this).apply {
+        text = value
+        textSize = 16f
+        setTextColor(theme.accent)
+        gravity = Gravity.CENTER
+        setPadding(0, 8, 0, 16)
+    }
+
+    private fun panelBackground() = GradientDrawable().apply {
+        cornerRadius = 28f
+        setColor(theme.surface)
+        setStroke(1, theme.accent)
+    }
+
     private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 20f
+        cornerRadius = if (theme.id == "cinema") 16f else 20f
         setColor(if (focused) theme.accent else theme.surface)
         setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else theme.accent)
     }
