@@ -4,13 +4,18 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
-import android.view.View
 import android.widget.Button
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import tv.blofy.player.core.identity.ActivationManager
+import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.home.HomeActivity
+import tv.blofy.player.ui.playlist.PlaylistActivity
 
 class LoginActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,43 +27,58 @@ class LoginActivity : AppCompatActivity() {
             setPadding(48, 48, 48, 48)
             setBackgroundColor(Color.rgb(5, 5, 10))
         }
-        val title = TextView(this).apply {
+        root.addView(TextView(this).apply {
             text = "BLOFY PLAYER"
             textSize = 34f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-        }
-        val subtitle = TextView(this).apply {
+        })
+        root.addView(TextView(this).apply {
             text = "تشغيل ذكي. تجربة أسرع."
             textSize = 16f
             setTextColor(Color.rgb(185, 140, 255))
             gravity = Gravity.CENTER
-            setPadding(0, 12, 0, 30)
-        }
+            setPadding(0, 12, 0, 26)
+        })
+
         val device = TextView(this).apply {
-            text = "BLOFY DEVICE"
+            text = "جاري إنشاء هوية الجهاز..."
+            textSize = 17f
             setTextColor(Color.LTGRAY)
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 18)
         }
-        val code = EditText(this).apply {
-            hint = "رمز التفعيل"
-            isSingleLine = true
+        val code = TextView(this).apply {
+            textSize = 28f
             setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
-            textDirection = View.TEXT_DIRECTION_RTL
+            gravity = Gravity.CENTER
+            setPadding(0, 8, 0, 24)
         }
-        val connect = Button(this).apply {
+        root.addView(device)
+        root.addView(code)
+
+        val addPlaylist = Button(this).apply {
+            text = "إضافة قائمة التشغيل"
+            isAllCaps = false
+            isFocusable = true
+            setOnClickListener { startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java)) }
+        }
+        val home = Button(this).apply {
             text = "اتصال"
+            isAllCaps = false
             isFocusable = true
             setOnClickListener { startActivity(Intent(this@LoginActivity, HomeActivity::class.java)) }
         }
-        root.addView(title)
-        root.addView(subtitle)
-        root.addView(device)
-        root.addView(code, LinearLayout.LayoutParams(520, LinearLayout.LayoutParams.WRAP_CONTENT))
-        root.addView(connect, LinearLayout.LayoutParams(360, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 })
+        root.addView(addPlaylist, LinearLayout.LayoutParams(380, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(home, LinearLayout.LayoutParams(380, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 12 })
         setContentView(root)
-        code.requestFocus()
+        addPlaylist.requestFocus()
+
+        lifecycleScope.launch {
+            val identity = withContext(Dispatchers.IO) {
+                ActivationManager(applicationContext, BlofyDatabase.get(applicationContext).dao()).ensureIdentity()
+            }
+            device.text = identity.deviceId
+            code.text = identity.activationCode
+        }
     }
 }
