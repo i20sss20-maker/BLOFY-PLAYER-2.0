@@ -40,14 +40,12 @@ class PlaylistManager(
                 locked = previous[fresh.key]?.locked ?: false
             )
         }
-
         listOf("live", "movie", "series").forEach { kind ->
             dao.clearCategories(provider.id, kind)
             dao.clearStreams(provider.id, kind)
         }
         dao.upsertCategories(parsed.categories)
         dao.upsertStreams(streams)
-
         val seriesIds = streams.filter { it.kind == "series" }.map { it.remoteId }
         seriesIds.forEach { dao.clearEpisodes(provider.id, it) }
         dao.upsertEpisodes(parsed.episodes)
@@ -73,6 +71,7 @@ class PlaylistManager(
         val streamRows = streams.mapNotNull { row ->
             val id = row.string("stream_id") ?: return@mapNotNull null
             val key = "${provider.id}:live:$id"
+            val archive = row.string("tv_archive").let { it == "1" || it.equals("true", true) }
             StreamEntity(
                 key = key,
                 providerId = provider.id,
@@ -84,6 +83,8 @@ class PlaylistManager(
                 directSource = row.string("direct_source"),
                 epgChannelId = row.string("epg_channel_id"),
                 streamType = row.string("stream_type"),
+                archiveEnabled = archive,
+                archiveDurationDays = row.string("tv_archive_duration")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
                 favorite = previous[key]?.favorite ?: false,
                 locked = previous[key]?.locked ?: false
             )
@@ -100,7 +101,6 @@ class PlaylistManager(
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
         val streams = api.list(actionUrl(provider, "get_vod_streams"))
         val previous = dao.streams(provider.id, "movie", null).first().associateBy { it.key }
-
         val categoryRows = categories.mapIndexedNotNull { index, row ->
             val id = row.string("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:movie:$id", provider.id, id, "movie", row.string("category_name") ?: "Movies", index)
@@ -134,7 +134,6 @@ class PlaylistManager(
                 locked = previous[key]?.locked ?: false
             )
         }
-
         dao.clearCategories(provider.id, "movie")
         dao.clearStreams(provider.id, "movie")
         dao.upsertCategories(categoryRows)
@@ -146,7 +145,6 @@ class PlaylistManager(
         val categories = api.list(actionUrl(provider, "get_series_categories"))
         val series = api.list(actionUrl(provider, "get_series"))
         val previous = dao.streams(provider.id, "series", null).first().associateBy { it.key }
-
         val categoryRows = categories.mapIndexedNotNull { index, row ->
             val id = row.string("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:series:$id", provider.id, id, "series", row.string("category_name") ?: "Series", index)
@@ -178,7 +176,6 @@ class PlaylistManager(
                 locked = previous[key]?.locked ?: false
             )
         }
-
         dao.clearCategories(provider.id, "series")
         dao.clearStreams(provider.id, "series")
         dao.upsertCategories(categoryRows)
@@ -197,20 +194,13 @@ class PlaylistManager(
                     val id = row.stringAny("id") ?: return@forEach
                     val season = row.intAny("season") ?: 0
                     val episode = row.intAny("episode_num") ?: row.intAny("episode") ?: 0
-                    add(
-                        EpisodeEntity(
-                            key = "${provider.id}:episode:$id",
-                            providerId = provider.id,
-                            seriesId = seriesId,
-                            remoteId = id,
-                            season = season,
-                            episode = episode,
-                            title = row.stringAny("title") ?: "Episode $episode",
-                            extension = row.stringAny("container_extension") ?: "mp4",
-                            directSource = row.stringAny("direct_source"),
-                            durationSecs = row.longAny("duration_secs")
-                        )
-                    )
+                    add(EpisodeEntity(
+                        key = "${provider.id}:episode:$id", providerId = provider.id, seriesId = seriesId,
+                        remoteId = id, season = season, episode = episode,
+                        title = row.stringAny("title") ?: "Episode $episode",
+                        extension = row.stringAny("container_extension") ?: "mp4",
+                        directSource = row.stringAny("direct_source"), durationSecs = row.longAny("duration_secs")
+                    ))
                 }
             }
         }
@@ -220,28 +210,36 @@ class PlaylistManager(
 
     suspend fun syncShortEpg(provider: ProviderEntity, streamId: String, limit: Int = 20) {
         if (provider.providerType.equals("m3u", true)) return
-        val response = api.objectResponse(
-            actionUrl(provider, "get_short_epg", mapOf("stream_id" to streamId, "limit" to limit.toString()))
-        )
-        val rows = response["epg_listings"] as? List<*> ?: emptyList<Any?>()
-        val items = rows.mapNotNull { raw ->
-            val row = raw as? Map<*, *> ?: return@mapNotNull null
-            val start = row.longAny("start_timestamp") ?: return@mapNotNull null
-            val end = row.longAny("stop_timestamp") ?: return@mapNotNull null
-            val title = decodeBase64OrRaw(row.stringAny("title") ?: "")
-            val id = row.stringAny("id") ?: "$start-$end"
-            EpgEntity(
-                key = "${provider.id}:epg:$streamId:$id",
-                providerId = provider.id,
-                streamId = streamId,
-                title = title,
-                description = decodeBase64OrRaw(row.stringAny("description") ?: "").takeIf { it.isNotBlank() },
-                startMs = start * 1000L,
-                endMs = end * 1000L
-            )
-        }
+        val response = api.objectResponse(actionUrl(provider, "get_short_epg", mapOf("stream_id" to streamId, "limit" to limit.toString())))
+        val items = parseEpg(provider.id, streamId, response["epg_listings"] as? List<*> ?: emptyList<Any?>())
         dao.clearEpg(provider.id, streamId)
         dao.upsertEpg(items)
+    }
+
+    suspend fun syncCatchupEpg(provider: ProviderEntity, streamId: String) {
+        if (provider.providerType.equals("m3u", true)) return
+        val response = api.objectResponse(actionUrl(provider, "get_simple_data_table", mapOf("stream_id" to streamId)))
+        val rows = response["epg_listings"] as? List<*> ?: emptyList<Any?>()
+        val items = parseEpg(provider.id, streamId, rows)
+        dao.clearEpg(provider.id, streamId)
+        dao.upsertEpg(items)
+    }
+
+    private fun parseEpg(providerId: String, streamId: String, rows: List<*>): List<EpgEntity> = rows.mapNotNull { raw ->
+        val row = raw as? Map<*, *> ?: return@mapNotNull null
+        val start = row.longAny("start_timestamp") ?: return@mapNotNull null
+        val end = row.longAny("stop_timestamp") ?: return@mapNotNull null
+        val title = decodeBase64OrRaw(row.stringAny("title") ?: "")
+        val id = row.stringAny("id") ?: "$start-$end"
+        EpgEntity(
+            key = "$providerId:epg:$streamId:$id",
+            providerId = providerId,
+            streamId = streamId,
+            title = title,
+            description = decodeBase64OrRaw(row.stringAny("description") ?: "").takeIf { it.isNotBlank() },
+            startMs = start * 1000L,
+            endMs = end * 1000L
+        )
     }
 
     private fun actionUrl(provider: ProviderEntity, action: String, extra: Map<String, String> = emptyMap()): String {
@@ -258,8 +256,6 @@ class PlaylistManager(
 
     private fun decodeBase64OrRaw(value: String): String {
         if (value.isBlank()) return value
-        return runCatching {
-            String(android.util.Base64.decode(value, android.util.Base64.DEFAULT), Charsets.UTF_8).trim()
-        }.getOrDefault(value)
+        return runCatching { String(android.util.Base64.decode(value, android.util.Base64.DEFAULT), Charsets.UTF_8).trim() }.getOrDefault(value)
     }
 }
