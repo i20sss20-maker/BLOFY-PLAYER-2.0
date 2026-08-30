@@ -34,9 +34,7 @@ class EpisodesActivity : AppCompatActivity() {
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         val seriesId = intent.getStringExtra(EXTRA_SERIES_ID).orEmpty()
         val seriesName = intent.getStringExtra(EXTRA_SERIES_NAME).orEmpty()
-        if (providerId.isBlank() || seriesId.isBlank()) {
-            finish(); return
-        }
+        if (providerId.isBlank() || seriesId.isBlank()) { finish(); return }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -68,7 +66,6 @@ class EpisodesActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
-
             episodeAdapter = FocusTextAdapter(
                 label = { "الحلقة ${it.episode}  •  ${it.title}" },
                 onClick = { episode -> openEpisode(provider, episode) }
@@ -82,9 +79,7 @@ class EpisodesActivity : AppCompatActivity() {
             seasons.adapter = seasonAdapter
 
             runCatching {
-                withContext(Dispatchers.IO) {
-                    PlaylistManager(XtreamClient.api, dao).syncSeriesEpisodes(provider, seriesId)
-                }
+                withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, dao).syncSeriesEpisodes(provider, seriesId) }
             }.onFailure { status.text = "عرض البيانات المحفوظة" }
 
             dao.episodes(providerId, seriesId).collect { items ->
@@ -122,9 +117,7 @@ class EpisodesActivity : AppCompatActivity() {
                     .setPositiveButton("استئناف") { _, _ -> launchEpisode(provider, episode, url, resume) }
                     .setNegativeButton("من البداية") { _, _ -> launchEpisode(provider, episode, url, 0L) }
                     .show()
-            } else {
-                launchEpisode(provider, episode, url, resume)
-            }
+            } else launchEpisode(provider, episode, url, resume)
         }
     }
 
@@ -136,6 +129,9 @@ class EpisodesActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_KIND, "episode")
             putExtra(PlayerActivity.EXTRA_RESUME_MS, resume)
             putExtra(PlayerActivity.EXTRA_TITLE, episode.title)
+            putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
+            putExtra(PlayerActivity.EXTRA_SEASON, episode.season)
+            putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
         })
     }
 
