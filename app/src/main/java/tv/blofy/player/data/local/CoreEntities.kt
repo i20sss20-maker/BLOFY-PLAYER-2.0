@@ -45,6 +45,13 @@ data class StreamEntity(
     val epgChannelId: String? = null,
     val streamType: String? = null,
     val addedAt: Long? = null,
+    val plot: String? = null,
+    val genre: String? = null,
+    val releaseDate: String? = null,
+    val year: String? = null,
+    val rating: String? = null,
+    val duration: String? = null,
+    val backdrop: String? = null,
     val favorite: Boolean = false,
     val locked: Boolean = false
 )
