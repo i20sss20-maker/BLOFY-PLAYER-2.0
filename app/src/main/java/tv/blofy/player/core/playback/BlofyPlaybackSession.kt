@@ -21,7 +21,8 @@ import tv.blofy.player.core.provider.ProviderProfile
 class BlofyPlaybackSession(
     context: Context,
     private val profile: ProviderProfile,
-    private val contentKind: String = "unknown"
+    private val contentKind: String = "unknown",
+    private val onTerminalError: ((String) -> Unit)? = null
 ) {
     private var metric: PlaybackMetric? = null
     private var firstFrameRecorded = false
@@ -34,25 +35,16 @@ class BlofyPlaybackSession(
 
     val player: ExoPlayer = ExoPlayer.Builder(appContext)
         .setRenderersFactory(renderersFactory)
-        .setMediaSourceFactory(
-            DefaultMediaSourceFactory(
-                TransportFactory.create(appContext, profile)
-            )
-        )
+        .setMediaSourceFactory(DefaultMediaSourceFactory(TransportFactory.create(appContext, profile)))
         .build()
         .apply {
             setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(C.USAGE_MEDIA)
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                    .build(),
+                AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
                 true
             )
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_BUFFERING) {
-                        metric?.let { metric = PlaybackDiagnostics.buffering(it) }
-                    }
+                    if (playbackState == Player.STATE_BUFFERING) metric?.let { metric = PlaybackDiagnostics.buffering(it) }
                 }
 
                 override fun onRenderedFirstFrame() {
@@ -63,16 +55,13 @@ class BlofyPlaybackSession(
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
-                    metric?.let {
-                        metric = PlaybackDiagnostics.error(
-                            it,
-                            error.errorCodeName,
-                            error.message
-                        )
-                    }
+                    metric?.let { metric = PlaybackDiagnostics.error(it, error.errorCodeName, error.message) }
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
                         automaticRetries++
                         retryHandler.post { retrySameUrl() }
+                    } else {
+                        val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+                        if (failedUrl.isNotBlank()) retryHandler.post { onTerminalError?.invoke(failedUrl) }
                     }
                 }
             })
