@@ -17,7 +17,7 @@ import tv.blofy.player.core.remote.RemoteKeyRouter
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 
-@UnstableApi
+@OptIn(UnstableApi::class)
 class PlayerActivity : AppCompatActivity() {
     private lateinit var session: BlofyPlaybackSession
     private lateinit var playerView: PlayerView
