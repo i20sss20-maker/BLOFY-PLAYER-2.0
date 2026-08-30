@@ -3,6 +3,9 @@ name: BLOFY FFmpeg Native
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-ffmpeg-apk:
     runs-on: ubuntu-latest
@@ -33,6 +36,7 @@ jobs:
         env:
           NDK_PATH: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
         run: |
+          set -euxo pipefail
           FFMPEG_MODULE_PATH="$RUNNER_TEMP/media3/libraries/decoder_ffmpeg/src/main"
           cd "$FFMPEG_MODULE_PATH/jni"
           git clone --depth 1 --branch release/6.0 https://github.com/FFmpeg/FFmpeg.git ffmpeg
@@ -41,19 +45,20 @@ jobs:
             "$NDK_PATH" \
             linux-x86_64 \
             23 \
-            ac3 eac3 dca truehd
+            ac3 eac3 dca truehd vorbis opus flac
 
       - name: Assemble Media3 FFmpeg AAR
         working-directory: ${{ runner.temp }}/media3
         run: ./gradlew --no-daemon :lib-decoder-ffmpeg:assembleRelease
 
-      - name: Locate FFmpeg AAR
+      - name: Locate and verify FFmpeg AAR
         id: ffmpeg
         shell: bash
         run: |
+          set -euxo pipefail
           AAR="$(find "$RUNNER_TEMP/media3/libraries/decoder_ffmpeg/build/outputs/aar" -name '*.aar' -type f | head -n 1)"
           test -n "$AAR" && test -f "$AAR"
-          echo "aar=$AAR" >> "$GITHUB_OUTPUT"
+          unzip -l "$AAR" | grep -q 'libffmpegJNI.so'
           cp "$AAR" "$RUNNER_TEMP/media3-ffmpeg-1.6.1.aar"
 
       - name: Build BLOFY APK with FFmpeg
@@ -62,14 +67,25 @@ jobs:
             -PBLOFY_FFMPEG_AAR="$RUNNER_TEMP/media3-ffmpeg-1.6.1.aar" \
             testDebugUnitTest lintDebug assembleDebug
 
+      - name: Verify FFmpeg is bundled in final APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          unzip -l "$APK" | grep -q 'libffmpegJNI.so'
+          echo "FFmpeg native decoder verified inside BLOFY APK"
+
       - uses: actions/upload-artifact@v4
         with:
           name: BLOFY-PLAYER-2.0-ffmpeg-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 30
 
       - uses: actions/upload-artifact@v4
         with:
           name: media3-ffmpeg-1.6.1-aar
           path: ${{ runner.temp }}/media3-ffmpeg-1.6.1.aar
           if-no-files-found: error
+          retention-days: 30
