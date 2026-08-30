@@ -23,18 +23,20 @@ class PlaylistActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val editingProviderId = intent.getStringExtra(EXTRA_PROVIDER_ID)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(60, 48, 60, 48)
             setBackgroundColor(Color.rgb(5, 5, 10))
         }
-        root.addView(TextView(this).apply {
-            text = "إضافة قائمة تشغيل"
+        val title = TextView(this).apply {
+            text = if (editingProviderId == null) "إضافة قائمة تشغيل" else "تعديل قائمة التشغيل"
             textSize = 30f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-        })
+        }
+        root.addView(title)
         root.addView(TextView(this).apply {
             text = "Xtream Codes أو M3U مباشر"
             textSize = 15f
@@ -71,7 +73,7 @@ class PlaylistActivity : AppCompatActivity() {
         root.addView(status)
 
         val save = Button(this).apply {
-            text = "حفظ القائمة"
+            text = if (editingProviderId == null) "حفظ القائمة" else "حفظ التعديلات"
             isAllCaps = false
             textSize = 16f
             isFocusable = true
@@ -98,8 +100,9 @@ class PlaylistActivity : AppCompatActivity() {
                     runCatching {
                         withContext(Dispatchers.IO) {
                             val dao = BlofyDatabase.get(applicationContext).dao()
+                            val existing = editingProviderId?.let { dao.provider(it) }
                             val type = if (isM3u) "m3u" else "xtream"
-                            val id = UUID.nameUUIDFromBytes("$type|$baseUrl|$user".toByteArray()).toString()
+                            val id = existing?.id ?: UUID.nameUUIDFromBytes("$type|$baseUrl|$user".toByteArray()).toString()
                             val provider = ProviderEntity(
                                 id = id,
                                 name = name.text.toString().trim().ifBlank { if (isM3u) "BLOFY M3U" else "BLOFY Server" },
@@ -107,9 +110,13 @@ class PlaylistActivity : AppCompatActivity() {
                                 username = user,
                                 password = pass,
                                 providerType = type,
-                                enabled = true
+                                liveFormat = existing?.liveFormat ?: "ts",
+                                preferredTransport = existing?.preferredTransport ?: "cronet",
+                                preferredEngine = existing?.preferredEngine ?: "media3",
+                                allowCrossProtocolRedirects = existing?.allowCrossProtocolRedirects ?: true,
+                                enabled = existing?.enabled ?: true,
+                                updatedAt = System.currentTimeMillis()
                             )
-                            dao.disableAllProviders()
                             dao.upsertProvider(provider)
                             PlaylistManager(XtreamClient.api, dao).syncAll(provider)
                         }
@@ -127,6 +134,19 @@ class PlaylistActivity : AppCompatActivity() {
         root.addView(save, LinearLayout.LayoutParams(380, 78).apply { topMargin = 18 })
         setContentView(root)
         name.requestFocus()
+
+        if (editingProviderId != null) {
+            lifecycleScope.launch {
+                val provider = withContext(Dispatchers.IO) {
+                    BlofyDatabase.get(applicationContext).dao().provider(editingProviderId)
+                } ?: return@launch
+                name.setText(provider.name)
+                url.setText(provider.baseUrl)
+                username.setText(provider.username)
+                password.setText(provider.password)
+                status.text = "${provider.providerType.uppercase()}  •  ${provider.name}"
+            }
+        }
     }
 
     private fun fieldBackground(focused: Boolean) = GradientDrawable().apply {
@@ -139,5 +159,9 @@ class PlaylistActivity : AppCompatActivity() {
         cornerRadius = 20f
         setColor(if (focused) Color.rgb(73, 34, 122) else Color.rgb(24, 19, 35))
         setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(52, 44, 68))
+    }
+
+    companion object {
+        const val EXTRA_PROVIDER_ID = "provider_id"
     }
 }
