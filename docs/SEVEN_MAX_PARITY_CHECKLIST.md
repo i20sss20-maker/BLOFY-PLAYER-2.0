@@ -54,7 +54,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Device ID + six-digit activation code foundation
 - [x] Connect opens local data without forced sync
 - [x] Saved-playlist switch/update/delete UI
-- [ ] Edit existing saved playlist credentials/details in place
+- [x] Edit existing saved playlist credentials/details in place
 - [ ] QR/barcode on login
 - [ ] Real activation backend/status/expiry flow
 
