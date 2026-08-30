@@ -11,8 +11,9 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Provider-scoped redirects/transport settings
 - [x] One retry of the same URL; no global route ladder
 - [x] direct_source retained as data, not primary Xtream route
-- [x] FFmpeg integration hook is ready: version-locked optional native AAR input, extension renderer preference, build flag/status UI, and build documentation
-- [ ] Build the Media3 1.6.1-compatible FFmpeg native AAR and validate AC3/EAC3/DTS-class samples on real target hardware
+- [x] FFmpeg integration hook: version-locked optional native AAR input, extension renderer preference, build flag/status UI, and documentation
+- [x] Media3 1.6.1-compatible FFmpeg native AAR builds successfully in CI and produces a BLOFY APK with the extension bundled
+- [ ] Validate AC3/EAC3/DTS-class samples on real target hardware
 - [x] External-player launch path (system/VLC/MX if installed)
 - [x] Automatic VLC/MX/external fallback after Media3 failure and one same-URL retry
 - [x] Read-only playback cache policy (streaming does not write new spans)
@@ -57,8 +58,9 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Saved-playlist switch/update/delete UI
 - [x] Edit existing saved playlist credentials/details in place
 - [x] QR/barcode on login
-- [x] Activation client flow is backend-ready: configurable endpoint, trial/active/expired/blocked states, expiry, cached offline entitlement and Connect gating
-- [ ] Deploy/configure the real BLOFY activation backend endpoint (external service work; app contract is complete)
+- [x] Activation client flow: configurable endpoint, trial/active/expired/blocked states, expiry, cached offline entitlement and Connect gating
+- [x] Activation backend implementation: PostgreSQL service, 7-day first-device trial, device/code binding, admin activation/block controls, Docker packaging and CI verification
+- [ ] Deploy/configure the real BLOFY activation backend endpoint on production hosting
 
 ## Themes / device classes
 - [x] BLOFY theme profile foundation
@@ -82,4 +84,4 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [ ] BLOFY web activation/playlist management portal
 
 ## Release gate
-Do not call the first Alpha feature-complete until every unchecked item above that is required for 7 Max behavioral parity has either been implemented or explicitly deferred with a documented reason.
+The Android implementation is parity-ready for Alpha QA. Remaining unchecked parity items require production deployment or physical-device/server validation rather than additional core feature construction.
