@@ -1,13 +1,14 @@
 package tv.blofy.player.core.network
 
 import android.content.Context
+import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import tv.blofy.player.core.provider.ProviderProfile
 
-@OptIn(UnstableApi::class)
+@OptIn(markerClass = [UnstableApi::class])
 object TransportFactory {
     fun create(context: Context, profile: ProviderProfile): DataSource.Factory {
         val http = DefaultHttpDataSource.Factory()
