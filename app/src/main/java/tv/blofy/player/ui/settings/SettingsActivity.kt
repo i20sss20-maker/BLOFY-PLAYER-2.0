@@ -1,6 +1,8 @@
 package tv.blofy.player.ui.settings
 
+import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
@@ -8,14 +10,20 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.playlist.PlaylistActivity
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var provider: ProviderEntity
     private lateinit var status: TextView
+    private lateinit var redirectsButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,39 +35,46 @@ class SettingsActivity : AppCompatActivity() {
         }
         root.addView(TextView(this).apply {
             text = "إعدادات BLOFY"
-            textSize = 30f
+            textSize = 31f
             setTextColor(Color.WHITE)
         })
-        status = TextView(this).apply {
+        root.addView(TextView(this).apply {
+            text = "إعدادات المزود مستقلة حتى لا يؤثر سيرفر على الآخر"
+            textSize = 14f
             setTextColor(Color.rgb(185, 140, 255))
+            setPadding(0, 6, 0, 12)
+        })
+        status = TextView(this).apply {
+            setTextColor(Color.rgb(205, 190, 230))
             gravity = Gravity.CENTER
-            setPadding(0, 14, 0, 20)
+            setPadding(0, 8, 0, 20)
         }
         root.addView(status)
 
-        val ts = Button(this).apply {
-            text = "البث المباشر: MPEG-TS"
-            isAllCaps = false
-            setOnClickListener { updateProvider { copy(liveFormat = "ts") } }
+        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val ts = actionButton("Live: MPEG-TS") { updateProvider { copy(liveFormat = "ts") } }
+        val hls = actionButton("Live: HLS") { updateProvider { copy(liveFormat = "m3u8") } }
+        val cronet = actionButton("Cronet أولاً") { updateProvider { copy(preferredTransport = "cronet") } }
+        val http = actionButton("HTTP أولاً") { updateProvider { copy(preferredTransport = "http") } }
+        listOf(ts, hls, cronet, http).forEach { row1.addView(it, LinearLayout.LayoutParams(220, 76).apply { marginEnd = 12 }) }
+        root.addView(row1)
+
+        val row2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 14, 0, 0)
         }
-        val hls = Button(this).apply {
-            text = "البث المباشر: HLS"
-            isAllCaps = false
-            setOnClickListener { updateProvider { copy(liveFormat = "m3u8") } }
+        redirectsButton = actionButton("Redirects") {
+            updateProvider { copy(allowCrossProtocolRedirects = !allowCrossProtocolRedirects) }
         }
-        val cronet = Button(this).apply {
-            text = "النقل: Cronet أولاً"
-            isAllCaps = false
-            setOnClickListener { updateProvider { copy(preferredTransport = "cronet") } }
+        val refresh = actionButton("تحديث القائمة الآن") { refreshLibrary() }
+        val playlists = actionButton("إضافة / إدارة قائمة") {
+            startActivity(Intent(this, PlaylistActivity::class.java))
         }
-        val http = Button(this).apply {
-            text = "النقل: HTTP أولاً"
-            isAllCaps = false
-            setOnClickListener { updateProvider { copy(preferredTransport = "http") } }
-        }
-        listOf(ts, hls, cronet, http).forEach {
-            root.addView(it, LinearLayout.LayoutParams(420, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 10 })
-        }
+        row2.addView(redirectsButton, LinearLayout.LayoutParams(250, 76).apply { marginEnd = 12 })
+        row2.addView(refresh, LinearLayout.LayoutParams(260, 76).apply { marginEnd = 12 })
+        row2.addView(playlists, LinearLayout.LayoutParams(280, 76))
+        root.addView(row2)
+
         setContentView(root)
         ts.requestFocus()
 
@@ -72,6 +87,20 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
+        text = label
+        isAllCaps = false
+        textSize = 15f
+        isFocusable = true
+        setTextColor(Color.WHITE)
+        background = buttonBackground(false)
+        setOnFocusChangeListener { view, focused ->
+            view.background = buttonBackground(focused)
+            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(100).start()
+        }
+        setOnClickListener { action() }
+    }
+
     private fun updateProvider(change: ProviderEntity.() -> ProviderEntity) {
         if (!::provider.isInitialized) return
         lifecycleScope.launch {
@@ -81,7 +110,30 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun refreshLibrary() {
+        if (!::provider.isInitialized) return
+        status.text = "جاري تحديث القنوات والأفلام والمسلسلات..."
+        lifecycleScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(provider)
+                }
+            }.onSuccess {
+                status.text = "اكتمل التحديث  •  ${provider.name}"
+            }.onFailure {
+                status.text = "تعذر التحديث: ${it.message ?: "خطأ اتصال"}"
+            }
+        }
+    }
+
     private fun refreshStatus() {
         status.text = "${provider.name}  •  ${provider.liveFormat.uppercase()}  •  ${provider.preferredTransport.uppercase()}"
+        redirectsButton.text = if (provider.allowCrossProtocolRedirects) "Redirects: تشغيل" else "Redirects: إيقاف"
+    }
+
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 18f
+        setColor(if (focused) Color.rgb(72, 34, 120) else Color.rgb(20, 17, 31))
+        setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(50, 42, 66))
     }
 }
