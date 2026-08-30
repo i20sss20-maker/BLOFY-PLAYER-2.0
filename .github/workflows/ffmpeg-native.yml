@@ -1,0 +1,75 @@
+name: BLOFY FFmpeg Native
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ffmpeg-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Install Android NDK r26b and CMake
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - name: Checkout AndroidX Media3 1.6.1
+        run: |
+          git clone --depth 1 --branch 1.6.1 https://github.com/androidx/media.git "$RUNNER_TEMP/media3"
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$RUNNER_TEMP/media3/local.properties"
+
+      - name: Build FFmpeg static libraries
+        env:
+          NDK_PATH: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
+        run: |
+          FFMPEG_MODULE_PATH="$RUNNER_TEMP/media3/libraries/decoder_ffmpeg/src/main"
+          cd "$FFMPEG_MODULE_PATH/jni"
+          git clone --depth 1 --branch release/6.0 https://github.com/FFmpeg/FFmpeg.git ffmpeg
+          ./build_ffmpeg.sh \
+            "$FFMPEG_MODULE_PATH" \
+            "$NDK_PATH" \
+            linux-x86_64 \
+            23 \
+            ac3 eac3 dca truehd
+
+      - name: Assemble Media3 FFmpeg AAR
+        working-directory: ${{ runner.temp }}/media3
+        run: ./gradlew --no-daemon :lib-decoder-ffmpeg:assembleRelease
+
+      - name: Locate FFmpeg AAR
+        id: ffmpeg
+        shell: bash
+        run: |
+          AAR="$(find "$RUNNER_TEMP/media3/libraries/decoder_ffmpeg/build/outputs/aar" -name '*.aar' -type f | head -n 1)"
+          test -n "$AAR" && test -f "$AAR"
+          echo "aar=$AAR" >> "$GITHUB_OUTPUT"
+          cp "$AAR" "$RUNNER_TEMP/media3-ffmpeg-1.6.1.aar"
+
+      - name: Build BLOFY APK with FFmpeg
+        run: |
+          gradle --no-daemon \
+            -PBLOFY_FFMPEG_AAR="$RUNNER_TEMP/media3-ffmpeg-1.6.1.aar" \
+            testDebugUnitTest lintDebug assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-2.0-ffmpeg-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: media3-ffmpeg-1.6.1-aar
+          path: ${{ runner.temp }}/media3-ffmpeg-1.6.1.aar
+          if-no-files-found: error
