@@ -20,11 +20,12 @@ object TransportFactory {
 
     fun create(context: Context, profile: ProviderProfile): DataSource.Factory {
         val appContext = context.applicationContext
-        val upstream: HttpDataSource.Factory = when (profile.transport) {
+        val upstreamHttp: HttpDataSource.Factory = when (profile.transport) {
             TransportPreference.CRONET_FIRST -> createCronet(appContext, profile) ?: createHttp(profile)
             TransportPreference.HTTP_FIRST -> createHttp(profile)
         }
-        return DefaultDataSource.Factory(appContext, upstream)
+        val upstream = DefaultDataSource.Factory(appContext, upstreamHttp)
+        return PlaybackCache.readOnly(appContext, upstream)
     }
 
     private fun createCronet(context: Context, profile: ProviderProfile): HttpDataSource.Factory? {
