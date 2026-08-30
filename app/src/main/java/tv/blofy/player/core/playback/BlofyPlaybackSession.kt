@@ -1,6 +1,7 @@
 package tv.blofy.player.core.playback
 
 import android.content.Context
+import android.os.Handler
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -23,6 +24,8 @@ class BlofyPlaybackSession(
 ) {
     private var metric: PlaybackMetric? = null
     private var firstFrameRecorded = false
+    private var automaticRetries = 0
+    private val retryHandler = Handler(context.mainLooper)
 
     val player: ExoPlayer = ExoPlayer.Builder(context.applicationContext)
         .setMediaSourceFactory(
@@ -61,11 +64,16 @@ class BlofyPlaybackSession(
                             error.message
                         )
                     }
+                    if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
+                        automaticRetries++
+                        retryHandler.post { retrySameUrl() }
+                    }
                 }
             })
         }
 
     fun play(url: String, resumeMs: Long = 0L) {
+        automaticRetries = 0
         firstFrameRecorded = false
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
         val item = MediaItem.Builder().setUri(url).build()
@@ -87,5 +95,12 @@ class BlofyPlaybackSession(
 
     fun isStarted(): Boolean = player.playbackState == Player.STATE_READY && player.playWhenReady
 
-    fun release() = player.release()
+    fun release() {
+        retryHandler.removeCallbacksAndMessages(null)
+        player.release()
+    }
+
+    private companion object {
+        const val MAX_AUTOMATIC_RETRIES = 1
+    }
 }
