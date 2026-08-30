@@ -1,5 +1,6 @@
 package tv.blofy.player.data
 
+import kotlinx.coroutines.flow.first
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.EpgEntity
@@ -23,11 +24,9 @@ class PlaylistManager(
     suspend fun syncLive(provider: ProviderEntity) {
         val categories = api.list(actionUrl(provider, "get_live_categories"))
         val streams = api.list(actionUrl(provider, "get_live_streams"))
+        val previous = dao.streams(provider.id, "live", null).first().associateBy { it.key }
 
-        dao.clearCategories(provider.id, "live")
-        dao.clearStreams(provider.id, "live")
-
-        dao.upsertCategories(categories.mapIndexedNotNull { index, row ->
+        val categoryRows = categories.mapIndexedNotNull { index, row ->
             val id = row.string("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity(
                 key = "${provider.id}:live:$id",
@@ -37,12 +36,12 @@ class PlaylistManager(
                 name = row.string("category_name") ?: "Live",
                 orderIndex = index
             )
-        })
-
-        dao.upsertStreams(streams.mapNotNull { row ->
+        }
+        val streamRows = streams.mapNotNull { row ->
             val id = row.string("stream_id") ?: return@mapNotNull null
+            val key = "${provider.id}:live:$id"
             StreamEntity(
-                key = "${provider.id}:live:$id",
+                key = key,
                 providerId = provider.id,
                 remoteId = id,
                 categoryId = row.string("category_id"),
@@ -51,24 +50,32 @@ class PlaylistManager(
                 icon = row.string("stream_icon"),
                 directSource = row.string("direct_source"),
                 epgChannelId = row.string("epg_channel_id"),
-                streamType = row.string("stream_type")
+                streamType = row.string("stream_type"),
+                favorite = previous[key]?.favorite ?: false,
+                locked = previous[key]?.locked ?: false
             )
-        })
+        }
+
+        dao.clearCategories(provider.id, "live")
+        dao.clearStreams(provider.id, "live")
+        dao.upsertCategories(categoryRows)
+        dao.upsertStreams(streamRows)
     }
 
     suspend fun syncVod(provider: ProviderEntity) {
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
         val streams = api.list(actionUrl(provider, "get_vod_streams"))
-        dao.clearCategories(provider.id, "movie")
-        dao.clearStreams(provider.id, "movie")
-        dao.upsertCategories(categories.mapIndexedNotNull { index, row ->
+        val previous = dao.streams(provider.id, "movie", null).first().associateBy { it.key }
+
+        val categoryRows = categories.mapIndexedNotNull { index, row ->
             val id = row.string("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:movie:$id", provider.id, id, "movie", row.string("category_name") ?: "Movies", index)
-        })
-        dao.upsertStreams(streams.mapNotNull { row ->
+        }
+        val streamRows = streams.mapNotNull { row ->
             val id = row.string("stream_id") ?: return@mapNotNull null
+            val key = "${provider.id}:movie:$id"
             StreamEntity(
-                key = "${provider.id}:movie:$id",
+                key = key,
                 providerId = provider.id,
                 remoteId = id,
                 categoryId = row.string("category_id"),
@@ -76,32 +83,49 @@ class PlaylistManager(
                 name = row.string("name") ?: "Movie $id",
                 icon = row.string("stream_icon"),
                 extension = row.string("container_extension") ?: "mp4",
-                directSource = row.string("direct_source")
+                directSource = row.string("direct_source"),
+                addedAt = row.string("added")?.toLongOrNull(),
+                favorite = previous[key]?.favorite ?: false,
+                locked = previous[key]?.locked ?: false
             )
-        })
+        }
+
+        dao.clearCategories(provider.id, "movie")
+        dao.clearStreams(provider.id, "movie")
+        dao.upsertCategories(categoryRows)
+        dao.upsertStreams(streamRows)
     }
 
     suspend fun syncSeries(provider: ProviderEntity) {
         val categories = api.list(actionUrl(provider, "get_series_categories"))
         val series = api.list(actionUrl(provider, "get_series"))
-        dao.clearCategories(provider.id, "series")
-        dao.clearStreams(provider.id, "series")
-        dao.upsertCategories(categories.mapIndexedNotNull { index, row ->
+        val previous = dao.streams(provider.id, "series", null).first().associateBy { it.key }
+
+        val categoryRows = categories.mapIndexedNotNull { index, row ->
             val id = row.string("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:series:$id", provider.id, id, "series", row.string("category_name") ?: "Series", index)
-        })
-        dao.upsertStreams(series.mapNotNull { row ->
+        }
+        val streamRows = series.mapNotNull { row ->
             val id = row.string("series_id") ?: return@mapNotNull null
+            val key = "${provider.id}:series:$id"
             StreamEntity(
-                key = "${provider.id}:series:$id",
+                key = key,
                 providerId = provider.id,
                 remoteId = id,
                 categoryId = row.string("category_id"),
                 kind = "series",
                 name = row.string("name") ?: "Series $id",
-                icon = row.string("cover") ?: row.string("stream_icon")
+                icon = row.string("cover") ?: row.string("stream_icon"),
+                addedAt = row.string("last_modified")?.toLongOrNull() ?: row.string("added")?.toLongOrNull(),
+                favorite = previous[key]?.favorite ?: false,
+                locked = previous[key]?.locked ?: false
             )
-        })
+        }
+
+        dao.clearCategories(provider.id, "series")
+        dao.clearStreams(provider.id, "series")
+        dao.upsertCategories(categoryRows)
+        dao.upsertStreams(streamRows)
     }
 
     suspend fun syncSeriesEpisodes(provider: ProviderEntity, seriesId: String) {
