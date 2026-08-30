@@ -11,8 +11,9 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Provider-scoped redirects/transport settings
 - [x] One retry of the same URL; no global route ladder
 - [x] direct_source retained as data, not primary Xtream route
-- [ ] FFmpeg audio extension for AC3/EAC3/DTS-class compatibility
-- [ ] Real VLC/external-player fallback path
+- [ ] FFmpeg audio extension for AC3/EAC3/DTS-class compatibility (requires locally built Media3 FFmpeg native module; not available from Google Maven)
+- [x] External-player launch path (system/VLC/MX if installed)
+- [ ] Automatic VLC fallback after Media3 failure
 - [ ] Read-only playback/download cache policy equivalent where useful
 
 ## Local-first data
@@ -20,7 +21,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Manual refresh instead of reload on every Connect
 - [x] Preserve favorite/lock flags across catalog refresh
 - [x] Episodes sorted by season then episode
-- [ ] EPG refresh lifecycle for current/next live channel
+- [x] EPG refresh lifecycle for current/next Xtream live channel
 - [ ] Recent channels list and UI
 
 ## Live TV / remote
@@ -33,8 +34,8 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] EPG HUD read from local DB
 - [x] Audio/subtitle track selection
 - [x] Favorite toggle in HUD
+- [x] Video quality selector (Auto/available video tracks)
 - [ ] Full TV remote state-machine polish across every screen
-- [ ] Video quality selector (Auto/available tracks)
 - [ ] Catch-up/archive flow
 
 ## Movies / Series
@@ -48,25 +49,28 @@ This file locks the implementation targets confirmed or strongly supported by th
 
 ## Playlists / identity
 - [x] Xtream playlist add/save
+- [x] M3U/M3U8 parser and supplied direct-URL playback path
+- [x] M3U grouping with Live/Movie and SxxExx series/episode recognition
 - [x] Device ID + six-digit activation code foundation
 - [x] Connect opens local data without forced sync
-- [ ] M3U/M3U8 playlist parser and direct-URL playback path
-- [ ] Full saved-playlist switch/edit/delete UI
+- [x] Saved-playlist switch/update/delete UI
+- [ ] Edit existing saved playlist credentials/details in place
 - [ ] QR/barcode on login
 - [ ] Real activation backend/status/expiry flow
 
 ## Themes / device classes
 - [x] BLOFY theme profile foundation
+- [x] Runtime theme selection/profile application
 - [x] TV launcher/banner and TV focus foundation
-- [ ] Runtime theme engine with multiple Login/Home layouts
+- [ ] Multiple structurally distinct Login/Home layouts per theme (not just palette/profile changes)
 - [ ] Separate TV and Mobile layout/activity behavior
 
 ## Search / library / locks
 - [x] Local search foundation
+- [x] Instant search while typing with debounce
 - [x] Favorites
 - [x] Continue watching
 - [x] Locked flag persisted
-- [ ] Instant search while typing with debounce
 - [ ] PIN/parental-lock UI and enforcement
 
 ## BLOFY additions (not claimed as 7 Max parity)
