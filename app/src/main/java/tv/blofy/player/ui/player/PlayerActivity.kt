@@ -12,6 +12,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.playback.ContentUrlResolver
+import tv.blofy.player.core.playback.ExternalPlayerLauncher
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderProfile
@@ -34,9 +36,11 @@ import tv.blofy.player.core.provider.TransportPreference
 import tv.blofy.player.core.remote.RemoteAction
 import tv.blofy.player.core.remote.RemoteKeyRouter
 import tv.blofy.player.data.ContentRepository
+import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.remote.XtreamClient
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -51,6 +55,8 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var channelNumberView: TextView
     private lateinit var audioButton: Button
     private lateinit var subtitleButton: Button
+    private lateinit var qualityButton: Button
+    private lateinit var externalButton: Button
     private lateinit var favoriteButton: Button
     private var epgJob: Job? = null
     private var digitBuffer = ""
@@ -81,7 +87,10 @@ class PlayerActivity : AppCompatActivity() {
         session.play(url, intent.getLongExtra(EXTRA_RESUME_MS, 0L))
         updateTitle(currentTitle)
         refreshFavoriteState()
-        if (kind == "live") observeEpg()
+        if (kind == "live") {
+            requestShortEpgRefresh()
+            observeEpg()
+        }
     }
 
     private fun buildPlayerUi() {
@@ -142,17 +151,21 @@ class PlayerActivity : AppCompatActivity() {
         }
         audioButton = controlButton("الصوت") { showTrackDialog(C.TRACK_TYPE_AUDIO) }
         subtitleButton = controlButton("الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
+        qualityButton = controlButton("الجودة") { showVideoQualityDialog() }
+        externalButton = controlButton("خارجي") { launchExternalPlayer() }
         favoriteButton = controlButton("☆ المفضلة") { toggleFavorite() }
-        controls.addView(audioButton, LinearLayout.LayoutParams(190, 74).apply { marginEnd = 12 })
-        controls.addView(subtitleButton, LinearLayout.LayoutParams(190, 74).apply { marginEnd = 12 })
-        controls.addView(favoriteButton, LinearLayout.LayoutParams(210, 74))
+        controls.addView(audioButton, LinearLayout.LayoutParams(160, 72).apply { marginEnd = 10 })
+        controls.addView(subtitleButton, LinearLayout.LayoutParams(160, 72).apply { marginEnd = 10 })
+        controls.addView(qualityButton, LinearLayout.LayoutParams(160, 72).apply { marginEnd = 10 })
+        controls.addView(externalButton, LinearLayout.LayoutParams(160, 72).apply { marginEnd = 10 })
+        controls.addView(favoriteButton, LinearLayout.LayoutParams(190, 72))
         if (kind == "live") {
             controls.addView(TextView(this).apply {
-                text = "  CH+/CH− للتبديل  •  اكتب رقم القناة مباشرة"
-                textSize = 15f
+                text = "  CH+/CH−  •  رقم القناة"
+                textSize = 14f
                 setTextColor(Color.rgb(185, 140, 255))
                 gravity = Gravity.CENTER_VERTICAL
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 74))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 72))
         }
         hud.addView(controls)
 
@@ -272,6 +285,7 @@ class PlayerActivity : AppCompatActivity() {
         updateTitle(stream.name)
         session.play(ContentUrlResolver.live(provider, profile, stream))
         refreshFavoriteState()
+        requestShortEpgRefresh(provider, stream)
         observeEpg()
         if (hud.visibility != View.VISIBLE) showHudBriefly()
     }
@@ -291,6 +305,19 @@ class PlayerActivity : AppCompatActivity() {
             val item = dao.stream(currentContentKey) ?: return@launch
             dao.setFavorite(currentContentKey, !item.favorite)
             favoriteButton.text = if (!item.favorite) "★ في المفضلة" else "☆ المفضلة"
+        }
+    }
+
+    private fun requestShortEpgRefresh(provider: ProviderEntity? = null, stream: StreamEntity? = null) {
+        if (providerId.isBlank() || currentStreamId.isBlank()) return
+        lifecycleScope.launch {
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val resolvedProvider = provider ?: dao.provider(providerId) ?: return@launch
+            if (resolvedProvider.providerType.equals("m3u", true)) return@launch
+            val resolvedStream = stream ?: dao.stream(currentContentKey) ?: return@launch
+            runCatching {
+                PlaylistManager(XtreamClient.api, dao).syncShortEpg(resolvedProvider, resolvedStream.remoteId)
+            }
         }
     }
 
@@ -358,6 +385,59 @@ class PlayerActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             .show()
+    }
+
+    private fun showVideoQualityDialog() {
+        val entries = mutableListOf<TrackEntry>()
+        session.player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO && it.length > 0 }.forEach { group ->
+            for (index in 0 until group.length) {
+                if (group.isTrackSupported(index)) {
+                    val format = group.getTrackFormat(index)
+                    entries += TrackEntry(group, index, videoLabel(format))
+                }
+            }
+        }
+        if (entries.isEmpty()) {
+            AlertDialog.Builder(this).setMessage("لا توجد جودات فيديو متعددة").setPositiveButton("حسنًا", null).show()
+            return
+        }
+        val labels = listOf("تلقائي (Auto)") + entries.map { it.label }
+        AlertDialog.Builder(this)
+            .setTitle("الجودة")
+            .setItems(labels.toTypedArray()) { dialog, which ->
+                val builder = session.player.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+                if (which == 0) {
+                    builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                } else {
+                    val entry = entries[which - 1]
+                    builder.setOverrideForType(TrackSelectionOverride(entry.group.mediaTrackGroup, listOf(entry.index)))
+                }
+                session.player.trackSelectionParameters = builder.build()
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun videoLabel(format: Format): String {
+        val resolution = when {
+            format.height >= 2160 -> "4K"
+            format.height >= 1440 -> "1440p"
+            format.height >= 1080 -> "1080p"
+            format.height >= 720 -> "720p"
+            format.height > 0 -> "${format.height}p"
+            else -> "VIDEO"
+        }
+        val fps = if (format.frameRate > 0) "${format.frameRate.toInt()}fps" else null
+        val bitrate = if (format.bitrate > 0) "${format.bitrate / 1_000_000.0}Mbps" else null
+        return listOfNotNull(resolution, fps, bitrate, format.codecs).joinToString(" • ")
+    }
+
+    private fun launchExternalPlayer() {
+        val url = session.player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+        if (url.isBlank() || !ExternalPlayerLauncher.launch(this, url, currentTitle)) {
+            Toast.makeText(this, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun trackLabel(format: Format, type: Int): String {
