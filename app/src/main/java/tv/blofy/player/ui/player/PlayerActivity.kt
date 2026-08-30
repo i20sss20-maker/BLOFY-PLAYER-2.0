@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -16,6 +17,7 @@ import tv.blofy.player.core.remote.RemoteKeyRouter
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 
+@UnstableApi
 class PlayerActivity : AppCompatActivity() {
     private lateinit var session: BlofyPlaybackSession
     private lateinit var playerView: PlayerView
