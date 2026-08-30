@@ -37,6 +37,7 @@ import tv.blofy.player.core.remote.RemoteAction
 import tv.blofy.player.core.remote.RemoteKeyRouter
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.PlaylistManager
+import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -88,6 +89,7 @@ class PlayerActivity : AppCompatActivity() {
         updateTitle(currentTitle)
         refreshFavoriteState()
         if (kind == "live") {
+            RecentChannelStore.record(this, providerId, currentContentKey)
             requestShortEpgRefresh()
             observeEpg()
         }
@@ -282,6 +284,7 @@ class PlayerActivity : AppCompatActivity() {
         currentStreamId = stream.remoteId
         currentContentKey = stream.key
         currentTitle = stream.name
+        RecentChannelStore.record(this, provider.id, stream.key)
         updateTitle(stream.name)
         session.play(ContentUrlResolver.live(provider, profile, stream))
         refreshFavoriteState()
