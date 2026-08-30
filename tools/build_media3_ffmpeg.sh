@@ -51,15 +51,32 @@ pushd "$MEDIA3_DIR" >/dev/null
 ./gradlew --no-daemon :lib-decoder-ffmpeg:assembleRelease
 popd >/dev/null
 
-AAR="$(find "$MEDIA3_DIR/libraries/decoder_ffmpeg/build/outputs/aar" -maxdepth 1 -type f -name '*.aar' | head -n 1)"
+# Media3 can redirect module build output into a repository-level buildout
+# directory, so never assume libraries/decoder_ffmpeg/build/outputs/aar.
+mapfile -t AAR_CANDIDATES < <(
+  find "$MEDIA3_DIR" -type f -name '*.aar' \
+    \( -path '*decoder_ffmpeg*' -o -path '*decoder-ffmpeg*' -o -name '*ffmpeg*.aar' \) \
+    -print | sort
+)
+
+AAR=""
+for candidate in "${AAR_CANDIDATES[@]}"; do
+  if unzip -l "$candidate" 2>/dev/null | grep -Eiq 'jni/.*/lib(ffmpeg|ffmpegJNI).*\.so|libffmpegJNI\.so'; then
+    AAR="$candidate"
+    break
+  fi
+done
+
 if [[ -z "$AAR" || ! -f "$AAR" ]]; then
-  echo "FFmpeg decoder AAR was not produced" >&2
+  echo "FFmpeg decoder AAR was not produced or did not contain the expected JNI library." >&2
+  echo "AAR candidates found under Media3:" >&2
+  if ((${#AAR_CANDIDATES[@]})); then
+    printf '  %s\n' "${AAR_CANDIDATES[@]}" >&2
+  else
+    find "$MEDIA3_DIR" -type f \( -name '*.aar' -o -name 'libffmpeg*.so' -o -name 'libffmpegJNI.so' \) -print >&2 || true
+  fi
   exit 3
 fi
-unzip -l "$AAR" | grep -Eiq 'jni/.*/lib(ffmpeg|ffmpegJNI).*\.so|libffmpegJNI\.so' || {
-  echo "FFmpeg AAR does not contain the expected JNI library" >&2
-  exit 4
-}
 
 DEST="$OUT_DIR/media3-decoder-ffmpeg-${MEDIA3_VERSION}.aar"
 cp "$AAR" "$DEST"
@@ -71,6 +88,7 @@ android_api=$ANDROID_ABI
 host_platform=$HOST_PLATFORM
 decoders=${DECODERS[*]}
 ndk=$NDK_PATH
+source_aar=$AAR
 aar=$DEST
 INFO
 
