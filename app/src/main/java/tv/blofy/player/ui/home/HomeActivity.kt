@@ -9,20 +9,25 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import tv.blofy.player.core.theme.ThemeManager
+import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 
 class HomeActivity : AppCompatActivity() {
+    private lateinit var theme: ThemeProfile
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        theme = ThemeManager.current(this)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(62, 46, 62, 46)
-            setBackgroundColor(Color.rgb(5, 5, 10))
+            setBackgroundColor(theme.background)
         }
         root.addView(TextView(this).apply {
             text = "BLOFY PLAYER"
@@ -30,9 +35,9 @@ class HomeActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
         })
         root.addView(TextView(this).apply {
-            text = "كل محتواك. أسرع. أبسط."
+            text = if (theme.id == "cinema") "BLOFY CINEMA" else "كل محتواك. أسرع. أبسط."
             textSize = 15f
-            setTextColor(Color.rgb(185, 140, 255))
+            setTextColor(theme.accent)
             setPadding(0, 4, 0, 30)
         })
 
@@ -69,9 +74,9 @@ class HomeActivity : AppCompatActivity() {
             setOnFocusChangeListener { view, focused ->
                 view.background = tile(focused)
                 view.animate()
-                    .scaleX(if (focused) 1.045f else 1f)
-                    .scaleY(if (focused) 1.045f else 1f)
-                    .setDuration(110)
+                    .scaleX(if (focused) theme.focusScale else 1f)
+                    .scaleY(if (focused) theme.focusScale else 1f)
+                    .setDuration(theme.motionMs)
                     .start()
             }
             setOnClickListener { startActivity(intent) }
@@ -81,7 +86,14 @@ class HomeActivity : AppCompatActivity() {
 
     private fun tile(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = 22f
-        setColor(if (focused) Color.rgb(70, 32, 118) else Color.rgb(18, 16, 28))
-        setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(45, 38, 60))
+        setColor(if (focused) blend(theme.surface, theme.accent, 0.34f) else theme.surface)
+        setStroke(if (focused) 3 else 1, if (focused) theme.accent else blend(theme.surface, Color.WHITE, 0.12f))
+    }
+
+    private fun blend(a: Int, b: Int, ratio: Float): Int {
+        val r = (Color.red(a) * (1f - ratio) + Color.red(b) * ratio).toInt()
+        val g = (Color.green(a) * (1f - ratio) + Color.green(b) * ratio).toInt()
+        val bl = (Color.blue(a) * (1f - ratio) + Color.blue(b) * ratio).toInt()
+        return Color.rgb(r, g, bl)
     }
 }
