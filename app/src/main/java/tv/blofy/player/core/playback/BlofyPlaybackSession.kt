@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import tv.blofy.player.core.diagnostics.PlaybackDiagnostics
+import tv.blofy.player.core.diagnostics.PlaybackDiagnosticsUploader
 import tv.blofy.player.core.diagnostics.PlaybackMetric
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
@@ -49,13 +50,21 @@ class BlofyPlaybackSession(
 
                 override fun onRenderedFirstFrame() {
                     if (!firstFrameRecorded) {
-                        metric?.let { metric = PlaybackDiagnostics.firstFrame(it) }
+                        metric?.let {
+                            val updated = PlaybackDiagnostics.firstFrame(it)
+                            metric = updated
+                            PlaybackDiagnosticsUploader.enqueue(appContext, updated)
+                        }
                         firstFrameRecorded = true
                     }
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
-                    metric?.let { metric = PlaybackDiagnostics.error(it, error.errorCodeName, error.message) }
+                    metric?.let {
+                        val updated = PlaybackDiagnostics.error(it, error.errorCodeName, error.message)
+                        metric = updated
+                        PlaybackDiagnosticsUploader.enqueue(appContext, updated)
+                    }
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
                         automaticRetries++
                         retryHandler.post { retrySameUrl() }
