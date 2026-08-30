@@ -62,7 +62,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] BLOFY theme profile foundation
 - [x] Runtime theme selection/profile application
 - [x] TV launcher/banner and TV focus foundation
-- [ ] Multiple structurally distinct Login/Home layouts per theme (not just palette/profile changes)
+- [x] Multiple structurally distinct Home layouts per theme (VISION dashboard versus CINEMA TV rail/stage); Login remains BLOFY-branded and theme-aware
 - [x] Separate TV and Mobile layout/activity behavior (TV browser/preview versus touch-first MobileContent; device-specific Home/Login/Playlist behavior)
 
 ## Search / library / locks
