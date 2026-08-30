@@ -24,6 +24,11 @@ import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
 
 class EpisodesActivity : AppCompatActivity() {
+    private lateinit var episodeAdapter: FocusTextAdapter<EpisodeEntity>
+    private lateinit var seasonAdapter: FocusTextAdapter<Int>
+    private var allEpisodes: List<EpisodeEntity> = emptyList()
+    private var selectedSeason: Int? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
@@ -38,43 +43,71 @@ class EpisodesActivity : AppCompatActivity() {
             setPadding(34, 24, 34, 24)
             setBackgroundColor(Color.rgb(5, 5, 10))
         }
-        val title = TextView(this).apply {
+        root.addView(TextView(this).apply {
             text = seriesName.ifBlank { "الحلقات" }
-            textSize = 27f
+            textSize = 29f
             setTextColor(Color.WHITE)
             gravity = Gravity.START
-            setPadding(8, 0, 0, 18)
-        }
+            setPadding(8, 0, 0, 6)
+        })
         val status = TextView(this).apply {
             text = "جاري تحميل الحلقات..."
             setTextColor(Color.rgb(185, 140, 255))
-            setPadding(8, 0, 0, 10)
+            setPadding(8, 0, 0, 14)
         }
-        val list = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@EpisodesActivity) }
-        root.addView(title)
         root.addView(status)
-        root.addView(list, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val seasons = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@EpisodesActivity) }
+        val episodes = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@EpisodesActivity) }
+        body.addView(seasons, LinearLayout.LayoutParams(260, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 18 })
+        body.addView(episodes, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
+
+            episodeAdapter = FocusTextAdapter(
+                label = { "الحلقة ${it.episode}  •  ${it.title}" },
+                onClick = { episode -> openEpisode(provider, episode) }
+            )
+            seasonAdapter = FocusTextAdapter(
+                label = { "الموسم $it" },
+                onClick = ::selectSeason,
+                onFocus = ::selectSeason
+            )
+            episodes.adapter = episodeAdapter
+            seasons.adapter = seasonAdapter
+
             runCatching {
                 withContext(Dispatchers.IO) {
                     PlaylistManager(XtreamClient.api, dao).syncSeriesEpisodes(provider, seriesId)
                 }
             }.onFailure { status.text = "عرض البيانات المحفوظة" }
 
-            val adapter = FocusTextAdapter<EpisodeEntity>(
-                label = { "الموسم ${it.season}  •  الحلقة ${it.episode}  •  ${it.title}" },
-                onClick = { episode -> openEpisode(provider, episode) }
-            )
-            list.adapter = adapter
-            dao.episodes(providerId, seriesId).collect {
-                status.text = if (it.isEmpty()) "لا توجد حلقات" else "${it.size} حلقة"
-                adapter.submit(it)
+            dao.episodes(providerId, seriesId).collect { items ->
+                allEpisodes = items.sortedWith(compareBy<EpisodeEntity> { it.season }.thenBy { it.episode })
+                val seasonValues = allEpisodes.map { it.season }.distinct().sorted()
+                seasonAdapter.submit(seasonValues)
+                if (selectedSeason == null || selectedSeason !in seasonValues) selectedSeason = seasonValues.firstOrNull()
+                refreshEpisodes()
+                status.text = if (items.isEmpty()) "لا توجد حلقات" else "${seasonValues.size} موسم  •  ${items.size} حلقة"
             }
         }
+    }
+
+    private fun selectSeason(season: Int) {
+        if (selectedSeason == season) return
+        selectedSeason = season
+        refreshEpisodes()
+    }
+
+    private fun refreshEpisodes() {
+        if (!::episodeAdapter.isInitialized) return
+        val season = selectedSeason
+        episodeAdapter.submit(if (season == null) emptyList() else allEpisodes.filter { it.season == season }.sortedBy { it.episode })
     }
 
     private fun openEpisode(provider: ProviderEntity, episode: EpisodeEntity) {
