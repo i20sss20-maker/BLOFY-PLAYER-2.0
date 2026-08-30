@@ -4,6 +4,9 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
+val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+
 android {
     namespace = "tv.blofy.player"
     compileSdk = 35
@@ -14,6 +17,7 @@ android {
         targetSdk = 35
         versionCode = 2000001
         versionName = "2.0.0-alpha01"
+        buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
     }
 
     buildFeatures {
