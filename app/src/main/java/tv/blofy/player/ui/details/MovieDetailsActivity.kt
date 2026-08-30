@@ -1,11 +1,11 @@
 package tv.blofy.player.ui.details
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -32,7 +32,7 @@ class MovieDetailsActivity : AppCompatActivity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(70, 54, 70, 54)
+            setPadding(76, 56, 76, 56)
         }
         root.addView(panel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
@@ -45,51 +45,36 @@ class MovieDetailsActivity : AppCompatActivity() {
 
             panel.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.name
-                textSize = 34f
+                textSize = 36f
                 setTextColor(Color.WHITE)
             })
             panel.addView(TextView(this@MovieDetailsActivity).apply {
                 text = buildString {
                     append("فيلم")
                     stream.extension?.takeIf { it.isNotBlank() }?.let { append("  •  ").append(it.uppercase()) }
-                    stream.addedAt?.let { append("  •  محفوظ محليًا") }
+                    if ((watch?.positionMs ?: 0L) > 30_000L) append("  •  لديك مشاهدة سابقة")
                 }
                 textSize = 16f
                 setTextColor(Color.rgb(190, 165, 225))
                 setPadding(0, 8, 0, 26)
             })
-
             panel.addView(TextView(this@MovieDetailsActivity).apply {
-                text = "BLOFY PLAYER يعرض بيانات الفيلم من قائمتك المحلية ويبدأ التشغيل بالرابط الأصلي للمزود بدون تخمينات إضافية."
+                text = "التشغيل يبدأ فقط عند اختيارك. BLOFY يستخدم رابط الفيلم الأصلي وامتداده المحفوظ من المزود."
                 textSize = 17f
                 setTextColor(Color.rgb(220, 220, 225))
-                setPadding(0, 0, 0, 28)
+                setPadding(0, 0, 0, 30)
             })
 
             val row = LinearLayout(this@MovieDetailsActivity).apply { orientation = LinearLayout.HORIZONTAL }
-            val play = actionButton(if ((watch?.positionMs ?: 0L) > 30_000L) "استئناف" else "تشغيل") {
-                val resume = watch?.positionMs ?: 0L
-                startActivity(Intent(this@MovieDetailsActivity, PlayerActivity::class.java).apply {
-                    putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.movie(provider, stream))
-                    putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
-                    putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
-                    putExtra(PlayerActivity.EXTRA_KIND, "movie")
-                    putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
-                    putExtra(PlayerActivity.EXTRA_RESUME_MS, resume)
-                })
+            val resumeMs = watch?.positionMs ?: 0L
+            val play = actionButton(if (resumeMs > 30_000L) "استئناف" else "تشغيل") {
+                openPlayer(provider.id, stream.key, stream.name, ContentUrlResolver.movie(provider, stream), resumeMs)
             }
             row.addView(play, LinearLayout.LayoutParams(230, 82).apply { marginEnd = 14 })
 
-            if ((watch?.positionMs ?: 0L) > 30_000L) {
+            if (resumeMs > 30_000L) {
                 row.addView(actionButton("من البداية") {
-                    startActivity(Intent(this@MovieDetailsActivity, PlayerActivity::class.java).apply {
-                        putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.movie(provider, stream))
-                        putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
-                        putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
-                        putExtra(PlayerActivity.EXTRA_KIND, "movie")
-                        putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
-                        putExtra(PlayerActivity.EXTRA_RESUME_MS, 0L)
-                    })
+                    openPlayer(provider.id, stream.key, stream.name, ContentUrlResolver.movie(provider, stream), 0L)
                 }, LinearLayout.LayoutParams(230, 82).apply { marginEnd = 14 })
             }
 
@@ -106,18 +91,35 @@ class MovieDetailsActivity : AppCompatActivity() {
         }
     }
 
+    private fun openPlayer(providerId: String, contentKey: String, title: String, url: String, resumeMs: Long) {
+        startActivity(Intent(this, PlayerActivity::class.java).apply {
+            putExtra(PlayerActivity.EXTRA_URL, url)
+            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, contentKey)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, providerId)
+            putExtra(PlayerActivity.EXTRA_KIND, "movie")
+            putExtra(PlayerActivity.EXTRA_TITLE, title)
+            putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
+        })
+    }
+
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
         textSize = 16f
         isFocusable = true
-        background = GradientDrawable().apply {
-            cornerRadius = 18f
-            setColor(Color.rgb(52, 25, 88))
-            setStroke(2, Color.rgb(160, 105, 235))
-        }
         setTextColor(Color.WHITE)
+        background = buttonBackground(false)
+        setOnFocusChangeListener { view: View, focused: Boolean ->
+            view.background = buttonBackground(focused)
+            view.animate().scaleX(if (focused) 1.04f else 1f).scaleY(if (focused) 1.04f else 1f).setDuration(100).start()
+        }
         setOnClickListener { action() }
+    }
+
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 18f
+        setColor(if (focused) Color.rgb(76, 35, 128) else Color.rgb(28, 21, 42))
+        setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(64, 48, 84))
     }
 
     companion object {
