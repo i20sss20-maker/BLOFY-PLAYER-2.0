@@ -10,6 +10,8 @@
     <application
         android:name=".BlofyApp"
         android:allowBackup="true"
+        android:banner="@drawable/blofy_tv_banner"
+        android:icon="@drawable/ic_blofy_app"
         android:label="BLOFY PLAYER"
         android:supportsRtl="true"
         android:theme="@style/Theme.Blofy">
