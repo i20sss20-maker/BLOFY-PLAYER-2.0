@@ -5,11 +5,13 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
 
+@UnstableApi
 class BlofyPlaybackSession(
     context: Context,
     private val profile: ProviderProfile
