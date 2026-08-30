@@ -13,3 +13,20 @@ CREATE TABLE IF NOT EXISTS devices (
 
 CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);
 CREATE INDEX IF NOT EXISTS idx_devices_expires_at ON devices(expires_at);
+
+CREATE TABLE IF NOT EXISTS playback_diagnostics (
+  id BIGSERIAL PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  provider_key TEXT NOT NULL,
+  content_kind TEXT NOT NULL,
+  redacted_url TEXT,
+  ttff_ms BIGINT,
+  buffering_count INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT,
+  error_message TEXT,
+  app_version TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_playback_diag_device_created ON playback_diagnostics(device_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_playback_diag_provider_created ON playback_diagnostics(provider_key, created_at DESC);
