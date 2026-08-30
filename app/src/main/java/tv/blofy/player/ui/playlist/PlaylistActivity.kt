@@ -106,8 +106,10 @@ class PlaylistActivity : AppCompatActivity() {
                                 baseUrl = if (isM3u) baseUrl else baseUrl.trimEnd('/'),
                                 username = user,
                                 password = pass,
-                                providerType = type
+                                providerType = type,
+                                enabled = true
                             )
+                            dao.disableAllProviders()
                             dao.upsertProvider(provider)
                             PlaylistManager(XtreamClient.api, dao).syncAll(provider)
                         }
