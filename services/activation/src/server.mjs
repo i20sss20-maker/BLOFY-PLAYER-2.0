@@ -54,6 +54,19 @@ function validIdentity(deviceId, activationCode) {
   return /^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) && /^\d{6}$/.test(activationCode);
 }
 
+function validProviderKey(providerKey) {
+  return /^[A-Za-z0-9._:-]{1,128}$/.test(providerKey);
+}
+
+async function authorizedDevice(deviceId, activationCode) {
+  if (!validIdentity(deviceId, activationCode)) return null;
+  const result = await pool.query('SELECT * FROM devices WHERE device_id=$1', [deviceId]);
+  const row = result.rows[0];
+  if (!row || !constantTimeEqual(row.activation_code, activationCode)) return null;
+  const status = normalizeStatus(row);
+  return status === 'trial' || status === 'active' ? row : null;
+}
+
 async function initializeDatabase() {
   const schemaUrl = new URL('../schema.sql', import.meta.url);
   const schema = await readFile(schemaUrl, 'utf8');
@@ -125,6 +138,30 @@ async function activationCheck(req, res) {
   } finally {
     client.release();
   }
+}
+
+async function providerProfile(req, res) {
+  const body = await readJson(req);
+  const deviceId = String(body.deviceId || '').trim();
+  const activationCode = String(body.activationCode || '').trim();
+  const providerKey = String(body.providerKey || '').trim();
+  if (!validProviderKey(providerKey)) return json(res, 400, { error: 'invalid_provider_key' });
+  if (!await authorizedDevice(deviceId, activationCode)) return json(res, 403, { error: 'unauthorized_device' });
+
+  const result = await pool.query(
+    `SELECT provider_key,live_format,preferred_transport,preferred_engine,allow_cross_protocol_redirects,updated_at
+     FROM provider_profiles WHERE provider_key=$1`, [providerKey]
+  );
+  const row = result.rows[0];
+  if (!row) return json(res, 204, {});
+  return json(res, 200, {
+    providerKey: row.provider_key,
+    liveFormat: row.live_format,
+    preferredTransport: row.preferred_transport,
+    preferredEngine: row.preferred_engine,
+    allowCrossProtocolRedirects: row.allow_cross_protocol_redirects,
+    updatedAt: new Date(row.updated_at).getTime()
+  });
 }
 
 async function playbackDiagnostic(req, res) {
@@ -257,13 +294,69 @@ async function adminDiagnostics(req, res, requestUrl) {
   });
 }
 
+async function adminProviderProfileGet(req, res, providerKey) {
+  if (!requireAdmin(req, res)) return;
+  if (!validProviderKey(providerKey)) return json(res, 400, { error: 'invalid_provider_key' });
+  const result = await pool.query('SELECT * FROM provider_profiles WHERE provider_key=$1', [providerKey]);
+  const row = result.rows[0];
+  if (!row) return json(res, 404, { error: 'provider_profile_not_found' });
+  return json(res, 200, {
+    providerKey: row.provider_key,
+    liveFormat: row.live_format,
+    preferredTransport: row.preferred_transport,
+    preferredEngine: row.preferred_engine,
+    allowCrossProtocolRedirects: row.allow_cross_protocol_redirects,
+    updatedAt: new Date(row.updated_at).getTime()
+  });
+}
+
+async function adminProviderProfileUpdate(req, res, providerKey) {
+  if (!requireAdmin(req, res)) return;
+  if (!validProviderKey(providerKey)) return json(res, 400, { error: 'invalid_provider_key' });
+  const body = await readJson(req);
+  const liveFormat = body.liveFormat == null ? null : String(body.liveFormat).toLowerCase();
+  const preferredTransport = body.preferredTransport == null ? null : String(body.preferredTransport).toLowerCase();
+  const preferredEngine = body.preferredEngine == null ? null : String(body.preferredEngine).toLowerCase();
+  const redirects = body.allowCrossProtocolRedirects == null ? null : Boolean(body.allowCrossProtocolRedirects);
+  if (liveFormat != null && !['ts', 'm3u8'].includes(liveFormat)) return json(res, 400, { error: 'invalid_live_format' });
+  if (preferredTransport != null && !['cronet', 'http'].includes(preferredTransport)) return json(res, 400, { error: 'invalid_transport' });
+  if (preferredEngine != null && !['media3', 'vlc'].includes(preferredEngine)) return json(res, 400, { error: 'invalid_engine' });
+
+  const result = await pool.query(
+    `INSERT INTO provider_profiles(provider_key,live_format,preferred_transport,preferred_engine,allow_cross_protocol_redirects,updated_at)
+     VALUES($1,$2,$3,$4,$5,NOW())
+     ON CONFLICT(provider_key) DO UPDATE SET
+       live_format=EXCLUDED.live_format,
+       preferred_transport=EXCLUDED.preferred_transport,
+       preferred_engine=EXCLUDED.preferred_engine,
+       allow_cross_protocol_redirects=EXCLUDED.allow_cross_protocol_redirects,
+       updated_at=NOW()
+     RETURNING *`,
+    [providerKey, liveFormat, preferredTransport, preferredEngine, redirects]
+  );
+  const row = result.rows[0];
+  return json(res, 200, {
+    providerKey: row.provider_key,
+    liveFormat: row.live_format,
+    preferredTransport: row.preferred_transport,
+    preferredEngine: row.preferred_engine,
+    allowCrossProtocolRedirects: row.allow_cross_protocol_redirects,
+    updatedAt: new Date(row.updated_at).getTime()
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
+    if (req.method === 'POST' && requestUrl.pathname === '/api/v1/provider-profile') return await providerProfile(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/diagnostics/playback') return await playbackDiagnostic(req, res);
     if (req.method === 'GET' && requestUrl.pathname === '/api/v1/admin/diagnostics') return await adminDiagnostics(req, res, requestUrl);
+
+    const profileMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/provider-profiles\/([^/?]+)$/);
+    if (profileMatch && req.method === 'GET') return await adminProviderProfileGet(req, res, decodeURIComponent(profileMatch[1]));
+    if (profileMatch && req.method === 'PATCH') return await adminProviderProfileUpdate(req, res, decodeURIComponent(profileMatch[1]));
 
     const match = requestUrl.pathname.match(/^\/api\/v1\/admin\/devices\/([^/?]+)$/);
     if (match && req.method === 'GET') return await adminGet(req, res, decodeURIComponent(match[1]));
