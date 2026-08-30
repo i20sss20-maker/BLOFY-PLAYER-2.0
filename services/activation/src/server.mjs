@@ -2,6 +2,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
+import { createPortalHandlers } from './portal.mjs';
 
 const { Pool } = pg;
 const PORT = Number(process.env.PORT || 8080);
@@ -67,6 +68,8 @@ async function authorizedDevice(deviceId, activationCode) {
   return status === 'trial' || status === 'active' ? row : null;
 }
 
+const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
+
 async function initializeDatabase() {
   const schemaUrl = new URL('../schema.sql', import.meta.url);
   const schema = await readFile(schemaUrl, 'utf8');
@@ -83,6 +86,19 @@ async function health(res) {
     console.error('health check failed', error);
     return json(res, 503, { ok: false, database: 'unavailable', time: Date.now() });
   }
+}
+
+async function servePortal(res) {
+  const file = await readFile(new URL('../web/index.html', import.meta.url));
+  res.writeHead(200, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': file.length,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:"
+  });
+  res.end(file);
 }
 
 async function activationCheck(req, res) {
@@ -348,12 +364,18 @@ async function adminProviderProfileUpdate(req, res, providerKey) {
 const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
+    if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/provider-profile') return await providerProfile(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/diagnostics/playback') return await playbackDiagnostic(req, res);
-    if (req.method === 'GET' && requestUrl.pathname === '/api/v1/admin/diagnostics') return await adminDiagnostics(req, res, requestUrl);
 
+    if (req.method === 'POST' && requestUrl.pathname === '/api/v1/portal/playlists/list') return await portal.list(req, res);
+    if (req.method === 'POST' && requestUrl.pathname === '/api/v1/portal/playlists') return await portal.upsert(req, res);
+    const portalPlaylistMatch = requestUrl.pathname.match(/^\/api\/v1\/portal\/playlists\/([^/?]+)$/);
+    if (portalPlaylistMatch && req.method === 'DELETE') return await portal.remove(req, res, decodeURIComponent(portalPlaylistMatch[1]));
+
+    if (req.method === 'GET' && requestUrl.pathname === '/api/v1/admin/diagnostics') return await adminDiagnostics(req, res, requestUrl);
     const profileMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/provider-profiles\/([^/?]+)$/);
     if (profileMatch && req.method === 'GET') return await adminProviderProfileGet(req, res, decodeURIComponent(profileMatch[1]));
     if (profileMatch && req.method === 'PATCH') return await adminProviderProfileUpdate(req, res, decodeURIComponent(profileMatch[1]));
