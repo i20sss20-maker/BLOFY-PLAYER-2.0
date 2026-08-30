@@ -3,10 +3,11 @@
 This checklist is the release gate for the first real-device Alpha. A green CI build is necessary but not sufficient. Every item below must be tested on real providers/devices before calling the Alpha validated.
 
 ## Build identity
-- [x] Android CI is green on the exact tested commit (`af08bd4`, Android CI #250).
+- [x] Android CI is green on the exact tested commit (`a6cff9c`, Android CI #251).
 - [ ] Settings shows the expected build/version.
-- [ ] Settings shows whether FFmpeg is bundled.
-- [x] FFmpeg CI verifies the APK contains `libffmpegJNI.so` before publishing the artifact (`af08bd4`, FFmpeg Native #57).
+- [ ] Settings shows `FFmpeg: مدمج` on the FFmpeg-enabled APK.
+- [x] FFmpeg CI verifies the APK contains the native FFmpeg extension before publishing the artifact (`a6cff9c`, FFmpeg Native #58).
+- [x] Activation CI is green on the same commit (`a6cff9c`, Activation CI #66).
 
 ## Activation
 - [ ] New device receives the expected trial state.
@@ -131,7 +132,7 @@ Run this section on Android TV / receiver with a physical remote.
 
 ## Release decision
 The Alpha can be called validated only after:
-1. Android + Activation CI are green on the tested commit.
+1. Android + Activation + FFmpeg CI are green on the exact tested commit.
 2. At least three different provider profiles have been exercised if available.
 3. At least one Android TV/receiver and one phone/tablet have been tested.
 4. Critical playback failures have diagnostics captured with provider key, content kind, TTFF/buffering/error information.
