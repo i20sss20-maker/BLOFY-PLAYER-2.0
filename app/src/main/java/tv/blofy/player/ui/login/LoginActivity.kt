@@ -91,7 +91,6 @@ class LoginActivity : AppCompatActivity() {
             setBackgroundColor(theme.background)
         }
         createIdentityViews(false)
-
         val identityPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -128,29 +127,10 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun createIdentityViews(phone: Boolean) {
-        deviceView = TextView(this).apply {
-            text = "جاري إنشاء هوية الجهاز..."
-            textSize = 17f
-            setTextColor(Color.LTGRAY)
-            gravity = Gravity.CENTER
-        }
-        codeView = TextView(this).apply {
-            textSize = if (phone) 25f else 30f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setPadding(0, 6, 0, 8)
-        }
-        qrView = ImageView(this).apply {
-            contentDescription = "رمز تفعيل BLOFY"
-            setBackgroundColor(Color.WHITE)
-            setPadding(10, 10, 10, 10)
-        }
-        status = TextView(this).apply {
-            textSize = 14f
-            setTextColor(theme.accent)
-            gravity = Gravity.CENTER
-            setPadding(0, 8, 0, 16)
-        }
+        deviceView = TextView(this).apply { text = "جاري إنشاء هوية الجهاز..."; textSize = 17f; setTextColor(Color.LTGRAY); gravity = Gravity.CENTER }
+        codeView = TextView(this).apply { textSize = if (phone) 25f else 30f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0, 6, 0, 8) }
+        qrView = ImageView(this).apply { contentDescription = "رمز تفعيل BLOFY"; setBackgroundColor(Color.WHITE); setPadding(10, 10, 10, 10) }
+        status = TextView(this).apply { textSize = 14f; setTextColor(theme.accent); gravity = Gravity.CENTER; setPadding(0, 8, 0, 16) }
     }
 
     private fun connect() {
@@ -162,42 +142,29 @@ class LoginActivity : AppCompatActivity() {
                 if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
                 return@launch
             }
-
             val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
-            if (endpoint.isBlank()) {
-                openHome()
-                return@launch
-            }
-
+            if (endpoint.isBlank()) { openHome(); return@launch }
             status.text = "جاري التحقق من تفعيل الجهاز..."
             val manager = ActivationManager(applicationContext, dao)
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
-                }
-            }
+            val result = runCatching { withContext(Dispatchers.IO) { manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME) } }
             result.onSuccess { remote ->
                 if (remote.canUse()) {
                     status.text = activationLabel(remote)
                     applyRemoteProviderProfile(endpoint, dao, activeProvider.id)
                     openHome()
-                } else {
-                    status.text = activationLabel(remote)
-                }
+                } else status.text = activationLabel(remote)
             }.onFailure {
                 val cached = withContext(Dispatchers.IO) { dao.activation() }
                 if (cached != null && manager.cachedCanUse(cached)) {
                     status.text = "تعذر الوصول لخادم التفعيل • استخدام الصلاحية المحفوظة"
                     openHome()
-                } else {
-                    status.text = "تعذر التحقق من التفعيل"
-                }
+                } else status.text = "تعذر التحقق من التفعيل"
             }
         }
     }
 
     private suspend fun applyRemoteProviderProfile(endpoint: String, dao: BlofyDao, providerId: String) {
-        val current = dao.providerById(providerId) ?: return
+        val current = dao.provider(providerId) ?: return
         val updated = RemoteProviderProfileClient.applyIfAvailable(applicationContext, endpoint, current)
         if (updated != current) dao.upsertProvider(updated)
     }
@@ -210,68 +177,26 @@ class LoginActivity : AppCompatActivity() {
         ActivationCheckResponse.State.UNKNOWN -> remote.message ?: "حالة التفعيل غير معروفة"
     }
 
-    private fun openHome() {
-        startActivity(Intent(this, HomeActivity::class.java))
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (::status.isInitialized) lifecycleScope.launch { refreshProviderStatus() }
-    }
-
+    private fun openHome() { startActivity(Intent(this, HomeActivity::class.java)) }
+    override fun onResume() { super.onResume(); if (::status.isInitialized) lifecycleScope.launch { refreshProviderStatus() } }
     private suspend fun refreshProviderStatus() {
         val provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
         status.text = if (provider == null) "لا توجد قائمة محفوظة" else "القائمة النشطة: ${provider.name}"
     }
-
     private fun createQr(value: String): Bitmap {
         val matrix = QRCodeWriter().encode(value, BarcodeFormat.QR_CODE, 360, 360)
         return Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.RGB_565).apply {
             for (y in 0 until matrix.height) for (x in 0 until matrix.width) setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
         }
     }
-
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         val tv = deviceKind == DeviceClass.Kind.TV
-        text = label
-        isAllCaps = false
-        textSize = 16f
-        isFocusable = tv
-        isFocusableInTouchMode = tv
-        setTextColor(Color.WHITE)
-        background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused ->
-            if (!tv) return@setOnFocusChangeListener
-            view.background = buttonBackground(focused)
-            view.animate().scaleX(if (focused) theme.focusScale else 1f).scaleY(if (focused) theme.focusScale else 1f).setDuration(theme.motionMs).start()
-        }
+        text = label; isAllCaps = false; textSize = 16f; isFocusable = tv; isFocusableInTouchMode = tv; setTextColor(Color.WHITE); background = buttonBackground(false)
+        setOnFocusChangeListener { view, focused -> if (tv) { view.background = buttonBackground(focused); view.animate().scaleX(if (focused) theme.focusScale else 1f).scaleY(if (focused) theme.focusScale else 1f).setDuration(theme.motionMs).start() } }
         setOnClickListener { action() }
     }
-
-    private fun title(value: String, size: Float) = TextView(this).apply {
-        text = value
-        textSize = size
-        setTextColor(Color.WHITE)
-        gravity = Gravity.CENTER
-    }
-
-    private fun subtitle(value: String) = TextView(this).apply {
-        text = value
-        textSize = 16f
-        setTextColor(theme.accent)
-        gravity = Gravity.CENTER
-        setPadding(0, 8, 0, 16)
-    }
-
-    private fun panelBackground() = GradientDrawable().apply {
-        cornerRadius = 28f
-        setColor(theme.surface)
-        setStroke(1, theme.accent)
-    }
-
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = if (theme.id == "cinema") 16f else 20f
-        setColor(if (focused) theme.accent else theme.surface)
-        setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else theme.accent)
-    }
+    private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; setTextColor(Color.WHITE); gravity = Gravity.CENTER }
+    private fun subtitle(value: String) = TextView(this).apply { text = value; textSize = 16f; setTextColor(theme.accent); gravity = Gravity.CENTER; setPadding(0, 8, 0, 16) }
+    private fun panelBackground() = GradientDrawable().apply { cornerRadius = 28f; setColor(theme.surface); setStroke(1, theme.accent) }
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = if (theme.id == "cinema") 16f else 20f; setColor(if (focused) theme.accent else theme.surface); setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else theme.accent) }
 }
