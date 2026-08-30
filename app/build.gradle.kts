@@ -6,6 +6,13 @@ plugins {
 
 val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+val buildSha = providers.gradleProperty("BLOFY_BUILD_SHA")
+    .orElse(providers.environmentVariable("GITHUB_SHA"))
+    .orElse("local")
+    .get()
+    .trim()
+    .ifBlank { "local" }
+val buildShaEscaped = buildSha.replace("\\", "\\\\").replace("\"", "\\\"")
 val ffmpegAarPath = providers.gradleProperty("BLOFY_FFMPEG_AAR").orElse("").get().trim()
 val ffmpegAar = ffmpegAarPath.takeIf { it.isNotBlank() }?.let { file(it) }
 if (ffmpegAar != null) {
@@ -25,6 +32,7 @@ android {
         versionCode = 2000001
         versionName = "2.0.0-alpha01"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
+        buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
         buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
     }
 
