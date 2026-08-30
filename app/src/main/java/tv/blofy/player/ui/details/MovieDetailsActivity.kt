@@ -10,10 +10,12 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.playback.ContentUrlResolver
+import tv.blofy.player.core.playback.ExternalPlayerLauncher
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.player.PlayerActivity
 
@@ -42,6 +44,7 @@ class MovieDetailsActivity : AppCompatActivity() {
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
             val watch = dao.watchState(contentKey)
+            val url = ContentUrlResolver.movie(provider, stream)
 
             panel.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.name
@@ -68,15 +71,21 @@ class MovieDetailsActivity : AppCompatActivity() {
             val row = LinearLayout(this@MovieDetailsActivity).apply { orientation = LinearLayout.HORIZONTAL }
             val resumeMs = watch?.positionMs ?: 0L
             val play = actionButton(if (resumeMs > 30_000L) "استئناف" else "تشغيل") {
-                openPlayer(provider.id, stream.key, stream.name, ContentUrlResolver.movie(provider, stream), resumeMs)
+                openPlayer(provider.id, stream.key, stream.name, url, resumeMs)
             }
-            row.addView(play, LinearLayout.LayoutParams(230, 82).apply { marginEnd = 14 })
+            row.addView(play, LinearLayout.LayoutParams(220, 82).apply { marginEnd = 12 })
 
             if (resumeMs > 30_000L) {
                 row.addView(actionButton("من البداية") {
-                    openPlayer(provider.id, stream.key, stream.name, ContentUrlResolver.movie(provider, stream), 0L)
-                }, LinearLayout.LayoutParams(230, 82).apply { marginEnd = 14 })
+                    openPlayer(provider.id, stream.key, stream.name, url, 0L)
+                }, LinearLayout.LayoutParams(210, 82).apply { marginEnd = 12 })
             }
+
+            row.addView(actionButton("مشغل خارجي") {
+                if (!ExternalPlayerLauncher.launch(this@MovieDetailsActivity, url, stream.name)) {
+                    Toast.makeText(this@MovieDetailsActivity, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
+                }
+            }, LinearLayout.LayoutParams(220, 82).apply { marginEnd = 12 })
 
             favoriteButton = actionButton(if (stream.favorite) "★ في المفضلة" else "☆ المفضلة") {
                 lifecycleScope.launch {
@@ -85,7 +94,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                     favoriteButton.text = if (!current.favorite) "★ في المفضلة" else "☆ المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(230, 82))
+            row.addView(favoriteButton, LinearLayout.LayoutParams(220, 82))
             panel.addView(row)
             play.requestFocus()
         }
