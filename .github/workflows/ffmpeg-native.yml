@@ -37,15 +37,17 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.1.10909125"
+          test -d "$ANDROID_HOME/ndk/26.1.10909125"
 
       - name: Build Media3 1.6.1 FFmpeg decoder AAR
         env:
-          NDK_PATH: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
           MEDIA3_VERSION: "1.6.1"
           FFMPEG_VERSION: "n6.0"
           ANDROID_ABI: "23"
           ENABLED_DECODERS: ${{ inputs.decoders || 'ac3 eac3 dca truehd aac mp3 opus vorbis flac' }}
         run: |
+          export NDK_PATH="$ANDROID_HOME/ndk/26.1.10909125"
+          test -d "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
           chmod +x tools/build_media3_ffmpeg.sh
           tools/build_media3_ffmpeg.sh
 
