@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import tv.blofy.player.core.diagnostics.PlaybackDiagnostics
@@ -26,11 +27,16 @@ class BlofyPlaybackSession(
     private var firstFrameRecorded = false
     private var automaticRetries = 0
     private val retryHandler = Handler(context.mainLooper)
+    private val appContext = context.applicationContext
 
-    val player: ExoPlayer = ExoPlayer.Builder(context.applicationContext)
+    private val renderersFactory = DefaultRenderersFactory(appContext)
+        .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+
+    val player: ExoPlayer = ExoPlayer.Builder(appContext)
+        .setRenderersFactory(renderersFactory)
         .setMediaSourceFactory(
             DefaultMediaSourceFactory(
-                TransportFactory.create(context.applicationContext, profile)
+                TransportFactory.create(appContext, profile)
             )
         )
         .build()
