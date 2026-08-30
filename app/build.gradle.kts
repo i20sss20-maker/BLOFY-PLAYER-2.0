@@ -6,6 +6,13 @@ plugins {
 
 val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+val ffmpegAarPath = providers.gradleProperty("BLOFY_FFMPEG_AAR").orElse("").get().trim()
+val ffmpegAar = ffmpegAarPath.takeIf { it.isNotBlank() }?.let { file(it) }
+if (ffmpegAar != null) {
+    check(ffmpegAar.exists() && ffmpegAar.isFile) {
+        "BLOFY_FFMPEG_AAR points to a missing file: ${ffmpegAar.absolutePath}"
+    }
+}
 
 android {
     namespace = "tv.blofy.player"
@@ -18,6 +25,7 @@ android {
         versionCode = 2000001
         versionName = "2.0.0-alpha01"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
+        buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
     }
 
     buildFeatures {
@@ -52,6 +60,7 @@ dependencies {
     implementation("androidx.media3:media3-datasource-cronet:1.6.1")
     implementation("androidx.media3:media3-database:1.6.1")
     implementation("com.google.android.gms:play-services-cronet:18.1.0")
+    if (ffmpegAar != null) implementation(files(ffmpegAar))
 
     implementation("androidx.room:room-runtime:2.7.0")
     implementation("androidx.room:room-ktx:2.7.0")
