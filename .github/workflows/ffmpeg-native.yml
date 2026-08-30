@@ -2,9 +2,17 @@ name: BLOFY FFmpeg Native
 
 on:
   workflow_dispatch:
+    inputs:
+      decoders:
+        description: Space-separated FFmpeg audio decoder names
+        required: false
+        default: "ac3 eac3 dca truehd aac mp3 opus vorbis flac"
   pull_request:
     paths:
       - '.github/workflows/ffmpeg-native.yml'
+      - 'tools/build_media3_ffmpeg.sh'
+      - 'app/build.gradle.kts'
+      - 'app/src/main/java/tv/blofy/player/core/playback/BlofyPlaybackSession.kt'
 
 permissions:
   contents: read
@@ -12,7 +20,7 @@ permissions:
 jobs:
   build-ffmpeg-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
 
@@ -25,62 +33,28 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Install Media3-matched Android NDK and CMake
+      - name: Install Media3-recommended Android NDK r26b
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;25.1.8937393" "cmake;3.22.1"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.1.10909125"
 
-      - name: Checkout AndroidX Media3 1.6.1
+      - name: Build Media3 1.6.1 FFmpeg decoder AAR
+        env:
+          NDK_PATH: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
+          MEDIA3_VERSION: "1.6.1"
+          FFMPEG_VERSION: "n6.0"
+          ANDROID_ABI: "23"
+          ENABLED_DECODERS: ${{ inputs.decoders || 'ac3 eac3 dca truehd aac mp3 opus vorbis flac' }}
         run: |
-          git clone --depth 1 --branch 1.6.1 https://github.com/androidx/media.git "$RUNNER_TEMP/media3"
-          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$RUNNER_TEMP/media3/local.properties"
-          cat >> "$RUNNER_TEMP/media3/libraries/decoder_ffmpeg/build.gradle" <<'EOF'
-
-          // BLOFY minSdk is 23. Keep the JNI link target aligned with the
-          // FFmpeg static libraries so bionic symbols such as stderr resolve.
-          android {
-              defaultConfig {
-                  minSdk 23
-              }
-          }
-          EOF
-
-      - name: Build FFmpeg static libraries
-        run: |
-          set -euxo pipefail
-          FFMPEG_MODULE_PATH="$RUNNER_TEMP/media3/libraries/decoder_ffmpeg/src/main"
-          NDK_PATH="$ANDROID_HOME/ndk/25.1.8937393"
-          test -d "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          cd "$FFMPEG_MODULE_PATH/jni"
-          git clone --depth 1 --branch release/6.0 https://github.com/FFmpeg/FFmpeg.git ffmpeg
-          ./build_ffmpeg.sh \
-            "$FFMPEG_MODULE_PATH" \
-            "$NDK_PATH" \
-            linux-x86_64 \
-            23 \
-            ac3 eac3 dca truehd vorbis opus flac
-
-      - name: Assemble Media3 FFmpeg AAR
-        working-directory: ${{ runner.temp }}/media3
-        run: ./gradlew --no-daemon :lib-decoder-ffmpeg:assembleRelease
-
-      - name: Locate and verify FFmpeg AAR
-        shell: bash
-        run: |
-          set -euxo pipefail
-          find "$RUNNER_TEMP/media3" -type f -name '*.aar' -print
-          AAR="$(find "$RUNNER_TEMP/media3" -type f -name '*.aar' | grep -E 'decoder[_-]ffmpeg|lib-decoder-ffmpeg|media3-decoder-ffmpeg' | head -n 1 || true)"
-          if [ -z "$AAR" ]; then
-            AAR="$(find "$RUNNER_TEMP/media3" -type f -name '*.aar' | head -n 1 || true)"
-          fi
-          test -n "$AAR" && test -f "$AAR"
-          unzip -l "$AAR" | grep -Eiq 'jni/.*/lib(ffmpeg|ffmpegJNI).*\.so|libffmpegJNI\.so'
-          cp "$AAR" "$RUNNER_TEMP/media3-ffmpeg-1.6.1.aar"
+          chmod +x tools/build_media3_ffmpeg.sh
+          tools/build_media3_ffmpeg.sh
 
       - name: Build BLOFY APK with FFmpeg
         run: |
+          AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
+          test -s "$AAR"
           gradle --no-daemon \
-            -PBLOFY_FFMPEG_AAR="$RUNNER_TEMP/media3-ffmpeg-1.6.1.aar" \
+            -PBLOFY_FFMPEG_AAR="$AAR" \
             testDebugUnitTest lintDebug assembleDebug
 
       - name: Verify FFmpeg is bundled in final APK
@@ -102,6 +76,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: media3-ffmpeg-1.6.1-aar
-          path: ${{ runner.temp }}/media3-ffmpeg-1.6.1.aar
+          path: |
+            build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar
+            build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar.sha256
+            build/ffmpeg-native/build-info.txt
           if-no-files-found: error
           retention-days: 30
