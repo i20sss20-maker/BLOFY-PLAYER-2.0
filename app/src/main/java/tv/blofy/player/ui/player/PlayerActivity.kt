@@ -38,7 +38,7 @@ class PlayerActivity : AppCompatActivity() {
             providerKey = providerId.ifBlank { "default" },
             liveFormat = if (intent.getStringExtra(EXTRA_LIVE_FORMAT) == "m3u8") LiveFormat.HLS else LiveFormat.TS
         )
-        session = BlofyPlaybackSession(this, profile)
+        session = BlofyPlaybackSession(this, profile, kind.ifBlank { "unknown" })
         playerView = PlayerView(this).apply {
             useController = true
             controllerAutoShow = false
