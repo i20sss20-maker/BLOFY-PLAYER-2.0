@@ -17,6 +17,10 @@
         android:theme="@style/Theme.Blofy">
 
         <activity
+            android:name=".ui.playlist.PlaylistActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.player.PlayerActivity"
             android:exported="false"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize" />
