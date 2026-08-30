@@ -108,6 +108,10 @@ class PlaylistManager(
         val streamRows = streams.mapNotNull { row ->
             val id = row.string("stream_id") ?: return@mapNotNull null
             val key = "${provider.id}:movie:$id"
+            val backdrop = when (val raw = row["backdrop_path"]) {
+                is List<*> -> raw.firstOrNull()?.toString()
+                else -> raw?.toString()
+            }
             StreamEntity(
                 key = key,
                 providerId = provider.id,
@@ -119,6 +123,13 @@ class PlaylistManager(
                 extension = row.string("container_extension") ?: "mp4",
                 directSource = row.string("direct_source"),
                 addedAt = row.string("added")?.toLongOrNull(),
+                plot = row.string("plot") ?: row.string("description"),
+                genre = row.string("genre"),
+                releaseDate = row.string("releaseDate") ?: row.string("release_date"),
+                year = row.string("year"),
+                rating = row.string("rating") ?: row.string("rating_5based"),
+                duration = row.string("duration"),
+                backdrop = backdrop?.takeIf { it.isNotBlank() && it != "null" },
                 favorite = previous[key]?.favorite ?: false,
                 locked = previous[key]?.locked ?: false
             )
@@ -143,6 +154,10 @@ class PlaylistManager(
         val streamRows = series.mapNotNull { row ->
             val id = row.string("series_id") ?: return@mapNotNull null
             val key = "${provider.id}:series:$id"
+            val backdrop = when (val raw = row["backdrop_path"]) {
+                is List<*> -> raw.firstOrNull()?.toString()
+                else -> raw?.toString()
+            }
             StreamEntity(
                 key = key,
                 providerId = provider.id,
@@ -152,6 +167,13 @@ class PlaylistManager(
                 name = row.string("name") ?: "Series $id",
                 icon = row.string("cover") ?: row.string("stream_icon"),
                 addedAt = row.string("last_modified")?.toLongOrNull() ?: row.string("added")?.toLongOrNull(),
+                plot = row.string("plot") ?: row.string("description"),
+                genre = row.string("genre"),
+                releaseDate = row.string("releaseDate") ?: row.string("release_date"),
+                year = row.string("year"),
+                rating = row.string("rating") ?: row.string("rating_5based"),
+                duration = row.string("episode_run_time") ?: row.string("duration"),
+                backdrop = backdrop?.takeIf { it.isNotBlank() && it != "null" },
                 favorite = previous[key]?.favorite ?: false,
                 locked = previous[key]?.locked ?: false
             )
