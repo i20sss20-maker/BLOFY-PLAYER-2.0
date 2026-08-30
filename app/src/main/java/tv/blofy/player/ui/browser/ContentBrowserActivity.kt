@@ -1,5 +1,6 @@
 package tv.blofy.player.ui.browser
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -195,18 +196,32 @@ class ContentBrowserActivity : AppCompatActivity() {
                 BlofyDatabase.get(applicationContext).dao().watchState(stream.key)?.positionMs ?: 0L
             } else 0L
             if (kind == KIND_LIVE) stopPreview()
-            startActivity(Intent(this@ContentBrowserActivity, PlayerActivity::class.java).apply {
-                putExtra(PlayerActivity.EXTRA_URL, url)
-                putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
-                putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
-                putExtra(PlayerActivity.EXTRA_KIND, kind)
-                putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
-                putExtra(PlayerActivity.EXTRA_RESUME_MS, resume)
-                putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
-                putExtra(PlayerActivity.EXTRA_CATEGORY_ID, currentCategoryId)
-                putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
-            })
+
+            if (kind == KIND_MOVIE && resume > 15_000L) {
+                AlertDialog.Builder(this@ContentBrowserActivity)
+                    .setTitle(stream.name)
+                    .setMessage("هل تريد استئناف المشاهدة أو البدء من البداية؟")
+                    .setPositiveButton("استئناف") { _, _ -> launchPlayer(stream, url, resume) }
+                    .setNegativeButton("من البداية") { _, _ -> launchPlayer(stream, url, 0L) }
+                    .show()
+            } else {
+                launchPlayer(stream, url, resume)
+            }
         }
+    }
+
+    private fun launchPlayer(stream: StreamEntity, url: String, resume: Long) {
+        startActivity(Intent(this, PlayerActivity::class.java).apply {
+            putExtra(PlayerActivity.EXTRA_URL, url)
+            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(PlayerActivity.EXTRA_KIND, kind)
+            putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
+            putExtra(PlayerActivity.EXTRA_RESUME_MS, resume)
+            putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
+            putExtra(PlayerActivity.EXTRA_CATEGORY_ID, currentCategoryId)
+            putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
+        })
     }
 
     override fun onResume() {
