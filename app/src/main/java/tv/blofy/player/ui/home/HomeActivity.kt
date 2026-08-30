@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import tv.blofy.player.ui.browser.ContentBrowserActivity
+import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 
 class HomeActivity : AppCompatActivity() {
@@ -38,6 +39,7 @@ class HomeActivity : AppCompatActivity() {
             "البث المباشر" to Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_LIVE),
             "الأفلام" to Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_MOVIE),
             "المسلسلات" to Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, ContentBrowserActivity.KIND_SERIES),
+            "البحث" to Intent(this, SearchActivity::class.java),
             "الإعدادات" to Intent(this, SettingsActivity::class.java)
         )
         actions.forEach { (label, intent) ->
