@@ -30,8 +30,8 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
+import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
-import tv.blofy.player.ui.series.EpisodesActivity
 
 @OptIn(markerClass = [UnstableApi::class])
 class ContentBrowserActivity : AppCompatActivity() {
@@ -181,19 +181,14 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun openStream(stream: StreamEntity) {
         when (kind) {
-            KIND_SERIES -> {
-                startActivity(Intent(this, EpisodesActivity::class.java).apply {
-                    putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, provider.id)
-                    putExtra(EpisodesActivity.EXTRA_SERIES_ID, stream.remoteId)
-                    putExtra(EpisodesActivity.EXTRA_SERIES_NAME, stream.name)
-                })
-            }
-            KIND_MOVIE -> {
-                startActivity(Intent(this, MovieDetailsActivity::class.java).apply {
-                    putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
-                    putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
-                })
-            }
+            KIND_SERIES -> startActivity(Intent(this, SeriesDetailsActivity::class.java).apply {
+                putExtra(SeriesDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
+                putExtra(SeriesDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
+            })
+            KIND_MOVIE -> startActivity(Intent(this, MovieDetailsActivity::class.java).apply {
+                putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
+                putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
+            })
             else -> {
                 val profile = profile(provider)
                 val url = ContentUrlResolver.live(provider, profile, stream)
