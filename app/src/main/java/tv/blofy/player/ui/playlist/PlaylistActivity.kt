@@ -36,7 +36,7 @@ class PlaylistActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         })
         root.addView(TextView(this).apply {
-            text = "Xtream Codes"
+            text = "Xtream Codes أو M3U مباشر"
             textSize = 15f
             setTextColor(Color.rgb(185, 140, 255))
             gravity = Gravity.CENTER
@@ -56,9 +56,9 @@ class PlaylistActivity : AppCompatActivity() {
         }
 
         val name = field("اسم القائمة")
-        val url = field("رابط السيرفر http://example.com:8080")
-        val username = field("اسم المستخدم")
-        val password = field("كلمة المرور", true)
+        val url = field("رابط السيرفر أو رابط M3U")
+        val username = field("اسم المستخدم — اتركه فارغًا لـ M3U")
+        val password = field("كلمة المرور — اتركها فارغة لـ M3U", true)
         listOf(name, url, username, password).forEach {
             root.addView(it, LinearLayout.LayoutParams(650, 68).apply { topMargin = 12 })
         }
@@ -79,26 +79,34 @@ class PlaylistActivity : AppCompatActivity() {
             background = buttonBackground(false)
             setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused) }
             setOnClickListener {
-                val baseUrl = url.text.toString().trim().trimEnd('/')
+                val baseUrl = url.text.toString().trim()
                 val user = username.text.toString().trim()
                 val pass = password.text.toString()
-                if (baseUrl.isBlank() || user.isBlank() || pass.isBlank()) {
-                    status.text = "أكمل بيانات السيرفر"
+                val isM3u = user.isBlank() && pass.isBlank()
+                val partialXtream = user.isBlank() xor pass.isBlank()
+                if (baseUrl.isBlank()) {
+                    status.text = "أدخل رابط القائمة"
+                    return@setOnClickListener
+                }
+                if (partialXtream) {
+                    status.text = "أدخل اسم المستخدم وكلمة المرور معًا، أو اتركهما معًا لـ M3U"
                     return@setOnClickListener
                 }
                 isEnabled = false
-                status.text = "جاري حفظ وتحميل القائمة..."
+                status.text = if (isM3u) "جاري قراءة M3U وحفظها محليًا..." else "جاري تحميل Xtream وحفظها محليًا..."
                 lifecycleScope.launch {
                     runCatching {
                         withContext(Dispatchers.IO) {
                             val dao = BlofyDatabase.get(applicationContext).dao()
-                            val id = UUID.nameUUIDFromBytes("$baseUrl|$user".toByteArray()).toString()
+                            val type = if (isM3u) "m3u" else "xtream"
+                            val id = UUID.nameUUIDFromBytes("$type|$baseUrl|$user".toByteArray()).toString()
                             val provider = ProviderEntity(
                                 id = id,
-                                name = name.text.toString().trim().ifBlank { "BLOFY Server" },
-                                baseUrl = baseUrl,
+                                name = name.text.toString().trim().ifBlank { if (isM3u) "BLOFY M3U" else "BLOFY Server" },
+                                baseUrl = if (isM3u) baseUrl else baseUrl.trimEnd('/'),
                                 username = user,
-                                password = pass
+                                password = pass,
+                                providerType = type
                             )
                             dao.upsertProvider(provider)
                             PlaylistManager(XtreamClient.api, dao).syncAll(provider)
