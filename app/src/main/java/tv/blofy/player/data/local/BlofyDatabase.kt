@@ -15,7 +15,7 @@ import androidx.room.RoomDatabase
         EpgEntity::class,
         ActivationEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class BlofyDatabase : RoomDatabase() {
