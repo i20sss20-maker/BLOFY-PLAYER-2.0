@@ -31,6 +31,7 @@ import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.catchup.CatchupActivity
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -75,9 +76,12 @@ class ContentBrowserActivity : AppCompatActivity() {
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
-        streamAdapter = FocusTextAdapter(label = { (if (it.locked) "🔒 " else "") + it.name }, onClick = ::openStream, onFocus = {
-            if (kind == KIND_LIVE && !it.locked) { rememberStream(it); schedulePreview(it) }
-        })
+        streamAdapter = FocusTextAdapter(
+            label = { (if (it.locked) "🔒 " else "") + it.name + if (kind == KIND_LIVE && it.archiveEnabled) "  ⏱" else "" },
+            onClick = ::openStream,
+            onFocus = { if (kind == KIND_LIVE && !it.locked) { rememberStream(it); schedulePreview(it) } },
+            onLongClick = { if (kind == KIND_LIVE && it.archiveEnabled) openCatchup(it) }
+        )
         categoryAdapter = FocusTextAdapter(label = { it.name }, onClick = { loadStreams(it.remoteId) }, onFocus = { loadStreams(it.remoteId) })
         categories.adapter = categoryAdapter; streams.adapter = streamAdapter
 
@@ -101,7 +105,10 @@ class ContentBrowserActivity : AppCompatActivity() {
         addView(previewTitle)
         previewView = PlayerView(this@ContentBrowserActivity).apply { useController = false; player = null; isFocusable = false; setShutterBackgroundColor(Color.BLACK) }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        addView(TextView(this@ContentBrowserActivity).apply { text = "OK: ملء الشاشة   •   ↑↓: تنقل بين القنوات"; textSize = 14f; setTextColor(Color.rgb(185, 140, 255)); setPadding(4, 14, 0, 0) })
+        addView(TextView(this@ContentBrowserActivity).apply {
+            text = "OK: ملء الشاشة   •   ضغط مطوّل: الأرشيف ⏱   •   ↑↓: القنوات"
+            textSize = 14f; setTextColor(Color.rgb(185, 140, 255)); setPadding(4, 14, 0, 0)
+        })
     }
 
     private fun loadStreams(categoryId: String?) {
@@ -142,6 +149,21 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun openStream(stream: StreamEntity) {
         if (stream.locked) ParentalGate.requirePin(this) { openUnlockedStream(stream) } else openUnlockedStream(stream)
+    }
+
+    private fun openCatchup(stream: StreamEntity) {
+        if (stream.locked) {
+            ParentalGate.requirePin(this) { launchCatchup(stream) }
+        } else launchCatchup(stream)
+    }
+
+    private fun launchCatchup(stream: StreamEntity) {
+        if (!stream.archiveEnabled || provider.providerType.equals("m3u", true)) return
+        stopPreview()
+        startActivity(Intent(this, CatchupActivity::class.java).apply {
+            putExtra(CatchupActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(CatchupActivity.EXTRA_CONTENT_KEY, stream.key)
+        })
     }
 
     private fun openUnlockedStream(stream: StreamEntity) {
