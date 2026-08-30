@@ -34,6 +34,16 @@ jobs:
         run: |
           git clone --depth 1 --branch 1.6.1 https://github.com/androidx/media.git "$RUNNER_TEMP/media3"
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$RUNNER_TEMP/media3/local.properties"
+          cat >> "$RUNNER_TEMP/media3/libraries/decoder_ffmpeg/build.gradle" <<'EOF'
+
+          // BLOFY minSdk is 23. Keep the JNI link target aligned with the
+          // FFmpeg static libraries so bionic symbols such as stderr resolve.
+          android {
+              defaultConfig {
+                  minSdk 23
+              }
+          }
+          EOF
 
       - name: Build FFmpeg static libraries
         run: |
