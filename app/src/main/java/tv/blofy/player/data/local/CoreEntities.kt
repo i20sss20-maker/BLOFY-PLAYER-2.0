@@ -11,6 +11,7 @@ data class ProviderEntity(
     val baseUrl: String,
     val username: String,
     val password: String,
+    val providerType: String = "xtream",
     val liveFormat: String = "ts",
     val preferredTransport: String = "cronet",
     val preferredEngine: String = "media3",
