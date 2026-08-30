@@ -50,6 +50,10 @@ function normalizeStatus(row) {
   return row.status;
 }
 
+function validIdentity(deviceId, activationCode) {
+  return /^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) && /^\d{6}$/.test(activationCode);
+}
+
 async function initializeDatabase() {
   const schemaUrl = new URL('../schema.sql', import.meta.url);
   const schema = await readFile(schemaUrl, 'utf8');
@@ -75,7 +79,7 @@ async function activationCheck(req, res) {
   const appVersion = String(body.appVersion || '').trim().slice(0, 64);
   const platform = String(body.platform || 'android').trim().slice(0, 32);
 
-  if (!/^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) || !/^\d{6}$/.test(activationCode)) {
+  if (!validIdentity(deviceId, activationCode)) {
     return json(res, 400, { status: 'blocked', serverTime: Date.now(), message: 'invalid_device_identity' });
   }
 
@@ -121,6 +125,35 @@ async function activationCheck(req, res) {
   } finally {
     client.release();
   }
+}
+
+async function playbackDiagnostic(req, res) {
+  const body = await readJson(req);
+  const deviceId = String(body.deviceId || '').trim();
+  const activationCode = String(body.activationCode || '').trim();
+  if (!validIdentity(deviceId, activationCode)) return json(res, 400, { error: 'invalid_device_identity' });
+
+  const device = await pool.query('SELECT activation_code FROM devices WHERE device_id=$1', [deviceId]);
+  const row = device.rows[0];
+  if (!row || !constantTimeEqual(row.activation_code, activationCode)) return json(res, 403, { error: 'unauthorized_device' });
+
+  const providerKey = String(body.providerKey || 'unknown').slice(0, 128);
+  const contentKind = String(body.contentKind || 'unknown').slice(0, 32);
+  const redactedUrl = String(body.redactedUrl || '').slice(0, 1024) || null;
+  const ttffRaw = body.ttffMs == null ? null : Number(body.ttffMs);
+  const ttffMs = Number.isFinite(ttffRaw) && ttffRaw >= 0 && ttffRaw <= 600_000 ? Math.round(ttffRaw) : null;
+  const bufferingRaw = Number(body.bufferingCount || 0);
+  const bufferingCount = Number.isFinite(bufferingRaw) ? Math.max(0, Math.min(10_000, Math.round(bufferingRaw))) : 0;
+  const errorCode = String(body.errorCode || '').slice(0, 128) || null;
+  const errorMessage = String(body.errorMessage || '').slice(0, 512) || null;
+  const appVersion = String(body.appVersion || '').slice(0, 64) || null;
+
+  await pool.query(
+    `INSERT INTO playback_diagnostics(device_id,provider_key,content_kind,redacted_url,ttff_ms,buffering_count,error_code,error_message,app_version)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [deviceId, providerKey, contentKind, redactedUrl, ttffMs, bufferingCount, errorCode, errorMessage, appVersion]
+  );
+  return json(res, 202, { accepted: true });
 }
 
 function requireAdmin(req, res) {
@@ -189,12 +222,50 @@ async function adminGet(req, res, deviceId) {
   });
 }
 
+async function adminDiagnostics(req, res, requestUrl) {
+  if (!requireAdmin(req, res)) return;
+  const deviceId = String(requestUrl.searchParams.get('deviceId') || '').trim();
+  const providerKey = String(requestUrl.searchParams.get('providerKey') || '').trim();
+  const requestedLimit = Number(requestUrl.searchParams.get('limit') || 100);
+  const limit = Math.max(1, Math.min(500, Number.isFinite(requestedLimit) ? Math.round(requestedLimit) : 100));
+
+  const clauses = [];
+  const values = [];
+  if (deviceId) { values.push(deviceId); clauses.push(`device_id=$${values.length}`); }
+  if (providerKey) { values.push(providerKey); clauses.push(`provider_key=$${values.length}`); }
+  values.push(limit);
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const result = await pool.query(
+    `SELECT id,device_id,provider_key,content_kind,redacted_url,ttff_ms,buffering_count,error_code,error_message,app_version,created_at
+     FROM playback_diagnostics ${where} ORDER BY created_at DESC LIMIT $${values.length}`,
+    values
+  );
+  return json(res, 200, {
+    items: result.rows.map((item) => ({
+      id: Number(item.id),
+      deviceId: item.device_id,
+      providerKey: item.provider_key,
+      contentKind: item.content_kind,
+      redactedUrl: item.redacted_url,
+      ttffMs: item.ttff_ms == null ? null : Number(item.ttff_ms),
+      bufferingCount: Number(item.buffering_count),
+      errorCode: item.error_code,
+      errorMessage: item.error_message,
+      appVersion: item.app_version,
+      createdAt: new Date(item.created_at).getTime()
+    }))
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.method === 'GET' && req.url === '/health') return await health(res);
-    if (req.method === 'POST' && req.url === '/api/v1/activation/check') return await activationCheck(req, res);
+    const requestUrl = new URL(req.url || '/', 'http://localhost');
+    if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
+    if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
+    if (req.method === 'POST' && requestUrl.pathname === '/api/v1/diagnostics/playback') return await playbackDiagnostic(req, res);
+    if (req.method === 'GET' && requestUrl.pathname === '/api/v1/admin/diagnostics') return await adminDiagnostics(req, res, requestUrl);
 
-    const match = req.url?.match(/^\/api\/v1\/admin\/devices\/([^/?]+)$/);
+    const match = requestUrl.pathname.match(/^\/api\/v1\/admin\/devices\/([^/?]+)$/);
     if (match && req.method === 'GET') return await adminGet(req, res, decodeURIComponent(match[1]));
     if (match && req.method === 'PATCH') return await adminUpdate(req, res, decodeURIComponent(match[1]));
 
