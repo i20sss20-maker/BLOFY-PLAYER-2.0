@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -30,7 +31,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(70, 54, 70, 54)
+            setPadding(76, 56, 76, 56)
         }
         root.addView(panel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
@@ -41,20 +42,20 @@ class SeriesDetailsActivity : AppCompatActivity() {
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.name
-                textSize = 34f
+                textSize = 36f
                 setTextColor(Color.WHITE)
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = "مسلسل  •  الحلقات مرتبة تصاعديًا داخل BLOFY"
+                text = "مسلسل  •  المواسم والحلقات محلية بعد المزامنة"
                 textSize = 16f
                 setTextColor(Color.rgb(190, 165, 225))
                 setPadding(0, 8, 0, 26)
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = "صفحة مستقلة للمسلسل بدون تشغيل تلقائي. اختر الحلقات للدخول إلى المواسم والحلقات المحفوظة محليًا."
+                text = "لا يوجد تشغيل تلقائي في صفحة التفاصيل. افتح الحلقات، اختر الموسم والحلقة، ثم يبدأ التشغيل بالرابط الأصلي للحلقة."
                 textSize = 17f
                 setTextColor(Color.rgb(220, 220, 225))
-                setPadding(0, 0, 0, 28)
+                setPadding(0, 0, 0, 30)
             })
 
             val row = LinearLayout(this@SeriesDetailsActivity).apply { orientation = LinearLayout.HORIZONTAL }
@@ -85,13 +86,19 @@ class SeriesDetailsActivity : AppCompatActivity() {
         isAllCaps = false
         textSize = 16f
         isFocusable = true
-        background = GradientDrawable().apply {
-            cornerRadius = 18f
-            setColor(Color.rgb(52, 25, 88))
-            setStroke(2, Color.rgb(160, 105, 235))
-        }
         setTextColor(Color.WHITE)
+        background = buttonBackground(false)
+        setOnFocusChangeListener { view: View, focused: Boolean ->
+            view.background = buttonBackground(focused)
+            view.animate().scaleX(if (focused) 1.04f else 1f).scaleY(if (focused) 1.04f else 1f).setDuration(100).start()
+        }
         setOnClickListener { action() }
+    }
+
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 18f
+        setColor(if (focused) Color.rgb(76, 35, 128) else Color.rgb(28, 21, 42))
+        setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(64, 48, 84))
     }
 
     companion object {
