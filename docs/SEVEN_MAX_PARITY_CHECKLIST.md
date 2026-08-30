@@ -14,7 +14,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [ ] FFmpeg audio extension for AC3/EAC3/DTS-class compatibility (requires locally built Media3 FFmpeg native module; not available from Google Maven)
 - [x] External-player launch path (system/VLC/MX if installed)
 - [ ] Automatic VLC fallback after Media3 failure
-- [ ] Read-only playback/download cache policy equivalent where useful
+- [x] Read-only playback cache policy (streaming does not write new spans)
 
 ## Local-first data
 - [x] Room local catalog for categories/streams/episodes/EPG/watch state
@@ -22,7 +22,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Preserve favorite/lock flags across catalog refresh
 - [x] Episodes sorted by season then episode
 - [x] EPG refresh lifecycle for current/next Xtream live channel
-- [ ] Recent channels list and UI
+- [x] Recent channels list and UI
 
 ## Live TV / remote
 - [x] Mini preview
@@ -44,7 +44,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] No autoplay on details
 - [x] Resume / start-over
 - [x] Seasons and episodes separated
-- [ ] Full Xtream movie/series metadata (plot, year, genre, duration, rating, backdrop)
+- [x] Local Xtream movie/series metadata (plot, year, genre, duration, rating, backdrop when supplied)
 - [ ] Next/previous episode from player and automatic next episode on natural end
 
 ## Playlists / identity
@@ -55,7 +55,7 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Connect opens local data without forced sync
 - [x] Saved-playlist switch/update/delete UI
 - [x] Edit existing saved playlist credentials/details in place
-- [ ] QR/barcode on login
+- [x] QR/barcode on login
 - [ ] Real activation backend/status/expiry flow
 
 ## Themes / device classes
