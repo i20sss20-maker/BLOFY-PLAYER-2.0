@@ -22,6 +22,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.playback.BlofyPlaybackSession
@@ -36,6 +37,9 @@ import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(markerClass = [UnstableApi::class])
 class PlayerActivity : AppCompatActivity() {
@@ -43,8 +47,10 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var playerView: PlayerView
     private lateinit var hud: LinearLayout
     private lateinit var titleView: TextView
+    private lateinit var epgView: TextView
     private lateinit var audioButton: Button
     private lateinit var subtitleButton: Button
+    private var epgJob: Job? = null
 
     private val providerId by lazy { intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty() }
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty() }
@@ -70,6 +76,7 @@ class PlayerActivity : AppCompatActivity() {
         buildPlayerUi()
         session.play(url, intent.getLongExtra(EXTRA_RESUME_MS, 0L))
         updateTitle(currentTitle)
+        if (kind == "live") observeEpg()
     }
 
     private fun buildPlayerUi() {
@@ -95,9 +102,17 @@ class PlayerActivity : AppCompatActivity() {
         titleView = TextView(this).apply {
             textSize = 23f
             setTextColor(Color.WHITE)
-            setPadding(0, 0, 0, 14)
+            setPadding(0, 0, 0, 6)
         }
         hud.addView(titleView)
+
+        epgView = TextView(this).apply {
+            textSize = 15f
+            setTextColor(Color.rgb(205, 190, 230))
+            setPadding(0, 0, 0, 14)
+            visibility = if (kind == "live") View.VISIBLE else View.GONE
+        }
+        hud.addView(epgView)
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -201,8 +216,31 @@ class PlayerActivity : AppCompatActivity() {
         currentTitle = stream.name
         updateTitle(stream.name)
         session.play(ContentUrlResolver.live(provider, profile, stream))
+        observeEpg()
         if (hud.visibility != View.VISIBLE) showHudBriefly()
     }
+
+    private fun observeEpg() {
+        if (providerId.isBlank() || currentStreamId.isBlank()) return
+        epgJob?.cancel()
+        epgJob = lifecycleScope.launch {
+            BlofyDatabase.get(applicationContext).dao().epg(providerId, currentStreamId, System.currentTimeMillis()).collect { items ->
+                val now = System.currentTimeMillis()
+                val current = items.firstOrNull { now in it.startMs until it.endMs } ?: items.firstOrNull()
+                val next = current?.let { c -> items.firstOrNull { it.startMs >= c.endMs } }
+                epgView.text = buildString {
+                    if (current != null) {
+                        append(time(current.startMs)).append("–").append(time(current.endMs)).append("  ").append(current.title)
+                    } else {
+                        append("لا تتوفر معلومات البرنامج")
+                    }
+                    if (next != null) append("   •   التالي: ").append(time(next.startMs)).append(" ").append(next.title)
+                }
+            }
+        }
+    }
+
+    private fun time(ms: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
 
     private fun showHudBriefly() {
         hud.visibility = View.VISIBLE
@@ -261,6 +299,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        epgJob?.cancel()
         if (::session.isInitialized) session.release()
         super.onDestroy()
     }
