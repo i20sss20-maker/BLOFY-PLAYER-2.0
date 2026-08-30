@@ -79,8 +79,8 @@ This file locks the implementation targets confirmed or strongly supported by th
 
 ## BLOFY additions (not claimed as 7 Max parity)
 - [x] Playback diagnostics foundation (TTFF/buffering/errors)
-- [ ] Diagnostics upload/control cloud
-- [ ] Remote provider-profile configuration
+- [x] Diagnostics upload/control cloud: redacted playback metrics upload from the player plus authenticated admin diagnostics query on the BLOFY service
+- [ ] Remote provider-profile configuration (database + safe Android client foundation added; service route/admin controls and Connect-time apply remain)
 - [ ] BLOFY web activation/playlist management portal
 
 ## Release gate
