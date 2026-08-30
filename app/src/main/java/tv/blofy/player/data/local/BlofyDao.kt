@@ -1,0 +1,49 @@
+package tv.blofy.player.data.local
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface BlofyDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertProvider(provider: ProviderEntity)
+
+    @Query("SELECT * FROM providers WHERE enabled = 1 ORDER BY updatedAt DESC")
+    fun providers(): Flow<List<ProviderEntity>>
+
+    @Query("SELECT * FROM providers WHERE id = :providerId LIMIT 1")
+    suspend fun provider(providerId: String): ProviderEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCategories(items: List<CategoryEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertStreams(items: List<StreamEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertEpisodes(items: List<EpisodeEntity>)
+
+    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, name")
+    fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY name")
+    fun streams(providerId: String, kind: String, categoryId: String?): Flow<List<StreamEntity>>
+
+    @Query("SELECT * FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId ORDER BY season, episode")
+    fun episodes(providerId: String, seriesId: String): Flow<List<EpisodeEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveWatchState(state: WatchStateEntity)
+
+    @Query("SELECT * FROM watch_state WHERE contentKey = :contentKey LIMIT 1")
+    suspend fun watchState(contentKey: String): WatchStateEntity?
+
+    @Query("DELETE FROM categories WHERE providerId = :providerId AND kind = :kind")
+    suspend fun clearCategories(providerId: String, kind: String)
+
+    @Query("DELETE FROM streams WHERE providerId = :providerId AND kind = :kind")
+    suspend fun clearStreams(providerId: String, kind: String)
+}
