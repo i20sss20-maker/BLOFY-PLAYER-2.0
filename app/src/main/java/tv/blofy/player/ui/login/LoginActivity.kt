@@ -18,8 +18,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationManager
+import tv.blofy.player.core.identity.ActivationRemoteClient
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.data.local.BlofyDatabase
@@ -150,13 +153,56 @@ class LoginActivity : AppCompatActivity() {
 
     private fun connect() {
         lifecycleScope.launch {
-            val hasProvider = BlofyDatabase.get(applicationContext).dao().providers().first().isNotEmpty()
-            if (hasProvider) startActivity(Intent(this@LoginActivity, HomeActivity::class.java))
-            else {
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val hasProvider = dao.providers().first().isNotEmpty()
+            if (!hasProvider) {
                 status.text = "أضف قائمة تشغيل أولاً"
                 if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
+                return@launch
+            }
+
+            val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+            if (endpoint.isBlank()) {
+                openHome()
+                return@launch
+            }
+
+            status.text = "جاري التحقق من تفعيل الجهاز..."
+            val manager = ActivationManager(applicationContext, dao)
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
+                }
+            }
+            result.onSuccess { remote ->
+                if (remote.canUse()) {
+                    status.text = activationLabel(remote)
+                    openHome()
+                } else {
+                    status.text = activationLabel(remote)
+                }
+            }.onFailure {
+                val cached = withContext(Dispatchers.IO) { dao.activation() }
+                if (cached != null && manager.cachedCanUse(cached)) {
+                    status.text = "تعذر الوصول لخادم التفعيل • استخدام الصلاحية المحفوظة"
+                    openHome()
+                } else {
+                    status.text = "تعذر التحقق من التفعيل"
+                }
             }
         }
+    }
+
+    private fun activationLabel(remote: ActivationCheckResponse): String = when (remote.state()) {
+        ActivationCheckResponse.State.TRIAL -> "الفترة التجريبية فعالة"
+        ActivationCheckResponse.State.ACTIVE -> "الجهاز مفعل"
+        ActivationCheckResponse.State.EXPIRED -> "انتهت صلاحية الجهاز"
+        ActivationCheckResponse.State.BLOCKED -> "الجهاز موقوف"
+        ActivationCheckResponse.State.UNKNOWN -> remote.message ?: "حالة التفعيل غير معروفة"
+    }
+
+    private fun openHome() {
+        startActivity(Intent(this, HomeActivity::class.java))
     }
 
     override fun onResume() {
