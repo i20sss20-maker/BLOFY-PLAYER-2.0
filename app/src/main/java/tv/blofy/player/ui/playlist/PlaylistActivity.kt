@@ -1,7 +1,7 @@
 package tv.blofy.player.ui.playlist
 
-import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
@@ -17,7 +17,6 @@ import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
-import tv.blofy.player.ui.home.HomeActivity
 import java.util.UUID
 
 class PlaylistActivity : AppCompatActivity() {
@@ -32,9 +31,16 @@ class PlaylistActivity : AppCompatActivity() {
         }
         root.addView(TextView(this).apply {
             text = "إضافة قائمة تشغيل"
-            textSize = 28f
+            textSize = 30f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
+        })
+        root.addView(TextView(this).apply {
+            text = "Xtream Codes"
+            textSize = 15f
+            setTextColor(Color.rgb(185, 140, 255))
+            gravity = Gravity.CENTER
+            setPadding(0, 6, 0, 22)
         })
 
         fun field(hintText: String, password: Boolean = false) = EditText(this).apply {
@@ -42,6 +48,10 @@ class PlaylistActivity : AppCompatActivity() {
             isSingleLine = true
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
+            setPadding(20, 0, 20, 0)
+            background = fieldBackground(false)
+            isFocusable = true
+            setOnFocusChangeListener { view, focused -> view.background = fieldBackground(focused) }
             if (password) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
 
@@ -50,7 +60,7 @@ class PlaylistActivity : AppCompatActivity() {
         val username = field("اسم المستخدم")
         val password = field("كلمة المرور", true)
         listOf(name, url, username, password).forEach {
-            root.addView(it, LinearLayout.LayoutParams(620, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 12 })
+            root.addView(it, LinearLayout.LayoutParams(650, 68).apply { topMargin = 12 })
         }
 
         val status = TextView(this).apply {
@@ -61,11 +71,15 @@ class PlaylistActivity : AppCompatActivity() {
         root.addView(status)
 
         val save = Button(this).apply {
-            text = "حفظ واتصال"
+            text = "حفظ القائمة"
             isAllCaps = false
+            textSize = 16f
             isFocusable = true
+            setTextColor(Color.WHITE)
+            background = buttonBackground(false)
+            setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused) }
             setOnClickListener {
-                val baseUrl = url.text.toString().trim()
+                val baseUrl = url.text.toString().trim().trimEnd('/')
                 val user = username.text.toString().trim()
                 val pass = password.text.toString()
                 if (baseUrl.isBlank() || user.isBlank() || pass.isBlank()) {
@@ -90,7 +104,8 @@ class PlaylistActivity : AppCompatActivity() {
                             PlaylistManager(XtreamClient.api, dao).syncAll(provider)
                         }
                     }.onSuccess {
-                        startActivity(Intent(this@PlaylistActivity, HomeActivity::class.java))
+                        status.text = "تم حفظ القائمة"
+                        setResult(RESULT_OK)
                         finish()
                     }.onFailure {
                         status.text = "تعذر تحميل القائمة: ${it.message ?: "خطأ اتصال"}"
@@ -99,8 +114,20 @@ class PlaylistActivity : AppCompatActivity() {
                 }
             }
         }
-        root.addView(save, LinearLayout.LayoutParams(360, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 })
+        root.addView(save, LinearLayout.LayoutParams(380, 78).apply { topMargin = 18 })
         setContentView(root)
         name.requestFocus()
+    }
+
+    private fun fieldBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 16f
+        setColor(Color.rgb(17, 15, 25))
+        setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(52, 44, 68))
+    }
+
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 20f
+        setColor(if (focused) Color.rgb(73, 34, 122) else Color.rgb(24, 19, 35))
+        setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(52, 44, 68))
     }
 }
