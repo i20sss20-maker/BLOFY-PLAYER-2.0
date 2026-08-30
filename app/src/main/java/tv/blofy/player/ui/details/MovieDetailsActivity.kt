@@ -52,18 +52,24 @@ class MovieDetailsActivity : AppCompatActivity() {
                 setTextColor(Color.WHITE)
             })
             panel.addView(TextView(this@MovieDetailsActivity).apply {
-                text = buildString {
-                    append("فيلم")
-                    stream.extension?.takeIf { it.isNotBlank() }?.let { append("  •  ").append(it.uppercase()) }
-                    if ((watch?.positionMs ?: 0L) > 30_000L) append("  •  لديك مشاهدة سابقة")
-                }
+                text = buildList {
+                    add("فيلم")
+                    stream.year?.takeIf { it.isNotBlank() }?.let(::add)
+                    stream.genre?.takeIf { it.isNotBlank() }?.let(::add)
+                    stream.duration?.takeIf { it.isNotBlank() }?.let(::add)
+                    stream.rating?.takeIf { it.isNotBlank() }?.let { add("★ $it") }
+                    stream.extension?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
+                    if ((watch?.positionMs ?: 0L) > 30_000L) add("لديك مشاهدة سابقة")
+                }.joinToString("  •  ")
                 textSize = 16f
                 setTextColor(Color.rgb(190, 165, 225))
-                setPadding(0, 8, 0, 26)
+                setPadding(0, 8, 0, 22)
             })
             panel.addView(TextView(this@MovieDetailsActivity).apply {
-                text = "التشغيل يبدأ فقط عند اختيارك. BLOFY يستخدم رابط الفيلم الأصلي وامتداده المحفوظ من المزود."
+                text = stream.plot?.takeIf { it.isNotBlank() }
+                    ?: "التشغيل يبدأ فقط عند اختيارك. BLOFY يستخدم رابط الفيلم الأصلي وامتداده المحفوظ من المزود."
                 textSize = 17f
+                maxLines = 5
                 setTextColor(Color.rgb(220, 220, 225))
                 setPadding(0, 0, 0, 30)
             })
