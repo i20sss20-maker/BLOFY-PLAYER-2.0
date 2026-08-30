@@ -1,5 +1,6 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -11,7 +12,10 @@ const TRIAL_DAYS = Number(process.env.BLOFY_TRIAL_DAYS || 7);
 if (!DATABASE_URL) throw new Error('DATABASE_URL is required');
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 24) throw new Error('BLOFY_ADMIN_TOKEN must be at least 24 characters');
 
-const pool = new Pool({ connectionString: DATABASE_URL, ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false } });
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false }
+});
 
 function json(res, status, body) {
   const payload = JSON.stringify(body);
@@ -46,6 +50,24 @@ function normalizeStatus(row) {
   return row.status;
 }
 
+async function initializeDatabase() {
+  const schemaUrl = new URL('../schema.sql', import.meta.url);
+  const schema = await readFile(schemaUrl, 'utf8');
+  await pool.query(schema);
+  await pool.query('SELECT 1');
+  console.log('BLOFY activation database ready');
+}
+
+async function health(res) {
+  try {
+    await pool.query('SELECT 1');
+    return json(res, 200, { ok: true, database: 'ready', time: Date.now() });
+  } catch (error) {
+    console.error('health check failed', error);
+    return json(res, 503, { ok: false, database: 'unavailable', time: Date.now() });
+  }
+}
+
 async function activationCheck(req, res) {
   const body = await readJson(req);
   const deviceId = String(body.deviceId || '').trim();
@@ -76,7 +98,7 @@ async function activationCheck(req, res) {
       return json(res, 403, { status: 'blocked', serverTime: Date.now(), message: 'activation_code_mismatch' });
     }
 
-    let status = normalizeStatus(row);
+    const status = normalizeStatus(row);
     if (status === 'expired' && row.status !== 'blocked') {
       await client.query("UPDATE devices SET status='expired', updated_at=NOW() WHERE device_id=$1", [deviceId]);
     }
@@ -87,7 +109,12 @@ async function activationCheck(req, res) {
     await client.query('COMMIT');
 
     const expiresAt = row.expires_at ? new Date(row.expires_at).getTime() : null;
-    return json(res, 200, { status, expiresAt, serverTime: Date.now(), message: status === 'trial' ? 'trial_active' : undefined });
+    return json(res, 200, {
+      status,
+      expiresAt,
+      serverTime: Date.now(),
+      message: status === 'trial' ? 'trial_active' : undefined
+    });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
@@ -110,7 +137,9 @@ async function adminUpdate(req, res, deviceId) {
   if (!requireAdmin(req, res)) return;
   const body = await readJson(req);
   const status = String(body.status || '').toLowerCase();
-  if (!['trial', 'active', 'expired', 'blocked'].includes(status)) return json(res, 400, { error: 'invalid_status' });
+  if (!['trial', 'active', 'expired', 'blocked'].includes(status)) {
+    return json(res, 400, { error: 'invalid_status' });
+  }
 
   let expiresAt = null;
   if (body.expiresAt != null) {
@@ -162,7 +191,7 @@ async function adminGet(req, res, deviceId) {
 
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.method === 'GET' && req.url === '/health') return json(res, 200, { ok: true, time: Date.now() });
+    if (req.method === 'GET' && req.url === '/health') return await health(res);
     if (req.method === 'POST' && req.url === '/api/v1/activation/check') return await activationCheck(req, res);
 
     const match = req.url?.match(/^\/api\/v1\/admin\/devices\/([^/?]+)$/);
@@ -177,7 +206,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`BLOFY activation service listening on :${PORT}`));
+async function start() {
+  await initializeDatabase();
+  server.listen(PORT, '0.0.0.0', () => console.log(`BLOFY activation service listening on :${PORT}`));
+}
 
 async function shutdown() {
   server.close(async () => {
@@ -185,5 +217,12 @@ async function shutdown() {
     process.exit(0);
   });
 }
+
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+start().catch(async (error) => {
+  console.error('BLOFY activation startup failed', error);
+  await pool.end().catch(() => {});
+  process.exit(1);
+});
