@@ -100,6 +100,13 @@ class SettingsActivity : AppCompatActivity() {
         row3.addView(clearPin, LinearLayout.LayoutParams(220, 76))
         root.addView(row3)
 
+        val row4 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 14, 0, 0) }
+        val systemStatus = actionButton("system_status", "حالة النظام / QA") {
+            startActivity(Intent(this, SystemStatusActivity::class.java))
+        }
+        row4.addView(systemStatus, LinearLayout.LayoutParams(300, 76))
+        root.addView(row4)
+
         setContentView(root)
         if (isTv) {
             val remembered = FocusMemory.restore(this, SCREEN_KEY)
