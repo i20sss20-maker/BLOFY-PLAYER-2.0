@@ -87,9 +87,10 @@ class ProviderManagerActivity : AppCompatActivity() {
                 setTextColor(Color.WHITE)
             }, LinearLayout.LayoutParams(0, 68, 1f))
 
-            row.addView(actionButton(if (provider.enabled) "نشطة" else "اختيار") { activate(provider) }, LinearLayout.LayoutParams(150, 62).apply { marginEnd = 10 })
-            row.addView(actionButton("تحديث") { refresh(provider) }, LinearLayout.LayoutParams(150, 62).apply { marginEnd = 10 })
-            row.addView(actionButton("حذف") { remove(provider) }, LinearLayout.LayoutParams(130, 62))
+            row.addView(actionButton(if (provider.enabled) "نشطة" else "اختيار") { activate(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginEnd = 8 })
+            row.addView(actionButton("تعديل") { edit(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginEnd = 8 })
+            row.addView(actionButton("تحديث") { refresh(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginEnd = 8 })
+            row.addView(actionButton("حذف") { remove(provider) }, LinearLayout.LayoutParams(120, 62))
             list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 92).apply { bottomMargin = 10 })
         }
     }
@@ -101,6 +102,12 @@ class ProviderManagerActivity : AppCompatActivity() {
             dao.activateProvider(provider.id)
             status.text = "تم اختيار ${provider.name}"
         }
+    }
+
+    private fun edit(provider: ProviderEntity) {
+        startActivity(Intent(this, PlaylistActivity::class.java).apply {
+            putExtra(PlaylistActivity.EXTRA_PROVIDER_ID, provider.id)
+        })
     }
 
     private fun refresh(provider: ProviderEntity) {
