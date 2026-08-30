@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.core.security.ParentalGate
@@ -55,6 +56,12 @@ class SettingsActivity : AppCompatActivity() {
             textSize = 14f
             setTextColor(theme.accent)
             setPadding(0, 6, 0, 12)
+        })
+        root.addView(TextView(this).apply {
+            text = if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "FFmpeg Audio: مدمج" else "FFmpeg Audio: غير مدمج"
+            textSize = 13f
+            setTextColor(if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) Color.rgb(170, 230, 180) else Color.rgb(185, 170, 200))
+            setPadding(0, 0, 0, 6)
         })
         status = TextView(this).apply {
             setTextColor(Color.rgb(205, 190, 230))
