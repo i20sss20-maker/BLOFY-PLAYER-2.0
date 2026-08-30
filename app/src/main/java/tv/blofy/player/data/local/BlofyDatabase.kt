@@ -11,10 +11,12 @@ import androidx.room.RoomDatabase
         CategoryEntity::class,
         StreamEntity::class,
         EpisodeEntity::class,
-        WatchStateEntity::class
+        WatchStateEntity::class,
+        EpgEntity::class,
+        ActivationEntity::class
     ],
-    version = 1,
-    exportSchema = true
+    version = 2,
+    exportSchema = false
 )
 abstract class BlofyDatabase : RoomDatabase() {
     abstract fun dao(): BlofyDao
@@ -27,7 +29,7 @@ abstract class BlofyDatabase : RoomDatabase() {
                 context.applicationContext,
                 BlofyDatabase::class.java,
                 "blofy-player-2.db"
-            ).fallbackToDestructiveMigration().build().also { instance = it }
+            ).fallbackToDestructiveMigration(dropAllTables = true).build().also { instance = it }
         }
     }
 }
