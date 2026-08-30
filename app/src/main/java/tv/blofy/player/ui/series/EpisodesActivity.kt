@@ -14,7 +14,9 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.ContentUrlResolver
+import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
@@ -26,13 +28,18 @@ import tv.blofy.player.ui.player.PlayerActivity
 class EpisodesActivity : AppCompatActivity() {
     private lateinit var episodeAdapter: FocusTextAdapter<EpisodeEntity>
     private lateinit var seasonAdapter: FocusTextAdapter<Int>
+    private lateinit var seasonList: RecyclerView
+    private lateinit var episodeList: RecyclerView
     private var allEpisodes: List<EpisodeEntity> = emptyList()
     private var selectedSeason: Int? = null
+    private var providerId = ""
+    private var seriesId = ""
+    private var restoredOnce = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
-        val seriesId = intent.getStringExtra(EXTRA_SERIES_ID).orEmpty()
+        providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
+        seriesId = intent.getStringExtra(EXTRA_SERIES_ID).orEmpty()
         val seriesName = intent.getStringExtra(EXTRA_SERIES_NAME).orEmpty()
         if (providerId.isBlank() || seriesId.isBlank()) { finish(); return }
 
@@ -56,10 +63,10 @@ class EpisodesActivity : AppCompatActivity() {
         root.addView(status)
 
         val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val seasons = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@EpisodesActivity) }
-        val episodes = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@EpisodesActivity) }
-        body.addView(seasons, LinearLayout.LayoutParams(260, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 18 })
-        body.addView(episodes, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        seasonList = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@EpisodesActivity) }
+        episodeList = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@EpisodesActivity) }
+        body.addView(seasonList, LinearLayout.LayoutParams(260, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 18 })
+        body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
@@ -68,15 +75,16 @@ class EpisodesActivity : AppCompatActivity() {
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             episodeAdapter = FocusTextAdapter(
                 label = { "الحلقة ${it.episode}  •  ${it.title}" },
-                onClick = { episode -> openEpisode(provider, episode) }
+                onClick = { episode -> rememberEpisode(episode); openEpisode(provider, episode) },
+                onFocus = ::rememberEpisode
             )
             seasonAdapter = FocusTextAdapter(
                 label = { "الموسم $it" },
                 onClick = ::selectSeason,
                 onFocus = ::selectSeason
             )
-            episodes.adapter = episodeAdapter
-            seasons.adapter = seasonAdapter
+            episodeList.adapter = episodeAdapter
+            seasonList.adapter = seasonAdapter
 
             runCatching {
                 withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, dao).syncSeriesEpisodes(provider, seriesId) }
@@ -86,23 +94,42 @@ class EpisodesActivity : AppCompatActivity() {
                 allEpisodes = items.sortedWith(compareBy<EpisodeEntity> { it.season }.thenBy { it.episode })
                 val seasonValues = allEpisodes.map { it.season }.distinct().sorted()
                 seasonAdapter.submit(seasonValues)
-                if (selectedSeason == null || selectedSeason !in seasonValues) selectedSeason = seasonValues.firstOrNull()
-                refreshEpisodes()
+                val rememberedSeason = FocusMemory.restore(this@EpisodesActivity, seasonMemoryKey())?.toIntOrNull()
+                if (selectedSeason == null || selectedSeason !in seasonValues) {
+                    selectedSeason = rememberedSeason?.takeIf { it in seasonValues } ?: seasonValues.firstOrNull()
+                }
+                refreshEpisodes(restoreFocus = !restoredOnce)
+                restoredOnce = true
                 status.text = if (items.isEmpty()) "لا توجد حلقات" else "${seasonValues.size} موسم  •  ${items.size} حلقة"
             }
         }
     }
 
     private fun selectSeason(season: Int) {
-        if (selectedSeason == season) return
+        val changed = selectedSeason != season
         selectedSeason = season
-        refreshEpisodes()
+        FocusMemory.save(this, seasonMemoryKey(), season.toString())
+        if (changed) refreshEpisodes(restoreFocus = false)
     }
 
-    private fun refreshEpisodes() {
+    private fun refreshEpisodes(restoreFocus: Boolean) {
         if (!::episodeAdapter.isInitialized) return
         val season = selectedSeason
-        episodeAdapter.submit(if (season == null) emptyList() else allEpisodes.filter { it.season == season }.sortedBy { it.episode })
+        val visible = if (season == null) emptyList() else allEpisodes.filter { it.season == season }.sortedBy { it.episode }
+        episodeAdapter.submit(visible)
+        if (!restoreFocus || !DeviceClass.isTv(this) || visible.isEmpty()) return
+        val remembered = FocusMemory.restore(this, episodeMemoryKey())
+        val index = visible.indexOfFirst { it.key == remembered }.let { if (it < 0) 0 else it }
+        episodeList.scrollToPosition(index)
+        episodeList.post {
+            val holder = episodeList.findViewHolderForAdapterPosition(index)
+            holder?.itemView?.requestFocus()
+        }
+    }
+
+    private fun rememberEpisode(episode: EpisodeEntity) {
+        FocusMemory.save(this, episodeMemoryKey(), episode.key)
+        FocusMemory.save(this, seasonMemoryKey(), episode.season.toString())
     }
 
     private fun openEpisode(provider: ProviderEntity, episode: EpisodeEntity) {
@@ -134,6 +161,9 @@ class EpisodesActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
         })
     }
+
+    private fun seasonMemoryKey() = "episodes:$providerId:$seriesId:season"
+    private fun episodeMemoryKey() = "episodes:$providerId:$seriesId:episode"
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"
