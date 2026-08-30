@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.ui.browser.ContentBrowserActivity
@@ -23,6 +24,7 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var theme: ThemeProfile
     private lateinit var deviceKind: DeviceClass.Kind
     private var firstAction: Button? = null
+    private val actionButtons = linkedMapOf<String, Button>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,7 +32,7 @@ class HomeActivity : AppCompatActivity() {
         deviceKind = DeviceClass.detect(this)
         val root = if (theme.id == "cinema" && deviceKind == DeviceClass.Kind.TV) buildCinemaTvHome() else buildVisionHome()
         setContentView(root)
-        if (deviceKind == DeviceClass.Kind.TV) firstAction?.requestFocus()
+        restoreFocus()
     }
 
     private fun buildVisionHome(): LinearLayout {
@@ -45,17 +47,17 @@ class HomeActivity : AppCompatActivity() {
         root.addView(subtitle("كل محتواك. أسرع. أبسط.", if (phone) 20 else 30))
 
         val primary = actionRow(phone)
-        addAction(primary, "البث المباشر", contentIntent("live"))
-        addAction(primary, "الأفلام", contentIntent("movie"))
-        addAction(primary, "المسلسلات", contentIntent("series"))
-        addAction(primary, "البحث", Intent(this, SearchActivity::class.java))
+        addAction(primary, "live", "البث المباشر", contentIntent("live"))
+        addAction(primary, "movies", "الأفلام", contentIntent("movie"))
+        addAction(primary, "series", "المسلسلات", contentIntent("series"))
+        addAction(primary, "search", "البحث", Intent(this, SearchActivity::class.java))
         root.addView(primary)
 
         val secondary = actionRow(phone).apply { setPadding(0, if (phone) 8 else 16, 0, 0) }
-        addAction(secondary, "آخر القنوات", Intent(this, RecentChannelsActivity::class.java))
-        addAction(secondary, "متابعة المشاهدة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE))
-        addAction(secondary, "المفضلة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
-        addAction(secondary, "الإعدادات", Intent(this, SettingsActivity::class.java))
+        addAction(secondary, "recent", "آخر القنوات", Intent(this, RecentChannelsActivity::class.java))
+        addAction(secondary, "continue", "متابعة المشاهدة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE))
+        addAction(secondary, "favorites", "المفضلة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
+        addAction(secondary, "settings", "الإعدادات", Intent(this, SettingsActivity::class.java))
         root.addView(secondary)
         return root
     }
@@ -66,7 +68,6 @@ class HomeActivity : AppCompatActivity() {
             setPadding(46, 38, 46, 38)
             setBackgroundColor(theme.background)
         }
-
         val rail = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
@@ -74,10 +75,10 @@ class HomeActivity : AppCompatActivity() {
         }
         rail.addView(title("BLOFY", 34f))
         rail.addView(subtitle("CINEMA", 24))
-        addRailAction(rail, "LIVE", contentIntent("live"))
-        addRailAction(rail, "MOVIES", contentIntent("movie"))
-        addRailAction(rail, "SERIES", contentIntent("series"))
-        addRailAction(rail, "SEARCH", Intent(this, SearchActivity::class.java))
+        addRailAction(rail, "live", "LIVE", contentIntent("live"))
+        addRailAction(rail, "movies", "MOVIES", contentIntent("movie"))
+        addRailAction(rail, "series", "SERIES", contentIntent("series"))
+        addRailAction(rail, "search", "SEARCH", Intent(this, SearchActivity::class.java))
         root.addView(rail, LinearLayout.LayoutParams(300, LinearLayout.LayoutParams.MATCH_PARENT))
 
         val stage = LinearLayout(this).apply {
@@ -97,15 +98,13 @@ class HomeActivity : AppCompatActivity() {
             setTextColor(theme.accent)
             setPadding(0, 8, 0, 28)
         })
-
         val library = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        addAction(library, "آخر القنوات", Intent(this, RecentChannelsActivity::class.java), height = 124)
-        addAction(library, "متابعة المشاهدة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE), height = 124)
-        addAction(library, "المفضلة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES), height = 124)
+        addAction(library, "recent", "آخر القنوات", Intent(this, RecentChannelsActivity::class.java), 124)
+        addAction(library, "continue", "متابعة المشاهدة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE), 124)
+        addAction(library, "favorites", "المفضلة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES), 124)
         stage.addView(library, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
         val utility = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 18, 0, 0) }
-        addAction(utility, "الإعدادات", Intent(this, SettingsActivity::class.java), height = 92)
+        addAction(utility, "settings", "الإعدادات", Intent(this, SettingsActivity::class.java), 92)
         stage.addView(utility)
         root.addView(stage, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         return root
@@ -117,18 +116,16 @@ class HomeActivity : AppCompatActivity() {
         Intent(this, MobileContentActivity::class.java).putExtra(MobileContentActivity.EXTRA_KIND, kind)
     }
 
-    private fun actionRow(phone: Boolean) = LinearLayout(this).apply {
-        orientation = if (phone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-    }
+    private fun actionRow(phone: Boolean) = LinearLayout(this).apply { orientation = if (phone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
 
-    private fun addRailAction(row: LinearLayout, label: String, intent: Intent) {
-        val button = makeButton(label, intent)
+    private fun addRailAction(row: LinearLayout, key: String, label: String, intent: Intent) {
+        val button = makeButton(key, label, intent)
         row.addView(button, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 72).apply { topMargin = 10 })
     }
 
-    private fun addAction(row: LinearLayout, label: String, intent: Intent, height: Int? = null) {
+    private fun addAction(row: LinearLayout, key: String, label: String, intent: Intent, height: Int? = null) {
         val phone = deviceKind == DeviceClass.Kind.PHONE
-        val button = makeButton(label, intent)
+        val button = makeButton(key, label, intent)
         val params = if (phone) {
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, height ?: 72).apply { bottomMargin = 8 }
         } else {
@@ -137,7 +134,7 @@ class HomeActivity : AppCompatActivity() {
         row.addView(button, params)
     }
 
-    private fun makeButton(label: String, intent: Intent) = Button(this).apply {
+    private fun makeButton(key: String, label: String, intent: Intent) = Button(this).apply {
         val phone = deviceKind == DeviceClass.Kind.PHONE
         val tv = deviceKind == DeviceClass.Kind.TV
         text = label
@@ -151,35 +148,36 @@ class HomeActivity : AppCompatActivity() {
         setOnFocusChangeListener { view, focused ->
             if (!tv) return@setOnFocusChangeListener
             view.background = tile(focused)
+            if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
             view.animate().scaleX(if (focused) theme.focusScale else 1f).scaleY(if (focused) theme.focusScale else 1f).setDuration(theme.motionMs).start()
         }
-        setOnClickListener { startActivity(intent) }
+        setOnClickListener {
+            if (tv) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
+            startActivity(intent)
+        }
+        actionButtons[key] = this
         if (firstAction == null) firstAction = this
     }
 
-    private fun title(textValue: String, size: Float) = TextView(this).apply {
-        text = textValue
-        textSize = size
-        setTextColor(Color.WHITE)
+    private fun restoreFocus() {
+        if (deviceKind != DeviceClass.Kind.TV) return
+        val saved = FocusMemory.restore(this, SCREEN_KEY)
+        (saved?.let { actionButtons[it] } ?: firstAction)?.requestFocus()
     }
 
-    private fun subtitle(textValue: String, bottom: Int) = TextView(this).apply {
-        text = textValue
-        textSize = 15f
-        setTextColor(theme.accent)
-        setPadding(0, 4, 0, bottom)
-    }
-
+    private fun title(textValue: String, size: Float) = TextView(this).apply { text = textValue; textSize = size; setTextColor(Color.WHITE) }
+    private fun subtitle(textValue: String, bottom: Int) = TextView(this).apply { text = textValue; textSize = 15f; setTextColor(theme.accent); setPadding(0, 4, 0, bottom) }
     private fun tile(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = if (theme.id == "cinema") 16f else 22f
         setColor(if (focused) blend(theme.surface, theme.accent, 0.34f) else theme.surface)
         setStroke(if (focused) 3 else 1, if (focused) theme.accent else blend(theme.surface, Color.WHITE, 0.12f))
     }
-
     private fun blend(a: Int, b: Int, ratio: Float): Int {
         val r = (Color.red(a) * (1f - ratio) + Color.red(b) * ratio).toInt()
         val g = (Color.green(a) * (1f - ratio) + Color.green(b) * ratio).toInt()
         val bl = (Color.blue(a) * (1f - ratio) + Color.blue(b) * ratio).toInt()
         return Color.rgb(r, g, bl)
     }
+
+    companion object { private const val SCREEN_KEY = "home" }
 }
