@@ -9,6 +9,7 @@ data class ProviderProfile(
     val connectTimeoutMs: Int = 8_000,
     val readTimeoutMs: Int = 15_000,
     val headers: Map<String, String> = emptyMap(),
+    val preferDirectSource: Boolean = false,
     val allowHttpFallback: Boolean = true,
     val allowVlcFallback: Boolean = true
 )
