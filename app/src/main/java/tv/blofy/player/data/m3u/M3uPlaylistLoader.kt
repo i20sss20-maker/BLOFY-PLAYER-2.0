@@ -48,6 +48,10 @@ class M3uPlaylistLoader(
         val episodes = mutableListOf<EpisodeEntity>()
         val seriesSeen = mutableSetOf<String>()
 
+        fun addCategory(key: String, row: CategoryEntity) {
+            if (!categories.containsKey(key)) categories[key] = row
+        }
+
         entries.forEach { entry ->
             val series = SERIES_PATTERN.find(entry.meta.name)
             if (series != null) {
@@ -57,7 +61,7 @@ class M3uPlaylistLoader(
                 val seriesId = stableId("series|${seriesName.lowercase()}")
                 val category = entry.meta.group.ifBlank { "Series" }
                 val categoryId = stableId("series-category|$category")
-                categories.putIfAbsent("series:$categoryId", CategoryEntity("${provider.id}:series:$categoryId", provider.id, categoryId, "series", category, categories.size))
+                addCategory("series:$categoryId", CategoryEntity("${provider.id}:series:$categoryId", provider.id, categoryId, "series", category, categories.size))
                 if (seriesSeen.add(seriesId)) {
                     streams[seriesId] = StreamEntity(
                         key = "${provider.id}:series:$seriesId", providerId = provider.id, remoteId = seriesId,
@@ -77,7 +81,7 @@ class M3uPlaylistLoader(
             val kind = if (looksLikeMovie(entry)) "movie" else "live"
             val category = entry.meta.group.ifBlank { if (kind == "movie") "Movies" else "Live" }
             val categoryId = stableId("$kind-category|$category")
-            categories.putIfAbsent("$kind:$categoryId", CategoryEntity("${provider.id}:$kind:$categoryId", provider.id, categoryId, kind, category, categories.size))
+            addCategory("$kind:$categoryId", CategoryEntity("${provider.id}:$kind:$categoryId", provider.id, categoryId, kind, category, categories.size))
             val streamId = stableId(entry.url)
             streams["$kind:$streamId"] = StreamEntity(
                 key = "${provider.id}:$kind:$streamId", providerId = provider.id, remoteId = streamId,
@@ -87,20 +91,14 @@ class M3uPlaylistLoader(
             )
         }
 
-        return ParsedM3u(
-            categories.values.toList(),
-            streams.values.toList(),
-            episodes.sortedWith(compareBy<EpisodeEntity> { it.seriesId }.thenBy { it.season }.thenBy { it.episode })
-        )
+        return ParsedM3u(categories.values.toList(), streams.values.toList(), episodes.sortedWith(compareBy<EpisodeEntity> { it.seriesId }.thenBy { it.season }.thenBy { it.episode }))
     }
 
-    private fun parseMetadata(line: String): Metadata {
-        val name = line.substringAfter(',', "").trim()
-        return Metadata(name, attribute(line, "group-title").orEmpty(), attribute(line, "tvg-logo"), attribute(line, "tvg-id"))
-    }
+    private fun parseMetadata(line: String): Metadata = Metadata(
+        line.substringAfter(',', "").trim(), attribute(line, "group-title").orEmpty(), attribute(line, "tvg-logo"), attribute(line, "tvg-id")
+    )
 
-    private fun attribute(line: String, name: String): String? =
-        Regex("(?i)${Regex.escape(name)}=\"([^\"]*)\"").find(line)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
+    private fun attribute(line: String, name: String): String? = Regex("(?i)${Regex.escape(name)}=\"([^\"]*)\"").find(line)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
 
     private fun looksLikeMovie(entry: Entry): Boolean {
         val group = entry.meta.group.lowercase()
@@ -109,17 +107,11 @@ class M3uPlaylistLoader(
     }
 
     private fun extension(url: String): String? = runCatching { URI(url).path.substringAfterLast('.', "").takeIf { it.length in 2..5 } }.getOrNull()
-
-    private fun stableId(value: String): String {
-        val digest = MessageDigest.getInstance("SHA-1").digest(value.toByteArray())
-        return digest.take(8).joinToString("") { "%02x".format(it) }
-    }
+    private fun stableId(value: String): String = MessageDigest.getInstance("SHA-1").digest(value.toByteArray()).take(8).joinToString("") { "%02x".format(it) }
 
     data class ParsedM3u(val categories: List<CategoryEntity>, val streams: List<StreamEntity>, val episodes: List<EpisodeEntity>)
     private data class Entry(val meta: Metadata, val url: String)
     private data class Metadata(val name: String, val group: String = "", val logo: String? = null, val tvgId: String? = null)
 
-    companion object {
-        private val SERIES_PATTERN = Regex("(?i)^(.+?)[ ._\\-]+S(\\d{1,2})E(\\d{1,3})(?:[ ._\\-]+.*)?$")
-    }
+    companion object { private val SERIES_PATTERN = Regex("(?i)^(.+?)[ ._\\-]+S(\\d{1,2})E(\\d{1,3})(?:[ ._\\-]+.*)?$") }
 }
