@@ -72,3 +72,23 @@ data class WatchStateEntity(
     val completed: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "epg", indices = [Index("providerId"), Index("streamId"), Index("startMs")])
+data class EpgEntity(
+    @PrimaryKey val key: String,
+    val providerId: String,
+    val streamId: String,
+    val title: String,
+    val description: String? = null,
+    val startMs: Long,
+    val endMs: Long
+)
+
+@Entity(tableName = "activation")
+data class ActivationEntity(
+    @PrimaryKey val deviceId: String,
+    val activationCode: String,
+    val activated: Boolean = false,
+    val expiresAt: Long? = null,
+    val lastCheckAt: Long = 0L
+)
