@@ -11,7 +11,8 @@ This file locks the implementation targets confirmed or strongly supported by th
 - [x] Provider-scoped redirects/transport settings
 - [x] One retry of the same URL; no global route ladder
 - [x] direct_source retained as data, not primary Xtream route
-- [ ] FFmpeg audio extension for AC3/EAC3/DTS-class compatibility (requires locally built Media3 FFmpeg native module; not available from Google Maven)
+- [x] FFmpeg integration hook is ready: version-locked optional native AAR input, extension renderer preference, build flag/status UI, and build documentation
+- [ ] Build the Media3 1.6.1-compatible FFmpeg native AAR and validate AC3/EAC3/DTS-class samples on real target hardware
 - [x] External-player launch path (system/VLC/MX if installed)
 - [x] Automatic VLC/MX/external fallback after Media3 failure and one same-URL retry
 - [x] Read-only playback cache policy (streaming does not write new spans)
