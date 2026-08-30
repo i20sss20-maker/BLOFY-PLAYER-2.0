@@ -17,6 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.core.security.ParentalPinManager
 import tv.blofy.player.core.theme.ThemeManager
@@ -31,6 +33,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var redirectsButton: Button
     private lateinit var themeButton: Button
+    private val focusButtons = linkedMapOf<String, Button>()
+    private val isTv by lazy { DeviceClass.isTv(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,37 +64,40 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(status)
 
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val ts = actionButton("Live: MPEG-TS") { updateProvider { copy(liveFormat = "ts") } }
-        val hls = actionButton("Live: HLS") { updateProvider { copy(liveFormat = "m3u8") } }
-        val cronet = actionButton("Cronet أولاً") { updateProvider { copy(preferredTransport = "cronet") } }
-        val http = actionButton("HTTP أولاً") { updateProvider { copy(preferredTransport = "http") } }
+        val ts = actionButton("live_ts", "Live: MPEG-TS") { updateProvider { copy(liveFormat = "ts") } }
+        val hls = actionButton("live_hls", "Live: HLS") { updateProvider { copy(liveFormat = "m3u8") } }
+        val cronet = actionButton("transport_cronet", "Cronet أولاً") { updateProvider { copy(preferredTransport = "cronet") } }
+        val http = actionButton("transport_http", "HTTP أولاً") { updateProvider { copy(preferredTransport = "http") } }
         listOf(ts, hls, cronet, http).forEach { row1.addView(it, LinearLayout.LayoutParams(220, 76).apply { marginEnd = 12 }) }
         root.addView(row1)
 
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 14, 0, 0) }
-        redirectsButton = actionButton("Redirects") { updateProvider { copy(allowCrossProtocolRedirects = !allowCrossProtocolRedirects) } }
-        val refresh = actionButton("تحديث القائمة الآن") { refreshLibrary() }
-        val playlists = actionButton("إدارة القوائم") { startActivity(Intent(this, ProviderManagerActivity::class.java)) }
+        redirectsButton = actionButton("redirects", "Redirects") { updateProvider { copy(allowCrossProtocolRedirects = !allowCrossProtocolRedirects) } }
+        val refresh = actionButton("refresh", "تحديث القائمة الآن") { refreshLibrary() }
+        val playlists = actionButton("playlists", "إدارة القوائم") { startActivity(Intent(this, ProviderManagerActivity::class.java)) }
         row2.addView(redirectsButton, LinearLayout.LayoutParams(250, 76).apply { marginEnd = 12 })
         row2.addView(refresh, LinearLayout.LayoutParams(260, 76).apply { marginEnd = 12 })
         row2.addView(playlists, LinearLayout.LayoutParams(280, 76))
         root.addView(row2)
 
         val row3 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 14, 0, 0) }
-        themeButton = actionButton("الثيم: ${theme.id.uppercase()}") {
+        themeButton = actionButton("theme", "الثيم: ${theme.id.uppercase()}") {
             val next = ThemeManager.toggle(this)
             themeButton.text = "الثيم: ${next.id.uppercase()}"
             recreate()
         }
-        val pinButton = actionButton(if (ParentalPinManager.hasPin(this)) "تغيير PIN" else "إنشاء PIN") { changePin() }
-        val clearPin = actionButton("إزالة PIN") { clearPin() }
+        val pinButton = actionButton("pin_change", if (ParentalPinManager.hasPin(this)) "تغيير PIN" else "إنشاء PIN") { changePin() }
+        val clearPin = actionButton("pin_clear", "إزالة PIN") { clearPin() }
         row3.addView(themeButton, LinearLayout.LayoutParams(260, 76).apply { marginEnd = 12 })
         row3.addView(pinButton, LinearLayout.LayoutParams(230, 76).apply { marginEnd = 12 })
         row3.addView(clearPin, LinearLayout.LayoutParams(220, 76))
         root.addView(row3)
 
         setContentView(root)
-        ts.requestFocus()
+        if (isTv) {
+            val remembered = FocusMemory.restore(this, SCREEN_KEY)
+            (remembered?.let(focusButtons::get) ?: ts).post { (remembered?.let(focusButtons::get) ?: ts).requestFocus() }
+        }
 
         lifecycleScope.launch {
             provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull() ?: run {
@@ -141,7 +148,7 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
+    private fun actionButton(key: String, label: String, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
         textSize = 15f
@@ -150,9 +157,11 @@ class SettingsActivity : AppCompatActivity() {
         background = buttonBackground(false)
         setOnFocusChangeListener { view, focused ->
             view.background = buttonBackground(focused)
+            if (focused && isTv) FocusMemory.save(this@SettingsActivity, SCREEN_KEY, key)
             view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(100).start()
         }
         setOnClickListener { action() }
+        focusButtons[key] = this
     }
 
     private fun updateProvider(change: ProviderEntity.() -> ProviderEntity) {
@@ -186,4 +195,6 @@ class SettingsActivity : AppCompatActivity() {
         setColor(if (focused) theme.accent else theme.surface)
         setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else theme.accent)
     }
+
+    companion object { private const val SCREEN_KEY = "settings" }
 }
