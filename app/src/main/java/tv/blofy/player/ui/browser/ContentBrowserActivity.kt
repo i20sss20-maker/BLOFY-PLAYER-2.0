@@ -104,12 +104,14 @@ class ContentBrowserActivity : AppCompatActivity() {
                     schedulePreview(it)
                 }
             },
-            onLongClick = { if (kind == KIND_LIVE && it.archiveEnabled) openCatchup(it) }
+            onLongClick = { if (kind == KIND_LIVE && it.archiveEnabled) openCatchup(it) },
+            itemKey = { it.key }
         )
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
             onClick = { loadStreams(it.remoteId) },
-            onFocus = { if (!phoneMode) loadStreams(it.remoteId) }
+            onFocus = { if (!phoneMode) loadStreams(it.remoteId) },
+            itemKey = { it.key }
         )
         categories.adapter = categoryAdapter
         streams.adapter = streamAdapter
