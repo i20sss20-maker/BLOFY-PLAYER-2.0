@@ -7,21 +7,54 @@ import tv.blofy.player.data.local.EpgEntity
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.m3u.M3uPlaylistLoader
 import tv.blofy.player.data.remote.XtreamApi
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 class PlaylistManager(
     private val api: XtreamApi,
-    private val dao: BlofyDao
+    private val dao: BlofyDao,
+    private val m3uLoader: M3uPlaylistLoader = M3uPlaylistLoader()
 ) {
     suspend fun syncAll(provider: ProviderEntity) {
+        if (provider.providerType.equals("m3u", true)) {
+            syncM3u(provider)
+            return
+        }
         syncLive(provider)
         syncVod(provider)
         syncSeries(provider)
     }
 
+    private suspend fun syncM3u(provider: ProviderEntity) {
+        val parsed = m3uLoader.load(provider)
+        val previous = buildMap {
+            listOf("live", "movie", "series").forEach { kind ->
+                dao.streams(provider.id, kind, null).first().forEach { put(it.key, it) }
+            }
+        }
+        val streams = parsed.streams.map { fresh ->
+            fresh.copy(
+                favorite = previous[fresh.key]?.favorite ?: false,
+                locked = previous[fresh.key]?.locked ?: false
+            )
+        }
+
+        listOf("live", "movie", "series").forEach { kind ->
+            dao.clearCategories(provider.id, kind)
+            dao.clearStreams(provider.id, kind)
+        }
+        dao.upsertCategories(parsed.categories)
+        dao.upsertStreams(streams)
+
+        val seriesIds = streams.filter { it.kind == "series" }.map { it.remoteId }
+        seriesIds.forEach { dao.clearEpisodes(provider.id, it) }
+        dao.upsertEpisodes(parsed.episodes)
+    }
+
     suspend fun syncLive(provider: ProviderEntity) {
+        if (provider.providerType.equals("m3u", true)) return
         val categories = api.list(actionUrl(provider, "get_live_categories"))
         val streams = api.list(actionUrl(provider, "get_live_streams"))
         val previous = dao.streams(provider.id, "live", null).first().associateBy { it.key }
@@ -63,6 +96,7 @@ class PlaylistManager(
     }
 
     suspend fun syncVod(provider: ProviderEntity) {
+        if (provider.providerType.equals("m3u", true)) return
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
         val streams = api.list(actionUrl(provider, "get_vod_streams"))
         val previous = dao.streams(provider.id, "movie", null).first().associateBy { it.key }
@@ -97,6 +131,7 @@ class PlaylistManager(
     }
 
     suspend fun syncSeries(provider: ProviderEntity) {
+        if (provider.providerType.equals("m3u", true)) return
         val categories = api.list(actionUrl(provider, "get_series_categories"))
         val series = api.list(actionUrl(provider, "get_series"))
         val previous = dao.streams(provider.id, "series", null).first().associateBy { it.key }
@@ -129,6 +164,7 @@ class PlaylistManager(
     }
 
     suspend fun syncSeriesEpisodes(provider: ProviderEntity, seriesId: String) {
+        if (provider.providerType.equals("m3u", true)) return
         val response = api.objectResponse(actionUrl(provider, "get_series_info", mapOf("series_id" to seriesId)))
         val groups = response["episodes"] as? Map<*, *> ?: emptyMap<Any?, Any?>()
         val episodes = buildList {
@@ -161,6 +197,7 @@ class PlaylistManager(
     }
 
     suspend fun syncShortEpg(provider: ProviderEntity, streamId: String, limit: Int = 20) {
+        if (provider.providerType.equals("m3u", true)) return
         val response = api.objectResponse(
             actionUrl(provider, "get_short_epg", mapOf("stream_id" to streamId, "limit" to limit.toString()))
         )
