@@ -31,6 +31,7 @@ android {
         targetSdk = 36
         versionCode = 2000006
         versionName = "2.0.0-rc05"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
         buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
@@ -84,6 +85,9 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit-ktx:1.2.1")
 }
 
 val validateReleaseConfiguration = tasks.register("validateReleaseConfiguration") {
