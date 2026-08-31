@@ -49,10 +49,9 @@ class SettingsActivity : AppCompatActivity() {
             background = AppCompatResources.getDrawable(this@SettingsActivity, R.drawable.blofy_home_background)
         }
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(26), 0, dp(24), 0) }
-        val title = TextView(this).apply {
-            text = "الإعدادات"; textSize = 31f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
-        }
-        content.addView(title)
+        content.addView(TextView(this).apply {
+            text = getString(R.string.settings_title); textSize = 31f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
+        })
         status = TextView(this).apply { textSize = 13f; setTextColor(SOFT); gravity = Gravity.RIGHT; setPadding(0, dp(6), 0, dp(14)) }
         content.addView(status)
         root.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
@@ -61,14 +60,14 @@ class SettingsActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.TOP; setPadding(dp(10), dp(12), dp(10), dp(12)); background = panelBackground()
         }
         val sections = listOf(
-            SECTION_PLAYBACK to "التشغيل",
-            SECTION_AUDIO to "الصوت",
-            SECTION_SUBTITLES to "الترجمة",
-            SECTION_LANGUAGE to "اللغة",
-            SECTION_NETWORK to "الشبكة",
-            SECTION_APPEARANCE to "المظهر",
-            SECTION_STORAGE to "التخزين",
-            SECTION_DEVICE to "معلومات الجهاز",
+            SECTION_PLAYBACK to getString(R.string.settings_playback),
+            SECTION_AUDIO to getString(R.string.settings_audio),
+            SECTION_SUBTITLES to getString(R.string.settings_subtitles),
+            SECTION_LANGUAGE to getString(R.string.settings_language),
+            SECTION_NETWORK to getString(R.string.settings_network),
+            SECTION_APPEARANCE to getString(R.string.settings_appearance),
+            SECTION_STORAGE to getString(R.string.settings_storage),
+            SECTION_DEVICE to getString(R.string.settings_device),
         )
         sections.forEach { (key, label) ->
             sectionRail.addView(navButton(label) { currentSection = key; renderSection() }, LinearLayout.LayoutParams(dp(245), dp(62)).apply { bottomMargin = dp(7) })
@@ -90,39 +89,39 @@ class SettingsActivity : AppCompatActivity() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(22)) }
         when (currentSection) {
             SECTION_PLAYBACK -> {
-                box.addView(sectionTitle("التشغيل")); box.addView(sectionHint("خيارات المشغل والعرض بدون تغيير محرك Media3/FFmpeg الحالي."))
+                box.addView(sectionTitle(getString(R.string.settings_playback))); box.addView(sectionHint("خيارات المشغل والعرض بدون تغيير محرك Media3/FFmpeg الحالي."))
                 box.addView(optionRow("صيغة البث المباشر", providerValue { liveFormat.uppercase() }, "MPEG-TS") { updateProvider { copy(liveFormat = "ts") } }, "HLS") { updateProvider { copy(liveFormat = "m3u8") } })
                 box.addView(toggleRow("تشغيل المعاينة تلقائيًا", "preview_auto", true))
                 box.addView(toggleRow("الانتقال السريع بين القنوات", "fast_channel_zap", true))
                 box.addView(toggleRow("استئناف الأفلام والحلقات", "resume_enabled", true))
             }
             SECTION_AUDIO -> {
-                box.addView(sectionTitle("الصوت")); box.addView(sectionHint("اختيار المسار يتم من مشغل الأفلام والمسلسلات عند توفر أكثر من مسار."))
+                box.addView(sectionTitle(getString(R.string.settings_audio))); box.addView(sectionHint("اختيار المسار يتم من مشغل الأفلام والمسلسلات عند توفر أكثر من مسار."))
                 box.addView(toggleRow("تذكر آخر مسار صوت", "remember_audio", true)); box.addView(toggleRow("تفضيل Stereo", "prefer_stereo", false))
             }
             SECTION_SUBTITLES -> {
-                box.addView(sectionTitle("الترجمة")); box.addView(sectionHint("خيارات الترجمة تظهر في Full Screen للأفلام والمسلسلات فقط."))
+                box.addView(sectionTitle(getString(R.string.settings_subtitles))); box.addView(sectionHint("خيارات الترجمة تظهر في Full Screen للأفلام والمسلسلات فقط."))
                 box.addView(toggleRow("تذكر آخر ترجمة", "remember_subtitles", true)); box.addView(choiceRow("حجم الترجمة", "subtitle_size", listOf("صغير", "متوسط", "كبير"), "متوسط"))
             }
             SECTION_LANGUAGE -> {
-                box.addView(sectionTitle("اللغة")); box.addView(sectionHint("اختر لغة الواجهة. العربية تستخدم RTL تلقائيًا واللغات الأخرى LTR."))
+                box.addView(sectionTitle(getString(R.string.settings_language))); box.addView(sectionHint("اختر لغة الواجهة. العربية تستخدم RTL تلقائيًا واللغات الأخرى LTR."))
                 box.addView(languageRow())
             }
             SECTION_NETWORK -> {
-                box.addView(sectionTitle("الشبكة")); box.addView(sectionHint("هذه إعدادات اتصال الكتالوج والبث العامة وليست تغييرًا للمحرك."))
+                box.addView(sectionTitle(getString(R.string.settings_network))); box.addView(sectionHint("هذه إعدادات اتصال الكتالوج والبث العامة وليست تغييرًا للمحرك."))
                 box.addView(optionRow("النقل المفضل", providerValue { preferredTransport.uppercase() }, "Cronet") { updateProvider { copy(preferredTransport = "cronet") } }, "HTTP") { updateProvider { copy(preferredTransport = "http") } })
                 box.addView(toggleProviderRow("السماح بتحويلات البروتوكول", { allowCrossProtocolRedirects }) { copy(allowCrossProtocolRedirects = !allowCrossProtocolRedirects) })
             }
             SECTION_APPEARANCE -> {
-                box.addView(sectionTitle("المظهر")); box.addView(sectionHint("هوية BLOFY البنفسجية ثابتة في شاشات TV."))
+                box.addView(sectionTitle(getString(R.string.settings_appearance))); box.addView(sectionHint("هوية BLOFY البنفسجية ثابتة في شاشات TV."))
                 box.addView(toggleRow("تكبير العنصر عند التركيز", "focus_scale", true)); box.addView(toggleRow("حركات واجهة خفيفة", "ui_motion", true))
             }
             SECTION_STORAGE -> {
-                box.addView(sectionTitle("التخزين")); box.addView(sectionHint("الكتالوج المحمّل يبقى محليًا لفتح التطبيق بسرعة."))
+                box.addView(sectionTitle(getString(R.string.settings_storage))); box.addView(sectionHint("الكتالوج المحمّل يبقى محليًا لفتح التطبيق بسرعة."))
                 box.addView(actionRow("تحديث القنوات والأفلام والمسلسلات") { refreshLibrary() }); box.addView(actionRow("إدارة قوائم التشغيل") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
             }
             SECTION_DEVICE -> {
-                box.addView(sectionTitle("معلومات الجهاز"));
+                box.addView(sectionTitle(getString(R.string.settings_device)));
                 box.addView(infoRow("الإصدار", BuildConfig.VERSION_NAME)); box.addView(infoRow("Media3 + FFmpeg", if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "جاهز" else "Media3 فقط")); box.addView(actionRow("حالة النظام / QA") { startActivity(Intent(this, SystemStatusActivity::class.java)) })
                 box.addView(actionRow(if (ParentalPinManager.hasPin(this)) "تغيير PIN" else "إنشاء PIN") { changePin() })
             }
@@ -134,9 +133,9 @@ class SettingsActivity : AppCompatActivity() {
     private fun languageRow(): Button {
         val selectedTag = prefs.getString("app_language_tag", "ar") ?: "ar"
         val selected = LANGUAGES.firstOrNull { it.second == selectedTag }?.first ?: "العربية"
-        return actionButton("لغة التطبيق: $selected") {
+        return actionButton("${getString(R.string.language_app)}: $selected") {
             val labels = LANGUAGES.map { it.first }.toTypedArray()
-            AlertDialog.Builder(this).setTitle("لغة التطبيق").setItems(labels) { dialog, which ->
+            AlertDialog.Builder(this).setTitle(getString(R.string.language_app)).setItems(labels) { dialog, which ->
                 val (label, tag) = LANGUAGES[which]
                 prefs.edit().putString("app_language", label).putString("app_language_tag", tag).apply()
                 AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
@@ -156,10 +155,10 @@ class SettingsActivity : AppCompatActivity() {
         addView(actionButton(a, onA), LinearLayout.LayoutParams(dp(170), dp(68)).apply { marginStart = dp(8) }); addView(actionButton(b, onB), LinearLayout.LayoutParams(dp(170), dp(68)))
     }
 
-    private fun toggleRow(label: String, key: String, default: Boolean): Button = actionButton("$label: ${if (prefs.getBoolean(key, default)) "تشغيل" else "إيقاف"}") {
+    private fun toggleRow(label: String, key: String, default: Boolean): Button = actionButton("$label: ${if (prefs.getBoolean(key, default)) getString(R.string.state_on) else getString(R.string.state_off)}") {
         prefs.edit().putBoolean(key, !prefs.getBoolean(key, default)).apply(); renderSection()
     }
-    private fun toggleProviderRow(label: String, value: ProviderEntity.() -> Boolean, change: ProviderEntity.() -> ProviderEntity): Button = actionButton("$label: ${if (::provider.isInitialized && provider.value()) "تشغيل" else "إيقاف"}") { updateProvider(change) }
+    private fun toggleProviderRow(label: String, value: ProviderEntity.() -> Boolean, change: ProviderEntity.() -> ProviderEntity): Button = actionButton("$label: ${if (::provider.isInitialized && provider.value()) getString(R.string.state_on) else getString(R.string.state_off)}") { updateProvider(change) }
     private fun choiceRow(label: String, key: String, values: List<String>, current: String): Button = actionButton("$label: $current") {
         AlertDialog.Builder(this).setTitle(label).setItems(values.toTypedArray()) { _, which -> prefs.edit().putString(key, values[which]).apply(); renderSection() }.show()
     }
