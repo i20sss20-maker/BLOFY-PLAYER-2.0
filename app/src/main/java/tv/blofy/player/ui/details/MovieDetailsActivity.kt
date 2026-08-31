@@ -20,6 +20,8 @@ import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.core.security.ParentalPinManager
+import tv.blofy.player.core.theme.ThemeManager
+import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -29,9 +31,11 @@ import tv.blofy.player.ui.player.PlayerActivity
 class MovieDetailsActivity : AppCompatActivity() {
     private lateinit var favoriteButton: Button
     private lateinit var lockButton: Button
+    private lateinit var theme: ThemeProfile
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        theme = ThemeManager.current(this)
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         val contentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
         if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }
@@ -61,7 +65,7 @@ class MovieDetailsActivity : AppCompatActivity() {
             }
             val poster = ImageView(this@MovieDetailsActivity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(0xFF15101F.toInt())
+                setBackgroundColor(theme.surface)
             }
             posterCard.addView(poster, LinearLayout.LayoutParams(dp(285), dp(425)))
             ArtworkLoader.load(poster, stream.icon)
@@ -88,7 +92,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                     stream.extension?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
                 }.joinToString("  •  ")
                 textSize = 16f
-                setTextColor(0xFFC6A8E7.toInt())
+                setTextColor(blend(Color.WHITE, theme.accent, 0.34f))
                 gravity = Gravity.END
                 setPadding(0, dp(8), 0, dp(18))
             })
@@ -96,7 +100,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 text = stream.plot?.takeIf { it.isNotBlank() } ?: "استمتع بالمشاهدة على BLOFY PLAYER"
                 textSize = 17f
                 maxLines = 6
-                setTextColor(0xFFE0DCE5.toInt())
+                setTextColor(blend(Color.WHITE, theme.background, 0.14f))
                 gravity = Gravity.END
                 setLineSpacing(0f, 1.18f)
                 setPadding(0, 0, 0, dp(24))
@@ -108,7 +112,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 val percent = ((resumeMs * 100L) / durationMs).coerceIn(1, 99)
                 info.addView(TextView(this@MovieDetailsActivity).apply {
                     text = "متابعة المشاهدة  •  $percent%"
-                    textSize = 15f; setTextColor(0xFFBCA8D7.toInt()); gravity = Gravity.END
+                    textSize = 15f; setTextColor(blend(Color.WHITE, theme.accent, 0.28f)); gravity = Gravity.END
                     setPadding(0, 0, 0, dp(12))
                 })
             }
@@ -175,16 +179,30 @@ class MovieDetailsActivity : AppCompatActivity() {
         text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
         setOnFocusChangeListener { view, focused ->
             view.background = buttonBackground(focused)
-            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(100).start()
+            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(theme.motionMs).start()
         }
         setOnClickListener { action() }
     }
 
-    private fun cardBackground() = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xD9181225.toInt()); setStroke(dp(1), 0x66533B68) }
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat(); setColor(if (focused) 0xFF6934A0.toInt() else 0xD91A1429.toInt())
-        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x66503A64)
+    private fun cardBackground() = GradientDrawable().apply {
+        cornerRadius = dp(20).toFloat()
+        setColor(theme.surface)
+        setStroke(dp(1), blend(theme.surface, Color.WHITE, 0.14f))
     }
+
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = dp(16).toFloat()
+        setColor(if (focused) theme.accent else theme.surface)
+        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else blend(theme.surface, Color.WHITE, 0.14f))
+    }
+
+    private fun blend(a: Int, b: Int, ratio: Float): Int {
+        val r = (Color.red(a) * (1f - ratio) + Color.red(b) * ratio).toInt()
+        val g = (Color.green(a) * (1f - ratio) + Color.green(b) * ratio).toInt()
+        val bl = (Color.blue(a) * (1f - ratio) + Color.blue(b) * ratio).toInt()
+        return Color.rgb(r, g, bl)
+    }
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     companion object { const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_CONTENT_KEY = "content_key" }
