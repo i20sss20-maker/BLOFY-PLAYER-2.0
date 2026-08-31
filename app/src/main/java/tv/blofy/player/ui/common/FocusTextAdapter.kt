@@ -6,6 +6,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 
 class FocusTextAdapter<T>(
@@ -28,15 +29,33 @@ class FocusTextAdapter<T>(
     fun submit(newItems: List<T>) {
         val listOwnedFocus = attachedRecyclerView?.hasFocus() == true
         val previousKey = focusedKey
+        val oldItems = items.toList()
+        val nextItems = newItems.toList()
+        val keyOf = itemKey
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = oldItems.size
+            override fun getNewListSize(): Int = nextItems.size
+
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                val oldItem = oldItems[oldItemPosition]
+                val newItem = nextItems[newItemPosition]
+                return if (keyOf != null) keyOf(oldItem) == keyOf(newItem) else oldItem == newItem
+            }
+
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                oldItems[oldItemPosition] == nextItems[newItemPosition]
+        }, false)
+
         items.clear()
-        items.addAll(newItems)
+        items.addAll(nextItems)
         focusedPosition = when {
-            previousKey != null && itemKey != null -> items.indexOfFirst { itemKey.invoke(it) == previousKey }
+            previousKey != null && keyOf != null -> items.indexOfFirst { keyOf(it) == previousKey }
             focusedPosition != RecyclerView.NO_POSITION && items.isNotEmpty() -> focusedPosition.coerceIn(0, items.lastIndex)
             else -> RecyclerView.NO_POSITION
         }
+        if (focusedPosition < 0) focusedPosition = RecyclerView.NO_POSITION
         restorePending = listOwnedFocus && focusedPosition != RecyclerView.NO_POSITION
-        notifyDataSetChanged()
+        diff.dispatchUpdatesTo(this)
     }
 
     fun clearFocusMemory() {
@@ -73,11 +92,12 @@ class FocusTextAdapter<T>(
             background = background(false)
             setOnFocusChangeListener { v, focused ->
                 (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
+                v.animate().cancel()
                 v.animate()
-                    .scaleX(if (focused) 1.025f else 1f)
-                    .scaleY(if (focused) 1.025f else 1f)
-                    .translationZ(if (focused) 12f else 2f)
-                    .setDuration(110)
+                    .scaleX(if (focused) 1.02f else 1f)
+                    .scaleY(if (focused) 1.02f else 1f)
+                    .translationZ(if (focused) 10f else 2f)
+                    .setDuration(75)
                     .start()
                 v.background = background(focused)
                 if (focused) {
