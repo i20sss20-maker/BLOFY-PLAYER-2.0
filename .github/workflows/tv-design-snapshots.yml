@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   snapshots:
-    name: Android TV 1080p snapshots
+    name: Google TV 1080p snapshots
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -45,6 +45,7 @@ jobs:
           sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$sdkmanager" --licenses >/dev/null || true
           "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+          "$sdkmanager" --list | grep -E 'google-tv|android-tv' | head -40 || true
 
       - name: Enable KVM
         run: |
@@ -55,11 +56,11 @@ jobs:
       - name: Build debug and instrumentation APKs
         run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
 
-      - name: Run real Android TV UI and capture screenshots
+      - name: Run real TV UI and capture screenshots
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          target: android-tv
+          target: google-tv
           arch: x86_64
           profile: tv_1080p
           disable-animations: true
