@@ -19,6 +19,7 @@ env:
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
   EXPECTED_VERSION_CODE: "2000004"
   EXPECTED_VERSION_NAME: 2.0.0-rc03
+  EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
   MEDIA3_VERSION: "1.6.1"
   FFMPEG_VERSION: n6.0
   FFMPEG_DECODERS: ac3 eac3 dca truehd aac mp3 opus vorbis flac
@@ -45,23 +46,19 @@ jobs:
           gradle-version: "8.11.1"
 
       - name: Validate rc03 and signing inputs
-        id: release-meta
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
-          EXPECTED_CERT_SHA256: ${{ vars.BLOFY_ANDROID_CERT_SHA256 }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == "refs/heads/main" ]] || exit 1
-          for value in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD EXPECTED_CERT_SHA256; do
+          for value in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
           done
-          normalized="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:-' | tr '[:lower:]' '[:upper:]')"
-          [[ "$normalized" =~ ^[0-9A-F]{64}$ ]] || { echo "::error::Invalid certificate SHA-256"; exit 1; }
-          echo "expected_cert_sha256=$normalized" >> "$GITHUB_OUTPUT"
+          [[ "$EXPECTED_CERT_SHA256" =~ ^[0-9A-F]{64}$ ]] || { echo "::error::Invalid certificate SHA-256"; exit 1; }
           grep -Fq 'versionCode = 2000004' app/build.gradle.kts
           grep -Fq 'versionName = "2.0.0-rc03"' app/build.gradle.kts
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
@@ -88,7 +85,6 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
-          EXPECTED_CERT_SHA256: ${{ steps.release-meta.outputs.expected_cert_sha256 }}
         run: |
           set -euo pipefail
           umask 077
@@ -146,8 +142,6 @@ jobs:
 
       - name: Verify package, version, signature, alignment and FFmpeg ABIs
         shell: bash
-        env:
-          EXPECTED_CERT_SHA256: ${{ steps.release-meta.outputs.expected_cert_sha256 }}
         run: |
           set -euo pipefail
           mkdir -p release
