@@ -1,0 +1,93 @@
+name: BLOFY Activation CI
+
+on:
+  pull_request:
+    paths:
+      - 'services/activation/**'
+      - '.github/workflows/activation-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: blofy
+          POSTGRES_PASSWORD: blofy_test
+          POSTGRES_DB: blofy_activation
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U blofy -d blofy_activation"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: services/activation
+    env:
+      DATABASE_URL: postgresql://blofy:blofy_test@127.0.0.1:5432/blofy_activation
+      PGSSLMODE: disable
+      BLOFY_ADMIN_TOKEN: ci-test-admin-token-1234567890
+      BLOFY_TRIAL_DAYS: 7
+      PORT: 8080
+      BLOFY_SMOKE_BASE_URL: http://127.0.0.1:8080
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/activation/package.json
+      - run: npm install
+      - name: Syntax check
+        run: npm run check
+      - name: Start activation service
+        run: |
+          npm start > /tmp/blofy-activation.log 2>&1 &
+          echo $! > /tmp/blofy-activation.pid
+      - name: Wait for DB-aware health
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8080/health | grep -q '"database":"ready"'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/blofy-activation.log
+          exit 1
+      - name: Unified production smoke suite
+        run: node smoke.mjs
+      - name: Verify active expiry and reactivation lifecycle
+        run: |
+          curl --fail --silent -H 'content-type: application/json' \
+            -d '{"deviceId":"BLOFY-AB12-CD34","activationCode":"123456","appVersion":"ci","platform":"android"}' \
+            http://127.0.0.1:8080/api/v1/activation/check | grep -q '"status":"trial"'
+          curl --fail --silent -X PATCH \
+            -H 'authorization: Bearer ci-test-admin-token-1234567890' -H 'content-type: application/json' \
+            -d '{"status":"active","days":30}' \
+            http://127.0.0.1:8080/api/v1/admin/devices/BLOFY-AB12-CD34 | grep -q '"status":"active"'
+          curl --fail --silent -X PATCH \
+            -H 'authorization: Bearer ci-test-admin-token-1234567890' -H 'content-type: application/json' \
+            -d '{"status":"expired"}' \
+            http://127.0.0.1:8080/api/v1/admin/devices/BLOFY-AB12-CD34 | grep -q '"status":"expired"'
+          curl --fail --silent -X PATCH \
+            -H 'authorization: Bearer ci-test-admin-token-1234567890' -H 'content-type: application/json' \
+            -d '{"status":"active","days":365}' \
+            http://127.0.0.1:8080/api/v1/admin/devices/BLOFY-AB12-CD34 | grep -q '"status":"active"'
+      - name: Verify playback diagnostics ingestion and admin query
+        run: |
+          code=$(curl --silent --output /tmp/diag-accepted.json --write-out '%{http_code}' \
+            -H 'content-type: application/json' \
+            -d '{"deviceId":"BLOFY-AB12-CD34","activationCode":"123456","providerKey":"provider-ci","contentKind":"live","redactedUrl":"https://example.test/live/***/***/123.ts","ttffMs":842,"bufferingCount":2,"errorCode":"ERROR_CODE_IO_NETWORK_CONNECTION_FAILED","errorMessage":"ci-network-error","appVersion":"ci"}' \
+            http://127.0.0.1:8080/api/v1/diagnostics/playback)
+          test "$code" = "202"
+          curl --fail --silent -H 'authorization: Bearer ci-test-admin-token-1234567890' \
+            'http://127.0.0.1:8080/api/v1/admin/diagnostics?deviceId=BLOFY-AB12-CD34&providerKey=provider-ci&limit=10' > /tmp/diag-list.json
+          grep -q '"ttffMs":842' /tmp/diag-list.json
+          grep -q '"bufferingCount":2' /tmp/diag-list.json
+      - name: Dump service log on failure
+        if: failure()
+        run: cat /tmp/blofy-activation.log || true

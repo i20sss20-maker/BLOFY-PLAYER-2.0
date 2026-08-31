@@ -1,0 +1,58 @@
+CREATE TABLE IF NOT EXISTS devices (
+  device_id TEXT PRIMARY KEY,
+  activation_code TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('trial','active','expired','blocked')),
+  trial_started_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ,
+  last_app_version TEXT,
+  last_platform TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);
+CREATE INDEX IF NOT EXISTS idx_devices_expires_at ON devices(expires_at);
+
+CREATE TABLE IF NOT EXISTS playback_diagnostics (
+  id BIGSERIAL PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  provider_key TEXT NOT NULL,
+  content_kind TEXT NOT NULL,
+  redacted_url TEXT,
+  ttff_ms BIGINT,
+  buffering_count INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT,
+  error_message TEXT,
+  app_version TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_playback_diag_device_created ON playback_diagnostics(device_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_playback_diag_provider_created ON playback_diagnostics(provider_key, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS provider_profiles (
+  provider_key TEXT PRIMARY KEY,
+  live_format TEXT CHECK (live_format IN ('ts','m3u8')),
+  preferred_transport TEXT CHECK (preferred_transport IN ('cronet','http')),
+  preferred_engine TEXT CHECK (preferred_engine IN ('media3','vlc')),
+  allow_cross_protocol_redirects BOOLEAN,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS device_playlists (
+  id UUID PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  provider_type TEXT NOT NULL CHECK (provider_type IN ('xtream','m3u')),
+  base_url_enc TEXT NOT NULL,
+  username_enc TEXT,
+  password_enc TEXT,
+  active BOOLEAN NOT NULL DEFAULT FALSE,
+  revision BIGINT NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_playlists_device ON device_playlists(device_id, updated_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_device_playlists_one_active ON device_playlists(device_id) WHERE active = TRUE;

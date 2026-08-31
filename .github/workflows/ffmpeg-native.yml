@@ -1,0 +1,114 @@
+name: BLOFY FFmpeg Native
+
+on:
+  workflow_dispatch:
+    inputs:
+      decoders:
+        description: Space-separated FFmpeg audio decoder names
+        required: false
+        default: "ac3 eac3 dca truehd aac mp3 opus vorbis flac"
+  pull_request:
+    paths:
+      - '.github/workflows/ffmpeg-native.yml'
+      - 'tools/build_media3_ffmpeg.sh'
+      - 'app/build.gradle.kts'
+      - 'app/src/main/java/tv/blofy/player/core/playback/BlofyPlaybackSession.kt'
+
+permissions:
+  contents: read
+
+jobs:
+  build-ffmpeg-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Install Android native toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            "ndk;26.1.10909125" \
+            "cmake;3.22.1"
+          test -d "$ANDROID_HOME/ndk/26.1.10909125"
+          test -d "$ANDROID_HOME/cmake/3.22.1"
+          command -v ninja || sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Build Media3 1.6.1 FFmpeg decoder AAR
+        env:
+          MEDIA3_VERSION: "1.6.1"
+          FFMPEG_VERSION: "n6.0"
+          ANDROID_ABI: "21"
+          ENABLED_DECODERS: ${{ inputs.decoders || 'ac3 eac3 dca truehd aac mp3 opus vorbis flac' }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export NDK_PATH="$ANDROID_HOME/ndk/26.1.10909125"
+          export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"
+          test -d "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          chmod +x tools/build_media3_ffmpeg.sh
+          tools/build_media3_ffmpeg.sh
+
+      - name: Build BLOFY APK with FFmpeg
+        shell: bash
+        run: |
+          set -euxo pipefail
+          AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
+          test -s "$AAR"
+          gradle --no-daemon \
+            -PBLOFY_FFMPEG_AAR="$AAR" \
+            testDebugUnitTest lintDebug assembleDebug
+
+      - name: Verify FFmpeg is bundled in final APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          AAR="build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$AAR"
+          test -s "$APK"
+          unzip -l "$AAR" | grep -Eiq 'jni/.*/lib(ffmpeg|ffmpegJNI).*\.so|libffmpegJNI\.so'
+          unzip -l "$APK" | grep -Eiq 'lib/.*/lib(ffmpeg|ffmpegJNI).*\.so|libffmpegJNI\.so'
+          echo "FFmpeg native decoder verified inside Media3 AAR and BLOFY APK"
+          ls -lh "$AAR" "$APK"
+          sha256sum "$AAR" "$APK" | tee build/ffmpeg-native/final-artifacts.sha256
+          {
+            echo "variant=ffmpeg"
+            echo "commit=$GITHUB_SHA"
+            echo "run=$GITHUB_RUN_NUMBER"
+            echo "media3=1.6.1"
+            echo "ffmpeg=true"
+            echo "decoders=${{ inputs.decoders || 'ac3 eac3 dca truehd aac mp3 opus vorbis flac' }}"
+          } > build/ffmpeg-native/build-apk-info.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-2.0-ffmpeg-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            build/ffmpeg-native/final-artifacts.sha256
+            build/ffmpeg-native/build-apk-info.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: media3-ffmpeg-1.6.1-aar-${{ github.sha }}
+          path: |
+            build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar
+            build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar.sha256
+            build/ffmpeg-native/build-info.txt
+          if-no-files-found: error
+          retention-days: 30

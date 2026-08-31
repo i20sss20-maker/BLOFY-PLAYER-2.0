@@ -4,6 +4,23 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
+val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+val buildSha = providers.gradleProperty("BLOFY_BUILD_SHA")
+    .orElse(providers.environmentVariable("GITHUB_SHA"))
+    .orElse("local")
+    .get()
+    .trim()
+    .ifBlank { "local" }
+val buildShaEscaped = buildSha.replace("\\", "\\\\").replace("\"", "\\\"")
+val ffmpegAarPath = providers.gradleProperty("BLOFY_FFMPEG_AAR").orElse("").get().trim()
+val ffmpegAar = ffmpegAarPath.takeIf { it.isNotBlank() }?.let { file(it) }
+if (ffmpegAar != null) {
+    check(ffmpegAar.exists() && ffmpegAar.isFile) {
+        "BLOFY_FFMPEG_AAR points to a missing file: ${ffmpegAar.absolutePath}"
+    }
+}
+
 android {
     namespace = "tv.blofy.player"
     compileSdk = 35
@@ -14,6 +31,9 @@ android {
         targetSdk = 35
         versionCode = 2000001
         versionName = "2.0.0-alpha01"
+        buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
+        buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
+        buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
     }
 
     buildFeatures {
@@ -46,6 +66,9 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.6.1")
     implementation("androidx.media3:media3-ui:1.6.1")
     implementation("androidx.media3:media3-datasource-cronet:1.6.1")
+    implementation("androidx.media3:media3-database:1.6.1")
+    implementation("com.google.android.gms:play-services-cronet:18.1.0")
+    if (ffmpegAar != null) implementation(files(ffmpegAar))
 
     implementation("androidx.room:room-runtime:2.7.0")
     implementation("androidx.room:room-ktx:2.7.0")
@@ -54,6 +77,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.google.zxing:core:3.5.3")
 
     testImplementation("junit:junit:4.13.2")
 }

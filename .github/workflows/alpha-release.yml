@@ -1,0 +1,78 @@
+name: BLOFY Alpha Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      activation_base_url:
+        description: 'Production activation base URL, e.g. https://activate.example.com/'
+        required: true
+        type: string
+      build_label:
+        description: 'Artifact label'
+        required: false
+        default: 'alpha'
+        type: string
+
+jobs:
+  build-alpha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Validate activation endpoint
+        shell: bash
+        env:
+          ACTIVATION_URL: ${{ inputs.activation_base_url }}
+        run: |
+          set -euo pipefail
+          [[ "$ACTIVATION_URL" =~ ^https:// ]] || { echo 'Production activation URL must use HTTPS'; exit 1; }
+          curl --fail --silent --show-error --max-time 15 "${ACTIVATION_URL%/}/health" > /tmp/blofy-health.json
+          grep -q '"ok":true' /tmp/blofy-health.json
+          grep -q '"database":"ready"' /tmp/blofy-health.json
+      - name: Test lint and build production-configured Alpha
+        env:
+          ACTIVATION_URL: ${{ inputs.activation_base_url }}
+        run: |
+          gradle --no-daemon \
+            -PBLOFY_ACTIVATION_BASE_URL="$ACTIVATION_URL" \
+            testDebugUnitTest lintDebug assembleDebug
+      - name: Stamp Alpha build
+        shell: bash
+        env:
+          ACTIVATION_URL: ${{ inputs.activation_base_url }}
+          BUILD_LABEL: ${{ inputs.build_label }}
+        run: |
+          set -euxo pipefail
+          APK='app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          cp "$APK" "app/build/outputs/apk/debug/BLOFY-PLAYER-2.0-${BUILD_LABEL}.apk"
+          sha256sum "app/build/outputs/apk/debug/BLOFY-PLAYER-2.0-${BUILD_LABEL}.apk" | tee "app/build/outputs/apk/debug/BLOFY-PLAYER-2.0-${BUILD_LABEL}.apk.sha256"
+          {
+            echo "label=$BUILD_LABEL"
+            echo "commit=$GITHUB_SHA"
+            echo "run=$GITHUB_RUN_NUMBER"
+            echo "activation_origin=$(python - <<'PY'
+import os
+from urllib.parse import urlsplit
+u=urlsplit(os.environ['ACTIVATION_URL'])
+print(f'{u.scheme}://{u.netloc}')
+PY
+)"
+            echo "ffmpeg=false"
+          } > app/build/outputs/apk/debug/alpha-build-info.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-2.0-${{ inputs.build_label }}-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/BLOFY-PLAYER-2.0-${{ inputs.build_label }}.apk
+            app/build/outputs/apk/debug/BLOFY-PLAYER-2.0-${{ inputs.build_label }}.apk.sha256
+            app/build/outputs/apk/debug/alpha-build-info.txt
+          if-no-files-found: error
+          retention-days: 30

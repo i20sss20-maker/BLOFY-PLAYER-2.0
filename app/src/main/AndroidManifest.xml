@@ -10,9 +10,30 @@
     <application
         android:name=".BlofyApp"
         android:allowBackup="true"
+        android:banner="@drawable/blofy_tv_banner"
+        android:icon="@drawable/ic_blofy_app"
         android:label="BLOFY PLAYER"
         android:supportsRtl="true"
         android:theme="@style/Theme.Blofy">
+
+        <activity android:name=".ui.mobile.MobileContentActivity" android:exported="false" />
+        <activity android:name=".ui.catchup.CatchupActivity" android:exported="false" />
+        <activity android:name=".ui.details.SeriesDetailsActivity" android:exported="false" />
+        <activity android:name=".ui.details.MovieDetailsActivity" android:exported="false" />
+        <activity android:name=".ui.library.RecentChannelsActivity" android:exported="false" />
+        <activity android:name=".ui.library.LibraryActivity" android:exported="false" />
+        <activity android:name=".ui.search.SearchActivity" android:exported="false" />
+        <activity android:name=".ui.settings.SystemStatusActivity" android:exported="false" />
+        <activity android:name=".ui.settings.SettingsActivity" android:exported="false" />
+        <activity android:name=".ui.series.EpisodesActivity" android:exported="false" />
+        <activity android:name=".ui.browser.ContentBrowserActivity" android:exported="false" />
+        <activity android:name=".ui.playlist.ProviderManagerActivity" android:exported="false" />
+        <activity android:name=".ui.playlist.PlaylistActivity" android:exported="false" />
+
+        <activity
+            android:name=".ui.player.PlayerActivity"
+            android:exported="false"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize" />
 
         <activity
             android:name=".ui.home.HomeActivity"

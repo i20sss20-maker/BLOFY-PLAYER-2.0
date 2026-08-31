@@ -1,0 +1,1374 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#07070d" />
+  <meta name="description" content="BLOFY PLAYER device portal" />
+  <title>BLOFY PLAYER — بوابة الجهاز</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07070d;
+      --surface: rgba(18, 15, 29, .88);
+      --surface-solid: #12101d;
+      --surface-alt: #1b162a;
+      --surface-hover: #251d35;
+      --accent: #8b37ff;
+      --accent-2: #b16cff;
+      --accent-blue: #3421ff;
+      --accent-soft: rgba(139, 55, 255, .14);
+      --text: #ffffff;
+      --muted: #aaa4b7;
+      --line: rgba(184, 140, 255, .19);
+      --line-accent: rgba(164, 97, 255, .34);
+      --success: #52df9a;
+      --danger: #ff6b79;
+      --shadow: 0 28px 90px rgba(0, 0, 0, .45);
+      --radius-xl: 30px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+    }
+
+    * { box-sizing: border-box; }
+    html { min-height: 100%; background: var(--bg); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100svh;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 84% -20%, rgba(109, 32, 217, .28), transparent 44%),
+        linear-gradient(145deg, #07070d, #0b0911 52%, #09080f);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      opacity: .55;
+      background:
+        radial-gradient(circle at 88% 22%, rgba(147, 70, 255, .2), transparent 28rem),
+        radial-gradient(circle at 5% 88%, rgba(58, 77, 214, .12), transparent 26rem);
+    }
+
+    button, input, select { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 3px solid rgba(185, 140, 255, .65);
+      outline-offset: 2px;
+    }
+
+    .hidden { display: none !important; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .topbar {
+      width: min(1180px, calc(100% - 32px));
+      min-height: 68px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding-top: env(safe-area-inset-top);
+      border-bottom: 0;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text);
+      text-decoration: none;
+      direction: ltr;
+    }
+
+    .brand-logo {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      flex: 0 0 auto;
+      filter: drop-shadow(0 10px 24px rgba(131, 59, 255, .3));
+    }
+
+    .brand-copy { display: grid; line-height: 1; }
+    .brand-copy strong { font-size: 18px; letter-spacing: .08em; }
+    .brand-copy span {
+      margin-top: 5px;
+      color: #ad69ff;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .25em;
+    }
+
+    .language-control {
+      position: relative;
+      display: flex;
+      align-items: center;
+      min-width: 144px;
+      height: 46px;
+      padding-inline-start: 42px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(18, 15, 29, .88);
+      backdrop-filter: blur(18px);
+    }
+
+    .language-control svg {
+      position: absolute;
+      inset-inline-start: 15px;
+      width: 18px;
+      height: 18px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    .language-control select {
+      width: 100%;
+      height: 100%;
+      appearance: none;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      padding-inline-end: 30px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .language-control::after {
+      content: "";
+      position: absolute;
+      inset-inline-end: 16px;
+      width: 7px;
+      height: 7px;
+      border-inline-end: 2px solid var(--muted);
+      border-bottom: 2px solid var(--muted);
+      transform: rotate(45deg) translateY(-2px);
+      pointer-events: none;
+    }
+
+    .portal {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 58px 0 max(34px, env(safe-area-inset-bottom));
+    }
+
+    .login-layout {
+      min-height: calc(100svh - 184px);
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(400px, .92fr);
+      align-items: center;
+      gap: clamp(44px, 7vw, 96px);
+    }
+
+    .hero-panel { max-width: 630px; }
+
+    .eyebrow {
+      width: fit-content;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 13px;
+      border: 1px solid var(--line-accent);
+      border-radius: 999px;
+      background: rgba(113, 55, 182, .09);
+      color: #bd8dff;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .eyebrow-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 5px rgba(73, 217, 160, .1);
+    }
+
+    .hero-panel h1 {
+      margin: 26px 0 18px;
+      max-width: 620px;
+      font-size: clamp(46px, 6.2vw, 78px);
+      line-height: 1.08;
+      letter-spacing: -.055em;
+    }
+
+    .hero-panel h1 span {
+      display: block;
+      white-space: pre-line;
+      color: transparent;
+      background: linear-gradient(180deg, #ffffff 0%, #ffffff 42%, #d1a2ff 58%, #9a49ff 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    .hero-panel > p {
+      max-width: 570px;
+      margin: 0;
+      color: #b8b1c2;
+      font-size: 18px;
+      line-height: 1.8;
+    }
+
+    .flow-steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 34px;
+    }
+
+    .flow-step {
+      min-height: 0;
+      padding: 10px 16px;
+      border: 1px solid rgba(136, 80, 212, .22);
+      border-radius: 999px;
+      background: rgba(113, 55, 182, .09);
+    }
+
+    .step-number, .flow-step p { display: none; }
+
+    .flow-step strong { display: block; color: #ddd8ea; font-size: 12px; }
+    .flow-step strong::before { content: "✓ "; color: #c28cff; }
+    .flow-step p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .auth-card, .dashboard-panel, .editor-card {
+      border: 1px solid var(--line);
+      background: linear-gradient(155deg, rgba(27, 22, 42, .94), rgba(12, 10, 19, .93));
+      box-shadow: 0 28px 80px rgba(0, 0, 0, .32);
+      backdrop-filter: blur(18px);
+    }
+
+    .auth-card {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(24px, 4vw, 38px);
+      border-radius: var(--radius-xl);
+    }
+
+    .auth-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(151, 92, 255, .9), transparent);
+    }
+
+    .auth-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+
+    .device-illustration {
+      width: 66px;
+      height: 66px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 1px solid var(--line-accent);
+      padding: 5px;
+      border-radius: 15px;
+      background: linear-gradient(145deg, rgba(137, 56, 255, .18), rgba(69, 31, 145, .08));
+      color: #d9c6ff;
+      box-shadow: 0 14px 34px rgba(77, 50, 189, .24);
+    }
+
+    .device-illustration img { width: 100%; height: 100%; object-fit: contain; }
+    .auth-step {
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      display: none;
+    }
+
+    .auth-card h2 {
+      margin: 0;
+      font-size: clamp(25px, 3vw, 32px);
+      letter-spacing: -.035em;
+    }
+
+    [dir="rtl"] .hero-panel h1,
+    [dir="rtl"] .auth-card h2 { letter-spacing: 0; }
+
+    .auth-subtitle {
+      margin: 10px 0 28px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .field { margin-top: 18px; }
+    .field label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 2px 8px;
+      color: #d9d7e0;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .input-shell {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-shell svg {
+      position: absolute;
+      inset-inline-start: 17px;
+      width: 20px;
+      height: 20px;
+      color: #777382;
+      pointer-events: none;
+    }
+
+    input, select {
+      width: 100%;
+      min-width: 0;
+      height: 52px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #0b0911;
+      color: var(--text);
+      padding: 0 16px;
+      outline: 0;
+      transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+
+    .input-shell input { padding-inline-start: 18px; }
+    .input-shell svg { display: none; }
+    input:hover, select:hover { border-color: rgba(255,255,255,.16); }
+    input:focus, select:focus {
+      border-color: var(--accent);
+      background: #0e0b16;
+      box-shadow: 0 0 0 4px rgba(126, 44, 255, .12);
+    }
+
+    input::placeholder { color: #666270; }
+    #deviceId, #activationCode, #baseUrl, #username, #password {
+      direction: ltr;
+      text-align: left;
+    }
+    #activationCode {
+      text-align: center;
+      letter-spacing: .32em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .primary-button, .secondary, .danger {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      min-height: 48px;
+      border: 0;
+      border-radius: 15px;
+      color: var(--text);
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .18s ease, filter .18s ease, background .18s ease, border-color .18s ease;
+    }
+
+    .primary-button {
+      width: 100%;
+      min-height: 54px;
+      margin-top: 24px;
+      padding: 0 20px;
+      background: linear-gradient(110deg, #7524ef, #a84fff);
+      box-shadow: 0 13px 30px rgba(111, 35, 229, .28);
+    }
+
+    .primary-button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .primary-button:active, .secondary:active, .danger:active { transform: scale(.985); }
+    .primary-button:disabled { cursor: wait; opacity: .72; transform: none; }
+    .primary-button svg, .secondary svg, .danger svg { width: 18px; height: 18px; }
+    [dir="rtl"] #loginBtn svg { transform: scaleX(-1); }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,.36);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status {
+      min-height: 22px;
+      margin-top: 13px;
+      color: #cbb2ff;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .status.bad { color: #ff9da6; }
+    .status.good { color: var(--success); }
+
+    .secure-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      margin: 18px 2px 0;
+      color: #827e8c;
+      font-size: 11px;
+      line-height: 1.55;
+    }
+    .secure-note svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; }
+
+    .dashboard { padding-bottom: 28px; }
+    .dashboard-panel {
+      overflow: hidden;
+      border-radius: var(--radius-xl);
+    }
+
+    .dashboard-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 26px 28px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .dashboard-title-wrap h1 { margin: 0; font-size: clamp(26px, 4vw, 38px); }
+    .dashboard-title-wrap p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+
+    .device-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin-top: 12px;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(5, 5, 10, .45);
+      color: #d7d3df;
+      direction: ltr;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+    }
+
+    .online-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px rgba(73,217,160,.1); }
+
+    .actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .actions .primary-button { width: auto; min-height: 48px; margin: 0; padding: 0 18px; }
+    .secondary, .danger { padding: 0 16px; border: 1px solid var(--line); background: var(--surface-alt); }
+    .secondary:hover { background: var(--surface-hover); border-color: rgba(255,255,255,.16); }
+    .danger { border-color: rgba(255,107,121,.2); background: rgba(255,107,121,.1); color: #ffabb3; }
+    .danger:hover { background: rgba(255,107,121,.16); }
+
+    .playlist-content { padding: 20px 24px 26px; }
+    #playlistList { display: grid; gap: 12px; }
+
+    .playlist {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 18px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: rgba(8, 9, 26, .74);
+      transition: border-color .18s ease, background .18s ease;
+    }
+    .playlist:hover { border-color: rgba(126,44,255,.26); background: rgba(15, 12, 24, .72); }
+
+    .playlist-main { display: flex; align-items: center; gap: 15px; min-width: 0; }
+    .playlist-icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 1px solid var(--line-accent);
+      border-radius: 15px;
+      background: var(--accent-soft);
+      color: #d7c2ff;
+      font-size: 11px;
+      font-weight: 900;
+    }
+    .playlist-copy { min-width: 0; }
+    .playlist-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .playlist h3 { margin: 0; font-size: 16px; }
+    .playlist p {
+      margin: 7px 0 0;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      direction: ltr;
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,.035);
+      color: #bcb8c5;
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .badge.active { border-color: rgba(73,217,160,.2); background: rgba(73,217,160,.1); color: #8aefc7; }
+
+    .playlist .actions { flex-wrap: nowrap; }
+    .playlist .actions button { min-width: 46px; min-height: 44px; }
+
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: 330px;
+      padding: 40px 20px;
+      text-align: center;
+    }
+    .empty-icon {
+      width: 70px;
+      height: 70px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line-accent);
+      border-radius: 22px;
+      background: var(--accent-soft);
+      color: var(--accent-2);
+    }
+    .empty-icon svg { width: 30px; height: 30px; }
+    .empty h3 { margin: 20px 0 8px; font-size: 20px; }
+    .empty p { max-width: 380px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .empty .primary-button { width: auto; min-height: 48px; margin-top: 20px; }
+
+    .editor-card {
+      margin-top: 18px;
+      padding: 26px;
+      border-radius: var(--radius-xl);
+      scroll-margin-top: 18px;
+    }
+    .editor-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+    .editor-head h2 { margin: 0; font-size: 24px; }
+    .editor-head p { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .form-grid .field { margin: 0; }
+    .full { grid-column: 1 / -1; }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 58px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(5,5,10,.5);
+      cursor: pointer;
+    }
+    .toggle-row span { color: #d9d7e0; font-size: 13px; font-weight: 700; }
+    .toggle-row input {
+      width: 42px;
+      height: 24px;
+      appearance: none;
+      padding: 0;
+      border: 0;
+      border-radius: 999px;
+      background: #36333e;
+      cursor: pointer;
+      position: relative;
+      transition: background .2s ease;
+    }
+    .toggle-row input::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      inset-inline-start: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform .2s ease;
+    }
+    .toggle-row input:checked { background: var(--accent); }
+    .toggle-row input:checked::after { transform: translateX(18px); }
+    [dir="rtl"] .toggle-row input:checked::after { transform: translateX(-18px); }
+
+    .editor-actions { margin-top: 22px; }
+    .editor-actions .primary-button { width: auto; min-width: 150px; margin: 0; }
+
+    .legal {
+      max-width: 820px;
+      margin: 26px auto 0;
+      color: #716d79;
+      text-align: center;
+      font-size: 11px;
+      line-height: 1.7;
+    }
+
+    @media (max-width: 920px) {
+      .portal { padding-top: 40px; }
+      .login-layout { grid-template-columns: 1fr; gap: 34px; }
+      .hero-panel { order: 1; max-width: 720px; text-align: center; margin: 0 auto; }
+      .auth-card { order: 2; width: min(520px, 100%); margin: 0 auto; }
+      .hero-panel h1 { max-width: 720px; }
+      .hero-panel > p { margin-inline: auto; }
+      .eyebrow { margin-inline: auto; }
+    }
+
+    @media (max-width: 680px) {
+      .topbar, .portal { width: min(100% - 22px, 1180px); }
+      .topbar { min-height: 68px; }
+      .brand-logo { width: 42px; height: 42px; }
+      .brand-copy strong { font-size: 16px; }
+      .brand-copy span { font-size: 8px; }
+      .language-control { min-width: 124px; height: 42px; }
+      .portal { padding: 35px 0 max(24px, env(safe-area-inset-bottom)); }
+      .login-layout { min-height: auto; gap: 26px; }
+      .hero-panel h1 { margin: 20px 0 14px; font-size: 40px; }
+      .hero-panel > p { font-size: 15px; }
+      .flow-steps { justify-content: center; gap: 8px; margin-top: 24px; text-align: center; }
+      .flow-step { padding: 9px 13px; }
+      .auth-card { padding: 24px 18px; border-radius: 24px; }
+      .auth-head { margin-bottom: 22px; }
+      .dashboard-panel, .editor-card { border-radius: 24px; }
+      .dashboard-head { align-items: flex-start; flex-direction: column; padding: 22px 18px; }
+      .dashboard-head .actions { width: 100%; }
+      .dashboard-head .actions .primary-button { flex: 1; }
+      .playlist-content { padding: 14px; }
+      .playlist { grid-template-columns: 1fr; gap: 14px; padding: 15px; }
+      .playlist .actions { width: 100%; }
+      .playlist .actions button { flex: 1; }
+      .editor-card { padding: 22px 16px; }
+      .editor-head { align-items: flex-start; }
+      .form-grid { grid-template-columns: 1fr; }
+      .full { grid-column: auto; }
+      .editor-actions, .editor-actions .primary-button { width: 100%; }
+      .editor-actions .secondary { flex: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="BLOFY PLAYER">
+      <img class="brand-logo" src="/blofy-logo.png" alt="" />
+      <span class="brand-copy"><strong>BLOFY</strong><span>PLAYER</span></span>
+    </a>
+
+    <div class="language-control">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
+      <label class="sr-only" for="languageSelect" data-i18n="language">اللغة</label>
+      <select id="languageSelect" aria-label="اللغة" data-i18n-aria-label="language">
+        <option value="ar">العربية</option>
+        <option value="en">English</option>
+        <option value="fr">Français</option>
+        <option value="es">Español</option>
+        <option value="pt">Português</option>
+        <option value="de">Deutsch</option>
+        <option value="it">Italiano</option>
+        <option value="tr">Türkçe</option>
+        <option value="nl">Nederlands</option>
+        <option value="ru">Русский</option>
+        <option value="fa">فارسی</option>
+        <option value="ur">اردو</option>
+        <option value="hi">हिन्दी</option>
+        <option value="id">Bahasa Indonesia</option>
+        <option value="zh">中文</option>
+      </select>
+    </div>
+  </header>
+
+  <main class="portal">
+    <section id="loginView" class="login-layout">
+      <div class="hero-panel">
+        <div class="eyebrow"><span class="eyebrow-dot"></span><span data-i18n="portalBadge">بوابة الجهاز الآمنة</span></div>
+        <h1><span data-i18n="heroTitle">كل قوائمك في مكان واحد.</span></h1>
+        <p data-i18n="heroSubtitle">اربط جهاز BLOFY ثم أضف قوائم M3U أو Xtream من جوالك. ستظهر التغييرات على التطبيق تلقائيًا.</p>
+
+        <div class="flow-steps" aria-label="خطوات الإعداد" data-i18n-aria-label="setupSteps">
+          <article class="flow-step"><span class="step-number">01</span><strong data-i18n="stepOneTitle">افتح التطبيق</strong><p data-i18n="stepOneText">خذ رقم الجهاز والرمز من شاشة BLOFY.</p></article>
+          <article class="flow-step"><span class="step-number">02</span><strong data-i18n="stepTwoTitle">اربط الجهاز</strong><p data-i18n="stepTwoText">أدخل البيانات بأمان في النموذج.</p></article>
+          <article class="flow-step"><span class="step-number">03</span><strong data-i18n="stepThreeTitle">أضف قائمتك</strong><p data-i18n="stepThreeText">اختر M3U أو Xtream واحفظها.</p></article>
+        </div>
+      </div>
+
+      <section class="auth-card" id="loginCard" aria-labelledby="loginTitle">
+        <div class="auth-head">
+          <div class="device-illustration">
+            <img src="/blofy-logo.png" alt="" aria-hidden="true" />
+          </div>
+          <span class="auth-step" data-i18n="loginStep">STEP 1 / 2</span>
+        </div>
+        <h2 id="loginTitle" data-i18n="loginTitle">اربط جهازك</h2>
+        <p class="auth-subtitle" data-i18n="loginSubtitle">أدخل معرّف الجهاز ورمز الجهاز الظاهرين على شاشة التلفزيون بعد مسح الباركود.</p>
+
+        <form id="deviceForm" novalidate>
+          <div class="field">
+            <label for="deviceId" data-i18n="deviceIdLabel">معرّف الجهاز</label>
+            <div class="input-shell">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M8 9h8M8 13h5"></path></svg>
+              <input id="deviceId" autocomplete="off" spellcheck="false" autocapitalize="characters" data-i18n-placeholder="deviceIdPlaceholder" placeholder="BLOFY-66HL-GB09" required />
+            </div>
+          </div>
+          <div class="field">
+            <label for="activationCode" data-i18n="activationCodeLabel">رمز الجهاز</label>
+            <div class="input-shell">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+              <input id="activationCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" pattern="[0-9]{6}" data-i18n-placeholder="activationCodePlaceholder" placeholder="000000" required />
+            </div>
+          </div>
+          <button class="primary-button" id="loginBtn" type="submit">
+            <span data-i18n="loginButton">دخول وإدارة القوائم</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+          </button>
+          <div id="loginStatus" class="status" role="status" aria-live="polite"></div>
+        </form>
+
+        <div class="secure-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path><path d="m9 12 2 2 4-4"></path></svg>
+          <span data-i18n="secureNote">اتصال مشفّر. بيانات القوائم تحفظ بشكل آمن ولا يعرض BLOFY أي محتوى أو اشتراكات.</span>
+        </div>
+      </section>
+    </section>
+
+    <section id="app" class="dashboard hidden">
+      <div class="dashboard-panel">
+        <header class="dashboard-head">
+          <div class="dashboard-title-wrap">
+            <h1 data-i18n="playlistsTitle">قوائم التشغيل</h1>
+            <p data-i18n="playlistsSubtitle">أدر قوائم جهازك وسيقوم BLOFY بمزامنتها تلقائيًا.</p>
+            <div class="device-chip"><span class="online-dot"></span><span id="deviceLabel"></span></div>
+          </div>
+          <div class="actions">
+            <button class="primary-button" id="newBtn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+              <span data-i18n="addPlaylist">إضافة قائمة</span>
+            </button>
+            <button class="secondary" id="logoutBtn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"></path><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"></path></svg>
+              <span data-i18n="logout">خروج</span>
+            </button>
+          </div>
+        </header>
+        <div class="playlist-content">
+          <div id="listStatus" class="status" role="status" aria-live="polite"></div>
+          <div id="playlistList"></div>
+        </div>
+      </div>
+
+      <section class="editor-card hidden" id="editor" aria-labelledby="editorTitle">
+        <div class="editor-head">
+          <div>
+            <h2 id="editorTitle">إضافة قائمة</h2>
+            <p data-i18n="editorSubtitle">أدخل البيانات التي حصلت عليها من مزود الخدمة.</p>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="name" data-i18n="playlistNameLabel">اسم القائمة</label>
+            <input id="name" data-i18n-placeholder="playlistNamePlaceholder" placeholder="قائمتي" />
+          </div>
+          <div class="field">
+            <label for="providerType" data-i18n="playlistTypeLabel">نوع القائمة</label>
+            <select id="providerType">
+              <option value="xtream" data-i18n="xtreamType">Xtream Codes</option>
+              <option value="m3u" data-i18n="m3uType">M3U / M3U8</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label for="baseUrl" data-i18n="serverUrlLabel">رابط السيرفر أو القائمة</label>
+            <input id="baseUrl" inputmode="url" autocomplete="url" data-i18n-placeholder="serverUrlPlaceholder" placeholder="https://example.com" />
+          </div>
+          <div class="field xtream">
+            <label for="username" data-i18n="usernameLabel">اسم المستخدم</label>
+            <input id="username" autocomplete="off" />
+          </div>
+          <div class="field xtream">
+            <label for="password" data-i18n="passwordLabel">كلمة المرور</label>
+            <input id="password" type="password" autocomplete="off" />
+          </div>
+          <label class="toggle-row full" for="active">
+            <span data-i18n="makeActive">اجعلها القائمة النشطة</span>
+            <input id="active" type="checkbox" checked />
+          </label>
+        </div>
+        <div class="actions editor-actions">
+          <button class="primary-button" id="saveBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 4h12l2 2v14H5V4Z"></path><path d="M8 4v6h8V4M8 20v-6h8v6"></path></svg>
+            <span data-i18n="save">حفظ القائمة</span>
+          </button>
+          <button class="secondary" id="cancelBtn" type="button" data-i18n="cancel">إلغاء</button>
+        </div>
+        <div id="editorStatus" class="status" role="status" aria-live="polite"></div>
+      </section>
+    </section>
+
+    <p class="legal" data-i18n="footerDisclaimer">BLOFY PLAYER مشغل وسائط عام ولا يوفر أو يبيع قوائم تشغيل أو اشتراكات أو محتوى. استخدم فقط المصادر التي تملك حق الوصول إليها.</p>
+  </main>
+
+  <script>
+    const translations = {
+      ar: {
+        pageTitle: "BLOFY PLAYER — إدارة الجهاز", language: "اللغة", setupSteps: "مزايا إدارة الجهاز", portalBadge: "إدارة الجهاز بأمان",
+        heroTitle: "كل قوائمك\nفي مكان واحد.", heroSubtitle: "سجّل برقم الجهاز ورمز الربط الظاهر في BLOFY PLAYER، ثم أضف قوائمك وعدّلها في أي وقت.",
+        stepOneTitle: "حفظ مشفّر", stepOneText: "خذ رقم الجهاز والرمز من شاشة BLOFY.", stepTwoTitle: "مزامنة تلقائية", stepTwoText: "أدخل البيانات بأمان في النموذج.", stepThreeTitle: "أكثر من قائمة", stepThreeText: "اختر M3U أو Xtream واحفظها.",
+        loginStep: "الخطوة ١ من ٢", loginTitle: "تسجيل دخول الجهاز", loginSubtitle: "تجد الرقم والرمز في شاشة قوائم التشغيل داخل التطبيق.",
+        deviceIdLabel: "رقم الجهاز", deviceIdPlaceholder: "BLOFY-66AF-CB09", activationCodeLabel: "رمز الربط", activationCodePlaceholder: "000000",
+        loginButton: "دخول وإدارة القوائم", checking: "جاري التحقق...", secureNote: "اتصال مشفّر. بيانات القوائم تحفظ بشكل آمن ولا يعرض BLOFY أي محتوى أو اشتراكات.",
+        playlistsTitle: "قوائم التشغيل", playlistsSubtitle: "أدر قوائم جهازك وسيقوم BLOFY بمزامنتها تلقائيًا.", addPlaylist: "إضافة قائمة", logout: "خروج",
+        loadingPlaylists: "جاري تحميل القوائم...", emptyTitle: "لا توجد قوائم بعد", emptyText: "أضف أول قائمة M3U أو Xtream وسيقوم التطبيق بمزامنتها مع هذا الجهاز.", addFirst: "إضافة أول قائمة",
+        active: "نشطة", edit: "تعديل", delete: "حذف", deleteConfirm: "حذف {name}؟",
+        editorAddTitle: "إضافة قائمة", editorEditTitle: "تعديل القائمة", editorSubtitle: "أدخل البيانات التي حصلت عليها من مزود الخدمة.",
+        playlistNameLabel: "اسم القائمة", playlistNamePlaceholder: "قائمتي", playlistTypeLabel: "نوع القائمة", xtreamType: "Xtream Codes", m3uType: "M3U / M3U8",
+        serverUrlLabel: "رابط السيرفر أو القائمة", serverUrlPlaceholder: "https://example.com", usernameLabel: "اسم المستخدم", passwordLabel: "كلمة المرور",
+        makeActive: "اجعلها القائمة النشطة", save: "حفظ القائمة", cancel: "إلغاء", saving: "جاري الحفظ...", saved: "تم حفظ القائمة", saveFailed: "تعذر الحفظ: {error}",
+        deleteFailed: "تعذر الحذف: {error}", loginFailed: "تعذر الدخول: {error}", footerDisclaimer: "BLOFY PLAYER مشغل وسائط عام ولا يوفر أو يبيع قوائم تشغيل أو اشتراكات أو محتوى. استخدم فقط المصادر التي تملك حق الوصول إليها.",
+        unauthorized_device: "بيانات الجهاز غير صحيحة", invalid_playlist: "تحقق من نوع القائمة والرابط", xtream_credentials_required: "اسم المستخدم وكلمة المرور مطلوبان لـ Xtream", playlist_not_found: "القائمة غير موجودة", internal_error: "حدث خطأ غير متوقع", network_error: "تعذر الاتصال. تحقق من الإنترنت وحاول مجددًا", required_fields: "أدخل معرّف الجهاز ورمز الجهاز كاملين"
+      },
+      en: {
+        pageTitle: "BLOFY PLAYER — Device Portal", language: "Language", setupSteps: "Setup steps", portalBadge: "Secure device portal",
+        heroTitle: "All your playlists. One place.", heroSubtitle: "Connect your BLOFY device, then add M3U or Xtream playlists from your phone. Changes sync to the app automatically.",
+        stepOneTitle: "Encrypted storage", stepOneText: "Find the device ID and code on BLOFY.", stepTwoTitle: "Automatic sync", stepTwoText: "Enter both values securely.", stepThreeTitle: "Multiple playlists", stepThreeText: "Choose M3U or Xtream and save.",
+        loginStep: "STEP 1 / 2", loginTitle: "Connect your device", loginSubtitle: "Enter the Device ID and Device Key shown on your TV after scanning the QR code.",
+        deviceIdLabel: "Device ID", deviceIdPlaceholder: "BLOFY-66HL-GB09", activationCodeLabel: "Device Key", activationCodePlaceholder: "000000",
+        loginButton: "Sign in & manage playlists", checking: "Checking device...", secureNote: "Encrypted connection. Playlist details are stored securely. BLOFY does not provide content or subscriptions.",
+        playlistsTitle: "Your playlists", playlistsSubtitle: "Manage this device and BLOFY will sync changes automatically.", addPlaylist: "Add playlist", logout: "Log out",
+        loadingPlaylists: "Loading playlists...", emptyTitle: "No playlists yet", emptyText: "Add your first M3U or Xtream playlist and the app will sync it to this device.", addFirst: "Add first playlist",
+        active: "Active", edit: "Edit", delete: "Delete", deleteConfirm: "Delete {name}?",
+        editorAddTitle: "Add playlist", editorEditTitle: "Edit playlist", editorSubtitle: "Enter the details supplied by your service provider.",
+        playlistNameLabel: "Playlist name", playlistNamePlaceholder: "My playlist", playlistTypeLabel: "Playlist type", xtreamType: "Xtream Codes", m3uType: "M3U / M3U8",
+        serverUrlLabel: "Server or playlist URL", serverUrlPlaceholder: "https://example.com", usernameLabel: "Username", passwordLabel: "Password",
+        makeActive: "Make this the active playlist", save: "Save playlist", cancel: "Cancel", saving: "Saving...", saved: "Playlist saved", saveFailed: "Could not save: {error}",
+        deleteFailed: "Could not delete: {error}", loginFailed: "Could not sign in: {error}", footerDisclaimer: "BLOFY PLAYER is a general media player. It does not provide or sell playlists, subscriptions, or content. Use only sources you are authorized to access.",
+        unauthorized_device: "The device details are incorrect", invalid_playlist: "Check the playlist type and URL", xtream_credentials_required: "Username and password are required for Xtream", playlist_not_found: "Playlist not found", internal_error: "An unexpected error occurred", network_error: "Check your internet connection and try again", required_fields: "Enter the complete Device ID and Device Key"
+      },
+      fr: {
+        pageTitle: "BLOFY PLAYER — Portail de l’appareil", language: "Langue", portalBadge: "Portail sécurisé de l’appareil",
+        loginTitle: "Connectez votre appareil", deviceIdLabel: "Identifiant de l’appareil", activationCodeLabel: "Clé de l’appareil", loginButton: "Continuer", checking: "Vérification…",
+        playlistsTitle: "Mes playlists", addPlaylist: "Ajouter une playlist", logout: "Se déconnecter", active: "Active", edit: "Modifier", delete: "Supprimer", deleteConfirm: "Supprimer « {name} » ? Cette action est irréversible.",
+        editorAddTitle: "Ajouter une playlist", editorEditTitle: "Modifier la playlist", playlistNameLabel: "Nom de la playlist", playlistTypeLabel: "Type de playlist", serverUrlLabel: "URL du serveur ou de la playlist",
+        usernameLabel: "Nom d’utilisateur", passwordLabel: "Mot de passe", makeActive: "Définir comme playlist active", save: "Enregistrer", cancel: "Annuler", saving: "Enregistrement…", saved: "Enregistré",
+        saveFailed: "Échec de l’enregistrement : {error}", deleteFailed: "Échec de la suppression : {error}", loginFailed: "Connexion impossible : {error}",
+        unauthorized_device: "L’identifiant ou la clé de l’appareil est incorrect.", invalid_playlist: "Vérifiez les informations et l’URL de la playlist.", xtream_credentials_required: "L’identifiant et le mot de passe Xtream sont requis.", playlist_not_found: "Playlist introuvable.", internal_error: "Une erreur s’est produite. Réessayez."
+      },
+      es: {
+        pageTitle: "BLOFY PLAYER — Portal del dispositivo", language: "Idioma", portalBadge: "Portal seguro del dispositivo",
+        loginTitle: "Conecta tu dispositivo", deviceIdLabel: "ID del dispositivo", activationCodeLabel: "Clave del dispositivo", loginButton: "Continuar", checking: "Comprobando…",
+        playlistsTitle: "Mis listas", addPlaylist: "Añadir lista", logout: "Cerrar sesión", active: "Activa", edit: "Editar", delete: "Eliminar", deleteConfirm: "¿Eliminar «{name}»? Esta acción no se puede deshacer.",
+        editorAddTitle: "Añadir lista", editorEditTitle: "Editar lista", playlistNameLabel: "Nombre de la lista", playlistTypeLabel: "Tipo de lista", serverUrlLabel: "URL del servidor o de la lista",
+        usernameLabel: "Usuario", passwordLabel: "Contraseña", makeActive: "Establecer como lista activa", save: "Guardar", cancel: "Cancelar", saving: "Guardando…", saved: "Guardado",
+        saveFailed: "No se pudo guardar: {error}", deleteFailed: "No se pudo eliminar: {error}", loginFailed: "No se pudo conectar: {error}",
+        unauthorized_device: "El ID o la clave del dispositivo no son correctos.", invalid_playlist: "Comprueba los datos y la URL de la lista.", xtream_credentials_required: "Se requieren el usuario y la contraseña de Xtream.", playlist_not_found: "No se encontró la lista.", internal_error: "Se produjo un error. Inténtalo de nuevo."
+      },
+      pt: {
+        pageTitle: "BLOFY PLAYER — Portal do dispositivo", language: "Idioma", portalBadge: "Portal seguro do dispositivo",
+        loginTitle: "Conecte seu dispositivo", deviceIdLabel: "ID do dispositivo", activationCodeLabel: "Chave do dispositivo", loginButton: "Continuar", checking: "Verificando…",
+        playlistsTitle: "Minhas playlists", addPlaylist: "Adicionar playlist", logout: "Sair", active: "Ativa", edit: "Editar", delete: "Excluir", deleteConfirm: "Excluir “{name}”? Esta ação não pode ser desfeita.",
+        editorAddTitle: "Adicionar playlist", editorEditTitle: "Editar playlist", playlistNameLabel: "Nome da playlist", playlistTypeLabel: "Tipo de playlist", serverUrlLabel: "URL do servidor ou da playlist",
+        usernameLabel: "Nome de usuário", passwordLabel: "Senha", makeActive: "Definir como playlist ativa", save: "Salvar", cancel: "Cancelar", saving: "Salvando…", saved: "Salvo",
+        saveFailed: "Não foi possível salvar: {error}", deleteFailed: "Não foi possível excluir: {error}", loginFailed: "Não foi possível conectar: {error}",
+        unauthorized_device: "O ID ou a chave do dispositivo estão incorretos.", invalid_playlist: "Verifique os dados e a URL da playlist.", xtream_credentials_required: "O nome de usuário e a senha do Xtream são obrigatórios.", playlist_not_found: "Playlist não encontrada.", internal_error: "Ocorreu um erro. Tente novamente."
+      },
+      de: {
+        pageTitle: "BLOFY PLAYER — Geräteportal", language: "Sprache", portalBadge: "Sicheres Geräteportal",
+        loginTitle: "Gerät verbinden", deviceIdLabel: "Geräte-ID", activationCodeLabel: "Geräteschlüssel", loginButton: "Fortfahren", checking: "Wird geprüft…",
+        playlistsTitle: "Meine Playlists", addPlaylist: "Playlist hinzufügen", logout: "Abmelden", active: "Aktiv", edit: "Bearbeiten", delete: "Löschen", deleteConfirm: "„{name}“ löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+        editorAddTitle: "Playlist hinzufügen", editorEditTitle: "Playlist bearbeiten", playlistNameLabel: "Playlist-Name", playlistTypeLabel: "Playlist-Typ", serverUrlLabel: "Server- oder Playlist-URL",
+        usernameLabel: "Benutzername", passwordLabel: "Passwort", makeActive: "Als aktive Playlist festlegen", save: "Speichern", cancel: "Abbrechen", saving: "Wird gespeichert…", saved: "Gespeichert",
+        saveFailed: "Speichern fehlgeschlagen: {error}", deleteFailed: "Löschen fehlgeschlagen: {error}", loginFailed: "Verbindung fehlgeschlagen: {error}",
+        unauthorized_device: "Geräte-ID oder Geräteschlüssel ist falsch.", invalid_playlist: "Playlist-Daten und URL prüfen.", xtream_credentials_required: "Xtream-Benutzername und -Passwort sind erforderlich.", playlist_not_found: "Playlist nicht gefunden.", internal_error: "Ein Fehler ist aufgetreten. Erneut versuchen."
+      },
+      it: {
+        pageTitle: "BLOFY PLAYER — Portale del dispositivo", language: "Lingua", portalBadge: "Portale sicuro del dispositivo",
+        loginTitle: "Collega il dispositivo", deviceIdLabel: "ID dispositivo", activationCodeLabel: "Chiave dispositivo", loginButton: "Continua", checking: "Verifica in corso…",
+        playlistsTitle: "Le mie playlist", addPlaylist: "Aggiungi playlist", logout: "Esci", active: "Attiva", edit: "Modifica", delete: "Elimina", deleteConfirm: "Eliminare “{name}”? Questa azione non può essere annullata.",
+        editorAddTitle: "Aggiungi playlist", editorEditTitle: "Modifica playlist", playlistNameLabel: "Nome della playlist", playlistTypeLabel: "Tipo di playlist", serverUrlLabel: "URL del server o della playlist",
+        usernameLabel: "Nome utente", passwordLabel: "Password", makeActive: "Imposta come playlist attiva", save: "Salva", cancel: "Annulla", saving: "Salvataggio…", saved: "Salvato",
+        saveFailed: "Impossibile salvare: {error}", deleteFailed: "Impossibile eliminare: {error}", loginFailed: "Impossibile connettersi: {error}",
+        unauthorized_device: "L’ID o la chiave del dispositivo non sono corretti.", invalid_playlist: "Controlla i dati e l’URL della playlist.", xtream_credentials_required: "Sono richiesti nome utente e password Xtream.", playlist_not_found: "Playlist non trovata.", internal_error: "Si è verificato un errore. Riprova."
+      },
+      tr: {
+        pageTitle: "BLOFY PLAYER — Cihaz Portalı", language: "Dil", portalBadge: "Güvenli cihaz portalı",
+        loginTitle: "Cihazınızı bağlayın", deviceIdLabel: "Cihaz kimliği", activationCodeLabel: "Cihaz anahtarı", loginButton: "Devam et", checking: "Kontrol ediliyor…",
+        playlistsTitle: "Oynatma listelerim", addPlaylist: "Oynatma listesi ekle", logout: "Çıkış yap", active: "Etkin", edit: "Düzenle", delete: "Sil", deleteConfirm: "“{name}” silinsin mi? Bu işlem geri alınamaz.",
+        editorAddTitle: "Oynatma listesi ekle", editorEditTitle: "Oynatma listesini düzenle", playlistNameLabel: "Oynatma listesi adı", playlistTypeLabel: "Oynatma listesi türü", serverUrlLabel: "Sunucu veya oynatma listesi URL’si",
+        usernameLabel: "Kullanıcı adı", passwordLabel: "Parola", makeActive: "Etkin oynatma listesi yap", save: "Kaydet", cancel: "İptal", saving: "Kaydediliyor…", saved: "Kaydedildi",
+        saveFailed: "Kaydedilemedi: {error}", deleteFailed: "Silinemedi: {error}", loginFailed: "Bağlantı kurulamadı: {error}",
+        unauthorized_device: "Cihaz kimliği veya cihaz anahtarı yanlış.", invalid_playlist: "Oynatma listesi bilgilerini ve URL’yi kontrol edin.", xtream_credentials_required: "Xtream kullanıcı adı ve parolası gereklidir.", playlist_not_found: "Oynatma listesi bulunamadı.", internal_error: "Bir hata oluştu. Tekrar deneyin."
+      },
+      nl: {
+        pageTitle: "BLOFY PLAYER — Apparaatportaal", language: "Taal", portalBadge: "Veilig apparaatportaal",
+        loginTitle: "Verbind je apparaat", deviceIdLabel: "Apparaat-ID", activationCodeLabel: "Apparaatsleutel", loginButton: "Doorgaan", checking: "Controleren…",
+        playlistsTitle: "Mijn afspeellijsten", addPlaylist: "Afspeellijst toevoegen", logout: "Uitloggen", active: "Actief", edit: "Bewerken", delete: "Verwijderen", deleteConfirm: "‘{name}’ verwijderen? Dit kan niet ongedaan worden gemaakt.",
+        editorAddTitle: "Afspeellijst toevoegen", editorEditTitle: "Afspeellijst bewerken", playlistNameLabel: "Naam van afspeellijst", playlistTypeLabel: "Type afspeellijst", serverUrlLabel: "Server- of afspeellijst-URL",
+        usernameLabel: "Gebruikersnaam", passwordLabel: "Wachtwoord", makeActive: "Instellen als actieve afspeellijst", save: "Opslaan", cancel: "Annuleren", saving: "Opslaan…", saved: "Opgeslagen",
+        saveFailed: "Opslaan mislukt: {error}", deleteFailed: "Verwijderen mislukt: {error}", loginFailed: "Kan geen verbinding maken: {error}",
+        unauthorized_device: "De apparaat-ID of apparaatsleutel is onjuist.", invalid_playlist: "Controleer de afspeellijstgegevens en URL.", xtream_credentials_required: "Xtream-gebruikersnaam en -wachtwoord zijn vereist.", playlist_not_found: "Afspeellijst niet gevonden.", internal_error: "Er is iets misgegaan. Probeer opnieuw."
+      },
+      ru: {
+        pageTitle: "BLOFY PLAYER — Портал устройства", language: "Язык", portalBadge: "Безопасный портал устройства",
+        loginTitle: "Подключите устройство", deviceIdLabel: "Идентификатор устройства", activationCodeLabel: "Ключ устройства", loginButton: "Продолжить", checking: "Проверка…",
+        playlistsTitle: "Мои плейлисты", addPlaylist: "Добавить плейлист", logout: "Выйти", active: "Активный", edit: "Изменить", delete: "Удалить", deleteConfirm: "Удалить «{name}»? Это действие нельзя отменить.",
+        editorAddTitle: "Добавить плейлист", editorEditTitle: "Изменить плейлист", playlistNameLabel: "Название плейлиста", playlistTypeLabel: "Тип плейлиста", serverUrlLabel: "URL сервера или плейлиста",
+        usernameLabel: "Имя пользователя", passwordLabel: "Пароль", makeActive: "Сделать активным", save: "Сохранить", cancel: "Отмена", saving: "Сохранение…", saved: "Сохранено",
+        saveFailed: "Не удалось сохранить: {error}", deleteFailed: "Не удалось удалить: {error}", loginFailed: "Не удалось подключиться: {error}",
+        unauthorized_device: "Идентификатор или ключ устройства неверен.", invalid_playlist: "Проверьте данные и URL плейлиста.", xtream_credentials_required: "Требуются имя пользователя и пароль Xtream.", playlist_not_found: "Плейлист не найден.", internal_error: "Произошла ошибка. Повторите попытку."
+      },
+      fa: {
+        pageTitle: "BLOFY PLAYER — پرتال دستگاه", language: "زبان", portalBadge: "پرتال امن دستگاه",
+        loginTitle: "دستگاه خود را متصل کنید", deviceIdLabel: "شناسه دستگاه", activationCodeLabel: "کلید دستگاه", loginButton: "ادامه", checking: "در حال بررسی…",
+        playlistsTitle: "فهرست‌های پخش", addPlaylist: "افزودن فهرست پخش", logout: "خروج", active: "فعال", edit: "ویرایش", delete: "حذف", deleteConfirm: "آیا «{name}» حذف شود؟ این کار قابل بازگشت نیست.",
+        editorAddTitle: "افزودن فهرست پخش", editorEditTitle: "ویرایش فهرست پخش", playlistNameLabel: "نام فهرست", playlistTypeLabel: "نوع فهرست", serverUrlLabel: "نشانی سرور یا فهرست پخش",
+        usernameLabel: "نام کاربری", passwordLabel: "گذرواژه", makeActive: "فعال‌کردن این فهرست", save: "ذخیره", cancel: "لغو", saving: "در حال ذخیره…", saved: "ذخیره شد",
+        saveFailed: "ذخیره ناموفق بود: {error}", deleteFailed: "حذف ناموفق بود: {error}", loginFailed: "ورود ناموفق بود: {error}",
+        unauthorized_device: "شناسه یا کلید دستگاه صحیح نیست.", invalid_playlist: "اطلاعات فهرست پخش معتبر نیست. نشانی را بررسی کنید.", xtream_credentials_required: "نام کاربری و گذرواژه Xtream الزامی است.", playlist_not_found: "فهرست پخش پیدا نشد.", internal_error: "خطایی رخ داد. دوباره تلاش کنید."
+      },
+      ur: {
+        pageTitle: "BLOFY PLAYER — ڈیوائس پورٹل", language: "زبان", portalBadge: "محفوظ ڈیوائس پورٹل",
+        loginTitle: "اپنا ڈیوائس منسلک کریں", deviceIdLabel: "ڈیوائس آئی ڈی", activationCodeLabel: "ڈیوائس کی", loginButton: "جاری رکھیں", checking: "تصدیق ہو رہی ہے…",
+        playlistsTitle: "پلے لسٹس", addPlaylist: "پلے لسٹ شامل کریں", logout: "لاگ آؤٹ", active: "فعال", edit: "ترمیم", delete: "حذف کریں", deleteConfirm: "کیا “{name}” حذف کریں؟ یہ عمل واپس نہیں ہو سکتا۔",
+        editorAddTitle: "پلے لسٹ شامل کریں", editorEditTitle: "پلے لسٹ میں ترمیم", playlistNameLabel: "پلے لسٹ کا نام", playlistTypeLabel: "پلے لسٹ کی قسم", serverUrlLabel: "سرور یا پلے لسٹ URL",
+        usernameLabel: "صارف نام", passwordLabel: "پاس ورڈ", makeActive: "اس پلے لسٹ کو فعال کریں", save: "محفوظ کریں", cancel: "منسوخ", saving: "محفوظ ہو رہا ہے…", saved: "محفوظ ہو گیا",
+        saveFailed: "محفوظ نہیں ہو سکا: {error}", deleteFailed: "حذف نہیں ہو سکا: {error}", loginFailed: "سائن اِن نہیں ہو سکا: {error}",
+        unauthorized_device: "ڈیوائس آئی ڈی یا ڈیوائس کی درست نہیں ہے۔", invalid_playlist: "پلے لسٹ کی معلومات درست نہیں ہیں۔ لنک چیک کریں۔", xtream_credentials_required: "Xtream کے لیے صارف نام اور پاس ورڈ ضروری ہیں۔", playlist_not_found: "پلے لسٹ نہیں ملی۔", internal_error: "خرابی پیش آئی۔ دوبارہ کوشش کریں۔"
+      },
+      hi: {
+        pageTitle: "BLOFY PLAYER — डिवाइस पोर्टल", language: "भाषा", portalBadge: "सुरक्षित डिवाइस पोर्टल",
+        loginTitle: "अपना डिवाइस कनेक्ट करें", deviceIdLabel: "डिवाइस आईडी", activationCodeLabel: "डिवाइस कुंजी", loginButton: "जारी रखें", checking: "जाँच हो रही है…",
+        playlistsTitle: "मेरी प्लेलिस्ट", addPlaylist: "प्लेलिस्ट जोड़ें", logout: "लॉग आउट", active: "सक्रिय", edit: "संपादित करें", delete: "हटाएँ", deleteConfirm: "“{name}” हटाएँ? इसे वापस नहीं किया जा सकता।",
+        editorAddTitle: "प्लेलिस्ट जोड़ें", editorEditTitle: "प्लेलिस्ट संपादित करें", playlistNameLabel: "प्लेलिस्ट का नाम", playlistTypeLabel: "प्लेलिस्ट का प्रकार", serverUrlLabel: "सर्वर या प्लेलिस्ट URL",
+        usernameLabel: "यूज़रनेम", passwordLabel: "पासवर्ड", makeActive: "सक्रिय प्लेलिस्ट बनाएँ", save: "सहेजें", cancel: "रद्द करें", saving: "सहेजा जा रहा है…", saved: "सहेजा गया",
+        saveFailed: "सहेजा नहीं जा सका: {error}", deleteFailed: "हटाया नहीं जा सका: {error}", loginFailed: "लॉग इन नहीं हो सका: {error}",
+        unauthorized_device: "डिवाइस आईडी या डिवाइस कुंजी गलत है।", invalid_playlist: "प्लेलिस्ट की जानकारी और URL जाँचें।", xtream_credentials_required: "Xtream Codes के लिए यूज़रनेम और पासवर्ड आवश्यक हैं।", playlist_not_found: "प्लेलिस्ट नहीं मिली।", internal_error: "कुछ गलत हुआ। फिर से कोशिश करें।"
+      },
+      id: {
+        pageTitle: "BLOFY PLAYER — Portal perangkat", language: "Bahasa", portalBadge: "Portal perangkat aman",
+        loginTitle: "Hubungkan perangkat Anda", deviceIdLabel: "ID perangkat", activationCodeLabel: "Kunci perangkat", loginButton: "Lanjutkan", checking: "Memverifikasi…",
+        playlistsTitle: "Daftar putar saya", addPlaylist: "Tambah daftar putar", logout: "Keluar", active: "Aktif", edit: "Edit", delete: "Hapus", deleteConfirm: "Hapus “{name}”? Tindakan ini tidak dapat dibatalkan.",
+        editorAddTitle: "Tambah daftar putar", editorEditTitle: "Edit daftar putar", playlistNameLabel: "Nama daftar putar", playlistTypeLabel: "Jenis daftar putar", serverUrlLabel: "URL server atau daftar putar",
+        usernameLabel: "Nama pengguna", passwordLabel: "Kata sandi", makeActive: "Jadikan daftar putar aktif", save: "Simpan", cancel: "Batal", saving: "Menyimpan…", saved: "Tersimpan",
+        saveFailed: "Tidak dapat menyimpan: {error}", deleteFailed: "Tidak dapat menghapus: {error}", loginFailed: "Tidak dapat masuk: {error}",
+        unauthorized_device: "ID atau kunci perangkat salah.", invalid_playlist: "Periksa detail dan URL daftar putar.", xtream_credentials_required: "Nama pengguna dan kata sandi Xtream wajib diisi.", playlist_not_found: "Daftar putar tidak ditemukan.", internal_error: "Terjadi kesalahan. Coba lagi."
+      },
+      zh: {
+        pageTitle: "BLOFY PLAYER — 设备门户", language: "语言", portalBadge: "安全设备门户",
+        loginTitle: "连接您的设备", deviceIdLabel: "设备 ID", activationCodeLabel: "设备密钥", loginButton: "继续", checking: "正在验证…",
+        playlistsTitle: "我的播放列表", addPlaylist: "添加播放列表", logout: "退出登录", active: "当前", edit: "编辑", delete: "删除", deleteConfirm: "确定删除“{name}”吗？此操作无法撤销。",
+        editorAddTitle: "添加播放列表", editorEditTitle: "编辑播放列表", playlistNameLabel: "播放列表名称", playlistTypeLabel: "播放列表类型", serverUrlLabel: "服务器或播放列表网址",
+        usernameLabel: "用户名", passwordLabel: "密码", makeActive: "设为当前播放列表", save: "保存", cancel: "取消", saving: "正在保存…", saved: "已保存",
+        saveFailed: "保存失败：{error}", deleteFailed: "删除失败：{error}", loginFailed: "无法登录：{error}",
+        unauthorized_device: "设备 ID 或设备密钥不正确。", invalid_playlist: "请检查播放列表信息和网址。", xtream_credentials_required: "Xtream Codes 需要用户名和密码。", playlist_not_found: "未找到播放列表。", internal_error: "发生错误，请重试。"
+      }
+    };
+
+    const localeEnhancements = {
+      fr: {
+        portalBadge: "Portail de l’appareil", heroTitle: "Gérez votre BLOFY PLAYER", heroSubtitle: "Activez votre appareil et gérez vos playlists depuis un espace unique et sécurisé.",
+        stepOneTitle: "Ouvrez BLOFY PLAYER", stepOneText: "Repérez l’identifiant et la clé de l’appareil sur l’écran du téléviseur.", stepTwoTitle: "Saisissez les informations", stepTwoText: "Utilisez le même identifiant et la même clé ci-dessous.", stepThreeTitle: "Gérez vos playlists", stepThreeText: "Ajoutez, modifiez ou supprimez vos playlists à tout moment.",
+        loginStep: "Étape 1 sur 2", loginSubtitle: "Saisissez les informations affichées sur votre appareil.", secureNote: "Connexion sécurisée et chiffrée", playlistsSubtitle: "Ajoutez et gérez les playlists de cet appareil.",
+        loadingPlaylists: "Chargement des playlists…", emptyTitle: "Aucune playlist", emptyText: "Ajoutez votre première playlist pour commencer.", addFirst: "Ajouter la première playlist", editorSubtitle: "Saisissez les informations de la playlist.",
+        playlistNamePlaceholder: "Ex. : Salon", xtreamType: "API Xtream Codes", m3uType: "URL M3U/M3U8", serverUrlPlaceholder: "https://serveur.exemple.com", footerDisclaimer: "BLOFY PLAYER ne fournit ni n’inclut aucun contenu multimédia.", required_fields: "Veuillez remplir tous les champs obligatoires."
+      },
+      es: {
+        portalBadge: "Portal del dispositivo", heroTitle: "Gestiona tu BLOFY PLAYER", heroSubtitle: "Activa tu dispositivo y gestiona tus listas desde un único lugar seguro.",
+        stepOneTitle: "Abre BLOFY PLAYER", stepOneText: "Busca el ID y la clave del dispositivo en la pantalla del televisor.", stepTwoTitle: "Introduce los datos", stepTwoText: "Usa abajo el mismo ID y la misma clave.", stepThreeTitle: "Gestiona tus listas", stepThreeText: "Añade, edita o elimina listas en cualquier momento.",
+        loginStep: "Paso 1 de 2", loginSubtitle: "Introduce los datos que aparecen en tu dispositivo.", secureNote: "Conexión segura y cifrada", playlistsSubtitle: "Añade y gestiona las listas de este dispositivo.",
+        loadingPlaylists: "Cargando listas…", emptyTitle: "Aún no hay listas", emptyText: "Añade tu primera lista para comenzar.", addFirst: "Añadir la primera lista", editorSubtitle: "Introduce los datos de la lista.",
+        playlistNamePlaceholder: "Ej.: Sala de estar", xtreamType: "API de Xtream Codes", m3uType: "URL M3U/M3U8", serverUrlPlaceholder: "https://servidor.ejemplo.com", footerDisclaimer: "BLOFY PLAYER no proporciona ni incluye contenido multimedia.", required_fields: "Completa todos los campos obligatorios."
+      },
+      pt: {
+        portalBadge: "Portal do dispositivo", heroTitle: "Gerencie seu BLOFY PLAYER", heroSubtitle: "Ative seu dispositivo e gerencie suas playlists em um único local seguro.",
+        stepOneTitle: "Abra o BLOFY PLAYER", stepOneText: "Encontre o ID e a chave do dispositivo na tela da TV.", stepTwoTitle: "Insira os dados", stepTwoText: "Use o mesmo ID e a mesma chave abaixo.", stepThreeTitle: "Gerencie suas playlists", stepThreeText: "Adicione, edite ou remova playlists a qualquer momento.",
+        loginStep: "Etapa 1 de 2", loginSubtitle: "Insira os dados exibidos no dispositivo.", secureNote: "Conexão segura e criptografada", playlistsSubtitle: "Adicione e gerencie as playlists deste dispositivo.",
+        loadingPlaylists: "Carregando playlists…", emptyTitle: "Ainda não há playlists", emptyText: "Adicione sua primeira playlist para começar.", addFirst: "Adicionar a primeira playlist", editorSubtitle: "Insira os dados da playlist.",
+        playlistNamePlaceholder: "Ex.: Sala de estar", xtreamType: "API Xtream Codes", m3uType: "URL M3U/M3U8", serverUrlPlaceholder: "https://servidor.exemplo.com", footerDisclaimer: "O BLOFY PLAYER não fornece nem inclui conteúdo de mídia.", required_fields: "Preencha todos os campos obrigatórios."
+      },
+      de: {
+        portalBadge: "Geräteportal", heroTitle: "BLOFY PLAYER verwalten", heroSubtitle: "Gerät aktivieren und Playlists an einem sicheren Ort verwalten.",
+        stepOneTitle: "BLOFY PLAYER öffnen", stepOneText: "Geräte-ID und Geräteschlüssel auf dem Fernsehbildschirm suchen.", stepTwoTitle: "Daten eingeben", stepTwoText: "Unten dieselbe ID und denselben Schlüssel verwenden.", stepThreeTitle: "Playlists verwalten", stepThreeText: "Playlists jederzeit hinzufügen, bearbeiten oder entfernen.",
+        loginStep: "Schritt 1 von 2", loginSubtitle: "Die auf dem Gerät angezeigten Daten eingeben.", secureNote: "Sichere, verschlüsselte Verbindung", playlistsSubtitle: "Playlists für dieses Gerät hinzufügen und verwalten.",
+        loadingPlaylists: "Playlists werden geladen…", emptyTitle: "Noch keine Playlists", emptyText: "Füge deine erste Playlist hinzu, um loszulegen.", addFirst: "Erste Playlist hinzufügen", editorSubtitle: "Playlist-Daten eingeben.",
+        playlistNamePlaceholder: "z. B. Wohnzimmer", xtreamType: "Xtream Codes API", m3uType: "M3U/M3U8-URL", serverUrlPlaceholder: "https://server.beispiel.de", footerDisclaimer: "BLOFY PLAYER stellt keine Medieninhalte bereit und enthält auch keine.", required_fields: "Bitte alle Pflichtfelder ausfüllen."
+      },
+      it: {
+        portalBadge: "Portale del dispositivo", heroTitle: "Gestisci il tuo BLOFY PLAYER", heroSubtitle: "Attiva il dispositivo e gestisci le playlist da un unico spazio sicuro.",
+        stepOneTitle: "Apri BLOFY PLAYER", stepOneText: "Trova l’ID e la chiave del dispositivo sullo schermo del televisore.", stepTwoTitle: "Inserisci i dati", stepTwoText: "Usa lo stesso ID e la stessa chiave qui sotto.", stepThreeTitle: "Gestisci le playlist", stepThreeText: "Aggiungi, modifica o rimuovi le playlist in qualsiasi momento.",
+        loginStep: "Passaggio 1 di 2", loginSubtitle: "Inserisci i dati visualizzati sul dispositivo.", secureNote: "Connessione sicura e crittografata", playlistsSubtitle: "Aggiungi e gestisci le playlist di questo dispositivo.",
+        loadingPlaylists: "Caricamento delle playlist…", emptyTitle: "Nessuna playlist", emptyText: "Aggiungi la prima playlist per iniziare.", addFirst: "Aggiungi la prima playlist", editorSubtitle: "Inserisci i dati della playlist.",
+        playlistNamePlaceholder: "Es.: Soggiorno", xtreamType: "API Xtream Codes", m3uType: "URL M3U/M3U8", serverUrlPlaceholder: "https://server.esempio.it", footerDisclaimer: "BLOFY PLAYER non fornisce né include contenuti multimediali.", required_fields: "Compila tutti i campi obbligatori."
+      },
+      tr: {
+        portalBadge: "Cihaz Portalı", heroTitle: "BLOFY PLAYER’ınızı yönetin", heroSubtitle: "Cihazınızı etkinleştirin ve oynatma listelerinizi tek bir güvenli yerden yönetin.",
+        stepOneTitle: "BLOFY PLAYER’ı açın", stepOneText: "TV ekranındaki cihaz kimliğini ve cihaz anahtarını bulun.", stepTwoTitle: "Bilgileri girin", stepTwoText: "Aşağıya aynı kimliği ve anahtarı girin.", stepThreeTitle: "Listeleri yönetin", stepThreeText: "Oynatma listelerini istediğiniz zaman ekleyin, düzenleyin veya kaldırın.",
+        loginStep: "1 / 2. adım", loginSubtitle: "Cihazınızda gösterilen bilgileri girin.", secureNote: "Güvenli ve şifreli bağlantı", playlistsSubtitle: "Bu cihazın oynatma listelerini ekleyin ve yönetin.",
+        loadingPlaylists: "Oynatma listeleri yükleniyor…", emptyTitle: "Henüz oynatma listesi yok", emptyText: "Başlamak için ilk oynatma listenizi ekleyin.", addFirst: "İlk oynatma listesini ekle", editorSubtitle: "Oynatma listesi bilgilerini girin.",
+        playlistNamePlaceholder: "Örn. Oturma odası", xtreamType: "Xtream Codes API", m3uType: "M3U/M3U8 URL’si", serverUrlPlaceholder: "https://sunucu.ornek.com", footerDisclaimer: "BLOFY PLAYER medya içeriği sağlamaz veya içermez.", required_fields: "Lütfen tüm zorunlu alanları doldurun."
+      },
+      nl: {
+        portalBadge: "Apparaatportaal", heroTitle: "Beheer je BLOFY PLAYER", heroSubtitle: "Activeer je apparaat en beheer afspeellijsten vanuit één veilige omgeving.",
+        stepOneTitle: "Open BLOFY PLAYER", stepOneText: "Zoek de apparaat-ID en apparaatsleutel op het tv-scherm.", stepTwoTitle: "Voer de gegevens in", stepTwoText: "Gebruik hieronder dezelfde ID en sleutel.", stepThreeTitle: "Beheer afspeellijsten", stepThreeText: "Voeg op elk moment afspeellijsten toe, bewerk ze of verwijder ze.",
+        loginStep: "Stap 1 van 2", loginSubtitle: "Voer de gegevens in die op je apparaat worden weergegeven.", secureNote: "Veilige, versleutelde verbinding", playlistsSubtitle: "Voeg afspeellijsten voor dit apparaat toe en beheer ze.",
+        loadingPlaylists: "Afspeellijsten laden…", emptyTitle: "Nog geen afspeellijsten", emptyText: "Voeg je eerste afspeellijst toe om te beginnen.", addFirst: "Eerste afspeellijst toevoegen", editorSubtitle: "Voer de gegevens van de afspeellijst in.",
+        playlistNamePlaceholder: "Bijv. Woonkamer", xtreamType: "Xtream Codes API", m3uType: "M3U/M3U8-URL", serverUrlPlaceholder: "https://server.voorbeeld.nl", footerDisclaimer: "BLOFY PLAYER levert of bevat geen mediacontent.", required_fields: "Vul alle verplichte velden in."
+      },
+      ru: {
+        portalBadge: "Портал устройства", heroTitle: "Управляйте BLOFY PLAYER", heroSubtitle: "Активируйте устройство и управляйте плейлистами в одном защищённом месте.",
+        stepOneTitle: "Откройте BLOFY PLAYER", stepOneText: "Найдите идентификатор и ключ устройства на экране телевизора.", stepTwoTitle: "Введите данные", stepTwoText: "Используйте ниже те же идентификатор и ключ.", stepThreeTitle: "Управляйте плейлистами", stepThreeText: "Добавляйте, изменяйте или удаляйте плейлисты в любое время.",
+        loginStep: "Шаг 1 из 2", loginSubtitle: "Введите данные, показанные на устройстве.", secureNote: "Защищённое шифрованное соединение", playlistsSubtitle: "Добавляйте плейлисты для этого устройства и управляйте ими.",
+        loadingPlaylists: "Загрузка плейлистов…", emptyTitle: "Плейлистов пока нет", emptyText: "Добавьте первый плейлист, чтобы начать.", addFirst: "Добавить первый плейлист", editorSubtitle: "Введите данные плейлиста.",
+        playlistNamePlaceholder: "Например, Гостиная", xtreamType: "API Xtream Codes", m3uType: "URL M3U/M3U8", serverUrlPlaceholder: "https://server.example.com", footerDisclaimer: "BLOFY PLAYER не предоставляет и не содержит медиаконтент.", required_fields: "Заполните все обязательные поля."
+      },
+      fa: {
+        portalBadge: "پرتال دستگاه", heroTitle: "BLOFY PLAYER خود را مدیریت کنید", heroSubtitle: "دستگاه را فعال کنید و فهرست‌های پخش را در محیطی امن مدیریت کنید.",
+        stepOneTitle: "BLOFY PLAYER را باز کنید", stepOneText: "شناسه و کلید دستگاه را روی صفحه تلویزیون پیدا کنید.", stepTwoTitle: "اطلاعات را وارد کنید", stepTwoText: "همان شناسه و کلید را در پایین وارد کنید.", stepThreeTitle: "فهرست‌های پخش را مدیریت کنید", stepThreeText: "هر زمان خواستید فهرست‌ها را اضافه، ویرایش یا حذف کنید.",
+        loginStep: "مرحله ۱ از ۲", loginSubtitle: "اطلاعات نمایش‌داده‌شده روی دستگاه را وارد کنید.", secureNote: "اتصال امن و رمزگذاری‌شده", playlistsSubtitle: "فهرست‌های پخش این دستگاه را اضافه و مدیریت کنید.",
+        loadingPlaylists: "در حال بارگذاری فهرست‌های پخش…", emptyTitle: "هنوز فهرست پخشی وجود ندارد", emptyText: "برای شروع، نخستین فهرست پخش را اضافه کنید.", addFirst: "افزودن نخستین فهرست پخش", editorSubtitle: "اطلاعات فهرست پخش را وارد کنید.",
+        playlistNamePlaceholder: "مثلاً: اتاق نشیمن", xtreamType: "رابط Xtream Codes", m3uType: "نشانی M3U/M3U8", serverUrlPlaceholder: "https://server.example.com", footerDisclaimer: "BLOFY PLAYER هیچ محتوای رسانه‌ای ارائه نمی‌کند و شامل آن نیست.", required_fields: "همه فیلدهای الزامی را تکمیل کنید."
+      },
+      ur: {
+        portalBadge: "ڈیوائس پورٹل", heroTitle: "اپنے BLOFY PLAYER کا انتظام کریں", heroSubtitle: "اپنا ڈیوائس فعال کریں اور پلے لسٹس کو ایک محفوظ جگہ سے منظم کریں۔",
+        stepOneTitle: "BLOFY PLAYER کھولیں", stepOneText: "ٹی وی اسکرین پر ڈیوائس آئی ڈی اور ڈیوائس کی تلاش کریں۔", stepTwoTitle: "معلومات درج کریں", stepTwoText: "نیچے وہی ڈیوائس آئی ڈی اور ڈیوائس کی استعمال کریں۔", stepThreeTitle: "پلے لسٹس منظم کریں", stepThreeText: "کسی بھی وقت پلے لسٹس شامل، ترمیم یا حذف کریں۔",
+        loginStep: "مرحلہ 1 از 2", loginSubtitle: "اپنے ڈیوائس پر دکھائی گئی معلومات درج کریں۔", secureNote: "محفوظ اور خفیہ کردہ کنکشن", playlistsSubtitle: "اس ڈیوائس کی پلے لسٹس شامل اور منظم کریں۔",
+        loadingPlaylists: "پلے لسٹس لوڈ ہو رہی ہیں…", emptyTitle: "ابھی کوئی پلے لسٹ نہیں", emptyText: "شروع کرنے کے لیے اپنی پہلی پلے لسٹ شامل کریں۔", addFirst: "پہلی پلے لسٹ شامل کریں", editorSubtitle: "پلے لسٹ کی معلومات درج کریں۔",
+        playlistNamePlaceholder: "مثال: بیٹھک", xtreamType: "Xtream Codes API", m3uType: "M3U/M3U8 URL", serverUrlPlaceholder: "https://server.example.com", footerDisclaimer: "BLOFY PLAYER کوئی میڈیا مواد فراہم یا شامل نہیں کرتا۔", required_fields: "تمام ضروری خانے مکمل کریں۔"
+      },
+      hi: {
+        portalBadge: "डिवाइस पोर्टल", heroTitle: "अपने BLOFY PLAYER को प्रबंधित करें", heroSubtitle: "अपने डिवाइस को सक्रिय करें और प्लेलिस्ट को एक सुरक्षित स्थान से प्रबंधित करें।",
+        stepOneTitle: "BLOFY PLAYER खोलें", stepOneText: "टीवी स्क्रीन पर डिवाइस आईडी और डिवाइस कुंजी खोजें।", stepTwoTitle: "जानकारी दर्ज करें", stepTwoText: "नीचे वही डिवाइस आईडी और कुंजी दर्ज करें।", stepThreeTitle: "प्लेलिस्ट प्रबंधित करें", stepThreeText: "कभी भी प्लेलिस्ट जोड़ें, संपादित करें या हटाएँ।",
+        loginStep: "चरण 1 में से 2", loginSubtitle: "अपने डिवाइस पर दिखाई गई जानकारी दर्ज करें।", secureNote: "सुरक्षित एन्क्रिप्टेड कनेक्शन", playlistsSubtitle: "इस डिवाइस की प्लेलिस्ट जोड़ें और प्रबंधित करें।",
+        loadingPlaylists: "प्लेलिस्ट लोड हो रही हैं…", emptyTitle: "अभी कोई प्लेलिस्ट नहीं", emptyText: "शुरू करने के लिए अपनी पहली प्लेलिस्ट जोड़ें।", addFirst: "पहली प्लेलिस्ट जोड़ें", editorSubtitle: "प्लेलिस्ट की जानकारी दर्ज करें।",
+        playlistNamePlaceholder: "उदा.: लिविंग रूम", xtreamType: "Xtream Codes API", m3uType: "M3U/M3U8 URL", serverUrlPlaceholder: "https://server.example.com", footerDisclaimer: "BLOFY PLAYER कोई मीडिया सामग्री प्रदान या शामिल नहीं करता है।", required_fields: "कृपया सभी आवश्यक फ़ील्ड भरें।"
+      },
+      id: {
+        portalBadge: "Portal perangkat", heroTitle: "Kelola BLOFY PLAYER Anda", heroSubtitle: "Aktifkan perangkat dan kelola daftar putar dari satu tempat yang aman.",
+        stepOneTitle: "Buka BLOFY PLAYER", stepOneText: "Temukan ID dan kunci perangkat di layar TV.", stepTwoTitle: "Masukkan informasi", stepTwoText: "Gunakan ID dan kunci yang sama di bawah.", stepThreeTitle: "Kelola daftar putar", stepThreeText: "Tambah, edit, atau hapus daftar putar kapan saja.",
+        loginStep: "Langkah 1 dari 2", loginSubtitle: "Masukkan informasi yang ditampilkan di perangkat.", secureNote: "Koneksi aman dan terenkripsi", playlistsSubtitle: "Tambah dan kelola daftar putar untuk perangkat ini.",
+        loadingPlaylists: "Memuat daftar putar…", emptyTitle: "Belum ada daftar putar", emptyText: "Tambahkan daftar putar pertama untuk memulai.", addFirst: "Tambah daftar putar pertama", editorSubtitle: "Masukkan informasi daftar putar.",
+        playlistNamePlaceholder: "Contoh: Ruang keluarga", xtreamType: "Xtream Codes API", m3uType: "URL M3U/M3U8", serverUrlPlaceholder: "https://server.example.com", footerDisclaimer: "BLOFY PLAYER tidak menyediakan atau menyertakan konten media.", required_fields: "Lengkapi semua kolom wajib."
+      },
+      zh: {
+        portalBadge: "设备门户", heroTitle: "管理您的 BLOFY PLAYER", heroSubtitle: "在一个安全的位置激活设备并管理播放列表。",
+        stepOneTitle: "打开 BLOFY PLAYER", stepOneText: "在电视屏幕上找到设备 ID 和设备密钥。", stepTwoTitle: "输入信息", stepTwoText: "在下方输入相同的设备 ID 和密钥。", stepThreeTitle: "管理播放列表", stepThreeText: "随时添加、编辑或删除播放列表。",
+        loginStep: "第 1 步，共 2 步", loginSubtitle: "输入设备上显示的信息。", secureNote: "安全加密连接", playlistsSubtitle: "为此设备添加和管理播放列表。",
+        loadingPlaylists: "正在加载播放列表…", emptyTitle: "暂无播放列表", emptyText: "添加第一个播放列表以开始使用。", addFirst: "添加第一个播放列表", editorSubtitle: "输入播放列表信息。",
+        playlistNamePlaceholder: "例如：客厅", xtreamType: "Xtream Codes API", m3uType: "M3U/M3U8 URL", serverUrlPlaceholder: "https://server.example.com", footerDisclaimer: "BLOFY PLAYER 不提供或包含任何媒体内容。", required_fields: "请填写所有必填项。"
+      }
+    };
+    Object.keys(localeEnhancements).forEach(function(code) {
+      Object.assign(translations[code], localeEnhancements[code]);
+    });
+
+    const rtlLocales = new Set(["ar", "fa", "ur"]);
+    const supportedLocales = Array.from(document.getElementById("languageSelect").options).map(function(option) { return option.value; });
+    function storageGet(kind, key) {
+      try { return window[kind].getItem(key); } catch (_) { return null; }
+    }
+    function storageSet(kind, key, value) {
+      try { window[kind].setItem(key, value); } catch (_) {}
+    }
+    function storageRemove(kind, key) {
+      try { window[kind].removeItem(key); } catch (_) {}
+    }
+    const browserLocales = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || "ar"])
+      .map(function(value) { return String(value).toLowerCase().split("-")[0]; });
+    const browserLocale = browserLocales.find(function(value) { return supportedLocales.includes(value); }) || "ar";
+    let locale = storageGet("localStorage", "blofyLocale") || browserLocale;
+    let auth = null;
+    let currentId = null;
+    let items = [];
+    let loginBusy = false;
+    const $ = function(id) { return document.getElementById(id); };
+
+    function t(key, vars) {
+      const source = translations[locale] || translations.en;
+      let value = source[key] || translations.en[key] || translations.ar[key] || key;
+      Object.keys(vars || {}).forEach(function(name) { value = value.split("{" + name + "}").join(String(vars[name])); });
+      return value;
+    }
+
+    function applyLanguage(nextLocale) {
+      locale = supportedLocales.includes(nextLocale) ? nextLocale : "ar";
+      storageSet("localStorage", "blofyLocale", locale);
+      document.documentElement.lang = locale;
+      document.documentElement.dir = rtlLocales.has(locale) ? "rtl" : "ltr";
+      $("languageSelect").value = locale;
+      document.title = t("pageTitle");
+      document.querySelectorAll("[data-i18n]").forEach(function(element) {
+        const key = element.getAttribute("data-i18n");
+        element.textContent = t(key);
+      });
+      document.querySelectorAll("[data-i18n-placeholder]").forEach(function(element) {
+        element.placeholder = t(element.getAttribute("data-i18n-placeholder"));
+      });
+      document.querySelectorAll("[data-i18n-aria-label]").forEach(function(element) {
+        element.setAttribute("aria-label", t(element.getAttribute("data-i18n-aria-label")));
+      });
+      if (!loginBusy) restoreLoginButton();
+      $("editorTitle").textContent = t(currentId ? "editorEditTitle" : "editorAddTitle");
+      if (!$("app").classList.contains("hidden")) render();
+    }
+
+    function icon(name) {
+      if (name === "edit") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"></path><path d="m13 7 4 4"></path></svg>';
+      if (name === "delete") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14"></path><path d="M10 11v6M14 11v6"></path></svg>';
+      if (name === "plus") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>';
+      return "";
+    }
+
+    function setLoginBusy(busy) {
+      loginBusy = busy;
+      $("loginBtn").disabled = busy;
+      if (busy) $("loginBtn").innerHTML = '<span class="spinner"></span><span>' + escapeHtml(t("checking")) + "</span>";
+      else restoreLoginButton();
+    }
+
+    function restoreLoginButton() {
+      $("loginBtn").innerHTML = '<span>' + escapeHtml(t("loginButton")) + '</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>';
+    }
+
+    function payload(extra) { return Object.assign({}, auth || {}, extra || {}); }
+
+    async function api(path, method, body) {
+      const response = await fetch(path, {
+        method: method || "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload(body || {}))
+      });
+      const text = await response.text();
+      let data = {};
+      try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+      if (!response.ok) throw new Error(data.error || ("HTTP " + response.status));
+      return data;
+    }
+
+    function friendlyError(error) {
+      const key = String(error && error.message || error || "internal_error");
+      if (key === "Failed to fetch" || key === "Load failed" || key === "NetworkError when attempting to fetch resource.") return t("network_error");
+      if (translations.en[key] || translations.ar[key]) return t(key);
+      return t("internal_error");
+    }
+
+    function showStatus(element, message, type) {
+      element.textContent = message || "";
+      element.classList.toggle("bad", type === "bad");
+      element.classList.toggle("good", type === "good");
+    }
+
+    async function login() {
+      const deviceId = $("deviceId").value.trim();
+      const activationCode = $("activationCode").value.trim();
+      if (!deviceId || !/^[0-9]{6}$/.test(activationCode)) {
+        showStatus($("loginStatus"), t("required_fields"), "bad");
+        return;
+      }
+      auth = { deviceId: deviceId, activationCode: activationCode };
+      setLoginBusy(true);
+      showStatus($("loginStatus"), t("checking"));
+      try {
+        await load();
+        $("loginView").classList.add("hidden");
+        $("app").classList.remove("hidden");
+        $("deviceLabel").textContent = auth.deviceId;
+        storageSet("sessionStorage", "blofyDevice", JSON.stringify(auth));
+        showStatus($("loginStatus"), "");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (error) {
+        auth = null;
+        showStatus($("loginStatus"), t("loginFailed", { error: friendlyError(error) }), "bad");
+      } finally {
+        setLoginBusy(false);
+      }
+    }
+
+    async function load() {
+      showStatus($("listStatus"), t("loadingPlaylists"));
+      const data = await api("/api/v1/portal/playlists/list");
+      items = data.items || [];
+      showStatus($("listStatus"), "");
+      render();
+    }
+
+    function displayUrl(value) {
+      try {
+        const parsed = new URL(String(value || ""));
+        return parsed.origin;
+      } catch (_) {
+        return "—";
+      }
+    }
+
+    function render() {
+      const root = $("playlistList");
+      root.innerHTML = "";
+      if (!items.length) {
+        root.innerHTML = '<div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h16v14H4z"></path><path d="M8 9h8M8 13h5"></path></svg></div><h3>' + escapeHtml(t("emptyTitle")) + "</h3><p>" + escapeHtml(t("emptyText")) + '</p><button class="primary-button" id="emptyAddBtn" type="button">' + icon("plus") + "<span>" + escapeHtml(t("addFirst")) + "</span></button></div>";
+        $("emptyAddBtn").onclick = openEditor;
+        return;
+      }
+
+      items.forEach(function(item) {
+        const element = document.createElement("article");
+        element.className = "playlist";
+        element.innerHTML =
+          '<div class="playlist-main"><div class="playlist-icon">' + escapeHtml(item.providerType === "xtream" ? "XC" : "M3U") + '</div><div class="playlist-copy"><div class="playlist-title-row"><h3>' +
+          escapeHtml(item.name) + '</h3><span class="badge">' + escapeHtml(item.providerType === "xtream" ? t("xtreamType") : t("m3uType")) + "</span>" +
+          (item.active ? '<span class="badge active">' + escapeHtml(t("active")) + "</span>" : "") +
+          '</div><p title="' + escapeHtml(displayUrl(item.baseUrl)) + '">' + escapeHtml(displayUrl(item.baseUrl)) + '</p></div></div><div class="actions"><button class="secondary edit" type="button">' +
+          icon("edit") + "<span>" + escapeHtml(t("edit")) + '</span></button><button class="danger del" type="button">' + icon("delete") + "<span>" + escapeHtml(t("delete")) + "</span></button></div>";
+        element.querySelector(".edit").onclick = function() { edit(item); };
+        element.querySelector(".del").onclick = function() { removeItem(item); };
+        root.appendChild(element);
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value).replace(/[&<>"']/g, function(character) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character];
+      });
+    }
+
+    function typeUi() {
+      const isXtream = $("providerType").value === "xtream";
+      document.querySelectorAll(".xtream").forEach(function(element) {
+        element.classList.toggle("hidden", !isXtream);
+      });
+      if (!isXtream) {
+        $("username").value = "";
+        $("password").value = "";
+      }
+    }
+
+    function openEditor() {
+      currentId = null;
+      $("editorTitle").textContent = t("editorAddTitle");
+      ["name", "baseUrl", "username", "password"].forEach(function(id) { $(id).value = ""; });
+      $("providerType").value = "xtream";
+      $("active").checked = true;
+      typeUi();
+      showStatus($("editorStatus"), "");
+      $("editor").classList.remove("hidden");
+      $("editor").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function edit(item) {
+      currentId = item.id;
+      $("editorTitle").textContent = t("editorEditTitle");
+      $("name").value = item.name || "";
+      $("providerType").value = item.providerType;
+      $("baseUrl").value = item.baseUrl || "";
+      $("username").value = item.username || "";
+      $("password").value = item.password || "";
+      $("active").checked = Boolean(item.active);
+      typeUi();
+      showStatus($("editorStatus"), "");
+      $("editor").classList.remove("hidden");
+      $("editor").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    async function save() {
+      $("saveBtn").disabled = true;
+      showStatus($("editorStatus"), t("saving"));
+      try {
+        const providerType = $("providerType").value;
+        const isXtream = providerType === "xtream";
+        await api("/api/v1/portal/playlists", "POST", {
+          id: currentId || undefined,
+          name: $("name").value,
+          providerType: providerType,
+          baseUrl: $("baseUrl").value,
+          username: isXtream ? $("username").value : "",
+          password: isXtream ? $("password").value : "",
+          active: $("active").checked
+        });
+        showStatus($("editorStatus"), t("saved"), "good");
+        $("editor").classList.add("hidden");
+        await load();
+      } catch (error) {
+        showStatus($("editorStatus"), t("saveFailed", { error: friendlyError(error) }), "bad");
+      } finally {
+        $("saveBtn").disabled = false;
+      }
+    }
+
+    async function removeItem(item) {
+      if (!confirm(t("deleteConfirm", { name: item.name }))) return;
+      try {
+        await api("/api/v1/portal/playlists/" + encodeURIComponent(item.id), "DELETE");
+        await load();
+      } catch (error) {
+        showStatus($("listStatus"), t("deleteFailed", { error: friendlyError(error) }), "bad");
+      }
+    }
+
+    function logout() {
+      storageRemove("sessionStorage", "blofyDevice");
+      auth = null;
+      currentId = null;
+      items = [];
+      $("deviceId").value = "";
+      $("activationCode").value = "";
+      ["name", "baseUrl", "username", "password"].forEach(function(id) { $(id).value = ""; });
+      $("app").classList.add("hidden");
+      $("editor").classList.add("hidden");
+      $("loginView").classList.remove("hidden");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    $("deviceForm").addEventListener("submit", function(event) { event.preventDefault(); login(); });
+    $("newBtn").onclick = openEditor;
+    $("logoutBtn").onclick = logout;
+    $("saveBtn").onclick = save;
+    $("cancelBtn").onclick = function() { $("editor").classList.add("hidden"); };
+    $("providerType").onchange = typeUi;
+    $("languageSelect").onchange = function(event) { applyLanguage(event.target.value); };
+
+    applyLanguage(locale);
+    try {
+      const saved = JSON.parse(storageGet("sessionStorage", "blofyDevice") || "null");
+      if (saved && saved.deviceId && saved.activationCode) {
+        $("deviceId").value = saved.deviceId;
+        $("activationCode").value = saved.activationCode;
+        login();
+      }
+    } catch (_) {}
+  </script>
+</body>
+</html>

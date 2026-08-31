@@ -21,8 +21,25 @@ jobs:
           gradle-version: '8.10.2'
       - name: Test lint and assemble
         run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
+      - name: Stamp standard build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          {
+            echo "variant=standard"
+            echo "commit=$GITHUB_SHA"
+            echo "run=$GITHUB_RUN_NUMBER"
+            echo "ffmpeg=false"
+          } > app/build/outputs/apk/debug/build-info.txt
+          sha256sum "$APK" | tee app/build/outputs/apk/debug/app-debug.apk.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: BLOFY-PLAYER-2.0-standard-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/app-debug.apk.sha256
+            app/build/outputs/apk/debug/build-info.txt
           if-no-files-found: error
+          retention-days: 30
