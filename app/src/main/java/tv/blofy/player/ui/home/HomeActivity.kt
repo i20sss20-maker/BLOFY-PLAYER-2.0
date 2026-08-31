@@ -20,6 +20,7 @@ import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.ui.browser.ContentBrowserActivity
+import tv.blofy.player.ui.catalog.PosterCatalogActivity
 import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.library.RecentChannelsActivity
 import tv.blofy.player.ui.mobile.MobileContentActivity
@@ -323,7 +324,11 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun contentIntent(kind: String): Intent = if (deviceKind == DeviceClass.Kind.TV) {
-        Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, kind)
+        if (kind == "live") {
+            Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, kind)
+        } else {
+            Intent(this, PosterCatalogActivity::class.java).putExtra(PosterCatalogActivity.EXTRA_KIND, kind)
+        }
     } else {
         Intent(this, MobileContentActivity::class.java).putExtra(MobileContentActivity.EXTRA_KIND, kind)
     }
