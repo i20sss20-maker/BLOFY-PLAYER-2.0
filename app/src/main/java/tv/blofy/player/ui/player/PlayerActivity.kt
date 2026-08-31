@@ -191,21 +191,24 @@ class PlayerActivity : AppCompatActivity() {
         favoriteButton = controlButton("☆ المفضلة") { toggleFavorite() }.apply {
             visibility = if (kind == "episode") View.GONE else View.VISIBLE
         }
-        controls.addView(audioButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
-        controls.addView(subtitleButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
-        controls.addView(qualityButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
-        controls.addView(externalButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
-        controls.addView(favoriteButton, LinearLayout.LayoutParams(180, 72).apply { marginEnd = 8 })
-        if (kind == "episode") {
-            controls.addView(controlButton("السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(140, 72).apply { marginEnd = 8 })
-            controls.addView(controlButton("التالي") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(140, 72))
-        } else if (kind == "live") {
+
+        if (kind == "live") {
             controls.addView(TextView(this).apply {
-                text = "  CH+/CH−  •  رقم القناة"
+                text = "CH+/CH−  •  رقم القناة  •  OK معلومات البرنامج"
                 textSize = 14f
                 setTextColor(Color.rgb(185, 140, 255))
                 gravity = Gravity.CENTER_VERTICAL
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 72))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 58))
+        } else {
+            controls.addView(audioButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
+            controls.addView(subtitleButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
+            controls.addView(qualityButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
+            controls.addView(externalButton, LinearLayout.LayoutParams(150, 72).apply { marginEnd = 8 })
+            controls.addView(favoriteButton, LinearLayout.LayoutParams(180, 72).apply { marginEnd = 8 })
+            if (kind == "episode") {
+                controls.addView(controlButton("السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(140, 72).apply { marginEnd = 8 })
+                controls.addView(controlButton("التالي") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(140, 72))
+            }
         }
         hud.addView(controls)
 
@@ -353,7 +356,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun showHud() {
         keepHudVisible()
         hud.visibility = View.VISIBLE
-        audioButton.requestFocus()
+        if (kind == "live") playerView.requestFocus() else audioButton.requestFocus()
     }
 
     private fun hideHud() {
