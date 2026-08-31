@@ -67,7 +67,7 @@ jobs:
           heap-size: 1024M
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            set -euo pipefail
+            set -eu
             adb shell wm size 1920x1080
             adb shell wm density 320
             adb shell settings put global window_animation_scale 0
