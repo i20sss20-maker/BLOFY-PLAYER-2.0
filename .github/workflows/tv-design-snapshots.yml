@@ -68,6 +68,7 @@ jobs:
           heap-size: 1024M
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
+            set -euo pipefail
             adb shell wm size 1920x1080
             adb shell wm density 320
             adb shell settings put global window_animation_scale 0
@@ -75,8 +76,19 @@ jobs:
             adb shell settings put global animator_duration_scale 0
             gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=tv.blofy.player.DesignSnapshotInstrumentedTest --stacktrace
             mkdir -p build/design-snapshots
-            adb pull /sdcard/Android/data/tv.blofy.player.v2/files/design-snapshots/. build/design-snapshots/
-            find build/design-snapshots -maxdepth 2 -type f -print
+            adb shell 'find /sdcard -type f -path "*/design-snapshots/*.png" -print 2>/dev/null' | tr -d '\r' > /tmp/blofy-snapshots.txt
+            echo "Discovered snapshot files:"
+            cat /tmp/blofy-snapshots.txt || true
+            test -s /tmp/blofy-snapshots.txt
+            while IFS= read -r remote; do
+              [ -n "$remote" ] || continue
+              name="$(basename "$remote")"
+              adb exec-out cat "$remote" > "build/design-snapshots/$name"
+            done < /tmp/blofy-snapshots.txt
+            count="$(find build/design-snapshots -maxdepth 1 -type f -name '*.png' | wc -l)"
+            echo "Captured $count BLOFY TV screenshots"
+            test "$count" -ge 9
+            find build/design-snapshots -maxdepth 1 -type f -name '*.png' -print
 
       - name: Upload design screenshots
         if: always()
