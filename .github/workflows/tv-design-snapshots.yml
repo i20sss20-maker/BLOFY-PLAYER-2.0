@@ -67,35 +67,19 @@ jobs:
           heap-size: 1024M
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            set -eu
             adb shell wm size 1920x1080
             adb shell wm density 320
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
-
-            APP_APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' ! -name '*androidTest*' | head -1)"
-            TEST_APK="$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' | head -1)"
-            test -f "$APP_APK"
-            test -f "$TEST_APK"
-            echo "Installing $APP_APK"
-            adb install -r "$APP_APK"
-            echo "Installing $TEST_APK"
-            adb install -r "$TEST_APK"
-
-            adb shell am instrument -w \
-              -e class tv.blofy.player.DesignSnapshotInstrumentedTest \
-              tv.blofy.player.v2.test/androidx.test.runner.AndroidJUnitRunner
-
+            adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' ! -name '*androidTest*' -print -quit)"
+            adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
+            adb shell am instrument -w -e class tv.blofy.player.DesignSnapshotInstrumentedTest tv.blofy.player.v2.test/androidx.test.runner.AndroidJUnitRunner
             mkdir -p build/design-snapshots
-            REMOTE_DIR="/sdcard/Android/data/tv.blofy.player.v2/files/design-snapshots"
-            echo "Snapshot directory contents:"
-            adb shell "ls -la '$REMOTE_DIR'"
-            adb pull "$REMOTE_DIR/." build/design-snapshots/
-
-            count="$(find build/design-snapshots -maxdepth 1 -type f -name '*.png' | wc -l)"
-            echo "Captured $count BLOFY TV screenshots"
-            test "$count" -ge 9
+            adb shell "ls -la /sdcard/Android/data/tv.blofy.player.v2/files/design-snapshots"
+            adb pull /sdcard/Android/data/tv.blofy.player.v2/files/design-snapshots/. build/design-snapshots/
+            echo "Captured $(find build/design-snapshots -maxdepth 1 -type f -name '*.png' | wc -l) BLOFY TV screenshots"
+            test "$(find build/design-snapshots -maxdepth 1 -type f -name '*.png' | wc -l)" -ge 9
             find build/design-snapshots -maxdepth 1 -type f -name '*.png' -print
 
       - name: Upload design screenshots
