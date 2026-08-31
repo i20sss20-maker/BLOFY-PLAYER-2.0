@@ -9,28 +9,30 @@ data class ThemeProfile(
     @ColorInt val accent: Int,
     @ColorInt val background: Int,
     @ColorInt val surface: Int,
-    val focusScale: Float = 1.06f,
-    val focusElevationDp: Float = 14f,
-    val motionMs: Long = 130L
+    val focusScale: Float = 1.008f,
+    val focusElevationDp: Float = 8f,
+    val motionMs: Long = 90L
 )
 
 object BlofyThemes {
-    val VISION = ThemeProfile(
-        id = "vision",
-        loginLayout = "blofy_login_vision",
-        homeLayout = "blofy_home_vision",
-        accent = 0xFF8B37FF.toInt(),
-        background = 0xFF07070D.toInt(),
-        surface = 0xFF12101D.toInt()
+    /**
+     * Original BLOFY theme copied from the first NEXT project visual system.
+     * Keep this profile stable: the current 2.0 playback/data engine must not
+     * change the approved legacy look.
+     */
+    val ORIGINAL = ThemeProfile(
+        id = "original",
+        loginLayout = "blofy_login_original",
+        homeLayout = "blofy_home_original",
+        accent = 0xFF7C2BFF.toInt(),
+        background = 0xFF05050C.toInt(),
+        surface = 0xFF11101E.toInt(),
+        focusScale = 1.008f,
+        focusElevationDp = 8f,
+        motionMs = 90L
     )
 
-    val CINEMA = ThemeProfile(
-        id = "cinema",
-        loginLayout = "blofy_login_cinema",
-        homeLayout = "blofy_home_cinema",
-        accent = 0xFFA84FFF.toInt(),
-        background = 0xFF05040A.toInt(),
-        surface = 0xFF171125.toInt(),
-        focusScale = 1.05f
-    )
+    // Compatibility aliases for code that still references the previous names.
+    val VISION = ORIGINAL
+    val CINEMA = ORIGINAL
 }
