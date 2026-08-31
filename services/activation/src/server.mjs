@@ -3,27 +3,66 @@ import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { createPortalHandlers } from './portal.mjs';
+import {
+  createActivationCredentialCodec,
+  createFixedWindowLimiter,
+  isAuthLocked,
+  nextAuthFailureState,
+  requestClientKey
+} from './auth-protection.mjs';
+import {
+  pseudonymizeDiagnosticProviderKey,
+  safeErrorSummary,
+  sanitizeDiagnosticAppVersion,
+  sanitizeDiagnosticContentKind,
+  sanitizeDiagnosticErrorCode,
+  sanitizeDiagnosticMessage,
+  sanitizeDiagnosticUrl
+} from './diagnostics-sanitizer.mjs';
 
 const { Pool } = pg;
 const PORT = Number(process.env.PORT || 8080);
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const ADMIN_TOKEN = process.env.BLOFY_ADMIN_TOKEN || '';
 const TRIAL_DAYS = Number(process.env.BLOFY_TRIAL_DAYS || 7);
+const PLAYLIST_ENCRYPTION_KEY = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
+const AUTH_RATE_WINDOW_MS = Number(process.env.BLOFY_AUTH_RATE_WINDOW_MS || 60_000);
+const AUTH_IP_RATE_LIMIT = Number(process.env.BLOFY_AUTH_IP_RATE_LIMIT || 60);
+const AUTH_DEVICE_RATE_LIMIT = Number(process.env.BLOFY_AUTH_DEVICE_RATE_LIMIT || 20);
+const AUTH_MAX_FAILURES = Number(process.env.BLOFY_AUTH_MAX_FAILURES || 5);
+const AUTH_FAILURE_WINDOW_MS = Number(process.env.BLOFY_AUTH_FAILURE_WINDOW_MS || 900_000);
+const AUTH_LOCK_MS = Number(process.env.BLOFY_AUTH_LOCK_MS || 900_000);
 
 if (!DATABASE_URL) throw new Error('DATABASE_URL is required');
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 24) throw new Error('BLOFY_ADMIN_TOKEN must be at least 24 characters');
+if (!/^[a-fA-F0-9]{64}$/.test(PLAYLIST_ENCRYPTION_KEY)) {
+  throw new Error('BLOFY_PLAYLIST_ENCRYPTION_KEY must be exactly 64 hexadecimal characters');
+}
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false }
 });
 
-function json(res, status, body) {
+const authIpLimiter = createFixedWindowLimiter({ limit: AUTH_IP_RATE_LIMIT, windowMs: AUTH_RATE_WINDOW_MS });
+const authDeviceLimiter = createFixedWindowLimiter({ limit: AUTH_DEVICE_RATE_LIMIT, windowMs: AUTH_RATE_WINDOW_MS });
+const adminIpLimiter = createFixedWindowLimiter({ limit: 30, windowMs: AUTH_RATE_WINDOW_MS });
+const activationCredentials = createActivationCredentialCodec(PLAYLIST_ENCRYPTION_KEY);
+
+class RateLimitError extends Error {
+  constructor(retryAfterSeconds) {
+    super('rate_limited');
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+function json(res, status, body, extraHeaders = {}) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(payload),
-    'cache-control': 'no-store'
+    'cache-control': 'no-store',
+    ...extraHeaders
   });
   res.end(payload);
 }
@@ -59,13 +98,68 @@ function validProviderKey(providerKey) {
   return /^[A-Za-z0-9._:-]{1,128}$/.test(providerKey);
 }
 
-async function authorizedDevice(deviceId, activationCode) {
+function consumeDeviceAuthAttempt(req, deviceId) {
+  const ipResult = authIpLimiter.consume(requestClientKey(req));
+  const deviceResult = authDeviceLimiter.consume(String(deviceId || 'invalid').toUpperCase());
+  if (!ipResult.allowed || !deviceResult.allowed) {
+    throw new RateLimitError(Math.max(ipResult.retryAfterSeconds, deviceResult.retryAfterSeconds));
+  }
+}
+
+async function recordAuthFailure(client, row) {
+  const state = nextAuthFailureState(row, Date.now(), {
+    maxFailures: AUTH_MAX_FAILURES,
+    failureWindowMs: AUTH_FAILURE_WINDOW_MS,
+    lockMs: AUTH_LOCK_MS
+  });
+  await client.query(
+    `UPDATE devices
+     SET auth_failed_attempts=$2,last_auth_failure_at=$3,auth_locked_until=$4,updated_at=NOW()
+     WHERE device_id=$1`,
+    [row.device_id, state.failedAttempts, state.lastFailureAt, state.lockedUntil]
+  );
+}
+
+async function verifyDeviceCredential(client, row, activationCode) {
+  if (isAuthLocked(row)) return false;
+  if (!activationCredentials.matches(row, activationCode)) {
+    await recordAuthFailure(client, row);
+    return false;
+  }
+  if (!activationCredentials.isProof(row.activation_code)) {
+    const proof = activationCredentials.proof(row.device_id, activationCode);
+    await client.query(
+      'UPDATE devices SET activation_code=$2,updated_at=NOW() WHERE device_id=$1',
+      [row.device_id, proof]
+    );
+    row.activation_code = proof;
+  }
+  // Do not clear failures on routine app polling: otherwise a legitimate
+  // success between guesses would continuously refresh an attacker's budget.
+  return true;
+}
+
+async function authorizedDevice(deviceId, activationCode, req) {
+  consumeDeviceAuthAttempt(req, deviceId);
   if (!validIdentity(deviceId, activationCode)) return null;
-  const result = await pool.query('SELECT * FROM devices WHERE device_id=$1', [deviceId]);
-  const row = result.rows[0];
-  if (!row || !constantTimeEqual(row.activation_code, activationCode)) return null;
-  const status = normalizeStatus(row);
-  return status === 'trial' || status === 'active' ? row : null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query('SELECT * FROM devices WHERE device_id=$1 FOR UPDATE', [deviceId]);
+    const row = result.rows[0];
+    if (!row || !await verifyDeviceCredential(client, row, activationCode)) {
+      await client.query('COMMIT');
+      return null;
+    }
+    await client.query('COMMIT');
+    const status = normalizeStatus(row);
+    return status === 'trial' || status === 'active' ? row : null;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
@@ -81,9 +175,9 @@ async function initializeDatabase() {
 async function health(res) {
   try {
     await pool.query('SELECT 1');
-    return json(res, 200, { ok: true, database: 'ready', time: Date.now() });
+    return json(res, 200, { ok: true, database: 'ready', playlistEncryption: 'ready', time: Date.now() });
   } catch (error) {
-    console.error('health check failed', error);
+    console.error('health check failed:', safeErrorSummary(error));
     return json(res, 503, { ok: false, database: 'unavailable', time: Date.now() });
   }
 }
@@ -119,6 +213,7 @@ async function activationCheck(req, res) {
   const appVersion = String(body.appVersion || '').trim().slice(0, 64);
   const platform = String(body.platform || 'android').trim().slice(0, 32);
 
+  consumeDeviceAuthAttempt(req, deviceId);
   if (!validIdentity(deviceId, activationCode)) {
     return json(res, 400, { status: 'blocked', serverTime: Date.now(), message: 'invalid_device_identity' });
   }
@@ -134,12 +229,12 @@ async function activationCheck(req, res) {
       result = await client.query(
         `INSERT INTO devices(device_id, activation_code, status, trial_started_at, expires_at, last_seen_at, last_app_version, last_platform)
          VALUES($1,$2,'trial',NOW(),$3,NOW(),$4,$5) RETURNING *`,
-        [deviceId, activationCode, expiresAt, appVersion, platform]
+        [deviceId, activationCredentials.proof(deviceId, activationCode), expiresAt, appVersion, platform]
       );
       row = result.rows[0];
-    } else if (!constantTimeEqual(row.activation_code, activationCode)) {
-      await client.query('ROLLBACK');
-      return json(res, 403, { status: 'blocked', serverTime: Date.now(), message: 'activation_code_mismatch' });
+    } else if (!await verifyDeviceCredential(client, row, activationCode)) {
+      await client.query('COMMIT');
+      return json(res, 403, { status: 'blocked', serverTime: Date.now(), message: 'unauthorized_device' });
     }
 
     const status = normalizeStatus(row);
@@ -167,13 +262,83 @@ async function activationCheck(req, res) {
   }
 }
 
+async function activationRotate(req, res) {
+  const body = await readJson(req);
+  const deviceId = String(body.deviceId || '').trim();
+  const currentActivationCode = String(body.currentActivationCode || '').trim();
+  const newActivationCode = String(body.newActivationCode || '').trim();
+
+  consumeDeviceAuthAttempt(req, deviceId);
+  if (!validIdentity(deviceId, currentActivationCode) || !/^\d{6}$/.test(newActivationCode)) {
+    return json(res, 400, { error: 'invalid_device_identity' });
+  }
+  if (constantTimeEqual(currentActivationCode, newActivationCode)) {
+    return json(res, 400, { error: 'activation_code_unchanged' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query('SELECT * FROM devices WHERE device_id=$1 FOR UPDATE', [deviceId]);
+    const row = result.rows[0];
+    if (!row) {
+      await client.query('COMMIT');
+      return json(res, 403, { error: 'unauthorized_device' });
+    }
+
+    // A lost HTTP response must not strand the app between the old and new codes.
+    // The HMAC binds the retry to the exact predecessor instead of turning the
+    // new code into a credential oracle.
+    if (activationCredentials.matches(row, newActivationCode)) {
+      if (isAuthLocked(row)) {
+        await client.query('COMMIT');
+        return json(res, 403, { error: 'unauthorized_device' });
+      }
+      const expectedProof = activationCredentials.proof(deviceId, currentActivationCode);
+      if (
+        row.previous_activation_code_proof &&
+        constantTimeEqual(row.previous_activation_code_proof, expectedProof)
+      ) {
+        await client.query('COMMIT');
+        return json(res, 200, { rotated: true });
+      }
+      await recordAuthFailure(client, row);
+      await client.query('COMMIT');
+      return json(res, 403, { error: 'unauthorized_device' });
+    }
+
+    if (!await verifyDeviceCredential(client, row, currentActivationCode)) {
+      await client.query('COMMIT');
+      return json(res, 403, { error: 'unauthorized_device' });
+    }
+    await client.query(
+      `UPDATE devices
+       SET activation_code=$2,previous_activation_code_proof=$3,activation_rotated_at=NOW(),
+           auth_failed_attempts=0,last_auth_failure_at=NULL,auth_locked_until=NULL,updated_at=NOW()
+       WHERE device_id=$1`,
+      [
+        deviceId,
+        activationCredentials.proof(deviceId, newActivationCode),
+        activationCredentials.proof(deviceId, currentActivationCode)
+      ]
+    );
+    await client.query('COMMIT');
+    return json(res, 200, { rotated: true });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function providerProfile(req, res) {
   const body = await readJson(req);
   const deviceId = String(body.deviceId || '').trim();
   const activationCode = String(body.activationCode || '').trim();
   const providerKey = String(body.providerKey || '').trim();
   if (!validProviderKey(providerKey)) return json(res, 400, { error: 'invalid_provider_key' });
-  if (!await authorizedDevice(deviceId, activationCode)) return json(res, 403, { error: 'unauthorized_device' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return json(res, 403, { error: 'unauthorized_device' });
 
   const result = await pool.query(
     `SELECT provider_key,live_format,preferred_transport,preferred_engine,allow_cross_protocol_redirects,updated_at
@@ -196,21 +361,18 @@ async function playbackDiagnostic(req, res) {
   const deviceId = String(body.deviceId || '').trim();
   const activationCode = String(body.activationCode || '').trim();
   if (!validIdentity(deviceId, activationCode)) return json(res, 400, { error: 'invalid_device_identity' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return json(res, 403, { error: 'unauthorized_device' });
 
-  const device = await pool.query('SELECT activation_code FROM devices WHERE device_id=$1', [deviceId]);
-  const row = device.rows[0];
-  if (!row || !constantTimeEqual(row.activation_code, activationCode)) return json(res, 403, { error: 'unauthorized_device' });
-
-  const providerKey = String(body.providerKey || 'unknown').slice(0, 128);
-  const contentKind = String(body.contentKind || 'unknown').slice(0, 32);
-  const redactedUrl = String(body.redactedUrl || '').slice(0, 1024) || null;
+  const providerKey = pseudonymizeDiagnosticProviderKey(body.providerKey);
+  const contentKind = sanitizeDiagnosticContentKind(body.contentKind);
+  const redactedUrl = body.redactedUrl == null ? null : sanitizeDiagnosticUrl(body.redactedUrl, 1024);
   const ttffRaw = body.ttffMs == null ? null : Number(body.ttffMs);
   const ttffMs = Number.isFinite(ttffRaw) && ttffRaw >= 0 && ttffRaw <= 600_000 ? Math.round(ttffRaw) : null;
   const bufferingRaw = Number(body.bufferingCount || 0);
   const bufferingCount = Number.isFinite(bufferingRaw) ? Math.max(0, Math.min(10_000, Math.round(bufferingRaw))) : 0;
-  const errorCode = String(body.errorCode || '').slice(0, 128) || null;
-  const errorMessage = String(body.errorMessage || '').slice(0, 512) || null;
-  const appVersion = String(body.appVersion || '').slice(0, 64) || null;
+  const errorCode = sanitizeDiagnosticErrorCode(body.errorCode);
+  const errorMessage = sanitizeDiagnosticMessage(body.errorMessage, 512);
+  const appVersion = sanitizeDiagnosticAppVersion(body.appVersion);
 
   await pool.query(
     `INSERT INTO playback_diagnostics(device_id,provider_key,content_kind,redacted_url,ttff_ms,buffering_count,error_code,error_message,app_version)
@@ -221,6 +383,8 @@ async function playbackDiagnostic(req, res) {
 }
 
 function requireAdmin(req, res) {
+  const rate = adminIpLimiter.consume(requestClientKey(req));
+  if (!rate.allowed) throw new RateLimitError(rate.retryAfterSeconds);
   const auth = String(req.headers.authorization || '');
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   if (!token || !constantTimeEqual(token, ADMIN_TOKEN)) {
@@ -296,7 +460,10 @@ async function adminDiagnostics(req, res, requestUrl) {
   const clauses = [];
   const values = [];
   if (deviceId) { values.push(deviceId); clauses.push(`device_id=$${values.length}`); }
-  if (providerKey) { values.push(providerKey); clauses.push(`provider_key=$${values.length}`); }
+  if (providerKey) {
+    values.push(pseudonymizeDiagnosticProviderKey(providerKey));
+    clauses.push(`provider_key=$${values.length}`);
+  }
   values.push(limit);
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const result = await pool.query(
@@ -308,14 +475,14 @@ async function adminDiagnostics(req, res, requestUrl) {
     items: result.rows.map((item) => ({
       id: Number(item.id),
       deviceId: item.device_id,
-      providerKey: item.provider_key,
-      contentKind: item.content_kind,
-      redactedUrl: item.redacted_url,
+      providerKey: pseudonymizeDiagnosticProviderKey(item.provider_key),
+      contentKind: sanitizeDiagnosticContentKind(item.content_kind),
+      redactedUrl: item.redacted_url == null ? null : sanitizeDiagnosticUrl(item.redacted_url, 1024),
       ttffMs: item.ttff_ms == null ? null : Number(item.ttff_ms),
       bufferingCount: Number(item.buffering_count),
-      errorCode: item.error_code,
-      errorMessage: item.error_message,
-      appVersion: item.app_version,
+      errorCode: sanitizeDiagnosticErrorCode(item.error_code),
+      errorMessage: sanitizeDiagnosticMessage(item.error_message, 512),
+      appVersion: sanitizeDiagnosticAppVersion(item.app_version),
       createdAt: new Date(item.created_at).getTime()
     }))
   });
@@ -379,6 +546,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
+    if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/rotate') return await activationRotate(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/provider-profile') return await providerProfile(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/diagnostics/playback') return await playbackDiagnostic(req, res);
 
@@ -398,7 +566,15 @@ const server = http.createServer(async (req, res) => {
 
     return json(res, 404, { error: 'not_found' });
   } catch (error) {
-    console.error(error);
+    console.error('request failed:', safeErrorSummary(error));
+    if (error instanceof RateLimitError) {
+      return json(
+        res,
+        429,
+        { error: 'rate_limited', retryAfterSeconds: error.retryAfterSeconds },
+        { 'retry-after': String(error.retryAfterSeconds) }
+      );
+    }
     const status = error?.message === 'payload_too_large' ? 413 : 500;
     return json(res, status, { error: status === 500 ? 'internal_error' : error.message });
   }
@@ -420,7 +596,7 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 start().catch(async (error) => {
-  console.error('BLOFY activation startup failed', error);
+  console.error('BLOFY activation startup failed:', safeErrorSummary(error));
   await pool.end().catch(() => {});
   process.exit(1);
 });

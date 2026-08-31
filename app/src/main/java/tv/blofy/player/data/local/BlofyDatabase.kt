@@ -4,6 +4,10 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+
+internal const val BLOFY_DATABASE_VERSION = 5
 
 @Database(
     entities = [
@@ -15,7 +19,7 @@ import androidx.room.RoomDatabase
         EpgEntity::class,
         ActivationEntity::class
     ],
-    version = 5,
+    version = BLOFY_DATABASE_VERSION,
     exportSchema = false
 )
 abstract class BlofyDatabase : RoomDatabase() {
@@ -24,12 +28,156 @@ abstract class BlofyDatabase : RoomDatabase() {
     companion object {
         @Volatile private var instance: BlofyDatabase? = null
 
+        internal val ALL_MIGRATIONS = arrayOf(
+            object : Migration(1, 2) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `epg` (
+                            `key` TEXT NOT NULL,
+                            `providerId` TEXT NOT NULL,
+                            `streamId` TEXT NOT NULL,
+                            `title` TEXT NOT NULL,
+                            `description` TEXT,
+                            `startMs` INTEGER NOT NULL,
+                            `endMs` INTEGER NOT NULL,
+                            PRIMARY KEY(`key`)
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_epg_providerId` ON `epg` (`providerId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_epg_streamId` ON `epg` (`streamId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_epg_startMs` ON `epg` (`startMs`)")
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `activation` (
+                            `deviceId` TEXT NOT NULL,
+                            `activationCode` TEXT NOT NULL,
+                            `activated` INTEGER NOT NULL,
+                            `expiresAt` INTEGER,
+                            `lastCheckAt` INTEGER NOT NULL,
+                            PRIMARY KEY(`deviceId`)
+                        )
+                        """.trimIndent()
+                    )
+                }
+            },
+            object : Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Rebuild instead of adding a column with a persistent SQL default.
+                    db.execSQL(
+                        """
+                        CREATE TABLE `providers_new` (
+                            `id` TEXT NOT NULL,
+                            `name` TEXT NOT NULL,
+                            `baseUrl` TEXT NOT NULL,
+                            `username` TEXT NOT NULL,
+                            `password` TEXT NOT NULL,
+                            `providerType` TEXT NOT NULL,
+                            `liveFormat` TEXT NOT NULL,
+                            `preferredTransport` TEXT NOT NULL,
+                            `preferredEngine` TEXT NOT NULL,
+                            `allowCrossProtocolRedirects` INTEGER NOT NULL,
+                            `enabled` INTEGER NOT NULL,
+                            `updatedAt` INTEGER NOT NULL,
+                            PRIMARY KEY(`id`)
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
+                        INSERT INTO `providers_new` (
+                            `id`, `name`, `baseUrl`, `username`, `password`, `providerType`,
+                            `liveFormat`, `preferredTransport`, `preferredEngine`,
+                            `allowCrossProtocolRedirects`, `enabled`, `updatedAt`
+                        )
+                        SELECT
+                            `id`, `name`, `baseUrl`, `username`, `password`, 'xtream',
+                            `liveFormat`, `preferredTransport`, `preferredEngine`,
+                            `allowCrossProtocolRedirects`, `enabled`, `updatedAt`
+                        FROM `providers`
+                        """.trimIndent()
+                    )
+                    db.execSQL("DROP TABLE `providers`")
+                    db.execSQL("ALTER TABLE `providers_new` RENAME TO `providers`")
+                }
+            },
+            object : Migration(3, 4) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `streams` ADD COLUMN `plot` TEXT")
+                    db.execSQL("ALTER TABLE `streams` ADD COLUMN `genre` TEXT")
+                    db.execSQL("ALTER TABLE `streams` ADD COLUMN `releaseDate` TEXT")
+                    db.execSQL("ALTER TABLE `streams` ADD COLUMN `year` TEXT")
+                    db.execSQL("ALTER TABLE `streams` ADD COLUMN `rating` TEXT")
+                    db.execSQL("ALTER TABLE `streams` ADD COLUMN `duration` TEXT")
+                    db.execSQL("ALTER TABLE `streams` ADD COLUMN `backdrop` TEXT")
+                }
+            },
+            object : Migration(4, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Rebuild to backfill non-null catch-up fields without changing the final schema defaults.
+                    db.execSQL(
+                        """
+                        CREATE TABLE `streams_new` (
+                            `key` TEXT NOT NULL,
+                            `providerId` TEXT NOT NULL,
+                            `remoteId` TEXT NOT NULL,
+                            `categoryId` TEXT,
+                            `kind` TEXT NOT NULL,
+                            `name` TEXT NOT NULL,
+                            `icon` TEXT,
+                            `extension` TEXT,
+                            `directSource` TEXT,
+                            `epgChannelId` TEXT,
+                            `streamType` TEXT,
+                            `addedAt` INTEGER,
+                            `plot` TEXT,
+                            `genre` TEXT,
+                            `releaseDate` TEXT,
+                            `year` TEXT,
+                            `rating` TEXT,
+                            `duration` TEXT,
+                            `backdrop` TEXT,
+                            `archiveEnabled` INTEGER NOT NULL,
+                            `archiveDurationDays` INTEGER NOT NULL,
+                            `favorite` INTEGER NOT NULL,
+                            `locked` INTEGER NOT NULL,
+                            PRIMARY KEY(`key`)
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
+                        INSERT INTO `streams_new` (
+                            `key`, `providerId`, `remoteId`, `categoryId`, `kind`, `name`,
+                            `icon`, `extension`, `directSource`, `epgChannelId`, `streamType`,
+                            `addedAt`, `plot`, `genre`, `releaseDate`, `year`, `rating`,
+                            `duration`, `backdrop`, `archiveEnabled`, `archiveDurationDays`,
+                            `favorite`, `locked`
+                        )
+                        SELECT
+                            `key`, `providerId`, `remoteId`, `categoryId`, `kind`, `name`,
+                            `icon`, `extension`, `directSource`, `epgChannelId`, `streamType`,
+                            `addedAt`, `plot`, `genre`, `releaseDate`, `year`, `rating`,
+                            `duration`, `backdrop`, 0, 0, `favorite`, `locked`
+                        FROM `streams`
+                        """.trimIndent()
+                    )
+                    db.execSQL("DROP TABLE `streams`")
+                    db.execSQL("ALTER TABLE `streams_new` RENAME TO `streams`")
+                    db.execSQL("CREATE INDEX `index_streams_providerId` ON `streams` (`providerId`)")
+                    db.execSQL("CREATE INDEX `index_streams_categoryId` ON `streams` (`categoryId`)")
+                    db.execSQL("CREATE INDEX `index_streams_kind` ON `streams` (`kind`)")
+                }
+            }
+        )
+
         fun get(context: Context): BlofyDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 BlofyDatabase::class.java,
                 "blofy-player-2.db"
-            ).fallbackToDestructiveMigration(dropAllTables = true).build().also { instance = it }
+            ).addMigrations(*ALL_MIGRATIONS).build().also { instance = it }
         }
     }
 }

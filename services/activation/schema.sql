@@ -14,6 +14,16 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);
 CREATE INDEX IF NOT EXISTS idx_devices_expires_at ON devices(expires_at);
 
+-- Existing installations are upgraded in place; these counters enforce a
+-- database-backed lockout across service restarts and multiple instances.
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS auth_failed_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_auth_failure_at TIMESTAMPTZ;
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS auth_locked_until TIMESTAMPTZ;
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS previous_activation_code_proof TEXT;
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS activation_rotated_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_devices_auth_locked_until ON devices(auth_locked_until)
+  WHERE auth_locked_until IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS playback_diagnostics (
   id BIGSERIAL PRIMARY KEY,
   device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,

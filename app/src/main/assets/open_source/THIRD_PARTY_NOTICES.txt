@@ -1,0 +1,35 @@
+BLOFY PLAYER — Third-party notices
+
+FFmpeg
+------
+This software uses libraries from the FFmpeg project under the GNU Lesser
+General Public License version 2.1 or later.
+
+FFmpeg version: n6.0
+FFmpeg commit: ea3d24bbe3c58b171e55fe2151fc7ffaca3ab3d2
+Enabled decoders: ac3 eac3 dca truehd aac mp3 opus vorbis flac
+GPL components: disabled
+Nonfree components: disabled
+Version 3 licensing switch: disabled
+
+Copyright and license details are provided in:
+  open_source/ffmpeg/LICENSE.md
+  open_source/ffmpeg/COPYING.LGPLv2.1
+  open_source/ffmpeg/SOURCE_OFFER.txt
+
+FFmpeg is a trademark of Fabrice Bellard. BLOFY PLAYER is not affiliated with
+or endorsed by the FFmpeg project.
+
+AndroidX Media3 FFmpeg decoder module
+-------------------------------------
+The FFmpeg JNI integration used by BLOFY PLAYER is based on AndroidX Media3
+1.6.1, commit 839c4a90f2ab36e48be73e1b5e907f3283dce72e, licensed under
+the Apache License, Version 2.0.
+
+The complete Apache 2.0 license is provided in:
+  open_source/androidx-media/LICENSE
+
+BLOFY PLAYER modifies only Media3's shared Android build configuration to pin
+Android NDK 28.0.13004108 for the JNI build. The matching compliance archive
+contains the prominent modification notice and exact patch as
+androidx-media-changes.diff.

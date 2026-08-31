@@ -12,11 +12,12 @@ Required environment variables:
 
 - `DATABASE_URL`: Railway PostgreSQL connection string.
 - `BLOFY_ADMIN_TOKEN`: at least 24 random characters. Use a generated production secret; never commit it.
+- `BLOFY_PLAYLIST_ENCRYPTION_KEY`: one stable 32-byte key encoded as 64 hexadecimal characters. Back it up securely; changing it makes existing saved playlist credentials unreadable.
 - `BLOFY_TRIAL_DAYS=7` unless product policy changes.
 - `PORT`: Railway normally injects this automatically.
 - `PGSSLMODE`: leave unset in production unless the managed database requires another mode.
 
-The service refuses to start if `DATABASE_URL` is missing or if `BLOFY_ADMIN_TOKEN` is too short.
+The service refuses to start if `DATABASE_URL` is missing, if `BLOFY_ADMIN_TOKEN` is too short, or if the playlist encryption key is missing/invalid.
 
 ## 2. Production health gate
 
@@ -24,6 +25,7 @@ After Railway reports the deployment healthy, verify:
 
 - `GET /health` returns HTTP 200.
 - Database initialization completed without errors.
+- The response contains `playlistEncryption: "ready"`.
 - The public endpoint is HTTPS.
 - No admin token or database credential appears in public logs or responses.
 
@@ -37,6 +39,7 @@ Run the service smoke test against the production URL or reproduce the same sequ
 4. Admin activation changes the device to `active` with the requested expiry.
 5. Admin block changes the device to `blocked` and Connect is denied.
 6. Expired trial/activation returns `expired`.
+7. Portal save → list → delete succeeds with encrypted playlist credentials.
 
 ## 4. Build Android against production activation
 

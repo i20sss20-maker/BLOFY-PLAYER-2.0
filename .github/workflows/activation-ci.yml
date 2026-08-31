@@ -32,6 +32,7 @@ jobs:
       PGSSLMODE: disable
       BLOFY_ADMIN_TOKEN: ci-test-admin-token-1234567890
       BLOFY_TRIAL_DAYS: 7
+      BLOFY_PLAYLIST_ENCRYPTION_KEY: 3f13b9368c3ae0dbcc7b4e7fbc28ba1247136ed4ad967f8a91a7db0911c7d4a2
       PORT: 8080
       BLOFY_SMOKE_BASE_URL: http://127.0.0.1:8080
     steps:
@@ -60,6 +61,10 @@ jobs:
           exit 1
       - name: Unified production smoke suite
         run: node smoke.mjs
+      - name: Portal to Android playlist sync E2E contract
+        env:
+          BLOFY_E2E_BASE_URL: http://127.0.0.1:8080
+        run: node test/portal-playlist-sync.e2e.mjs
       - name: Verify active expiry and reactivation lifecycle
         run: |
           curl --fail --silent -H 'content-type: application/json' \

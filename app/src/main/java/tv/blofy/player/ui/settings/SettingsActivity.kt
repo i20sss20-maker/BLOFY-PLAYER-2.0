@@ -63,6 +63,15 @@ class SettingsActivity : AppCompatActivity() {
             setTextColor(if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) Color.rgb(170, 230, 180) else Color.rgb(185, 170, 200))
             setPadding(0, 0, 0, 6)
         })
+        if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) {
+            root.addView(TextView(this).apply {
+                text = "يستخدم هذا التطبيق مكتبات من مشروع FFmpeg بموجب LGPL v2.1 أو أحدث. الترخيص والمصدر ومواد إعادة الربط مرفقة بحزمة الإصدار."
+                textSize = 12f
+                setTextColor(Color.rgb(190, 180, 210))
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, 8)
+            })
+        }
         status = TextView(this).apply {
             setTextColor(Color.rgb(205, 190, 230))
             gravity = Gravity.CENTER

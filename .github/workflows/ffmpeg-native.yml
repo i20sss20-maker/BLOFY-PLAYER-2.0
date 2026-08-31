@@ -12,10 +12,19 @@ on:
       - '.github/workflows/ffmpeg-native.yml'
       - 'tools/build_media3_ffmpeg.sh'
       - 'app/build.gradle.kts'
+      - 'app/src/main/assets/open_source/**'
       - 'app/src/main/java/tv/blofy/player/core/playback/BlofyPlaybackSession.kt'
+      - 'app/src/main/java/tv/blofy/player/ui/settings/SettingsActivity.kt'
+      - 'docs/FFMPEG*.md'
 
 permissions:
   contents: read
+
+env:
+  ANDROID_NDK_VERSION: 28.0.13004108
+  ANDROID_BUILD_TOOLS_VERSION: 35.0.0
+  GRADLE_CMD: gradle
+  MEDIA3_GRADLE_VERSION: "8.11.1"
 
 jobs:
   build-ffmpeg-apk:
@@ -31,7 +40,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
+          gradle-version: '8.11.1'
 
       - name: Install Android native toolchain
         shell: bash
@@ -40,11 +49,18 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" \
-            "ndk;26.1.10909125" \
+            "platforms;android-36" \
+            "build-tools;$ANDROID_BUILD_TOOLS_VERSION" \
+            "ndk;$ANDROID_NDK_VERSION" \
             "cmake;3.22.1"
-          test -d "$ANDROID_HOME/ndk/26.1.10909125"
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
+          test -d "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
           test -d "$ANDROID_HOME/cmake/3.22.1"
-          command -v ninja || sudo apt-get update && sudo apt-get install -y ninja-build
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
 
       - name: Build Media3 1.6.1 FFmpeg decoder AAR
         env:
@@ -55,7 +71,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          export NDK_PATH="$ANDROID_HOME/ndk/26.1.10909125"
+          export NDK_PATH="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
           export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"
           test -d "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
           chmod +x tools/build_media3_ffmpeg.sh
@@ -79,9 +95,68 @@ jobs:
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$AAR"
           test -s "$APK"
-          unzip -l "$AAR" | grep -Eiq 'jni/.*/lib(ffmpeg|ffmpegJNI).*\.so|libffmpegJNI\.so'
-          unzip -l "$APK" | grep -Eiq 'lib/.*/lib(ffmpeg|ffmpegJNI).*\.so|libffmpegJNI\.so'
-          echo "FFmpeg native decoder verified inside Media3 AAR and BLOFY APK"
+          unzip -Z1 "$AAR" > "$RUNNER_TEMP/ffmpeg-aar-files.txt"
+          unzip -Z1 "$APK" > "$RUNNER_TEMP/ffmpeg-apk-files.txt"
+          for license_asset in \
+            assets/open_source/THIRD_PARTY_NOTICES.txt \
+            assets/open_source/ffmpeg/LICENSE.md \
+            assets/open_source/ffmpeg/COPYING.LGPLv2.1 \
+            assets/open_source/ffmpeg/SOURCE_OFFER.txt \
+            assets/open_source/androidx-media/LICENSE; do
+            grep -Fxq "$license_asset" "$RUNNER_TEMP/ffmpeg-apk-files.txt"
+          done
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            grep -Fxq "jni/$abi/libffmpegJNI.so" "$RUNNER_TEMP/ffmpeg-aar-files.txt"
+            grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/ffmpeg-apk-files.txt"
+          done
+
+          "$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION/zipalign" \
+            -c -P 16 -v 4 "$APK"
+
+          verify_dir="$RUNNER_TEMP/blofy-ffmpeg-apk-native"
+          rm -rf "$verify_dir"
+          mkdir -p "$verify_dir"
+          unzip -q "$APK" 'lib/arm64-v8a/*.so' 'lib/x86_64/*.so' -d "$verify_dir"
+
+          llvm_objdump="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump"
+          llvm_readelf="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          test -x "$llvm_objdump"
+          test -x "$llvm_readelf"
+
+          for abi in arm64-v8a x86_64; do
+            mapfile -t libraries < <(find "$verify_dir/lib/$abi" -maxdepth 1 -type f -name '*.so' -print | sort)
+            ((${#libraries[@]} > 0))
+            for library in "${libraries[@]}"; do
+              "$llvm_readelf" -h "$library" | grep -Eq 'Class:[[:space:]]+ELF64'
+              mapfile -t load_alignments < <("$llvm_objdump" -p "$library" | awk '$1 == "LOAD" { print $NF }')
+              ((${#load_alignments[@]} > 0))
+              for alignment in "${load_alignments[@]}"; do
+                if [[ ! "$alignment" =~ ^2\*\*([0-9]+)$ ]] || ((BASH_REMATCH[1] < 14)); then
+                  echo "::error file=${library#$verify_dir/}::ELF LOAD alignment $alignment is below 2**14"
+                  exit 1
+                fi
+              done
+              echo "Verified ${library#$verify_dir/}: ELF64 LOAD alignment >= 2**14"
+            done
+          done
+
+          echo "FFmpeg native decoder verified for all Android ABIs; 64-bit ELF and APK alignment are 16 KB compatible"
+          test -s build/ffmpeg-native/compliance/COPYING.LGPLv2.1
+          test -s build/ffmpeg-native/compliance/FFmpeg-LICENSE.md
+          test -s build/ffmpeg-native/compliance/BUILD-AND-RELINK.txt
+          test -s build/ffmpeg-native/compliance/FFmpeg-n6.0-source.tar.gz
+          test -s build/ffmpeg-native/compliance/androidx-media-1.6.1-source.tar.gz
+          test -s build/ffmpeg-native/compliance/androidx-media-changes.diff
+          grep -Fq 'Modified by BLOFY PLAYER' build/ffmpeg-native/compliance/androidx-media-changes.diff
+          grep -Fq "ndkVersion '$ANDROID_NDK_VERSION'" build/ffmpeg-native/compliance/androidx-media-changes.diff
+          grep -Fq 'CONFIG_GPL=0' build/ffmpeg-native/compliance/BUILD-AND-RELINK.txt
+          grep -Fq 'CONFIG_NONFREE=0' build/ffmpeg-native/compliance/BUILD-AND-RELINK.txt
+          grep -Fq 'CONFIG_VERSION3=0' build/ffmpeg-native/compliance/BUILD-AND-RELINK.txt
+          grep -Fq "Gradle: $MEDIA3_GRADLE_VERSION" build/ffmpeg-native/compliance/BUILD-AND-RELINK.txt
+          (
+            cd build/ffmpeg-native/compliance
+            sha256sum --check SHA256SUMS
+          )
           ls -lh "$AAR" "$APK"
           sha256sum "$AAR" "$APK" | tee build/ffmpeg-native/final-artifacts.sha256
           {
@@ -89,7 +164,20 @@ jobs:
             echo "commit=$GITHUB_SHA"
             echo "run=$GITHUB_RUN_NUMBER"
             echo "media3=1.6.1"
+            echo "media3_commit=839c4a90f2ab36e48be73e1b5e907f3283dce72e"
             echo "ffmpeg=true"
+            echo "ffmpeg_version=n6.0"
+            echo "ffmpeg_commit=ea3d24bbe3c58b171e55fe2151fc7ffaca3ab3d2"
+            echo "ffmpeg_license=LGPL-2.1-or-later"
+            echo "ffmpeg_config_gpl=0"
+            echo "ffmpeg_config_nonfree=0"
+            echo "ffmpeg_config_version3=0"
+            echo "abis=armeabi-v7a arm64-v8a x86 x86_64"
+            echo "required_64_bit_abis=arm64-v8a x86_64"
+            echo "elf_load_alignment=2**14"
+            echo "page_size_compatible=16384"
+            echo "ndk=$ANDROID_NDK_VERSION"
+            echo "gradle=$MEDIA3_GRADLE_VERSION"
             echo "decoders=${{ inputs.decoders || 'ac3 eac3 dca truehd aac mp3 opus vorbis flac' }}"
           } > build/ffmpeg-native/build-apk-info.txt
 
@@ -100,6 +188,7 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk
             build/ffmpeg-native/final-artifacts.sha256
             build/ffmpeg-native/build-apk-info.txt
+            build/ffmpeg-native/compliance/
           if-no-files-found: error
           retention-days: 30
 

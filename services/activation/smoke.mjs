@@ -33,6 +33,35 @@ const wrongCode = await request('/api/v1/activation/check', {
 assert.equal(wrongCode.response.status, 403);
 assert.equal(wrongCode.body?.status, 'blocked');
 
+const lockDeviceId = 'BLOFY-LOCK-QA01';
+const lockCode = '593841';
+const lockRegistered = await request('/api/v1/activation/check', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ deviceId: lockDeviceId, activationCode: lockCode, appVersion: 'smoke', platform: 'ci' })
+});
+assert.equal(lockRegistered.response.status, 200);
+for (let attempt = 0; attempt < 5; attempt += 1) {
+  const failed = await request('/api/v1/activation/check', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      deviceId: lockDeviceId,
+      activationCode: String(100_000 + attempt),
+      appVersion: 'smoke',
+      platform: 'ci'
+    })
+  });
+  assert.equal(failed.response.status, 403);
+}
+const lockedCorrectCode = await request('/api/v1/activation/check', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ deviceId: lockDeviceId, activationCode: lockCode, appVersion: 'smoke', platform: 'ci' })
+});
+assert.equal(lockedCorrectCode.response.status, 403);
+assert.equal(lockedCorrectCode.body?.message, 'unauthorized_device');
+
 if (adminToken) {
   const block = await request(`/api/v1/admin/devices/${encodeURIComponent(deviceId)}`, {
     method: 'PATCH',
