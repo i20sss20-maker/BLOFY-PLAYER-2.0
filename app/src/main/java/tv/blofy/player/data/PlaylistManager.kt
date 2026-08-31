@@ -152,8 +152,9 @@ class PlaylistManager(
     ): Int {
         if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
-        val previous = dao.streams(provider.id, "movie", null).first()
-        val previousFlags = PreviousStreamFlags(previous)
+        val (previousCount, previousFlags) = dao.streams(provider.id, "movie", null).first().let { previous ->
+            previous.size to PreviousStreamFlags(previous.filter { it.favorite || it.locked })
+        }
         val coroutineContext = currentCoroutineContext()
         val categoryRows = categories.mapIndexedNotNull { index, row ->
             if (index % 256 == 0) coroutineContext.ensureActive()
@@ -192,7 +193,7 @@ class PlaylistManager(
         onProgress(88)
 
         if (CatalogReplacementPolicy.shouldReplace(
-                previousStreamCount = previous.size,
+                previousStreamCount = previousCount,
                 sourceCategoryCount = categories.size,
                 parsedCategoryCount = categoryRows.size,
                 sourceStreamCount = sourceStreamCount,
