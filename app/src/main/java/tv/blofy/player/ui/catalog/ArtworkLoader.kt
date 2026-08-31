@@ -50,9 +50,11 @@ object ArtworkLoader {
         }
 
         view.setImageDrawable(null)
-        val listeners = waiting.computeIfAbsent(url) { CopyOnWriteArrayList() }
+        val created = CopyOnWriteArrayList<WeakReference<ImageView>>()
+        val existing = waiting.putIfAbsent(url, created)
+        val listeners = existing ?: created
         listeners += WeakReference(view)
-        if (listeners.size > 1) return
+        if (existing != null) return
 
         val appContext = view.context.applicationContext
         pool.execute {
@@ -76,7 +78,8 @@ object ArtworkLoader {
     fun prefetch(context: android.content.Context, urls: List<String?>) {
         urls.asSequence().mapNotNull { it?.trim() }.filter(::isHttpUrl).distinct().take(12).forEach { url ->
             if (cache.get(url) != null || waiting.containsKey(url)) return@forEach
-            waiting[url] = CopyOnWriteArrayList()
+            val created = CopyOnWriteArrayList<WeakReference<ImageView>>()
+            if (waiting.putIfAbsent(url, created) != null) return@forEach
             val appContext = context.applicationContext
             pool.execute {
                 val bitmap = runCatching {
