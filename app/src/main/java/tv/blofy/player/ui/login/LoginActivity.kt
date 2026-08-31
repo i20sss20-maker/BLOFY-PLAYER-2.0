@@ -34,6 +34,7 @@ import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.provider.RemoteProviderProfileClient
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
+import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.home.HomeActivity
@@ -220,6 +221,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun openCatalogLoading(providerId: String) {
+        CatalogSyncState.markPending(applicationContext, providerId)
         startActivity(Intent(this, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, providerId))
     }
 
@@ -230,7 +232,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) {
-        CATALOG_KINDS.all { kind -> dao.streams(providerId, kind, null).first().isNotEmpty() }
+        CatalogSyncState.isReady(applicationContext, providerId) && dao.allStreamsForProvider(providerId).isNotEmpty()
     }
 
     private suspend fun <T> runSuspendCatching(block: suspend () -> T): Result<T> = try { Result.success(block()) }
@@ -285,6 +287,4 @@ class LoginActivity : AppCompatActivity() {
     private fun panelBackground() = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(0xEA151020.toInt()); setStroke(dp(1), 0xFF67458E.toInt()) }
     private fun buttonBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(if (focused) 0xFF7D45D9.toInt() else 0xFF241A30.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0xFF69468F.toInt()) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-
-    companion object { private val CATALOG_KINDS = listOf("live", "movie", "series") }
 }
