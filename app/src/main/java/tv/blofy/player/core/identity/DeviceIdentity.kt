@@ -1,21 +1,34 @@
 package tv.blofy.player.core.identity
 
 import android.content.Context
-import android.provider.Settings
-import java.security.MessageDigest
 import java.security.SecureRandom
 
 object DeviceIdentity {
     private const val PREFERENCES = "blofy_device_identity"
+    private const val DEVICE_ID = "device_id_v2"
     private const val ACTIVE_CODE = "activation_code"
     private const val PENDING_CODE = "pending_activation_code"
+    private const val DEVICE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     private val secureRandom = SecureRandom()
 
+    /**
+     * Device IDs are installation-scoped, not derived from ANDROID_ID.
+     *
+     * This is intentional: after the app is deleted its local activation credential is lost.
+     * Reusing the same deterministic Device ID with a newly generated activation code would
+     * collide with the old server row and permanently reject the fresh install. A fresh install
+     * now receives a fresh complete identity, while normal app updates keep the same ID because
+     * this value remains in SharedPreferences.
+     */
+    @Synchronized
     fun deviceId(context: Context): String {
-        val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID).orEmpty()
-        val digest = sha256("blofy:$androidId:${context.packageName}")
-        val code = digest.take(8).uppercase()
-        return "BLOFY-${code.take(4)}-${code.drop(4)}"
+        val preferences = preferences(context)
+        preferences.getString(DEVICE_ID, null)?.takeIf(::validDeviceId)?.let { return it }
+        return generateDeviceId().also {
+            check(preferences.edit().putString(DEVICE_ID, it).commit()) {
+                "Unable to persist the device ID"
+            }
+        }
     }
 
     @Synchronized
@@ -100,6 +113,13 @@ object DeviceIdentity {
         }
     }
 
+    internal fun generateDeviceId(nextInt: (Int) -> Int = secureRandom::nextInt): String {
+        val raw = buildString(8) {
+            repeat(8) { append(DEVICE_ALPHABET[nextInt(DEVICE_ALPHABET.length)]) }
+        }
+        return "BLOFY-${raw.take(4)}-${raw.drop(4)}"
+    }
+
     internal fun generateActivationCode(nextInt: (Int) -> Int = secureRandom::nextInt): String =
         (100_000 + nextInt(900_000)).toString()
 
@@ -113,8 +133,5 @@ object DeviceIdentity {
         context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
 
     private fun validActivationCode(value: String): Boolean = value.matches(Regex("\\d{6}"))
-
-    private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
-        .digest(value.toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
+    private fun validDeviceId(value: String): Boolean = value.matches(Regex("BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}"))
 }
