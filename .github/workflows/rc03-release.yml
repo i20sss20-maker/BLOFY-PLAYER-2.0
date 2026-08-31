@@ -89,7 +89,15 @@ jobs:
           set -euo pipefail
           umask 077
           keystore="$RUNNER_TEMP/blofy-production.keystore"
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          clean_b64="$RUNNER_TEMP/blofy-production.b64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' > "$clean_b64"
+          test -s "$clean_b64"
+          remainder=$(( $(wc -c < "$clean_b64") % 4 ))
+          if [[ "$remainder" -ne 0 ]]; then
+            printf '%*s' $((4 - remainder)) '' | tr ' ' '=' >> "$clean_b64"
+          fi
+          base64 --decode "$clean_b64" > "$keystore"
+          rm -f "$clean_b64"
           test -s "$keystore"
           keytool -list -keystore "$keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null
           actual="$(keytool -exportcert -keystore "$keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')"
@@ -177,4 +185,4 @@ jobs:
       - name: Remove signing material
         if: always()
         shell: bash
-        run: rm -f "$RUNNER_TEMP/blofy-production.keystore"
+        run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
