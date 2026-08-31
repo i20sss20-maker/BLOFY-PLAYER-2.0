@@ -101,6 +101,17 @@ async function servePortal(res) {
   res.end(file);
 }
 
+async function servePortalLogo(res) {
+  const file = await readFile(new URL('../web/blofy-logo.png', import.meta.url));
+  res.writeHead(200, {
+    'content-type': 'image/png',
+    'content-length': file.length,
+    'cache-control': 'public, max-age=86400',
+    'x-content-type-options': 'nosniff'
+  });
+  res.end(file);
+}
+
 async function activationCheck(req, res) {
   const body = await readJson(req);
   const deviceId = String(body.deviceId || '').trim();
@@ -365,6 +376,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
+    if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/provider-profile') return await providerProfile(req, res);
