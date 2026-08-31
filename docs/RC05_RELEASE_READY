@@ -1,0 +1,8 @@
+BLOFY PLAYER 2.0 rc05 release gate
+
+Includes:
+- activation identity reinstall fix
+- portal/app activation consistency fix
+- restored original BLOFY logo on activation screen
+- restored approved BLOFY playlist entry styling
+- existing player engines and playback stack unchanged
