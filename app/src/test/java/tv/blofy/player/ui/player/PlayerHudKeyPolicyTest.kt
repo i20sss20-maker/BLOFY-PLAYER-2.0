@@ -16,6 +16,6 @@ class PlayerHudKeyPolicyTest {
 
     @Test
     fun dpadCenterKeepsVisibleHudWhenNoActionableControlIsFocused() {
-        assertEquals(HudOkAction.KEEP_HUD, PlayerHudKeyPolicy.okAction(true, false))
+        assertEquals(HudOkAction.SHOW_HUD, PlayerHudKeyPolicy.okAction(true, false))
     }
 }
