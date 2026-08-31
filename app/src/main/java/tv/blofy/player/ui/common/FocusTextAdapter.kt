@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.common
 
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
@@ -22,9 +23,7 @@ class FocusTextAdapter<T>(
     private var restorePending = false
     private var attachedRecyclerView: RecyclerView? = null
 
-    init {
-        setHasStableIds(itemKey != null)
-    }
+    init { setHasStableIds(itemKey != null) }
 
     fun submit(newItems: List<T>) {
         val listOwnedFocus = attachedRecyclerView?.hasFocus() == true
@@ -35,17 +34,14 @@ class FocusTextAdapter<T>(
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize(): Int = oldItems.size
             override fun getNewListSize(): Int = nextItems.size
-
             override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
                 val oldItem = oldItems[oldItemPosition]
                 val newItem = nextItems[newItemPosition]
                 return if (keyOf != null) keyOf(oldItem) == keyOf(newItem) else oldItem == newItem
             }
-
             override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
                 oldItems[oldItemPosition] == nextItems[newItemPosition]
         }, false)
-
         items.clear()
         items.addAll(nextItems)
         focusedPosition = when {
@@ -64,10 +60,8 @@ class FocusTextAdapter<T>(
         restorePending = false
     }
 
-    override fun getItemId(position: Int): Long {
-        val key = itemKey ?: return super.getItemId(position)
-        return key(items[position]).hashCode().toLong()
-    }
+    override fun getItemId(position: Int): Long = itemKey?.invoke(items[position])?.hashCode()?.toLong()
+        ?: super.getItemId(position)
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
@@ -81,25 +75,29 @@ class FocusTextAdapter<T>(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
+        val density = parent.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
         val view = TextView(parent.context).apply {
-            textSize = 17f
+            textSize = 14f
+            typeface = Typeface.create(typeface, Typeface.BOLD)
             setTextColor(TEXT_IDLE)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(22, 0, 22, 0)
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            textDirection = View.TEXT_DIRECTION_RTL
+            setPadding(dp(18), 0, dp(18), 0)
             isFocusable = true
             isClickable = true
             isLongClickable = true
-            background = background(false)
+            background = background(parent, false)
             setOnFocusChangeListener { v, focused ->
                 (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
                 v.animate().cancel()
                 v.animate()
-                    .scaleX(if (focused) 1.02f else 1f)
-                    .scaleY(if (focused) 1.02f else 1f)
-                    .translationZ(if (focused) 10f else 2f)
-                    .setDuration(75)
+                    .scaleX(if (focused) 1.006f else 1f)
+                    .scaleY(if (focused) 1.006f else 1f)
+                    .translationZ(if (focused) dp(8).toFloat() else 0f)
+                    .setDuration(90L)
                     .start()
-                v.background = background(focused)
+                v.background = background(parent, focused)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
                         items.getOrNull(pos)?.let { item ->
@@ -134,19 +132,20 @@ class FocusTextAdapter<T>(
     }
 
     override fun getItemCount(): Int = items.size
-
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
 
-    private fun background(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF7930D7.toInt(), 0xFF32164F.toInt())
-        else intArrayOf(0xD91C162C.toInt(), 0xE8110E1B.toInt())
-    ).apply {
-        cornerRadius = 16f
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFE1B8FF.toInt() else 0x554D376B)
+    private fun background(parent: ViewGroup, focused: Boolean): GradientDrawable {
+        val density = parent.resources.displayMetrics.density
+        return GradientDrawable().apply {
+            setColor(if (focused) PANEL_SOFT else Color.TRANSPARENT)
+            cornerRadius = 13f * density
+            if (focused) setStroke((2f * density).toInt().coerceAtLeast(1), PURPLE_LIGHT)
+        }
     }
 
     companion object {
-        private val TEXT_IDLE = Color.rgb(232, 226, 239)
+        private val TEXT_IDLE = Color.rgb(213, 210, 221)
+        private val PANEL_SOFT = Color.rgb(38, 25, 68)
+        private val PURPLE_LIGHT = Color.rgb(188, 132, 255)
     }
 }
