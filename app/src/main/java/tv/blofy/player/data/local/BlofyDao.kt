@@ -72,6 +72,7 @@ interface BlofyDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveWatchState(state: WatchStateEntity)
     @Query("SELECT * FROM watch_state WHERE contentKey = :contentKey LIMIT 1") suspend fun watchState(contentKey: String): WatchStateEntity?
+    @Query("SELECT * FROM watch_state WHERE providerId = :providerId") suspend fun watchStates(providerId: String): List<WatchStateEntity>
     @Query("SELECT * FROM watch_state WHERE providerId = :providerId AND completed = 0 AND positionMs > 0 ORDER BY updatedAt DESC LIMIT :limit") fun continueWatching(providerId: String, limit: Int = 30): Flow<List<WatchStateEntity>>
 
     @Query("DELETE FROM categories WHERE providerId = :providerId AND kind = :kind") suspend fun clearCategories(providerId: String, kind: String)
@@ -101,11 +102,6 @@ interface BlofyDao {
         deleteProvider(stagedProviderId)
     }
 
-    /**
-     * Atomically promotes a fully validated staging catalog to the stable portal provider ID.
-     * The old catalog remains readable until this transaction begins, and matching favorites,
-     * locks and hidden-category choices survive credential refreshes.
-     */
     @Transaction
     suspend fun promoteStagedCatalog(stagedProviderId: String, targetProvider: ProviderEntity) {
         val oldCategories = allCategoriesForProvider(targetProvider.id)
