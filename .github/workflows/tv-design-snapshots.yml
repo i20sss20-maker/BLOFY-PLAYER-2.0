@@ -45,7 +45,6 @@ jobs:
           sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$sdkmanager" --licenses >/dev/null || true
           "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
-          "$sdkmanager" --list | grep -E 'google-tv|android-tv' | head -40 || true
 
       - name: Enable KVM
         run: |
@@ -74,17 +73,26 @@ jobs:
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
-            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=tv.blofy.player.DesignSnapshotInstrumentedTest --stacktrace
+
+            APP_APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' ! -name '*androidTest*' | head -1)"
+            TEST_APK="$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' | head -1)"
+            test -f "$APP_APK"
+            test -f "$TEST_APK"
+            echo "Installing $APP_APK"
+            adb install -r "$APP_APK"
+            echo "Installing $TEST_APK"
+            adb install -r "$TEST_APK"
+
+            adb shell am instrument -w \
+              -e class tv.blofy.player.DesignSnapshotInstrumentedTest \
+              tv.blofy.player.v2.test/androidx.test.runner.AndroidJUnitRunner
+
             mkdir -p build/design-snapshots
-            adb shell 'find /sdcard -type f -path "*/design-snapshots/*.png" -print 2>/dev/null' | tr -d '\r' > /tmp/blofy-snapshots.txt
-            echo "Discovered snapshot files:"
-            cat /tmp/blofy-snapshots.txt || true
-            test -s /tmp/blofy-snapshots.txt
-            while IFS= read -r remote; do
-              [ -n "$remote" ] || continue
-              name="$(basename "$remote")"
-              adb exec-out cat "$remote" > "build/design-snapshots/$name"
-            done < /tmp/blofy-snapshots.txt
+            REMOTE_DIR="/sdcard/Android/data/tv.blofy.player.v2/files/design-snapshots"
+            echo "Snapshot directory contents:"
+            adb shell "ls -la '$REMOTE_DIR'"
+            adb pull "$REMOTE_DIR/." build/design-snapshots/
+
             count="$(find build/design-snapshots -maxdepth 1 -type f -name '*.png' | wc -l)"
             echo "Captured $count BLOFY TV screenshots"
             test "$count" -ge 9
