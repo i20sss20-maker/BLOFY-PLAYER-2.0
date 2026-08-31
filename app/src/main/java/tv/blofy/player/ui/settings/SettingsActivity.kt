@@ -3,6 +3,7 @@ package tv.blofy.player.ui.settings
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.InputType
@@ -10,19 +11,19 @@ import android.view.Gravity
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
-import tv.blofy.player.core.device.DeviceClass
-import tv.blofy.player.core.remote.FocusMemory
+import tv.blofy.player.R
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.core.security.ParentalPinManager
-import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -32,192 +33,151 @@ import tv.blofy.player.ui.playlist.ProviderManagerActivity
 class SettingsActivity : AppCompatActivity() {
     private lateinit var provider: ProviderEntity
     private lateinit var status: TextView
-    private lateinit var redirectsButton: Button
-    private lateinit var themeButton: Button
-    private val focusButtons = linkedMapOf<String, Button>()
-    private val isTv by lazy { DeviceClass.isTv(this) }
+    private lateinit var content: LinearLayout
+    private lateinit var sectionRail: LinearLayout
+    private var currentSection = SECTION_PLAYBACK
+    private val prefs by lazy { getSharedPreferences("blofy_settings", MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val theme = ThemeManager.current(this)
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(56, 40, 56, 40)
-            setBackgroundColor(theme.background)
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = LinearLayout.LAYOUT_DIRECTION_LTR
+            setPadding(dp(26), dp(22), dp(26), dp(22))
+            background = AppCompatResources.getDrawable(this@SettingsActivity, R.drawable.blofy_home_background)
         }
-        root.addView(TextView(this).apply {
-            text = "إعدادات BLOFY"
-            textSize = 31f
-            setTextColor(Color.WHITE)
-        })
-        root.addView(TextView(this).apply {
-            text = "إعدادات المزود مستقلة حتى لا يؤثر سيرفر على الآخر"
-            textSize = 14f
-            setTextColor(theme.accent)
-            setPadding(0, 6, 0, 12)
-        })
-        root.addView(TextView(this).apply {
-            text = if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "FFmpeg Audio: مدمج" else "FFmpeg Audio: غير مدمج"
-            textSize = 13f
-            setTextColor(if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) Color.rgb(170, 230, 180) else Color.rgb(185, 170, 200))
-            setPadding(0, 0, 0, 6)
-        })
-        if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) {
-            root.addView(TextView(this).apply {
-                text = "يستخدم هذا التطبيق مكتبات من مشروع FFmpeg بموجب LGPL v2.1 أو أحدث. الترخيص والمصدر ومواد إعادة الربط مرفقة بحزمة الإصدار."
-                textSize = 12f
-                setTextColor(Color.rgb(190, 180, 210))
-                gravity = Gravity.CENTER
-                setPadding(0, 0, 0, 8)
-            })
+        content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(26), 0, dp(24), 0) }
+        val title = TextView(this).apply {
+            text = "الإعدادات"; textSize = 31f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
         }
-        status = TextView(this).apply {
-            setTextColor(Color.rgb(205, 190, 230))
-            gravity = Gravity.CENTER
-            setPadding(0, 8, 0, 20)
+        content.addView(title)
+        status = TextView(this).apply { textSize = 13f; setTextColor(SOFT); gravity = Gravity.RIGHT; setPadding(0, dp(6), 0, dp(14)) }
+        content.addView(status)
+        root.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+
+        sectionRail = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.TOP; setPadding(dp(10), dp(12), dp(10), dp(12)); background = panelBackground()
         }
-        root.addView(status)
-
-        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val ts = actionButton("live_ts", "Live: MPEG-TS") { updateProvider { copy(liveFormat = "ts") } }
-        val hls = actionButton("live_hls", "Live: HLS") { updateProvider { copy(liveFormat = "m3u8") } }
-        val cronet = actionButton("transport_cronet", "Cronet أولاً") { updateProvider { copy(preferredTransport = "cronet") } }
-        val http = actionButton("transport_http", "HTTP أولاً") { updateProvider { copy(preferredTransport = "http") } }
-        listOf(ts, hls, cronet, http).forEach { row1.addView(it, LinearLayout.LayoutParams(220, 76).apply { marginEnd = 12 }) }
-        root.addView(row1)
-
-        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 14, 0, 0) }
-        redirectsButton = actionButton("redirects", "Redirects") { updateProvider { copy(allowCrossProtocolRedirects = !allowCrossProtocolRedirects) } }
-        val refresh = actionButton("refresh", "تحديث القائمة الآن") { refreshLibrary() }
-        val playlists = actionButton("playlists", "إدارة القوائم") { startActivity(Intent(this, ProviderManagerActivity::class.java)) }
-        row2.addView(redirectsButton, LinearLayout.LayoutParams(250, 76).apply { marginEnd = 12 })
-        row2.addView(refresh, LinearLayout.LayoutParams(260, 76).apply { marginEnd = 12 })
-        row2.addView(playlists, LinearLayout.LayoutParams(280, 76))
-        root.addView(row2)
-
-        val row3 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 14, 0, 0) }
-        themeButton = actionButton("theme", "الثيم: ${theme.id.uppercase()}") {
-            val next = ThemeManager.toggle(this)
-            themeButton.text = "الثيم: ${next.id.uppercase()}"
-            recreate()
+        val sections = listOf(
+            SECTION_PLAYBACK to "التشغيل",
+            SECTION_AUDIO to "الصوت",
+            SECTION_SUBTITLES to "الترجمة",
+            SECTION_LANGUAGE to "اللغة",
+            SECTION_NETWORK to "الشبكة",
+            SECTION_APPEARANCE to "المظهر",
+            SECTION_STORAGE to "التخزين",
+            SECTION_DEVICE to "معلومات الجهاز",
+        )
+        sections.forEach { (key, label) ->
+            sectionRail.addView(navButton(label) { currentSection = key; renderSection() }, LinearLayout.LayoutParams(dp(245), dp(62)).apply { bottomMargin = dp(7) })
         }
-        val pinButton = actionButton("pin_change", if (ParentalPinManager.hasPin(this)) "تغيير PIN" else "إنشاء PIN") { changePin() }
-        val clearPin = actionButton("pin_clear", "إزالة PIN") { clearPin() }
-        row3.addView(themeButton, LinearLayout.LayoutParams(260, 76).apply { marginEnd = 12 })
-        row3.addView(pinButton, LinearLayout.LayoutParams(230, 76).apply { marginEnd = 12 })
-        row3.addView(clearPin, LinearLayout.LayoutParams(220, 76))
-        root.addView(row3)
-
-        val row4 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 14, 0, 0) }
-        val systemStatus = actionButton("system_status", "حالة النظام / QA") {
-            startActivity(Intent(this, SystemStatusActivity::class.java))
-        }
-        row4.addView(systemStatus, LinearLayout.LayoutParams(300, 76))
-        root.addView(row4)
-
+        root.addView(sectionRail, LinearLayout.LayoutParams(dp(275), LinearLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
-        if (isTv) {
-            val remembered = FocusMemory.restore(this, SCREEN_KEY)
-            (remembered?.let(focusButtons::get) ?: ts).post { (remembered?.let(focusButtons::get) ?: ts).requestFocus() }
-        }
 
         lifecycleScope.launch {
             provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull() ?: run {
-                status.text = "لا توجد قائمة تشغيل"
-                return@launch
+                status.text = "لا توجد قائمة تشغيل نشطة"; renderSection(); return@launch
             }
-            refreshStatus()
+            refreshStatus(); renderSection()
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        lifecycleScope.launch {
-            val active = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
-            if (active != null) { provider = active; refreshStatus() }
-        }
-    }
-
-    private fun changePin() {
-        val openNewPin = {
-            val input = EditText(this).apply {
-                inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-                hint = "4 إلى 6 أرقام"
-                isSingleLine = true
+    private fun renderSection() {
+        while (content.childCount > 2) content.removeViewAt(2)
+        val scroll = ScrollView(this).apply { isFocusable = false }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(22)) }
+        when (currentSection) {
+            SECTION_PLAYBACK -> {
+                box.addView(sectionTitle("التشغيل")); box.addView(sectionHint("خيارات المشغل والعرض بدون تغيير محرك Media3/FFmpeg الحالي."))
+                box.addView(optionRow("صيغة البث المباشر", providerValue { liveFormat.uppercase() }, "MPEG-TS") { updateProvider { copy(liveFormat = "ts") } }, "HLS") { updateProvider { copy(liveFormat = "m3u8") } })
+                box.addView(toggleRow("تشغيل المعاينة تلقائيًا", "preview_auto", true))
+                box.addView(toggleRow("الانتقال السريع بين القنوات", "fast_channel_zap", true))
+                box.addView(toggleRow("استئناف الأفلام والحلقات", "resume_enabled", true))
             }
-            val dialog = AlertDialog.Builder(this).setTitle("PIN جديد").setView(input).setPositiveButton("حفظ", null).setNegativeButton("إلغاء", null).create()
-            dialog.setOnShowListener {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                    if (ParentalPinManager.setPin(this, input.text.toString())) {
-                        status.text = "تم حفظ PIN"
-                        dialog.dismiss()
-                    } else input.error = "أدخل 4 إلى 6 أرقام"
-                }
+            SECTION_AUDIO -> {
+                box.addView(sectionTitle("الصوت")); box.addView(sectionHint("اختيار المسار يتم من مشغل الأفلام والمسلسلات عند توفر أكثر من مسار."))
+                box.addView(toggleRow("تذكر آخر مسار صوت", "remember_audio", true)); box.addView(toggleRow("تفضيل Stereo", "prefer_stereo", false))
             }
-            dialog.show()
+            SECTION_SUBTITLES -> {
+                box.addView(sectionTitle("الترجمة")); box.addView(sectionHint("خيارات الترجمة تظهر في Full Screen للأفلام والمسلسلات فقط."))
+                box.addView(toggleRow("تذكر آخر ترجمة", "remember_subtitles", true)); box.addView(choiceRow("حجم الترجمة", "subtitle_size", listOf("صغير", "متوسط", "كبير"), "متوسط"))
+            }
+            SECTION_LANGUAGE -> {
+                box.addView(sectionTitle("اللغة")); box.addView(sectionHint("اختر لغة الواجهة. العربية تستخدم RTL تلقائيًا."))
+                box.addView(choiceRow("لغة التطبيق", "app_language", listOf("العربية", "English", "Français", "Español", "Deutsch", "Türkçe", "Português", "Italiano"), prefs.getString("app_language", "العربية") ?: "العربية"))
+            }
+            SECTION_NETWORK -> {
+                box.addView(sectionTitle("الشبكة")); box.addView(sectionHint("هذه إعدادات اتصال الكتالوج والبث العامة وليست تغييرًا للمحرك."))
+                box.addView(optionRow("النقل المفضل", providerValue { preferredTransport.uppercase() }, "Cronet") { updateProvider { copy(preferredTransport = "cronet") } }, "HTTP") { updateProvider { copy(preferredTransport = "http") } })
+                box.addView(toggleProviderRow("السماح بتحويلات البروتوكول", { allowCrossProtocolRedirects }) { copy(allowCrossProtocolRedirects = !allowCrossProtocolRedirects) })
+            }
+            SECTION_APPEARANCE -> {
+                box.addView(sectionTitle("المظهر")); box.addView(sectionHint("هوية BLOFY البنفسجية ثابتة في شاشات TV."))
+                box.addView(toggleRow("تكبير العنصر عند التركيز", "focus_scale", true)); box.addView(toggleRow("حركات واجهة خفيفة", "ui_motion", true))
+            }
+            SECTION_STORAGE -> {
+                box.addView(sectionTitle("التخزين")); box.addView(sectionHint("الكتالوج المحمّل يبقى محليًا لفتح التطبيق بسرعة."))
+                box.addView(actionRow("تحديث القنوات والأفلام والمسلسلات") { refreshLibrary() }); box.addView(actionRow("إدارة قوائم التشغيل") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
+            }
+            SECTION_DEVICE -> {
+                box.addView(sectionTitle("معلومات الجهاز"));
+                box.addView(infoRow("الإصدار", BuildConfig.VERSION_NAME)); box.addView(infoRow("Media3 + FFmpeg", if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "جاهز" else "Media3 فقط")); box.addView(actionRow("حالة النظام / QA") { startActivity(Intent(this, SystemStatusActivity::class.java)) })
+                box.addView(actionRow(if (ParentalPinManager.hasPin(this)) "تغيير PIN" else "إنشاء PIN") { changePin() })
+            }
         }
-        if (ParentalPinManager.hasPin(this)) ParentalGate.requirePin(this) { openNewPin() } else openNewPin()
+        scroll.addView(box); content.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        box.post { if (box.childCount > 2) box.getChildAt(2).requestFocus() }
     }
 
-    private fun clearPin() {
-        if (!ParentalPinManager.hasPin(this)) {
-            status.text = "لا يوجد PIN محفوظ"
-            return
-        }
-        ParentalGate.requirePin(this) {
-            ParentalPinManager.clear(this)
-            status.text = "تمت إزالة PIN"
-        }
+    private fun sectionTitle(value: String) = TextView(this).apply { text = value; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT }
+    private fun sectionHint(value: String) = TextView(this).apply { text = value; textSize = 14f; setTextColor(SOFT); gravity = Gravity.RIGHT; setPadding(0, dp(6), 0, dp(18)) }
+    private fun infoRow(label: String, value: String) = TextView(this).apply { text = "$label    $value"; textSize = 17f; setTextColor(Color.WHITE); gravity = Gravity.RIGHT; background = itemBackground(false); setPadding(dp(18), dp(16), dp(18), dp(16)) }
+    private fun actionRow(label: String, action: () -> Unit) = actionButton(label, action)
+
+    private fun optionRow(label: String, value: String, a: String, onA: () -> Unit, b: String, onB: () -> Unit): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; layoutDirection = LinearLayout.LAYOUT_DIRECTION_RTL; setPadding(0, 0, 0, dp(10))
+        addView(TextView(this@SettingsActivity).apply { text = "$label\n$value"; textSize = 16f; setTextColor(Color.WHITE); gravity = Gravity.RIGHT }, LinearLayout.LayoutParams(0, dp(72), 1f))
+        addView(actionButton(a, onA), LinearLayout.LayoutParams(dp(170), dp(68)).apply { marginStart = dp(8) }); addView(actionButton(b, onB), LinearLayout.LayoutParams(dp(170), dp(68)))
     }
 
-    private fun actionButton(key: String, label: String, action: () -> Unit) = Button(this).apply {
-        text = label
-        isAllCaps = false
-        textSize = 15f
-        isFocusable = true
-        setTextColor(Color.WHITE)
-        background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = buttonBackground(focused)
-            if (focused && isTv) FocusMemory.save(this@SettingsActivity, SCREEN_KEY, key)
-            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(100).start()
-        }
+    private fun toggleRow(label: String, key: String, default: Boolean): Button = actionButton("$label: ${if (prefs.getBoolean(key, default)) "تشغيل" else "إيقاف"}") {
+        prefs.edit().putBoolean(key, !prefs.getBoolean(key, default)).apply(); renderSection()
+    }
+    private fun toggleProviderRow(label: String, value: ProviderEntity.() -> Boolean, change: ProviderEntity.() -> ProviderEntity): Button = actionButton("$label: ${if (::provider.isInitialized && provider.value()) "تشغيل" else "إيقاف"}") { updateProvider(change) }
+    private fun choiceRow(label: String, key: String, values: List<String>, current: String): Button = actionButton("$label: $current") {
+        AlertDialog.Builder(this).setTitle(label).setItems(values.toTypedArray()) { _, which -> prefs.edit().putString(key, values[which]).apply(); renderSection() }.show()
+    }
+
+    private fun navButton(label: String, action: () -> Unit) = actionButton(label, action)
+    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
+        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = itemBackground(false)
+        setOnFocusChangeListener { view, focused -> view.background = itemBackground(focused); view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(90).start() }
         setOnClickListener { action() }
-        focusButtons[key] = this
     }
+    private fun panelBackground() = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(0xE4141020.toInt()); setStroke(dp(1), 0x554A355F) }
+    private fun itemBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (focused) PURPLE else 0xC51B1528.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x554A355F) }
 
     private fun updateProvider(change: ProviderEntity.() -> ProviderEntity) {
         if (!::provider.isInitialized) return
-        lifecycleScope.launch {
-            provider = provider.change().copy(updatedAt = System.currentTimeMillis())
-            BlofyDatabase.get(applicationContext).dao().upsertProvider(provider)
-            refreshStatus()
-        }
+        lifecycleScope.launch { provider = provider.change().copy(updatedAt = System.currentTimeMillis()); BlofyDatabase.get(applicationContext).dao().upsertProvider(provider); refreshStatus(); renderSection() }
     }
-
     private fun refreshLibrary() {
         if (!::provider.isInitialized) return
-        status.text = "جاري تحديث القنوات والأفلام والمسلسلات..."
-        lifecycleScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(provider) }
-            }.onSuccess { status.text = "اكتمل التحديث  •  ${provider.name}" }
-                .onFailure { status.text = "تعذر التحديث: ${it.message ?: "خطأ اتصال"}" }
-        }
+        status.text = "جاري تحديث الباقة..."
+        lifecycleScope.launch { runCatching { withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(provider) } }.onSuccess { status.text = "اكتمل التحديث • ${provider.name}" }.onFailure { status.text = "تعذر التحديث: ${it.message ?: "خطأ اتصال"}" } }
     }
-
-    private fun refreshStatus() {
-        status.text = "${provider.name}  •  ${provider.providerType.uppercase()}  •  ${provider.liveFormat.uppercase()}  •  ${provider.preferredTransport.uppercase()}"
-        redirectsButton.text = if (provider.allowCrossProtocolRedirects) "Redirects: تشغيل" else "Redirects: إيقاف"
+    private fun refreshStatus() { status.text = "${provider.name} • ${provider.providerType.uppercase()} • ${provider.liveFormat.uppercase()}" }
+    private fun <T> providerValue(block: ProviderEntity.() -> T): String = if (::provider.isInitialized) provider.block().toString() else "—"
+    private fun changePin() {
+        val input = EditText(this).apply { inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "4 إلى 6 أرقام"; isSingleLine = true }
+        val save = { if (ParentalPinManager.setPin(this, input.text.toString())) status.text = "تم حفظ PIN" else input.error = "أدخل 4 إلى 6 أرقام" }
+        val show = { AlertDialog.Builder(this).setTitle("PIN جديد").setView(input).setPositiveButton("حفظ") { _, _ -> save() }.setNegativeButton("إلغاء", null).show() }
+        if (ParentalPinManager.hasPin(this)) ParentalGate.requirePin(this) { show() } else show()
     }
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        val theme = ThemeManager.current(this@SettingsActivity)
-        cornerRadius = 18f
-        setColor(if (focused) theme.accent else theme.surface)
-        setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else theme.accent)
+    companion object {
+        private const val SECTION_PLAYBACK = "playback"; private const val SECTION_AUDIO = "audio"; private const val SECTION_SUBTITLES = "subtitles"; private const val SECTION_LANGUAGE = "language"; private const val SECTION_NETWORK = "network"; private const val SECTION_APPEARANCE = "appearance"; private const val SECTION_STORAGE = "storage"; private const val SECTION_DEVICE = "device"
+        private val PURPLE = Color.rgb(126, 44, 255); private val SOFT = Color.rgb(195, 175, 220)
     }
-
-    companion object { private const val SCREEN_KEY = "settings" }
 }
