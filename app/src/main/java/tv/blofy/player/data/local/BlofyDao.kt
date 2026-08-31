@@ -142,8 +142,8 @@ interface BlofyDao {
         }
 
         if (promotedCategories.isNotEmpty()) upsertCategories(promotedCategories)
-        if (promotedStreams.isNotEmpty()) upsertStreams(promotedStreams)
-        if (promotedEpisodes.isNotEmpty()) upsertEpisodes(promotedEpisodes)
+        promotedStreams.chunked(CATALOG_INSERT_BATCH_SIZE).forEach { upsertStreams(it) }
+        promotedEpisodes.chunked(CATALOG_INSERT_BATCH_SIZE).forEach { upsertEpisodes(it) }
         upsertProvider(targetProvider.copy(enabled = true))
         disableAllProviders()
         activateProvider(targetProvider.id, targetProvider.updatedAt)
@@ -160,7 +160,7 @@ interface BlofyDao {
         clearCategories(providerId, kind)
         clearStreams(providerId, kind)
         if (categories.isNotEmpty()) upsertCategories(categories)
-        if (streams.isNotEmpty()) upsertStreams(streams)
+        streams.chunked(CATALOG_INSERT_BATCH_SIZE).forEach { upsertStreams(it) }
     }
 
     @Transaction
@@ -174,8 +174,8 @@ interface BlofyDao {
         clearM3uStreams(providerId)
         clearProviderEpisodes(providerId)
         if (categories.isNotEmpty()) upsertCategories(categories)
-        if (streams.isNotEmpty()) upsertStreams(streams)
-        if (episodes.isNotEmpty()) upsertEpisodes(episodes)
+        streams.chunked(CATALOG_INSERT_BATCH_SIZE).forEach { upsertStreams(it) }
+        episodes.chunked(CATALOG_INSERT_BATCH_SIZE).forEach { upsertEpisodes(it) }
     }
 
     @Query("DELETE FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId") suspend fun clearEpisodes(providerId: String, seriesId: String)
@@ -189,6 +189,7 @@ interface BlofyDao {
     @Query("DELETE FROM epg WHERE providerId = :providerId AND streamId = :streamId") suspend fun clearEpg(providerId: String, streamId: String)
 }
 
+private const val CATALOG_INSERT_BATCH_SIZE = 1000
 private val LEGACY_DECIMAL_CATALOG_ID = Regex("[+-]?\\d+\\.0+")
 
 private fun legacyCatalogId(value: String): String {
