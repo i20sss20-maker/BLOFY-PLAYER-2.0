@@ -14,7 +14,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -103,8 +105,8 @@ class SettingsActivity : AppCompatActivity() {
                 box.addView(toggleRow("تذكر آخر ترجمة", "remember_subtitles", true)); box.addView(choiceRow("حجم الترجمة", "subtitle_size", listOf("صغير", "متوسط", "كبير"), "متوسط"))
             }
             SECTION_LANGUAGE -> {
-                box.addView(sectionTitle("اللغة")); box.addView(sectionHint("اختر لغة الواجهة. العربية تستخدم RTL تلقائيًا."))
-                box.addView(choiceRow("لغة التطبيق", "app_language", listOf("العربية", "English", "Français", "Español", "Deutsch", "Türkçe", "Português", "Italiano"), prefs.getString("app_language", "العربية") ?: "العربية"))
+                box.addView(sectionTitle("اللغة")); box.addView(sectionHint("اختر لغة الواجهة. العربية تستخدم RTL تلقائيًا واللغات الأخرى LTR."))
+                box.addView(languageRow())
             }
             SECTION_NETWORK -> {
                 box.addView(sectionTitle("الشبكة")); box.addView(sectionHint("هذه إعدادات اتصال الكتالوج والبث العامة وليست تغييرًا للمحرك."))
@@ -127,6 +129,20 @@ class SettingsActivity : AppCompatActivity() {
         }
         scroll.addView(box); content.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         box.post { if (box.childCount > 2) box.getChildAt(2).requestFocus() }
+    }
+
+    private fun languageRow(): Button {
+        val selectedTag = prefs.getString("app_language_tag", "ar") ?: "ar"
+        val selected = LANGUAGES.firstOrNull { it.second == selectedTag }?.first ?: "العربية"
+        return actionButton("لغة التطبيق: $selected") {
+            val labels = LANGUAGES.map { it.first }.toTypedArray()
+            AlertDialog.Builder(this).setTitle("لغة التطبيق").setItems(labels) { dialog, which ->
+                val (label, tag) = LANGUAGES[which]
+                prefs.edit().putString("app_language", label).putString("app_language_tag", tag).apply()
+                AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+                dialog.dismiss()
+            }.show()
+        }
     }
 
     private fun sectionTitle(value: String) = TextView(this).apply { text = value; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT }
@@ -179,5 +195,15 @@ class SettingsActivity : AppCompatActivity() {
     companion object {
         private const val SECTION_PLAYBACK = "playback"; private const val SECTION_AUDIO = "audio"; private const val SECTION_SUBTITLES = "subtitles"; private const val SECTION_LANGUAGE = "language"; private const val SECTION_NETWORK = "network"; private const val SECTION_APPEARANCE = "appearance"; private const val SECTION_STORAGE = "storage"; private const val SECTION_DEVICE = "device"
         private val PURPLE = Color.rgb(126, 44, 255); private val SOFT = Color.rgb(195, 175, 220)
+        private val LANGUAGES = listOf(
+            "العربية" to "ar",
+            "English" to "en",
+            "Français" to "fr",
+            "Español" to "es",
+            "Deutsch" to "de",
+            "Türkçe" to "tr",
+            "Português" to "pt",
+            "Italiano" to "it"
+        )
     }
 }
