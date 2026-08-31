@@ -135,52 +135,52 @@ class PlayerActivity : AppCompatActivity() {
         root.addView(playerView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         channelNumberView = TextView(this).apply {
-            textSize = 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-            setPadding(24, 10, 24, 10)
-            background = GradientDrawable().apply { cornerRadius = 18f; setColor(Color.argb(225, 43, 18, 76)); setStroke(2, PURPLE_SOFT) }
+            textSize = 32f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            setPadding(22, 9, 22, 9)
+            background = GradientDrawable().apply { cornerRadius = 16f; setColor(Color.argb(225, 43, 18, 76)); setStroke(2, PURPLE_SOFT) }
             visibility = View.GONE
         }
-        root.addView(channelNumberView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = 34; marginEnd = 42 })
+        root.addView(channelNumberView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = 30; marginEnd = 36 })
 
         hud = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(44, 28, 44, 34)
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xE60B0813.toInt(), 0xFA08060D.toInt())).apply {
-                cornerRadii = floatArrayOf(30f, 30f, 30f, 30f, 0f, 0f, 0f, 0f)
-                setStroke(1, 0x553C2956)
+            setPadding(36, 20, 36, 24)
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xD90B0813.toInt(), 0xF507050C.toInt())).apply {
+                cornerRadii = floatArrayOf(26f, 26f, 26f, 26f, 0f, 0f, 0f, 0f)
+                setStroke(1, 0x4D52366E)
             }
             visibility = View.GONE
         }
 
         val eyebrow = TextView(this).apply {
             text = if (kind == "live") "BLOFY LIVE" else if (kind == "episode") "BLOFY SERIES" else "BLOFY CINEMA"
-            textSize = 12f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_SOFT); letterSpacing = .08f
-            setPadding(0, 0, 0, 5)
+            textSize = 11f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_SOFT); letterSpacing = .07f
+            setPadding(0, 0, 0, 3)
         }
         hud.addView(eyebrow)
 
         titleView = TextView(this).apply {
-            textSize = 25f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 1
-            setPadding(0, 0, 0, 8)
+            textSize = 23f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 1
+            setPadding(0, 0, 0, 6)
         }
         hud.addView(titleView)
 
         epgView = TextView(this).apply {
-            textSize = 15f; setTextColor(Color.rgb(214, 203, 228)); setPadding(0, 0, 0, 16)
+            textSize = 14f; setTextColor(Color.rgb(218, 208, 231))
             visibility = if (kind == "live") View.VISIBLE else View.GONE
-            background = if (kind == "live") GradientDrawable().apply { cornerRadius = 14f; setColor(0x4D281D39); setStroke(1, 0x554F3868) } else null
-            if (kind == "live") setPadding(18, 12, 18, 12)
+            background = if (kind == "live") GradientDrawable().apply { cornerRadius = 12f; setColor(0x45281D39); setStroke(1, 0x4D4F3868) } else null
+            if (kind == "live") setPadding(16, 10, 16, 10) else setPadding(0, 0, 0, 10)
         }
         hud.addView(epgView)
 
         if (kind != "live") {
-            val timeline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 4, 0, 14) }
-            positionView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(Color.WHITE); gravity = Gravity.CENTER_VERTICAL }
-            durationView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(Color.rgb(190, 180, 205)); gravity = Gravity.CENTER_VERTICAL }
+            val timeline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 2, 0, 10) }
+            positionView = TextView(this).apply { text = "00:00"; textSize = 12f; setTextColor(Color.WHITE); gravity = Gravity.CENTER_VERTICAL }
+            durationView = TextView(this).apply { text = "00:00"; textSize = 12f; setTextColor(Color.rgb(190, 180, 205)); gravity = Gravity.CENTER_VERTICAL }
             progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progress = 0 }
-            timeline.addView(positionView, LinearLayout.LayoutParams(72, 36))
-            timeline.addView(progressBar, LinearLayout.LayoutParams(0, 18, 1f).apply { marginEnd = 14; marginStart = 14 })
-            timeline.addView(durationView, LinearLayout.LayoutParams(72, 36))
+            timeline.addView(positionView, LinearLayout.LayoutParams(68, 30))
+            timeline.addView(progressBar, LinearLayout.LayoutParams(0, 12, 1f).apply { marginEnd = 12; marginStart = 12 })
+            timeline.addView(durationView, LinearLayout.LayoutParams(68, 30))
             hud.addView(timeline)
         }
 
@@ -192,17 +192,17 @@ class PlayerActivity : AppCompatActivity() {
 
         if (kind == "live") {
             controls.addView(TextView(this).apply {
-                text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لإظهار معلومات البرنامج"
-                textSize = 14f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER_VERTICAL
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 62))
+                text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لمعلومات البرنامج"
+                textSize = 13f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 50))
         } else {
-            controls.addView(audioButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
-            controls.addView(subtitleButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
-            controls.addView(qualityButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
-            controls.addView(favoriteButton, LinearLayout.LayoutParams(184, 68).apply { marginEnd = 10 })
+            controls.addView(audioButton, LinearLayout.LayoutParams(158, 58).apply { marginEnd = 8 })
+            controls.addView(subtitleButton, LinearLayout.LayoutParams(158, 58).apply { marginEnd = 8 })
+            controls.addView(qualityButton, LinearLayout.LayoutParams(158, 58).apply { marginEnd = 8 })
+            controls.addView(favoriteButton, LinearLayout.LayoutParams(166, 58).apply { marginEnd = 8 })
             if (kind == "episode") {
-                controls.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(150, 68).apply { marginEnd = 10 })
-                controls.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(150, 68))
+                controls.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(136, 58).apply { marginEnd = 8 })
+                controls.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(136, 58))
             }
         }
         hud.addView(controls)
@@ -213,20 +213,20 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun controlButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; isFocusable = true; isFocusableInTouchMode = true; textSize = 14f
+        text = label; isAllCaps = false; isFocusable = true; isFocusableInTouchMode = true; textSize = 13f
         typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); background = controlBackground(false)
         setOnFocusChangeListener { view, focused ->
             view.background = controlBackground(focused)
-            view.animate().scaleX(if (focused) 1.055f else 1f).scaleY(if (focused) 1.055f else 1f).setDuration(100L).start()
+            view.animate().scaleX(if (focused) 1.045f else 1f).scaleY(if (focused) 1.045f else 1f).setDuration(70L).start()
             if (focused) keepHudVisible()
         }
         setOnClickListener { action() }
     }
 
     private fun controlBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 18f
-        setColor(if (focused) PURPLE else 0xD5231A31.toInt())
-        setStroke(if (focused) 2 else 1, if (focused) Color.WHITE else 0x66553B70)
+        cornerRadius = 16f
+        setColor(if (focused) PURPLE else 0xD01E1729.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) Color.WHITE else 0x5C553B70)
     }
 
     private fun updateProgressUi() {
