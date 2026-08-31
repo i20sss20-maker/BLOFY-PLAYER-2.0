@@ -1,0 +1,67 @@
+name: BLOFY TV Design Snapshots
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'app/src/main/java/tv/blofy/player/ui/**'
+      - 'app/src/main/res/drawable/**'
+      - 'app/src/main/java/tv/blofy/player/core/theme/**'
+      - 'app/src/androidTest/**'
+      - '.github/workflows/design-snapshots.yml'
+
+concurrency:
+  group: blofy-design-snapshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture-tv-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug app and instrumentation
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Capture real Android TV screens
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: android-tv
+          arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: |
+            adb shell wm size 1920x1080
+            adb shell wm density 320
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
+            ./gradlew :app:connectedDebugAndroidTest --stacktrace
+            mkdir -p design-snapshots
+            adb pull /sdcard/Android/data/tv.blofy.player.v2/files/design-snapshots/. design-snapshots/
+            ls -lah design-snapshots
+
+      - name: Upload 1080p TV screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-TV-DESIGN-SNAPSHOTS-${{ github.sha }}
+          path: design-snapshots/*.png
+          if-no-files-found: warn
+          retention-days: 30
