@@ -90,7 +90,7 @@ class SettingsActivity : AppCompatActivity() {
         when (currentSection) {
             SECTION_PLAYBACK -> {
                 box.addView(sectionTitle(getString(R.string.settings_playback))); box.addView(sectionHint("خيارات المشغل والعرض بدون تغيير محرك Media3/FFmpeg الحالي."))
-                box.addView(optionRow("صيغة البث المباشر", providerValue { liveFormat.uppercase() }, "MPEG-TS") { updateProvider { copy(liveFormat = "ts") } }, "HLS") { updateProvider { copy(liveFormat = "m3u8") } })
+                box.addView(optionRow("صيغة البث المباشر", providerValue { liveFormat.uppercase() }, "MPEG-TS", { updateProvider { copy(liveFormat = "ts") } }, "HLS", { updateProvider { copy(liveFormat = "m3u8") } }))
                 box.addView(toggleRow("تشغيل المعاينة تلقائيًا", "preview_auto", true))
                 box.addView(toggleRow("الانتقال السريع بين القنوات", "fast_channel_zap", true))
                 box.addView(toggleRow("استئناف الأفلام والحلقات", "resume_enabled", true))
@@ -109,7 +109,7 @@ class SettingsActivity : AppCompatActivity() {
             }
             SECTION_NETWORK -> {
                 box.addView(sectionTitle(getString(R.string.settings_network))); box.addView(sectionHint("هذه إعدادات اتصال الكتالوج والبث العامة وليست تغييرًا للمحرك."))
-                box.addView(optionRow("النقل المفضل", providerValue { preferredTransport.uppercase() }, "Cronet") { updateProvider { copy(preferredTransport = "cronet") } }, "HTTP") { updateProvider { copy(preferredTransport = "http") } })
+                box.addView(optionRow("النقل المفضل", providerValue { preferredTransport.uppercase() }, "Cronet", { updateProvider { copy(preferredTransport = "cronet") } }, "HTTP", { updateProvider { copy(preferredTransport = "http") } }))
                 box.addView(toggleProviderRow("السماح بتحويلات البروتوكول", { allowCrossProtocolRedirects }) { copy(allowCrossProtocolRedirects = !allowCrossProtocolRedirects) })
             }
             SECTION_APPEARANCE -> {
