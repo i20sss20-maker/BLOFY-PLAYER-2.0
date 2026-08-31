@@ -7,6 +7,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
@@ -104,6 +105,7 @@ class EpisodesActivity : AppCompatActivity() {
             )
             episodeList.adapter = episodeAdapter
             seasonList.adapter = seasonAdapter
+            installTvFocusBridge()
             launch { dao.episodes(providerId, seriesId).collect { renderEpisodes(it) } }
             syncEpisodes(provider)
         }
@@ -113,6 +115,37 @@ class EpisodesActivity : AppCompatActivity() {
         super.onResume()
         if (!::episodeAdapter.isInitialized) return
         lifecycleScope.launch { refreshWatchProgress(); refreshEpisodes(false) }
+    }
+
+    private fun installTvFocusBridge() {
+        if (!DeviceClass.isTv(this)) return
+        seasonList.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_LEFT) return@setOnKeyListener false
+            focusEpisodeList()
+        }
+        episodeList.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return@setOnKeyListener false
+            focusSelectedSeason()
+        }
+    }
+
+    private fun focusEpisodeList(): Boolean {
+        if (episodeAdapter.itemCount <= 0) return false
+        val remembered = FocusMemory.restore(this, episodeMemoryKey())
+        val visible = selectedSeason?.let { s -> allEpisodes.filter { it.season == s }.sortedBy { it.episode } } ?: emptyList()
+        val index = visible.indexOfFirst { it.key == remembered }.let { if (it < 0) 0 else it }
+        episodeList.scrollToPosition(index)
+        episodeList.post { episodeList.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
+        return true
+    }
+
+    private fun focusSelectedSeason(): Boolean {
+        if (seasonAdapter.itemCount <= 0) return false
+        val seasons = allEpisodes.map { it.season }.distinct().sorted()
+        val index = seasons.indexOf(selectedSeason).let { if (it < 0) 0 else it }
+        seasonList.scrollToPosition(index)
+        seasonList.post { seasonList.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
+        return true
     }
 
     private suspend fun currentProvider(): ProviderEntity = BlofyDatabase.get(applicationContext).dao().provider(providerId)
@@ -137,7 +170,6 @@ class EpisodesActivity : AppCompatActivity() {
     }
 
     private fun renderEpisodes(items: List<EpisodeEntity>) {
-        // Server episode order is normalized only within the explicit season/episode numbers.
         allEpisodes = items.sortedWith(compareBy<EpisodeEntity> { it.season }.thenBy { it.episode })
         lifecycleScope.launch {
             refreshWatchProgress()
@@ -152,10 +184,15 @@ class EpisodesActivity : AppCompatActivity() {
     }
 
     private suspend fun refreshWatchProgress() {
-        if (allEpisodes.isEmpty()) return
+        if (allEpisodes.isEmpty()) {
+            watchProgress.clear()
+            return
+        }
         val dao = BlofyDatabase.get(applicationContext).dao()
+        val states = dao.watchStates(providerId).associateBy { it.contentKey }
+        watchProgress.clear()
         allEpisodes.forEach { e ->
-            val w = dao.watchState(e.key)
+            val w = states[e.key]
             watchProgress[e.key] = when {
                 w == null || w.positionMs <= 15_000L -> 0
                 w.completed -> 100
