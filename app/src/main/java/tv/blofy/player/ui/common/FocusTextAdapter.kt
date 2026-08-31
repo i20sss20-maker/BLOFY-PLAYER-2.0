@@ -19,12 +19,14 @@ class FocusTextAdapter<T>(
     private var focusedKey: String? = null
     private var focusedPosition: Int = RecyclerView.NO_POSITION
     private var restorePending = false
+    private var attachedRecyclerView: RecyclerView? = null
 
     init {
         setHasStableIds(itemKey != null)
     }
 
     fun submit(newItems: List<T>) {
+        val listOwnedFocus = attachedRecyclerView?.hasFocus() == true
         val previousKey = focusedKey
         items.clear()
         items.addAll(newItems)
@@ -33,7 +35,7 @@ class FocusTextAdapter<T>(
             focusedPosition != RecyclerView.NO_POSITION && items.isNotEmpty() -> focusedPosition.coerceIn(0, items.lastIndex)
             else -> RecyclerView.NO_POSITION
         }
-        restorePending = focusedPosition != RecyclerView.NO_POSITION
+        restorePending = listOwnedFocus && focusedPosition != RecyclerView.NO_POSITION
         notifyDataSetChanged()
     }
 
@@ -48,10 +50,21 @@ class FocusTextAdapter<T>(
         return key(items[position]).hashCode().toLong()
     }
 
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        super.onAttachedToRecyclerView(recyclerView)
+        attachedRecyclerView = recyclerView
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        if (attachedRecyclerView === recyclerView) attachedRecyclerView = null
+        restorePending = false
+        super.onDetachedFromRecyclerView(recyclerView)
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val view = TextView(parent.context).apply {
             textSize = 17f
-            setTextColor(Color.WHITE)
+            setTextColor(TEXT_IDLE)
             gravity = Gravity.CENTER_VERTICAL
             setPadding(22, 0, 22, 0)
             isFocusable = true
@@ -59,7 +72,13 @@ class FocusTextAdapter<T>(
             isLongClickable = true
             background = background(false)
             setOnFocusChangeListener { v, focused ->
-                v.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(110).start()
+                (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
+                v.animate()
+                    .scaleX(if (focused) 1.025f else 1f)
+                    .scaleY(if (focused) 1.025f else 1f)
+                    .translationZ(if (focused) 12f else 2f)
+                    .setDuration(110)
+                    .start()
                 v.background = background(focused)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
@@ -98,9 +117,16 @@ class FocusTextAdapter<T>(
 
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
 
-    private fun background(focused: Boolean) = GradientDrawable().apply {
+    private fun background(focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        if (focused) intArrayOf(0xFF7930D7.toInt(), 0xFF32164F.toInt())
+        else intArrayOf(0xD91C162C.toInt(), 0xE8110E1B.toInt())
+    ).apply {
         cornerRadius = 16f
-        setColor(if (focused) Color.rgb(75, 38, 126) else Color.rgb(18, 17, 28))
-        if (focused) setStroke(2, Color.rgb(180, 130, 255))
+        setStroke(if (focused) 2 else 1, if (focused) 0xFFE1B8FF.toInt() else 0x554D376B)
+    }
+
+    companion object {
+        private val TEXT_IDLE = Color.rgb(232, 226, 239)
     }
 }

@@ -3,11 +3,11 @@
 This checklist is the release gate for the first real-device Alpha. A green CI build is necessary but not sufficient. Every item below must be tested on real providers/devices before calling the Alpha validated.
 
 ## Build identity
-- [x] Android CI is green on the exact tested commit (`a6cff9c`, Android CI #251).
+- [ ] Android CI is green on the exact `2.0.0-rc02` commit.
 - [ ] Settings shows the expected build/version.
 - [ ] Settings shows `FFmpeg: مدمج` on the FFmpeg-enabled APK.
-- [x] FFmpeg CI verifies the APK contains the native FFmpeg extension before publishing the artifact (`a6cff9c`, FFmpeg Native #58).
-- [x] Activation CI is green on the same commit (`a6cff9c`, Activation CI #66).
+- [ ] FFmpeg/release verification confirms the exact `2.0.0-rc02` APK contains the native extension.
+- [ ] Activation CI is green on the same `2.0.0-rc02` commit.
 
 ## Activation
 - [ ] New device receives the expected trial state.
@@ -68,7 +68,7 @@ Target: identify provider/device outliers using measured TTFF, not guesses.
 - [ ] Subtitle selector/off works.
 - [ ] Quality selector works with available video tracks.
 - [ ] Media3 failure retries the same URL once only.
-- [ ] Terminal failure follows configured external/VLC fallback behavior.
+- [ ] Terminal failure stays inside BLOFY; the external-player button works only when selected manually.
 
 ## Series
 - [ ] Seasons are separated.

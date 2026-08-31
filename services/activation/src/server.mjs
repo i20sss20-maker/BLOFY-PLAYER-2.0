@@ -19,6 +19,7 @@ import {
   sanitizeDiagnosticMessage,
   sanitizeDiagnosticUrl
 } from './diagnostics-sanitizer.mjs';
+import { activationReleaseMetadata } from './release-metadata.mjs';
 
 const { Pool } = pg;
 const PORT = Number(process.env.PORT || 8080);
@@ -32,6 +33,7 @@ const AUTH_DEVICE_RATE_LIMIT = Number(process.env.BLOFY_AUTH_DEVICE_RATE_LIMIT |
 const AUTH_MAX_FAILURES = Number(process.env.BLOFY_AUTH_MAX_FAILURES || 5);
 const AUTH_FAILURE_WINDOW_MS = Number(process.env.BLOFY_AUTH_FAILURE_WINDOW_MS || 900_000);
 const AUTH_LOCK_MS = Number(process.env.BLOFY_AUTH_LOCK_MS || 900_000);
+const RELEASE_METADATA = activationReleaseMetadata();
 
 if (!DATABASE_URL) throw new Error('DATABASE_URL is required');
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 24) throw new Error('BLOFY_ADMIN_TOKEN must be at least 24 characters');
@@ -175,10 +177,21 @@ async function initializeDatabase() {
 async function health(res) {
   try {
     await pool.query('SELECT 1');
-    return json(res, 200, { ok: true, database: 'ready', playlistEncryption: 'ready', time: Date.now() });
+    return json(res, 200, {
+      ok: true,
+      database: 'ready',
+      playlistEncryption: 'ready',
+      release: RELEASE_METADATA,
+      time: Date.now()
+    });
   } catch (error) {
     console.error('health check failed:', safeErrorSummary(error));
-    return json(res, 503, { ok: false, database: 'unavailable', time: Date.now() });
+    return json(res, 503, {
+      ok: false,
+      database: 'unavailable',
+      release: RELEASE_METADATA,
+      time: Date.now()
+    });
   }
 }
 

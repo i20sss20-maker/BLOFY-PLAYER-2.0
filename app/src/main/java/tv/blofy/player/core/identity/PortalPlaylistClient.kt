@@ -2,6 +2,7 @@ package tv.blofy.player.core.identity
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -12,17 +13,19 @@ import org.json.JSONArray
 import org.json.JSONObject
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.core.network.awaitResponse
 import tv.blofy.player.core.url.PlaylistUrlPolicy
 import java.util.concurrent.TimeUnit
 
 object PortalPlaylistClient {
     data class SyncResult(
-        val activeProviderId: String?,
+        val activeProvider: ProviderEntity?,
         val changedProviderIds: Set<String>,
         val remoteCount: Int
     )
 
     private val client = OkHttpClient.Builder()
+        .callTimeout(12, TimeUnit.SECONDS)
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS)
         .writeTimeout(8, TimeUnit.SECONDS)
@@ -41,7 +44,7 @@ object PortalPlaylistClient {
         val local = dao.allProviders().first()
         val localById = local.associateBy { it.id }
         val changed = linkedSetOf<String>()
-        var remoteActive: String? = null
+        var remoteActive: ProviderEntity? = null
 
         remote.forEach { item ->
             val existing = localById[item.id]
@@ -62,29 +65,40 @@ object PortalPlaylistClient {
             val contentChanged = existing == null ||
                 existing.baseUrl != next.baseUrl || existing.username != next.username ||
                 existing.password != next.password || existing.providerType != next.providerType
-            if (existing != next) dao.upsertProvider(next)
             if (contentChanged) changed += next.id
-            if (item.active) remoteActive = item.id
+            // Connection fields received from the portal are candidates until LoginActivity
+            // validates them against a fresh staging catalog. Safe metadata-only changes may be
+            // stored while preserving the current active flag.
+            if (!contentChanged && existing != next) {
+                dao.upsertProvider(next.copy(enabled = existing.enabled))
+            }
+            if (item.active) remoteActive = next
         }
 
         // Preserve local-only providers by publishing them to the portal after device authorization.
         val remoteIds = remote.mapTo(hashSetOf()) { it.id }
         local.filterNot { it.id in remoteIds }.forEach { provider ->
-            runCatching { push(endpoint, auth, provider) }
+            try {
+                push(
+                    endpoint,
+                    auth,
+                    provider.copy(enabled = provider.enabled && remoteActive == null)
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // A portal upload failure must not discard a successfully downloaded profile.
+            }
         }
 
-        if (remoteActive != null) {
-            dao.disableAllProviders()
-            dao.activateProvider(remoteActive!!)
-        }
-        val activeId = remoteActive ?: dao.providers().first().firstOrNull()?.id
-        SyncResult(activeId, changed, remote.size)
+        val activeCandidate = remoteActive ?: dao.providers().first().firstOrNull()
+        SyncResult(activeCandidate, changed, remote.size)
     }
 
     suspend fun pushProvider(context: Context, baseUrl: String, provider: ProviderEntity) = withContext(Dispatchers.IO) {
         val endpoint = baseUrl.trim().trimEnd('/')
         if (endpoint.isBlank()) return@withContext
-        require(PlaylistUrlPolicy.isValid(provider.baseUrl)) { "HTTPS playlist URL required" }
+        require(PlaylistUrlPolicy.isValid(provider.baseUrl)) { "Valid HTTP or HTTPS playlist URL required" }
         val auth = JSONObject().apply {
             put("deviceId", DeviceIdentity.deviceId(context))
             put("activationCode", DeviceIdentity.activationCode(context))
@@ -92,12 +106,12 @@ object PortalPlaylistClient {
         push(endpoint, auth, provider)
     }
 
-    private fun fetchRemote(endpoint: String, auth: JSONObject): List<RemotePlaylist> {
+    private suspend fun fetchRemote(endpoint: String, auth: JSONObject): List<RemotePlaylist> {
         val request = Request.Builder()
             .url("$endpoint/api/v1/portal/playlists/list")
             .post(auth.toString().toRequestBody(jsonType))
             .build()
-        client.newCall(request).execute().use { response ->
+        client.newCall(request).awaitResponse().use { response ->
             if (!response.isSuccessful) error("portal_list_http_${response.code}")
             val root = JSONObject(response.body?.string().orEmpty())
             val items = root.optJSONArray("items") ?: JSONArray()
@@ -123,7 +137,7 @@ object PortalPlaylistClient {
         }
     }
 
-    private fun push(endpoint: String, auth: JSONObject, provider: ProviderEntity) {
+    private suspend fun push(endpoint: String, auth: JSONObject, provider: ProviderEntity) {
         val body = JSONObject(auth.toString()).apply {
             put("id", provider.id)
             put("name", provider.name)
@@ -137,7 +151,7 @@ object PortalPlaylistClient {
             .url("$endpoint/api/v1/portal/playlists")
             .post(body.toString().toRequestBody(jsonType))
             .build()
-        client.newCall(request).execute().use { response ->
+        client.newCall(request).awaitResponse().use { response ->
             if (!response.isSuccessful) error("portal_save_http_${response.code}")
         }
     }

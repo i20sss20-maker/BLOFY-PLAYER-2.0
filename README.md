@@ -10,10 +10,12 @@ Clean Android-native rebuild of BLOFY PLAYER.
 - Exact URL builders per content type.
 - Provider-scoped profiles; no global compatibility hacks.
 - Cronet-first transport with HTTP fallback.
-- Media3 player core with audio extension support and VLC fallback when required.
+- Media3 player core with FFmpeg audio extension support and explicit manual external-player action.
 - Dedicated Remote Engine and Theme Engine.
 - Activation, playlist management, diagnostics and future Control Cloud integration.
 
 ## Status
 
-Foundation phase started. The legacy BLOFY project is reference-only; this repository is a clean implementation.
+`2.0.0-rc02` release candidate. The production activation and playlist portal is connected at <https://blofy-player-2-0.vercel.app>.
+
+The canonical clean-rebuild package is `tv.blofy.player.v2`, so it installs beside the legacy application. See [the Arabic final reference](docs/BLOFY_2_FINAL_REFERENCE_AR.md) and [the 7 Max parity checklist](docs/SEVEN_MAX_PARITY_CHECKLIST.md) before changing playback, catalog replacement, or TV focus behavior.

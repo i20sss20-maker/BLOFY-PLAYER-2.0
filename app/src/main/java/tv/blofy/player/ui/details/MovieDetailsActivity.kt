@@ -19,6 +19,8 @@ import tv.blofy.player.core.playback.ExternalPlayerLauncher
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.core.security.ParentalPinManager
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.player.PlayerActivity
 
 class MovieDetailsActivity : AppCompatActivity() {
@@ -77,11 +79,11 @@ class MovieDetailsActivity : AppCompatActivity() {
             val row = LinearLayout(this@MovieDetailsActivity).apply { orientation = LinearLayout.HORIZONTAL }
             val resumeMs = watch?.positionMs ?: 0L
             val play = actionButton(if (resumeMs > 30_000L) "استئناف" else "تشغيل") {
-                openPlayer(provider.id, stream.key, stream.name, url, resumeMs)
+                openPlayer(provider, stream, url, resumeMs)
             }
             row.addView(play, LinearLayout.LayoutParams(190, 82).apply { marginEnd = 10 })
             if (resumeMs > 30_000L) {
-                row.addView(actionButton("من البداية") { openPlayer(provider.id, stream.key, stream.name, url, 0L) }, LinearLayout.LayoutParams(190, 82).apply { marginEnd = 10 })
+                row.addView(actionButton("من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(190, 82).apply { marginEnd = 10 })
             }
             row.addView(actionButton("مشغل خارجي") {
                 if (!ExternalPlayerLauncher.launch(this@MovieDetailsActivity, url, stream.name)) Toast.makeText(this@MovieDetailsActivity, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
@@ -127,13 +129,18 @@ class MovieDetailsActivity : AppCompatActivity() {
         }
     }
 
-    private fun openPlayer(providerId: String, contentKey: String, title: String, url: String, resumeMs: Long) {
+    private fun openPlayer(provider: ProviderEntity, stream: StreamEntity, url: String, resumeMs: Long) {
         startActivity(Intent(this, PlayerActivity::class.java).apply {
             putExtra(PlayerActivity.EXTRA_URL, url)
-            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, contentKey)
-            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, providerId)
+            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
             putExtra(PlayerActivity.EXTRA_KIND, "movie")
-            putExtra(PlayerActivity.EXTRA_TITLE, title)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+            putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream))
+            putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
             putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
         })
     }

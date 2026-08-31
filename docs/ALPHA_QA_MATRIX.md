@@ -59,7 +59,7 @@ Measure TTFF (time to first rendered frame) for 10 channel starts/provider:
 - Seeking works and progress saves on exit.
 - Completed titles do not remain as misleading resume entries.
 - Media3 same-URL retry occurs once only.
-- External fallback can launch after terminal Media3 failure when enabled.
+- Terminal Media3 failure stays inside BLOFY; external playback launches only from the explicit user action.
 
 Measure TTFF for at least 5 movies/provider including one large/high-bitrate title.
 
@@ -154,7 +154,7 @@ For every failed sample record:
 - Buffering count.
 - Media3 error code/name.
 - Whether retry happened.
-- Whether external fallback launched.
+- Whether an internal URL fallback was attempted and whether the user manually selected external playback.
 - Device model / Android version.
 - FFmpeg bundled: yes/no.
 

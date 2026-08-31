@@ -46,7 +46,8 @@ The existing fallback order remains:
 
 1. Media3 playback (with native FFmpeg renderer available when bundled)
 2. One retry of the same URL
-3. External/VLC/MX fallback when provider policy permits
+3. A bounded internal URL/format fallback when available
+4. A clear terminal error inside BLOFY; External/VLC/MX remains a manual user action only
 
 No global URL route ladder or global header injection should be added as part of FFmpeg integration.
 
@@ -58,4 +59,4 @@ FFmpeg parity is considered complete only after all of the following pass:
 - `BuildConfig.FFMPEG_EXTENSION_BUNDLED == true` in that build.
 - AC-3/E-AC-3 problem samples are tested on real Android TV/box hardware.
 - No `NoSuchMethodError`/renderer ABI mismatch occurs.
-- Existing TS/HLS, subtitles, audio-track switching, resume, and external fallback continue to work.
+- Existing TS/HLS, subtitles, audio-track switching, resume, and the manual external-player action continue to work.

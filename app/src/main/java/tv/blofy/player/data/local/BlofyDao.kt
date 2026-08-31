@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -15,6 +16,22 @@ interface BlofyDao {
     @Query("UPDATE providers SET enabled = 0") suspend fun disableAllProviders()
     @Query("UPDATE providers SET enabled = 1, updatedAt = :updatedAt WHERE id = :providerId") suspend fun activateProvider(providerId: String, updatedAt: Long = System.currentTimeMillis())
     @Query("DELETE FROM providers WHERE id = :providerId") suspend fun deleteProvider(providerId: String)
+
+    @Transaction
+    suspend fun saveAndActivateProvider(provider: ProviderEntity) {
+        upsertProvider(provider.copy(enabled = true))
+        disableAllProviders()
+        activateProvider(provider.id, provider.updatedAt)
+    }
+
+    @Query("SELECT * FROM categories WHERE providerId = :providerId")
+    suspend fun allCategoriesForProvider(providerId: String): List<CategoryEntity>
+
+    @Query("SELECT * FROM streams WHERE providerId = :providerId")
+    suspend fun allStreamsForProvider(providerId: String): List<StreamEntity>
+
+    @Query("SELECT * FROM episodes WHERE providerId = :providerId")
+    suspend fun allEpisodesForProvider(providerId: String): List<EpisodeEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertCategories(items: List<CategoryEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertStreams(items: List<StreamEntity>)
@@ -37,6 +54,8 @@ interface BlofyDao {
 
     @Query("SELECT * FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId ORDER BY season, episode")
     fun episodes(providerId: String, seriesId: String): Flow<List<EpisodeEntity>>
+    @Query("SELECT * FROM episodes WHERE key = :contentKey LIMIT 1")
+    suspend fun episode(contentKey: String): EpisodeEntity?
 
     @Query("SELECT * FROM epg WHERE providerId = :providerId AND streamId = :streamId AND endMs >= :nowMs ORDER BY startMs LIMIT :limit")
     fun epg(providerId: String, streamId: String, nowMs: Long, limit: Int = 20): Flow<List<EpgEntity>>
@@ -50,6 +69,126 @@ interface BlofyDao {
 
     @Query("DELETE FROM categories WHERE providerId = :providerId AND kind = :kind") suspend fun clearCategories(providerId: String, kind: String)
     @Query("DELETE FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun clearStreams(providerId: String, kind: String)
+    @Query("DELETE FROM categories WHERE providerId = :providerId AND kind IN ('live', 'movie', 'series')")
+    suspend fun clearM3uCategories(providerId: String)
+    @Query("DELETE FROM streams WHERE providerId = :providerId AND kind IN ('live', 'movie', 'series')")
+    suspend fun clearM3uStreams(providerId: String)
+    @Query("DELETE FROM episodes WHERE providerId = :providerId")
+    suspend fun clearProviderEpisodes(providerId: String)
+
+    @Query("DELETE FROM categories WHERE providerId = :providerId")
+    suspend fun clearProviderCategories(providerId: String)
+
+    @Query("DELETE FROM streams WHERE providerId = :providerId")
+    suspend fun clearProviderStreams(providerId: String)
+
+    @Query("DELETE FROM epg WHERE providerId = :providerId")
+    suspend fun clearProviderEpg(providerId: String)
+
+    @Transaction
+    suspend fun discardStagedCatalog(stagedProviderId: String) {
+        clearProviderCategories(stagedProviderId)
+        clearProviderStreams(stagedProviderId)
+        clearProviderEpisodes(stagedProviderId)
+        clearProviderEpg(stagedProviderId)
+        deleteProvider(stagedProviderId)
+    }
+
+    /**
+     * Atomically promotes a fully validated staging catalog to the stable portal provider ID.
+     * The old catalog remains readable until this transaction begins, and matching favorites,
+     * locks and hidden-category choices survive credential refreshes.
+     */
+    @Transaction
+    suspend fun promoteStagedCatalog(stagedProviderId: String, targetProvider: ProviderEntity) {
+        val oldCategories = allCategoriesForProvider(targetProvider.id)
+            .associateBy { "${it.kind}:${legacyCatalogId(it.remoteId)}" }
+        val oldStreams = allStreamsForProvider(targetProvider.id)
+            .associateBy { "${it.kind}:${legacyCatalogId(it.remoteId)}" }
+        val stagedCategories = allCategoriesForProvider(stagedProviderId)
+        val stagedStreams = allStreamsForProvider(stagedProviderId)
+        val stagedEpisodes = allEpisodesForProvider(stagedProviderId)
+
+        clearProviderCategories(targetProvider.id)
+        clearProviderStreams(targetProvider.id)
+        clearProviderEpisodes(targetProvider.id)
+        clearProviderEpg(targetProvider.id)
+
+        val promotedCategories = stagedCategories.map { category ->
+            val old = oldCategories["${category.kind}:${legacyCatalogId(category.remoteId)}"]
+            category.copy(
+                key = "${targetProvider.id}:${category.kind}:${category.remoteId}",
+                providerId = targetProvider.id,
+                hidden = old?.hidden ?: category.hidden
+            )
+        }
+        val promotedStreams = stagedStreams.map { stream ->
+            val old = oldStreams["${stream.kind}:${legacyCatalogId(stream.remoteId)}"]
+            stream.copy(
+                key = "${targetProvider.id}:${stream.kind}:${stream.remoteId}",
+                providerId = targetProvider.id,
+                favorite = old?.favorite ?: stream.favorite,
+                locked = old?.locked ?: stream.locked
+            )
+        }
+        val promotedEpisodes = stagedEpisodes.map { episode ->
+            episode.copy(
+                key = "${targetProvider.id}:episode:${episode.remoteId}",
+                providerId = targetProvider.id
+            )
+        }
+
+        if (promotedCategories.isNotEmpty()) upsertCategories(promotedCategories)
+        if (promotedStreams.isNotEmpty()) upsertStreams(promotedStreams)
+        if (promotedEpisodes.isNotEmpty()) upsertEpisodes(promotedEpisodes)
+        upsertProvider(targetProvider.copy(enabled = true))
+        disableAllProviders()
+        activateProvider(targetProvider.id, targetProvider.updatedAt)
+        discardStagedCatalog(stagedProviderId)
+    }
+
+    @Transaction
+    suspend fun replaceCatalog(
+        providerId: String,
+        kind: String,
+        categories: List<CategoryEntity>,
+        streams: List<StreamEntity>
+    ) {
+        clearCategories(providerId, kind)
+        clearStreams(providerId, kind)
+        if (categories.isNotEmpty()) upsertCategories(categories)
+        if (streams.isNotEmpty()) upsertStreams(streams)
+    }
+
+    @Transaction
+    suspend fun replaceM3uCatalog(
+        providerId: String,
+        categories: List<CategoryEntity>,
+        streams: List<StreamEntity>,
+        episodes: List<EpisodeEntity>
+    ) {
+        clearM3uCategories(providerId)
+        clearM3uStreams(providerId)
+        clearProviderEpisodes(providerId)
+        if (categories.isNotEmpty()) upsertCategories(categories)
+        if (streams.isNotEmpty()) upsertStreams(streams)
+        if (episodes.isNotEmpty()) upsertEpisodes(episodes)
+    }
+
     @Query("DELETE FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId") suspend fun clearEpisodes(providerId: String, seriesId: String)
+
+    @Transaction
+    suspend fun replaceEpisodes(providerId: String, seriesId: String, episodes: List<EpisodeEntity>) {
+        clearEpisodes(providerId, seriesId)
+        if (episodes.isNotEmpty()) upsertEpisodes(episodes)
+    }
+
     @Query("DELETE FROM epg WHERE providerId = :providerId AND streamId = :streamId") suspend fun clearEpg(providerId: String, streamId: String)
+}
+
+private val LEGACY_DECIMAL_CATALOG_ID = Regex("[+-]?\\d+\\.0+")
+
+private fun legacyCatalogId(value: String): String {
+    val trimmed = value.trim()
+    return if (LEGACY_DECIMAL_CATALOG_ID.matches(trimmed)) trimmed.substringBefore('.') else trimmed
 }

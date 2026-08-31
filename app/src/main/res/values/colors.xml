@@ -1,9 +1,9 @@
 <resources>
-    <color name="blofy_black">#05050A</color>
-    <color name="blofy_surface">#11111A</color>
-    <color name="blofy_surface_alt">#191827</color>
-    <color name="blofy_purple">#7E2CFF</color>
-    <color name="blofy_purple_soft">#B98CFF</color>
+    <color name="blofy_black">#07070D</color>
+    <color name="blofy_surface">#12101D</color>
+    <color name="blofy_surface_alt">#1B162A</color>
+    <color name="blofy_purple">#8B37FF</color>
+    <color name="blofy_purple_soft">#C387FF</color>
     <color name="blofy_white">#FFFFFF</color>
     <color name="blofy_text_muted">#A9A7B3</color>
 </resources>

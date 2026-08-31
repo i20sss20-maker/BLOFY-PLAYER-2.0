@@ -51,7 +51,7 @@ For SD, HD, FHD and 4K samples where available:
 - [ ] Now/Next EPG appears without blocking playback.
 - [ ] Recent Channels records fullscreen viewing, not preview-only focus.
 - [ ] One same-URL automatic retry occurs on playback failure; no route ladder is used.
-- [ ] External/VLC fallback occurs only after terminal Media3 failure when enabled.
+- [ ] A terminal Media3 failure stays inside BLOFY and shows a clear error; External/VLC opens only from the user's explicit HUD action.
 
 ### Live performance targets
 Record actual values from diagnostics:

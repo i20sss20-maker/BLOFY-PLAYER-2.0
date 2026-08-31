@@ -78,7 +78,7 @@ For every failure record:
 - buffering count
 - Media3 error code
 - whether same-URL retry ran
-- whether external fallback launched
+- whether a bounded internal fallback ran, and whether the user manually opened an external player
 
 ## Movies
 - [ ] Movie list opens from local data

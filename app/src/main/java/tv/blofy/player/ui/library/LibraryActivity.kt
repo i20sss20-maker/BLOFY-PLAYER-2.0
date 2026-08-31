@@ -18,8 +18,12 @@ import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
+import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.EpisodeEntity
+import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.local.WatchStateEntity
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
@@ -57,11 +61,21 @@ class LibraryActivity : AppCompatActivity() {
             list.removeAllViews()
             if (mode == MODE_CONTINUE) {
                 val states = withContext(Dispatchers.IO) { dao.continueWatching(provider.id).first() }
-                val pairs = withContext(Dispatchers.IO) {
-                    states.mapNotNull { state -> dao.stream(state.contentKey)?.let { it to state.positionMs } }
+                val entries = withContext(Dispatchers.IO) {
+                    resolveContinueWatching(dao, provider.id, states)
                 }
-                if (pairs.isEmpty()) showMessage("لا يوجد محتوى للاستئناف")
-                pairs.forEach { (stream, resume) -> addRow(provider.id, provider.liveFormat, stream, resume) }
+                if (entries.isEmpty()) showMessage("لا يوجد محتوى للاستئناف")
+                entries.forEach { entry ->
+                    when (entry) {
+                        is ContinueWatchingEntry.StreamEntry -> addRow(
+                            provider.id,
+                            provider.liveFormat,
+                            entry.stream,
+                            entry.state.positionMs
+                        )
+                        is ContinueWatchingEntry.EpisodeEntry -> addEpisodeRow(provider, entry)
+                    }
+                }
             } else {
                 val favorites = withContext(Dispatchers.IO) { ContentRepository(dao).favorites(provider.id).first() }
                 if (favorites.isEmpty()) showMessage("لا توجد عناصر في المفضلة")
@@ -69,6 +83,32 @@ class LibraryActivity : AppCompatActivity() {
             }
             list.getChildAt(0)?.requestFocus()
         }
+    }
+
+    private suspend fun resolveContinueWatching(
+        dao: BlofyDao,
+        providerId: String,
+        states: List<WatchStateEntity>
+    ): List<ContinueWatchingEntry> {
+        val streams = LinkedHashMap<String, StreamEntity>()
+        val episodes = LinkedHashMap<String, EpisodeEntity>()
+
+        states.forEach { state ->
+            if (state.kind == "episode") {
+                dao.episode(state.contentKey)?.let { episodes[state.contentKey] = it }
+                    ?: dao.stream(state.contentKey)?.let { streams[state.contentKey] = it }
+            } else {
+                dao.stream(state.contentKey)?.let { streams[state.contentKey] = it }
+                    ?: dao.episode(state.contentKey)?.let { episodes[state.contentKey] = it }
+            }
+        }
+
+        val parentSeries = if (episodes.isEmpty()) {
+            emptyList()
+        } else {
+            dao.streams(providerId, "series", null).first()
+        }
+        return ContinueWatchingResolver.resolve(states, streams, episodes, parentSeries)
     }
 
     private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
@@ -86,6 +126,31 @@ class LibraryActivity : AppCompatActivity() {
                 view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(100).start()
             }
             setOnClickListener { guardedOpen(providerId, liveFormat, stream, resumeMs) }
+        }
+        list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
+    }
+
+    private fun addEpisodeRow(provider: ProviderEntity, entry: ContinueWatchingEntry.EpisodeEntry) {
+        val episode = entry.episode
+        val parent = entry.parentSeries
+        val row = TextView(this).apply {
+            val seriesName = parent?.name?.takeIf(String::isNotBlank) ?: "مسلسل"
+            text = "${if (parent?.locked == true) "🔒 " else ""}EPISODE   •   $seriesName   •   S${episode.season} E${episode.episode}   •   ${episode.title}"
+            textSize = 18f
+            setTextColor(Color.WHITE)
+            setPadding(24, 17, 24, 17)
+            gravity = Gravity.CENTER_VERTICAL
+            isFocusable = true
+            isClickable = true
+            background = rowBackground(false)
+            setOnFocusChangeListener { view, focused ->
+                view.background = rowBackground(focused)
+                view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(100).start()
+            }
+            setOnClickListener {
+                val play = { openEpisode(provider, episode, entry.state.positionMs, seriesName) }
+                if (parent?.locked == true) ParentalGate.requirePin(this@LibraryActivity, play) else play()
+            }
         }
         list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
     }
@@ -121,12 +186,42 @@ class LibraryActivity : AppCompatActivity() {
                     putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
                     putExtra(PlayerActivity.EXTRA_KIND, "live")
                     putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
+                    putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+                    putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+                    putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+                    putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
+                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream))
                     putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
                     putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
                     putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
                 })
             }
         }
+    }
+
+    private fun openEpisode(provider: ProviderEntity, episode: EpisodeEntity, resumeMs: Long, seriesName: String) {
+        val url = runCatching { ContentUrlResolver.episode(provider, episode) }.getOrNull()
+        if (url == null) {
+            showMessage("تعذر تجهيز رابط الحلقة")
+            return
+        }
+        startActivity(Intent(this, PlayerActivity::class.java).apply {
+            putExtra(PlayerActivity.EXTRA_URL, url)
+            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(PlayerActivity.EXTRA_KIND, "episode")
+            putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+            putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode))
+            putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
+            putExtra(PlayerActivity.EXTRA_TITLE, "$seriesName • S${episode.season} E${episode.episode} • ${episode.title}")
+            putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
+            putExtra(PlayerActivity.EXTRA_SEASON, episode.season)
+            putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
+        })
     }
 
     private fun kindLabel(kind: String) = when (kind) {

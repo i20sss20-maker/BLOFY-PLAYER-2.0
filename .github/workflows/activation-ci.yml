@@ -33,6 +33,7 @@ jobs:
       BLOFY_ADMIN_TOKEN: ci-test-admin-token-1234567890
       BLOFY_TRIAL_DAYS: 7
       BLOFY_PLAYLIST_ENCRYPTION_KEY: 3f13b9368c3ae0dbcc7b4e7fbc28ba1247136ed4ad967f8a91a7db0911c7d4a2
+      BLOFY_RELEASE_COMMIT_SHA: ${{ github.sha }}
       PORT: 8080
       BLOFY_SMOKE_BASE_URL: http://127.0.0.1:8080
     steps:
@@ -45,6 +46,8 @@ jobs:
       - run: npm install
       - name: Syntax check
         run: npm run check
+      - name: Unit tests
+        run: npm test
       - name: Start activation service
         run: |
           npm start > /tmp/blofy-activation.log 2>&1 &

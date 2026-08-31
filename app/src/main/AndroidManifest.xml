@@ -26,8 +26,9 @@
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/ic_blofy_app"
         android:label="BLOFY PLAYER 2.0"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="false"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.Blofy">
 
         <activity android:name=".ui.mobile.MobileContentActivity" android:exported="false" />

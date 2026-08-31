@@ -1,4 +1,6 @@
-# BLOFY PLAYER 2.0 — Alpha Candidate
+# BLOFY PLAYER 2.0 — Historical Alpha Candidate
+
+> **Historical record only.** This document pins the first `core-v1` Alpha used during early QA. Its branch, SHA, artifacts and promotion gates are not current release instructions. For the active `2.0.0-rc02` release candidate use [`PRODUCTION_DEPLOYMENT.md`](PRODUCTION_DEPLOYMENT.md), [`ALPHA_QA_GATE.md`](ALPHA_QA_GATE.md) and the authoritative [`BLOFY_2_FINAL_REFERENCE_AR.md`](BLOFY_2_FINAL_REFERENCE_AR.md).
 
 ## Candidate identity
 
