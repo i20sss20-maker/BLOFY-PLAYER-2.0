@@ -15,6 +15,11 @@ async function request(path, options = {}) {
 const health = await request('/health');
 assert.equal(health.response.status, 200);
 assert.equal(health.body?.ok, true);
+assert.equal(health.body?.release?.service, 'blofy-activation');
+assert.match(String(health.body?.release?.version || ''), /^[0-9A-Za-z._-]{1,64}$/);
+assert.ok(['vercel', 'self-hosted'].includes(health.body?.release?.platform));
+const expectedReleaseCommit = String(process.env.BLOFY_RELEASE_COMMIT_SHA || '').trim().toLowerCase();
+if (expectedReleaseCommit) assert.equal(health.body?.release?.commitSha, expectedReleaseCommit);
 
 const trial = await request('/api/v1/activation/check', {
   method: 'POST',

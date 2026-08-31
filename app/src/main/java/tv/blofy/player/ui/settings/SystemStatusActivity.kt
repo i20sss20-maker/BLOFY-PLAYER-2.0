@@ -76,7 +76,7 @@ class SystemStatusActivity : AppCompatActivity() {
                     appendLine("Live format: ${provider.liveFormat.uppercase()}")
                     appendLine("Transport: ${provider.preferredTransport.uppercase()}")
                     appendLine("Redirects: ${if (provider.allowCrossProtocolRedirects) "ON" else "OFF"}")
-                    appendLine("VLC/external fallback: ON • after Media3 terminal failure")
+                    appendLine("External player: يدوي فقط • لا خروج تلقائي من BLOFY")
                 }
                 appendLine()
                 appendLine("ملاحظة: هذه الشاشة لا تعرض اسم المستخدم أو كلمة المرور أو رابط يحتوي بيانات دخول.")

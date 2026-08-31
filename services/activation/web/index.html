@@ -1110,21 +1110,21 @@
     });
 
     const urlPolicyMessages = {
-      ar: { https_playlist_required: "للأمان، روابط http غير مدعومة. استخدم رابطًا يبدأ بـ https://", invalid_playlist_url: "أدخل رابطًا كاملًا وصحيحًا يبدأ بـ https://" },
-      en: { https_playlist_required: "For security, HTTP links are not supported. Use an https:// URL.", invalid_playlist_url: "Enter a complete, valid URL beginning with https://." },
-      fr: { https_playlist_required: "Pour votre sécurité, les liens HTTP ne sont pas pris en charge. Utilisez une URL https://.", invalid_playlist_url: "Saisissez une URL complète et valide commençant par https://." },
-      es: { https_playlist_required: "Por seguridad, no se admiten enlaces HTTP. Usa una URL https://.", invalid_playlist_url: "Introduce una URL completa y válida que empiece por https://." },
-      pt: { https_playlist_required: "Por segurança, links HTTP não são aceitos. Use uma URL https://.", invalid_playlist_url: "Insira uma URL completa e válida começando com https://." },
-      de: { https_playlist_required: "Aus Sicherheitsgründen werden HTTP-Links nicht unterstützt. Verwende eine https://-URL.", invalid_playlist_url: "Gib eine vollständige, gültige URL ein, die mit https:// beginnt." },
-      it: { https_playlist_required: "Per sicurezza, i link HTTP non sono supportati. Usa un URL https://.", invalid_playlist_url: "Inserisci un URL completo e valido che inizi con https://." },
-      tr: { https_playlist_required: "Güvenlik için HTTP bağlantıları desteklenmez. https:// ile başlayan bir URL kullanın.", invalid_playlist_url: "https:// ile başlayan eksiksiz ve geçerli bir URL girin." },
-      nl: { https_playlist_required: "Voor de veiligheid worden HTTP-links niet ondersteund. Gebruik een https://-URL.", invalid_playlist_url: "Voer een volledige, geldige URL in die begint met https://." },
-      ru: { https_playlist_required: "Для безопасности HTTP-ссылки не поддерживаются. Используйте URL с https://.", invalid_playlist_url: "Введите полный корректный URL, начинающийся с https://." },
-      fa: { https_playlist_required: "برای امنیت، پیوندهای HTTP پشتیبانی نمی‌شوند. از نشانی https:// استفاده کنید.", invalid_playlist_url: "یک نشانی کامل و معتبر با https:// وارد کنید." },
-      ur: { https_playlist_required: "حفاظت کے لیے HTTP لنکس معاون نہیں ہیں۔ https:// والا URL استعمال کریں۔", invalid_playlist_url: "https:// سے شروع ہونے والا مکمل اور درست URL درج کریں۔" },
-      hi: { https_playlist_required: "सुरक्षा के लिए HTTP लिंक समर्थित नहीं हैं। https:// URL इस्तेमाल करें।", invalid_playlist_url: "https:// से शुरू होने वाला पूरा और मान्य URL दर्ज करें।" },
-      id: { https_playlist_required: "Demi keamanan, tautan HTTP tidak didukung. Gunakan URL https://.", invalid_playlist_url: "Masukkan URL lengkap dan valid yang diawali https://." },
-      zh: { https_playlist_required: "为保障安全，不支持 HTTP 链接。请使用 https:// 网址。", invalid_playlist_url: "请输入以 https:// 开头的完整有效网址。" }
+      ar: { invalid_playlist_url: "أدخل رابطًا كاملًا وصحيحًا يبدأ بـ http:// أو https://", playlist_userinfo_not_allowed: "لا تضع اسم المستخدم أو كلمة المرور داخل الرابط؛ استخدم الحقول المخصصة.", unsafe_playlist_host: "استخدم رابط مزود عام؛ العناوين المحلية والخاصة غير مدعومة.", http_playlist_warning: "جاري الحفظ. تنبيه: اتصال التطبيق بهذا المزود سيكون عبر HTTP غير مشفّر." },
+      en: { invalid_playlist_url: "Enter a complete, valid URL beginning with http:// or https://.", playlist_userinfo_not_allowed: "Do not put a username or password in the URL; use the dedicated fields.", unsafe_playlist_host: "Use a public provider URL; local and private addresses are not supported.", http_playlist_warning: "Saving. Note: the app will connect to this provider over unencrypted HTTP." },
+      fr: { invalid_playlist_url: "Saisissez une URL complète commençant par http:// ou https://.", playlist_userinfo_not_allowed: "Ne placez pas d’identifiant ni de mot de passe dans l’URL ; utilisez les champs prévus.", unsafe_playlist_host: "Utilisez une URL publique ; les adresses locales et privées ne sont pas prises en charge.", http_playlist_warning: "Enregistrement. Remarque : l’application se connectera à ce fournisseur via HTTP non chiffré." },
+      es: { invalid_playlist_url: "Introduce una URL completa que empiece por http:// o https://.", playlist_userinfo_not_allowed: "No incluyas el usuario ni la contraseña en la URL; usa los campos correspondientes.", unsafe_playlist_host: "Usa una URL pública; no se admiten direcciones locales ni privadas.", http_playlist_warning: "Guardando. Nota: la aplicación se conectará a este proveedor mediante HTTP sin cifrar." },
+      pt: { invalid_playlist_url: "Insira uma URL completa começando com http:// ou https://.", playlist_userinfo_not_allowed: "Não inclua usuário ou senha na URL; use os campos próprios.", unsafe_playlist_host: "Use uma URL pública; endereços locais e privados não são aceitos.", http_playlist_warning: "Salvando. Observação: o app se conectará a este provedor por HTTP não criptografado." },
+      de: { invalid_playlist_url: "Gib eine vollständige URL ein, die mit http:// oder https:// beginnt.", playlist_userinfo_not_allowed: "Benutzername und Passwort nicht in die URL schreiben; nutze die vorgesehenen Felder.", unsafe_playlist_host: "Verwende eine öffentliche Anbieter-URL; lokale und private Adressen werden nicht unterstützt.", http_playlist_warning: "Wird gespeichert. Hinweis: Die App verbindet sich über unverschlüsseltes HTTP mit diesem Anbieter." },
+      it: { invalid_playlist_url: "Inserisci un URL completo che inizi con http:// o https://.", playlist_userinfo_not_allowed: "Non inserire nome utente o password nell’URL; usa i campi dedicati.", unsafe_playlist_host: "Usa un URL pubblico; gli indirizzi locali e privati non sono supportati.", http_playlist_warning: "Salvataggio. Nota: l’app si connetterà al provider tramite HTTP non crittografato." },
+      tr: { invalid_playlist_url: "http:// veya https:// ile başlayan eksiksiz bir URL girin.", playlist_userinfo_not_allowed: "Kullanıcı adı veya parolayı URL’ye yazmayın; ilgili alanları kullanın.", unsafe_playlist_host: "Genel bir sağlayıcı URL’si kullanın; yerel ve özel adresler desteklenmez.", http_playlist_warning: "Kaydediliyor. Not: Uygulama bu sağlayıcıya şifrelenmemiş HTTP üzerinden bağlanacak." },
+      nl: { invalid_playlist_url: "Voer een volledige URL in die begint met http:// of https://.", playlist_userinfo_not_allowed: "Zet geen gebruikersnaam of wachtwoord in de URL; gebruik de aparte velden.", unsafe_playlist_host: "Gebruik een openbare provider-URL; lokale en privé-adressen worden niet ondersteund.", http_playlist_warning: "Opslaan. Let op: de app maakt via onbeveiligde HTTP verbinding met deze provider." },
+      ru: { invalid_playlist_url: "Введите полный URL, начинающийся с http:// или https://.", playlist_userinfo_not_allowed: "Не указывайте логин или пароль в URL; используйте отдельные поля.", unsafe_playlist_host: "Используйте публичный URL провайдера; локальные и частные адреса не поддерживаются.", http_playlist_warning: "Сохранение. Приложение подключится к провайдеру по незашифрованному HTTP." },
+      fa: { invalid_playlist_url: "یک نشانی کامل با http:// یا https:// وارد کنید.", playlist_userinfo_not_allowed: "نام کاربری یا گذرواژه را داخل نشانی قرار ندهید؛ از فیلدهای جداگانه استفاده کنید.", unsafe_playlist_host: "از نشانی عمومی ارائه‌دهنده استفاده کنید؛ نشانی‌های محلی و خصوصی پشتیبانی نمی‌شوند.", http_playlist_warning: "در حال ذخیره. توجه: برنامه از HTTP رمزگذاری‌نشده به این ارائه‌دهنده متصل می‌شود." },
+      ur: { invalid_playlist_url: "http:// یا https:// سے شروع ہونے والا مکمل URL درج کریں۔", playlist_userinfo_not_allowed: "صارف نام یا پاس ورڈ URL میں نہ لکھیں؛ مخصوص خانے استعمال کریں۔", unsafe_playlist_host: "عوامی فراہم کنندہ URL استعمال کریں؛ مقامی اور نجی پتے معاون نہیں ہیں۔", http_playlist_warning: "محفوظ ہو رہا ہے۔ ایپ اس فراہم کنندہ سے غیر خفیہ HTTP کے ذریعے منسلک ہوگی۔" },
+      hi: { invalid_playlist_url: "http:// या https:// से शुरू होने वाला पूरा URL दर्ज करें।", playlist_userinfo_not_allowed: "यूज़रनेम या पासवर्ड URL में न डालें; अलग फ़ील्ड इस्तेमाल करें।", unsafe_playlist_host: "सार्वजनिक प्रदाता URL इस्तेमाल करें; स्थानीय और निजी पते समर्थित नहीं हैं।", http_playlist_warning: "सहेजा जा रहा है। ऐप इस प्रदाता से अनएन्क्रिप्टेड HTTP पर जुड़ेगा।" },
+      id: { invalid_playlist_url: "Masukkan URL lengkap yang diawali http:// atau https://.", playlist_userinfo_not_allowed: "Jangan masukkan nama pengguna atau kata sandi ke URL; gunakan kolom khusus.", unsafe_playlist_host: "Gunakan URL penyedia publik; alamat lokal dan privat tidak didukung.", http_playlist_warning: "Menyimpan. Catatan: aplikasi akan terhubung ke penyedia ini melalui HTTP yang tidak terenkripsi." },
+      zh: { invalid_playlist_url: "请输入以 http:// 或 https:// 开头的完整网址。", playlist_userinfo_not_allowed: "请勿在网址中填写用户名或密码，请使用专用输入框。", unsafe_playlist_host: "请使用公共服务商网址；不支持本地或私有地址。", http_playlist_warning: "正在保存。注意：应用将通过未加密的 HTTP 连接到此提供商。" }
     };
     Object.keys(urlPolicyMessages).forEach(function(code) {
       Object.assign(translations[code], urlPolicyMessages[code]);
@@ -1169,6 +1169,7 @@
     let currentId = null;
     let items = [];
     let loginBusy = false;
+    let playlistUrlTouched = false;
     const $ = function(id) { return document.getElementById(id); };
 
     function t(key, vars) {
@@ -1339,17 +1340,122 @@
       }
     }
 
+    function authorityHasUserInfo(candidate, parsed) {
+      if (parsed.username || parsed.password) return true;
+      const authorityStart = candidate.indexOf("://");
+      if (authorityStart < 0) return false;
+      const start = authorityStart + 3;
+      const boundaries = ["/", "?", "#"]
+        .map(function(marker) { return candidate.indexOf(marker, start); })
+        .filter(function(index) { return index >= 0; })
+        .sort(function(left, right) { return left - right; });
+      const end = boundaries.length ? boundaries[0] : candidate.length;
+      return candidate.slice(start, end).includes("@");
+    }
+
+    function parsePlaylistIpv4(host) {
+      const parts = host.split(".");
+      if (parts.length !== 4) return null;
+      const numbers = parts.map(function(part) { return /^\d+$/.test(part) ? Number(part) : Number.NaN; });
+      return numbers.every(function(part) { return Number.isInteger(part) && part >= 0 && part <= 255; }) ? numbers : null;
+    }
+
+    function isUnsafePlaylistIpv4(parts) {
+      const a = parts[0];
+      const b = parts[1];
+      return a === 0 || a === 10 || a === 127 ||
+        (a === 100 && b >= 64 && b <= 127) ||
+        (a === 169 && b === 254) ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 0) ||
+        (a === 192 && b === 168) ||
+        (a === 198 && b >= 18 && b <= 19) ||
+        a >= 224;
+    }
+
+    function parsePlaylistIpv6(host) {
+      let value = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+      if (!value || value.includes("%") || value.indexOf("::") !== value.lastIndexOf("::")) return null;
+      const ipv4Start = value.lastIndexOf(":") + 1;
+      const ipv4 = parsePlaylistIpv4(value.slice(ipv4Start));
+      if (ipv4) {
+        const high = ((ipv4[0] << 8) | ipv4[1]).toString(16);
+        const low = ((ipv4[2] << 8) | ipv4[3]).toString(16);
+        value = value.slice(0, ipv4Start) + high + ":" + low;
+      }
+      const compressedAt = value.indexOf("::");
+      const left = (compressedAt >= 0 ? value.slice(0, compressedAt) : value).split(":").filter(Boolean);
+      const right = compressedAt >= 0 ? value.slice(compressedAt + 2).split(":").filter(Boolean) : [];
+      const missing = 8 - left.length - right.length;
+      if ((compressedAt >= 0 && missing < 1) || (compressedAt < 0 && left.length !== 8)) return null;
+      const groups = compressedAt >= 0 ? left.concat(Array(missing).fill("0"), right) : left;
+      if (groups.length !== 8 || groups.some(function(group) { return !/^[0-9a-f]{1,4}$/i.test(group); })) return null;
+      return groups.reduce(function(bytes, group) {
+        const number = Number.parseInt(group, 16);
+        bytes.push(number >> 8, number & 0xff);
+        return bytes;
+      }, []);
+    }
+
+    function isUnsafePlaylistIpv6(host) {
+      const bytes = parsePlaylistIpv6(host);
+      if (!bytes) return true;
+      const mappedIpv4 = bytes.slice(0, 10).every(function(byte) { return byte === 0; }) && bytes[10] === 0xff && bytes[11] === 0xff;
+      const compatibleIpv4 = bytes.slice(0, 12).every(function(byte) { return byte === 0; }) && !bytes.slice(12).every(function(byte) { return byte === 0; });
+      if (mappedIpv4 || compatibleIpv4) return isUnsafePlaylistIpv4(bytes.slice(12));
+      const allZero = bytes.every(function(byte) { return byte === 0; });
+      const loopback = bytes.slice(0, 15).every(function(byte) { return byte === 0; }) && bytes[15] === 1;
+      const uniqueLocal = (bytes[0] & 0xfe) === 0xfc;
+      const linkLocal = bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80;
+      const multicast = bytes[0] === 0xff;
+      const documentation = bytes[0] === 0x20 && bytes[1] === 0x01 && bytes[2] === 0x0d && bytes[3] === 0xb8;
+      return allZero || loopback || uniqueLocal || linkLocal || multicast || documentation;
+    }
+
+    function isUnsafePlaylistHost(host) {
+      const normalized = String(host || "")
+        .replace(/^\[|\]$/g, "")
+        .replace(/\.+$/, "")
+        .toLowerCase();
+      if (!normalized) return true;
+      if (normalized === "localhost" || normalized.endsWith(".localhost") ||
+        normalized.endsWith(".local") || normalized.endsWith(".internal") ||
+        normalized.endsWith(".lan") || normalized.endsWith(".home") ||
+        normalized.endsWith(".home.arpa")) return true;
+      const ipv4 = parsePlaylistIpv4(normalized);
+      if (ipv4) return isUnsafePlaylistIpv4(ipv4);
+      if (normalized.includes(":")) return isUnsafePlaylistIpv6(normalized);
+      return !normalized.includes(".");
+    }
+
     function playlistUrlError(value) {
+      const candidate = String(value || "").trim();
+      if (!candidate || /[\s\u0000-\u001f\u007f]/u.test(candidate)) return "invalid_playlist_url";
+      if (!/^https?:\/\//i.test(candidate)) return "invalid_playlist_url";
       let parsed;
-      try { parsed = new URL(String(value || "").trim()); }
+      try { parsed = new URL(candidate); }
       catch (_) { return "invalid_playlist_url"; }
-      if (parsed.protocol !== "https:") return "https_playlist_required";
-      return parsed.hostname ? null : "invalid_playlist_url";
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "invalid_playlist_url";
+      if (!parsed.hostname) return "invalid_playlist_url";
+      if (authorityHasUserInfo(candidate, parsed)) return "playlist_userinfo_not_allowed";
+      if (parsed.port === "0" || isUnsafePlaylistHost(parsed.hostname)) return "unsafe_playlist_host";
+      return null;
+    }
+
+    function validatePlaylistUrlField(showError) {
+      const input = $("baseUrl");
+      const error = playlistUrlError(input.value);
+      input.setCustomValidity(error ? t(error) : "");
+      if (showError && error) showStatus($("editorStatus"), t(error), "bad");
+      if (!error && $("editorStatus").classList.contains("bad")) showStatus($("editorStatus"), "");
+      return error;
     }
 
     function clearEditor() {
       currentId = null;
+      playlistUrlTouched = false;
       ["name", "baseUrl", "username", "password"].forEach(function(id) { $(id).value = ""; });
+      $("baseUrl").setCustomValidity("");
       $("providerType").value = "xtream";
       $("active").checked = true;
       typeUi();
@@ -1365,6 +1471,7 @@
 
     function edit(item) {
       currentId = item.id;
+      playlistUrlTouched = false;
       $("editorTitle").textContent = t("editorEditTitle");
       $("name").value = item.name || "";
       $("providerType").value = item.providerType;
@@ -1379,13 +1486,16 @@
     }
 
     async function save() {
-      const urlError = playlistUrlError($("baseUrl").value);
+      playlistUrlTouched = true;
+      const urlError = validatePlaylistUrlField(true);
       if (urlError) {
         showStatus($("editorStatus"), t(urlError), "bad");
         return;
       }
+      let playlistProtocol = "";
+      try { playlistProtocol = new URL($("baseUrl").value.trim()).protocol; } catch (_) {}
       $("saveBtn").disabled = true;
-      showStatus($("editorStatus"), t("saving"));
+      showStatus($("editorStatus"), playlistProtocol === "http:" ? t("http_playlist_warning") : t("saving"));
       try {
         const providerType = $("providerType").value;
         const isXtream = providerType === "xtream";
@@ -1441,6 +1551,13 @@
       clearEditor();
     };
     $("providerType").onchange = typeUi;
+    $("baseUrl").addEventListener("blur", function() {
+      playlistUrlTouched = true;
+      validatePlaylistUrlField(true);
+    });
+    $("baseUrl").addEventListener("input", function() {
+      if (playlistUrlTouched) validatePlaylistUrlField(true);
+    });
     $("languageSelect").onchange = function(event) { applyLanguage(event.target.value); };
 
     applyLanguage(locale);

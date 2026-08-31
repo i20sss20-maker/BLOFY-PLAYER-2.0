@@ -11,9 +11,26 @@ data class ProviderProfile(
     val headers: Map<String, String> = emptyMap(),
     val preferDirectSource: Boolean = false,
     val allowHttpFallback: Boolean = true,
-    val allowVlcFallback: Boolean = true
+    // External playback is an explicit user action from the player controls.
+    // Never leave BLOFY automatically after an internal playback failure.
+    val allowVlcFallback: Boolean = false,
+    val providerKind: ProviderKind = ProviderKind.UNKNOWN
 )
 
 enum class LiveFormat(val extension: String) { TS("ts"), HLS("m3u8") }
 enum class TransportPreference { CRONET_FIRST, HTTP_FIRST }
 enum class PlayerPreference { MEDIA3, VLC }
+
+enum class ProviderKind {
+    XTREAM,
+    M3U,
+    UNKNOWN;
+
+    companion object {
+        fun from(value: String?): ProviderKind = when (value?.trim()?.lowercase()) {
+            "xtream" -> XTREAM
+            "m3u" -> M3U
+            else -> UNKNOWN
+        }
+    }
+}

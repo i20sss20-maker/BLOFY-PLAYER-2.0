@@ -1,6 +1,8 @@
 package tv.blofy.player.data.m3u
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -8,12 +10,14 @@ import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.core.network.awaitResponse
 import java.net.URI
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 class M3uPlaylistLoader(
     private val client: OkHttpClient = OkHttpClient.Builder()
+        .callTimeout(35, TimeUnit.SECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(25, TimeUnit.SECONDS)
         .followRedirects(true)
@@ -22,16 +26,21 @@ class M3uPlaylistLoader(
 ) {
     suspend fun load(provider: ProviderEntity): ParsedM3u = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(provider.baseUrl).header("User-Agent", "BLOFY PLAYER/2.0").build()
-        client.newCall(request).execute().use { response ->
+        val coroutineContext = currentCoroutineContext()
+        client.newCall(request).awaitResponse().use { response ->
             if (!response.isSuccessful) error("M3U HTTP ${response.code}")
-            parse(provider, response.body?.string().orEmpty())
+            parse(provider, response.body?.string().orEmpty()) { coroutineContext.ensureActive() }
         }
     }
 
-    fun parse(provider: ProviderEntity, text: String): ParsedM3u {
+    fun parse(provider: ProviderEntity, text: String): ParsedM3u = parse(provider, text) {}
+
+    private fun parse(provider: ProviderEntity, text: String, cancellationCheck: () -> Unit): ParsedM3u {
         val entries = mutableListOf<Entry>()
         var pending: Metadata? = null
+        var lineIndex = 0
         text.lineSequence().forEach { raw ->
+            if (lineIndex++ % 256 == 0) cancellationCheck()
             val line = raw.trim()
             when {
                 line.startsWith("#EXTINF", true) -> pending = parseMetadata(line)
@@ -52,7 +61,8 @@ class M3uPlaylistLoader(
             if (!categories.containsKey(key)) categories[key] = row
         }
 
-        entries.forEach { entry ->
+        entries.forEachIndexed { index, entry ->
+            if (index % 256 == 0) cancellationCheck()
             val series = SERIES_PATTERN.find(entry.meta.name)
             if (series != null) {
                 val seriesName = series.groupValues[1].trim(' ', '-', '.', '_')
@@ -75,7 +85,7 @@ class M3uPlaylistLoader(
                     remoteId = episodeId, season = season, episode = episodeNo, title = entry.meta.name,
                     extension = extension(entry.url) ?: "mp4", directSource = entry.url
                 )
-                return@forEach
+                return@forEachIndexed
             }
 
             val kind = if (looksLikeMovie(entry)) "movie" else "live"

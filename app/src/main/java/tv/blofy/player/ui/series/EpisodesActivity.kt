@@ -5,12 +5,15 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -30,11 +33,15 @@ class EpisodesActivity : AppCompatActivity() {
     private lateinit var seasonAdapter: FocusTextAdapter<Int>
     private lateinit var seasonList: RecyclerView
     private lateinit var episodeList: RecyclerView
+    private lateinit var status: TextView
+    private lateinit var retryButton: Button
     private var allEpisodes: List<EpisodeEntity> = emptyList()
     private var selectedSeason: Int? = null
     private var providerId = ""
     private var seriesId = ""
     private var restoredOnce = false
+    private var syncInProgress = false
+    private var loadState = EpisodeLoadState.LOADING
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,12 +62,20 @@ class EpisodesActivity : AppCompatActivity() {
             gravity = Gravity.START
             setPadding(8, 0, 0, 6)
         })
-        val status = TextView(this).apply {
+        status = TextView(this).apply {
             text = "جاري تحميل الحلقات..."
             setTextColor(Color.rgb(185, 140, 255))
-            setPadding(8, 0, 0, 14)
+            setPadding(8, 0, 0, 8)
         }
         root.addView(status)
+        retryButton = Button(this).apply {
+            text = "إعادة تحميل الحلقات"
+            isAllCaps = false
+            visibility = View.GONE
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.rgb(91, 45, 175))
+        }
+        root.addView(retryButton, LinearLayout.LayoutParams(250, 64).apply { bottomMargin = 10 })
 
         val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         seasonList = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@EpisodesActivity) }
@@ -86,22 +101,84 @@ class EpisodesActivity : AppCompatActivity() {
             episodeList.adapter = episodeAdapter
             seasonList.adapter = seasonAdapter
 
-            runCatching {
-                withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, dao).syncSeriesEpisodes(provider, seriesId) }
-            }.onFailure { status.text = "عرض البيانات المحفوظة" }
-
-            dao.episodes(providerId, seriesId).collect { items ->
-                allEpisodes = items.sortedWith(compareBy<EpisodeEntity> { it.season }.thenBy { it.episode })
-                val seasonValues = allEpisodes.map { it.season }.distinct().sorted()
-                seasonAdapter.submit(seasonValues)
-                val rememberedSeason = FocusMemory.restore(this@EpisodesActivity, seasonMemoryKey())?.toIntOrNull()
-                if (selectedSeason == null || selectedSeason !in seasonValues) {
-                    selectedSeason = rememberedSeason?.takeIf { it in seasonValues } ?: seasonValues.firstOrNull()
-                }
-                refreshEpisodes(restoreFocus = !restoredOnce)
-                restoredOnce = true
-                status.text = if (items.isEmpty()) "لا توجد حلقات" else "${seasonValues.size} موسم  •  ${items.size} حلقة"
+            retryButton.setOnClickListener {
+                lifecycleScope.launch { syncEpisodes(provider) }
             }
+
+            launch {
+                dao.episodes(providerId, seriesId).collect { items ->
+                    renderEpisodes(items)
+                }
+            }
+            syncEpisodes(provider)
+        }
+    }
+
+    private suspend fun syncEpisodes(provider: ProviderEntity) {
+        if (syncInProgress) return
+        syncInProgress = true
+        loadState = EpisodeLoadState.LOADING
+        retryButton.visibility = View.GONE
+        updateStatus()
+
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao())
+                    .syncSeriesEpisodes(provider, seriesId)
+            }
+        }
+        result.exceptionOrNull()?.let { failure ->
+            if (failure is CancellationException) throw failure
+        }
+
+        syncInProgress = false
+        loadState = result.fold(
+            onSuccess = { sync ->
+                when {
+                    sync.episodeCount > 0 -> EpisodeLoadState.LOADED
+                    sync.payloadPresent -> EpisodeLoadState.EMPTY_PROVIDER_RESPONSE
+                    else -> EpisodeLoadState.INVALID_PROVIDER_RESPONSE
+                }
+            },
+            onFailure = { EpisodeLoadState.ERROR }
+        )
+        retryButton.visibility = if (loadState.canRetry && allEpisodes.isEmpty()) View.VISIBLE else View.GONE
+        updateStatus()
+        if (retryButton.visibility == View.VISIBLE && DeviceClass.isTv(this)) {
+            retryButton.post { retryButton.requestFocus() }
+        }
+    }
+
+    private fun renderEpisodes(items: List<EpisodeEntity>) {
+        allEpisodes = items.sortedWith(compareBy<EpisodeEntity> { it.season }.thenBy { it.episode })
+        val seasonValues = allEpisodes.map { it.season }.distinct().sorted()
+        seasonAdapter.submit(seasonValues)
+        val rememberedSeason = FocusMemory.restore(this, seasonMemoryKey())?.toIntOrNull()
+        if (selectedSeason == null || selectedSeason !in seasonValues) {
+            selectedSeason = rememberedSeason?.takeIf { it in seasonValues } ?: seasonValues.firstOrNull()
+        }
+        refreshEpisodes(restoreFocus = !restoredOnce)
+        restoredOnce = true
+        retryButton.visibility = if (allEpisodes.isEmpty() && loadState.canRetry) View.VISIBLE else View.GONE
+        updateStatus()
+    }
+
+    private fun updateStatus() {
+        if (allEpisodes.isNotEmpty()) {
+            val seasons = allEpisodes.map { it.season }.distinct().size
+            status.text = if (syncInProgress) {
+                "جاري تحديث الحلقات...  •  ${allEpisodes.size} حلقة محفوظة"
+            } else {
+                "$seasons موسم  •  ${allEpisodes.size} حلقة"
+            }
+            return
+        }
+        status.text = when (loadState) {
+            EpisodeLoadState.LOADING -> "جاري تحميل الحلقات..."
+            EpisodeLoadState.LOADED -> "جاري تجهيز الحلقات..."
+            EpisodeLoadState.EMPTY_PROVIDER_RESPONSE -> "السيرفر لم يرسل حلقات لهذا المسلسل • حاول مرة أخرى"
+            EpisodeLoadState.INVALID_PROVIDER_RESPONSE -> "رد السيرفر غير مكتمل • أعد تحميل الحلقات"
+            EpisodeLoadState.ERROR -> "تعذر تحميل الحلقات • تحقق من الاتصال ثم أعد المحاولة"
         }
     }
 
@@ -154,6 +231,11 @@ class EpisodesActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)
             putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
             putExtra(PlayerActivity.EXTRA_KIND, "episode")
+            putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+            putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode))
             putExtra(PlayerActivity.EXTRA_RESUME_MS, resume)
             putExtra(PlayerActivity.EXTRA_TITLE, episode.title)
             putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
@@ -164,6 +246,14 @@ class EpisodesActivity : AppCompatActivity() {
 
     private fun seasonMemoryKey() = "episodes:$providerId:$seriesId:season"
     private fun episodeMemoryKey() = "episodes:$providerId:$seriesId:episode"
+
+    private enum class EpisodeLoadState(val canRetry: Boolean) {
+        LOADING(false),
+        LOADED(false),
+        EMPTY_PROVIDER_RESPONSE(true),
+        INVALID_PROVIDER_RESPONSE(true),
+        ERROR(true)
+    }
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"

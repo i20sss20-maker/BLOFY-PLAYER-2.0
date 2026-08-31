@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  IPTV providers in the field still expose metadata and streams over HTTP.
+  HTTPS remains preferred and the UI requires an explicit warning before an
+  HTTP provider is saved. Dynamic provider hosts cannot be enumerated here.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

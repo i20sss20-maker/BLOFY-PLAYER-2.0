@@ -58,7 +58,8 @@ For each tested channel record:
 - Resume: pass / fail
 - 4K/HEVC: pass / fail / unavailable
 - Same-URL retry bounded to one: pass / fail / not observed
-- External fallback after terminal error: pass / fail / not observed
+- Bounded internal fallback after terminal error: pass / fail / not observed
+- Manual external-player action: pass / fail / not tested
 
 ## Series
 - Series tested:

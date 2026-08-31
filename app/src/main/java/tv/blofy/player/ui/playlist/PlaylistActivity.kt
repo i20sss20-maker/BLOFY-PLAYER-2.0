@@ -8,9 +8,13 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
@@ -18,6 +22,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.PlaylistManager
+import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
@@ -67,7 +72,39 @@ class PlaylistActivity : AppCompatActivity() {
         val url = field("رابط السيرفر أو رابط M3U")
         val username = field("اسم المستخدم — اتركه فارغًا لـ M3U")
         val password = field("كلمة المرور — اتركها فارغة لـ M3U", true)
-        listOf(name, url, username, password).forEach {
+
+        fun addField(field: EditText) {
+            root.addView(field, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 650, if (phone) 62 else 68).apply { topMargin = 12 })
+        }
+        addField(name)
+        addField(url)
+
+        val transportNotice = TextView(this).apply {
+            text = "يفضّل استخدام HTTPS. تُقبل روابط HTTP للتوافق مع بعض السيرفرات."
+            textSize = if (phone) 13f else 14f
+            setTextColor(Color.rgb(185, 140, 255))
+            gravity = Gravity.CENTER
+            setPadding(8, 9, 8, 0)
+        }
+        root.addView(transportNotice, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 650, LinearLayout.LayoutParams.WRAP_CONTENT))
+        url.doAfterTextChanged { value ->
+            val candidate = value?.toString()?.trim().orEmpty()
+            when {
+                candidate.startsWith("http://", ignoreCase = true) -> {
+                    transportNotice.text = "تنبيه أمني: اتصال HTTP غير مشفّر، وقد تظهر بيانات الدخول والمحتوى لأي جهة على الشبكة."
+                    transportNotice.setTextColor(Color.rgb(255, 179, 71))
+                }
+                candidate.startsWith("https://", ignoreCase = true) -> {
+                    transportNotice.text = "اتصال HTTPS مشفّر (موصى به)."
+                    transportNotice.setTextColor(Color.rgb(116, 224, 174))
+                }
+                else -> {
+                    transportNotice.text = "يفضّل استخدام HTTPS. تُقبل روابط HTTP للتوافق مع بعض السيرفرات."
+                    transportNotice.setTextColor(Color.rgb(185, 140, 255))
+                }
+            }
+        }
+        listOf(username, password).forEach {
             root.addView(it, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 650, if (phone) 62 else 68).apply { topMargin = 12 })
         }
 
@@ -78,6 +115,7 @@ class PlaylistActivity : AppCompatActivity() {
         }
         root.addView(status)
 
+        var confirmedHttpUrl: String? = null
         val save = Button(this).apply {
             text = if (editingProviderId == null) "حفظ القائمة" else "حفظ التعديلات"
             isAllCaps = false
@@ -99,12 +137,31 @@ class PlaylistActivity : AppCompatActivity() {
                         return@setOnClickListener
                     }
                     PlaylistUrlPolicy.Result.INVALID -> {
-                        status.text = "الرابط غير صحيح. أدخل رابطًا كاملًا يبدأ بـ https://"
+                        status.text = "الرابط غير صحيح. أدخل رابطًا كاملًا يبدأ بـ https:// أو http://"
                         return@setOnClickListener
                     }
-                    PlaylistUrlPolicy.Result.HTTPS_REQUIRED -> {
-                        status.text = "للأمان، روابط http غير مدعومة. استخدم https://"
+                    PlaylistUrlPolicy.Result.USER_INFO_NOT_ALLOWED -> {
+                        status.text = "لا تضع اسم المستخدم أو كلمة المرور داخل الرابط؛ استخدم الحقول المخصصة."
                         return@setOnClickListener
+                    }
+                    PlaylistUrlPolicy.Result.UNSAFE_HOST -> {
+                        status.text = "لا يمكن استخدام عنوان محلي أو خاص. أدخل رابط السيرفر العام."
+                        return@setOnClickListener
+                    }
+                    PlaylistUrlPolicy.Result.HTTP_CLEAR_TEXT -> {
+                        if (confirmedHttpUrl != baseUrl) {
+                            val saveButton = this
+                            AlertDialog.Builder(this@PlaylistActivity)
+                                .setTitle("اتصال HTTP غير مشفّر")
+                                .setMessage("قد تظهر بيانات الدخول والمحتوى لأي جهة على الشبكة. استخدم HTTPS متى توفر، أو تابع فقط إذا كان هذا هو الرابط الرسمي لسيرفرك.")
+                                .setNegativeButton("رجوع", null)
+                                .setPositiveButton("متابعة وحفظ") { _, _ ->
+                                    confirmedHttpUrl = baseUrl
+                                    saveButton.performClick()
+                                }
+                                .show()
+                            return@setOnClickListener
+                        }
                     }
                     PlaylistUrlPolicy.Result.VALID -> Unit
                 }
@@ -112,8 +169,8 @@ class PlaylistActivity : AppCompatActivity() {
                 isEnabled = false
                 status.text = if (isM3u) "جاري قراءة M3U وحفظها محليًا..." else "جاري تحميل Xtream وحفظها محليًا..."
                 lifecycleScope.launch {
-                    runCatching {
-                        withContext(Dispatchers.IO) {
+                    try {
+                        val portalSynced = withContext(Dispatchers.IO) {
                             val dao = BlofyDatabase.get(applicationContext).dao()
                             val existing = editingProviderId?.let { dao.provider(it) }
                             val type = if (isM3u) "m3u" else "xtream"
@@ -129,25 +186,64 @@ class PlaylistActivity : AppCompatActivity() {
                                 preferredTransport = existing?.preferredTransport ?: "cronet",
                                 preferredEngine = existing?.preferredEngine ?: "media3",
                                 allowCrossProtocolRedirects = existing?.allowCrossProtocolRedirects ?: true,
-                                enabled = existing?.enabled ?: true,
+                                enabled = true,
                                 updatedAt = System.currentTimeMillis()
                             )
-                            dao.upsertProvider(provider)
-                            PlaylistManager(XtreamClient.api, dao).syncAll(provider)
+                            val stagingProvider = provider.copy(
+                                id = UUID.randomUUID().toString(),
+                                enabled = false
+                            )
+                            var promoted = false
 
-                            val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
-                            if (endpoint.isNotBlank()) {
-                                runCatching {
-                                    PortalPlaylistClient.pushProvider(applicationContext, endpoint, provider)
+                            try {
+                                // Network writes go to an invisible staging ID. Only a non-empty
+                                // fresh response is promoted atomically over the working provider.
+                                val syncResult = PlaylistSyncPolicy.run {
+                                    PlaylistManager(XtreamClient.api, dao).syncAll(stagingProvider)
+                                }
+                                check(syncResult.freshItemCount > 0) {
+                                    "لم يرجع السيرفر أي قنوات أو أفلام أو مسلسلات من بيانات الدخول الحالية"
+                                }
+                                check(syncResult.failedSectionCount == 0) {
+                                    "تعذر تحميل أحد أقسام القائمة؛ بقيت القائمة السابقة كما هي"
+                                }
+                                dao.promoteStagedCatalog(stagingProvider.id, provider)
+                                promoted = true
+
+                                val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+                                if (endpoint.isBlank()) {
+                                    true
+                                } else {
+                                    try {
+                                        PortalPlaylistClient.pushProvider(applicationContext, endpoint, provider)
+                                        true
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (_: Exception) {
+                                        false
+                                    }
+                                }
+                            } finally {
+                                if (!promoted) {
+                                    withContext(NonCancellable) {
+                                        dao.discardStagedCatalog(stagingProvider.id)
+                                    }
                                 }
                             }
                         }
-                    }.onSuccess {
-                        status.text = "تم حفظ القائمة"
+
                         setResult(RESULT_OK)
-                        finish()
-                    }.onFailure {
-                        status.text = "تعذر تحميل القائمة: ${it.message ?: "خطأ اتصال"}"
+                        if (portalSynced) {
+                            status.text = "تم حفظ القائمة وربطها بالموقع"
+                            finish()
+                        } else {
+                            status.text = "تم حفظ القائمة داخل التطبيق، لكن تعذر ربطها بالموقع. اضغط حفظ لإعادة المحاولة."
+                            isEnabled = true
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        status.text = "تعذر تحميل القائمة: ${error.message ?: "خطأ اتصال"}"
                         isEnabled = true
                     }
                 }

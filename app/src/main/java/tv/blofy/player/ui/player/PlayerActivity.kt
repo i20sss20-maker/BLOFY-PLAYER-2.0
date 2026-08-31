@@ -27,11 +27,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import tv.blofy.player.BlofyApp
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.playback.ExternalPlayerLauncher
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.PlayerPreference
+import tv.blofy.player.core.provider.ProviderKind
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
 import tv.blofy.player.core.remote.RemoteAction
@@ -39,6 +41,7 @@ import tv.blofy.player.core.remote.RemoteKeyRouter
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.RecentChannelStore
+import tv.blofy.player.data.ResumeWriteRequest
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -74,6 +77,9 @@ class PlayerActivity : AppCompatActivity() {
     private var currentTitle = ""
     private var currentSeason = 0
     private var currentEpisode = 0
+    private val hideHudRunnable = Runnable {
+        if (::hud.isInitialized && !isFinishing) hideHud()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,7 +93,18 @@ class PlayerActivity : AppCompatActivity() {
         currentEpisode = intent.getIntExtra(EXTRA_EPISODE, 0)
 
         val profile = profileFromIntent()
-        session = BlofyPlaybackSession(this, profile, kind.ifBlank { "unknown" })
+        session = BlofyPlaybackSession(
+            context = this,
+            profile = profile,
+            contentKind = kind.ifBlank { "unknown" }
+        ) {
+            Toast.makeText(
+                this,
+                if (kind == "live") "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى أو زر خارجي"
+                else "تعذر تشغيل هذا المحتوى داخل BLOFY • المشغل الخارجي متاح يدويًا",
+                Toast.LENGTH_LONG
+            ).show()
+        }
         session.player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED && kind == "episode" && !autoNextTriggered) {
@@ -97,7 +114,11 @@ class PlayerActivity : AppCompatActivity() {
             }
         })
         buildPlayerUi()
-        session.play(url, intent.getLongExtra(EXTRA_RESUME_MS, 0L))
+        session.play(
+            url = url,
+            resumeMs = intent.getLongExtra(EXTRA_RESUME_MS, 0L),
+            fallbackUrl = intent.getStringExtra(EXTRA_FALLBACK_URL)
+        )
         updateTitle(currentTitle)
         refreshFavoriteState()
         if (kind == "live") {
@@ -203,6 +224,7 @@ class PlayerActivity : AppCompatActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val routed = RemoteKeyRouter.route(event)
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
+        if (hud.visibility == View.VISIBLE && routed.action in HUD_NAVIGATION_ACTIONS) keepHudVisible()
         return when (routed.action) {
             RemoteAction.BACK -> {
                 if (hud.visibility == View.VISIBLE) { hideHud(); true } else { finish(); true }
@@ -238,7 +260,16 @@ class PlayerActivity : AppCompatActivity() {
                 if (kind == "live" && routed.digit != null) { handleChannelDigit(routed.digit); true } else super.dispatchKeyEvent(event)
             }
             RemoteAction.OK -> {
-                if (hud.visibility == View.VISIBLE) hideHud() else showHud(); true
+                val focusedControl = actionableFocusedHudControl()
+                when (PlayerHudKeyPolicy.okAction(hud.visibility == View.VISIBLE, focusedControl != null)) {
+                    HudOkAction.SHOW_HUD -> showHud()
+                    HudOkAction.HIDE_HUD -> hideHud()
+                    HudOkAction.CLICK_FOCUSED_CONTROL -> {
+                        keepHudVisible()
+                        focusedControl?.performClick()
+                    }
+                }
+                true
             }
             else -> super.dispatchKeyEvent(event)
         }
@@ -267,7 +298,11 @@ class PlayerActivity : AppCompatActivity() {
             currentSeason = target.season
             currentEpisode = target.episode
             updateTitle("S${target.season} E${target.episode} • ${target.title}")
-            session.play(ContentUrlResolver.episode(provider, target), 0L)
+            session.play(
+                url = ContentUrlResolver.episode(provider, target),
+                resumeMs = 0L,
+                fallbackUrl = ContentUrlResolver.directFallback(target)
+            )
             autoNextTriggered = false
             showHudBriefly()
         }
@@ -275,10 +310,18 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun markCurrentCompleted() {
         if (currentContentKey.isBlank()) return
+        val completedContentKey = currentContentKey
+        val completedProviderId = providerId
+        val completedDuration = session.player.duration.coerceAtLeast(0L)
         lifecycleScope.launch(Dispatchers.IO) {
-            val duration = session.player.duration.coerceAtLeast(0L)
             ContentRepository(BlofyDatabase.get(applicationContext).dao())
-                .saveResume(currentContentKey, providerId, "episode", duration, duration)
+                .saveResume(
+                    completedContentKey,
+                    completedProviderId,
+                    "episode",
+                    completedDuration,
+                    completedDuration
+                )
         }
     }
 
@@ -308,13 +351,30 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showHud() {
+        keepHudVisible()
         hud.visibility = View.VISIBLE
         audioButton.requestFocus()
     }
 
     private fun hideHud() {
+        keepHudVisible()
         hud.visibility = View.GONE
         playerView.requestFocus()
+    }
+
+    private fun keepHudVisible() {
+        if (::hud.isInitialized) hud.removeCallbacks(hideHudRunnable)
+    }
+
+    private fun actionableFocusedHudControl(): View? {
+        val focused = currentFocus ?: return null
+        if (!focused.isShown || !focused.isEnabled || !focused.isClickable) return null
+        var current: View? = focused
+        while (current != null) {
+            if (current === hud) return focused
+            current = current.parent as? View
+        }
+        return null
     }
 
     private fun updateTitle(title: String) {
@@ -341,7 +401,10 @@ class PlayerActivity : AppCompatActivity() {
         currentTitle = stream.name
         RecentChannelStore.record(this, provider.id, stream.key)
         updateTitle(stream.name)
-        session.play(ContentUrlResolver.live(provider, profile, stream))
+        session.play(
+            url = ContentUrlResolver.live(provider, profile, stream),
+            fallbackUrl = ContentUrlResolver.directFallback(stream)
+        )
         refreshFavoriteState()
         requestShortEpgRefresh(provider, stream)
         observeEpg()
@@ -397,8 +460,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun time(ms: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
 
     private fun showHudBriefly() {
+        keepHudVisible()
         hud.visibility = View.VISIBLE
-        hud.postDelayed({ if (!isFinishing) hideHud() }, 1600L)
+        hud.postDelayed(hideHudRunnable, 1600L)
     }
 
     private fun showTrackDialog(trackType: Int) {
@@ -499,14 +563,32 @@ class PlayerActivity : AppCompatActivity() {
         if (kind == "live" || currentContentKey.isBlank() || providerId.isBlank() || !::session.isInitialized) return
         val position = session.player.currentPosition.coerceAtLeast(0L)
         val duration = session.player.duration.coerceAtLeast(0L)
-        lifecycleScope.launch(Dispatchers.IO) {
-            ContentRepository(BlofyDatabase.get(applicationContext).dao()).saveResume(currentContentKey, providerId, kind, position, duration)
-        }
+        (application as BlofyApp).resumeStateWriter.enqueue(
+            ResumeWriteRequest(
+                contentKey = currentContentKey,
+                providerId = providerId,
+                kind = kind,
+                positionMs = position,
+                durationMs = duration
+            )
+        )
     }
 
     private fun profileFromIntent() = ProviderProfile(
         providerKey = providerId.ifBlank { "default" },
-        liveFormat = if (intent.getStringExtra(EXTRA_LIVE_FORMAT) == "m3u8") LiveFormat.HLS else LiveFormat.TS
+        liveFormat = if (intent.getStringExtra(EXTRA_LIVE_FORMAT) == "m3u8") LiveFormat.HLS else LiveFormat.TS,
+        transport = if (intent.getStringExtra(EXTRA_PREFERRED_TRANSPORT).equals("http", true)) {
+            TransportPreference.HTTP_FIRST
+        } else {
+            TransportPreference.CRONET_FIRST
+        },
+        player = if (intent.getStringExtra(EXTRA_PREFERRED_ENGINE).equals("vlc", true)) {
+            PlayerPreference.VLC
+        } else {
+            PlayerPreference.MEDIA3
+        },
+        allowCrossProtocolRedirects = intent.getBooleanExtra(EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, true),
+        providerKind = ProviderKind.from(intent.getStringExtra(EXTRA_PROVIDER_TYPE))
     )
 
     private fun providerProfile(provider: ProviderEntity) = ProviderProfile(
@@ -514,7 +596,8 @@ class PlayerActivity : AppCompatActivity() {
         liveFormat = if (provider.liveFormat.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS,
         transport = if (provider.preferredTransport.equals("http", true)) TransportPreference.HTTP_FIRST else TransportPreference.CRONET_FIRST,
         player = if (provider.preferredEngine.equals("vlc", true)) PlayerPreference.VLC else PlayerPreference.MEDIA3,
-        allowCrossProtocolRedirects = provider.allowCrossProtocolRedirects
+        allowCrossProtocolRedirects = provider.allowCrossProtocolRedirects,
+        providerKind = ProviderKind.from(provider.providerType)
     )
 
     private fun Int.floorMod(size: Int): Int = ((this % size) + size) % size
@@ -526,6 +609,11 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_PROVIDER_ID = "provider_id"
         const val EXTRA_KIND = "kind"
         const val EXTRA_LIVE_FORMAT = "live_format"
+        const val EXTRA_PROVIDER_TYPE = "provider_type"
+        const val EXTRA_PREFERRED_TRANSPORT = "preferred_transport"
+        const val EXTRA_PREFERRED_ENGINE = "preferred_engine"
+        const val EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS = "allow_cross_protocol_redirects"
+        const val EXTRA_FALLBACK_URL = "fallback_url"
         const val EXTRA_RESUME_MS = "resume_ms"
         const val EXTRA_STREAM_ID = "stream_id"
         const val EXTRA_CATEGORY_ID = "category_id"
@@ -533,5 +621,12 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_SERIES_ID = "series_id"
         const val EXTRA_SEASON = "season"
         const val EXTRA_EPISODE = "episode"
+        private val HUD_NAVIGATION_ACTIONS = setOf(
+            RemoteAction.OK,
+            RemoteAction.UP,
+            RemoteAction.DOWN,
+            RemoteAction.LEFT,
+            RemoteAction.RIGHT
+        )
     }
 }
