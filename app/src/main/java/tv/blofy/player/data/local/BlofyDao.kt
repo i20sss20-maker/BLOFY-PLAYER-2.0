@@ -39,6 +39,13 @@ interface BlofyDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEpg(items: List<EpgEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertActivation(state: ActivationEntity)
     @Query("SELECT * FROM activation LIMIT 1") suspend fun activation(): ActivationEntity?
+    @Query("DELETE FROM activation") suspend fun clearActivation()
+
+    @Transaction
+    suspend fun replaceActivation(state: ActivationEntity) {
+        clearActivation()
+        upsertActivation(state)
+    }
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, name")
     fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
