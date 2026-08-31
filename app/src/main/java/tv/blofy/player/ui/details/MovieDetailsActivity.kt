@@ -2,18 +2,22 @@ package tv.blofy.player.ui.details
 
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.playback.ExternalPlayerLauncher
 import tv.blofy.player.core.security.ParentalGate
@@ -21,6 +25,7 @@ import tv.blofy.player.core.security.ParentalPinManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.player.PlayerActivity
 
 class MovieDetailsActivity : AppCompatActivity() {
@@ -33,13 +38,14 @@ class MovieDetailsActivity : AppCompatActivity() {
         val contentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
         if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }
 
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.rgb(5, 5, 10)) }
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val root = FrameLayout(this).apply { background = AppCompatResources.getDrawable(this@MovieDetailsActivity, R.drawable.blofy_home_background) }
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(76, 56, 76, 56)
+            setPadding(dp(58), dp(44), dp(58), dp(44))
         }
-        root.addView(panel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        root.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
 
         lifecycleScope.launch {
@@ -49,12 +55,32 @@ class MovieDetailsActivity : AppCompatActivity() {
             val watch = dao.watchState(contentKey)
             val url = ContentUrlResolver.movie(provider, stream)
 
-            panel.addView(TextView(this@MovieDetailsActivity).apply {
+            val posterCard = LinearLayout(this@MovieDetailsActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                background = cardBackground()
+            }
+            val poster = ImageView(this@MovieDetailsActivity).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(0xFF15101F.toInt())
+            }
+            posterCard.addView(poster, LinearLayout.LayoutParams(dp(285), dp(425)))
+            ArtworkLoader.load(poster, stream.icon)
+            body.addView(posterCard, LinearLayout.LayoutParams(dp(310), dp(450)).apply { marginStart = dp(34) })
+
+            val info = LinearLayout(this@MovieDetailsActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            }
+            info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.name
-                textSize = 36f
+                textSize = 38f
+                typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.WHITE)
+                gravity = Gravity.END
             })
-            panel.addView(TextView(this@MovieDetailsActivity).apply {
+            info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = buildList {
                     add("فيلم")
                     stream.year?.takeIf { it.isNotBlank() }?.let(::add)
@@ -62,32 +88,41 @@ class MovieDetailsActivity : AppCompatActivity() {
                     stream.duration?.takeIf { it.isNotBlank() }?.let(::add)
                     stream.rating?.takeIf { it.isNotBlank() }?.let { add("★ $it") }
                     stream.extension?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
-                    if ((watch?.positionMs ?: 0L) > 30_000L) add("لديك مشاهدة سابقة")
                 }.joinToString("  •  ")
                 textSize = 16f
-                setTextColor(Color.rgb(190, 165, 225))
-                setPadding(0, 8, 0, 22)
+                setTextColor(0xFFC6A8E7.toInt())
+                gravity = Gravity.END
+                setPadding(0, dp(8), 0, dp(18))
             })
-            panel.addView(TextView(this@MovieDetailsActivity).apply {
-                text = stream.plot?.takeIf { it.isNotBlank() } ?: "التشغيل يبدأ فقط عند اختيارك."
+            info.addView(TextView(this@MovieDetailsActivity).apply {
+                text = stream.plot?.takeIf { it.isNotBlank() } ?: "استمتع بالمشاهدة على BLOFY PLAYER"
                 textSize = 17f
-                maxLines = 5
-                setTextColor(Color.rgb(220, 220, 225))
-                setPadding(0, 0, 0, 30)
+                maxLines = 6
+                setTextColor(0xFFE0DCE5.toInt())
+                gravity = Gravity.END
+                setLineSpacing(0f, 1.18f)
+                setPadding(0, 0, 0, dp(24))
             })
 
-            val row = LinearLayout(this@MovieDetailsActivity).apply { orientation = LinearLayout.HORIZONTAL }
             val resumeMs = watch?.positionMs ?: 0L
-            val play = actionButton(if (resumeMs > 30_000L) "استئناف" else "تشغيل") {
-                openPlayer(provider, stream, url, resumeMs)
+            val durationMs = watch?.durationMs ?: 0L
+            if (resumeMs > 30_000L && durationMs > 0L) {
+                val percent = ((resumeMs * 100L) / durationMs).coerceIn(1, 99)
+                info.addView(TextView(this@MovieDetailsActivity).apply {
+                    text = "متابعة المشاهدة  •  $percent%"
+                    textSize = 15f; setTextColor(0xFFBCA8D7.toInt()); gravity = Gravity.END
+                    setPadding(0, 0, 0, dp(12))
+                })
             }
-            row.addView(play, LinearLayout.LayoutParams(190, 82).apply { marginEnd = 10 })
-            if (resumeMs > 30_000L) {
-                row.addView(actionButton("من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(190, 82).apply { marginEnd = 10 })
+
+            val row = LinearLayout(this@MovieDetailsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                gravity = Gravity.END
             }
-            row.addView(actionButton("مشغل خارجي") {
-                if (!ExternalPlayerLauncher.launch(this@MovieDetailsActivity, url, stream.name)) Toast.makeText(this@MovieDetailsActivity, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(190, 82).apply { marginEnd = 10 })
+            val play = actionButton(if (resumeMs > 30_000L) "▶ استئناف" else "▶ شاهد الآن") { openPlayer(provider, stream, url, resumeMs) }
+            row.addView(play, LinearLayout.LayoutParams(dp(195), dp(74)).apply { marginStart = dp(10) })
+            if (resumeMs > 30_000L) row.addView(actionButton("من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
 
             favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
                 lifecycleScope.launch {
@@ -96,35 +131,32 @@ class MovieDetailsActivity : AppCompatActivity() {
                     favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(185, 82).apply { marginEnd = 10 })
+            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
 
             lockButton = actionButton(if (stream.locked) "🔒 مقفل" else "🔓 قفل") {
                 lifecycleScope.launch {
                     val current = dao.stream(contentKey) ?: return@launch
                     if (current.locked) {
                         ParentalGate.requirePin(this@MovieDetailsActivity) {
-                            lifecycleScope.launch {
-                                dao.setLocked(contentKey, false)
-                                lockButton.text = "🔓 قفل"
-                            }
+                            lifecycleScope.launch { dao.setLocked(contentKey, false); lockButton.text = "🔓 قفل" }
+                        }
+                    } else if (!ParentalPinManager.hasPin(this@MovieDetailsActivity)) {
+                        ParentalGate.requirePin(this@MovieDetailsActivity) {
+                            lifecycleScope.launch { dao.setLocked(contentKey, true); lockButton.text = "🔒 مقفل" }
                         }
                     } else {
-                        if (!ParentalPinManager.hasPin(this@MovieDetailsActivity)) {
-                            ParentalGate.requirePin(this@MovieDetailsActivity) {
-                                lifecycleScope.launch {
-                                    dao.setLocked(contentKey, true)
-                                    lockButton.text = "🔒 مقفل"
-                                }
-                            }
-                        } else {
-                            dao.setLocked(contentKey, true)
-                            lockButton.text = "🔒 مقفل"
-                        }
+                        dao.setLocked(contentKey, true); lockButton.text = "🔒 مقفل"
                     }
                 }
             }
-            row.addView(lockButton, LinearLayout.LayoutParams(175, 82))
-            panel.addView(row)
+            row.addView(lockButton, LinearLayout.LayoutParams(dp(150), dp(74)).apply { marginStart = dp(10) })
+            info.addView(row)
+
+            info.addView(actionButton("مشغل خارجي") {
+                if (!ExternalPlayerLauncher.launch(this@MovieDetailsActivity, url, stream.name)) Toast.makeText(this@MovieDetailsActivity, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(dp(180), dp(62)).apply { topMargin = dp(14); gravity = Gravity.END })
+
+            body.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             play.requestFocus()
         }
     }
@@ -146,27 +178,20 @@ class MovieDetailsActivity : AppCompatActivity() {
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label
-        isAllCaps = false
-        textSize = 15f
-        isFocusable = true
-        setTextColor(Color.WHITE)
-        background = buttonBackground(false)
-        setOnFocusChangeListener { view: View, focused: Boolean ->
+        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
+        setOnFocusChangeListener { view, focused ->
             view.background = buttonBackground(focused)
-            view.animate().scaleX(if (focused) 1.04f else 1f).scaleY(if (focused) 1.04f else 1f).setDuration(100).start()
+            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(100).start()
         }
         setOnClickListener { action() }
     }
 
+    private fun cardBackground() = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xD9181225.toInt()); setStroke(dp(1), 0x66533B68) }
     private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 18f
-        setColor(if (focused) Color.rgb(76, 35, 128) else Color.rgb(28, 21, 42))
-        setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(64, 48, 84))
+        cornerRadius = dp(16).toFloat(); setColor(if (focused) 0xFF6934A0.toInt() else 0xD91A1429.toInt())
+        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x66503A64)
     }
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    companion object {
-        const val EXTRA_PROVIDER_ID = "provider_id"
-        const val EXTRA_CONTENT_KEY = "content_key"
-    }
+    companion object { const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_CONTENT_KEY = "content_key" }
 }
