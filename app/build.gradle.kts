@@ -39,8 +39,8 @@ android {
         applicationId = "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2000003
-        versionName = "2.0.0-rc02"
+        versionCode = 2000004
+        versionName = "2.0.0-rc03"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
         buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
