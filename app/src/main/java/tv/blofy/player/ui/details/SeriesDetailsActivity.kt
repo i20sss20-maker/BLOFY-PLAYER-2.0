@@ -12,10 +12,15 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.core.security.ParentalPinManager
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.EpisodeEntity
+import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.series.EpisodesActivity
 
 class SeriesDetailsActivity : AppCompatActivity() {
@@ -39,7 +44,14 @@ class SeriesDetailsActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
+            val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
+            val resume = dao.episodes(providerId, stream.remoteId).first()
+                .mapNotNull { episode ->
+                    val watch = dao.watchState(episode.key) ?: return@mapNotNull null
+                    if (watch.completed || watch.positionMs <= 15_000L) null else Triple(episode, watch.positionMs, watch.updatedAt)
+                }
+                .maxByOrNull { it.third }
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.name
@@ -53,6 +65,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     stream.genre?.takeIf { it.isNotBlank() }?.let(::add)
                     stream.duration?.takeIf { it.isNotBlank() }?.let(::add)
                     stream.rating?.takeIf { it.isNotBlank() }?.let { add("★ $it") }
+                    resume?.let { add("لديك حلقة غير مكتملة") }
                 }.joinToString("  •  ")
                 textSize = 16f
                 setTextColor(Color.rgb(190, 165, 225))
@@ -67,6 +80,18 @@ class SeriesDetailsActivity : AppCompatActivity() {
             })
 
             val row = LinearLayout(this@SeriesDetailsActivity).apply { orientation = LinearLayout.HORIZONTAL }
+            var primary: Button? = null
+            resume?.let { (episode, positionMs, _) ->
+                val resumeButton = actionButton("استئناف S${episode.season} E${episode.episode}") {
+                    launchEpisode(provider, episode, positionMs)
+                }
+                primary = resumeButton
+                row.addView(resumeButton, LinearLayout.LayoutParams(250, 82).apply { marginEnd = 12 })
+                row.addView(actionButton("من البداية") {
+                    launchEpisode(provider, episode, 0L)
+                }, LinearLayout.LayoutParams(190, 82).apply { marginEnd = 12 })
+            }
+
             val episodes = actionButton("الحلقات") {
                 startActivity(Intent(this@SeriesDetailsActivity, EpisodesActivity::class.java).apply {
                     putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, providerId)
@@ -74,7 +99,8 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     putExtra(EpisodesActivity.EXTRA_SERIES_NAME, stream.name)
                 })
             }
-            row.addView(episodes, LinearLayout.LayoutParams(220, 82).apply { marginEnd = 12 })
+            if (primary == null) primary = episodes
+            row.addView(episodes, LinearLayout.LayoutParams(200, 82).apply { marginEnd = 12 })
 
             favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
                 lifecycleScope.launch {
@@ -83,7 +109,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(220, 82).apply { marginEnd = 12 })
+            row.addView(favoriteButton, LinearLayout.LayoutParams(200, 82).apply { marginEnd = 12 })
 
             lockButton = actionButton(if (stream.locked) "🔒 مقفل" else "🔓 قفل") {
                 lifecycleScope.launch {
@@ -110,10 +136,29 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     }
                 }
             }
-            row.addView(lockButton, LinearLayout.LayoutParams(200, 82))
+            row.addView(lockButton, LinearLayout.LayoutParams(180, 82))
             panel.addView(row)
-            episodes.requestFocus()
+            primary?.requestFocus()
         }
+    }
+
+    private fun launchEpisode(provider: ProviderEntity, episode: EpisodeEntity, resumeMs: Long) {
+        startActivity(Intent(this, PlayerActivity::class.java).apply {
+            putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.episode(provider, episode))
+            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(PlayerActivity.EXTRA_KIND, "episode")
+            putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+            putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode))
+            putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
+            putExtra(PlayerActivity.EXTRA_TITLE, episode.title)
+            putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
+            putExtra(PlayerActivity.EXTRA_SEASON, episode.season)
+            putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
+        })
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
