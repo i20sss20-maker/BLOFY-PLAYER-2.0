@@ -1,9 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="blofy_black">#07070D</color>
-    <color name="blofy_surface">#12101D</color>
-    <color name="blofy_surface_alt">#1B162A</color>
-    <color name="blofy_purple">#8B37FF</color>
-    <color name="blofy_purple_soft">#C387FF</color>
-    <color name="blofy_white">#FFFFFF</color>
-    <color name="blofy_text_muted">#A9A7B3</color>
+    <color name="blofy_black">#05050C</color>
+    <color name="blofy_surface">#11101E</color>
+    <color name="blofy_surface_alt">#261944</color>
+    <color name="blofy_purple">#7C2BFF</color>
+    <color name="blofy_purple_soft">#BC84FF</color>
+    <color name="blofy_purple_light">#BC84FF</color>
+    <color name="blofy_white">#F9F8FC</color>
+    <color name="blofy_text">#F9F8FC</color>
+    <color name="blofy_text_muted">#D5D2DD</color>
 </resources>
