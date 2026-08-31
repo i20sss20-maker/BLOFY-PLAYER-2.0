@@ -1,7 +1,9 @@
 package tv.blofy.player.data.remote
 
 import com.google.gson.JsonElement
+import okhttp3.ResponseBody
 import retrofit2.http.GET
+import retrofit2.http.Streaming
 import retrofit2.http.Url
 
 interface XtreamApi {
@@ -10,6 +12,11 @@ interface XtreamApi {
 
     @GET
     suspend fun objectResponse(@Url url: String): Map<String, Any?>
+
+    /** Streams very large catalog arrays without buffering the complete HTTP body in memory. */
+    @Streaming
+    @GET
+    suspend fun streamingResponse(@Url url: String): ResponseBody
 
     /**
      * Some Xtream-compatible servers return `get_series_info` as a top-level JSON array
