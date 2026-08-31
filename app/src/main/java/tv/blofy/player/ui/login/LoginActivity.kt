@@ -22,6 +22,7 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationManager
+import tv.blofy.player.core.identity.ActivationPortalUrl
 import tv.blofy.player.core.identity.ActivationRemoteClient
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.provider.RemoteProviderProfileClient
@@ -55,9 +56,7 @@ class LoginActivity : AppCompatActivity() {
             val identity = withContext(Dispatchers.IO) {
                 ActivationManager(applicationContext, BlofyDatabase.get(applicationContext).dao()).ensureIdentity()
             }
-            deviceView.text = identity.deviceId
-            codeView.text = identity.activationCode
-            qrView.setImageBitmap(createQr("BLOFY://activate/${identity.deviceId}?code=${identity.activationCode}"))
+            renderIdentity(identity.deviceId, identity.activationCode)
             refreshProviderStatus()
         }
     }
@@ -158,6 +157,10 @@ class LoginActivity : AppCompatActivity() {
                     manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
                 }
             }
+            if (result.isSuccess) {
+                val currentIdentity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
+                renderIdentity(currentIdentity.deviceId, currentIdentity.activationCode)
+            }
             result.onSuccess { remote ->
                 if (!remote.canUse()) {
                     status.text = activationLabel(remote)
@@ -201,6 +204,19 @@ class LoginActivity : AppCompatActivity() {
                     status.text = "تعذر التحقق من التفعيل"
                 }
             }
+        }
+    }
+
+    private fun renderIdentity(deviceId: String, activationCode: String) {
+        deviceView.text = deviceId
+        codeView.text = activationCode
+        val portalUrl = ActivationPortalUrl.create(BuildConfig.ACTIVATION_BASE_URL, deviceId, activationCode)
+        if (portalUrl != null) {
+            qrView.setImageBitmap(createQr(portalUrl))
+            qrView.contentDescription = "افتح بوابة تفعيل BLOFY"
+        } else {
+            qrView.setImageDrawable(null)
+            qrView.contentDescription = "بوابة تفعيل BLOFY غير مهيأة"
         }
     }
 

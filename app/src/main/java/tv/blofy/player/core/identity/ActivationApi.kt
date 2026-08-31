@@ -10,6 +10,14 @@ data class ActivationCheckRequest(
     val platform: String = "android"
 )
 
+data class ActivationRotateRequest(
+    val deviceId: String,
+    val currentActivationCode: String,
+    val newActivationCode: String
+)
+
+data class ActivationRotateResponse(val rotated: Boolean)
+
 data class ActivationCheckResponse(
     val status: String,
     val expiresAt: Long? = null,
@@ -35,4 +43,7 @@ data class ActivationCheckResponse(
 interface ActivationApi {
     @POST("api/v1/activation/check")
     suspend fun check(@Body request: ActivationCheckRequest): ActivationCheckResponse
+
+    @POST("api/v1/activation/rotate")
+    suspend fun rotate(@Body request: ActivationRotateRequest): ActivationRotateResponse
 }

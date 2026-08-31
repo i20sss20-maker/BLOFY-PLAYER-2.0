@@ -33,17 +33,28 @@ function open(value) {
 function cleanText(value, max = 256) { return String(value || '').trim().slice(0, max); }
 function validType(value) { return value === 'xtream' || value === 'm3u'; }
 
+export function playlistUrlValidation(value) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || '').trim());
+  } catch (_) {
+    return 'invalid_playlist_url';
+  }
+  if (parsed.protocol !== 'https:') return 'https_playlist_required';
+  return parsed.hostname ? null : 'invalid_playlist_url';
+}
+
 export function createPortalHandlers({ pool, json, readJson, authorizedDevice }) {
-  async function authenticate(body) {
+  async function authenticate(req, body) {
     const deviceId = cleanText(body.deviceId, 64);
     const activationCode = cleanText(body.activationCode, 16);
-    const device = await authorizedDevice(deviceId, activationCode);
+    const device = await authorizedDevice(deviceId, activationCode, req);
     return device ? { deviceId, activationCode } : null;
   }
 
   async function list(req, res) {
     const body = await readJson(req);
-    const auth = await authenticate(body);
+    const auth = await authenticate(req, body);
     if (!auth) return json(res, 403, { error: 'unauthorized_device' });
     const result = await pool.query(
       `SELECT id,name,provider_type,base_url_enc,username_enc,password_enc,active,revision,updated_at
@@ -64,7 +75,7 @@ export function createPortalHandlers({ pool, json, readJson, authorizedDevice })
 
   async function upsert(req, res) {
     const body = await readJson(req);
-    const auth = await authenticate(body);
+    const auth = await authenticate(req, body);
     if (!auth) return json(res, 403, { error: 'unauthorized_device' });
     const id = cleanText(body.id, 64) || crypto.randomUUID();
     const name = cleanText(body.name, 128) || 'BLOFY Playlist';
@@ -73,7 +84,9 @@ export function createPortalHandlers({ pool, json, readJson, authorizedDevice })
     const username = cleanText(body.username, 256);
     const password = cleanText(body.password, 256);
     const active = body.active !== false;
-    if (!validType(providerType) || !/^https?:\/\//i.test(baseUrl)) return json(res, 400, { error: 'invalid_playlist' });
+    if (!validType(providerType)) return json(res, 400, { error: 'invalid_playlist' });
+    const urlError = playlistUrlValidation(baseUrl);
+    if (urlError) return json(res, 400, { error: urlError });
     if (providerType === 'xtream' && (!username || !password)) return json(res, 400, { error: 'xtream_credentials_required' });
 
     const client = await pool.connect();
@@ -103,7 +116,7 @@ export function createPortalHandlers({ pool, json, readJson, authorizedDevice })
 
   async function remove(req, res, id) {
     const body = await readJson(req);
-    const auth = await authenticate(body);
+    const auth = await authenticate(req, body);
     if (!auth) return json(res, 403, { error: 'unauthorized_device' });
     const result = await pool.query('DELETE FROM device_playlists WHERE id=$1 AND device_id=$2 RETURNING id,active', [id, auth.deviceId]);
     const deleted = result.rows[0];

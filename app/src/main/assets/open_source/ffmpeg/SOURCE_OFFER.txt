@@ -1,0 +1,25 @@
+BLOFY PLAYER FFmpeg source and relink materials
+
+BLOFY PLAYER release builds that bundle FFmpeg use FFmpeg n6.0
+(commit ea3d24bbe3c58b171e55fe2151fc7ffaca3ab3d2) under the GNU Lesser
+General Public License version 2.1 or later.
+
+The complete corresponding FFmpeg source, the Media3 1.6.1 decoder source used
+to create libffmpegJNI.so, the build recipe, the FFmpeg and AndroidX Media
+changes.diff files, and integrity hashes are distributed in:
+
+  BLOFY-PLAYER-2.0-<release-label>-ffmpeg-compliance.zip
+
+That compliance archive must be offered from the same download location and
+for the same period as the matching APK or AAB. Do not redistribute the APK or
+AAB by itself without the matching compliance archive.
+
+The materials permit rebuilding libffmpegJNI.so with a modified,
+interface-compatible FFmpeg library, replacing it in the matching APK, and
+signing that modified APK with the recipient's own key for the recipient's own
+use. BLOFY PLAYER does not restrict reverse engineering performed solely to
+debug such LGPL modifications.
+
+FFmpeg project: https://ffmpeg.org/
+FFmpeg n6.0 source: https://github.com/FFmpeg/FFmpeg/tree/ea3d24bbe3c58b171e55fe2151fc7ffaca3ab3d2
+AndroidX Media3 1.6.1 source: https://github.com/androidx/media/tree/839c4a90f2ab36e48be73e1b5e907f3283dce72e

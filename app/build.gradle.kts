@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -21,19 +23,51 @@ if (ffmpegAar != null) {
     }
 }
 
+fun releaseSetting(name: String) =
+    providers.environmentVariable(name).orElse(providers.gradleProperty(name))
+
+val releaseKeystorePath = releaseSetting("BLOFY_RELEASE_KEYSTORE_PATH")
+val releaseStorePassword = releaseSetting("BLOFY_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = releaseSetting("BLOFY_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = releaseSetting("BLOFY_RELEASE_KEY_PASSWORD")
+
 android {
     namespace = "tv.blofy.player"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "tv.blofy.player"
+        applicationId = "tv.blofy.player.v2"
         minSdk = 23
-        targetSdk = 35
-        versionCode = 2000001
-        versionName = "2.0.0-alpha01"
+        targetSdk = 36
+        versionCode = 2000002
+        versionName = "2.0.0-rc01"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
         buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = releaseKeystorePath.orNull
+                ?.takeIf { it.isNotBlank() }
+                ?.let { rootProject.file(it) }
+            storePassword = releaseStorePassword.orNull
+            keyAlias = releaseKeyAlias.orNull
+            keyPassword = releaseKeyPassword.orNull
+            storeType = "PKCS12"
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isDebuggable = false
+            isJniDebuggable = false
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     buildFeatures {
@@ -80,4 +114,51 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
 
     testImplementation("junit:junit:4.13.2")
+}
+
+val validateReleaseConfiguration = tasks.register("validateReleaseConfiguration") {
+    group = "verification"
+    description = "Fails closed when production endpoint or release signing inputs are missing."
+
+    doLast {
+        val signingInputs = linkedMapOf(
+            "BLOFY_RELEASE_KEYSTORE_PATH" to releaseKeystorePath.orNull,
+            "BLOFY_RELEASE_STORE_PASSWORD" to releaseStorePassword.orNull,
+            "BLOFY_RELEASE_KEY_ALIAS" to releaseKeyAlias.orNull,
+            "BLOFY_RELEASE_KEY_PASSWORD" to releaseKeyPassword.orNull,
+        )
+        val missingInputs = signingInputs
+            .filterValues { it.isNullOrBlank() }
+            .keys
+        check(missingInputs.isEmpty()) {
+            "Release signing is not configured. Missing: ${missingInputs.joinToString()}"
+        }
+
+        val keystoreFile = rootProject.file(checkNotNull(releaseKeystorePath.orNull))
+        check(keystoreFile.isFile && keystoreFile.canRead()) {
+            "BLOFY_RELEASE_KEYSTORE_PATH is not a readable file: ${keystoreFile.absolutePath}"
+        }
+
+        val endpoint = activationBaseUrl.trim()
+        val endpointUri = runCatching { URI(endpoint) }.getOrNull()
+        check(
+            endpointUri != null &&
+                endpointUri.scheme.equals("https", ignoreCase = true) &&
+                !endpointUri.host.isNullOrBlank() &&
+                endpointUri.userInfo == null &&
+                endpointUri.query == null &&
+                endpointUri.fragment == null
+        ) {
+            "Release builds require BLOFY_ACTIVATION_BASE_URL to be a valid HTTPS base URL."
+        }
+    }
+}
+
+tasks.configureEach {
+    val releaseTaskName = name.lowercase()
+    val packagesRelease = listOf("assemble", "bundle", "package", "install", "publish")
+        .any { releaseTaskName.startsWith(it) }
+    if (name == "validateSigningRelease" || ("release" in releaseTaskName && packagesRelease)) {
+        dependsOn(validateReleaseConfiguration)
+    }
 }

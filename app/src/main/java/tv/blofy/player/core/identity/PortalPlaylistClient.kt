@@ -12,6 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.core.url.PlaylistUrlPolicy
 import java.util.concurrent.TimeUnit
 
 object PortalPlaylistClient {
@@ -83,6 +84,7 @@ object PortalPlaylistClient {
     suspend fun pushProvider(context: Context, baseUrl: String, provider: ProviderEntity) = withContext(Dispatchers.IO) {
         val endpoint = baseUrl.trim().trimEnd('/')
         if (endpoint.isBlank()) return@withContext
+        require(PlaylistUrlPolicy.isValid(provider.baseUrl)) { "HTTPS playlist URL required" }
         val auth = JSONObject().apply {
             put("deviceId", DeviceIdentity.deviceId(context))
             put("activationCode", DeviceIdentity.activationCode(context))
@@ -105,7 +107,7 @@ object PortalPlaylistClient {
                     val type = row.optString("providerType").lowercase()
                     val url = row.optString("baseUrl").trim()
                     val id = row.optString("id").trim()
-                    if (id.isBlank() || type !in setOf("xtream", "m3u") || !url.startsWith("http")) continue
+                    if (id.isBlank() || type !in setOf("xtream", "m3u") || !PlaylistUrlPolicy.isValid(url)) continue
                     add(RemotePlaylist(
                         id = id,
                         name = row.optString("name").ifBlank { "BLOFY Playlist" },

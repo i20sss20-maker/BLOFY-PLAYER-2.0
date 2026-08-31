@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -92,7 +93,21 @@ class PlaylistActivity : AppCompatActivity() {
                 val pass = password.text.toString()
                 val isM3u = user.isBlank() && pass.isBlank()
                 val partialXtream = user.isBlank() xor pass.isBlank()
-                if (baseUrl.isBlank()) { status.text = "أدخل رابط القائمة"; return@setOnClickListener }
+                when (PlaylistUrlPolicy.validate(baseUrl)) {
+                    PlaylistUrlPolicy.Result.EMPTY -> {
+                        status.text = "أدخل رابط القائمة"
+                        return@setOnClickListener
+                    }
+                    PlaylistUrlPolicy.Result.INVALID -> {
+                        status.text = "الرابط غير صحيح. أدخل رابطًا كاملًا يبدأ بـ https://"
+                        return@setOnClickListener
+                    }
+                    PlaylistUrlPolicy.Result.HTTPS_REQUIRED -> {
+                        status.text = "للأمان، روابط http غير مدعومة. استخدم https://"
+                        return@setOnClickListener
+                    }
+                    PlaylistUrlPolicy.Result.VALID -> Unit
+                }
                 if (partialXtream) { status.text = "أدخل اسم المستخدم وكلمة المرور معًا، أو اتركهما معًا لـ M3U"; return@setOnClickListener }
                 isEnabled = false
                 status.text = if (isM3u) "جاري قراءة M3U وحفظها محليًا..." else "جاري تحميل Xtream وحفظها محليًا..."

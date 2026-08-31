@@ -24,13 +24,13 @@ object PlaybackDiagnostics {
 
     fun begin(providerKey: String, kind: String, url: String): PlaybackMetric {
         val metric = PlaybackMetric(
-            providerKey = providerKey,
-            contentKind = kind,
-            url = redact(url),
+            providerKey = DiagnosticsSanitizer.pseudonymizeProviderKey(providerKey),
+            contentKind = DiagnosticsSanitizer.sanitizeContentKind(kind),
+            url = DiagnosticsSanitizer.sanitizeUrl(url),
             startedAtElapsedMs = SystemClock.elapsedRealtime()
         )
         history += metric
-        Log.i(TAG, "begin provider=$providerKey kind=$kind url=${metric.url}")
+        Log.i(TAG, "begin provider=${metric.providerKey} kind=${metric.contentKind} url=${metric.url}")
         return metric
     }
 
@@ -49,9 +49,11 @@ object PlaybackDiagnostics {
     }
 
     fun error(metric: PlaybackMetric, code: String?, message: String?): PlaybackMetric {
-        val updated = metric.copy(errorCode = code, errorMessage = message)
+        val safeCode = DiagnosticsSanitizer.sanitizeErrorCode(code)
+        val safeMessage = DiagnosticsSanitizer.sanitizeMessage(message)
+        val updated = metric.copy(errorCode = safeCode, errorMessage = safeMessage)
         replace(metric, updated)
-        Log.e(TAG, "error provider=${metric.providerKey} kind=${metric.contentKind} code=$code message=$message")
+        Log.e(TAG, "error provider=${metric.providerKey} kind=${metric.contentKind} code=$safeCode message=$safeMessage")
         return updated
     }
 
@@ -62,13 +64,5 @@ object PlaybackDiagnostics {
     private fun replace(old: PlaybackMetric, new: PlaybackMetric) {
         val index = history.indexOf(old)
         if (index >= 0) history[index] = new else history += new
-    }
-
-    private fun redact(url: String): String {
-        val parts = url.split('/')
-        if (parts.size < 7) return url.substringBefore('?')
-        return parts.mapIndexed { index, value ->
-            if (index == 4 || index == 5) "***" else value
-        }.joinToString("/").substringBefore('?')
     }
 }

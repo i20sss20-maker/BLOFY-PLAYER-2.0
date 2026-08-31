@@ -31,13 +31,14 @@ object PlaybackDiagnosticsUploader {
                 val payload = JSONObject().apply {
                     put("deviceId", DeviceIdentity.deviceId(appContext))
                     put("activationCode", DeviceIdentity.activationCode(appContext))
-                    put("providerKey", metric.providerKey.take(128))
-                    put("contentKind", metric.contentKind.take(32))
-                    put("redactedUrl", metric.url.take(1024))
+                    put("providerKey", DiagnosticsSanitizer.pseudonymizeProviderKey(metric.providerKey))
+                    put("contentKind", DiagnosticsSanitizer.sanitizeContentKind(metric.contentKind))
+                    put("redactedUrl", DiagnosticsSanitizer.sanitizeUrl(metric.url, 1024))
                     metric.ttffMs?.let { put("ttffMs", it) }
                     put("bufferingCount", metric.bufferingCount)
-                    metric.errorCode?.let { put("errorCode", it.take(128)) }
-                    metric.errorMessage?.let { put("errorMessage", it.take(512)) }
+                    DiagnosticsSanitizer.sanitizeErrorCode(metric.errorCode)?.let { put("errorCode", it) }
+                    DiagnosticsSanitizer.sanitizeMessage(metric.errorMessage, 512)
+                        ?.let { put("errorMessage", it) }
                     put("appVersion", BuildConfig.VERSION_NAME)
                 }
                 val request = Request.Builder()
