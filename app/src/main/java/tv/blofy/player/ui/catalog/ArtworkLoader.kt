@@ -12,8 +12,8 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-/** Lightweight in-memory artwork loader for TV poster grids. */
-internal object ArtworkLoader {
+/** Lightweight in-memory artwork loader shared by TV poster grids and detail pages. */
+object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 6 * 1024 * 1024
     private val main = Handler(Looper.getMainLooper())
     private val pool = Executors.newFixedThreadPool(4) { runnable ->
