@@ -141,9 +141,9 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun sidebarSelected(icon: String, label: String): LinearLayout = sidebarBase(icon, label).apply {
-        background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF5417B9.toInt(), 0xFFB02DDF.toInt())).apply {
+        background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(blend(theme.accent, Color.BLACK, 0.28f), theme.accent)).apply {
             cornerRadius = dp(17).toFloat()
-            setStroke(dp(1), 0xFFCE75FF.toInt())
+            setStroke(dp(1), blend(theme.accent, Color.WHITE, 0.42f))
         }
     }
 
@@ -156,7 +156,7 @@ class HomeActivity : AppCompatActivity() {
         setOnFocusChangeListener { view, focused ->
             view.background = sideItemBackground(focused)
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
-            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(110).start()
+            view.animate().scaleX(if (focused) theme.focusScale.coerceAtMost(1.04f) else 1f).scaleY(if (focused) theme.focusScale.coerceAtMost(1.04f) else 1f).setDuration(theme.motionMs).start()
         }
         setOnClickListener { startActivity(intent) }
         registerAction(key, this)
@@ -192,7 +192,7 @@ class HomeActivity : AppCompatActivity() {
             text = "حلقة جديدة"
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(0xFF54E5C6.toInt())
+            setTextColor(theme.accent)
             gravity = Gravity.RIGHT
         })
         addView(TextView(this@HomeActivity).apply {
@@ -206,7 +206,7 @@ class HomeActivity : AppCompatActivity() {
         addView(TextView(this@HomeActivity).apply {
             text = "الأفلام والمسلسلات والقنوات في واجهة واحدة سريعة وواضحة."
             textSize = 17f
-            setTextColor(0xFFC8BCD4.toInt())
+            setTextColor(blend(Color.WHITE, theme.surface, 0.24f))
             gravity = Gravity.RIGHT
             setPadding(0, dp(8), 0, dp(18))
         })
@@ -251,7 +251,7 @@ class HomeActivity : AppCompatActivity() {
         isClickable = true
         addView(TextView(this@HomeActivity).apply { text = title; textSize = 19f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT })
         addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 13f; setTextColor(TEXT_MUTED); gravity = Gravity.RIGHT; setPadding(0, dp(4), 0, dp(10)) })
-        addView(TextView(this@HomeActivity).apply { text = buttonLabel; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_SOFT); gravity = Gravity.RIGHT })
+        addView(TextView(this@HomeActivity).apply { text = buttonLabel; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(theme.accent); gravity = Gravity.RIGHT })
         setOnFocusChangeListener { view, focused -> view.background = panelBackground(focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key) }
         setOnClickListener { startActivity(intent) }
         registerAction(key, this)
@@ -272,7 +272,7 @@ class HomeActivity : AppCompatActivity() {
             setOnFocusChangeListener { view, focused ->
                 view.background = storyBackground(focused)
                 if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
-                view.animate().scaleX(if (focused) 1.04f else 1f).scaleY(if (focused) 1.04f else 1f).setDuration(110).start()
+                view.animate().scaleX(if (focused) theme.focusScale.coerceAtMost(1.04f) else 1f).scaleY(if (focused) theme.focusScale.coerceAtMost(1.04f) else 1f).setDuration(theme.motionMs).start()
             }
             setOnClickListener { startActivity(intent) }
         }
@@ -334,13 +334,37 @@ class HomeActivity : AppCompatActivity() {
     private fun registerAction(key: String, view: View) { actionViews[key] = view; if (firstAction == null) firstAction = view }
     private fun restoreFocus() { if (deviceKind != DeviceClass.Kind.TV) return; val saved = FocusMemory.restore(this, SCREEN_KEY); val target = saved?.let { actionViews[it] } ?: firstAction ?: actionViews.values.firstOrNull(); target?.post { target.requestFocus() } }
 
-    private fun sidebarBackground() = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xEA120A1B.toInt()); setStroke(dp(1), 0xFF4B2C63.toInt()) }
-    private fun sideItemBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (focused) 0x664B1A78 else Color.TRANSPARENT); if (focused) setStroke(dp(1), 0xFFAD66F0.toInt()) }
-    private fun heroBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF00B101C.toInt(), 0xF0210C2E.toInt())).apply { cornerRadius = dp(22).toFloat(); setStroke(dp(1), 0xFF4B2C63.toInt()) }
-    private fun panelBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, if (focused) intArrayOf(0xFF37154F.toInt(), 0xFF1C1029.toInt()) else intArrayOf(0xE8191023.toInt(), 0xEB120C1A.toInt())).apply { cornerRadius = dp(18).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFA958F5.toInt() else 0xFF3E294B.toInt()) }
-    private fun storyBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF6B23C9.toInt(), 0xFF29113C.toInt()) else intArrayOf(0xFF201329.toInt(), 0xFF100B17.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(if (focused) dp(3) else dp(1), if (focused) 0xFFFF56D6.toInt() else 0xFF463053.toInt()) }
-    private fun primaryButton(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(if (focused) 0xFF821CFF.toInt() else 0xFF681AE3.toInt(), if (focused) 0xFFF247C5.toInt() else 0xFFB429E6.toInt())).apply { cornerRadius = dp(14).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0xFFCA6DFF.toInt()) }
-    private fun secondaryButton(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(if (focused) 0xFF342047.toInt() else 0xCC160F20.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB166F1.toInt() else 0xFF5B3B6B.toInt()) }
+    private fun sidebarBackground() = GradientDrawable().apply {
+        cornerRadius = dp(20).toFloat()
+        setColor(blend(theme.background, theme.surface, 0.72f))
+        setStroke(dp(1), blend(theme.surface, theme.accent, 0.26f))
+    }
+    private fun sideItemBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = dp(15).toFloat()
+        setColor(if (focused) blend(theme.surface, theme.accent, 0.26f) else Color.TRANSPARENT)
+        if (focused) setStroke(dp(1), blend(theme.accent, Color.WHITE, 0.24f))
+    }
+    private fun heroBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(blend(theme.background, theme.surface, 0.32f), blend(theme.background, theme.accent, 0.12f))).apply {
+        cornerRadius = dp(22).toFloat()
+        setStroke(dp(1), blend(theme.surface, theme.accent, 0.25f))
+    }
+    private fun panelBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, if (focused) intArrayOf(blend(theme.surface, theme.accent, 0.34f), theme.surface) else intArrayOf(blend(theme.background, theme.surface, 0.62f), theme.surface)).apply {
+        cornerRadius = dp(18).toFloat()
+        setStroke(if (focused) dp(2) else dp(1), if (focused) theme.accent else blend(theme.surface, Color.WHITE, 0.12f))
+    }
+    private fun storyBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(blend(theme.surface, theme.accent, 0.55f), theme.surface) else intArrayOf(theme.surface, blend(theme.background, theme.surface, 0.45f))).apply {
+        cornerRadius = dp(15).toFloat()
+        setStroke(if (focused) dp(2) else dp(1), if (focused) blend(theme.accent, Color.WHITE, 0.22f) else blend(theme.surface, Color.WHITE, 0.12f))
+    }
+    private fun primaryButton(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(if (focused) blend(theme.accent, Color.WHITE, 0.10f) else theme.accent, if (focused) blend(theme.accent, Color.BLACK, 0.04f) else blend(theme.accent, Color.BLACK, 0.14f))).apply {
+        cornerRadius = dp(14).toFloat()
+        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else blend(theme.accent, Color.WHITE, 0.24f))
+    }
+    private fun secondaryButton(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = dp(14).toFloat()
+        setColor(if (focused) blend(theme.surface, theme.accent, 0.28f) else theme.surface)
+        setStroke(if (focused) dp(2) else dp(1), if (focused) theme.accent else blend(theme.surface, Color.WHITE, 0.16f))
+    }
     private fun compactTile(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(if (focused) blend(theme.surface, theme.accent, 0.34f) else theme.surface); setStroke(dp(if (focused) 3 else 1), if (focused) theme.accent else blend(theme.surface, Color.WHITE, 0.12f)) }
 
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; setTextColor(Color.WHITE); gravity = Gravity.START }
@@ -350,7 +374,6 @@ class HomeActivity : AppCompatActivity() {
 
     companion object {
         private const val SCREEN_KEY = "home"
-        private val PURPLE_SOFT = Color.rgb(195, 135, 255)
         private val TEXT_MUTED = Color.rgb(177, 169, 191)
     }
 }
