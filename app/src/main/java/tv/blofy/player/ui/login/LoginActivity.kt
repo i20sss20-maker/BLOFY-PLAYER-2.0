@@ -61,7 +61,6 @@ class LoginActivity : AppCompatActivity() {
         lifecycleScope.launch { refreshIdentityAndProvider() }
     }
 
-    /** Approved TV activation layout: logo/title, split QR card, three actions below. */
     private fun buildApprovedTvLogin(): LinearLayout {
         createIdentityViews(false)
         val root = LinearLayout(this).apply {
@@ -78,9 +77,10 @@ class LoginActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
         brandRow.addView(ImageView(this).apply {
-            setImageResource(R.drawable.ic_blofy_app)
+            setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-        }, LinearLayout.LayoutParams(dp(86), dp(86)))
+            adjustViewBounds = true
+        }, LinearLayout.LayoutParams(dp(118), dp(86)))
         val brandText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
         brandText.addView(TextView(this).apply {
             text = "BLOFY PLAYER"; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
@@ -144,6 +144,7 @@ class LoginActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             setPadding(dp(24), dp(24), dp(24), dp(24)); setBackgroundColor(theme.background)
         }
+        root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(150), dp(82)))
         root.addView(title("BLOFY PLAYER", 29f)); root.addView(subtitle("فعّل جهازك ثم أضف قائمة التشغيل"))
         root.addView(deviceView); root.addView(codeView); root.addView(qrView, LinearLayout.LayoutParams(dp(180), dp(180))); root.addView(status)
         addPlaylist = actionButton("إضافة قائمة التشغيل") { startActivity(Intent(this, PlaylistActivity::class.java)) }
