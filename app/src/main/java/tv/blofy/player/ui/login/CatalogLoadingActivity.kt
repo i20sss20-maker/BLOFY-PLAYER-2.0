@@ -3,8 +3,10 @@ package tv.blofy.player.ui.login
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -32,6 +34,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var percent: TextView
     private lateinit var stage: TextView
     private lateinit var progress: ProgressBar
+    private lateinit var serverStep: TextView
+    private lateinit var contentStep: TextView
+    private lateinit var prepareStep: TextView
+    private lateinit var readyStep: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,38 +55,113 @@ class CatalogLoadingActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(80), dp(60), dp(80), dp(60))
+            setPadding(dp(80), dp(44), dp(80), dp(44))
             background = AppCompatResources.getDrawable(this@CatalogLoadingActivity, R.drawable.blofy_home_background)
         }
-        root.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"; textSize = 34f; typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE); gravity = Gravity.CENTER
-        })
-        root.addView(TextView(this).apply {
-            text = "جاري تجهيز مكتبتك"; textSize = 24f; setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER; setPadding(0, dp(18), 0, dp(8))
-        })
-        stage = TextView(this).apply {
-            text = "التحقق من القائمة..."; textSize = 17f
-            setTextColor(0xFFBCA8D7.toInt()); gravity = Gravity.CENTER
+
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(54), dp(34), dp(54), dp(32))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(28).toFloat()
+                setColor(0xE8151024.toInt())
+                setStroke(dp(1), 0xFF5C357F.toInt())
+            }
         }
-        root.addView(stage)
-        percent = TextView(this).apply {
-            text = "0%"; textSize = 52f; typeface = Typeface.DEFAULT_BOLD
-            setTextColor(0xFF8D5CFF.toInt()); gravity = Gravity.CENTER
-            setPadding(0, dp(28), 0, dp(14))
+
+        panel.addView(ImageView(this).apply {
+            setImageResource(R.drawable.blofy_logo)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            adjustViewBounds = true
+        }, LinearLayout.LayoutParams(dp(170), dp(96)))
+
+        panel.addView(TextView(this).apply {
+            text = "جاري تجهيز مكتبتك"
+            textSize = 28f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, dp(2))
+        })
+
+        panel.addView(TextView(this).apply {
+            text = "يتم تحميل الباقة كاملة وحفظها محليًا قبل الدخول"
+            textSize = 14f
+            setTextColor(0xFFB7A8C9.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(18))
+        })
+
+        val progressRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = android.view.View.LAYOUT_DIRECTION_LTR
         }
-        root.addView(percent)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100; progress = 0; progressDrawable = progressDrawable.mutate()
+            max = 100
+            progress = 0
+            progressTintList = android.content.res.ColorStateList.valueOf(0xFF8D39FF.toInt())
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF2D243A.toInt())
         }
-        root.addView(progress, LinearLayout.LayoutParams(dp(620), dp(18)))
-        root.addView(TextView(this).apply {
-            text = "يتم تنزيل القنوات والأفلام والمسلسلات وحفظها محليًا قبل الدخول"
-            textSize = 14f; setTextColor(0xFF9B91A8.toInt()); gravity = Gravity.CENTER
-            setPadding(0, dp(22), 0, 0)
+        progressRow.addView(progress, LinearLayout.LayoutParams(0, dp(14), 1f).apply { marginEnd = dp(22) })
+        percent = TextView(this).apply {
+            text = "0%"
+            textSize = 34f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        }
+        progressRow.addView(percent, LinearLayout.LayoutParams(dp(120), dp(54)))
+        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(62)))
+
+        stage = TextView(this).apply {
+            text = "جاري الاتصال بالخادم..."
+            textSize = 19f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(12), 0, dp(4))
+        }
+        panel.addView(stage)
+
+        panel.addView(TextView(this).apply {
+            text = "يرجى الانتظار قليلاً..."
+            textSize = 14f
+            setTextColor(0xFF9587A8.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(24))
         })
+
+        val steps = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+        }
+        serverStep = step("●  الاتصال بالخادم")
+        contentStep = step("○  جلب المحتوى")
+        prepareStep = step("○  تحضير المكتبة")
+        readyStep = step("○  جاهز")
+        steps.addView(serverStep, stepParams())
+        steps.addView(contentStep, stepParams())
+        steps.addView(prepareStep, stepParams())
+        steps.addView(readyStep, stepParams())
+        panel.addView(steps, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
+
+        root.addView(panel, LinearLayout.LayoutParams(dp(980), LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
+    }
+
+    private fun step(value: String) = TextView(this).apply {
+        text = value
+        textSize = 13f
+        setTextColor(0xFF756B82.toInt())
+        gravity = Gravity.CENTER
+    }
+
+    private fun stepParams() = LinearLayout.LayoutParams(0, dp(50), 1f).apply {
+        marginStart = dp(5)
+        marginEnd = dp(5)
     }
 
     private suspend fun sync(providerId: String) {
@@ -131,10 +212,19 @@ class CatalogLoadingActivity : AppCompatActivity() {
         progress.progress = safe
         percent.text = "$safe%"
         stage.text = label
+        serverStep.setTextColor(if (safe >= 5) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
+        contentStep.setTextColor(if (safe >= 15) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
+        prepareStep.setTextColor(if (safe >= 90) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
+        readyStep.setTextColor(if (safe >= 100) 0xFF45E3C2.toInt() else 0xFF756B82.toInt())
+        serverStep.text = if (safe >= 15) "✓  الاتصال بالخادم" else "●  الاتصال بالخادم"
+        contentStep.text = if (safe >= 90) "✓  جلب المحتوى" else "○  جلب المحتوى"
+        prepareStep.text = if (safe >= 100) "✓  تحضير المكتبة" else "○  تحضير المكتبة"
+        readyStep.text = if (safe >= 100) "✓  جاهز" else "○  جاهز"
     }
 
     private fun fail(message: String) {
         stage.text = message
+        stage.setTextColor(0xFFFF879B.toInt())
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
