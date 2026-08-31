@@ -6,23 +6,18 @@ object ThemeManager {
     private const val PREFS = "blofy_theme"
     private const val KEY_THEME = "theme_id"
 
-    fun current(context: Context): ThemeProfile {
-        return when (context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_THEME, BlofyThemes.VISION.id)) {
-            BlofyThemes.CINEMA.id -> BlofyThemes.CINEMA
-            else -> BlofyThemes.VISION
-        }
-    }
+    /** The application now intentionally uses the original BLOFY theme only. */
+    fun current(context: Context): ThemeProfile = BlofyThemes.ORIGINAL
 
     fun set(context: Context, theme: ThemeProfile) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
-            .putString(KEY_THEME, theme.id)
+            .putString(KEY_THEME, BlofyThemes.ORIGINAL.id)
             .apply()
     }
 
     fun toggle(context: Context): ThemeProfile {
-        val next = if (current(context).id == BlofyThemes.VISION.id) BlofyThemes.CINEMA else BlofyThemes.VISION
-        set(context, next)
-        return next
+        set(context, BlofyThemes.ORIGINAL)
+        return BlofyThemes.ORIGINAL
     }
 }
