@@ -32,7 +32,6 @@ import kotlinx.coroutines.launch
 import tv.blofy.player.BlofyApp
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.playback.ContentUrlResolver
-import tv.blofy.player.core.playback.ExternalPlayerLauncher
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderKind
@@ -63,7 +62,6 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var audioButton: Button
     private lateinit var subtitleButton: Button
     private lateinit var qualityButton: Button
-    private lateinit var externalButton: Button
     private lateinit var favoriteButton: Button
     private var progressBar: ProgressBar? = null
     private var positionView: TextView? = null
@@ -103,7 +101,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val profile = profileFromIntent()
         session = BlofyPlaybackSession(context = this, profile = profile, contentKind = kind.ifBlank { "unknown" }) {
-            Toast.makeText(this, if (kind == "live") "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى أو زر خارجي" else "تعذر تشغيل هذا المحتوى داخل BLOFY • المشغل الخارجي متاح يدويًا", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, if (kind == "live") "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى" else "تعذر تشغيل هذا المحتوى داخل BLOFY • أعد المحاولة", Toast.LENGTH_LONG).show()
         }
         session.player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -190,7 +188,6 @@ class PlayerActivity : AppCompatActivity() {
         audioButton = controlButton("🔊  الصوت") { showTrackDialog(C.TRACK_TYPE_AUDIO) }
         subtitleButton = controlButton("CC  الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
         qualityButton = controlButton("▣  الجودة") { showVideoQualityDialog() }
-        externalButton = controlButton("↗  خارجي") { launchExternalPlayer() }
         favoriteButton = controlButton("☆  المفضلة") { toggleFavorite() }.apply { visibility = if (kind == "episode") View.GONE else View.VISIBLE }
 
         if (kind == "live") {
@@ -202,7 +199,6 @@ class PlayerActivity : AppCompatActivity() {
             controls.addView(audioButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
             controls.addView(subtitleButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
             controls.addView(qualityButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
-            controls.addView(externalButton, LinearLayout.LayoutParams(166, 68).apply { marginEnd = 10 })
             controls.addView(favoriteButton, LinearLayout.LayoutParams(184, 68).apply { marginEnd = 10 })
             if (kind == "episode") {
                 controls.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(150, 68).apply { marginEnd = 10 })
@@ -428,10 +424,6 @@ class PlayerActivity : AppCompatActivity() {
         return listOfNotNull(resolution, fps, bitrate, format.codecs).joinToString(" • ")
     }
 
-    private fun launchExternalPlayer() {
-        val url = session.player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
-        if (url.isBlank() || !ExternalPlayerLauncher.launch(this, url, currentTitle)) Toast.makeText(this, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
-    }
     private fun trackLabel(format: Format, type: Int): String {
         val language = format.language?.uppercase() ?: if (type == C.TRACK_TYPE_AUDIO) "AUDIO" else "SUB"; val label = format.label?.takeIf { it.isNotBlank() }; val codec = format.codecs?.takeIf { it.isNotBlank() }
         return listOfNotNull(label, language, codec).distinct().joinToString(" • ")
