@@ -12,14 +12,12 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
-import tv.blofy.player.core.playback.ExternalPlayerLauncher
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.core.security.ParentalPinManager
 import tv.blofy.player.data.local.BlofyDatabase
@@ -151,10 +149,6 @@ class MovieDetailsActivity : AppCompatActivity() {
             }
             row.addView(lockButton, LinearLayout.LayoutParams(dp(150), dp(74)).apply { marginStart = dp(10) })
             info.addView(row)
-
-            info.addView(actionButton("مشغل خارجي") {
-                if (!ExternalPlayerLauncher.launch(this@MovieDetailsActivity, url, stream.name)) Toast.makeText(this@MovieDetailsActivity, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(dp(180), dp(62)).apply { topMargin = dp(14); gravity = Gravity.END })
 
             body.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             play.requestFocus()
