@@ -7,6 +7,20 @@ import org.junit.Test
 
 class DeviceIdentityTest {
     @Test
+    fun generatedDeviceIdUsesBlofyFourByFourFormat() {
+        val id = DeviceIdentity.generateDeviceId { 0 }
+        assertEquals("BLOFY-AAAA-AAAA", id)
+        assertTrue(id.matches(Regex("BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}")))
+    }
+
+    @Test
+    fun generatedDeviceIdChangesWithInstallationEntropy() {
+        val first = DeviceIdentity.generateDeviceId { 0 }
+        val second = DeviceIdentity.generateDeviceId { 1 }
+        assertNotEquals(first, second)
+    }
+
+    @Test
     fun generatedActivationCodeUsesTheFullSixDigitRange() {
         assertEquals("100000", DeviceIdentity.generateActivationCode { bound ->
             assertEquals(900_000, bound)
