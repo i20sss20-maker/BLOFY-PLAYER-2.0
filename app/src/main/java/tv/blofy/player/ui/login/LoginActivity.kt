@@ -63,78 +63,168 @@ class LoginActivity : AppCompatActivity() {
 
     private fun buildApprovedTvLogin(): LinearLayout {
         createIdentityViews(false)
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(54), dp(28), dp(54), dp(30))
+            setPadding(dp(72), dp(22), dp(72), dp(22))
             background = AppCompatResources.getDrawable(this@LoginActivity, R.drawable.blofy_home_background)
         }
 
-        val brandRow = LinearLayout(this).apply {
+        val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
-        brandRow.addView(ImageView(this).apply {
+        header.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
-        }, LinearLayout.LayoutParams(dp(118), dp(86)))
-        val brandText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
-        brandText.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
+        }, LinearLayout.LayoutParams(dp(132), dp(92)))
+
+        val headerText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        headerText.addView(TextView(this).apply {
+            text = "فعّل جهازك بسهولة"
+            textSize = 38f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.RIGHT
         })
-        brandText.addView(TextView(this).apply {
-            text = "فعّل جهازك بسهولة"; textSize = 20f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
+        headerText.addView(TextView(this).apply {
+            text = "امسح الرمز أو استخدم رقم الجهاز لإضافة قائمة التشغيل"
+            textSize = 17f
+            setTextColor(0xFFB7A8C8.toInt())
+            gravity = Gravity.RIGHT
+            setPadding(0, dp(4), 0, 0)
         })
-        brandText.addView(TextView(this).apply {
-            text = "امسح رمز QR أو استخدم رقم الجهاز ورمز الربط"; textSize = 13f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.RIGHT
-        })
-        brandRow.addView(brandText, LinearLayout.LayoutParams(0, dp(88), 1f).apply { marginStart = dp(12) })
-        root.addView(brandRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(92)))
+        header.addView(headerText, LinearLayout.LayoutParams(0, dp(104), 1f).apply { marginEnd = dp(16) })
+        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(106)))
 
         val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            background = panelBackground()
+        }
+
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            setPadding(dp(30), dp(24), dp(30), dp(24))
-            background = panelBackground()
+            setPadding(dp(26), dp(22), dp(26), dp(12))
         }
-        val qrPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
-        qrPanel.addView(qrView, LinearLayout.LayoutParams(dp(245), dp(245)))
+
+        val qrPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(10), 0, dp(20), 0)
+        }
         qrPanel.addView(TextView(this).apply {
-            text = "امسح الرمز لإضافة القائمة"; textSize = 13f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(10), 0, 0)
+            text = "امسح رمز QR"
+            textSize = 22f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(10))
         })
-        card.addView(qrPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        qrPanel.addView(qrView, LinearLayout.LayoutParams(dp(254), dp(254)))
+        qrPanel.addView(TextView(this).apply {
+            text = "افتح موقع BLOFY PLAYER من جوالك ثم امسح الرمز"
+            textSize = 13f
+            setTextColor(0xFFC9BDD8.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(2))
+        })
+        qrPanel.addView(TextView(this).apply {
+            text = "blofy-player-2-0.vercel.app"
+            textSize = 13f
+            setTextColor(0xFFB86CFF.toInt())
+            gravity = Gravity.CENTER
+        })
+        content.addView(qrPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.95f))
+
+        val divider = View(this).apply { setBackgroundColor(0xFF3E2B4F.toInt()) }
+        content.addView(divider, LinearLayout.LayoutParams(dp(1), LinearLayout.LayoutParams.MATCH_PARENT).apply {
+            marginStart = dp(14); marginEnd = dp(20)
+        })
 
         val infoPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(34), 0, dp(18), 0)
+            setPadding(dp(24), 0, dp(4), 0)
         }
+        infoPanel.addView(TextView(this).apply {
+            text = "بيانات الجهاز"
+            textSize = 23f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.RIGHT
+            setPadding(0, 0, 0, dp(12))
+        })
+
         infoPanel.addView(label("رقم الجهاز"))
-        infoPanel.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
-        infoPanel.addView(label("رمز الربط"))
-        infoPanel.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(62)))
-        status.gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-        infoPanel.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)))
-        card.addView(infoPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.15f))
-        root.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(345)).apply { topMargin = dp(14) })
+        deviceView.apply {
+            textSize = 23f
+            gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
+            setPadding(dp(24), 0, dp(24), 0)
+            background = fieldBackground()
+        }
+        infoPanel.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(66)).apply { topMargin = dp(6) })
+
+        infoPanel.addView(label("رمز الربط"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)).apply { topMargin = dp(12) })
+        codeView.apply {
+            textSize = 44f
+            letterSpacing = 0.18f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = fieldBackground()
+        }
+        infoPanel.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(84)).apply { topMargin = dp(4) })
+
+        status.apply {
+            textSize = 15f
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            setTextColor(0xFFE7DCEF.toInt())
+            setPadding(dp(20), 0, dp(20), 0)
+            background = statusBackground()
+        }
+        infoPanel.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(12) })
+        content.addView(infoPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.25f))
+
+        card.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        val separator = View(this).apply { setBackgroundColor(0xFF3B294C.toInt()) }
+        card.addView(separator, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
 
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(18), dp(12), dp(18), dp(12))
         }
-        addPlaylist = actionButton("إضافة قائمة التشغيل") { startActivity(Intent(this, PlaylistActivity::class.java)) }
+        addPlaylist = primaryActionButton("إضافة قائمة التشغيل") { startActivity(Intent(this, PlaylistActivity::class.java)) }
         connectButton = actionButton("اتصال") { startOrCancelConnect() }
         refreshCodeButton = actionButton("تحديث الرمز") { lifecycleScope.launch { refreshIdentityAndProvider() } }
-        actions.addView(addPlaylist, actionParams())
-        actions.addView(connectButton, actionParams())
-        actions.addView(refreshCodeButton, actionParams())
-        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(76)).apply { topMargin = dp(18) })
+        actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(66), 1.35f).apply { marginStart = dp(8); marginEnd = dp(8) })
+        actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(66), 0.9f).apply { marginStart = dp(8); marginEnd = dp(8) })
+        actions.addView(refreshCodeButton, LinearLayout.LayoutParams(0, dp(66), 0.9f).apply { marginStart = dp(8); marginEnd = dp(8) })
+        card.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(92)))
+
+        root.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(8) })
+
+        root.addView(TextView(this).apply {
+            text = "♢  بياناتك محفوظة بشكل آمن ومشفّر"
+            textSize = 13f
+            setTextColor(0xFF978BA5.toInt())
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)).apply { topMargin = dp(6) })
         return root
     }
 
@@ -164,7 +254,11 @@ class LoginActivity : AppCompatActivity() {
             textSize = if (phone) 25f else 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(0xFFB78CFF.toInt())
             gravity = if (phone) Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }
-        qrView = ImageView(this).apply { contentDescription = "رمز تفعيل BLOFY"; setBackgroundColor(Color.WHITE); setPadding(dp(10), dp(10), dp(10), dp(10)) }
+        qrView = ImageView(this).apply {
+            contentDescription = "رمز تفعيل BLOFY"
+            setBackgroundColor(Color.WHITE)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        }
         status = TextView(this).apply { textSize = 14f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(8)) }
     }
 
@@ -277,15 +371,82 @@ class LoginActivity : AppCompatActivity() {
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         val tv = deviceKind == DeviceClass.Kind.TV
-        text = label; isAllCaps = false; textSize = 16f; isFocusable = tv; isFocusableInTouchMode = tv; setTextColor(Color.WHITE); background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused -> if (tv) { view.background = buttonBackground(focused); view.animate().scaleX(if (focused) 1.04f else 1f).scaleY(if (focused) 1.04f else 1f).setDuration(110).start() } }
+        text = label
+        isAllCaps = false
+        textSize = 16f
+        isFocusable = tv
+        isFocusableInTouchMode = tv
+        setTextColor(Color.WHITE)
+        background = buttonBackground(false)
+        setOnFocusChangeListener { view, focused ->
+            if (tv) {
+                view.background = buttonBackground(focused)
+                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(110).start()
+            }
+        }
         setOnClickListener { action() }
     }
-    private fun actionParams() = LinearLayout.LayoutParams(0, dp(68), 1f).apply { marginStart = dp(7); marginEnd = dp(7) }
-    private fun label(value: String) = TextView(this).apply { text = value; textSize = 13f; setTextColor(0xFF9E90AE.toInt()); gravity = Gravity.RIGHT }
+
+    private fun primaryActionButton(label: String, action: () -> Unit) = Button(this).apply {
+        val tv = deviceKind == DeviceClass.Kind.TV
+        text = label
+        isAllCaps = false
+        textSize = 18f
+        typeface = Typeface.DEFAULT_BOLD
+        isFocusable = tv
+        isFocusableInTouchMode = tv
+        setTextColor(Color.WHITE)
+        background = primaryButtonBackground(false)
+        setOnFocusChangeListener { view, focused ->
+            if (tv) {
+                view.background = primaryButtonBackground(focused)
+                view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(110).start()
+            }
+        }
+        setOnClickListener { action() }
+    }
+
+    private fun label(value: String) = TextView(this).apply {
+        text = value
+        textSize = 14f
+        setTextColor(0xFFAA9AB8.toInt())
+        gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+    }
+
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER }
     private fun subtitle(value: String) = TextView(this).apply { text = value; textSize = 16f; setTextColor(theme.accent); gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(16)) }
-    private fun panelBackground() = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(0xEA151020.toInt()); setStroke(dp(1), 0xFF67458E.toInt()) }
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(if (focused) 0xFF7D45D9.toInt() else 0xFF241A30.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0xFF69468F.toInt()) }
+
+    private fun panelBackground() = GradientDrawable().apply {
+        cornerRadius = dp(24).toFloat()
+        setColor(0xE8120B1B.toInt())
+        setStroke(dp(1), 0xFF5A3477.toInt())
+    }
+
+    private fun fieldBackground() = GradientDrawable().apply {
+        cornerRadius = dp(14).toFloat()
+        setColor(0xC90B0811.toInt())
+        setStroke(dp(1), 0xFF352540.toInt())
+    }
+
+    private fun statusBackground() = GradientDrawable().apply {
+        cornerRadius = dp(18).toFloat()
+        setColor(0xB5140E1C.toInt())
+        setStroke(dp(1), 0xFF32243C.toInt())
+    }
+
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = dp(16).toFloat()
+        setColor(if (focused) 0xFF47206E.toInt() else 0xFF17111F.toInt())
+        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB56CFF.toInt() else 0xFF4B365C.toInt())
+    }
+
+    private fun primaryButtonBackground(focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT,
+        intArrayOf(if (focused) 0xFF7A20FF.toInt() else 0xFF6520E8.toInt(), if (focused) 0xFFE948C4.toInt() else 0xFFA92AEF.toInt())
+    ).apply {
+        cornerRadius = dp(16).toFloat()
+        setStroke(if (focused) dp(3) else dp(2), if (focused) Color.WHITE else 0xFFDB77FF.toInt())
+    }
+
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
