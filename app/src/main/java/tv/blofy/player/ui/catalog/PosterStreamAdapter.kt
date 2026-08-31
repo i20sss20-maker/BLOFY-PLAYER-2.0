@@ -10,6 +10,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.data.local.StreamEntity
 
@@ -19,11 +20,26 @@ internal class PosterStreamAdapter(
 ) : RecyclerView.Adapter<PosterStreamAdapter.Holder>() {
     private val items = mutableListOf<StreamEntity>()
 
+    init {
+        setHasStableIds(true)
+    }
+
     fun submit(newItems: List<StreamEntity>) {
+        val oldItems = items.toList()
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize() = oldItems.size
+            override fun getNewListSize() = newItems.size
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                oldItems[oldItemPosition].key == newItems[newItemPosition].key
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                oldItems[oldItemPosition] == newItems[newItemPosition]
+        }, false)
         items.clear()
         items.addAll(newItems)
-        notifyDataSetChanged()
+        diff.dispatchUpdatesTo(this)
     }
+
+    override fun getItemId(position: Int): Long = items[position].key.hashCode().toLong()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val density = parent.resources.displayMetrics.density
@@ -82,7 +98,7 @@ internal class PosterStreamAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
-        holder.itemView.tag = item
+        holder.itemView.tag = item.key
         holder.title.text = item.name
         holder.meta.text = listOfNotNull(
             item.year?.takeIf(String::isNotBlank),
@@ -94,17 +110,30 @@ internal class PosterStreamAdapter(
             text = value?.let { "★ $it" }.orEmpty()
         }
         ArtworkLoader.load(holder.image, item.icon ?: item.backdrop)
+        if (position % 4 == 0) {
+            val next = (position + 1 until minOf(items.size, position + 9)).map { index ->
+                items[index].icon ?: items[index].backdrop
+            }
+            ArtworkLoader.prefetch(holder.itemView.context, next)
+        }
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
             view.background = card(focused)
+            view.animate().cancel()
             view.animate()
-                .scaleX(if (focused) 1.045f else 1f)
-                .scaleY(if (focused) 1.045f else 1f)
-                .translationZ(if (focused) 18f else 3f)
-                .setDuration(120)
+                .scaleX(if (focused) 1.035f else 1f)
+                .scaleY(if (focused) 1.035f else 1f)
+                .translationZ(if (focused) 14f else 3f)
+                .setDuration(85)
                 .start()
             if (focused) onFocus(item)
         }
+    }
+
+    override fun onViewRecycled(holder: Holder) {
+        holder.image.tag = null
+        holder.image.setImageDrawable(null)
+        super.onViewRecycled(holder)
     }
 
     override fun getItemCount(): Int = items.size
