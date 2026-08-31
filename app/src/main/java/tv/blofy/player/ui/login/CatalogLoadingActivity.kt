@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -40,6 +41,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             fail("تعذر تحديد قائمة التشغيل")
             return
         }
+        CatalogSyncState.markPending(applicationContext, providerId)
         lifecycleScope.launch { sync(providerId) }
     }
 
@@ -101,6 +103,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             withContext(Dispatchers.IO) {
                 dao.promoteStagedCatalog(staged.id, target.copy(enabled = true, updatedAt = System.currentTimeMillis()))
             }
+            CatalogSyncState.markReady(applicationContext, providerId)
             render(100, "اكتمل التحميل")
             startActivity(Intent(this, HomeActivity::class.java))
             finish()
