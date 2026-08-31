@@ -25,6 +25,8 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.core.security.ParentalPinManager
+import tv.blofy.player.core.theme.ThemeManager
+import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -35,11 +37,13 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var provider: ProviderEntity
     private lateinit var status: TextView
     private lateinit var content: LinearLayout
+    private lateinit var theme: ThemeProfile
     private var currentSection = SECTION_PLAYBACK
     private val prefs by lazy { getSharedPreferences("blofy_settings", MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        theme = ThemeManager.current(this)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = LinearLayout.LAYOUT_DIRECTION_LTR
@@ -209,15 +213,17 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun panelBackground() = GradientDrawable().apply {
         cornerRadius = dp(22).toFloat()
-        setColor(0xE4141020.toInt())
-        setStroke(dp(1), 0x554A355F)
+        setColor(theme.surface)
+        setStroke(dp(1), withAlpha(theme.accent, 0x55))
     }
 
     private fun itemBackground(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = dp(15).toFloat()
-        setColor(if (focused) PURPLE else 0xC51B1528.toInt())
-        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x554A355F)
+        setColor(if (focused) theme.accent else theme.surface)
+        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else withAlpha(theme.accent, 0x55))
     }
+
+    private fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
 
     private fun refreshLibrary() {
         if (!::provider.isInitialized) {
@@ -266,7 +272,6 @@ class SettingsActivity : AppCompatActivity() {
         private const val SECTION_LANGUAGE = "language"
         private const val SECTION_LIBRARY = "library"
         private const val SECTION_PARENTAL = "parental"
-        private val PURPLE = Color.rgb(126, 44, 255)
         private val SOFT = Color.rgb(195, 175, 220)
         private val LANGUAGES = listOf(
             "العربية" to "ar",
