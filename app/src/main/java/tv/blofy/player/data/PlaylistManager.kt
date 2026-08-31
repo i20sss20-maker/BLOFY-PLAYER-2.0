@@ -1,9 +1,12 @@
 package tv.blofy.player.data
 
-import kotlinx.coroutines.flow.first
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonReader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.EpgEntity
@@ -13,6 +16,9 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.m3u.M3uPlaylistLoader
 import tv.blofy.player.data.remote.XtreamApi
 import tv.blofy.player.data.remote.XtreamIdentifier
+import java.io.FilterInputStream
+import java.io.InputStream
+import java.io.InputStreamReader
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -43,7 +49,9 @@ class PlaylistManager(
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
-                    freshItemCount += syncVod(provider)
+                    freshItemCount += syncVod(provider) { percent ->
+                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
+                    }
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
@@ -64,9 +72,6 @@ class PlaylistManager(
         }
         val streams = PreviousStreamFlags(previous).applyTo(parsed.streams)
 
-        // A failed/empty download must not erase a catalog that was already usable. All M3U
-        // tables are otherwise replaced in one Room transaction so cancellation rolls back the
-        // entire refresh instead of leaving a mixture of old and new kinds.
         if (!CatalogReplacementPolicy.shouldReplace(
                 previousStreamCount = previous.size,
                 sourceCategoryCount = parsed.categories.size,
@@ -136,10 +141,17 @@ class PlaylistManager(
         return preservedRows.size
     }
 
-    suspend fun syncVod(provider: ProviderEntity): Int {
+    /**
+     * VOD is intentionally parsed as a streaming JSON array. Large providers can return tens of
+     * thousands of movies and buffering `List<Map<...>>` plus the converted entity list at the
+     * same time creates a very large memory spike on Android TV devices.
+     */
+    suspend fun syncVod(
+        provider: ProviderEntity,
+        onProgress: suspend (Int) -> Unit = {}
+    ): Int {
         if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
-        val streams = api.list(actionUrl(provider, "get_vod_streams"))
         val previous = dao.streams(provider.id, "movie", null).first()
         val previousFlags = PreviousStreamFlags(previous)
         val coroutineContext = currentCoroutineContext()
@@ -148,48 +160,77 @@ class PlaylistManager(
             val id = row.id("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:movie:$id", provider.id, id, "movie", row.string("category_name") ?: "Movies", index)
         }
-        val streamRows = streams.mapIndexedNotNull { index, row ->
-            if (index % 256 == 0) coroutineContext.ensureActive()
-            val id = row.id("stream_id") ?: return@mapIndexedNotNull null
-            val key = "${provider.id}:movie:$id"
-            val backdrop = when (val raw = row["backdrop_path"]) {
-                is List<*> -> raw.firstOrNull()?.toString()
-                else -> raw?.toString()
+
+        val streamRows = ArrayList<StreamEntity>(4096)
+        var sourceStreamCount = 0
+        val body = api.streamingResponse(actionUrl(provider, "get_vod_streams"))
+        val declaredBytes = body.contentLength()
+        body.use { responseBody ->
+            val counting = CountingInputStream(responseBody.byteStream())
+            JsonReader(InputStreamReader(counting, Charsets.UTF_8)).use { reader ->
+                reader.beginArray()
+                val gson = Gson()
+                val mapType = object : TypeToken<Map<String, Any?>>() {}.type
+                while (reader.hasNext()) {
+                    if (sourceStreamCount % 128 == 0) coroutineContext.ensureActive()
+                    val row: Map<String, Any?> = gson.fromJson(reader, mapType)
+                    sourceStreamCount += 1
+                    vodEntity(provider, row)?.let { streamRows += previousFlags.applyTo(it) }
+
+                    if (sourceStreamCount % 256 == 0) {
+                        val percent = if (declaredBytes > 0L) {
+                            60 + ((counting.bytesRead.toDouble() / declaredBytes.toDouble()) * 28.0).toInt().coerceIn(0, 28)
+                        } else {
+                            60 + (sourceStreamCount / 500).coerceIn(0, 27)
+                        }
+                        onProgress(percent.coerceIn(60, 88))
+                    }
+                }
+                reader.endArray()
             }
-            StreamEntity(
-                key = key,
-                providerId = provider.id,
-                remoteId = id,
-                categoryId = row.id("category_id"),
-                kind = "movie",
-                name = row.string("name") ?: "Movie $id",
-                icon = row.string("stream_icon"),
-                extension = row.string("container_extension") ?: "mp4",
-                directSource = row.string("direct_source"),
-                addedAt = row.string("added")?.toLongOrNull(),
-                plot = row.string("plot") ?: row.string("description"),
-                genre = row.string("genre"),
-                releaseDate = row.string("releaseDate") ?: row.string("release_date"),
-                year = row.string("year"),
-                rating = row.string("rating") ?: row.string("rating_5based"),
-                duration = row.string("duration"),
-                backdrop = backdrop?.takeIf { it.isNotBlank() && it != "null" },
-                favorite = false,
-                locked = false
-            )
         }
-        val preservedRows = previousFlags.applyTo(streamRows)
+        onProgress(88)
+
         if (CatalogReplacementPolicy.shouldReplace(
                 previousStreamCount = previous.size,
                 sourceCategoryCount = categories.size,
                 parsedCategoryCount = categoryRows.size,
-                sourceStreamCount = streams.size,
-                parsedStreamCount = preservedRows.size
+                sourceStreamCount = sourceStreamCount,
+                parsedStreamCount = streamRows.size
             )
         ) {
-            dao.replaceCatalog(provider.id, "movie", categoryRows, preservedRows)
+            dao.replaceCatalog(provider.id, "movie", categoryRows, streamRows)
         }
-        return preservedRows.size
+        return streamRows.size
+    }
+
+    private fun vodEntity(provider: ProviderEntity, row: Map<String, Any?>): StreamEntity? {
+        val id = row.id("stream_id") ?: return null
+        val backdrop = when (val raw = row["backdrop_path"]) {
+            is List<*> -> raw.firstOrNull()?.toString()
+            else -> raw?.toString()
+        }
+        return StreamEntity(
+            key = "${provider.id}:movie:$id",
+            providerId = provider.id,
+            remoteId = id,
+            categoryId = row.id("category_id"),
+            kind = "movie",
+            name = row.string("name") ?: "Movie $id",
+            icon = row.string("stream_icon"),
+            extension = row.string("container_extension") ?: "mp4",
+            directSource = row.string("direct_source"),
+            addedAt = row.string("added")?.toLongOrNull(),
+            plot = row.string("plot") ?: row.string("description"),
+            genre = row.string("genre"),
+            releaseDate = row.string("releaseDate") ?: row.string("release_date"),
+            year = row.string("year"),
+            rating = row.string("rating") ?: row.string("rating_5based"),
+            duration = row.string("duration"),
+            backdrop = backdrop?.takeIf { it.isNotBlank() && it != "null" },
+            favorite = false,
+            locked = false
+        )
     }
 
     suspend fun syncSeries(provider: ProviderEntity): Int {
@@ -252,16 +293,12 @@ class PlaylistManager(
             return SeriesEpisodeSyncResult(cached.size, payloadPresent = true, cacheUpdated = false)
         }
 
-        // Older builds could persist a numeric Gson identifier as "123.0". Xtream providers
-        // commonly reject that value even though the series exists, so repair it at request time.
         val requestSeriesId = SeriesEpisodeParser.normalizeSeriesIdForRequest(seriesId)
         val response = api.jsonResponse(
             actionUrl(provider, "get_series_info", mapOf("series_id" to requestSeriesId))
         )
         val parsed = SeriesEpisodeParser.parse(provider.id, seriesId, response)
 
-        // Never destroy a previously working episode cache because one provider returned an
-        // empty, malformed, or temporarily incomplete response.
         if (parsed.episodes.isNotEmpty()) {
             dao.replaceEpisodes(provider.id, seriesId, parsed.episodes)
         }
@@ -325,13 +362,24 @@ class PlaylistManager(
     }
 }
 
-/**
- * Carries user state across the one-time ID repair from Gson-style `14.0` IDs to `14`.
- *
- * Xtream identifiers with intentional leading zeroes remain distinct (`0014` is not `14`).
- * Both the stored remote ID and the legacy key suffix are indexed because older releases could
- * normalize one without normalizing the other.
- */
+private class CountingInputStream(input: InputStream) : FilterInputStream(input) {
+    var bytesRead: Long = 0L
+        private set
+
+    override fun read(): Int {
+        val value = super.read()
+        if (value >= 0) bytesRead += 1
+        return value
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val count = super.read(buffer, offset, length)
+        if (count > 0) bytesRead += count.toLong()
+        return count
+    }
+}
+
+/** Carries favorite/lock state across catalog refreshes and legacy identifier repair. */
 internal class PreviousStreamFlags(previous: List<StreamEntity>) {
     private data class Flags(val favorite: Boolean = false, val locked: Boolean = false) {
         fun merge(other: Flags) = Flags(favorite || other.favorite, locked || other.locked)
@@ -344,12 +392,15 @@ internal class PreviousStreamFlags(previous: List<StreamEntity>) {
         }
     }
 
-    fun applyTo(streams: List<StreamEntity>): List<StreamEntity> = streams.map { stream ->
+    fun applyTo(stream: StreamEntity): StreamEntity {
+        if (byAlias.isEmpty()) return stream
         val flags = aliases(stream)
             .mapNotNull(byAlias::get)
             .fold(Flags(stream.favorite, stream.locked)) { combined, item -> combined.merge(item) }
-        stream.copy(favorite = flags.favorite, locked = flags.locked)
+        return stream.copy(favorite = flags.favorite, locked = flags.locked)
     }
+
+    fun applyTo(streams: List<StreamEntity>): List<StreamEntity> = streams.map(::applyTo)
 
     private fun aliases(stream: StreamEntity): Set<String> = buildSet {
         add("key:${stream.key}")
