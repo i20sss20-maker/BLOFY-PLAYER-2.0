@@ -17,6 +17,7 @@ import java.util.concurrent.Executors
 @OptIn(markerClass = [UnstableApi::class])
 object TransportFactory {
     private val cronetExecutor: ExecutorService by lazy { Executors.newCachedThreadPool() }
+    @Volatile private var cronetEngine: CronetEngine? = null
 
     fun create(context: Context, profile: ProviderProfile): DataSource.Factory {
         val appContext = context.applicationContext
@@ -30,16 +31,22 @@ object TransportFactory {
 
     private fun createCronet(context: Context, profile: ProviderProfile): HttpDataSource.Factory? {
         return runCatching {
-            val engine = CronetEngine.Builder(context)
-                .enableHttp2(true)
-                .enableQuic(true)
-                .build()
+            val engine = getCronetEngine(context)
             val factory: CronetDataSource.Factory = CronetDataSource.Factory(engine, cronetExecutor)
                 .setUserAgent("BLOFY PLAYER/2.0")
             factory.setDefaultRequestProperties(profile.headers)
             factory
         }.getOrNull()
     }
+
+    private fun getCronetEngine(context: Context): CronetEngine =
+        cronetEngine ?: synchronized(this) {
+            cronetEngine ?: CronetEngine.Builder(context.applicationContext)
+                .enableHttp2(true)
+                .enableQuic(true)
+                .build()
+                .also { cronetEngine = it }
+        }
 
     private fun createHttp(profile: ProviderProfile): HttpDataSource.Factory =
         DefaultHttpDataSource.Factory()
