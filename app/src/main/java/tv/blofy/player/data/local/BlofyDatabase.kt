@@ -170,6 +170,7 @@ abstract class BlofyDatabase : RoomDatabase() {
             },
             object : Migration(5, 6) {
                 override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("UPDATE `streams` SET `locked` = 0 WHERE `locked` != 0")
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_categories_providerId_kind_orderIndex` ON `categories` (`providerId`, `kind`, `orderIndex`)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_categoryId_name` ON `streams` (`providerId`, `kind`, `categoryId`, `name`)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_name` ON `streams` (`providerId`, `name`)")
