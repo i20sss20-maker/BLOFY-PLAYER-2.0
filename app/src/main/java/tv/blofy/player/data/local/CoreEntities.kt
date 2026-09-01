@@ -20,7 +20,14 @@ data class ProviderEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "categories", indices = [Index("providerId"), Index("kind")])
+@Entity(
+    tableName = "categories",
+    indices = [
+        Index("providerId"),
+        Index("kind"),
+        Index(value = ["providerId", "kind", "orderIndex"])
+    ]
+)
 data class CategoryEntity(
     @PrimaryKey val key: String,
     val providerId: String,
@@ -31,7 +38,17 @@ data class CategoryEntity(
     val hidden: Boolean = false
 )
 
-@Entity(tableName = "streams", indices = [Index("providerId"), Index("categoryId"), Index("kind")])
+@Entity(
+    tableName = "streams",
+    indices = [
+        Index("providerId"),
+        Index("categoryId"),
+        Index("kind"),
+        Index(value = ["providerId", "kind", "categoryId", "name"]),
+        Index(value = ["providerId", "name"]),
+        Index(value = ["providerId", "kind", "addedAt"])
+    ]
+)
 data class StreamEntity(
     @PrimaryKey val key: String,
     val providerId: String,
