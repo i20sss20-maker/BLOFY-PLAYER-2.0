@@ -44,7 +44,9 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var addButton: Button
     private lateinit var updateButton: Button
+    private lateinit var connectButton: Button
     private var updateJob: Job? = null
+    private var connectJob: Job? = null
     private val isTv by lazy { DeviceClass.detect(this) == DeviceClass.Kind.TV }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,7 +54,7 @@ class LoginActivity : AppCompatActivity() {
         window.statusBarColor = V339Ui.BLACK
         window.navigationBarColor = V339Ui.BLACK
         setContentView(buildUi())
-        if (isTv) updateButton.requestFocus()
+        if (isTv) connectButton.requestFocus()
         lifecycleScope.launch { refreshIdentity() }
     }
 
@@ -82,14 +84,18 @@ class LoginActivity : AppCompatActivity() {
         content.addView(V339Ui.title(this, "قوائم التشغيل", 30f).apply {
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
-        content.addView(V339Ui.text(this, "أضف قائمة أو حدّث البيانات من موقع BLOFY", 14f, V339Ui.MUTED).apply {
+        content.addView(V339Ui.text(this, "حدّث بيانات الموقع ثم اضغط اتصال", 14f, V339Ui.MUTED).apply {
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)))
 
         val spacer = View(this)
         content.addView(spacer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        updateButton = V339Ui.button(this, "↻  تحديث", true).apply {
+        connectButton = V339Ui.button(this, "اتصال", true).apply {
+            textSize = 16f; isFocusable = isTv; isFocusableInTouchMode = isTv
+            setOnClickListener { connect() }
+        }
+        updateButton = V339Ui.button(this, "↻  تحديث", false).apply {
             textSize = 16f; isFocusable = isTv; isFocusableInTouchMode = isTv
             setOnClickListener { refreshFromPortal() }
         }
@@ -97,12 +103,13 @@ class LoginActivity : AppCompatActivity() {
             textSize = 16f; isFocusable = isTv; isFocusableInTouchMode = isTv
             setOnClickListener { startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java)) }
         }
+        content.addView(connectButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)).apply { bottomMargin = dp(10) })
         content.addView(updateButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)).apply { bottomMargin = dp(10) })
         content.addView(addButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)))
         content.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(8) })
 
         page.addView(content, LinearLayout.LayoutParams(if (isTv) 0 else ViewGroup.LayoutParams.MATCH_PARENT,
-            if (isTv) dp(420) else ViewGroup.LayoutParams.WRAP_CONTENT, if (isTv) 1f else 0f).apply {
+            if (isTv) dp(470) else ViewGroup.LayoutParams.WRAP_CONTENT, if (isTv) 1f else 0f).apply {
             setMargins(dp(8), dp(8), dp(8), dp(8))
         })
 
@@ -152,35 +159,62 @@ class LoginActivity : AppCompatActivity() {
         status = V339Ui.text(this, "", 12f, V339Ui.MUTED).apply { gravity = Gravity.CENTER }
     }
 
+    private fun connect() {
+        if (connectJob?.isActive == true) return
+        connectJob = lifecycleScope.launch {
+            connectButton.isEnabled = false
+            connectButton.text = "جاري الاتصال..."
+            try {
+                val dao = BlofyDatabase.get(applicationContext).dao()
+                val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
+                if (provider == null) {
+                    status.text = "لا توجد قائمة تشغيل — اضغط تحديث بعد حفظها في الموقع"
+                    return@launch
+                }
+                withContext(Dispatchers.IO) { dao.saveAndActivateProvider(provider.copy(enabled = true)) }
+                if (hasCachedCatalog(dao, provider.id)) {
+                    status.text = "تم الاتصال"
+                    openHome()
+                } else {
+                    status.text = "جاري تحميل المحتوى"
+                    openCatalogLoading(provider.id)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { status.text = "تعذر الاتصال" }
+            finally {
+                connectButton.isEnabled = true
+                connectButton.text = "اتصال"
+                connectJob = null
+            }
+        }
+    }
+
     private fun refreshFromPortal() {
         if (updateJob?.isActive == true) return
         updateJob = lifecycleScope.launch {
             updateButton.isEnabled = false
             updateButton.text = "جاري التحديث..."
-            status.text = "جاري جلب البيانات"
+            status.text = "جاري جلب البيانات من الموقع"
             try {
                 val dao = BlofyDatabase.get(applicationContext).dao()
                 val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
                 if (endpoint.isBlank()) {
-                    val local = dao.providers().first().firstOrNull()
-                    if (local == null) status.text = "لا توجد قائمة تشغيل"
-                    else if (hasCachedCatalog(dao, local.id)) openHome() else openCatalogLoading(local.id)
+                    status.text = if (dao.providers().first().firstOrNull() == null) "لا توجد قائمة تشغيل" else "القائمة محفوظة — اضغط اتصال"
                     return@launch
                 }
                 val manager = ActivationManager(applicationContext, dao)
                 runCatching { withContext(Dispatchers.IO) { manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME) } }
                 val sync = withContext(Dispatchers.IO) { PortalPlaylistClient.sync(applicationContext, endpoint, dao) }
                 val provider = sync.activeProvider
-                if (provider == null) { status.text = "لم توجد قائمة في الموقع"; return@launch }
-                withContext(Dispatchers.IO) { dao.upsertProvider(provider.copy(enabled = true)) }
-                val changed = provider.id in sync.changedProviderIds
-                if (changed || !hasCachedCatalog(dao, provider.id)) {
-                    status.text = "جاري تحميل المحتوى"
-                    openCatalogLoading(provider.id)
+                if (provider == null) {
+                    status.text = "لم توجد قائمة في الموقع"
+                    return@launch
+                }
+                withContext(Dispatchers.IO) { dao.saveAndActivateProvider(provider.copy(enabled = true)) }
+                status.text = if (provider.id in sync.changedProviderIds || !hasCachedCatalog(dao, provider.id)) {
+                    "تم التحديث — اضغط اتصال لتحميل القائمة"
                 } else {
-                    withContext(Dispatchers.IO) { dao.saveAndActivateProvider(provider.copy(enabled = true)) }
-                    status.text = "تم التحديث"
-                    openHome()
+                    "تم التحديث — اضغط اتصال"
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { status.text = "تعذر التحديث" }
@@ -202,7 +236,7 @@ class LoginActivity : AppCompatActivity() {
             ?: "$PORTAL_FALLBACK/#deviceId=${identity.deviceId}&code=${identity.activationCode}"
         qrView.setImageBitmap(createQr(portalUrl))
         val provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
-        status.text = if (provider == null) "" else "القائمة محفوظة"
+        status.text = if (provider == null) "" else "القائمة محفوظة — اضغط اتصال"
     }
 
     private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) {
