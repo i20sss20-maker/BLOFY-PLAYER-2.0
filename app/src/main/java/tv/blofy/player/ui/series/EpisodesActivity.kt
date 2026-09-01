@@ -2,9 +2,6 @@ package tv.blofy.player.ui.series
 
 import android.app.AlertDialog
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
@@ -13,7 +10,6 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -21,7 +17,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.remote.FocusMemory
@@ -30,6 +25,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.V339Ui
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
 
@@ -59,15 +55,14 @@ class EpisodesActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(28), dp(22), dp(28), dp(24))
-            background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
+            background = V339Ui.screenGradient()
         }
-        root.addView(TextView(this).apply {
-            text = seriesName.ifBlank { "الحلقات" }
-            textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
+        root.addView(V339Ui.title(this, seriesName.ifBlank { "الحلقات" }, 30f).apply {
+            gravity = Gravity.RIGHT
             setPadding(dp(8), 0, 0, dp(4))
         })
-        status = TextView(this).apply {
-            text = "جاري تحميل الحلقات..."; textSize = 14f; setTextColor(SOFT); gravity = Gravity.RIGHT
+        status = V339Ui.text(this, "جاري تحميل الحلقات...", 14f, V339Ui.MUTED).apply {
+            gravity = Gravity.RIGHT
             setPadding(dp(8), 0, 0, dp(12))
         }
         root.addView(status)
@@ -77,11 +72,11 @@ class EpisodesActivity : AppCompatActivity() {
         val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_LTR }
         episodeList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@EpisodesActivity); itemAnimator = null; setHasFixedSize(true)
-            setPadding(dp(8), dp(8), dp(8), dp(8)); background = panelBackground()
+            setPadding(dp(8), dp(8), dp(8), dp(8)); background = V339Ui.panel(this@EpisodesActivity, V339Ui.PANEL, 18, V339Ui.STROKE)
         }
         seasonList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@EpisodesActivity); itemAnimator = null; setHasFixedSize(true)
-            setPadding(dp(8), dp(8), dp(8), dp(8)); background = panelBackground()
+            setPadding(dp(8), dp(8), dp(8), dp(8)); background = V339Ui.panel(this@EpisodesActivity, V339Ui.PANEL, 18, V339Ui.STROKE)
         }
         body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(18) })
         body.addView(seasonList, LinearLayout.LayoutParams(dp(260), LinearLayout.LayoutParams.MATCH_PARENT))
@@ -184,10 +179,7 @@ class EpisodesActivity : AppCompatActivity() {
     }
 
     private suspend fun refreshWatchProgress() {
-        if (allEpisodes.isEmpty()) {
-            watchProgress.clear()
-            return
-        }
+        if (allEpisodes.isEmpty()) { watchProgress.clear(); return }
         val dao = BlofyDatabase.get(applicationContext).dao()
         val states = dao.watchStates(providerId).associateBy { it.contentKey }
         watchProgress.clear()
@@ -273,25 +265,12 @@ class EpisodesActivity : AppCompatActivity() {
         })
     }
 
-    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused); view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(90).start() }
+    private fun actionButton(label: String, action: () -> Unit) = V339Ui.button(this, label, false).apply {
+        textSize = 15f
         setOnClickListener { action() }
     }
 
-    private fun panelBackground() = GradientDrawable().apply {
-        cornerRadius = dp(18).toFloat()
-        setColor(CLASSIC_SURFACE)
-        setStroke(dp(1), CLASSIC_STROKE)
-    }
-
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(15).toFloat()
-        setColor(if (focused) CLASSIC_FOCUS else CLASSIC_SURFACE)
-        setStroke(if (focused) dp(2) else dp(1), if (focused) CLASSIC_FOCUS_STROKE else CLASSIC_STROKE)
-    }
-
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun dp(v: Int) = V339Ui.dp(this, v)
     private fun seasonMemoryKey() = "episodes:$providerId:$seriesId:season"
     private fun episodeMemoryKey() = "episodes:$providerId:$seriesId:episode"
 
@@ -299,10 +278,5 @@ class EpisodesActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_SERIES_ID = "series_id"; const val EXTRA_SERIES_NAME = "series_name"
-        private val SOFT = Color.rgb(188, 182, 205)
-        private val CLASSIC_SURFACE = Color.rgb(17, 16, 30)
-        private val CLASSIC_STROKE = Color.rgb(69, 55, 88)
-        private val CLASSIC_FOCUS = Color.rgb(72, 42, 120)
-        private val CLASSIC_FOCUS_STROKE = Color.rgb(188, 132, 255)
     }
 }
