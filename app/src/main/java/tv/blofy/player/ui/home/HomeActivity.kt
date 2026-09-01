@@ -11,7 +11,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import tv.blofy.player.ui.V339Ui
-import tv.blofy.player.ui.browser.ContentBrowserActivity
+import tv.blofy.player.ui.browser.V339LiveActivity
 import tv.blofy.player.ui.catalog.PosterCatalogActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import tv.blofy.player.ui.settings.SettingsActivity
@@ -65,7 +65,7 @@ class HomeActivity : AppCompatActivity() {
         val mediaWidth = minOf(452, maxOf(338, availableWidth - liveWidth - systemWidth - 32))
 
         val live = homeTile("◉", "بث مباشر", true) {
-            startActivity(Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, "live"))
+            startActivity(Intent(this, V339LiveActivity::class.java))
         }
         launchers.addView(live, LinearLayout.LayoutParams(dp(liveWidth), dp(292)).apply { marginEnd = dp(16) })
 
@@ -83,7 +83,7 @@ class HomeActivity : AppCompatActivity() {
             startActivity(Intent(this, PosterCatalogActivity::class.java).putExtra(PosterCatalogActivity.EXTRA_KIND, "series"))
         }
         val sports = homeTile("⚽", "الرياضة", false) {
-            startActivity(Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, "live"))
+            startActivity(Intent(this, V339LiveActivity::class.java))
         }
         val playlists = homeTile("▤", "تغيير قائمة التشغيل", false) {
             startActivity(Intent(this, ProviderManagerActivity::class.java))
