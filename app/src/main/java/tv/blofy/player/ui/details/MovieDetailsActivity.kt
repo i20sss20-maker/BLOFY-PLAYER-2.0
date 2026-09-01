@@ -43,7 +43,7 @@ class MovieDetailsActivity : AppCompatActivity() {
         val root = FrameLayout(this).apply { background = AppCompatResources.getDrawable(this@MovieDetailsActivity, R.drawable.blofy_home_background) }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(58), dp(44), dp(58), dp(44))
         }
@@ -69,10 +69,11 @@ class MovieDetailsActivity : AppCompatActivity() {
             }
             posterCard.addView(poster, LinearLayout.LayoutParams(dp(285), dp(425)))
             ArtworkLoader.load(poster, stream.icon)
-            body.addView(posterCard, LinearLayout.LayoutParams(dp(310), dp(450)).apply { marginStart = dp(34) })
+            body.addView(posterCard, LinearLayout.LayoutParams(dp(310), dp(450)).apply { marginEnd = dp(34) })
 
             val info = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL or Gravity.END
             }
             info.addView(TextView(this@MovieDetailsActivity).apply {
