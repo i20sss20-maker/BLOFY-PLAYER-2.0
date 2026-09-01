@@ -7,9 +7,11 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -47,103 +49,103 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = V339Ui.BLACK
+        window.navigationBarColor = V339Ui.BLACK
         setContentView(buildUi())
         if (isTv) updateButton.requestFocus()
         lifecycleScope.launch { refreshIdentity() }
     }
 
-    private fun buildUi(): LinearLayout {
+    /** Composition transplanted from v339 MainActivity playlist hub/devicePanel. */
+    private fun buildUi(): View {
         createIdentityViews()
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val page = LinearLayout(this).apply {
+            orientation = if (isTv) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(if (isTv) 72 else 24), dp(if (isTv) 26 else 24), dp(if (isTv) 72 else 24), dp(if (isTv) 26 else 24))
+            setPadding(dp(34), dp(26), dp(34), dp(26))
             background = V339Ui.screenGradient()
         }
 
-        root.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            adjustViewBounds = true
-        }, LinearLayout.LayoutParams(dp(if (isTv) 130 else 112), dp(if (isTv) 82 else 68)).apply { bottomMargin = dp(10) })
+        val device = devicePanel()
+        page.addView(device, LinearLayout.LayoutParams(if (isTv) dp(300) else ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(dp(8), dp(8), dp(20), dp(8)) })
 
-        val card = LinearLayout(this).apply {
-            orientation = if (isTv) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            layoutDirection = if (isTv) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(22), dp(20), dp(22), dp(20))
-            background = V339Ui.panel(this@LoginActivity, V339Ui.PANEL, 18, V339Ui.STROKE)
-        }
-
-        val qrPanel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-        }
-        qrPanel.addView(qrView, LinearLayout.LayoutParams(dp(if (isTv) 230 else 190), dp(if (isTv) 230 else 190)))
-
-        val info = LinearLayout(this).apply {
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(if (isTv) dp(30) else 0, if (isTv) 0 else dp(18), 0, 0)
+            setPadding(dp(32), dp(26), dp(32), dp(26))
+            background = V339Ui.gradientPanel(this@LoginActivity,
+                Color.argb(246, 13, 11, 24), Color.argb(244, 7, 7, 15), 24, V339Ui.STROKE)
         }
-        info.addView(label("رقم الجهاز"))
-        info.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { topMargin = dp(5); bottomMargin = dp(10) })
-        info.addView(label("رمز الربط"))
-        info.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply { topMargin = dp(5) })
-        info.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)).apply { topMargin = dp(8) })
+        content.addView(V339Ui.title(this, "قوائم التشغيل", 30f).apply {
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        content.addView(V339Ui.text(this, "أضف قائمة أو حدّث البيانات من موقع BLOFY", 14f, V339Ui.MUTED).apply {
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)))
 
-        if (isTv) {
-            card.addView(qrPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.88f))
-            card.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.12f))
-        } else {
-            card.addView(qrPanel)
-            card.addView(info, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val spacer = View(this)
+        content.addView(spacer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        updateButton = V339Ui.button(this, "↻  تحديث", true).apply {
+            textSize = 16f; isFocusable = isTv; isFocusableInTouchMode = isTv
+            setOnClickListener { refreshFromPortal() }
         }
-        root.addView(card, LinearLayout.LayoutParams(if (isTv) dp(900) else LinearLayout.LayoutParams.MATCH_PARENT, if (isTv) dp(350) else LinearLayout.LayoutParams.WRAP_CONTENT))
+        addButton = V339Ui.button(this, "＋  إضافة قائمة التشغيل", false).apply {
+            textSize = 16f; isFocusable = isTv; isFocusableInTouchMode = isTv
+            setOnClickListener { startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java)) }
+        }
+        content.addView(updateButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)).apply { bottomMargin = dp(10) })
+        content.addView(addButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)))
+        content.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(8) })
 
-        val actions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+        page.addView(content, LinearLayout.LayoutParams(if (isTv) 0 else ViewGroup.LayoutParams.MATCH_PARENT,
+            if (isTv) dp(420) else ViewGroup.LayoutParams.WRAP_CONTENT, if (isTv) 1f else 0f).apply {
+            setMargins(dp(8), dp(8), dp(8), dp(8))
+        })
+
+        return ScrollView(this).apply {
+            isFillViewport = true
+            addView(page)
+        }
+    }
+
+    private fun devicePanel(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(dp(20), dp(18), dp(20), dp(18))
+        background = V339Ui.gradientPanel(this@LoginActivity,
+            Color.argb(238, 25, 18, 46), Color.argb(240, 10, 10, 21), 22, Color.rgb(75, 48, 116))
+        addView(ImageView(this@LoginActivity).apply {
+            setImageResource(R.drawable.blofy_logo)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+        }, LinearLayout.LayoutParams(dp(88), dp(88)))
+        addView(V339Ui.title(this@LoginActivity, "جهاز BLOFY", 17f).apply { gravity = Gravity.CENTER })
+        addView(deviceView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
+        addView(codeView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
+        addView(qrView, LinearLayout.LayoutParams(dp(142), dp(142)).apply { topMargin = dp(12) })
+        addView(V339Ui.text(this@LoginActivity, "امسح الرمز لإدارة الجهاز", 11f, V339Ui.MUTED).apply {
             gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(0, dp(16), 0, 0)
-        }
-        updateButton = actionButton("تحديث", primary = true) { refreshFromPortal() }
-        addButton = actionButton("إضافة قائمة التشغيل", primary = false) {
-            startActivity(Intent(this, PlaylistActivity::class.java))
-        }
-        actions.addView(updateButton, LinearLayout.LayoutParams(0, dp(64), 1f).apply { marginStart = dp(7); marginEnd = dp(7) })
-        actions.addView(addButton, LinearLayout.LayoutParams(0, dp(64), 1f).apply { marginStart = dp(7); marginEnd = dp(7) })
-        root.addView(actions, LinearLayout.LayoutParams(if (isTv) dp(760) else LinearLayout.LayoutParams.MATCH_PARENT, dp(82)))
-        return root
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
     }
 
     private fun createIdentityViews() {
-        deviceView = TextView(this).apply {
-            text = "..."
-            textSize = if (isTv) 20f else 16f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(V339Ui.TEXT)
-            gravity = Gravity.CENTER_VERTICAL or Gravity.LEFT
+        deviceView = V339Ui.title(this, "غير مسجل", 20f).apply {
             textDirection = View.TEXT_DIRECTION_LTR
-            setPadding(dp(18), 0, dp(18), 0)
-            background = V339Ui.focusDrawable(this@LoginActivity, Color.argb(220, 16, 15, 28), V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
-        }
-        codeView = TextView(this).apply {
-            text = "------"
-            textSize = if (isTv) 36f else 28f
-            typeface = Typeface.DEFAULT_BOLD
-            letterSpacing = .16f
-            setTextColor(V339Ui.TEXT)
             gravity = Gravity.CENTER
+            setTextIsSelectable(true)
+        }
+        codeView = V339Ui.text(this, "رمز الدخول   ------", 14f, V339Ui.PURPLE_LIGHT).apply {
+            typeface = Typeface.DEFAULT_BOLD
             textDirection = View.TEXT_DIRECTION_LTR
-            background = V339Ui.focusDrawable(this@LoginActivity, Color.argb(220, 16, 15, 28), V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
+            gravity = Gravity.CENTER
+            setTextIsSelectable(true)
         }
         qrView = ImageView(this).apply {
             setBackgroundColor(Color.WHITE)
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setPadding(dp(7), dp(7), dp(7), dp(7))
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "رمز BLOFY"
         }
@@ -165,19 +167,11 @@ class LoginActivity : AppCompatActivity() {
                     else if (hasCachedCatalog(dao, local.id)) openHome() else openCatalogLoading(local.id)
                     return@launch
                 }
-
                 val manager = ActivationManager(applicationContext, dao)
-                runCatching {
-                    withContext(Dispatchers.IO) { manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME) }
-                }
-
+                runCatching { withContext(Dispatchers.IO) { manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME) } }
                 val sync = withContext(Dispatchers.IO) { PortalPlaylistClient.sync(applicationContext, endpoint, dao) }
                 val provider = sync.activeProvider
-                if (provider == null) {
-                    status.text = "لم توجد قائمة في الموقع"
-                    return@launch
-                }
-
+                if (provider == null) { status.text = "لم توجد قائمة في الموقع"; return@launch }
                 withContext(Dispatchers.IO) { dao.upsertProvider(provider.copy(enabled = true)) }
                 val changed = provider.id in sync.changedProviderIds
                 if (changed || !hasCachedCatalog(dao, provider.id)) {
@@ -188,13 +182,11 @@ class LoginActivity : AppCompatActivity() {
                     status.text = "تم التحديث"
                     openHome()
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                status.text = "تعذر التحديث"
-            } finally {
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { status.text = "تعذر التحديث" }
+            finally {
                 updateButton.isEnabled = true
-                updateButton.text = "تحديث"
+                updateButton.text = "↻  تحديث"
                 updateJob = null
             }
         }
@@ -205,7 +197,7 @@ class LoginActivity : AppCompatActivity() {
             ActivationManager(applicationContext, BlofyDatabase.get(applicationContext).dao()).ensureIdentity()
         }
         deviceView.text = identity.deviceId
-        codeView.text = identity.activationCode
+        codeView.text = "رمز الدخول   ${identity.activationCode}"
         val portalUrl = ActivationPortalUrl.create(BuildConfig.ACTIVATION_BASE_URL, identity.deviceId, identity.activationCode)
             ?: "$PORTAL_FALLBACK/#deviceId=${identity.deviceId}&code=${identity.activationCode}"
         qrView.setImageBitmap(createQr(portalUrl))
@@ -221,28 +213,14 @@ class LoginActivity : AppCompatActivity() {
         CatalogSyncState.markPending(applicationContext, providerId)
         startActivity(Intent(this, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, providerId))
     }
-
     private fun openHome() { startActivity(Intent(this, HomeActivity::class.java)) }
-
-    private fun actionButton(label: String, primary: Boolean, action: () -> Unit) = V339Ui.button(this, label, primary).apply {
-        textSize = 16f
-        isFocusable = isTv
-        isFocusableInTouchMode = isTv
-        setOnClickListener { action() }
-    }
-
-    private fun label(value: String) = V339Ui.text(this, value, 13f, V339Ui.MUTED).apply { gravity = Gravity.RIGHT }
-
     private fun createQr(value: String): Bitmap {
         val matrix = QRCodeWriter().encode(value, BarcodeFormat.QR_CODE, 360, 360)
         return Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888).apply {
             for (y in 0 until matrix.height) for (x in 0 until matrix.width) setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
         }
     }
-
     private fun dp(value: Int) = V339Ui.dp(this, value)
 
-    companion object {
-        private const val PORTAL_FALLBACK = "https://blofy-player-2-0.vercel.app"
-    }
+    companion object { private const val PORTAL_FALLBACK = "https://blofy-player-2-0.vercel.app" }
 }
