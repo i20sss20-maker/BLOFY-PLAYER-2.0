@@ -98,7 +98,7 @@ class LoginActivity : AppCompatActivity() {
         headerText.addView(TextView(this).apply {
             text = "امسح الرمز أو استخدم رقم الجهاز لإضافة قائمة التشغيل"
             textSize = 17f
-            setTextColor(0xFFB7A8C8.toInt())
+            setTextColor(CLASSIC_MUTED)
             gravity = Gravity.RIGHT
             setPadding(0, dp(4), 0, 0)
         })
@@ -137,19 +137,19 @@ class LoginActivity : AppCompatActivity() {
         qrPanel.addView(TextView(this).apply {
             text = "افتح موقع BLOFY PLAYER من جوالك ثم امسح الرمز"
             textSize = 13f
-            setTextColor(0xFFC9BDD8.toInt())
+            setTextColor(CLASSIC_MUTED)
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(2))
         })
         qrPanel.addView(TextView(this).apply {
             text = "blofy-player-2-0.vercel.app"
             textSize = 13f
-            setTextColor(0xFFB86CFF.toInt())
+            setTextColor(CLASSIC_PURPLE_SOFT)
             gravity = Gravity.CENTER
         })
         content.addView(qrPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.95f))
 
-        val divider = View(this).apply { setBackgroundColor(0xFF3E2B4F.toInt()) }
+        val divider = View(this).apply { setBackgroundColor(CLASSIC_STROKE) }
         content.addView(divider, LinearLayout.LayoutParams(dp(1), LinearLayout.LayoutParams.MATCH_PARENT).apply {
             marginStart = dp(14); marginEnd = dp(20)
         })
@@ -191,7 +191,7 @@ class LoginActivity : AppCompatActivity() {
         status.apply {
             textSize = 15f
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            setTextColor(0xFFE7DCEF.toInt())
+            setTextColor(Color.rgb(231, 226, 239))
             setPadding(dp(20), 0, dp(20), 0)
             background = statusBackground()
         }
@@ -200,7 +200,7 @@ class LoginActivity : AppCompatActivity() {
 
         card.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        val separator = View(this).apply { setBackgroundColor(0xFF3B294C.toInt()) }
+        val separator = View(this).apply { setBackgroundColor(CLASSIC_STROKE) }
         card.addView(separator, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
 
         val actions = LinearLayout(this).apply {
@@ -222,7 +222,7 @@ class LoginActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = "♢  بياناتك محفوظة بشكل آمن ومشفّر"
             textSize = 13f
-            setTextColor(0xFF978BA5.toInt())
+            setTextColor(Color.rgb(151, 139, 165))
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)).apply { topMargin = dp(6) })
         return root
@@ -251,7 +251,7 @@ class LoginActivity : AppCompatActivity() {
             setTextColor(Color.WHITE); gravity = if (phone) Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }
         codeView = TextView(this).apply {
-            textSize = if (phone) 25f else 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(0xFFB78CFF.toInt())
+            textSize = if (phone) 25f else 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(CLASSIC_PURPLE_SOFT)
             gravity = if (phone) Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }
         qrView = ImageView(this).apply {
@@ -259,7 +259,7 @@ class LoginActivity : AppCompatActivity() {
             setBackgroundColor(Color.WHITE)
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
-        status = TextView(this).apply { textSize = 14f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(8)) }
+        status = TextView(this).apply { textSize = 14f; setTextColor(CLASSIC_MUTED); gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(8)) }
     }
 
     private fun startOrCancelConnect() {
@@ -381,7 +381,7 @@ class LoginActivity : AppCompatActivity() {
         setOnFocusChangeListener { view, focused ->
             if (tv) {
                 view.background = buttonBackground(focused)
-                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(110).start()
+                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(90).start()
             }
         }
         setOnClickListener { action() }
@@ -400,7 +400,7 @@ class LoginActivity : AppCompatActivity() {
         setOnFocusChangeListener { view, focused ->
             if (tv) {
                 view.background = primaryButtonBackground(focused)
-                view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(110).start()
+                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(90).start()
             }
         }
         setOnClickListener { action() }
@@ -409,44 +409,50 @@ class LoginActivity : AppCompatActivity() {
     private fun label(value: String) = TextView(this).apply {
         text = value
         textSize = 14f
-        setTextColor(0xFFAA9AB8.toInt())
+        setTextColor(CLASSIC_MUTED)
         gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
     }
 
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER }
-    private fun subtitle(value: String) = TextView(this).apply { text = value; textSize = 16f; setTextColor(theme.accent); gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(16)) }
+    private fun subtitle(value: String) = TextView(this).apply { text = value; textSize = 16f; setTextColor(CLASSIC_PURPLE_SOFT); gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(16)) }
 
     private fun panelBackground() = GradientDrawable().apply {
-        cornerRadius = dp(24).toFloat()
-        setColor(0xE8120B1B.toInt())
-        setStroke(dp(1), 0xFF5A3477.toInt())
+        cornerRadius = dp(22).toFloat()
+        setColor(CLASSIC_SURFACE)
+        setStroke(dp(1), CLASSIC_STROKE)
     }
 
     private fun fieldBackground() = GradientDrawable().apply {
         cornerRadius = dp(14).toFloat()
-        setColor(0xC90B0811.toInt())
-        setStroke(dp(1), 0xFF352540.toInt())
+        setColor(Color.rgb(11, 9, 17))
+        setStroke(dp(1), Color.rgb(53, 44, 68))
     }
 
     private fun statusBackground() = GradientDrawable().apply {
-        cornerRadius = dp(18).toFloat()
-        setColor(0xB5140E1C.toInt())
-        setStroke(dp(1), 0xFF32243C.toInt())
+        cornerRadius = dp(16).toFloat()
+        setColor(Color.rgb(14, 12, 22))
+        setStroke(dp(1), CLASSIC_STROKE)
     }
 
     private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat()
-        setColor(if (focused) 0xFF47206E.toInt() else 0xFF17111F.toInt())
-        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB56CFF.toInt() else 0xFF4B365C.toInt())
+        cornerRadius = dp(15).toFloat()
+        setColor(if (focused) CLASSIC_FOCUS else CLASSIC_SURFACE)
+        setStroke(if (focused) dp(2) else dp(1), if (focused) CLASSIC_PURPLE_SOFT else CLASSIC_STROKE)
     }
 
-    private fun primaryButtonBackground(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(if (focused) 0xFF7A20FF.toInt() else 0xFF6520E8.toInt(), if (focused) 0xFFE948C4.toInt() else 0xFFA92AEF.toInt())
-    ).apply {
-        cornerRadius = dp(16).toFloat()
-        setStroke(if (focused) dp(3) else dp(2), if (focused) Color.WHITE else 0xFFDB77FF.toInt())
+    private fun primaryButtonBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = dp(15).toFloat()
+        setColor(if (focused) CLASSIC_FOCUS else Color.rgb(59, 30, 108))
+        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else CLASSIC_PURPLE_SOFT)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    companion object {
+        private val CLASSIC_SURFACE = Color.rgb(17, 16, 30)
+        private val CLASSIC_STROKE = Color.rgb(69, 55, 88)
+        private val CLASSIC_FOCUS = Color.rgb(72, 42, 120)
+        private val CLASSIC_PURPLE_SOFT = Color.rgb(188, 132, 255)
+        private val CLASSIC_MUTED = Color.rgb(188, 182, 205)
+    }
 }
