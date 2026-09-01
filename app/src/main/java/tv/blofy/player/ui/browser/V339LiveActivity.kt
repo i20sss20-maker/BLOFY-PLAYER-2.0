@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.OptIn
@@ -23,6 +24,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import tv.blofy.player.R
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
@@ -54,6 +56,7 @@ class V339LiveActivity : AppCompatActivity() {
     private lateinit var count: TextView
     private lateinit var channelName: TextView
     private lateinit var previewView: PlayerView
+    private lateinit var previewFallback: ImageView
     private var streamsJob: Job? = null
     private var previewJob: Job? = null
     private var previewSession: BlofyPlaybackSession? = null
@@ -98,7 +101,7 @@ class V339LiveActivity : AppCompatActivity() {
 
         val columns = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            // User-requested variation on v339: categories anchored on the right.
+            // v339 composition with the user-approved category rail anchored on the right.
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
 
@@ -136,6 +139,13 @@ class V339LiveActivity : AppCompatActivity() {
             setShutterBackgroundColor(Color.BLACK)
         }
         previewFrame.addView(previewView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        previewFallback = ImageView(this).apply {
+            setImageResource(R.drawable.blofy_logo)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(dp(74), dp(74), dp(74), dp(74))
+            visibility = View.VISIBLE
+        }
+        previewFrame.addView(previewFallback, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         previewPanel.addView(previewFrame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         previewPanel.addView(V339Ui.text(this, "يعرض الآن", 10f, V339Ui.PURPLE_LIGHT).apply {
             gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
@@ -274,7 +284,11 @@ class V339LiveActivity : AppCompatActivity() {
         }
         lastPreviewKey = stream.key
         channelName.text = stream.name
+        previewFallback.visibility = View.VISIBLE
         previewSession?.play(url)
+        previewView.postDelayed({
+            if (previewSession?.player?.isPlaying == true) previewFallback.visibility = View.GONE
+        }, 450L)
         refreshShortEpg(stream)
     }
 
@@ -320,6 +334,7 @@ class V339LiveActivity : AppCompatActivity() {
         previewSession?.release()
         previewSession = null
         lastPreviewKey = null
+        if (::previewFallback.isInitialized) previewFallback.visibility = View.VISIBLE
     }
 
     private fun allCategory() = CategoryEntity(
