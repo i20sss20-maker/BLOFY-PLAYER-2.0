@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Blofy" parent="android:style/Theme.Material.NoActionBar">
+    <style name="Theme.Blofy" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:windowBackground">@color/blofy_black</item>
         <item name="android:colorAccent">@color/blofy_purple</item>
+        <item name="colorPrimary">@color/blofy_purple</item>
+        <item name="colorPrimaryVariant">@color/blofy_purple</item>
+        <item name="colorSecondary">@color/blofy_purple_light</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowDisablePreview">true</item>
         <item name="android:windowContentTransitions">false</item>
