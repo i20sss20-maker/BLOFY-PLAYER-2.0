@@ -102,35 +102,48 @@ interface BlofyDao {
         deleteProvider(stagedProviderId)
     }
 
+    /*
+     * Promotion runs after download reaches 96%. The old correlated queries filtered
+     * providerId/kind/remoteId for every staged row and became extremely slow on large
+     * catalogs because those columns did not have a matching composite index. The
+     * canonical content key is the table primary key, so these scalar lookups hit the
+     * SQLite PK index directly and keep promotion close to linear time.
+     */
     @Query("""
         UPDATE categories
-        SET hidden = COALESCE((
-            SELECT old.hidden FROM categories AS old
-            WHERE old.providerId = :targetProviderId
-              AND old.kind = categories.kind
-              AND (old.remoteId = categories.remoteId OR old.remoteId = categories.remoteId || '.0')
-            LIMIT 1
-        ), categories.hidden)
+        SET hidden = COALESCE(
+            (SELECT old.hidden FROM categories AS old
+             WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId
+             LIMIT 1),
+            (SELECT old.hidden FROM categories AS old
+             WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId || '.0'
+             LIMIT 1),
+            categories.hidden
+        )
         WHERE providerId = :stagedProviderId
     """)
     suspend fun inheritStagedCategoryFlags(stagedProviderId: String, targetProviderId: String)
 
     @Query("""
         UPDATE streams
-        SET favorite = COALESCE((
-                SELECT old.favorite FROM streams AS old
-                WHERE old.providerId = :targetProviderId
-                  AND old.kind = streams.kind
-                  AND (old.remoteId = streams.remoteId OR old.remoteId = streams.remoteId || '.0')
-                LIMIT 1
-            ), streams.favorite),
-            locked = COALESCE((
-                SELECT old.locked FROM streams AS old
-                WHERE old.providerId = :targetProviderId
-                  AND old.kind = streams.kind
-                  AND (old.remoteId = streams.remoteId OR old.remoteId = streams.remoteId || '.0')
-                LIMIT 1
-            ), streams.locked)
+        SET favorite = COALESCE(
+                (SELECT old.favorite FROM streams AS old
+                 WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId
+                 LIMIT 1),
+                (SELECT old.favorite FROM streams AS old
+                 WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0'
+                 LIMIT 1),
+                streams.favorite
+            ),
+            locked = COALESCE(
+                (SELECT old.locked FROM streams AS old
+                 WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId
+                 LIMIT 1),
+                (SELECT old.locked FROM streams AS old
+                 WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0'
+                 LIMIT 1),
+                streams.locked
+            )
         WHERE providerId = :stagedProviderId
     """)
     suspend fun inheritStagedStreamFlags(stagedProviderId: String, targetProviderId: String)
