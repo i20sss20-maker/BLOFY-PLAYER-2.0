@@ -48,7 +48,7 @@ class LoginActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildUi())
-        if (isTv) addButton.requestFocus()
+        if (isTv) updateButton.requestFocus()
         lifecycleScope.launch { refreshIdentity() }
     }
 
@@ -66,13 +66,7 @@ class LoginActivity : AppCompatActivity() {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
-        }, LinearLayout.LayoutParams(dp(if (isTv) 150 else 128), dp(if (isTv) 92 else 76)).apply { bottomMargin = dp(8) })
-
-        root.addView(V339Ui.title(this, "BLOFY PLAYER", if (isTv) 29f else 25f).apply { gravity = Gravity.CENTER })
-        root.addView(V339Ui.text(this, "أضف القائمة من الموقع ثم اضغط تحديث", if (isTv) 15f else 13f, V339Ui.MUTED).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(4), 0, dp(14))
-        })
+        }, LinearLayout.LayoutParams(dp(if (isTv) 130 else 112), dp(if (isTv) 82 else 68)).apply { bottomMargin = dp(10) })
 
         val card = LinearLayout(this).apply {
             orientation = if (isTv) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
@@ -88,10 +82,6 @@ class LoginActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
         qrPanel.addView(qrView, LinearLayout.LayoutParams(dp(if (isTv) 230 else 190), dp(if (isTv) 230 else 190)))
-        qrPanel.addView(V339Ui.text(this, "امسح الرمز لفتح موقع BLOFY PLAYER", 13f, V339Ui.MUTED).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(9), 0, 0)
-        })
 
         val info = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -103,7 +93,7 @@ class LoginActivity : AppCompatActivity() {
         info.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { topMargin = dp(5); bottomMargin = dp(10) })
         info.addView(label("رمز الربط"))
         info.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply { topMargin = dp(5) })
-        info.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(10) })
+        info.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)).apply { topMargin = dp(8) })
 
         if (isTv) {
             card.addView(qrPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.88f))
@@ -112,7 +102,7 @@ class LoginActivity : AppCompatActivity() {
             card.addView(qrPanel)
             card.addView(info, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
-        root.addView(card, LinearLayout.LayoutParams(if (isTv) dp(900) else LinearLayout.LayoutParams.MATCH_PARENT, if (isTv) dp(385) else LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(card, LinearLayout.LayoutParams(if (isTv) dp(900) else LinearLayout.LayoutParams.MATCH_PARENT, if (isTv) dp(350) else LinearLayout.LayoutParams.WRAP_CONTENT))
 
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -120,13 +110,13 @@ class LoginActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(0, dp(16), 0, 0)
         }
+        updateButton = actionButton("تحديث", primary = true) { refreshFromPortal() }
         addButton = actionButton("إضافة قائمة التشغيل", primary = false) {
             startActivity(Intent(this, PlaylistActivity::class.java))
         }
-        updateButton = actionButton("تحديث", primary = true) { refreshFromPortal() }
-        actions.addView(updateButton, LinearLayout.LayoutParams(0, dp(66), 1f).apply { marginStart = dp(7); marginEnd = dp(7) })
-        actions.addView(addButton, LinearLayout.LayoutParams(0, dp(66), 1f).apply { marginStart = dp(7); marginEnd = dp(7) })
-        root.addView(actions, LinearLayout.LayoutParams(if (isTv) dp(760) else LinearLayout.LayoutParams.MATCH_PARENT, dp(84)))
+        actions.addView(updateButton, LinearLayout.LayoutParams(0, dp(64), 1f).apply { marginStart = dp(7); marginEnd = dp(7) })
+        actions.addView(addButton, LinearLayout.LayoutParams(0, dp(64), 1f).apply { marginStart = dp(7); marginEnd = dp(7) })
+        root.addView(actions, LinearLayout.LayoutParams(if (isTv) dp(760) else LinearLayout.LayoutParams.MATCH_PARENT, dp(82)))
         return root
     }
 
@@ -137,6 +127,7 @@ class LoginActivity : AppCompatActivity() {
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(V339Ui.TEXT)
             gravity = Gravity.CENTER_VERTICAL or Gravity.LEFT
+            textDirection = View.TEXT_DIRECTION_LTR
             setPadding(dp(18), 0, dp(18), 0)
             background = V339Ui.focusDrawable(this@LoginActivity, Color.argb(220, 16, 15, 28), V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
         }
@@ -147,6 +138,7 @@ class LoginActivity : AppCompatActivity() {
             letterSpacing = .16f
             setTextColor(V339Ui.TEXT)
             gravity = Gravity.CENTER
+            textDirection = View.TEXT_DIRECTION_LTR
             background = V339Ui.focusDrawable(this@LoginActivity, Color.argb(220, 16, 15, 28), V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
         }
         qrView = ImageView(this).apply {
@@ -155,7 +147,7 @@ class LoginActivity : AppCompatActivity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "رمز BLOFY"
         }
-        status = V339Ui.text(this, "جاهز", 13f, V339Ui.MUTED).apply { gravity = Gravity.CENTER }
+        status = V339Ui.text(this, "", 12f, V339Ui.MUTED).apply { gravity = Gravity.CENTER }
     }
 
     private fun refreshFromPortal() {
@@ -163,13 +155,13 @@ class LoginActivity : AppCompatActivity() {
         updateJob = lifecycleScope.launch {
             updateButton.isEnabled = false
             updateButton.text = "جاري التحديث..."
-            status.text = "جاري جلب بيانات الموقع"
+            status.text = "جاري جلب البيانات"
             try {
                 val dao = BlofyDatabase.get(applicationContext).dao()
                 val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
                 if (endpoint.isBlank()) {
                     val local = dao.providers().first().firstOrNull()
-                    if (local == null) status.text = "أضف قائمة تشغيل أولاً"
+                    if (local == null) status.text = "لا توجد قائمة تشغيل"
                     else if (hasCachedCatalog(dao, local.id)) openHome() else openCatalogLoading(local.id)
                     return@launch
                 }
@@ -189,7 +181,7 @@ class LoginActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) { dao.upsertProvider(provider.copy(enabled = true)) }
                 val changed = provider.id in sync.changedProviderIds
                 if (changed || !hasCachedCatalog(dao, provider.id)) {
-                    status.text = "تم جلب القائمة • جاري تحميل المحتوى"
+                    status.text = "جاري تحميل المحتوى"
                     openCatalogLoading(provider.id)
                 } else {
                     withContext(Dispatchers.IO) { dao.saveAndActivateProvider(provider.copy(enabled = true)) }
@@ -199,7 +191,7 @@ class LoginActivity : AppCompatActivity() {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                status.text = "تعذر التحديث من الموقع • حاول مرة أخرى"
+                status.text = "تعذر التحديث"
             } finally {
                 updateButton.isEnabled = true
                 updateButton.text = "تحديث"
@@ -218,7 +210,7 @@ class LoginActivity : AppCompatActivity() {
             ?: "$PORTAL_FALLBACK/#deviceId=${identity.deviceId}&code=${identity.activationCode}"
         qrView.setImageBitmap(createQr(portalUrl))
         val provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
-        status.text = if (provider == null) "أضف القائمة من الموقع ثم اضغط تحديث" else "القائمة محفوظة • اضغط تحديث لجلب أي تغيير"
+        status.text = if (provider == null) "" else "القائمة محفوظة"
     }
 
     private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) {
@@ -230,11 +222,10 @@ class LoginActivity : AppCompatActivity() {
         startActivity(Intent(this, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, providerId))
     }
 
-    private fun openHome() {
-        startActivity(Intent(this, HomeActivity::class.java))
-    }
+    private fun openHome() { startActivity(Intent(this, HomeActivity::class.java)) }
 
     private fun actionButton(label: String, primary: Boolean, action: () -> Unit) = V339Ui.button(this, label, primary).apply {
+        textSize = 16f
         isFocusable = isTv
         isFocusableInTouchMode = isTv
         setOnClickListener { action() }
