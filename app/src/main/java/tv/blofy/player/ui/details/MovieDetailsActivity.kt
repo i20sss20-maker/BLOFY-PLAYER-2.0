@@ -13,34 +13,29 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
-import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.core.security.ParentalPinManager
-import tv.blofy.player.core.theme.ThemeManager
-import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.ui.V339Ui
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.player.PlayerActivity
 
 class MovieDetailsActivity : AppCompatActivity() {
     private lateinit var favoriteButton: Button
     private lateinit var lockButton: Button
-    private lateinit var theme: ThemeProfile
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        theme = ThemeManager.current(this)
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         val contentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
         if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }
 
-        val root = FrameLayout(this).apply { background = AppCompatResources.getDrawable(this@MovieDetailsActivity, R.drawable.blofy_home_background) }
+        val root = FrameLayout(this).apply { background = V339Ui.screenGradient() }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
@@ -58,53 +53,33 @@ class MovieDetailsActivity : AppCompatActivity() {
             val url = ContentUrlResolver.movie(provider, stream)
 
             val posterCard = LinearLayout(this@MovieDetailsActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(10), dp(10), dp(10), dp(10))
-                background = cardBackground()
+                orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+                setPadding(dp(10), dp(10), dp(10), dp(10)); background = cardBackground()
             }
             val poster = ImageView(this@MovieDetailsActivity).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(theme.surface)
+                scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(V339Ui.PANEL)
             }
             posterCard.addView(poster, LinearLayout.LayoutParams(dp(285), dp(425)))
             ArtworkLoader.load(poster, stream.icon)
             body.addView(posterCard, LinearLayout.LayoutParams(dp(310), dp(450)).apply { marginEnd = dp(34) })
 
             val info = LinearLayout(this@MovieDetailsActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                orientation = LinearLayout.VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL or Gravity.END
             }
             info.addView(TextView(this@MovieDetailsActivity).apply {
-                text = stream.name
-                textSize = 38f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                gravity = Gravity.END
+                text = stream.name; textSize = 38f; typeface = Typeface.DEFAULT_BOLD; setTextColor(V339Ui.TEXT); gravity = Gravity.END
             })
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = buildList {
-                    add("فيلم")
-                    stream.year?.takeIf { it.isNotBlank() }?.let(::add)
-                    stream.genre?.takeIf { it.isNotBlank() }?.let(::add)
-                    stream.duration?.takeIf { it.isNotBlank() }?.let(::add)
-                    stream.rating?.takeIf { it.isNotBlank() }?.let { add("★ $it") }
-                    stream.extension?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
+                    add("فيلم"); stream.year?.takeIf { it.isNotBlank() }?.let(::add); stream.genre?.takeIf { it.isNotBlank() }?.let(::add)
+                    stream.duration?.takeIf { it.isNotBlank() }?.let(::add); stream.rating?.takeIf { it.isNotBlank() }?.let { add("★ $it") }; stream.extension?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
                 }.joinToString("  •  ")
-                textSize = 16f
-                setTextColor(blend(Color.WHITE, theme.accent, 0.34f))
-                gravity = Gravity.END
-                setPadding(0, dp(8), 0, dp(18))
+                textSize = 16f; setTextColor(V339Ui.PURPLE_LIGHT); gravity = Gravity.END; setPadding(0, dp(8), 0, dp(18))
             })
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.plot?.takeIf { it.isNotBlank() } ?: "استمتع بالمشاهدة على BLOFY PLAYER"
-                textSize = 17f
-                maxLines = 6
-                setTextColor(blend(Color.WHITE, theme.background, 0.14f))
-                gravity = Gravity.END
-                setLineSpacing(0f, 1.18f)
-                setPadding(0, 0, 0, dp(24))
+                textSize = 17f; maxLines = 6; setTextColor(V339Ui.MUTED); gravity = Gravity.END; setLineSpacing(0f, 1.18f); setPadding(0, 0, 0, dp(24))
             })
 
             val resumeMs = watch?.positionMs ?: 0L
@@ -112,49 +87,30 @@ class MovieDetailsActivity : AppCompatActivity() {
             if (resumeMs > 30_000L && durationMs > 0L) {
                 val percent = ((resumeMs * 100L) / durationMs).coerceIn(1, 99)
                 info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = "متابعة المشاهدة  •  $percent%"
-                    textSize = 15f; setTextColor(blend(Color.WHITE, theme.accent, 0.28f)); gravity = Gravity.END
-                    setPadding(0, 0, 0, dp(12))
+                    text = "متابعة المشاهدة  •  $percent%"; textSize = 15f; setTextColor(V339Ui.PURPLE_LIGHT); gravity = Gravity.END; setPadding(0, 0, 0, dp(12))
                 })
             }
 
-            val row = LinearLayout(this@MovieDetailsActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
-                gravity = Gravity.END
-            }
+            val row = LinearLayout(this@MovieDetailsActivity).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.END }
             val play = actionButton(if (resumeMs > 30_000L) "▶ استئناف" else "▶ شاهد الآن") { openPlayer(provider, stream, url, resumeMs) }
             row.addView(play, LinearLayout.LayoutParams(dp(195), dp(74)).apply { marginStart = dp(10) })
             if (resumeMs > 30_000L) row.addView(actionButton("من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
 
             favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
-                lifecycleScope.launch {
-                    val current = dao.stream(contentKey) ?: return@launch
-                    dao.setFavorite(contentKey, !current.favorite)
-                    favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة"
-                }
+                lifecycleScope.launch { val current = dao.stream(contentKey) ?: return@launch; dao.setFavorite(contentKey, !current.favorite); favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة" }
             }
             row.addView(favoriteButton, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
 
             lockButton = actionButton(if (stream.locked) "🔒 مقفل" else "🔓 قفل") {
                 lifecycleScope.launch {
                     val current = dao.stream(contentKey) ?: return@launch
-                    if (current.locked) {
-                        ParentalGate.requirePin(this@MovieDetailsActivity) {
-                            lifecycleScope.launch { dao.setLocked(contentKey, false); lockButton.text = "🔓 قفل" }
-                        }
-                    } else if (!ParentalPinManager.hasPin(this@MovieDetailsActivity)) {
-                        ParentalGate.requirePin(this@MovieDetailsActivity) {
-                            lifecycleScope.launch { dao.setLocked(contentKey, true); lockButton.text = "🔒 مقفل" }
-                        }
-                    } else {
-                        dao.setLocked(contentKey, true); lockButton.text = "🔒 مقفل"
-                    }
+                    if (current.locked) ParentalGate.requirePin(this@MovieDetailsActivity) { lifecycleScope.launch { dao.setLocked(contentKey, false); lockButton.text = "🔓 قفل" } }
+                    else if (!ParentalPinManager.hasPin(this@MovieDetailsActivity)) ParentalGate.requirePin(this@MovieDetailsActivity) { lifecycleScope.launch { dao.setLocked(contentKey, true); lockButton.text = "🔒 مقفل" } }
+                    else { dao.setLocked(contentKey, true); lockButton.text = "🔒 مقفل" }
                 }
             }
             row.addView(lockButton, LinearLayout.LayoutParams(dp(150), dp(74)).apply { marginStart = dp(10) })
             info.addView(row)
-
             body.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             play.requestFocus()
         }
@@ -162,49 +118,21 @@ class MovieDetailsActivity : AppCompatActivity() {
 
     private fun openPlayer(provider: ProviderEntity, stream: StreamEntity, url: String, resumeMs: Long) {
         startActivity(Intent(this, PlayerActivity::class.java).apply {
-            putExtra(PlayerActivity.EXTRA_URL, url)
-            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
-            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
-            putExtra(PlayerActivity.EXTRA_KIND, "movie")
-            putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
-            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
-            putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
-            putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream))
-            putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
-            putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
+            putExtra(PlayerActivity.EXTRA_URL, url); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key); putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(PlayerActivity.EXTRA_KIND, "movie"); putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType); putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine); putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream)); putExtra(PlayerActivity.EXTRA_TITLE, stream.name); putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
         })
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = buttonBackground(focused)
-            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(theme.motionMs).start()
-        }
+        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(V339Ui.TEXT); background = buttonBackground(false)
+        setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused); view.animate().scaleX(if (focused) 1.008f else 1f).scaleY(if (focused) 1.008f else 1f).setDuration(90L).start() }
         setOnClickListener { action() }
     }
 
-    private fun cardBackground() = GradientDrawable().apply {
-        cornerRadius = dp(20).toFloat()
-        setColor(theme.surface)
-        setStroke(dp(1), blend(theme.surface, Color.WHITE, 0.14f))
-    }
-
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat()
-        setColor(if (focused) theme.accent else theme.surface)
-        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else blend(theme.surface, Color.WHITE, 0.14f))
-    }
-
-    private fun blend(a: Int, b: Int, ratio: Float): Int {
-        val r = (Color.red(a) * (1f - ratio) + Color.red(b) * ratio).toInt()
-        val g = (Color.green(a) * (1f - ratio) + Color.green(b) * ratio).toInt()
-        val bl = (Color.blue(a) * (1f - ratio) + Color.blue(b) * ratio).toInt()
-        return Color.rgb(r, g, bl)
-    }
-
+    private fun cardBackground() = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(V339Ui.PANEL); setStroke(dp(1), V339Ui.STROKE) }
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(if (focused) V339Ui.PANEL_SOFT else V339Ui.PANEL); setStroke(if (focused) dp(2) else dp(1), if (focused) V339Ui.PURPLE_LIGHT else V339Ui.STROKE) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-
     companion object { const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_CONTENT_KEY = "content_key" }
 }
