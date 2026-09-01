@@ -102,52 +102,86 @@ interface BlofyDao {
         deleteProvider(stagedProviderId)
     }
 
+    @Query("""
+        UPDATE categories AS staged
+        SET hidden = COALESCE((
+            SELECT old.hidden FROM categories AS old
+            WHERE old.providerId = :targetProviderId
+              AND old.kind = staged.kind
+              AND (old.remoteId = staged.remoteId OR old.remoteId = staged.remoteId || '.0')
+            LIMIT 1
+        ), staged.hidden)
+        WHERE staged.providerId = :stagedProviderId
+    """)
+    suspend fun inheritStagedCategoryFlags(stagedProviderId: String, targetProviderId: String)
+
+    @Query("""
+        UPDATE streams AS staged
+        SET favorite = COALESCE((
+                SELECT old.favorite FROM streams AS old
+                WHERE old.providerId = :targetProviderId
+                  AND old.kind = staged.kind
+                  AND (old.remoteId = staged.remoteId OR old.remoteId = staged.remoteId || '.0')
+                LIMIT 1
+            ), staged.favorite),
+            locked = COALESCE((
+                SELECT old.locked FROM streams AS old
+                WHERE old.providerId = :targetProviderId
+                  AND old.kind = staged.kind
+                  AND (old.remoteId = staged.remoteId OR old.remoteId = staged.remoteId || '.0')
+                LIMIT 1
+            ), staged.locked)
+        WHERE staged.providerId = :stagedProviderId
+    """)
+    suspend fun inheritStagedStreamFlags(stagedProviderId: String, targetProviderId: String)
+
+    @Query("""
+        UPDATE categories
+        SET providerId = :targetProviderId,
+            `key` = :targetProviderId || ':' || kind || ':' || remoteId
+        WHERE providerId = :stagedProviderId
+    """)
+    suspend fun promoteStagedCategoriesInPlace(stagedProviderId: String, targetProviderId: String)
+
+    @Query("""
+        UPDATE streams
+        SET providerId = :targetProviderId,
+            `key` = :targetProviderId || ':' || kind || ':' || remoteId
+        WHERE providerId = :stagedProviderId
+    """)
+    suspend fun promoteStagedStreamsInPlace(stagedProviderId: String, targetProviderId: String)
+
+    @Query("""
+        UPDATE episodes
+        SET providerId = :targetProviderId,
+            `key` = :targetProviderId || ':episode:' || remoteId
+        WHERE providerId = :stagedProviderId
+    """)
+    suspend fun promoteStagedEpisodesInPlace(stagedProviderId: String, targetProviderId: String)
+
     @Transaction
     suspend fun promoteStagedCatalog(stagedProviderId: String, targetProvider: ProviderEntity) {
-        val oldCategories = allCategoriesForProvider(targetProvider.id)
-            .associateBy { "${it.kind}:${legacyCatalogId(it.remoteId)}" }
-        val oldStreams = allStreamsForProvider(targetProvider.id)
-            .associateBy { "${it.kind}:${legacyCatalogId(it.remoteId)}" }
-        val stagedCategories = allCategoriesForProvider(stagedProviderId)
-        val stagedStreams = allStreamsForProvider(stagedProviderId)
-        val stagedEpisodes = allEpisodesForProvider(stagedProviderId)
+        // Preserve user flags while the old catalog is still present. These run entirely in
+        // SQLite and avoid materializing tens of thousands of staged rows in Kotlin memory.
+        inheritStagedCategoryFlags(stagedProviderId, targetProvider.id)
+        inheritStagedStreamFlags(stagedProviderId, targetProvider.id)
 
         clearProviderCategories(targetProvider.id)
         clearProviderStreams(targetProvider.id)
         clearProviderEpisodes(targetProvider.id)
         clearProviderEpg(targetProvider.id)
 
-        val promotedCategories = stagedCategories.map { category ->
-            val old = oldCategories["${category.kind}:${legacyCatalogId(category.remoteId)}"]
-            category.copy(
-                key = "${targetProvider.id}:${category.kind}:${category.remoteId}",
-                providerId = targetProvider.id,
-                hidden = old?.hidden ?: category.hidden
-            )
-        }
-        val promotedStreams = stagedStreams.map { stream ->
-            val old = oldStreams["${stream.kind}:${legacyCatalogId(stream.remoteId)}"]
-            stream.copy(
-                key = "${targetProvider.id}:${stream.kind}:${stream.remoteId}",
-                providerId = targetProvider.id,
-                favorite = old?.favorite ?: stream.favorite,
-                locked = old?.locked ?: stream.locked
-            )
-        }
-        val promotedEpisodes = stagedEpisodes.map { episode ->
-            episode.copy(
-                key = "${targetProvider.id}:episode:${episode.remoteId}",
-                providerId = targetProvider.id
-            )
-        }
+        // Promote the already-inserted staging rows in place instead of reading/copying/reinserting
+        // the entire catalog. This keeps the 96% save phase short even for very large providers.
+        promoteStagedCategoriesInPlace(stagedProviderId, targetProvider.id)
+        promoteStagedStreamsInPlace(stagedProviderId, targetProvider.id)
+        promoteStagedEpisodesInPlace(stagedProviderId, targetProvider.id)
+        clearProviderEpg(stagedProviderId)
 
-        if (promotedCategories.isNotEmpty()) upsertCategories(promotedCategories)
-        promotedStreams.chunked(CATALOG_INSERT_BATCH_SIZE).forEach { upsertStreams(it) }
-        promotedEpisodes.chunked(CATALOG_INSERT_BATCH_SIZE).forEach { upsertEpisodes(it) }
         upsertProvider(targetProvider.copy(enabled = true))
         disableAllProviders()
         activateProvider(targetProvider.id, targetProvider.updatedAt)
-        discardStagedCatalog(stagedProviderId)
+        deleteProvider(stagedProviderId)
     }
 
     @Transaction
@@ -190,9 +224,3 @@ interface BlofyDao {
 }
 
 private const val CATALOG_INSERT_BATCH_SIZE = 1000
-private val LEGACY_DECIMAL_CATALOG_ID = Regex("[+-]?\\d+\\.0+")
-
-private fun legacyCatalogId(value: String): String {
-    val trimmed = value.trim()
-    return if (LEGACY_DECIMAL_CATALOG_ID.matches(trimmed)) trimmed.substringBefore('.') else trimmed
-}
