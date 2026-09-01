@@ -275,11 +275,22 @@ class EpisodesActivity : AppCompatActivity() {
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused); view.animate().scaleX(if (focused) 1.03f else 1f).scaleY(if (focused) 1.03f else 1f).setDuration(90).start() }
+        setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused); view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(90).start() }
         setOnClickListener { action() }
     }
-    private fun panelBackground() = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xD9141020.toInt()); setStroke(dp(1), 0x554A355F) }
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (focused) PURPLE else 0xC51B1528.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x554A355F) }
+
+    private fun panelBackground() = GradientDrawable().apply {
+        cornerRadius = dp(18).toFloat()
+        setColor(CLASSIC_SURFACE)
+        setStroke(dp(1), CLASSIC_STROKE)
+    }
+
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = dp(15).toFloat()
+        setColor(if (focused) CLASSIC_FOCUS else CLASSIC_SURFACE)
+        setStroke(if (focused) dp(2) else dp(1), if (focused) CLASSIC_FOCUS_STROKE else CLASSIC_STROKE)
+    }
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun seasonMemoryKey() = "episodes:$providerId:$seriesId:season"
     private fun episodeMemoryKey() = "episodes:$providerId:$seriesId:episode"
@@ -288,6 +299,10 @@ class EpisodesActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_SERIES_ID = "series_id"; const val EXTRA_SERIES_NAME = "series_name"
-        private val PURPLE = Color.rgb(126, 44, 255); private val SOFT = Color.rgb(195, 175, 220)
+        private val SOFT = Color.rgb(188, 182, 205)
+        private val CLASSIC_SURFACE = Color.rgb(17, 16, 30)
+        private val CLASSIC_STROKE = Color.rgb(69, 55, 88)
+        private val CLASSIC_FOCUS = Color.rgb(72, 42, 120)
+        private val CLASSIC_FOCUS_STROKE = Color.rgb(188, 132, 255)
     }
 }
