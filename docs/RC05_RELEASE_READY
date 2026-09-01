@@ -1,13 +1,13 @@
 BLOFY PLAYER 2.0 rc05 release gate
 
-Includes:
-- activation identity reinstall fix
-- portal/app activation consistency fix
-- restored original BLOFY logo on activation screen
-- restored approved BLOFY playlist entry styling
-- restored original BLOFY launcher app icon
-- approved catalog loading and activation UI updates now present on main
-- Media3 1.6.1 FFmpeg native decoder verification passed for all Android ABIs
-- Android CI verification passed on the current main baseline
-- signed RC05 rebuild requested from current main after commit 7951275b24f93861ae0e24130aedf3d7368e0f5f
-- existing player engines and playback stack unchanged
+Final signed candidate:
+- exact v339 visual experience restored from Android CI Run #339
+- v339 home page, theme, colors, backgrounds and banner restored
+- v339 posters, artwork loading, focus animations and remote/D-pad behavior restored
+- v339 barcode/activation, playlist entry, settings and catalog loading screens restored
+- v339 movie details, series details, episodes, resume UI and player HUD restored
+- parental lock/PIN controls removed and legacy lock state cleared
+- current Media3 1.6.1 + FFmpeg playback engine retained
+- current transport, URL resolution, fallback, server compatibility and data layer retained
+- Android CI and native FFmpeg verification passed before merge
+- production signed RC05 rebuild requested from merge commit 122313d94f4f834cd08c88871a74416284e762f6
