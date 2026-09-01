@@ -28,7 +28,10 @@ jobs:
           "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
           test -d "$ANDROID_HOME/platforms/android-36"
       - name: Test lint and assemble
-        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
+        run: >-
+          gradle --no-daemon
+          -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app
+          testDebugUnitTest lintDebug assembleDebug
       - name: Stamp standard build
         shell: bash
         run: |
@@ -40,6 +43,7 @@ jobs:
             echo "commit=$GITHUB_SHA"
             echo "run=$GITHUB_RUN_NUMBER"
             echo "ffmpeg=false"
+            echo "activation=https://blofy-player-2-0.vercel.app"
           } > app/build/outputs/apk/debug/build-info.txt
           sha256sum "$APK" | tee app/build/outputs/apk/debug/app-debug.apk.sha256
       - uses: actions/upload-artifact@v4
