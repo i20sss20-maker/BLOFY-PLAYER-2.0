@@ -26,14 +26,10 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
-import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationPortalUrl
 import tv.blofy.player.core.identity.ActivationRemoteClient
 import tv.blofy.player.core.identity.PortalPlaylistClient
-import tv.blofy.player.core.provider.RemoteProviderProfileClient
-import tv.blofy.player.core.theme.ThemeManager
-import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
@@ -41,278 +37,208 @@ import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
 
 class LoginActivity : AppCompatActivity() {
-    private lateinit var status: TextView
-    private lateinit var theme: ThemeProfile
-    private lateinit var deviceKind: DeviceClass.Kind
     private lateinit var deviceView: TextView
     private lateinit var codeView: TextView
     private lateinit var qrView: ImageView
-    private lateinit var addPlaylist: Button
-    private lateinit var connectButton: Button
-    private lateinit var refreshCodeButton: Button
-    private var connectJob: Job? = null
+    private lateinit var status: TextView
+    private lateinit var addButton: Button
+    private lateinit var updateButton: Button
+    private var updateJob: Job? = null
+    private val isTv by lazy { DeviceClass.detect(this) == DeviceClass.Kind.TV }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        theme = ThemeManager.current(this)
-        deviceKind = DeviceClass.detect(this)
-        setContentView(if (deviceKind == DeviceClass.Kind.TV) buildApprovedTvLogin() else buildPhoneLogin())
-        if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
-        lifecycleScope.launch { refreshIdentityAndProvider() }
+        setContentView(buildUi())
+        if (isTv) addButton.requestFocus()
+        lifecycleScope.launch { refreshIdentity() }
     }
 
-    private fun buildApprovedTvLogin(): LinearLayout {
-        createIdentityViews(false)
-
+    private fun buildUi(): LinearLayout {
+        createIdentityViews()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
+            gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(72), dp(22), dp(72), dp(22))
+            setPadding(dp(if (isTv) 72 else 24), dp(if (isTv) 26 else 24), dp(if (isTv) 72 else 24), dp(if (isTv) 26 else 24))
             background = AppCompatResources.getDrawable(this@LoginActivity, R.drawable.blofy_home_background)
         }
 
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-        }
-        header.addView(ImageView(this).apply {
+        root.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
-        }, LinearLayout.LayoutParams(dp(132), dp(92)))
+        }, LinearLayout.LayoutParams(dp(if (isTv) 150 else 128), dp(if (isTv) 92 else 76)).apply { bottomMargin = dp(8) })
 
-        val headerText = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-        }
-        headerText.addView(TextView(this).apply {
-            text = "فعّل جهازك بسهولة"
-            textSize = 38f
+        root.addView(TextView(this).apply {
+            text = "BLOFY PLAYER"
+            textSize = if (isTv) 29f else 25f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.CENTER
         })
-        headerText.addView(TextView(this).apply {
-            text = "امسح الرمز أو استخدم رقم الجهاز لإضافة قائمة التشغيل"
-            textSize = 17f
-            setTextColor(CLASSIC_MUTED)
-            gravity = Gravity.RIGHT
-            setPadding(0, dp(4), 0, 0)
+        root.addView(TextView(this).apply {
+            text = "أضف القائمة من الموقع ثم اضغط تحديث"
+            textSize = if (isTv) 15f else 13f
+            setTextColor(MUTED)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, dp(14))
         })
-        header.addView(headerText, LinearLayout.LayoutParams(0, dp(104), 1f).apply { marginEnd = dp(16) })
-        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(106)))
 
         val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = if (isTv) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = if (isTv) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(22), dp(20), dp(22), dp(20))
             background = panelBackground()
-        }
-
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
-            setPadding(dp(26), dp(22), dp(26), dp(12))
         }
 
         val qrPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(10), 0, dp(20), 0)
         }
+        qrPanel.addView(qrView, LinearLayout.LayoutParams(dp(if (isTv) 230 else 190), dp(if (isTv) 230 else 190)))
         qrPanel.addView(TextView(this).apply {
-            text = "امسح رمز QR"
-            textSize = 22f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(10))
-        })
-        qrPanel.addView(qrView, LinearLayout.LayoutParams(dp(254), dp(254)))
-        qrPanel.addView(TextView(this).apply {
-            text = "افتح موقع BLOFY PLAYER من جوالك ثم امسح الرمز"
+            text = "امسح الرمز لفتح موقع BLOFY PLAYER"
             textSize = 13f
-            setTextColor(CLASSIC_MUTED)
+            setTextColor(MUTED)
             gravity = Gravity.CENTER
-            setPadding(0, dp(10), 0, dp(2))
-        })
-        qrPanel.addView(TextView(this).apply {
-            text = "blofy-player-2-0.vercel.app"
-            textSize = 13f
-            setTextColor(CLASSIC_PURPLE_SOFT)
-            gravity = Gravity.CENTER
-        })
-        content.addView(qrPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.95f))
-
-        val divider = View(this).apply { setBackgroundColor(CLASSIC_STROKE) }
-        content.addView(divider, LinearLayout.LayoutParams(dp(1), LinearLayout.LayoutParams.MATCH_PARENT).apply {
-            marginStart = dp(14); marginEnd = dp(20)
+            setPadding(0, dp(9), 0, 0)
         })
 
-        val infoPanel = LinearLayout(this).apply {
+        val info = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(24), 0, dp(4), 0)
+            setPadding(if (isTv) dp(30) else 0, if (isTv) 0 else dp(18), 0, 0)
         }
-        infoPanel.addView(TextView(this).apply {
-            text = "بيانات الجهاز"
-            textSize = 23f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
-            setPadding(0, 0, 0, dp(12))
-        })
+        info.addView(label("رقم الجهاز"))
+        info.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { topMargin = dp(5); bottomMargin = dp(10) })
+        info.addView(label("رمز الربط"))
+        info.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply { topMargin = dp(5) })
+        info.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(10) })
 
-        infoPanel.addView(label("رقم الجهاز"))
-        deviceView.apply {
-            textSize = 23f
-            gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
-            setPadding(dp(24), 0, dp(24), 0)
-            background = fieldBackground()
+        if (isTv) {
+            card.addView(qrPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.88f))
+            card.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.12f))
+        } else {
+            card.addView(qrPanel)
+            card.addView(info, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
-        infoPanel.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(66)).apply { topMargin = dp(6) })
-
-        infoPanel.addView(label("رمز الربط"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)).apply { topMargin = dp(12) })
-        codeView.apply {
-            textSize = 44f
-            letterSpacing = 0.18f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = fieldBackground()
-        }
-        infoPanel.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(84)).apply { topMargin = dp(4) })
-
-        status.apply {
-            textSize = 15f
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            setTextColor(Color.rgb(231, 226, 239))
-            setPadding(dp(20), 0, dp(20), 0)
-            background = statusBackground()
-        }
-        infoPanel.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(12) })
-        content.addView(infoPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.25f))
-
-        card.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-
-        val separator = View(this).apply { setBackgroundColor(CLASSIC_STROKE) }
-        card.addView(separator, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
+        root.addView(card, LinearLayout.LayoutParams(if (isTv) dp(900) else LinearLayout.LayoutParams.MATCH_PARENT, if (isTv) dp(385) else LinearLayout.LayoutParams.WRAP_CONTENT))
 
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(18), dp(12), dp(18), dp(12))
+            setPadding(0, dp(16), 0, 0)
         }
-        addPlaylist = primaryActionButton("إضافة قائمة التشغيل") { startActivity(Intent(this, PlaylistActivity::class.java)) }
-        connectButton = actionButton("اتصال") { startOrCancelConnect() }
-        refreshCodeButton = actionButton("تحديث الرمز") { lifecycleScope.launch { refreshIdentityAndProvider() } }
-        actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(66), 1.35f).apply { marginStart = dp(8); marginEnd = dp(8) })
-        actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(66), 0.9f).apply { marginStart = dp(8); marginEnd = dp(8) })
-        actions.addView(refreshCodeButton, LinearLayout.LayoutParams(0, dp(66), 0.9f).apply { marginStart = dp(8); marginEnd = dp(8) })
-        card.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(92)))
-
-        root.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(8) })
-
-        root.addView(TextView(this).apply {
-            text = "♢  بياناتك محفوظة بشكل آمن ومشفّر"
-            textSize = 13f
-            setTextColor(Color.rgb(151, 139, 165))
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)).apply { topMargin = dp(6) })
+        addButton = actionButton("إضافة قائمة التشغيل", primary = false) {
+            startActivity(Intent(this, PlaylistActivity::class.java))
+        }
+        updateButton = actionButton("تحديث", primary = true) { refreshFromPortal() }
+        actions.addView(updateButton, LinearLayout.LayoutParams(0, dp(66), 1f).apply { marginStart = dp(7); marginEnd = dp(7) })
+        actions.addView(addButton, LinearLayout.LayoutParams(0, dp(66), 1f).apply { marginStart = dp(7); marginEnd = dp(7) })
+        root.addView(actions, LinearLayout.LayoutParams(if (isTv) dp(760) else LinearLayout.LayoutParams.MATCH_PARENT, dp(84)))
         return root
     }
 
-    private fun buildPhoneLogin(): LinearLayout {
-        createIdentityViews(true)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            setPadding(dp(24), dp(24), dp(24), dp(24)); setBackgroundColor(theme.background)
-        }
-        root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(150), dp(82)))
-        root.addView(title("BLOFY PLAYER", 29f)); root.addView(subtitle("فعّل جهازك ثم أضف قائمة التشغيل"))
-        root.addView(deviceView); root.addView(codeView); root.addView(qrView, LinearLayout.LayoutParams(dp(180), dp(180))); root.addView(status)
-        addPlaylist = actionButton("إضافة قائمة التشغيل") { startActivity(Intent(this, PlaylistActivity::class.java)) }
-        connectButton = actionButton("اتصال") { startOrCancelConnect() }
-        refreshCodeButton = actionButton("تحديث الرمز") { lifecycleScope.launch { refreshIdentityAndProvider() } }
-        root.addView(addPlaylist, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)))
-        root.addView(connectButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)).apply { topMargin = dp(10) })
-        return root
-    }
-
-    private fun createIdentityViews(phone: Boolean) {
+    private fun createIdentityViews() {
         deviceView = TextView(this).apply {
-            text = "جاري إنشاء هوية الجهاز..."; textSize = if (phone) 17f else 21f; typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE); gravity = if (phone) Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            text = "..."
+            textSize = if (isTv) 20f else 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER_VERTICAL or Gravity.LEFT
+            setPadding(dp(18), 0, dp(18), 0)
+            background = fieldBackground()
         }
         codeView = TextView(this).apply {
-            textSize = if (phone) 25f else 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(CLASSIC_PURPLE_SOFT)
-            gravity = if (phone) Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            text = "------"
+            textSize = if (isTv) 36f else 28f
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = .16f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = fieldBackground()
         }
         qrView = ImageView(this).apply {
-            contentDescription = "رمز تفعيل BLOFY"
             setBackgroundColor(Color.WHITE)
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            contentDescription = "رمز BLOFY"
         }
-        status = TextView(this).apply { textSize = 14f; setTextColor(CLASSIC_MUTED); gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(8)) }
-    }
-
-    private fun startOrCancelConnect() {
-        if (connectJob?.isActive == true) { connectJob?.cancel(); status.text = "تم إلغاء الاتصال"; return }
-        connectJob = lifecycleScope.launch {
-            connectButton.text = "إلغاء"
-            try { connectFlow() } catch (_: CancellationException) { }
-            finally { connectButton.text = "اتصال"; connectJob = null }
+        status = TextView(this).apply {
+            text = "جاهز"
+            textSize = 13f
+            setTextColor(MUTED)
+            gravity = Gravity.CENTER
         }
     }
 
-    private suspend fun connectFlow() {
-        val dao = BlofyDatabase.get(applicationContext).dao()
-        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
-        if (endpoint.isBlank()) {
-            val localProvider = dao.providers().first().firstOrNull()
-            if (localProvider == null) { status.text = "أضف قائمة تشغيل أولاً"; return }
-            if (hasCachedCatalog(dao, localProvider.id)) openHome() else openCatalogLoading(localProvider.id)
-            return
-        }
+    private fun refreshFromPortal() {
+        if (updateJob?.isActive == true) return
+        updateJob = lifecycleScope.launch {
+            updateButton.isEnabled = false
+            updateButton.text = "جاري التحديث..."
+            status.text = "جاري جلب بيانات الموقع"
+            try {
+                val dao = BlofyDatabase.get(applicationContext).dao()
+                val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+                if (endpoint.isBlank()) {
+                    val local = dao.providers().first().firstOrNull()
+                    if (local == null) status.text = "أضف قائمة تشغيل أولاً"
+                    else if (hasCachedCatalog(dao, local.id)) openHome() else openCatalogLoading(local.id)
+                    return@launch
+                }
 
-        status.text = "جاري التحقق من تفعيل الجهاز..."
-        val manager = ActivationManager(applicationContext, dao)
-        val result = runSuspendCatching { withContext(Dispatchers.IO) { manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME) } }
-        if (result.isSuccess) {
-            val currentIdentity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
-            renderIdentity(currentIdentity.deviceId, currentIdentity.activationCode)
-        }
-        result.onSuccess { remote ->
-            if (!remote.canUse()) { status.text = activationLabel(remote); return@onSuccess }
-            val portalSync = runSuspendCatching { PortalPlaylistClient.sync(applicationContext, endpoint, dao) }.getOrNull()
-            val activeProvider = portalSync?.activeProvider ?: dao.providers().first().firstOrNull()
-            if (activeProvider == null) { status.text = "في انتظار إضافة قائمة"; addPlaylist.requestFocus(); return@onSuccess }
+                val manager = ActivationManager(applicationContext, dao)
+                runCatching {
+                    withContext(Dispatchers.IO) { manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME) }
+                }
 
-            withContext(Dispatchers.IO) { dao.upsertProvider(activeProvider) }
-            val cachedBeforeSync = hasCachedCatalog(dao, activeProvider.id)
-            val providerChanged = portalSync?.changedProviderIds?.contains(activeProvider.id) == true
-            if (providerChanged || !cachedBeforeSync) {
-                status.text = "تم التحقق • جاري تجهيز الباقة"
-                openCatalogLoading(activeProvider.id)
-                return@onSuccess
+                val sync = withContext(Dispatchers.IO) { PortalPlaylistClient.sync(applicationContext, endpoint, dao) }
+                val provider = sync.activeProvider
+                if (provider == null) {
+                    status.text = "لم توجد قائمة في الموقع"
+                    return@launch
+                }
+
+                withContext(Dispatchers.IO) { dao.upsertProvider(provider.copy(enabled = true)) }
+                val changed = provider.id in sync.changedProviderIds
+                if (changed || !hasCachedCatalog(dao, provider.id)) {
+                    status.text = "تم جلب القائمة • جاري تحميل المحتوى"
+                    openCatalogLoading(provider.id)
+                } else {
+                    withContext(Dispatchers.IO) { dao.saveAndActivateProvider(provider.copy(enabled = true)) }
+                    status.text = "تم التحديث"
+                    openHome()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status.text = "تعذر التحديث من الموقع • حاول مرة أخرى"
+            } finally {
+                updateButton.isEnabled = true
+                updateButton.text = "تحديث"
+                updateJob = null
             }
-
-            withContext(Dispatchers.IO) { dao.saveAndActivateProvider(activeProvider) }
-            applyRemoteProviderProfile(endpoint, dao, activeProvider.id)
-            openHome()
-        }.onFailure {
-            val cached = withContext(Dispatchers.IO) { dao.activation() }
-            val localProvider = dao.providers().first().firstOrNull()
-            val hasLocalContent = localProvider?.let { hasCachedCatalog(dao, it.id) } == true
-            if (cached != null && manager.cachedCanUse(cached) && localProvider != null && hasLocalContent) openHome()
-            else status.text = "تعذر التحقق من التفعيل"
         }
+    }
+
+    private suspend fun refreshIdentity() {
+        val identity = withContext(Dispatchers.IO) {
+            ActivationManager(applicationContext, BlofyDatabase.get(applicationContext).dao()).ensureIdentity()
+        }
+        deviceView.text = identity.deviceId
+        codeView.text = identity.activationCode
+        val portalUrl = ActivationPortalUrl.create(BuildConfig.ACTIVATION_BASE_URL, identity.deviceId, identity.activationCode)
+        if (portalUrl != null) qrView.setImageBitmap(createQr(portalUrl)) else qrView.setImageDrawable(null)
+        val provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
+        status.text = if (provider == null) "أضف القائمة من الموقع ثم اضغط تحديث" else "القائمة محفوظة • اضغط تحديث لجلب أي تغيير"
+    }
+
+    private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) {
+        CatalogSyncState.isReady(applicationContext, providerId) && dao.allStreamsForProvider(providerId).isNotEmpty()
     }
 
     private fun openCatalogLoading(providerId: String) {
@@ -320,46 +246,33 @@ class LoginActivity : AppCompatActivity() {
         startActivity(Intent(this, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, providerId))
     }
 
-    private suspend fun refreshIdentityAndProvider() {
-        val identity = withContext(Dispatchers.IO) { ActivationManager(applicationContext, BlofyDatabase.get(applicationContext).dao()).ensureIdentity() }
-        renderIdentity(identity.deviceId, identity.activationCode)
-        refreshProviderStatus()
+    private fun openHome() {
+        startActivity(Intent(this, HomeActivity::class.java))
     }
 
-    private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) {
-        CatalogSyncState.isReady(applicationContext, providerId) && dao.allStreamsForProvider(providerId).isNotEmpty()
+    private fun actionButton(label: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
+        text = label
+        isAllCaps = false
+        textSize = 16f
+        typeface = Typeface.DEFAULT_BOLD
+        isFocusable = isTv
+        isFocusableInTouchMode = isTv
+        setTextColor(Color.WHITE)
+        background = buttonBackground(false, primary)
+        setOnFocusChangeListener { view, focused ->
+            if (isTv) {
+                view.background = buttonBackground(focused, primary)
+                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(80).start()
+            }
+        }
+        setOnClickListener { action() }
     }
 
-    private suspend fun <T> runSuspendCatching(block: suspend () -> T): Result<T> = try { Result.success(block()) }
-    catch (cancelled: CancellationException) { throw cancelled } catch (error: Throwable) { Result.failure(error) }
-
-    private fun renderIdentity(deviceId: String, activationCode: String) {
-        deviceView.text = deviceId; codeView.text = activationCode
-        val portalUrl = ActivationPortalUrl.create(BuildConfig.ACTIVATION_BASE_URL, deviceId, activationCode)
-        if (portalUrl != null) { qrView.setImageBitmap(createQr(portalUrl)); qrView.contentDescription = "افتح بوابة تفعيل BLOFY" }
-        else { qrView.setImageDrawable(null); qrView.contentDescription = "بوابة تفعيل BLOFY غير مهيأة" }
-    }
-
-    private suspend fun applyRemoteProviderProfile(endpoint: String, dao: BlofyDao, providerId: String) {
-        val current = dao.provider(providerId) ?: return
-        val updated = RemoteProviderProfileClient.applyIfAvailable(applicationContext, endpoint, current)
-        if (updated != current) dao.upsertProvider(updated)
-    }
-
-    private fun activationLabel(remote: ActivationCheckResponse): String = when (remote.state()) {
-        ActivationCheckResponse.State.TRIAL -> "الفترة التجريبية فعالة"
-        ActivationCheckResponse.State.ACTIVE -> "الجهاز مفعل"
-        ActivationCheckResponse.State.EXPIRED -> "انتهت صلاحية الجهاز"
-        ActivationCheckResponse.State.BLOCKED -> "الجهاز موقوف"
-        ActivationCheckResponse.State.UNKNOWN -> remote.message ?: "حالة التفعيل غير معروفة"
-    }
-
-    private fun openHome() { startActivity(Intent(this, HomeActivity::class.java)); finish() }
-    override fun onResume() { super.onResume(); if (::status.isInitialized && connectJob?.isActive != true) lifecycleScope.launch { refreshProviderStatus() } }
-    private suspend fun refreshProviderStatus() {
-        if (connectJob?.isActive == true) return
-        val provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
-        status.text = if (provider == null) "في انتظار إضافة قائمة" else "القائمة جاهزة: ${provider.name}"
+    private fun label(value: String) = TextView(this).apply {
+        text = value
+        textSize = 13f
+        setTextColor(MUTED)
+        gravity = Gravity.RIGHT
     }
 
     private fun createQr(value: String): Bitmap {
@@ -369,90 +282,35 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        val tv = deviceKind == DeviceClass.Kind.TV
-        text = label
-        isAllCaps = false
-        textSize = 16f
-        isFocusable = tv
-        isFocusableInTouchMode = tv
-        setTextColor(Color.WHITE)
-        background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused ->
-            if (tv) {
-                view.background = buttonBackground(focused)
-                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(90).start()
-            }
-        }
-        setOnClickListener { action() }
-    }
-
-    private fun primaryActionButton(label: String, action: () -> Unit) = Button(this).apply {
-        val tv = deviceKind == DeviceClass.Kind.TV
-        text = label
-        isAllCaps = false
-        textSize = 18f
-        typeface = Typeface.DEFAULT_BOLD
-        isFocusable = tv
-        isFocusableInTouchMode = tv
-        setTextColor(Color.WHITE)
-        background = primaryButtonBackground(false)
-        setOnFocusChangeListener { view, focused ->
-            if (tv) {
-                view.background = primaryButtonBackground(focused)
-                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(90).start()
-            }
-        }
-        setOnClickListener { action() }
-    }
-
-    private fun label(value: String) = TextView(this).apply {
-        text = value
-        textSize = 14f
-        setTextColor(CLASSIC_MUTED)
-        gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-    }
-
-    private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER }
-    private fun subtitle(value: String) = TextView(this).apply { text = value; textSize = 16f; setTextColor(CLASSIC_PURPLE_SOFT); gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(16)) }
-
     private fun panelBackground() = GradientDrawable().apply {
-        cornerRadius = dp(22).toFloat()
-        setColor(CLASSIC_SURFACE)
-        setStroke(dp(1), CLASSIC_STROKE)
+        cornerRadius = dp(20).toFloat()
+        setColor(SURFACE)
+        setStroke(dp(1), STROKE)
     }
 
     private fun fieldBackground() = GradientDrawable().apply {
-        cornerRadius = dp(14).toFloat()
-        setColor(Color.rgb(11, 9, 17))
-        setStroke(dp(1), Color.rgb(53, 44, 68))
+        cornerRadius = dp(13).toFloat()
+        setColor(Color.rgb(10, 9, 16))
+        setStroke(dp(1), Color.rgb(57, 45, 73))
     }
 
-    private fun statusBackground() = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat()
-        setColor(Color.rgb(14, 12, 22))
-        setStroke(dp(1), CLASSIC_STROKE)
-    }
-
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
+    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply {
         cornerRadius = dp(15).toFloat()
-        setColor(if (focused) CLASSIC_FOCUS else CLASSIC_SURFACE)
-        setStroke(if (focused) dp(2) else dp(1), if (focused) CLASSIC_PURPLE_SOFT else CLASSIC_STROKE)
-    }
-
-    private fun primaryButtonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(15).toFloat()
-        setColor(if (focused) CLASSIC_FOCUS else Color.rgb(59, 30, 108))
-        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else CLASSIC_PURPLE_SOFT)
+        setColor(when {
+            focused -> FOCUS
+            primary -> Color.rgb(59, 30, 108)
+            else -> SURFACE
+        })
+        setStroke(if (focused) dp(2) else dp(1), if (focused) PURPLE_SOFT else STROKE)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
-        private val CLASSIC_SURFACE = Color.rgb(17, 16, 30)
-        private val CLASSIC_STROKE = Color.rgb(69, 55, 88)
-        private val CLASSIC_FOCUS = Color.rgb(72, 42, 120)
-        private val CLASSIC_PURPLE_SOFT = Color.rgb(188, 132, 255)
-        private val CLASSIC_MUTED = Color.rgb(188, 182, 205)
+        private val SURFACE = Color.rgb(17, 16, 30)
+        private val STROKE = Color.rgb(69, 55, 88)
+        private val FOCUS = Color.rgb(72, 42, 120)
+        private val PURPLE_SOFT = Color.rgb(188, 132, 255)
+        private val MUTED = Color.rgb(188, 182, 205)
     }
 }
