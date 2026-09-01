@@ -1,129 +1,191 @@
 package tv.blofy.player.ui.playlist
 
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
+import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.url.PlaylistUrlPolicy
-import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.PlaylistManager
+import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
-import tv.blofy.player.ui.V339Ui
+import tv.blofy.player.data.remote.XtreamClient
 import java.util.UUID
 
 class PlaylistActivity : AppCompatActivity() {
-    private var mode = MODE_XTREAM
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val editingProviderId = intent.getStringExtra(EXTRA_PROVIDER_ID)
-        val tv = DeviceClass.detect(this) == DeviceClass.Kind.TV
+        val device = DeviceClass.detect(this)
+        val phone = device == DeviceClass.Kind.PHONE
+        val tv = device == DeviceClass.Kind.TV
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(if (tv) 74 else 22), dp(if (tv) 28 else 22), dp(if (tv) 74 else 22), dp(if (tv) 28 else 22))
-            background = V339Ui.screenGradient()
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(if (phone) 22 else 54, if (phone) 24 else 30, if (phone) 22 else 54, if (phone) 24 else 30)
+            background = AppCompatResources.getDrawable(this@PlaylistActivity, R.drawable.blofy_home_background)
         }
 
-        root.addView(V339Ui.title(this, "إضافة قائمة التشغيل", if (tv) 27f else 23f).apply {
+        root.addView(ImageView(this).apply {
+            setImageResource(R.drawable.blofy_logo)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            adjustViewBounds = true
+        }, LinearLayout.LayoutParams(if (phone) 150 else 190, if (phone) 72 else 82))
+
+        root.addView(TextView(this).apply {
+            text = if (editingProviderId == null) "إضافة قائمة التشغيل" else "تعديل قائمة التشغيل"
+            textSize = if (phone) 25f else 31f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { bottomMargin = dp(12) })
+        })
+        root.addView(TextView(this).apply {
+            text = "أدخل بيانات القائمة كما أرسلها لك مزود الخدمة"
+            textSize = if (phone) 14f else 16f
+            setTextColor(0xFFB8ABC7.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 6, 0, if (phone) 16 else 20)
+        })
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(22), dp(20), dp(22), dp(22))
-            background = V339Ui.panel(this@PlaylistActivity, Color.argb(220, 17, 16, 30), 18, V339Ui.STROKE)
+            setPadding(if (phone) 18 else 30, if (phone) 18 else 24, if (phone) 18 else 30, if (phone) 18 else 24)
+            background = panelBackground()
         }
-        root.addView(panel, LinearLayout.LayoutParams(if (tv) dp(690) else LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
-        val modeRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
-        }
-        lateinit var xtreamButton: Button
-        lateinit var m3uButton: Button
-        xtreamButton = modeButton("Xtream")
-        m3uButton = modeButton("M3U")
-        modeRow.addView(xtreamButton, LinearLayout.LayoutParams(0, dp(58), 1f).apply { marginEnd = dp(6) })
-        modeRow.addView(m3uButton, LinearLayout.LayoutParams(0, dp(58), 1f).apply { marginStart = dp(6) })
-        panel.addView(modeRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
+        root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 780, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         fun field(hintText: String, passwordField: Boolean = false) = EditText(this).apply {
             hint = hintText
             isSingleLine = true
-            textSize = 14f
-            setTextColor(V339Ui.TEXT)
-            setHintTextColor(V339Ui.MUTED)
-            setPadding(dp(18), 0, dp(18), 0)
-            background = V339Ui.focusDrawable(this@PlaylistActivity, Color.argb(220, 16, 15, 28), V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
+            setTextColor(Color.WHITE)
+            setHintTextColor(0xFF8E829A.toInt())
+            setPadding(22, 0, 22, 0)
+            background = fieldBackground(false)
             isFocusable = true
-            textDirection = View.TEXT_DIRECTION_RTL
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            setOnFocusChangeListener { view, focused -> if (tv) view.background = fieldBackground(focused) }
             if (passwordField) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
 
-        val url = field("رابط السيرفر")
-        val username = field("اسم المستخدم")
-        val password = field("كلمة المرور", true)
-        val m3uUrl = field("رابط M3U")
-        listOf(url, username, password, m3uUrl).forEach {
-            panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { topMargin = dp(9) })
-        }
+        val name = field("اسم القائمة")
+        val url = field("رابط السيرفر أو رابط M3U")
+        val username = field("اسم المستخدم — اتركه فارغًا لـ M3U")
+        val password = field("كلمة المرور — اتركها فارغة لـ M3U", true)
 
-        val status = V339Ui.text(this, "", 13f, V339Ui.MUTED).apply {
+        fun addField(field: EditText) {
+            panel.addView(field, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 66).apply { topMargin = 10 })
+        }
+        addField(name)
+        addField(url)
+
+        val transportNotice = TextView(this).apply {
+            text = "يفضّل استخدام HTTPS. تُقبل روابط HTTP للتوافق مع بعض السيرفرات."
+            textSize = if (phone) 12f else 13f
+            setTextColor(0xFFB78CFF.toInt())
             gravity = Gravity.CENTER
-            setPadding(0, dp(9), 0, 0)
+            setPadding(8, 9, 8, 2)
+        }
+        panel.addView(transportNotice, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        url.doAfterTextChanged { value ->
+            val candidate = value?.toString()?.trim().orEmpty()
+            when {
+                candidate.startsWith("http://", ignoreCase = true) -> {
+                    transportNotice.text = "تنبيه أمني: اتصال HTTP غير مشفّر."
+                    transportNotice.setTextColor(Color.rgb(255, 179, 71))
+                }
+                candidate.startsWith("https://", ignoreCase = true) -> {
+                    transportNotice.text = "اتصال HTTPS مشفّر (موصى به)."
+                    transportNotice.setTextColor(Color.rgb(116, 224, 174))
+                }
+                else -> {
+                    transportNotice.text = "يفضّل استخدام HTTPS. تُقبل روابط HTTP للتوافق مع بعض السيرفرات."
+                    transportNotice.setTextColor(0xFFB78CFF.toInt())
+                }
+            }
+        }
+        listOf(username, password).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 66).apply { topMargin = 10 }) }
+
+        val status = TextView(this).apply {
+            setTextColor(0xFFB78CFF.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 14, 0, 2)
         }
         panel.addView(status)
 
-        val update = V339Ui.button(this, "تحديث", true).apply {
+        var confirmedHttpUrl: String? = null
+        val save = Button(this).apply {
+            text = if (editingProviderId == null) "حفظ القائمة" else "حفظ التعديلات"
+            isAllCaps = false
             textSize = 16f
             isFocusable = tv
             isFocusableInTouchMode = tv
-            setOnClickListener {
-                val isM3u = mode == MODE_M3U
-                val baseUrl = if (isM3u) m3uUrl.text.toString().trim() else url.text.toString().trim()
-                val user = if (isM3u) "" else username.text.toString().trim()
-                val pass = if (isM3u) "" else password.text.toString()
-
-                if (baseUrl.isBlank()) { status.text = if (isM3u) "أدخل رابط M3U" else "أدخل رابط السيرفر"; return@setOnClickListener }
-                if (!isM3u && (user.isBlank() || pass.isBlank())) { status.text = "أدخل اسم المستخدم وكلمة المرور"; return@setOnClickListener }
-                when (PlaylistUrlPolicy.validate(baseUrl)) {
-                    PlaylistUrlPolicy.Result.EMPTY, PlaylistUrlPolicy.Result.INVALID -> { status.text = "الرابط غير صحيح"; return@setOnClickListener }
-                    PlaylistUrlPolicy.Result.USER_INFO_NOT_ALLOWED -> { status.text = "استخدم الخانات المخصصة"; return@setOnClickListener }
-                    PlaylistUrlPolicy.Result.UNSAFE_HOST -> { status.text = "الرابط غير مسموح"; return@setOnClickListener }
-                    else -> Unit
+            setTextColor(Color.WHITE)
+            background = buttonBackground(false)
+            setOnFocusChangeListener { view, focused ->
+                if (tv) {
+                    view.background = buttonBackground(focused)
+                    view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(100).start()
                 }
-
+            }
+            setOnClickListener {
+                val baseUrl = url.text.toString().trim()
+                val user = username.text.toString().trim()
+                val pass = password.text.toString()
+                val isM3u = user.isBlank() && pass.isBlank()
+                val partialXtream = user.isBlank() xor pass.isBlank()
+                when (PlaylistUrlPolicy.validate(baseUrl)) {
+                    PlaylistUrlPolicy.Result.EMPTY -> { status.text = "أدخل رابط القائمة"; return@setOnClickListener }
+                    PlaylistUrlPolicy.Result.INVALID -> { status.text = "الرابط غير صحيح. أدخل رابطًا كاملًا يبدأ بـ https:// أو http://"; return@setOnClickListener }
+                    PlaylistUrlPolicy.Result.USER_INFO_NOT_ALLOWED -> { status.text = "لا تضع اسم المستخدم أو كلمة المرور داخل الرابط؛ استخدم الحقول المخصصة."; return@setOnClickListener }
+                    PlaylistUrlPolicy.Result.UNSAFE_HOST -> { status.text = "لا يمكن استخدام عنوان محلي أو خاص. أدخل رابط السيرفر العام."; return@setOnClickListener }
+                    PlaylistUrlPolicy.Result.HTTP_CLEAR_TEXT -> {
+                        if (confirmedHttpUrl != baseUrl) {
+                            val saveButton = this
+                            AlertDialog.Builder(this@PlaylistActivity)
+                                .setTitle("اتصال HTTP غير مشفّر")
+                                .setMessage("قد تظهر بيانات الدخول والمحتوى لأي جهة على الشبكة. استخدم HTTPS متى توفر، أو تابع فقط إذا كان هذا هو الرابط الرسمي لسيرفرك.")
+                                .setNegativeButton("رجوع", null)
+                                .setPositiveButton("متابعة وحفظ") { _, _ -> confirmedHttpUrl = baseUrl; saveButton.performClick() }
+                                .show()
+                            return@setOnClickListener
+                        }
+                    }
+                    PlaylistUrlPolicy.Result.VALID -> Unit
+                }
+                if (partialXtream) { status.text = "أدخل اسم المستخدم وكلمة المرور معًا، أو اتركهما معًا لـ M3U"; return@setOnClickListener }
                 isEnabled = false
-                status.text = "جاري التحديث..."
+                status.text = if (isM3u) "جاري قراءة M3U وحفظها محليًا..." else "جاري تحميل Xtream وحفظها محليًا..."
                 lifecycleScope.launch {
                     try {
-                        val provider = withContext(Dispatchers.IO) {
+                        val portalSynced = withContext(Dispatchers.IO) {
                             val dao = BlofyDatabase.get(applicationContext).dao()
                             val existing = editingProviderId?.let { dao.provider(it) }
                             val type = if (isM3u) "m3u" else "xtream"
                             val id = existing?.id ?: UUID.nameUUIDFromBytes("$type|$baseUrl|$user".toByteArray()).toString()
-                            val next = ProviderEntity(
+                            val provider = ProviderEntity(
                                 id = id,
-                                name = if (isM3u) "BLOFY M3U" else "BLOFY Xtream",
+                                name = name.text.toString().trim().ifBlank { if (isM3u) "BLOFY M3U" else "BLOFY Server" },
                                 baseUrl = if (isM3u) baseUrl else baseUrl.trimEnd('/'),
                                 username = user,
                                 password = pass,
@@ -135,72 +197,62 @@ class PlaylistActivity : AppCompatActivity() {
                                 enabled = true,
                                 updatedAt = System.currentTimeMillis()
                             )
-                            dao.saveAndActivateProvider(next)
-                            CatalogSyncState.markPending(applicationContext, next.id)
-                            next
-                        }
-                        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
-                        if (endpoint.isNotBlank()) {
-                            try { withContext(Dispatchers.IO) { PortalPlaylistClient.pushProvider(applicationContext, endpoint, provider) } }
-                            catch (cancelled: CancellationException) { throw cancelled }
-                            catch (_: Exception) { }
+                            val stagingProvider = provider.copy(id = UUID.randomUUID().toString(), enabled = false)
+                            var promoted = false
+                            try {
+                                val syncResult = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(stagingProvider) }
+                                check(syncResult.freshItemCount > 0) { "لم يرجع السيرفر أي قنوات أو أفلام أو مسلسلات من بيانات الدخول الحالية" }
+                                check(syncResult.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة؛ بقيت القائمة السابقة كما هي" }
+                                dao.promoteStagedCatalog(stagingProvider.id, provider)
+                                promoted = true
+                                val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+                                if (endpoint.isBlank()) true else try { PortalPlaylistClient.pushProvider(applicationContext, endpoint, provider); true }
+                                catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { false }
+                            } finally {
+                                if (!promoted) withContext(NonCancellable) { dao.discardStagedCatalog(stagingProvider.id) }
+                            }
                         }
                         setResult(RESULT_OK)
-                        finish()
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        status.text = "تعذر التحديث"
-                        isEnabled = true
-                    }
+                        if (portalSynced) { status.text = "تم حفظ القائمة وربطها بالموقع"; finish() }
+                        else { status.text = "تم حفظ القائمة داخل التطبيق، لكن تعذر ربطها بالموقع. اضغط حفظ لإعادة المحاولة."; isEnabled = true }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (error: Exception) { status.text = "تعذر تحميل القائمة: ${error.message ?: "خطأ اتصال"}"; isEnabled = true }
                 }
             }
         }
-        panel.addView(update, LinearLayout.LayoutParams(if (tv) dp(300) else LinearLayout.LayoutParams.MATCH_PARENT, dp(62)).apply { topMargin = dp(14) })
-
-        fun applyVisibility() {
-            val xtream = mode == MODE_XTREAM
-            url.visibility = if (xtream) View.VISIBLE else View.GONE
-            username.visibility = if (xtream) View.VISIBLE else View.GONE
-            password.visibility = if (xtream) View.VISIBLE else View.GONE
-            m3uUrl.visibility = if (xtream) View.GONE else View.VISIBLE
-        }
-        fun applyMode() {
-            xtreamButton.background = if (mode == MODE_XTREAM) V339Ui.gradientPanel(this, Color.rgb(62,19,124), Color.rgb(31,15,62), 14, V339Ui.PURPLE_LIGHT)
-            else V339Ui.focusDrawable(this, Color.TRANSPARENT, V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
-            m3uButton.background = if (mode == MODE_M3U) V339Ui.gradientPanel(this, Color.rgb(62,19,124), Color.rgb(31,15,62), 14, V339Ui.PURPLE_LIGHT)
-            else V339Ui.focusDrawable(this, Color.TRANSPARENT, V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
-            applyVisibility()
-        }
-        xtreamButton.setOnClickListener { mode = MODE_XTREAM; applyMode(); url.requestFocus() }
-        m3uButton.setOnClickListener { mode = MODE_M3U; applyMode(); m3uUrl.requestFocus() }
-        applyMode()
+        panel.addView(save, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 360, if (phone) 64 else 70).apply { topMargin = 16 })
         setContentView(root)
-        xtreamButton.requestFocus()
+        name.requestFocus()
 
         if (editingProviderId != null) {
             lifecycleScope.launch {
                 val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: return@launch
-                if (provider.providerType.equals("m3u", true)) {
-                    mode = MODE_M3U; m3uUrl.setText(provider.baseUrl)
-                } else {
-                    mode = MODE_XTREAM; url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password)
-                }
-                applyMode()
+                name.setText(provider.name)
+                url.setText(provider.baseUrl)
+                username.setText(provider.username)
+                password.setText(provider.password)
+                status.text = "${provider.providerType.uppercase()}  •  ${provider.name}"
             }
         }
     }
 
-    private fun modeButton(label: String) = V339Ui.button(this, label, false).apply {
-        textSize = 16f
-        isFocusable = true
+    private fun panelBackground() = GradientDrawable().apply {
+        cornerRadius = 24f
+        setColor(0xEA151020.toInt())
+        setStroke(1, 0xFF67458E.toInt())
     }
 
-    private fun dp(value: Int) = V339Ui.dp(this, value)
-
-    companion object {
-        const val EXTRA_PROVIDER_ID = "provider_id"
-        private const val MODE_XTREAM = "xtream"
-        private const val MODE_M3U = "m3u"
+    private fun fieldBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 16f
+        setColor(0xFF110F19.toInt())
+        setStroke(if (focused) 3 else 1, if (focused) 0xFFBE87FF.toInt() else 0xFF342C44.toInt())
     }
+
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 18f
+        setColor(if (focused) 0xFF7D45D9.toInt() else 0xFF241A30.toInt())
+        setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else 0xFF69468F.toInt())
+    }
+
+    companion object { const val EXTRA_PROVIDER_ID = "provider_id" }
 }

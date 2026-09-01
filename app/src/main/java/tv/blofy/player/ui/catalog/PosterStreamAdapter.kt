@@ -1,15 +1,18 @@
 package tv.blofy.player.ui.catalog
 
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.data.local.StreamEntity
-import tv.blofy.player.ui.V339Ui
 
 internal class PosterStreamAdapter(
     private val onClick: (StreamEntity) -> Unit,
@@ -17,81 +20,112 @@ internal class PosterStreamAdapter(
 ) : RecyclerView.Adapter<PosterStreamAdapter.Holder>() {
     private val items = mutableListOf<StreamEntity>()
 
-    init { setHasStableIds(true) }
+    init {
+        setHasStableIds(true)
+    }
 
     fun submit(newItems: List<StreamEntity>) {
         val oldItems = items.toList()
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize() = oldItems.size
             override fun getNewListSize() = newItems.size
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int) = oldItems[oldItemPosition].key == newItems[newItemPosition].key
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int) = oldItems[oldItemPosition] == newItems[newItemPosition]
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                oldItems[oldItemPosition].key == newItems[newItemPosition].key
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                oldItems[oldItemPosition] == newItems[newItemPosition]
         }, false)
         items.clear()
         items.addAll(newItems)
         diff.dispatchUpdatesTo(this)
     }
 
-    override fun getItemId(position: Int) = items[position].key.hashCode().toLong()
+    override fun getItemId(position: Int): Long = items[position].key.hashCode().toLong()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
-        val context = parent.context
-        val root = LinearLayout(context).apply {
+        val density = parent.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+        val root = LinearLayout(parent.context).apply {
             orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
             isFocusable = true
             isClickable = true
-            setPadding(dp(context, 2), dp(context, 2), dp(context, 2), dp(context, 3))
-            background = V339Ui.focusDrawable(context, android.graphics.Color.rgb(15, 13, 27), V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
-            clipChildren = false
-            clipToPadding = false
+            setPadding(dp(7), dp(7), dp(7), dp(10))
+            background = card(false)
+            clipToOutline = true
         }
-        V339Ui.attachScaleFocus(root, 1.035f)
-
-        val image = ImageView(context).apply {
+        val frame = FrameLayout(parent.context)
+        val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(Color.rgb(20, 15, 31))
+            clipToOutline = true
         }
-        root.addView(image, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(context, 194)))
-
-        val title = V339Ui.title(context, "", 11f).apply {
-            gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
-            textDirection = View.TEXT_DIRECTION_RTL
+        frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(245)))
+        val rating = TextView(parent.context).apply {
+            textSize = 11f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(11).toFloat()
+                setColor(Color.argb(225, 62, 27, 105))
+                setStroke(dp(1), Color.rgb(189, 129, 255))
+            }
+        }
+        frame.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(8)
+            marginEnd = dp(8)
+        })
+        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(245)))
+        val title = TextView(parent.context).apply {
+            textSize = 14f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.START
             maxLines = 2
-            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(4), dp(9), dp(4), 0)
         }
-        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(context, 42)))
-
-        val meta = V339Ui.text(context, "", 9f, V339Ui.MUTED).apply {
-            gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
-            textDirection = View.TEXT_DIRECTION_LTR
-            isSingleLine = true
+        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        val meta = TextView(parent.context).apply {
+            textSize = 11f
+            setTextColor(Color.rgb(183, 168, 201))
+            gravity = Gravity.START
+            maxLines = 1
+            setPadding(dp(4), dp(2), dp(4), 0)
         }
-        root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(context, 24)))
-
-        root.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            setMargins(dp(context, 6), dp(context, 5), dp(context, 6), dp(context, 7))
-        }
-        return Holder(root, image, title, meta)
+        root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(27)))
+        return Holder(root, image, title, meta, rating)
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
         holder.itemView.tag = item.key
         holder.title.text = item.name
-        holder.meta.text = buildList {
-            item.releaseDate?.takeIf(String::isNotBlank)?.let(::add)
-                ?: item.year?.takeIf(String::isNotBlank)?.let(::add)
-            item.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
-            add(if (item.kind == "series") "مسلسل" else "فيلم")
-        }.joinToString("  •  ")
+        holder.meta.text = listOfNotNull(
+            item.year?.takeIf(String::isNotBlank),
+            item.genre?.takeIf(String::isNotBlank)?.substringBefore(',')
+        ).joinToString("  •  ")
+        holder.rating.apply {
+            val value = item.rating?.takeIf(String::isNotBlank)
+            visibility = if (value == null) View.GONE else View.VISIBLE
+            text = value?.let { "★ $it" }.orEmpty()
+        }
         ArtworkLoader.load(holder.image, item.icon ?: item.backdrop)
         if (position % 4 == 0) {
-            ArtworkLoader.prefetch(holder.itemView.context, (position + 1 until minOf(items.size, position + 9)).map { index -> items[index].icon ?: items[index].backdrop })
+            val next = (position + 1 until minOf(items.size, position + 9)).map { index ->
+                items[index].icon ?: items[index].backdrop
+            }
+            ArtworkLoader.prefetch(holder.itemView.context, next)
         }
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
+            view.background = card(focused)
             view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(90L).start()
-            view.elevation = if (focused) dp(view.context, 8).toFloat() else 0f
+            view.animate()
+                .scaleX(if (focused) 1.035f else 1f)
+                .scaleY(if (focused) 1.035f else 1f)
+                .translationZ(if (focused) 14f else 3f)
+                .setDuration(85)
+                .start()
             if (focused) onFocus(item)
         }
     }
@@ -102,9 +136,22 @@ internal class PosterStreamAdapter(
         super.onViewRecycled(holder)
     }
 
-    override fun getItemCount() = items.size
+    override fun getItemCount(): Int = items.size
 
-    internal class Holder(itemView: View, val image: ImageView, val title: TextView, val meta: TextView) : RecyclerView.ViewHolder(itemView)
+    internal class Holder(
+        itemView: View,
+        val image: ImageView,
+        val title: TextView,
+        val meta: TextView,
+        val rating: TextView
+    ) : RecyclerView.ViewHolder(itemView)
 
-    private fun dp(context: android.content.Context, value: Int) = V339Ui.dp(context, value)
+    private fun card(focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        if (focused) intArrayOf(0xFF5D2498.toInt(), 0xFF241330.toInt())
+        else intArrayOf(0xED181321.toInt(), 0xF00C0A12.toInt())
+    ).apply {
+        cornerRadius = 20f
+        setStroke(if (focused) 3 else 1, if (focused) 0xFFE0B5FF.toInt() else 0x554D376B)
+    }
 }

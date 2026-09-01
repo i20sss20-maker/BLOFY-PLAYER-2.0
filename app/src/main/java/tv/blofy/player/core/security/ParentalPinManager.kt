@@ -1,31 +1,22 @@
 package tv.blofy.player.core.security
 
 import android.content.Context
-import java.security.MessageDigest
 
+/**
+ * Compatibility bridge for old v339 references.
+ * PIN storage and parental locking are intentionally disabled.
+ */
 object ParentalPinManager {
-    private const val PREFS = "blofy_parental"
-    private const val KEY_PIN = "pin_hash"
+    @Suppress("UNUSED_PARAMETER")
+    fun hasPin(context: Context): Boolean = false
 
-    fun hasPin(context: Context): Boolean =
-        !context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PIN, null).isNullOrBlank()
+    @Suppress("UNUSED_PARAMETER")
+    fun setPin(context: Context, pin: String): Boolean = false
 
-    fun setPin(context: Context, pin: String): Boolean {
-        if (!pin.matches(Regex("\\d{4,6}"))) return false
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_PIN, hash(pin)).apply()
-        return true
-    }
-
-    fun verify(context: Context, pin: String): Boolean {
-        val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PIN, null) ?: return false
-        return stored == hash(pin)
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun verify(context: Context, pin: String): Boolean = true
 
     fun clear(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_PIN).apply()
+        context.getSharedPreferences("blofy_parental", Context.MODE_PRIVATE).edit().clear().apply()
     }
-
-    private fun hash(value: String): String =
-        MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
 }
