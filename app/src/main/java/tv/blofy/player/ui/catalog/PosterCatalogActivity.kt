@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.catalog
 
 import android.content.Intent
+import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
