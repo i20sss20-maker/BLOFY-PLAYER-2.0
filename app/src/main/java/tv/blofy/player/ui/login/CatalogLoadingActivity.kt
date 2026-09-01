@@ -54,7 +54,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(54), dp(34), dp(54), dp(34))
+            setPadding(dp(44), dp(28), dp(44), dp(28))
             background = AppCompatResources.getDrawable(this@CatalogLoadingActivity, R.drawable.blofy_home_background)
         }
 
@@ -62,7 +62,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(54), dp(32), dp(54), dp(34))
+            setPadding(dp(58), dp(34), dp(58), dp(30))
             background = classicPanel()
         }
 
@@ -71,31 +71,24 @@ class CatalogLoadingActivity : AppCompatActivity() {
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
             isFocusable = false
-        }, LinearLayout.LayoutParams(dp(170), dp(104)).apply { bottomMargin = dp(4) })
+        }, LinearLayout.LayoutParams(dp(138), dp(82)).apply { bottomMargin = dp(8) })
 
         panel.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"
+            text = "جاري تجهيز مكتبتك"
             textSize = 25f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)))
 
-        panel.addView(TextView(this).apply {
-            text = "جاري تحميل البيانات"
-            textSize = 17f
-            setTextColor(TEXT_MUTED)
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)))
-
         percent = TextView(this).apply {
             text = "0%"
-            textSize = 42f
+            textSize = 56f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }
-        panel.addView(percent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(70)).apply { topMargin = dp(8) })
+        panel.addView(percent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(86)).apply { topMargin = dp(10) })
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
@@ -103,37 +96,34 @@ class CatalogLoadingActivity : AppCompatActivity() {
             progressTintList = ColorStateList.valueOf(CLASSIC_PURPLE)
             progressBackgroundTintList = ColorStateList.valueOf(PROGRESS_TRACK)
         }
-        panel.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10)).apply {
-            topMargin = dp(6)
-            bottomMargin = dp(14)
+        panel.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(12)).apply {
+            topMargin = dp(4)
+            bottomMargin = dp(16)
         })
 
         stage = TextView(this).apply {
             text = "جاري الاتصال بالخادم..."
-            textSize = 15f
+            textSize = 17f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(TEXT_MUTED)
             gravity = Gravity.CENTER
         }
-        panel.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
-
-        panel.addView(View(this).apply { setBackgroundColor(CLASSIC_STROKE) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
-                topMargin = dp(8); bottomMargin = dp(12)
-            })
+        panel.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)))
 
         panel.addView(TextView(this).apply {
-            text = "يتم حفظ الباقة محليًا • لن يعاد تحميلها عند كل دخول"
-            textSize = 13f
+            text = "يتم حفظ المحتوى محليًا بعد اكتمال التحميل"
+            textSize = 12f
             setTextColor(TEXT_DIM)
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)))
+            setPadding(0, dp(8), 0, 0)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)))
 
-        root.addView(panel, LinearLayout.LayoutParams(dp(780), LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(panel, LinearLayout.LayoutParams(dp(700), LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
     }
 
     private fun classicPanel() = GradientDrawable().apply {
-        cornerRadius = dp(18).toFloat()
+        cornerRadius = dp(22).toFloat()
         setColor(CLASSIC_SURFACE)
         setStroke(dp(1), CLASSIC_STROKE)
     }
