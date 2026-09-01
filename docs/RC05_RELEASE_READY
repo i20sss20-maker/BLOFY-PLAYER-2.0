@@ -6,4 +6,8 @@ Includes:
 - restored original BLOFY logo on activation screen
 - restored approved BLOFY playlist entry styling
 - restored original BLOFY launcher app icon
+- approved catalog loading and activation UI updates now present on main
+- Media3 1.6.1 FFmpeg native decoder verification passed for all Android ABIs
+- Android CI verification passed on the current main baseline
+- signed RC05 rebuild requested from current main after commit 7951275b24f93861ae0e24130aedf3d7368e0f5f
 - existing player engines and playback stack unchanged
