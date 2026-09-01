@@ -2,13 +2,13 @@ package tv.blofy.player.ui.common
 
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
+import tv.blofy.player.ui.V339Ui
 
 class FocusTextAdapter<T>(
     private val label: (T) -> String,
@@ -39,8 +39,7 @@ class FocusTextAdapter<T>(
                 val newItem = nextItems[newItemPosition]
                 return if (keyOf != null) keyOf(oldItem) == keyOf(newItem) else oldItem == newItem
             }
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition] == nextItems[newItemPosition]
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean = oldItems[oldItemPosition] == nextItems[newItemPosition]
         }, false)
         items.clear()
         items.addAll(nextItems)
@@ -60,8 +59,7 @@ class FocusTextAdapter<T>(
         restorePending = false
     }
 
-    override fun getItemId(position: Int): Long = itemKey?.invoke(items[position])?.hashCode()?.toLong()
-        ?: super.getItemId(position)
+    override fun getItemId(position: Int): Long = itemKey?.invoke(items[position])?.hashCode()?.toLong() ?: super.getItemId(position)
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
@@ -75,29 +73,26 @@ class FocusTextAdapter<T>(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
-        val density = parent.resources.displayMetrics.density
-        fun dp(value: Int) = (value * density).toInt()
         val view = TextView(parent.context).apply {
             textSize = 14f
             typeface = Typeface.create(typeface, Typeface.BOLD)
-            setTextColor(TEXT_IDLE)
+            setTextColor(Color.rgb(213, 210, 221))
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
             textDirection = View.TEXT_DIRECTION_RTL
-            setPadding(dp(18), 0, dp(18), 0)
+            setPadding(V339Ui.dp(parent.context, 18), 0, V339Ui.dp(parent.context, 18), 0)
             isFocusable = true
             isClickable = true
             isLongClickable = true
-            background = background(parent, false)
+            background = V339Ui.focusDrawable(parent.context, Color.TRANSPARENT, V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
             setOnFocusChangeListener { v, focused ->
-                (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
+                (v as TextView).setTextColor(if (focused) V339Ui.TEXT else Color.rgb(213, 210, 221))
                 v.animate().cancel()
                 v.animate()
                     .scaleX(if (focused) 1.006f else 1f)
                     .scaleY(if (focused) 1.006f else 1f)
-                    .translationZ(if (focused) dp(8).toFloat() else 0f)
+                    .translationZ(if (focused) V339Ui.dp(parent.context, 8).toFloat() else 0f)
                     .setDuration(90L)
                     .start()
-                v.background = background(parent, focused)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
                         items.getOrNull(pos)?.let { item ->
@@ -133,19 +128,4 @@ class FocusTextAdapter<T>(
 
     override fun getItemCount(): Int = items.size
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
-
-    private fun background(parent: ViewGroup, focused: Boolean): GradientDrawable {
-        val density = parent.resources.displayMetrics.density
-        return GradientDrawable().apply {
-            setColor(if (focused) PANEL_SOFT else Color.TRANSPARENT)
-            cornerRadius = 13f * density
-            if (focused) setStroke((2f * density).toInt().coerceAtLeast(1), PURPLE_LIGHT)
-        }
-    }
-
-    companion object {
-        private val TEXT_IDLE = Color.rgb(213, 210, 221)
-        private val PANEL_SOFT = Color.rgb(38, 25, 68)
-        private val PURPLE_LIGHT = Color.rgb(188, 132, 255)
-    }
 }
