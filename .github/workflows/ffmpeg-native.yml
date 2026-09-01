@@ -7,6 +7,17 @@ on:
         description: Space-separated FFmpeg audio decoder names
         required: false
         default: "ac3 eac3 dca truehd aac mp3 opus vorbis flac"
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/ffmpeg-native.yml'
+      - 'tools/build_media3_ffmpeg.sh'
+      - 'app/build.gradle.kts'
+      - 'app/src/main/assets/open_source/**'
+      - 'app/src/main/java/tv/blofy/player/core/playback/BlofyPlaybackSession.kt'
+      - 'app/src/main/java/tv/blofy/player/ui/settings/SettingsActivity.kt'
+      - 'docs/FFMPEG*.md'
   pull_request:
     paths:
       - '.github/workflows/ffmpeg-native.yml'
