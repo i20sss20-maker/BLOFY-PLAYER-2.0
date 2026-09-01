@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
@@ -67,11 +68,11 @@ class EpisodesActivity : AppCompatActivity() {
             setPadding(dp(8), 0, 0, dp(4))
         })
         status = TextView(this).apply {
-            text = "جاري تحميل الحلقات..."; textSize = 14f; setTextColor(SOFT); gravity = Gravity.RIGHT
+            text = "جاري تجهيز الحلقات..."; textSize = 14f; setTextColor(SOFT); gravity = Gravity.RIGHT
             setPadding(dp(8), 0, 0, dp(12))
         }
         root.addView(status)
-        retryButton = actionButton("إعادة تحميل الحلقات") { lifecycleScope.launch { syncEpisodes(currentProvider()) } }.apply { visibility = View.GONE }
+        retryButton = actionButton("تحديث الحلقات") { lifecycleScope.launch { syncEpisodes(currentProvider()) } }.apply { visibility = View.GONE }
         root.addView(retryButton, LinearLayout.LayoutParams(dp(250), dp(64)).apply { bottomMargin = dp(10); gravity = Gravity.RIGHT })
 
         val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_LTR }
@@ -106,8 +107,16 @@ class EpisodesActivity : AppCompatActivity() {
             episodeList.adapter = episodeAdapter
             seasonList.adapter = seasonAdapter
             installTvFocusBridge()
+
+            val cached = dao.episodes(providerId, seriesId).first()
             launch { dao.episodes(providerId, seriesId).collect { renderEpisodes(it) } }
-            syncEpisodes(provider)
+            if (cached.isEmpty()) {
+                syncEpisodes(provider)
+            } else {
+                loadState = EpisodeLoadState.LOADED
+                renderEpisodes(cached)
+                updateStatus()
+            }
         }
     }
 
@@ -184,10 +193,7 @@ class EpisodesActivity : AppCompatActivity() {
     }
 
     private suspend fun refreshWatchProgress() {
-        if (allEpisodes.isEmpty()) {
-            watchProgress.clear()
-            return
-        }
+        if (allEpisodes.isEmpty()) { watchProgress.clear(); return }
         val dao = BlofyDatabase.get(applicationContext).dao()
         val states = dao.watchStates(providerId).associateBy { it.contentKey }
         watchProgress.clear()
@@ -215,11 +221,11 @@ class EpisodesActivity : AppCompatActivity() {
     private fun updateStatus() {
         if (allEpisodes.isNotEmpty()) {
             val seasons = allEpisodes.map { it.season }.distinct().size
-            status.text = if (syncInProgress) "جاري تحديث الحلقات...  •  ${allEpisodes.size} حلقة محفوظة" else "$seasons موسم  •  ${allEpisodes.size} حلقة"
+            status.text = if (syncInProgress) "جاري تحديث الحلقات...  •  ${allEpisodes.size} حلقة محفوظة" else "$seasons موسم  •  ${allEpisodes.size} حلقة • محفوظ محليًا"
             return
         }
         status.text = when (loadState) {
-            EpisodeLoadState.LOADING -> "جاري تحميل الحلقات..."
+            EpisodeLoadState.LOADING -> "جاري تحميل الحلقات لأول مرة..."
             EpisodeLoadState.LOADED -> "جاري تجهيز الحلقات..."
             EpisodeLoadState.EMPTY_PROVIDER_RESPONSE -> "السيرفر لم يرسل حلقات لهذا المسلسل • حاول مرة أخرى"
             EpisodeLoadState.INVALID_PROVIDER_RESPONSE -> "رد السيرفر غير مكتمل • أعد تحميل الحلقات"
