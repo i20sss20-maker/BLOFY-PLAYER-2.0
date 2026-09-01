@@ -1,11 +1,13 @@
 package tv.blofy.player.ui.login
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -51,74 +53,89 @@ class CatalogLoadingActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(80), dp(44), dp(80), dp(44))
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(54), dp(34), dp(54), dp(34))
             background = AppCompatResources.getDrawable(this@CatalogLoadingActivity, R.drawable.blofy_home_background)
         }
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(64), dp(38), dp(64), dp(38))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(22).toFloat()
-                setColor(Color.rgb(17, 16, 30))
-                setStroke(dp(1), Color.rgb(69, 55, 88))
-            }
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(54), dp(32), dp(54), dp(34))
+            background = classicPanel()
         }
 
         panel.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
-        }, LinearLayout.LayoutParams(dp(180), dp(110)).apply { bottomMargin = dp(8) })
+            isFocusable = false
+        }, LinearLayout.LayoutParams(dp(170), dp(104)).apply { bottomMargin = dp(4) })
+
+        panel.addView(TextView(this).apply {
+            text = "BLOFY PLAYER"
+            textSize = 25f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)))
 
         panel.addView(TextView(this).apply {
             text = "جاري تحميل البيانات"
-            textSize = 26f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            textSize = 17f
+            setTextColor(TEXT_MUTED)
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)))
-
-        stage = TextView(this).apply {
-            text = "جاري الاتصال بالخادم..."
-            textSize = 16f
-            setTextColor(Color.rgb(188, 182, 205))
-            gravity = Gravity.CENTER
-        }
-        panel.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { bottomMargin = dp(18) })
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)))
 
         percent = TextView(this).apply {
             text = "0%"
-            textSize = 38f
+            textSize = 42f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }
-        panel.addView(percent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
+        panel.addView(percent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(70)).apply { topMargin = dp(8) })
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             progress = 0
-            progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(124, 43, 255))
-            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(40, 34, 52))
+            progressTintList = ColorStateList.valueOf(CLASSIC_PURPLE)
+            progressBackgroundTintList = ColorStateList.valueOf(PROGRESS_TRACK)
         }
-        panel.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(14)).apply {
-            topMargin = dp(12)
-            bottomMargin = dp(18)
+        panel.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10)).apply {
+            topMargin = dp(6)
+            bottomMargin = dp(14)
         })
 
-        panel.addView(TextView(this).apply {
-            text = "يتم حفظ الباقة محليًا، ولن يعاد تحميلها عند كل دخول"
-            textSize = 13f
-            setTextColor(Color.rgb(151, 139, 165))
+        stage = TextView(this).apply {
+            text = "جاري الاتصال بالخادم..."
+            textSize = 15f
+            setTextColor(TEXT_MUTED)
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)))
+        }
+        panel.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
 
-        root.addView(panel, LinearLayout.LayoutParams(dp(860), LinearLayout.LayoutParams.WRAP_CONTENT))
+        panel.addView(View(this).apply { setBackgroundColor(CLASSIC_STROKE) },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                topMargin = dp(8); bottomMargin = dp(12)
+            })
+
+        panel.addView(TextView(this).apply {
+            text = "يتم حفظ الباقة محليًا • لن يعاد تحميلها عند كل دخول"
+            textSize = 13f
+            setTextColor(TEXT_DIM)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)))
+
+        root.addView(panel, LinearLayout.LayoutParams(dp(780), LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
+    }
+
+    private fun classicPanel() = GradientDrawable().apply {
+        cornerRadius = dp(18).toFloat()
+        setColor(CLASSIC_SURFACE)
+        setStroke(dp(1), CLASSIC_STROKE)
     }
 
     private suspend fun sync(providerId: String) {
@@ -173,7 +190,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private fun fail(message: String) {
         stage.text = message
-        stage.setTextColor(Color.rgb(255, 135, 155))
+        stage.setTextColor(ERROR)
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
@@ -181,5 +198,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"
+        private val CLASSIC_SURFACE = Color.rgb(17, 16, 30)
+        private val CLASSIC_STROKE = Color.rgb(69, 55, 88)
+        private val CLASSIC_PURPLE = Color.rgb(124, 43, 255)
+        private val PROGRESS_TRACK = Color.rgb(40, 34, 52)
+        private val TEXT_MUTED = Color.rgb(188, 182, 205)
+        private val TEXT_DIM = Color.rgb(151, 139, 165)
+        private val ERROR = Color.rgb(255, 135, 155)
     }
 }
