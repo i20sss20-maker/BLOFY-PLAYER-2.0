@@ -4,7 +4,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -13,7 +12,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
@@ -33,6 +31,7 @@ import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.ui.V339Ui
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
 
@@ -60,7 +59,7 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(if (isTv) 72 else 24), dp(if (isTv) 26 else 24), dp(if (isTv) 72 else 24), dp(if (isTv) 26 else 24))
-            background = AppCompatResources.getDrawable(this@LoginActivity, R.drawable.blofy_home_background)
+            background = V339Ui.screenGradient()
         }
 
         root.addView(ImageView(this).apply {
@@ -69,17 +68,8 @@ class LoginActivity : AppCompatActivity() {
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(dp(if (isTv) 150 else 128), dp(if (isTv) 92 else 76)).apply { bottomMargin = dp(8) })
 
-        root.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"
-            textSize = if (isTv) 29f else 25f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-        })
-        root.addView(TextView(this).apply {
-            text = "أضف القائمة من الموقع ثم اضغط تحديث"
-            textSize = if (isTv) 15f else 13f
-            setTextColor(MUTED)
+        root.addView(V339Ui.title(this, "BLOFY PLAYER", if (isTv) 29f else 25f).apply { gravity = Gravity.CENTER })
+        root.addView(V339Ui.text(this, "أضف القائمة من الموقع ثم اضغط تحديث", if (isTv) 15f else 13f, V339Ui.MUTED).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(4), 0, dp(14))
         })
@@ -89,7 +79,7 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             layoutDirection = if (isTv) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
             setPadding(dp(22), dp(20), dp(22), dp(20))
-            background = panelBackground()
+            background = V339Ui.panel(this@LoginActivity, V339Ui.PANEL, 18, V339Ui.STROKE)
         }
 
         val qrPanel = LinearLayout(this).apply {
@@ -98,10 +88,7 @@ class LoginActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
         qrPanel.addView(qrView, LinearLayout.LayoutParams(dp(if (isTv) 230 else 190), dp(if (isTv) 230 else 190)))
-        qrPanel.addView(TextView(this).apply {
-            text = "امسح الرمز لفتح موقع BLOFY PLAYER"
-            textSize = 13f
-            setTextColor(MUTED)
+        qrPanel.addView(V339Ui.text(this, "امسح الرمز لفتح موقع BLOFY PLAYER", 13f, V339Ui.MUTED).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(9), 0, 0)
         })
@@ -148,19 +135,19 @@ class LoginActivity : AppCompatActivity() {
             text = "..."
             textSize = if (isTv) 20f else 16f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            setTextColor(V339Ui.TEXT)
             gravity = Gravity.CENTER_VERTICAL or Gravity.LEFT
             setPadding(dp(18), 0, dp(18), 0)
-            background = fieldBackground()
+            background = V339Ui.focusDrawable(this@LoginActivity, Color.argb(220, 16, 15, 28), V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
         }
         codeView = TextView(this).apply {
             text = "------"
             textSize = if (isTv) 36f else 28f
             typeface = Typeface.DEFAULT_BOLD
             letterSpacing = .16f
-            setTextColor(Color.WHITE)
+            setTextColor(V339Ui.TEXT)
             gravity = Gravity.CENTER
-            background = fieldBackground()
+            background = V339Ui.focusDrawable(this@LoginActivity, Color.argb(220, 16, 15, 28), V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
         }
         qrView = ImageView(this).apply {
             setBackgroundColor(Color.WHITE)
@@ -168,12 +155,7 @@ class LoginActivity : AppCompatActivity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "رمز BLOFY"
         }
-        status = TextView(this).apply {
-            text = "جاهز"
-            textSize = 13f
-            setTextColor(MUTED)
-            gravity = Gravity.CENTER
-        }
+        status = V339Ui.text(this, "جاهز", 13f, V339Ui.MUTED).apply { gravity = Gravity.CENTER }
     }
 
     private fun refreshFromPortal() {
@@ -252,30 +234,13 @@ class LoginActivity : AppCompatActivity() {
         startActivity(Intent(this, HomeActivity::class.java))
     }
 
-    private fun actionButton(label: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
-        text = label
-        isAllCaps = false
-        textSize = 16f
-        typeface = Typeface.DEFAULT_BOLD
+    private fun actionButton(label: String, primary: Boolean, action: () -> Unit) = V339Ui.button(this, label, primary).apply {
         isFocusable = isTv
         isFocusableInTouchMode = isTv
-        setTextColor(Color.WHITE)
-        background = buttonBackground(false, primary)
-        setOnFocusChangeListener { view, focused ->
-            if (isTv) {
-                view.background = buttonBackground(focused, primary)
-                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(80).start()
-            }
-        }
         setOnClickListener { action() }
     }
 
-    private fun label(value: String) = TextView(this).apply {
-        text = value
-        textSize = 13f
-        setTextColor(MUTED)
-        gravity = Gravity.RIGHT
-    }
+    private fun label(value: String) = V339Ui.text(this, value, 13f, V339Ui.MUTED).apply { gravity = Gravity.RIGHT }
 
     private fun createQr(value: String): Bitmap {
         val matrix = QRCodeWriter().encode(value, BarcodeFormat.QR_CODE, 360, 360)
@@ -284,36 +249,9 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun panelBackground() = GradientDrawable().apply {
-        cornerRadius = dp(20).toFloat()
-        setColor(SURFACE)
-        setStroke(dp(1), STROKE)
-    }
-
-    private fun fieldBackground() = GradientDrawable().apply {
-        cornerRadius = dp(13).toFloat()
-        setColor(Color.rgb(10, 9, 16))
-        setStroke(dp(1), Color.rgb(57, 45, 73))
-    }
-
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(15).toFloat()
-        setColor(when {
-            focused -> FOCUS
-            primary -> Color.rgb(59, 30, 108)
-            else -> SURFACE
-        })
-        setStroke(if (focused) dp(2) else dp(1), if (focused) PURPLE_SOFT else STROKE)
-    }
-
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    private fun dp(value: Int) = V339Ui.dp(this, value)
 
     companion object {
         private const val PORTAL_FALLBACK = "https://blofy-player-2-0.vercel.app"
-        private val SURFACE = Color.rgb(17, 16, 30)
-        private val STROKE = Color.rgb(69, 55, 88)
-        private val FOCUS = Color.rgb(72, 42, 120)
-        private val PURPLE_SOFT = Color.rgb(188, 132, 255)
-        private val MUTED = Color.rgb(188, 182, 205)
     }
 }
