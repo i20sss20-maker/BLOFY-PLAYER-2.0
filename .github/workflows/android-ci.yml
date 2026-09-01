@@ -28,10 +28,20 @@ jobs:
           "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
           test -d "$ANDROID_HOME/platforms/android-36"
       - name: Test lint and assemble
-        run: >-
-          gradle --no-daemon
-          -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app
-          testDebugUnitTest lintDebug assembleDebug
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon \
+            -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app \
+            testDebugUnitTest lintDebug assembleDebug 2>&1 | tee gradle-ci.log
+      - name: Upload Gradle diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-gradle-diagnostics-${{ github.sha }}
+          path: gradle-ci.log
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Stamp standard build
         shell: bash
         run: |
