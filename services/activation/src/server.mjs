@@ -195,11 +195,53 @@ async function health(res) {
   }
 }
 
+function hardenPortalCredentialInputs(html) {
+  let output = html
+    .replace(
+      '<input id="baseUrl" inputmode="url" autocomplete="off"',
+      '<input id="baseUrl" name="blofy-server-url" inputmode="url" autocomplete="new-password" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true"'
+    )
+    .replace(
+      '<input id="username" autocomplete="off"',
+      '<input id="username" name="blofy-provider-username" autocomplete="new-password" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true"'
+    )
+    .replace(
+      '<input id="password" type="password" autocomplete="off"',
+      '<input id="password" name="blofy-provider-password" type="password" autocomplete="new-password" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true"'
+    );
+
+  const pasteGuard = `<script>
+(function () {
+  ['baseUrl', 'username', 'password'].forEach(function (id) {
+    var input = document.getElementById(id);
+    if (!input) return;
+    input.setAttribute('autocomplete', 'new-password');
+    input.setAttribute('autocorrect', 'off');
+    input.setAttribute('autocapitalize', 'none');
+    input.setAttribute('spellcheck', 'false');
+    input.addEventListener('paste', function (event) {
+      var clipboard = event.clipboardData || window.clipboardData;
+      if (!clipboard) return;
+      var text = clipboard.getData('text/plain');
+      if (typeof text !== 'string') return;
+      event.preventDefault();
+      input.value = text.trim();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  });
+})();
+</script>`;
+  if (output.includes('</body>')) output = output.replace('</body>', `${pasteGuard}\n</body>`);
+  return output;
+}
+
 async function servePortal(res) {
-  const file = await readFile(new URL('../web/index.html', import.meta.url));
+  const source = await readFile(new URL('../web/index.html', import.meta.url), 'utf8');
+  const file = hardenPortalCredentialInputs(source);
   res.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
-    'content-length': file.length,
+    'content-length': Buffer.byteLength(file),
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
     'x-frame-options': 'DENY',
