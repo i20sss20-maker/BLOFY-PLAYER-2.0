@@ -15,8 +15,8 @@ object ExternalPlayerLauncher {
         preferredPackages.forEach { packageName ->
             val intent = baseIntent(url, title).setPackage(packageName)
             if (intent.resolveActivity(context.packageManager) != null) {
-                context.startActivity(intent)
-                return true
+                val launched = runCatching { context.startActivity(intent) }.isSuccess
+                if (launched) return true
             }
         }
         return launch(context, url, title)
@@ -24,9 +24,10 @@ object ExternalPlayerLauncher {
 
     fun launch(context: Context, url: String, title: String? = null): Boolean {
         val intent = baseIntent(url, title)
-        val resolved = intent.resolveActivity(context.packageManager) ?: return false
-        context.startActivity(Intent.createChooser(intent, "تشغيل بواسطة").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        return resolved != null
+        if (intent.resolveActivity(context.packageManager) == null) return false
+        val chooser = Intent.createChooser(intent, "تشغيل بواسطة")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching { context.startActivity(chooser) }.isSuccess
     }
 
     private fun baseIntent(url: String, title: String?) = Intent(Intent.ACTION_VIEW).apply {
