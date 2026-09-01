@@ -8,7 +8,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
-import tv.blofy.player.V339ThemeBridge
+import tv.blofy.player.ui.V339Ui
 
 class FocusTextAdapter<T>(
     private val label: (T) -> String,
@@ -64,14 +64,14 @@ class FocusTextAdapter<T>(
             setTextColor(Color.rgb(213,210,221))
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
             textDirection = View.TEXT_DIRECTION_RTL
-            setPadding(V339ThemeBridge.dp(parent.context,18), 0, V339ThemeBridge.dp(parent.context,18), 0)
+            setPadding(V339Ui.dp(parent.context,18), 0, V339Ui.dp(parent.context,18), 0)
             isFocusable = true; isClickable = true; isLongClickable = true
-            background = V339ThemeBridge.focusDrawable(parent.context, Color.TRANSPARENT, V339ThemeBridge.PANEL_SOFT, V339ThemeBridge.PURPLE_LIGHT)
+            background = V339Ui.focusDrawable(parent.context, Color.TRANSPARENT, V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
             setOnFocusChangeListener { v, focused ->
-                (v as TextView).setTextColor(if (focused) V339ThemeBridge.TEXT else Color.rgb(213,210,221))
+                (v as TextView).setTextColor(if (focused) V339Ui.TEXT else Color.rgb(213,210,221))
                 v.animate().cancel()
                 v.animate().scaleX(if (focused) 1.006f else 1f).scaleY(if (focused) 1.006f else 1f)
-                    .translationZ(if (focused) V339ThemeBridge.dp(parent.context,8).toFloat() else 0f).setDuration(90L).start()
+                    .translationZ(if (focused) V339Ui.dp(parent.context,8).toFloat() else 0f).setDuration(90L).start()
                 if (focused) (v.tag as? Int)?.let { pos -> items.getOrNull(pos)?.let { item -> focusedPosition = pos; focusedKey = itemKey?.invoke(item); onFocus?.invoke(item) } }
             }
         }
