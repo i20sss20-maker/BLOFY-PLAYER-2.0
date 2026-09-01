@@ -4,7 +4,6 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
@@ -15,7 +14,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +27,7 @@ import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.V339Ui
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 
 class SettingsActivity : AppCompatActivity() {
@@ -44,7 +43,7 @@ class SettingsActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = LinearLayout.LAYOUT_DIRECTION_LTR
             setPadding(dp(26), dp(22), dp(26), dp(22))
-            background = AppCompatResources.getDrawable(this@SettingsActivity, R.drawable.blofy_home_background)
+            background = V339Ui.screenGradient()
         }
 
         content = LinearLayout(this).apply {
@@ -52,17 +51,8 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(dp(28), 0, dp(24), 0)
             layoutDirection = LinearLayout.LAYOUT_DIRECTION_RTL
         }
-        content.addView(TextView(this).apply {
-            text = getString(R.string.settings_title)
-            textSize = 31f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
-        })
-        status = TextView(this).apply {
-            text = "إعدادات BLOFY PLAYER"
-            textSize = 13f
-            setTextColor(SOFT)
+        content.addView(V339Ui.title(this, getString(R.string.settings_title), 31f).apply { gravity = Gravity.RIGHT })
+        status = V339Ui.text(this, "إعدادات BLOFY PLAYER", 13f, V339Ui.MUTED).apply {
             gravity = Gravity.RIGHT
             setPadding(0, dp(6), 0, dp(14))
         }
@@ -74,7 +64,7 @@ class SettingsActivity : AppCompatActivity() {
             gravity = Gravity.TOP
             layoutDirection = LinearLayout.LAYOUT_DIRECTION_RTL
             setPadding(dp(10), dp(12), dp(10), dp(12))
-            background = panelBackground()
+            background = V339Ui.panel(this@SettingsActivity, V339Ui.PANEL, 18, V339Ui.STROKE)
         }
         listOf(
             SECTION_PLAYBACK to "التشغيل",
@@ -109,7 +99,6 @@ class SettingsActivity : AppCompatActivity() {
             layoutDirection = LinearLayout.LAYOUT_DIRECTION_RTL
             setPadding(0, dp(8), 0, dp(22))
         }
-
         when (currentSection) {
             SECTION_PLAYBACK -> renderPlayback(box)
             SECTION_MEDIA -> renderMedia(box)
@@ -117,7 +106,6 @@ class SettingsActivity : AppCompatActivity() {
             SECTION_LIBRARY -> renderLibrary(box)
             SECTION_PARENTAL -> renderParental(box)
         }
-
         scroll.addView(box)
         content.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         box.post { if (box.childCount > 2) box.getChildAt(2).requestFocus() }
@@ -130,31 +118,16 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
         box.addView(sectionHint("هذه الخيارات مرتبطة مباشرة بملف تشغيل السيرفر الحالي."))
-        box.addView(choiceButton(
-            "محرك التشغيل",
-            if (provider.preferredEngine.equals("vlc", true)) "VLC" else "Media3",
-            listOf("Media3", "VLC")
-        ) { selected ->
+        box.addView(choiceButton("محرك التشغيل", if (provider.preferredEngine.equals("vlc", true)) "VLC" else "Media3", listOf("Media3", "VLC")) { selected ->
             updateProvider(provider.copy(preferredEngine = if (selected == "VLC") "vlc" else "media3"))
         })
-        box.addView(choiceButton(
-            "اتصال الشبكة",
-            if (provider.preferredTransport.equals("http", true)) "HTTP" else "Cronet",
-            listOf("Cronet", "HTTP")
-        ) { selected ->
+        box.addView(choiceButton("اتصال الشبكة", if (provider.preferredTransport.equals("http", true)) "HTTP" else "Cronet", listOf("Cronet", "HTTP")) { selected ->
             updateProvider(provider.copy(preferredTransport = if (selected == "HTTP") "http" else "cronet"))
         })
-        box.addView(choiceButton(
-            "صيغة البث المباشر",
-            if (provider.liveFormat.equals("m3u8", true)) "M3U8 / HLS" else "TS",
-            listOf("TS", "M3U8 / HLS")
-        ) { selected ->
+        box.addView(choiceButton("صيغة البث المباشر", if (provider.liveFormat.equals("m3u8", true)) "M3U8 / HLS" else "TS", listOf("TS", "M3U8 / HLS")) { selected ->
             updateProvider(provider.copy(liveFormat = if (selected.startsWith("M3U8")) "m3u8" else "ts"))
         })
-        box.addView(toggleProviderRow(
-            "السماح بالتحويل بين HTTP و HTTPS",
-            provider.allowCrossProtocolRedirects
-        ) { enabled ->
+        box.addView(toggleProviderRow("السماح بالتحويل بين HTTP و HTTPS", provider.allowCrossProtocolRedirects) { enabled ->
             updateProvider(provider.copy(allowCrossProtocolRedirects = enabled))
         })
     }
@@ -201,18 +174,9 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun sectionTitle(value: String) = TextView(this).apply {
-        text = value
-        textSize = 27f
-        typeface = Typeface.DEFAULT_BOLD
-        setTextColor(Color.WHITE)
-        gravity = Gravity.RIGHT
-    }
+    private fun sectionTitle(value: String) = V339Ui.title(this, value, 27f).apply { gravity = Gravity.RIGHT }
 
-    private fun sectionHint(value: String) = TextView(this).apply {
-        text = value
-        textSize = 14f
-        setTextColor(SOFT)
+    private fun sectionHint(value: String) = V339Ui.text(this, value, 14f, V339Ui.MUTED).apply {
         gravity = Gravity.RIGHT
         setPadding(0, dp(6), 0, dp(18))
     }
@@ -222,18 +186,9 @@ class SettingsActivity : AppCompatActivity() {
         gravity = Gravity.RIGHT
         layoutDirection = LinearLayout.LAYOUT_DIRECTION_RTL
         setPadding(dp(20), dp(14), dp(20), dp(14))
-        background = itemBackground(false)
-        addView(TextView(this@SettingsActivity).apply {
-            text = title
-            textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
-        })
-        addView(TextView(this@SettingsActivity).apply {
-            text = description
-            textSize = 13f
-            setTextColor(SOFT)
+        background = V339Ui.focusDrawable(this@SettingsActivity, V339Ui.PANEL, V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
+        addView(V339Ui.title(this@SettingsActivity, title, 16f).apply { gravity = Gravity.RIGHT })
+        addView(V339Ui.text(this@SettingsActivity, description, 13f, V339Ui.MUTED).apply {
             gravity = Gravity.RIGHT
             setPadding(0, dp(4), 0, 0)
         })
@@ -250,9 +205,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
     private fun toggleProviderRow(label: String, enabled: Boolean, onChange: (Boolean) -> Unit): Button =
-        actionButton("$label: ${if (enabled) getString(R.string.state_on) else getString(R.string.state_off)}") {
-            onChange(!enabled)
-        }
+        actionButton("$label: ${if (enabled) getString(R.string.state_on) else getString(R.string.state_off)}") { onChange(!enabled) }
 
     private fun updateProvider(updated: ProviderEntity) {
         lifecycleScope.launch {
@@ -267,30 +220,9 @@ class SettingsActivity : AppCompatActivity() {
     private fun actionRow(label: String, action: () -> Unit) = actionButton(label, action)
     private fun navButton(label: String, action: () -> Unit) = actionButton(label, action)
 
-    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label
-        isAllCaps = false
+    private fun actionButton(label: String, action: () -> Unit) = V339Ui.button(this, label, false).apply {
         textSize = 15f
-        isFocusable = true
-        setTextColor(Color.WHITE)
-        background = itemBackground(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = itemBackground(focused)
-            view.animate().scaleX(if (focused) 1.018f else 1f).scaleY(if (focused) 1.018f else 1f).setDuration(70).start()
-        }
         setOnClickListener { action() }
-    }
-
-    private fun panelBackground() = GradientDrawable().apply {
-        cornerRadius = dp(20).toFloat()
-        setColor(IDLE_FILL)
-        setStroke(dp(1), IDLE_STROKE)
-    }
-
-    private fun itemBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(15).toFloat()
-        setColor(if (focused) FOCUS_FILL else IDLE_FILL)
-        setStroke(if (focused) dp(2) else dp(1), if (focused) FOCUS_STROKE else IDLE_STROKE)
     }
 
     private fun refreshLibrary() {
@@ -304,11 +236,8 @@ class SettingsActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) {
                     PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(provider)
                 }
-            }.onSuccess {
-                status.text = "اكتمل تحديث المحتوى"
-            }.onFailure {
-                status.text = "تعذر تحديث المحتوى"
-            }
+            }.onSuccess { status.text = "اكتمل تحديث المحتوى" }
+                .onFailure { status.text = "تعذر تحديث المحتوى" }
         }
     }
 
@@ -317,6 +246,9 @@ class SettingsActivity : AppCompatActivity() {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
             hint = "4 إلى 6 أرقام"
             isSingleLine = true
+            setTextColor(V339Ui.TEXT)
+            setHintTextColor(V339Ui.MUTED)
+            background = V339Ui.focusDrawable(this@SettingsActivity, Color.argb(220, 16, 15, 28), V339Ui.PANEL_SOFT, V339Ui.PURPLE_LIGHT)
         }
         val show = {
             AlertDialog.Builder(this)
@@ -332,7 +264,7 @@ class SettingsActivity : AppCompatActivity() {
         if (ParentalPinManager.hasPin(this)) ParentalGate.requirePin(this) { show() } else show()
     }
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun dp(v: Int) = V339Ui.dp(this, v)
 
     companion object {
         private const val SECTION_PLAYBACK = "playback"
@@ -340,11 +272,6 @@ class SettingsActivity : AppCompatActivity() {
         private const val SECTION_LANGUAGE = "language"
         private const val SECTION_LIBRARY = "library"
         private const val SECTION_PARENTAL = "parental"
-        private val SOFT = Color.rgb(195, 175, 220)
-        private val IDLE_FILL = Color.rgb(17, 16, 30)
-        private val IDLE_STROKE = Color.rgb(69, 55, 88)
-        private val FOCUS_FILL = Color.rgb(72, 42, 120)
-        private val FOCUS_STROKE = Color.rgb(188, 132, 255)
         private val LANGUAGES = listOf(
             "العربية" to "ar",
             "English" to "en",
