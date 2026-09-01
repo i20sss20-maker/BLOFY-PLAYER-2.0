@@ -1,17 +1,12 @@
 package tv.blofy.player.ui.catalog
 
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
-import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -19,10 +14,10 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import tv.blofy.player.R
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.ui.V339Ui
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -47,23 +42,34 @@ class PosterCatalogActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             setPadding(dp(28), dp(22), dp(28), dp(24))
-            background = AppCompatResources.getDrawable(this@PosterCatalogActivity, R.drawable.blofy_home_background)
-            clipChildren = false; clipToPadding = false
+            background = V339Ui.screenGradient()
+            clipChildren = false
+            clipToPadding = false
         }
 
-        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
-        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
-        header.addView(TextView(this).apply {
-            text = if (kind == KIND_SERIES) "المسلسلات" else "الأفلام"
-            textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.START
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        header.addView(V339Ui.title(this, if (kind == KIND_SERIES) "المسلسلات" else "الأفلام", 30f).apply {
+            gravity = Gravity.START
         }, LinearLayout.LayoutParams(0, dp(58), 1f))
-        countView = TextView(this).apply { textSize = 14f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER_VERTICAL }
+        countView = V339Ui.text(this, "", 14f, V339Ui.PURPLE_LIGHT).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(countView)
         content.addView(header)
 
         posterGrid = RecyclerView(this).apply {
             layoutManager = GridLayoutManager(this@PosterCatalogActivity, GRID_COLUMNS)
-            setPadding(dp(4), dp(4), dp(8), dp(22)); clipChildren = false; clipToPadding = false; itemAnimator = null
+            setPadding(dp(4), dp(4), dp(8), dp(22))
+            clipChildren = false
+            clipToPadding = false
+            itemAnimator = null
             setHasFixedSize(true)
             recycledViewPool.setMaxRecycledViews(0, 30)
             descendantFocusability = ViewGroupFocus.AFTER_DESCENDANTS
@@ -72,15 +78,20 @@ class PosterCatalogActivity : AppCompatActivity() {
         root.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(18) })
 
         val rail = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.TOP; layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(10), dp(14), dp(10), dp(14)); background = categoryBackground()
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.TOP
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(10), dp(14), dp(10), dp(14))
+            background = V339Ui.panel(this@PosterCatalogActivity, V339Ui.PANEL, 18, V339Ui.STROKE)
         }
-        rail.addView(TextView(this).apply {
-            text = "الفئات"; textSize = 20f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)))
+        rail.addView(V339Ui.title(this, "الفئات", 20f).apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)))
         categoryList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@PosterCatalogActivity, RecyclerView.VERTICAL, false)
-            clipChildren = false; clipToPadding = false; itemAnimator = null; setHasFixedSize(true)
+            clipChildren = false
+            clipToPadding = false
+            itemAnimator = null
+            setHasFixedSize(true)
         }
         rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(rail, LinearLayout.LayoutParams(dp(250), LinearLayout.LayoutParams.MATCH_PARENT))
@@ -124,7 +135,8 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun loadStreams(categoryId: String?) {
         if (providerId.isBlank() || selectedCategoryId == categoryId && streamsJob?.isActive == true) return
-        selectedCategoryId = categoryId; streamsJob?.cancel()
+        selectedCategoryId = categoryId
+        streamsJob?.cancel()
         streamsJob = lifecycleScope.launch {
             BlofyDatabase.get(applicationContext).dao().streams(providerId, kind, categoryId).collect { items ->
                 posterAdapter.submit(items)
@@ -177,28 +189,33 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun openItem(stream: StreamEntity) {
         startActivity(Intent(this, if (kind == KIND_SERIES) SeriesDetailsActivity::class.java else MovieDetailsActivity::class.java).apply {
-            putExtra(EXTRA_PROVIDER_ID_SHARED, providerId); putExtra(EXTRA_CONTENT_KEY_SHARED, stream.key)
+            putExtra(EXTRA_PROVIDER_ID_SHARED, providerId)
+            putExtra(EXTRA_CONTENT_KEY_SHARED, stream.key)
         })
     }
 
-    private fun allCategory() = CategoryEntity("$providerId:$kind:$ALL_CATEGORY_ID", providerId, ALL_CATEGORY_ID, kind, if (kind == KIND_SERIES) "كل المسلسلات" else "كل الأفلام", -1)
+    private fun allCategory() = CategoryEntity(
+        "$providerId:$kind:$ALL_CATEGORY_ID",
+        providerId,
+        ALL_CATEGORY_ID,
+        kind,
+        if (kind == KIND_SERIES) "كل المسلسلات" else "كل الأفلام",
+        -1
+    )
+
     private fun categoryRemoteId(category: CategoryEntity) = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
-    private fun categoryBackground() = GradientDrawable().apply {
-        cornerRadius = dp(18).toFloat()
-        setColor(CLASSIC_SURFACE)
-        setStroke(dp(1), CLASSIC_STROKE)
-    }
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    private fun dp(value: Int) = V339Ui.dp(this, value)
     override fun onDestroy() { streamsJob?.cancel(); super.onDestroy() }
 
     private object ViewGroupFocus { const val AFTER_DESCENDANTS = 0x40000 }
 
     companion object {
-        const val EXTRA_KIND = "kind"; const val KIND_MOVIE = "movie"; const val KIND_SERIES = "series"
+        const val EXTRA_KIND = "kind"
+        const val KIND_MOVIE = "movie"
+        const val KIND_SERIES = "series"
         private const val GRID_COLUMNS = 5
-        private const val ALL_CATEGORY_ID = "__all__"; private const val EXTRA_PROVIDER_ID_SHARED = "provider_id"; private const val EXTRA_CONTENT_KEY_SHARED = "content_key"
-        private val PURPLE_SOFT = Color.rgb(195, 135, 255)
-        private val CLASSIC_SURFACE = Color.rgb(18, 16, 29)
-        private val CLASSIC_STROKE = Color.argb(85, 77, 55, 107)
+        private const val ALL_CATEGORY_ID = "__all__"
+        private const val EXTRA_PROVIDER_ID_SHARED = "provider_id"
+        private const val EXTRA_CONTENT_KEY_SHARED = "content_key"
     }
 }
