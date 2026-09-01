@@ -15,13 +15,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
 /** Fast artwork loader for large TV catalogs: memory + disk cache with request deduplication. */
 object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 6 * 1024 * 1024
     private const val MAX_DISK_BYTES = 180L * 1024L * 1024L
-    private const val TRIM_EVERY_WRITES = 32
     private val main = Handler(Looper.getMainLooper())
     private val pool = Executors.newFixedThreadPool(6) { runnable ->
         Thread(runnable, "blofy-artwork").apply { priority = Thread.NORM_PRIORITY - 1 }
@@ -38,7 +36,6 @@ object ArtworkLoader {
         override fun sizeOf(key: String, value: Bitmap): Int = (value.byteCount / 1024).coerceAtLeast(1)
     }
     private val waiting = ConcurrentHashMap<String, CopyOnWriteArrayList<WeakReference<ImageView>>>()
-    private val writesSinceTrim = AtomicInteger(0)
 
     fun load(view: ImageView, rawUrl: String?) {
         val url = rawUrl?.trim().orEmpty()
@@ -145,9 +142,7 @@ object ArtworkLoader {
                 temp.copyTo(target, overwrite = true)
                 temp.delete()
             }
-            if (writesSinceTrim.incrementAndGet() >= TRIM_EVERY_WRITES && writesSinceTrim.getAndSet(0) >= TRIM_EVERY_WRITES) {
-                trimDisk(dir)
-            }
+            trimDisk(dir)
         }
     }
 

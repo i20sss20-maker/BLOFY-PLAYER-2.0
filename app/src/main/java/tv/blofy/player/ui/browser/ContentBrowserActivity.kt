@@ -78,33 +78,27 @@ class ContentBrowserActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(if (phoneMode) 18 else 30, if (phoneMode) 16 else 22, if (phoneMode) 18 else 30, if (phoneMode) 16 else 22)
             background = AppCompatResources.getDrawable(this@ContentBrowserActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
             val section = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
             text = "BLOFY  •  $section"
-            textSize = if (phoneMode) 22f else 24f
+            textSize = if (phoneMode) 24f else 28f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            textDirection = View.TEXT_DIRECTION_RTL
-            setPadding(8, 0, 0, if (phoneMode) 10 else 14)
+            setShadowLayer(18f, 0f, 3f, Color.rgb(126, 44, 255))
+            gravity = Gravity.START
+            setPadding(8, 0, 0, if (phoneMode) 10 else 18)
         })
 
-        val body = LinearLayout(this).apply {
-            orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-        }
+        val body = LinearLayout(this).apply { orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
         categoryList = RecyclerView(this).apply {
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, true)
+            layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, false)
             else LinearLayoutManager(this@ContentBrowserActivity)
             background = browserPanelBackground(emphasis = true)
         }
         streamList = RecyclerView(this).apply {
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
             layoutManager = LinearLayoutManager(this@ContentBrowserActivity)
             background = browserPanelBackground(emphasis = false)
         }
@@ -115,7 +109,6 @@ class ContentBrowserActivity : AppCompatActivity() {
             body.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 92).apply { bottomMargin = 10 })
             body.addView(streamList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            // RTL container + first child = category rail anchored to the right.
             body.addView(categoryList, LinearLayout.LayoutParams(280, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 18 })
             if (previewEnabled) {
                 body.addView(streamList, LinearLayout.LayoutParams(360, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 22 })
@@ -170,27 +163,24 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun createCatalogStatusRow() = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
         gravity = Gravity.CENTER_VERTICAL
         setPadding(8, 0, 8, if (phoneMode) 8 else 12)
         background = browserPanelBackground(emphasis = true)
         catalogStatus = TextView(this@ContentBrowserActivity).apply {
             text = "جاري التحقق من ${catalogLabel()}..."
-            textSize = if (phoneMode) 14f else 14f
+            textSize = if (phoneMode) 14f else 16f
             setTextColor(BLOFY_PURPLE_SOFT)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }
         addView(catalogStatus, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         catalogRetry = Button(this@ContentBrowserActivity).apply {
             text = "إعادة المحاولة"
             isAllCaps = false
-            textSize = 14f
             setTextColor(Color.WHITE)
             background = catalogActionBackground(false)
             visibility = View.GONE
             setOnFocusChangeListener { view, focused ->
                 view.background = catalogActionBackground(focused)
-                view.animate().scaleX(if (focused) 1.006f else 1f).scaleY(if (focused) 1.006f else 1f).setDuration(90L).start()
+                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(110L).start()
             }
             setOnClickListener { refreshMissingCatalog() }
         }
@@ -199,15 +189,14 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun createPreviewPanel() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
         setPadding(18, 18, 18, 18)
         background = previewPanelBackground()
         previewTitle = TextView(this@ContentBrowserActivity).apply {
             text = "المعاينة"
-            textSize = 18f
+            textSize = 21f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            setShadowLayer(12f, 0f, 2f, BLOFY_PURPLE)
             setPadding(4, 0, 0, 12)
         }
         addView(previewTitle)
@@ -222,27 +211,34 @@ class ContentBrowserActivity : AppCompatActivity() {
             text = "OK: ملء الشاشة   •   ضغط مطوّل: الأرشيف ⏱   •   ↑↓: القنوات"
             textSize = 14f
             setTextColor(BLOFY_PURPLE_SOFT)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
             setPadding(4, 14, 0, 0)
         })
     }
 
-    private fun browserPanelBackground(emphasis: Boolean) = GradientDrawable().apply {
-        setColor(if (emphasis) 0xF211101E.toInt() else 0xE811101E.toInt())
-        cornerRadius = 18f
-        setStroke(1, if (emphasis) 0xAA452465.toInt() else 0x66452465)
+    private fun browserPanelBackground(emphasis: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        if (emphasis) intArrayOf(0xE8251B3B.toInt(), 0xF0120E20.toInt())
+        else intArrayOf(0xE81A1429.toInt(), 0xF00C0A15.toInt())
+    ).apply {
+        cornerRadius = 20f
+        setStroke(1, if (emphasis) 0x805E3A87.toInt() else 0x594A355F)
     }
 
-    private fun previewPanelBackground() = GradientDrawable().apply {
-        setColor(0xF211101E.toInt())
-        cornerRadius = 18f
-        setStroke(1, 0xAA452465.toInt())
+    private fun previewPanelBackground() = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        intArrayOf(0xF025183D.toInt(), 0xF00C0914.toInt())
+    ).apply {
+        cornerRadius = 24f
+        setStroke(2, 0x806E3CAE.toInt())
     }
 
-    private fun catalogActionBackground(focused: Boolean) = GradientDrawable().apply {
-        setColor(if (focused) 0xFF261944.toInt() else 0xFF11101E.toInt())
-        cornerRadius = 13f
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFBC84FF.toInt() else 0xAA452465.toInt())
+    private fun catalogActionBackground(focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT,
+        if (focused) intArrayOf(0xFFA84FFF.toInt(), 0xFF7524EF.toInt())
+        else intArrayOf(0xFF5920A5.toInt(), 0xFF35145F.toInt())
+    ).apply {
+        cornerRadius = 16f
+        setStroke(if (focused) 2 else 1, if (focused) 0xFFE6C5FF.toInt() else 0x807C4EB8.toInt())
     }
 
     private fun loadStreams(categoryId: String?) {
@@ -506,7 +502,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
         private const val ALL_CATEGORY_ID = "__all__"
-        private val BLOFY_PURPLE = Color.rgb(124, 43, 255)
-        private val BLOFY_PURPLE_SOFT = Color.rgb(188, 132, 255)
+        private val BLOFY_PURPLE = Color.rgb(139, 55, 255)
+        private val BLOFY_PURPLE_SOFT = Color.rgb(195, 135, 255)
     }
 }

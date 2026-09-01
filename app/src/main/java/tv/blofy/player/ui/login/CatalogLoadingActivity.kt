@@ -1,16 +1,18 @@
 package tv.blofy.player.ui.login
 
 import android.content.Intent
-import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
-import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +26,6 @@ import tv.blofy.player.data.PlaylistSyncProgress
 import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.remote.XtreamClient
-import tv.blofy.player.ui.V339Ui
 import tv.blofy.player.ui.home.HomeActivity
 import java.util.UUID
 
@@ -33,6 +34,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var percent: TextView
     private lateinit var stage: TextView
     private lateinit var progress: ProgressBar
+    private lateinit var serverStep: TextView
+    private lateinit var contentStep: TextView
+    private lateinit var prepareStep: TextView
+    private lateinit var readyStep: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,68 +55,113 @@ class CatalogLoadingActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(34), dp(20), dp(34), dp(20))
-            background = V339Ui.screenGradient()
+            setPadding(dp(80), dp(44), dp(80), dp(44))
+            background = AppCompatResources.getDrawable(this@CatalogLoadingActivity, R.drawable.blofy_home_background)
         }
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(46), dp(28), dp(46), dp(26))
-            background = V339Ui.gradientPanel(
-                this@CatalogLoadingActivity,
-                V339Ui.PANEL_ALT,
-                V339Ui.BLACK,
-                20,
-                V339Ui.STROKE
-            )
+            setPadding(dp(54), dp(34), dp(54), dp(32))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(28).toFloat()
+                setColor(0xE8151024.toInt())
+                setStroke(dp(1), 0xFF5C357F.toInt())
+            }
         }
 
         panel.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
-            isFocusable = false
-        }, LinearLayout.LayoutParams(dp(126), dp(72)).apply { bottomMargin = dp(6) })
+        }, LinearLayout.LayoutParams(dp(170), dp(96)))
 
-        panel.addView(V339Ui.title(this, "جاري تجهيز مكتبتك", 24f).apply {
+        panel.addView(TextView(this).apply {
+            text = "جاري تجهيز مكتبتك"
+            textSize = 28f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)))
-
-        percent = V339Ui.title(this, "0%", 54f).apply {
-            gravity = Gravity.CENTER
-            setTextColor(V339Ui.TEXT)
-        }
-        panel.addView(percent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(82)).apply {
-            topMargin = dp(6)
+            setPadding(0, dp(4), 0, dp(2))
         })
 
+        panel.addView(TextView(this).apply {
+            text = "يتم تحميل الباقة كاملة وحفظها محليًا قبل الدخول"
+            textSize = 14f
+            setTextColor(0xFFB7A8C9.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(18))
+        })
+
+        val progressRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = android.view.View.LAYOUT_DIRECTION_LTR
+        }
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             progress = 0
-            progressTintList = V339Ui.progressColors()
-            progressBackgroundTintList = ColorStateList.valueOf(V339Ui.DIVIDER)
+            progressTintList = android.content.res.ColorStateList.valueOf(0xFF8D39FF.toInt())
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF2D243A.toInt())
         }
-        panel.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10)).apply {
-            topMargin = dp(2)
-            bottomMargin = dp(14)
+        progressRow.addView(progress, LinearLayout.LayoutParams(0, dp(14), 1f).apply { marginEnd = dp(22) })
+        percent = TextView(this).apply {
+            text = "0%"
+            textSize = 34f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        }
+        progressRow.addView(percent, LinearLayout.LayoutParams(dp(120), dp(54)))
+        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(62)))
+
+        stage = TextView(this).apply {
+            text = "جاري الاتصال بالخادم..."
+            textSize = 19f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(12), 0, dp(4))
+        }
+        panel.addView(stage)
+
+        panel.addView(TextView(this).apply {
+            text = "يرجى الانتظار قليلاً..."
+            textSize = 14f
+            setTextColor(0xFF9587A8.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(24))
         })
 
-        stage = V339Ui.title(this, "جاري الاتصال بالخادم...", 16f).apply {
-            setTextColor(V339Ui.MUTED)
+        val steps = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
+            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
         }
-        panel.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
+        serverStep = step("●  الاتصال بالخادم")
+        contentStep = step("○  جلب المحتوى")
+        prepareStep = step("○  تحضير المكتبة")
+        readyStep = step("○  جاهز")
+        steps.addView(serverStep, stepParams())
+        steps.addView(contentStep, stepParams())
+        steps.addView(prepareStep, stepParams())
+        steps.addView(readyStep, stepParams())
+        panel.addView(steps, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
 
-        panel.addView(V339Ui.text(this, "يتم حفظ المحتوى محليًا بعد اكتمال التحميل", 12f, V339Ui.MUTED).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(6), 0, 0)
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)))
-
-        root.addView(panel, LinearLayout.LayoutParams(dp(660), LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(panel, LinearLayout.LayoutParams(dp(980), LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
+    }
+
+    private fun step(value: String) = TextView(this).apply {
+        text = value
+        textSize = 13f
+        setTextColor(0xFF756B82.toInt())
+        gravity = Gravity.CENTER
+    }
+
+    private fun stepParams() = LinearLayout.LayoutParams(0, dp(50), 1f).apply {
+        marginStart = dp(5)
+        marginEnd = dp(5)
     }
 
     private suspend fun sync(providerId: String) {
@@ -162,15 +212,23 @@ class CatalogLoadingActivity : AppCompatActivity() {
         progress.progress = safe
         percent.text = "$safe%"
         stage.text = label
+        serverStep.setTextColor(if (safe >= 5) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
+        contentStep.setTextColor(if (safe >= 15) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
+        prepareStep.setTextColor(if (safe >= 90) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
+        readyStep.setTextColor(if (safe >= 100) 0xFF45E3C2.toInt() else 0xFF756B82.toInt())
+        serverStep.text = if (safe >= 15) "✓  الاتصال بالخادم" else "●  الاتصال بالخادم"
+        contentStep.text = if (safe >= 90) "✓  جلب المحتوى" else "○  جلب المحتوى"
+        prepareStep.text = if (safe >= 100) "✓  تحضير المكتبة" else "○  تحضير المكتبة"
+        readyStep.text = if (safe >= 100) "✓  جاهز" else "○  جاهز"
     }
 
     private fun fail(message: String) {
         stage.text = message
-        stage.setTextColor(V339Ui.ERROR)
+        stage.setTextColor(0xFFFF879B.toInt())
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    private fun dp(v: Int) = V339Ui.dp(this, v)
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"
