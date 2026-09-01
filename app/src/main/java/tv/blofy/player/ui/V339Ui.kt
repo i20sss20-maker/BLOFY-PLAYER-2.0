@@ -5,6 +5,7 @@ import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import tv.blofy.player.V339OriginalBridge
 
@@ -33,6 +34,8 @@ object V339Ui {
     fun title(context: Context, value: String, sp: Float): TextView =
         V339OriginalBridge.title(context, value, sp.toInt())
     fun chip(context: Context, value: String): TextView = V339OriginalBridge.chip(context, value)
+    fun input(context: Context, hint: String, numeric: Boolean = false): EditText =
+        V339OriginalBridge.input(context, hint, numeric)
     fun button(context: Context, label: String, primary: Boolean): Button =
         V339OriginalBridge.button(context, label, primary)
     fun navChip(context: Context, label: String): TextView = V339OriginalBridge.navChip(context, label)
