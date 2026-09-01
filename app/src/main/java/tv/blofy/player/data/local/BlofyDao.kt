@@ -103,35 +103,35 @@ interface BlofyDao {
     }
 
     @Query("""
-        UPDATE categories AS staged
+        UPDATE categories
         SET hidden = COALESCE((
             SELECT old.hidden FROM categories AS old
             WHERE old.providerId = :targetProviderId
-              AND old.kind = staged.kind
-              AND (old.remoteId = staged.remoteId OR old.remoteId = staged.remoteId || '.0')
+              AND old.kind = categories.kind
+              AND (old.remoteId = categories.remoteId OR old.remoteId = categories.remoteId || '.0')
             LIMIT 1
-        ), staged.hidden)
-        WHERE staged.providerId = :stagedProviderId
+        ), categories.hidden)
+        WHERE providerId = :stagedProviderId
     """)
     suspend fun inheritStagedCategoryFlags(stagedProviderId: String, targetProviderId: String)
 
     @Query("""
-        UPDATE streams AS staged
+        UPDATE streams
         SET favorite = COALESCE((
                 SELECT old.favorite FROM streams AS old
                 WHERE old.providerId = :targetProviderId
-                  AND old.kind = staged.kind
-                  AND (old.remoteId = staged.remoteId OR old.remoteId = staged.remoteId || '.0')
+                  AND old.kind = streams.kind
+                  AND (old.remoteId = streams.remoteId OR old.remoteId = streams.remoteId || '.0')
                 LIMIT 1
-            ), staged.favorite),
+            ), streams.favorite),
             locked = COALESCE((
                 SELECT old.locked FROM streams AS old
                 WHERE old.providerId = :targetProviderId
-                  AND old.kind = staged.kind
-                  AND (old.remoteId = staged.remoteId OR old.remoteId = staged.remoteId || '.0')
+                  AND old.kind = streams.kind
+                  AND (old.remoteId = streams.remoteId OR old.remoteId = streams.remoteId || '.0')
                 LIMIT 1
-            ), staged.locked)
-        WHERE staged.providerId = :stagedProviderId
+            ), streams.locked)
+        WHERE providerId = :stagedProviderId
     """)
     suspend fun inheritStagedStreamFlags(stagedProviderId: String, targetProviderId: String)
 
@@ -161,8 +161,6 @@ interface BlofyDao {
 
     @Transaction
     suspend fun promoteStagedCatalog(stagedProviderId: String, targetProvider: ProviderEntity) {
-        // Preserve user flags while the old catalog is still present. These run entirely in
-        // SQLite and avoid materializing tens of thousands of staged rows in Kotlin memory.
         inheritStagedCategoryFlags(stagedProviderId, targetProvider.id)
         inheritStagedStreamFlags(stagedProviderId, targetProvider.id)
 
@@ -171,8 +169,6 @@ interface BlofyDao {
         clearProviderEpisodes(targetProvider.id)
         clearProviderEpg(targetProvider.id)
 
-        // Promote the already-inserted staging rows in place instead of reading/copying/reinserting
-        // the entire catalog. This keeps the 96% save phase short even for very large providers.
         promoteStagedCategoriesInPlace(stagedProviderId, targetProvider.id)
         promoteStagedStreamsInPlace(stagedProviderId, targetProvider.id)
         promoteStagedEpisodesInPlace(stagedProviderId, targetProvider.id)
