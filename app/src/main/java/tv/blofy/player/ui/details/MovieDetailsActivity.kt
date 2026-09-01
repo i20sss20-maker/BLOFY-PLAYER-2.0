@@ -20,8 +20,6 @@ import kotlinx.coroutines.launch
 import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.playback.ExternalPlayerLauncher
-import tv.blofy.player.core.security.ParentalGate
-import tv.blofy.player.core.security.ParentalPinManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -30,7 +28,6 @@ import tv.blofy.player.ui.player.PlayerActivity
 
 class MovieDetailsActivity : AppCompatActivity() {
     private lateinit var favoriteButton: Button
-    private lateinit var lockButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,24 +129,6 @@ class MovieDetailsActivity : AppCompatActivity() {
                 }
             }
             row.addView(favoriteButton, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
-
-            lockButton = actionButton(if (stream.locked) "🔒 مقفل" else "🔓 قفل") {
-                lifecycleScope.launch {
-                    val current = dao.stream(contentKey) ?: return@launch
-                    if (current.locked) {
-                        ParentalGate.requirePin(this@MovieDetailsActivity) {
-                            lifecycleScope.launch { dao.setLocked(contentKey, false); lockButton.text = "🔓 قفل" }
-                        }
-                    } else if (!ParentalPinManager.hasPin(this@MovieDetailsActivity)) {
-                        ParentalGate.requirePin(this@MovieDetailsActivity) {
-                            lifecycleScope.launch { dao.setLocked(contentKey, true); lockButton.text = "🔒 مقفل" }
-                        }
-                    } else {
-                        dao.setLocked(contentKey, true); lockButton.text = "🔒 مقفل"
-                    }
-                }
-            }
-            row.addView(lockButton, LinearLayout.LayoutParams(dp(150), dp(74)).apply { marginStart = dp(10) })
             info.addView(row)
 
             info.addView(actionButton("مشغل خارجي") {
