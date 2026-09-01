@@ -6,10 +6,6 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
-    <queries>
-        <package android:name="org.videolan.vlc" /><package android:name="com.mxtech.videoplayer.ad" /><package android:name="com.mxtech.videoplayer.pro" />
-        <intent><action android:name="android.intent.action.VIEW" /><data android:mimeType="video/*" /></intent>
-    </queries>
     <application android:name=".BlofyApp" android:allowBackup="false" android:banner="@drawable/blofy_tv_banner" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules" android:icon="@drawable/blofy_logo" android:label="@string/app_name" android:localeConfig="@xml/locales_config" android:networkSecurityConfig="@xml/network_security_config" android:supportsRtl="true" android:usesCleartextTraffic="true" android:theme="@style/Theme.Blofy">
         <activity android:name=".ui.mobile.MobileContentActivity" android:exported="false" />
         <activity android:name=".ui.catchup.CatchupActivity" android:exported="false" />
