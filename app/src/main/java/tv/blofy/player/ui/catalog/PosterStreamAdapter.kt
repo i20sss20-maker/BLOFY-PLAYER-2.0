@@ -20,26 +20,20 @@ internal class PosterStreamAdapter(
 ) : RecyclerView.Adapter<PosterStreamAdapter.Holder>() {
     private val items = mutableListOf<StreamEntity>()
 
-    init {
-        setHasStableIds(true)
-    }
+    init { setHasStableIds(true) }
 
     fun submit(newItems: List<StreamEntity>) {
         val oldItems = items.toList()
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize() = oldItems.size
             override fun getNewListSize() = newItems.size
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition].key == newItems[newItemPosition].key
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition] == newItems[newItemPosition]
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int) = oldItems[oldItemPosition].key == newItems[newItemPosition].key
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int) = oldItems[oldItemPosition] == newItems[newItemPosition]
         }, false)
-        items.clear()
-        items.addAll(newItems)
-        diff.dispatchUpdatesTo(this)
+        items.clear(); items.addAll(newItems); diff.dispatchUpdatesTo(this)
     }
 
-    override fun getItemId(position: Int): Long = items[position].key.hashCode().toLong()
+    override fun getItemId(position: Int) = items[position].key.hashCode().toLong()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val density = parent.resources.displayMetrics.density
@@ -47,49 +41,38 @@ internal class PosterStreamAdapter(
         val root = LinearLayout(parent.context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            isFocusable = true
-            isClickable = true
-            setPadding(dp(7), dp(7), dp(7), dp(10))
+            isFocusable = true; isClickable = true
+            setPadding(dp(6), dp(6), dp(6), dp(9))
             background = card(false)
             clipToOutline = true
         }
         val frame = FrameLayout(parent.context)
         val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(Color.rgb(20, 15, 31))
+            setBackgroundColor(CLASSIC_SURFACE)
             clipToOutline = true
         }
         frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(245)))
         val rating = TextView(parent.context).apply {
-            textSize = 11f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
+            textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
             setPadding(dp(8), dp(4), dp(8), dp(4))
             background = GradientDrawable().apply {
-                cornerRadius = dp(11).toFloat()
-                setColor(Color.argb(225, 62, 27, 105))
-                setStroke(dp(1), Color.rgb(189, 129, 255))
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.argb(220, 18, 16, 29))
+                setStroke(dp(1), CLASSIC_PURPLE_SOFT)
             }
         }
         frame.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(8)
-            marginEnd = dp(8)
+            topMargin = dp(8); marginEnd = dp(8)
         })
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(245)))
         val title = TextView(parent.context).apply {
-            textSize = 14f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            gravity = Gravity.START
-            maxLines = 2
-            setPadding(dp(4), dp(9), dp(4), 0)
+            textSize = 14f; typeface = Typeface.create("sans-serif", Typeface.BOLD); setTextColor(Color.WHITE)
+            gravity = Gravity.START; maxLines = 2; setPadding(dp(4), dp(8), dp(4), 0)
         }
         root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         val meta = TextView(parent.context).apply {
-            textSize = 11f
-            setTextColor(Color.rgb(183, 168, 201))
-            gravity = Gravity.START
-            maxLines = 1
+            textSize = 11f; setTextColor(CLASSIC_MUTED); gravity = Gravity.START; maxLines = 1
             setPadding(dp(4), dp(2), dp(4), 0)
         }
         root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(27)))
@@ -100,10 +83,7 @@ internal class PosterStreamAdapter(
         val item = items[position]
         holder.itemView.tag = item.key
         holder.title.text = item.name
-        holder.meta.text = listOfNotNull(
-            item.year?.takeIf(String::isNotBlank),
-            item.genre?.takeIf(String::isNotBlank)?.substringBefore(',')
-        ).joinToString("  •  ")
+        holder.meta.text = listOfNotNull(item.year?.takeIf(String::isNotBlank), item.genre?.takeIf(String::isNotBlank)?.substringBefore(',')).joinToString("  •  ")
         holder.rating.apply {
             val value = item.rating?.takeIf(String::isNotBlank)
             visibility = if (value == null) View.GONE else View.VISIBLE
@@ -111,47 +91,37 @@ internal class PosterStreamAdapter(
         }
         ArtworkLoader.load(holder.image, item.icon ?: item.backdrop)
         if (position % 4 == 0) {
-            val next = (position + 1 until minOf(items.size, position + 9)).map { index ->
-                items[index].icon ?: items[index].backdrop
-            }
-            ArtworkLoader.prefetch(holder.itemView.context, next)
+            ArtworkLoader.prefetch(holder.itemView.context, (position + 1 until minOf(items.size, position + 9)).map { index -> items[index].icon ?: items[index].backdrop })
         }
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
             view.background = card(focused)
             view.animate().cancel()
-            view.animate()
-                .scaleX(if (focused) 1.035f else 1f)
-                .scaleY(if (focused) 1.035f else 1f)
-                .translationZ(if (focused) 14f else 3f)
-                .setDuration(85)
-                .start()
+            view.animate().scaleX(if (focused) 1.03f else 1f).scaleY(if (focused) 1.03f else 1f).translationZ(if (focused) 10f else 2f).setDuration(75).start()
             if (focused) onFocus(item)
         }
     }
 
     override fun onViewRecycled(holder: Holder) {
-        holder.image.tag = null
-        holder.image.setImageDrawable(null)
-        super.onViewRecycled(holder)
+        holder.image.tag = null; holder.image.setImageDrawable(null); super.onViewRecycled(holder)
     }
 
-    override fun getItemCount(): Int = items.size
+    override fun getItemCount() = items.size
 
-    internal class Holder(
-        itemView: View,
-        val image: ImageView,
-        val title: TextView,
-        val meta: TextView,
-        val rating: TextView
-    ) : RecyclerView.ViewHolder(itemView)
+    internal class Holder(itemView: View, val image: ImageView, val title: TextView, val meta: TextView, val rating: TextView) : RecyclerView.ViewHolder(itemView)
 
-    private fun card(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF5D2498.toInt(), 0xFF241330.toInt())
-        else intArrayOf(0xED181321.toInt(), 0xF00C0A12.toInt())
-    ).apply {
-        cornerRadius = 20f
-        setStroke(if (focused) 3 else 1, if (focused) 0xFFE0B5FF.toInt() else 0x554D376B)
+    private fun card(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 16f
+        setColor(if (focused) CLASSIC_FOCUS else CLASSIC_SURFACE)
+        setStroke(if (focused) 2 else 1, if (focused) CLASSIC_FOCUS_STROKE else CLASSIC_STROKE)
+    }
+
+    companion object {
+        private val CLASSIC_SURFACE = Color.rgb(18, 16, 29)
+        private val CLASSIC_FOCUS = Color.rgb(50, 22, 79)
+        private val CLASSIC_FOCUS_STROKE = Color.rgb(225, 184, 255)
+        private val CLASSIC_STROKE = Color.argb(85, 77, 55, 107)
+        private val CLASSIC_PURPLE_SOFT = Color.rgb(195, 135, 255)
+        private val CLASSIC_MUTED = Color.rgb(169, 167, 179)
     }
 }
