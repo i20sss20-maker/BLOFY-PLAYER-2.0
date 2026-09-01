@@ -1,6 +1,12 @@
 name: BLOFY Activation CI
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/activation/**'
+      - '.github/workflows/activation-ci.yml'
   pull_request:
     paths:
       - 'services/activation/**'
