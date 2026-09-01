@@ -165,6 +165,7 @@ class LoginActivity : AppCompatActivity() {
         qrView = ImageView(this).apply {
             setBackgroundColor(Color.WHITE)
             setPadding(dp(10), dp(10), dp(10), dp(10))
+            scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "رمز BLOFY"
         }
         status = TextView(this).apply {
@@ -232,7 +233,8 @@ class LoginActivity : AppCompatActivity() {
         deviceView.text = identity.deviceId
         codeView.text = identity.activationCode
         val portalUrl = ActivationPortalUrl.create(BuildConfig.ACTIVATION_BASE_URL, identity.deviceId, identity.activationCode)
-        if (portalUrl != null) qrView.setImageBitmap(createQr(portalUrl)) else qrView.setImageDrawable(null)
+            ?: "$PORTAL_FALLBACK/#deviceId=${identity.deviceId}&code=${identity.activationCode}"
+        qrView.setImageBitmap(createQr(portalUrl))
         val provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
         status.text = if (provider == null) "أضف القائمة من الموقع ثم اضغط تحديث" else "القائمة محفوظة • اضغط تحديث لجلب أي تغيير"
     }
@@ -277,7 +279,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun createQr(value: String): Bitmap {
         val matrix = QRCodeWriter().encode(value, BarcodeFormat.QR_CODE, 360, 360)
-        return Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.RGB_565).apply {
+        return Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888).apply {
             for (y in 0 until matrix.height) for (x in 0 until matrix.width) setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
         }
     }
@@ -307,6 +309,7 @@ class LoginActivity : AppCompatActivity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val PORTAL_FALLBACK = "https://blofy-player-2-0.vercel.app"
         private val SURFACE = Color.rgb(17, 16, 30)
         private val STROKE = Color.rgb(69, 55, 88)
         private val FOCUS = Color.rgb(72, 42, 120)
