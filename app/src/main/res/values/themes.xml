@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Technical base only. No BLOFY visual theme is defined here. -->
     <style name="Theme.Blofy" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
-        <item name="android:windowBackground">@color/blofy_black</item>
-        <item name="android:colorAccent">@color/blofy_purple</item>
-        <item name="colorPrimary">@color/blofy_purple</item>
-        <item name="colorPrimaryVariant">@color/blofy_purple</item>
-        <item name="colorSecondary">@color/blofy_purple_light</item>
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:colorAccent">#FFFFFF</item>
+        <item name="colorPrimary">#000000</item>
+        <item name="colorPrimaryVariant">#000000</item>
+        <item name="colorSecondary">#FFFFFF</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowDisablePreview">true</item>
         <item name="android:windowContentTransitions">false</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:navigationBarColor">@color/blofy_black</item>
-        <item name="android:statusBarColor">@color/blofy_black</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:statusBarColor">#000000</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
 
     <style name="Theme.Blofy.Player" parent="Theme.Blofy">
         <item name="android:windowFullscreen">true</item>
-        <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>
