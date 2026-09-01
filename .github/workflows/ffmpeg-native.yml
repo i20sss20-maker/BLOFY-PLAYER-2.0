@@ -138,9 +138,7 @@ jobs:
             mapfile -t libraries < <(find "$verify_dir/lib/$abi" -maxdepth 1 -type f -name '*.so' -print | sort)
             ((${#libraries[@]} > 0))
             for library in "${libraries[@]}"; do
-              # Match the invariant ELF class token instead of llvm-readelf's
-              # localized/spacing-sensitive label formatting.
-              "$llvm_readelf" -h "$library" | grep -Eq 'ELF64'
+              "$llvm_readelf" -h "$library" | grep -Eq 'Class:[[:space:]]+ELF64'
               mapfile -t load_alignments < <("$llvm_objdump" -p "$library" | awk '$1 == "LOAD" { print $NF }')
               ((${#load_alignments[@]} > 0))
               for alignment in "${load_alignments[@]}"; do
