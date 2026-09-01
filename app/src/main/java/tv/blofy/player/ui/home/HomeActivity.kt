@@ -2,179 +2,203 @@ package tv.blofy.player.ui.home
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
-import android.widget.Button
-import android.widget.ImageView
+import android.view.ViewGroup
+import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import tv.blofy.player.R
-import tv.blofy.player.core.device.DeviceClass
-import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.ui.V339Ui
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.catalog.PosterCatalogActivity
-import tv.blofy.player.ui.library.LibraryActivity
-import tv.blofy.player.ui.library.RecentChannelsActivity
-import tv.blofy.player.ui.mobile.MobileContentActivity
-import tv.blofy.player.ui.search.SearchActivity
+import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 
+/** TV home composition transplanted from v339 SevenMaxActivity.showHome(). */
 class HomeActivity : AppCompatActivity() {
-    private lateinit var deviceKind: DeviceClass.Kind
-    private var firstAction: View? = null
-    private val actionViews = linkedMapOf<String, View>()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        deviceKind = DeviceClass.detect(this)
-        setContentView(if (deviceKind == DeviceClass.Kind.TV) buildClassicTvHome() else buildCompactHome())
-        restoreFocus()
+        window.statusBarColor = V339Ui.BLACK
+        window.navigationBarColor = V339Ui.BLACK
+        setContentView(buildV339Home())
     }
 
-    private fun buildClassicTvHome(): LinearLayout {
-        val root = LinearLayout(this).apply {
+    private fun buildV339Home(): LinearLayout {
+        val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(42), dp(26), dp(42), dp(28))
+            setPadding(dp(34), dp(20), dp(34), dp(20))
             background = V339Ui.screenGradient()
-            clipChildren = false
-            clipToPadding = false
         }
 
-        root.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            adjustViewBounds = true
-            isFocusable = false
-        }, LinearLayout.LayoutParams(dp(180), dp(112)).apply { bottomMargin = dp(10) })
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+        }
+        header.addView(brand("P L A Y E R"), LinearLayout.LayoutParams(dp(260), dp(64)))
+        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        val account = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+        }
+        account.addView(V339Ui.text(this, "●  قائمة التشغيل متصلة", 12f, V339Ui.SUCCESS).apply {
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(dp(360), dp(28)))
+        account.addView(V339Ui.text(this, "BLOFY PLAYER", 11f, V339Ui.MUTED).apply {
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            textDirection = View.TEXT_DIRECTION_RTL
+        }, LinearLayout.LayoutParams(dp(360), dp(26)))
+        header.addView(account, LinearLayout.LayoutParams(dp(380), dp(62)))
+        page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)))
 
-        root.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"
-            textSize = 28f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(V339Ui.TEXT)
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)))
-
-        root.addView(TextView(this).apply {
-            text = "اختر القسم"
-            textSize = 15f
-            setTextColor(V339Ui.MUTED)
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)).apply { bottomMargin = dp(16) })
-
-        val primary = LinearLayout(this).apply {
+        val launchers = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            clipChildren = false; clipToPadding = false
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
         }
-        addClassicAction(primary, "live", "البث المباشر", "◉", contentIntent("live"), true)
-        addClassicAction(primary, "movies", "الأفلام", "▣", contentIntent("movie"), true)
-        addClassicAction(primary, "series", "المسلسلات", "▤", contentIntent("series"), true)
-        root.addView(primary, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(150)))
 
-        val secondary = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(0, dp(18), 0, 0)
-            clipChildren = false; clipToPadding = false
+        val availableWidth = maxOf(820, (resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt() - 68)
+        val liveWidth = minOf(330, maxOf(250, availableWidth * 29 / 100))
+        val systemWidth = minOf(264, maxOf(200, availableWidth * 23 / 100))
+        val mediaWidth = minOf(452, maxOf(338, availableWidth - liveWidth - systemWidth - 32))
+
+        val live = homeTile("◉", "بث مباشر", true) {
+            startActivity(Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, "live"))
         }
-        addClassicAction(secondary, "favorites", "المفضلة", "♡", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES), false)
-        addClassicAction(secondary, "continue", "متابعة المشاهدة", "▶", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE), false)
-        addClassicAction(secondary, "recent", "آخر القنوات", "↺", Intent(this, RecentChannelsActivity::class.java), false)
-        addClassicAction(secondary, "search", "البحث", "⌕", Intent(this, SearchActivity::class.java), false)
-        addClassicAction(secondary, "settings", "الإعدادات", "⚙", Intent(this, SettingsActivity::class.java), false)
-        root.addView(secondary, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(118)))
-        return root
+        launchers.addView(live, LinearLayout.LayoutParams(dp(liveWidth), dp(292)).apply { marginEnd = dp(16) })
+
+        val media = GridLayout(this).apply {
+            columnCount = 2
+            rowCount = 2
+            alignmentMode = GridLayout.ALIGN_BOUNDS
+            useDefaultMargins = false
+        }
+        val mediaTileWidth = maxOf(160, (mediaWidth - 16) / 2)
+        val movies = homeTile("●", "الأفلام", false) {
+            startActivity(Intent(this, PosterCatalogActivity::class.java).putExtra(PosterCatalogActivity.EXTRA_KIND, "movie"))
+        }
+        val series = homeTile("▣", "المسلسلات", false) {
+            startActivity(Intent(this, PosterCatalogActivity::class.java).putExtra(PosterCatalogActivity.EXTRA_KIND, "series"))
+        }
+        val sports = homeTile("⚽", "الرياضة", false) {
+            startActivity(Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, "live"))
+        }
+        val playlists = homeTile("▤", "تغيير قائمة التشغيل", false) {
+            startActivity(Intent(this, ProviderManagerActivity::class.java))
+        }
+        addHomeGridTile(media, movies, mediaTileWidth)
+        addHomeGridTile(media, series, mediaTileWidth)
+        addHomeGridTile(media, sports, mediaTileWidth)
+        addHomeGridTile(media, playlists, mediaTileWidth)
+        launchers.addView(media, LinearLayout.LayoutParams(dp(mediaWidth), dp(292)))
+
+        val system = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        launchers.addView(system, LinearLayout.LayoutParams(dp(systemWidth), dp(292)).apply { marginStart = dp(16) })
+        val settings = homeTile("⚙", "الإعدادات", false) {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+        val refresh = homeTile("↻", "تحديث القائمة", false) {
+            startActivity(Intent(this, ProviderManagerActivity::class.java))
+        }
+        val exit = homeTile("↪", "خروج", false) { finishAffinity() }
+        addSystemTile(system, settings)
+        addSystemTile(system, refresh)
+        addSystemTile(system, exit)
+        linkHomeFocus(live, movies, series, sports, playlists, settings, refresh, exit)
+
+        page.addView(launchers, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        val footer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+        }
+        footer.addView(V339Ui.text(this, "BLOFY PLAYER", 11f, V339Ui.PURPLE_LIGHT).apply {
+            textDirection = View.TEXT_DIRECTION_LTR
+        }, LinearLayout.LayoutParams(dp(250), dp(42)))
+        footer.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        footer.addView(V339Ui.text(this, "BLOFY", 11f, V339Ui.MUTED).apply {
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            textDirection = View.TEXT_DIRECTION_RTL
+        }, LinearLayout.LayoutParams(dp(560), dp(42)))
+        page.addView(footer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)))
+
+        live.requestFocus()
+        return page
     }
 
-    private fun addClassicAction(row: LinearLayout, key: String, label: String, icon: String, intent: Intent, primary: Boolean) {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+    private fun homeTile(icon: String, label: String, primary: Boolean, action: () -> Unit): TextView {
+        return V339Ui.title(this, "$icon\n$label", if (primary) 25f else 18f).apply {
             gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            isFocusable = true; isFocusableInTouchMode = true; isClickable = true
-            background = classicTile(false, primary)
-            addView(TextView(this@HomeActivity).apply {
-                text = icon; textSize = if (primary) 34f else 26f; setTextColor(V339Ui.TEXT); gravity = Gravity.CENTER
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-            addView(TextView(this@HomeActivity).apply {
-                text = label; textSize = if (primary) 19f else 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(V339Ui.TEXT); gravity = Gravity.CENTER
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (primary) dp(52) else dp(42)))
-            setOnFocusChangeListener { view, focused ->
-                view.background = classicTile(focused, primary)
-                if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
-                view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.008f else 1f).scaleY(if (focused) 1.008f else 1f)
-                    .translationZ(if (focused) dp(8).toFloat() else 0f).setDuration(90L).start()
+            textDirection = View.TEXT_DIRECTION_RTL
+            isFocusable = true
+            isFocusableInTouchMode = true
+            isClickable = true
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            val normal = if (primary) Color.rgb(64, 29, 112) else Color.rgb(28, 25, 43)
+            val focused = if (primary) Color.rgb(119, 42, 210) else Color.rgb(88, 39, 151)
+            background = V339Ui.focusDrawable(this@HomeActivity, normal, focused, V339Ui.PURPLE_LIGHT)
+            setOnClickListener { action() }
+            setOnFocusChangeListener { view, hasFocus ->
+                view.animate().scaleX(if (hasFocus) 1.025f else 1f).scaleY(if (hasFocus) 1.025f else 1f).setDuration(110L).start()
             }
-            setOnClickListener { startActivity(intent) }
         }
-        registerAction(key, card)
-        row.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
-            marginStart = dp(if (primary) 9 else 6); marginEnd = dp(if (primary) 9 else 6)
+    }
+
+    private fun addHomeGridTile(grid: GridLayout, tile: TextView, tileWidth: Int) {
+        grid.addView(tile, GridLayout.LayoutParams().apply {
+            width = dp(tileWidth)
+            height = dp(138)
+            setMargins(dp(4), dp(4), dp(4), dp(4))
         })
     }
 
-    private fun buildCompactHome(): LinearLayout {
-        val phone = deviceKind == DeviceClass.Kind.PHONE
-        val root = LinearLayout(this).apply {
+    private fun addSystemTile(column: LinearLayout, tile: TextView) {
+        column.addView(tile, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+            setMargins(0, dp(4), 0, dp(4))
+        })
+    }
+
+    private fun linkHomeFocus(live: View, movies: View, series: View, sports: View, playlists: View,
+                              settings: View, refresh: View, exit: View) {
+        val views = listOf(live, movies, series, sports, playlists, settings, refresh, exit)
+        views.forEach { it.id = View.generateViewId() }
+        live.nextFocusRightId = live.id; live.nextFocusLeftId = movies.id
+        movies.nextFocusRightId = live.id; movies.nextFocusLeftId = settings.id; movies.nextFocusDownId = sports.id
+        series.nextFocusRightId = live.id; series.nextFocusLeftId = settings.id; series.nextFocusDownId = playlists.id
+        sports.nextFocusUpId = movies.id; sports.nextFocusRightId = live.id; sports.nextFocusLeftId = refresh.id
+        playlists.nextFocusUpId = series.id; playlists.nextFocusRightId = live.id; playlists.nextFocusLeftId = exit.id
+        settings.nextFocusRightId = movies.id; settings.nextFocusDownId = refresh.id
+        refresh.nextFocusUpId = settings.id; refresh.nextFocusRightId = sports.id; refresh.nextFocusDownId = exit.id
+        exit.nextFocusUpId = refresh.id; exit.nextFocusRightId = playlists.id
+    }
+
+    private fun brand(subtitle: String): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+        }
+        val logo = android.widget.ImageView(this).apply {
+            setImageResource(tv.blofy.player.R.drawable.blofy_logo)
+            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+        }
+        row.addView(logo, LinearLayout.LayoutParams(dp(50), dp(50)))
+        val labels = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = if (phone) Gravity.TOP else Gravity.CENTER_VERTICAL
-            setPadding(if (phone) dp(24) else dp(62), if (phone) dp(24) else dp(46), if (phone) dp(24) else dp(62), if (phone) dp(24) else dp(46))
-            background = V339Ui.screenGradient()
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(9), 0, 0, 0)
         }
-        root.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"; textSize = if (phone) 26f else 32f; typeface = Typeface.DEFAULT_BOLD; setTextColor(V339Ui.TEXT); gravity = Gravity.CENTER_HORIZONTAL
+        labels.addView(V339Ui.title(this, "BLOFY", 18f).apply {
+            textDirection = View.TEXT_DIRECTION_LTR; gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
         })
-        root.addView(TextView(this).apply {
-            text = "اختر القسم"; textSize = 15f; setTextColor(V339Ui.MUTED); gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, dp(6), 0, dp(24))
+        labels.addView(V339Ui.text(this, subtitle, 9f, V339Ui.PURPLE_LIGHT).apply {
+            textDirection = View.TEXT_DIRECTION_LTR; gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
         })
-        val primary = actionRow(phone)
-        addCompactAction(primary, "live", "البث المباشر", contentIntent("live")); addCompactAction(primary, "movies", "الأفلام", contentIntent("movie")); addCompactAction(primary, "series", "المسلسلات", contentIntent("series")); addCompactAction(primary, "search", "البحث", Intent(this, SearchActivity::class.java)); root.addView(primary)
-        val secondary = actionRow(phone).apply { setPadding(0, if (phone) dp(8) else dp(16), 0, 0) }
-        addCompactAction(secondary, "recent", "آخر القنوات", Intent(this, RecentChannelsActivity::class.java)); addCompactAction(secondary, "continue", "متابعة المشاهدة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE)); addCompactAction(secondary, "favorites", "المفضلة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES)); addCompactAction(secondary, "settings", "الإعدادات", Intent(this, SettingsActivity::class.java)); root.addView(secondary)
-        return root
+        row.addView(labels, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        return row
     }
 
-    private fun contentIntent(kind: String): Intent = if (deviceKind == DeviceClass.Kind.TV) {
-        if (kind == "live") Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, kind)
-        else Intent(this, PosterCatalogActivity::class.java).putExtra(PosterCatalogActivity.EXTRA_KIND, kind)
-    } else Intent(this, MobileContentActivity::class.java).putExtra(MobileContentActivity.EXTRA_KIND, kind)
-
-    private fun actionRow(phone: Boolean) = LinearLayout(this).apply { orientation = if (phone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
-
-    private fun addCompactAction(row: LinearLayout, key: String, label: String, intent: Intent) {
-        val phone = deviceKind == DeviceClass.Kind.PHONE
-        val button = Button(this).apply {
-            text = label; isAllCaps = false; textSize = if (phone) 15f else 16f; setTextColor(V339Ui.TEXT)
-            isFocusable = deviceKind == DeviceClass.Kind.TV; isFocusableInTouchMode = deviceKind == DeviceClass.Kind.TV
-            background = classicTile(false, true)
-            setOnFocusChangeListener { view, focused -> view.background = classicTile(focused, true); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key) }
-            setOnClickListener { startActivity(intent) }
-        }
-        registerAction(key, button)
-        row.addView(button, if (phone) LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply { bottomMargin = dp(8) }
-        else LinearLayout.LayoutParams(0, dp(112), 1f).apply { marginEnd = dp(14) })
-    }
-
-    private fun classicTile(focused: Boolean, primary: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(if (primary) 18 else 15).toFloat()
-        setColor(if (focused) V339Ui.PANEL_SOFT else V339Ui.PANEL)
-        setStroke(dp(if (focused) 2 else 1), if (focused) V339Ui.PURPLE_LIGHT else V339Ui.STROKE)
-    }
-
-    private fun registerAction(key: String, view: View) { actionViews[key] = view; if (firstAction == null) firstAction = view }
-    private fun restoreFocus() { if (deviceKind != DeviceClass.Kind.TV) return; val saved = FocusMemory.restore(this, SCREEN_KEY); val target = saved?.let { actionViews[it] } ?: firstAction ?: actionViews.values.firstOrNull(); target?.post { target.requestFocus() } }
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-    companion object { private const val SCREEN_KEY = "home" }
+    private fun dp(value: Int) = V339Ui.dp(this, value)
 }
