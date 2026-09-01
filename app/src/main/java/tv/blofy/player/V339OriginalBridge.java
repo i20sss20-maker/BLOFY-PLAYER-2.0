@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 
 /** Public bridge to the untouched original v339 BlofyUi implementation. */
@@ -31,6 +32,7 @@ public final class V339OriginalBridge {
     public static TextView text(Context context, String value, int sp, int color) { return BlofyUi.text(context, value, sp, color); }
     public static TextView title(Context context, String value, int sp) { return BlofyUi.title(context, value, sp); }
     public static TextView chip(Context context, String value) { return BlofyUi.chip(context, value); }
+    public static EditText input(Context context, String hint, boolean numeric) { return BlofyUi.input(context, hint, numeric); }
     public static Button button(Context context, String label, boolean primary) { return BlofyUi.button(context, label, primary); }
     public static TextView navChip(Context context, String label) { return BlofyUi.navChip(context, label); }
     public static TextView sidebarItem(Context context, String icon, String label, boolean selected) { return BlofyUi.sidebarItem(context, icon, label, selected); }
