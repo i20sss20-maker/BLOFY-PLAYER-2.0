@@ -101,7 +101,6 @@ class PosterCatalogActivity : AppCompatActivity() {
             val provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
             providerId = provider.id
             dao.categories(provider.id, kind).collect { categories ->
-                // Room rows already carry Xtream orderIndex. Never sort client-side.
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
                 if (selectedCategoryId == null && streamsJob == null) loadStreams(null)
@@ -184,18 +183,22 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun allCategory() = CategoryEntity("$providerId:$kind:$ALL_CATEGORY_ID", providerId, ALL_CATEGORY_ID, kind, if (kind == KIND_SERIES) "كل المسلسلات" else "كل الأفلام", -1)
     private fun categoryRemoteId(category: CategoryEntity) = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
-    private fun categoryBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xE81A1429.toInt(), 0xF00C0A15.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0x594A355F) }
+    private fun categoryBackground() = GradientDrawable().apply {
+        cornerRadius = dp(18).toFloat()
+        setColor(CLASSIC_SURFACE)
+        setStroke(dp(1), CLASSIC_STROKE)
+    }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     override fun onDestroy() { streamsJob?.cancel(); super.onDestroy() }
 
-    private object ViewGroupFocus {
-        const val AFTER_DESCENDANTS = 0x40000
-    }
+    private object ViewGroupFocus { const val AFTER_DESCENDANTS = 0x40000 }
 
     companion object {
         const val EXTRA_KIND = "kind"; const val KIND_MOVIE = "movie"; const val KIND_SERIES = "series"
         private const val GRID_COLUMNS = 5
         private const val ALL_CATEGORY_ID = "__all__"; private const val EXTRA_PROVIDER_ID_SHARED = "provider_id"; private const val EXTRA_CONTENT_KEY_SHARED = "content_key"
         private val PURPLE_SOFT = Color.rgb(195, 135, 255)
+        private val CLASSIC_SURFACE = Color.rgb(18, 16, 29)
+        private val CLASSIC_STROKE = Color.argb(85, 77, 55, 107)
     }
 }
