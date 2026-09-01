@@ -1,6 +1,5 @@
 package tv.blofy.player.ui.settings
 
-import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
@@ -12,36 +11,35 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
-import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.ui.V339Ui
 import java.text.DateFormat
 import java.util.Date
 
 class SystemStatusActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val theme = ThemeManager.current(this)
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP
             setPadding(48, 38, 48, 38)
-            setBackgroundColor(theme.background)
+            background = V339Ui.screenGradient()
         }
         content.addView(TextView(this).apply {
             text = "BLOFY System Status"
             textSize = 30f
-            setTextColor(Color.WHITE)
+            setTextColor(V339Ui.TEXT)
         })
         content.addView(TextView(this).apply {
             text = "معلومات النسخة المستخدمة في اختبار Alpha"
             textSize = 14f
-            setTextColor(theme.accent)
+            setTextColor(V339Ui.PURPLE_LIGHT)
             setPadding(0, 6, 0, 22)
         })
         val body = TextView(this).apply {
             text = "جاري قراءة الحالة..."
             textSize = 17f
-            setTextColor(Color.rgb(225, 220, 235))
+            setTextColor(V339Ui.MUTED)
             setLineSpacing(10f, 1f)
         }
         content.addView(body)
@@ -68,9 +66,7 @@ class SystemStatusActivity : AppCompatActivity() {
                 appendLine("Activation: $activationText")
                 appendLine("Last activation check: ${activation?.lastCheckAt?.let(::formatTime) ?: "—"}")
                 appendLine()
-                if (provider == null) {
-                    appendLine("Provider: لا توجد قائمة نشطة")
-                } else {
+                if (provider == null) appendLine("Provider: لا توجد قائمة نشطة") else {
                     appendLine("Provider: ${provider.name}")
                     appendLine("Provider type: ${provider.providerType.uppercase()}")
                     appendLine("Live format: ${provider.liveFormat.uppercase()}")
