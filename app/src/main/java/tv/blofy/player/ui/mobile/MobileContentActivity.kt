@@ -17,7 +17,6 @@ import kotlinx.coroutines.launch
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
-import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.ProviderEntity
@@ -76,7 +75,7 @@ class MobileContentActivity : AppCompatActivity() {
         list.setOnItemLongClickListener { _, _, position, _ ->
             val stream = streams.getOrNull(position) ?: return@setOnItemLongClickListener false
             if (kind == KIND_LIVE && stream.archiveEnabled) {
-                guarded(stream) { openCatchup(stream) }
+                openCatchup(stream)
                 true
             } else false
         }
@@ -91,13 +90,13 @@ class MobileContentActivity : AppCompatActivity() {
                 list.adapter = ArrayAdapter(
                     this@MobileContentActivity,
                     android.R.layout.simple_list_item_1,
-                    items.map { (if (it.locked) "🔒 " else "") + it.name + if (kind == KIND_LIVE && it.archiveEnabled) "  ⏱" else "" }
+                    items.map { it.name + if (kind == KIND_LIVE && it.archiveEnabled) "  ⏱" else "" }
                 )
             }
         }
     }
 
-    private fun openStream(stream: StreamEntity) = guarded(stream) {
+    private fun openStream(stream: StreamEntity) {
         when (kind) {
             KIND_MOVIE -> startActivity(Intent(this, MovieDetailsActivity::class.java).apply {
                 putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
@@ -126,10 +125,6 @@ class MobileContentActivity : AppCompatActivity() {
                 })
             }
         }
-    }
-
-    private fun guarded(stream: StreamEntity, action: () -> Unit) {
-        if (stream.locked) ParentalGate.requirePin(this, action) else action()
     }
 
     private fun openCatchup(stream: StreamEntity) {
