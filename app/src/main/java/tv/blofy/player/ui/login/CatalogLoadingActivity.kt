@@ -2,8 +2,6 @@ package tv.blofy.player.ui.login
 
 import android.content.Intent
 import android.content.res.ColorStateList
-import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -53,7 +51,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(44), dp(28), dp(44), dp(28))
+            setPadding(dp(34), dp(20), dp(34), dp(20))
             background = V339Ui.screenGradient()
         }
 
@@ -61,8 +59,14 @@ class CatalogLoadingActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(58), dp(34), dp(58), dp(30))
-            background = V339Ui.panel(this@CatalogLoadingActivity, V339Ui.PANEL, 18, V339Ui.STROKE)
+            setPadding(dp(46), dp(28), dp(46), dp(26))
+            background = V339Ui.gradientPanel(
+                this@CatalogLoadingActivity,
+                V339Ui.PANEL_ALT,
+                V339Ui.BLACK,
+                20,
+                V339Ui.STROKE
+            )
         }
 
         panel.addView(ImageView(this).apply {
@@ -70,13 +74,19 @@ class CatalogLoadingActivity : AppCompatActivity() {
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
             isFocusable = false
-        }, LinearLayout.LayoutParams(dp(138), dp(82)).apply { bottomMargin = dp(8) })
+        }, LinearLayout.LayoutParams(dp(126), dp(72)).apply { bottomMargin = dp(6) })
 
-        panel.addView(V339Ui.title(this, "جاري تجهيز مكتبتك", 25f).apply { gravity = Gravity.CENTER },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)))
+        panel.addView(V339Ui.title(this, "جاري تجهيز مكتبتك", 24f).apply {
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)))
 
-        percent = V339Ui.title(this, "0%", 56f).apply { gravity = Gravity.CENTER }
-        panel.addView(percent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(86)).apply { topMargin = dp(10) })
+        percent = V339Ui.title(this, "0%", 54f).apply {
+            gravity = Gravity.CENTER
+            setTextColor(V339Ui.TEXT)
+        }
+        panel.addView(percent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(82)).apply {
+            topMargin = dp(6)
+        })
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
@@ -84,23 +94,23 @@ class CatalogLoadingActivity : AppCompatActivity() {
             progressTintList = V339Ui.progressColors()
             progressBackgroundTintList = ColorStateList.valueOf(V339Ui.DIVIDER)
         }
-        panel.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(12)).apply {
-            topMargin = dp(4)
-            bottomMargin = dp(16)
+        panel.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10)).apply {
+            topMargin = dp(2)
+            bottomMargin = dp(14)
         })
 
-        stage = V339Ui.title(this, "جاري الاتصال بالخادم...", 17f).apply {
+        stage = V339Ui.title(this, "جاري الاتصال بالخادم...", 16f).apply {
             setTextColor(V339Ui.MUTED)
             gravity = Gravity.CENTER
         }
-        panel.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)))
+        panel.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
 
         panel.addView(V339Ui.text(this, "يتم حفظ المحتوى محليًا بعد اكتمال التحميل", 12f, V339Ui.MUTED).apply {
             gravity = Gravity.CENTER
-            setPadding(0, dp(8), 0, 0)
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)))
+            setPadding(0, dp(6), 0, 0)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)))
 
-        root.addView(panel, LinearLayout.LayoutParams(dp(700), LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(panel, LinearLayout.LayoutParams(dp(660), LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
     }
 
