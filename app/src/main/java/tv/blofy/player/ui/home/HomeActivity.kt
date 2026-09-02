@@ -14,12 +14,19 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
+import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.browser.ContentBrowserActivity
+import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.catalog.PosterCatalogActivity
 import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.library.RecentChannelsActivity
@@ -39,6 +46,20 @@ class HomeActivity : AppCompatActivity() {
         deviceKind = DeviceClass.detect(this)
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildTvHome() else buildCompactHome())
         restoreFocus()
+        warmCatalogArtwork()
+    }
+
+    private fun warmCatalogArtwork() {
+        lifecycleScope.launch {
+            val urls = withContext(Dispatchers.IO) {
+                val dao = BlofyDatabase.get(applicationContext).dao()
+                val provider = dao.providers().first().firstOrNull() ?: return@withContext emptyList<String?>()
+                val movies = dao.catalogPageAfterAll(provider.id, "movie", 0L, 10)
+                val series = dao.catalogPageAfterAll(provider.id, "series", 0L, 10)
+                (movies + series).map { it.icon ?: it.backdrop }
+            }
+            if (urls.isNotEmpty()) ArtworkLoader.warmPrefetch(this@HomeActivity, urls)
+        }
     }
 
     private fun buildTvHome(): FrameLayout {
