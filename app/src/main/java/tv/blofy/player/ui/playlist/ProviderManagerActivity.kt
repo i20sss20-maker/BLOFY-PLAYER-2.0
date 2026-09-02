@@ -40,17 +40,26 @@ class ProviderManagerActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
         })
         status = TextView(this).apply {
-            text = "اختر القائمة النشطة أو حدثها"
+            text = "اختر القائمة النشطة أو أضف اشتراك BLOFY"
             textSize = 15f
             setTextColor(Color.rgb(185, 140, 255))
             setPadding(0, 6, 0, 18)
         }
         root.addView(status)
 
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START
+        }
         addButton = actionButton("add", "+ إضافة قائمة") {
             startActivity(Intent(this, PlaylistActivity::class.java))
         }
-        root.addView(addButton, LinearLayout.LayoutParams(260, 72).apply { bottomMargin = 16 })
+        val subscriberButton = actionButton("subscriber", "مشتركين BLOFY") {
+            startActivity(Intent(this, BlofySubscriberActivity::class.java))
+        }
+        actions.addView(addButton, LinearLayout.LayoutParams(260, 72).apply { marginEnd = 12 })
+        actions.addView(subscriberButton, LinearLayout.LayoutParams(280, 72))
+        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 72).apply { bottomMargin = 16 })
 
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = ScrollView(this).apply { addView(list) }
@@ -63,7 +72,7 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun render(items: List<ProviderEntity>) {
-        focusButtons.keys.filter { it != "add" }.toList().forEach { focusButtons.remove(it) }
+        focusButtons.keys.filter { it !in setOf("add", "subscriber") }.toList().forEach { focusButtons.remove(it) }
         list.removeAllViews()
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
@@ -119,6 +128,10 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun edit(provider: ProviderEntity) {
+        if (provider.name == "مشتركين BLOFY" && provider.baseUrl.contains("/api/v1/subscribers/xtream")) {
+            startActivity(Intent(this, BlofySubscriberActivity::class.java))
+            return
+        }
         startActivity(Intent(this, PlaylistActivity::class.java).apply {
             putExtra(PlaylistActivity.EXTRA_PROVIDER_ID, provider.id)
         })
