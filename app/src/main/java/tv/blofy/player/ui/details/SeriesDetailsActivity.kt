@@ -28,6 +28,8 @@ import tv.blofy.player.ui.series.EpisodesActivity
 
 class SeriesDetailsActivity : AppCompatActivity() {
     private lateinit var favoriteButton: Button
+    private val headingTypeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
+    private val bodyTypeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,17 +38,30 @@ class SeriesDetailsActivity : AppCompatActivity() {
         if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }
 
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_LTR; gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(54), dp(38), dp(54), dp(38)); background = AppCompatResources.getDrawable(this@SeriesDetailsActivity, R.drawable.blofy_home_background)
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(66), dp(46), dp(66), dp(46))
+            background = AppCompatResources.getDrawable(this@SeriesDetailsActivity, R.drawable.blofy_home_background)
+            clipChildren = false
         }
         val poster = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xFF15111E.toInt()) }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(24).toFloat()
+                setColor(0xFF15111E.toInt())
+                setStroke(dp(1), 0x705D3E78)
+            }
             clipToOutline = true
+            elevation = dp(6).toFloat()
         }
-        root.addView(poster, LinearLayout.LayoutParams(dp(310), dp(465)).apply { marginEnd = dp(42) })
+        root.addView(poster, LinearLayout.LayoutParams(dp(324), dp(486)).apply { marginEnd = dp(48) })
+
         val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.END; layoutDirection = View.LAYOUT_DIRECTION_RTL
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            clipChildren = false
         }
         root.addView(panel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         setContentView(root)
@@ -63,81 +78,148 @@ class SeriesDetailsActivity : AppCompatActivity() {
             }.maxByOrNull { it.updatedAt }
             val seasons = allEpisodes.map { it.season }.distinct().size
 
-            panel.addView(TextView(this@SeriesDetailsActivity).apply { text = stream.name; textSize = 38f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT })
+            panel.addView(TextView(this@SeriesDetailsActivity).apply {
+                text = stream.name
+                textSize = 42f
+                typeface = headingTypeface
+                setTextColor(Color.WHITE)
+                gravity = Gravity.RIGHT
+                includeFontPadding = false
+                maxLines = 2
+            })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = buildList {
-                    add("مسلسل"); stream.year?.takeIf(String::isNotBlank)?.let(::add); stream.genre?.takeIf(String::isNotBlank)?.let(::add)
-                    if (seasons > 0) add("$seasons موسم"); if (allEpisodes.isNotEmpty()) add("${allEpisodes.size} حلقة")
+                    add("مسلسل")
+                    stream.year?.takeIf(String::isNotBlank)?.let(::add)
+                    stream.genre?.takeIf(String::isNotBlank)?.substringBefore(',')?.let(::add)
+                    if (seasons > 0) add("$seasons موسم")
+                    if (allEpisodes.isNotEmpty()) add("${allEpisodes.size} حلقة")
                     stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
                 }.joinToString("  •  ")
-                textSize = 16f; setTextColor(SOFT); gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(18))
+                textSize = 16f
+                typeface = bodyTypeface
+                setTextColor(SOFT)
+                gravity = Gravity.RIGHT
+                setPadding(0, dp(10), 0, dp(20))
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.plot?.takeIf(String::isNotBlank) ?: "اختر الموسم والحلقة لبدء المشاهدة."
-                textSize = 17f; maxLines = 5; setTextColor(0xFFDCDCE2.toInt()); gravity = Gravity.RIGHT; setPadding(0, 0, 0, dp(24))
+                textSize = 17.5f
+                typeface = bodyTypeface
+                maxLines = 5
+                setTextColor(0xFFE3DEE8.toInt())
+                gravity = Gravity.RIGHT
+                setLineSpacing(dp(2).toFloat(), 1.15f)
+                setPadding(0, 0, 0, dp(26))
             })
 
             resume?.let { r ->
                 val pct = if (r.durationMs > 0) ((r.positionMs * 100) / r.durationMs).toInt().coerceIn(1, 99) else 0
                 panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                    text = "استئناف الموسم ${r.episode.season} • الحلقة ${r.episode.episode}${if (pct > 0) "  •  $pct%" else ""}"
-                    textSize = 15f; setTextColor(SOFT); gravity = Gravity.RIGHT
+                    text = "استئناف الموسم ${r.episode.season}  •  الحلقة ${r.episode.episode}${if (pct > 0) "  •  $pct%" else ""}"
+                    textSize = 15f
+                    typeface = bodyTypeface
+                    setTextColor(SOFT)
+                    gravity = Gravity.RIGHT
                 })
                 if (r.durationMs > 0) panel.addView(ProgressBar(this@SeriesDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
-                    max = 100; progress = pct
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(8)).apply { topMargin = dp(8); bottomMargin = dp(18) })
+                    max = 100
+                    progress = pct
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(8)).apply {
+                    topMargin = dp(9)
+                    bottomMargin = dp(20)
+                })
             }
 
-            val row = LinearLayout(this@SeriesDetailsActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.RIGHT }
+            val row = LinearLayout(this@SeriesDetailsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.RIGHT
+                clipChildren = false
+            }
             var primary: Button? = null
             resume?.let { r ->
-                val resumeButton = actionButton("▶ استئناف الحلقة") { launchEpisode(provider, r.episode, r.positionMs) }
+                val resumeButton = actionButton("▶  استئناف الحلقة") { launchEpisode(provider, r.episode, r.positionMs) }
                 primary = resumeButton
-                row.addView(resumeButton, LinearLayout.LayoutParams(dp(230), dp(74)).apply { marginStart = dp(10) })
-                row.addView(actionButton("من البداية") { launchEpisode(provider, r.episode, 0L) }, LinearLayout.LayoutParams(dp(180), dp(74)).apply { marginStart = dp(10) })
+                row.addView(resumeButton, LinearLayout.LayoutParams(dp(240), dp(72)).apply { marginStart = dp(12) })
+                row.addView(actionButton("من البداية") { launchEpisode(provider, r.episode, 0L) }, LinearLayout.LayoutParams(dp(185), dp(72)).apply { marginStart = dp(12) })
             }
             val episodes = actionButton("المواسم والحلقات") {
                 startActivity(Intent(this@SeriesDetailsActivity, EpisodesActivity::class.java).apply {
-                    putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, providerId); putExtra(EpisodesActivity.EXTRA_SERIES_ID, stream.remoteId); putExtra(EpisodesActivity.EXTRA_SERIES_NAME, stream.name)
+                    putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, providerId)
+                    putExtra(EpisodesActivity.EXTRA_SERIES_ID, stream.remoteId)
+                    putExtra(EpisodesActivity.EXTRA_SERIES_NAME, stream.name)
                 })
             }
             if (primary == null) primary = episodes
-            row.addView(episodes, LinearLayout.LayoutParams(dp(230), dp(74)).apply { marginStart = dp(10) })
-            favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
+            row.addView(episodes, LinearLayout.LayoutParams(dp(240), dp(72)).apply { marginStart = dp(12) })
+
+            favoriteButton = actionButton(if (stream.favorite) "★  المفضلة" else "☆  المفضلة") {
                 lifecycleScope.launch {
                     val current = dao.stream(contentKey) ?: return@launch
                     dao.setFavorite(contentKey, !current.favorite)
-                    favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة"
+                    favoriteButton.text = if (!current.favorite) "★  المفضلة" else "☆  المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
-            panel.addView(row); primary?.requestFocus()
+            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(185), dp(72)).apply { marginStart = dp(12) })
+            panel.addView(row)
+            primary?.requestFocus()
         }
     }
 
     private fun launchEpisode(provider: ProviderEntity, episode: EpisodeEntity, resumeMs: Long) {
         startActivity(Intent(this, PlayerActivity::class.java).apply {
-            putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.episode(provider, episode)); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)
-            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(PlayerActivity.EXTRA_KIND, "episode"); putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
-            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport); putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+            putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.episode(provider, episode))
+            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(PlayerActivity.EXTRA_KIND, "episode")
+            putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
             putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode)); putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
-            putExtra(PlayerActivity.EXTRA_TITLE, episode.title); putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId); putExtra(PlayerActivity.EXTRA_SEASON, episode.season); putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode))
+            putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
+            putExtra(PlayerActivity.EXTRA_TITLE, episode.title)
+            putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
+            putExtra(PlayerActivity.EXTRA_SEASON, episode.season)
+            putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
         })
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused); view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(90).start() }
+        text = label
+        isAllCaps = false
+        textSize = 15.5f
+        typeface = bodyTypeface
+        isFocusable = true
+        includeFontPadding = false
+        setTextColor(Color.WHITE)
+        background = buttonBackground(false)
+        setOnFocusChangeListener { view, focused ->
+            view.background = buttonBackground(focused)
+            view.animate().cancel()
+            view.animate()
+                .scaleX(if (focused) 1.04f else 1f)
+                .scaleY(if (focused) 1.04f else 1f)
+                .translationZ(if (focused) 18f else 2f)
+                .setDuration(if (focused) 115L else 90L)
+                .start()
+        }
         setOnClickListener { action() }
     }
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat(); setColor(if (focused) PURPLE else 0xD31A1427.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x665C3E80)
+
+    private fun buttonBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+        if (focused) intArrayOf(0xFF8342CF.toInt(), 0xFF5D269F.toInt()) else intArrayOf(0xE61B1428.toInt(), 0xED100B19.toInt())
+    ).apply {
+        cornerRadius = dp(18).toFloat()
+        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFE8CEFF.toInt() else 0x66533A69)
     }
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private data class Resume(val episode: EpisodeEntity, val positionMs: Long, val durationMs: Long, val updatedAt: Long)
+
     companion object {
-        const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_CONTENT_KEY = "content_key"
-        private val PURPLE = Color.rgb(126, 44, 255); private val SOFT = Color.rgb(195, 165, 225)
+        const val EXTRA_PROVIDER_ID = "provider_id"
+        const val EXTRA_CONTENT_KEY = "content_key"
+        private val SOFT = Color.rgb(208, 174, 235)
     }
 }
