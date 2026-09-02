@@ -9,9 +9,9 @@ data class ThemeProfile(
     @ColorInt val accent: Int,
     @ColorInt val background: Int,
     @ColorInt val surface: Int,
-    val focusScale: Float = 1.06f,
-    val focusElevationDp: Float = 14f,
-    val motionMs: Long = 130L
+    val focusScale: Float = 1.05f,
+    val focusElevationDp: Float = 12f,
+    val motionMs: Long = 110L
 )
 
 object BlofyThemes {
@@ -22,9 +22,9 @@ object BlofyThemes {
         accent = 0xFF682ACC.toInt(),
         background = 0xFFF5F5F8.toInt(),
         surface = 0xFFFFFFFF.toInt(),
-        focusScale = 1.04f,
+        focusScale = 1.035f,
         focusElevationDp = 12f,
-        motionMs = 105L
+        motionMs = 95L
     )
 
     val CINEMA = ThemeProfile(
@@ -34,8 +34,8 @@ object BlofyThemes {
         accent = 0xFF8245E1.toInt(),
         background = 0xFFF8F7FA.toInt(),
         surface = 0xFFFCFBFE.toInt(),
-        focusScale = 1.04f,
+        focusScale = 1.035f,
         focusElevationDp = 12f,
-        motionMs = 105L
+        motionMs = 95L
     )
 }
