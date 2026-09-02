@@ -11,7 +11,10 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 
 class FocusTextAdapter<T : Any>(private val label:(T)->String,private val onClick:(T)->Unit,private val onFocus:((T)->Unit)?=null,private val onLongClick:((T)->Unit)?=null,private val itemKey:((T)->String)?=null):RecyclerView.Adapter<FocusTextAdapter<T>.Holder>(){
- private val differ=AsyncListDiffer(this,object:DiffUtil.ItemCallback<T>(){override fun areItemsTheSame(o:T,n:T)=itemKey?.let{it(o)==it(n)}?: (o==n);override fun areContentsTheSame(o:T,n:T)=o==n});private val items get()=differ.currentList;private var focusedKey:String?=null;private var focusedPosition=RecyclerView.NO_POSITION;private var restorePending=false;private var attached:RecyclerView?=null
+ private val differ=AsyncListDiffer(this,object:DiffUtil.ItemCallback<T>(){
+  override fun areItemsTheSame(o:T,n:T)=itemKey?.let{it(o)==it(n)}?: (o===n)
+  override fun areContentsTheSame(o:T,n:T)=o===n
+ });private val items get()=differ.currentList;private var focusedKey:String?=null;private var focusedPosition=RecyclerView.NO_POSITION;private var restorePending=false;private var attached:RecyclerView?=null
  init{setHasStableIds(itemKey!=null)}
  fun submit(n:List<T>){val owned=attached?.hasFocus()==true;val pk=focusedKey;val pp=focusedPosition;differ.submitList(n.toList()){focusedPosition=when{pk!=null&&itemKey!=null->items.indexOfFirst{itemKey.invoke(it)==pk};pp!=RecyclerView.NO_POSITION&&items.isNotEmpty()->pp.coerceIn(0,items.lastIndex);else->RecyclerView.NO_POSITION};if(focusedPosition<0)focusedPosition=RecyclerView.NO_POSITION;restorePending=owned&&focusedPosition!=RecyclerView.NO_POSITION;if(restorePending)attached?.post{attached?.findViewHolderForAdapterPosition(focusedPosition)?.itemView?.requestFocus()}}}
  fun clearFocusMemory(){focusedKey=null;focusedPosition=RecyclerView.NO_POSITION;restorePending=false};override fun getItemId(p:Int)=itemKey?.invoke(items[p])?.hashCode()?.toLong()?:super.getItemId(p);override fun onAttachedToRecyclerView(r:RecyclerView){super.onAttachedToRecyclerView(r);attached=r};override fun onDetachedFromRecyclerView(r:RecyclerView){if(attached===r)attached=null;restorePending=false;super.onDetachedFromRecyclerView(r)}
