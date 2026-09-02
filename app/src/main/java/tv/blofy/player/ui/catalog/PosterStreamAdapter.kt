@@ -10,8 +10,6 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.recyclerview.widget.AsyncListDiffer
-import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -20,18 +18,24 @@ internal class PosterStreamAdapter(
     private val onClick: (StreamEntity) -> Unit,
     private val onFocus: (StreamEntity) -> Unit = {}
 ) : RecyclerView.Adapter<PosterStreamAdapter.Holder>() {
-    private val differ = AsyncListDiffer(this, object : DiffUtil.ItemCallback<StreamEntity>() {
-        override fun areItemsTheSame(oldItem: StreamEntity, newItem: StreamEntity) = oldItem.key == newItem.key
-        override fun areContentsTheSame(oldItem: StreamEntity, newItem: StreamEntity) = oldItem == newItem
-    })
-    private val items: List<StreamEntity> get() = differ.currentList
+    private val items = ArrayList<StreamEntity>(256)
 
     init { setHasStableIds(true) }
 
-    fun submit(newItems: List<StreamEntity>) {
-        // AsyncListDiffer performs the expensive diff on a background executor.
-        differ.submitList(newItems.toList())
+    fun replace(newItems: List<StreamEntity>) {
+        items.clear()
+        items.addAll(newItems)
+        notifyDataSetChanged()
     }
+
+    fun append(newItems: List<StreamEntity>) {
+        if (newItems.isEmpty()) return
+        val start = items.size
+        items.addAll(newItems)
+        notifyItemRangeInserted(start, newItems.size)
+    }
+
+    fun itemAt(position: Int): StreamEntity? = items.getOrNull(position)
 
     override fun getItemId(position: Int): Long = items[position].key.hashCode().toLong()
 
@@ -102,8 +106,8 @@ internal class PosterStreamAdapter(
             text = value?.let { "★ $it" }.orEmpty()
         }
         ArtworkLoader.load(holder.image, item.icon ?: item.backdrop)
-        if (position % 4 == 0) {
-            val next = (position + 1 until minOf(items.size, position + 9)).map { index -> items[index].icon ?: items[index].backdrop }
+        if (position % 5 == 0) {
+            val next = (position + 1 until minOf(items.size, position + 11)).map { index -> items[index].icon ?: items[index].backdrop }
             ArtworkLoader.prefetch(holder.itemView.context, next)
         }
         holder.itemView.setOnClickListener { onClick(item) }
@@ -126,7 +130,8 @@ internal class PosterStreamAdapter(
 
     internal class Holder(itemView: View, val image: ImageView, val title: TextView, val meta: TextView, val rating: TextView) : RecyclerView.ViewHolder(itemView)
 
-    private fun card(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+    private fun card(focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
         if (focused) intArrayOf(0xFF62379B.toInt(), 0xFF25172F.toInt()) else intArrayOf(0xFF241A32.toInt(), 0xFF15101E.toInt())
     ).apply {
         cornerRadius = 20f
