@@ -3,6 +3,7 @@ package tv.blofy.player.ui.catalog
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -20,77 +21,81 @@ internal class PosterStreamAdapter(
 ) : RecyclerView.Adapter<PosterStreamAdapter.Holder>() {
     private val items = mutableListOf<StreamEntity>()
 
-    init {
-        setHasStableIds(true)
-    }
+    init { setHasStableIds(true) }
 
     fun submit(newItems: List<StreamEntity>) {
         val oldItems = items.toList()
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize() = oldItems.size
             override fun getNewListSize() = newItems.size
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition].key == newItems[newItemPosition].key
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition] == newItems[newItemPosition]
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int) = oldItems[oldItemPosition].key == newItems[newItemPosition].key
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int) = oldItems[oldItemPosition] == newItems[newItemPosition]
         }, false)
-        items.clear()
-        items.addAll(newItems)
-        diff.dispatchUpdatesTo(this)
+        items.clear(); items.addAll(newItems); diff.dispatchUpdatesTo(this)
     }
 
-    override fun getItemId(position: Int): Long = items[position].key.hashCode().toLong()
+    override fun getItemId(position: Int) = items[position].key.hashCode().toLong()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val density = parent.resources.displayMetrics.density
-        fun dp(value: Int) = (value * density).toInt()
+        fun dp(v: Int) = (v * density).toInt()
         val root = LinearLayout(parent.context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             isFocusable = true
             isClickable = true
-            setPadding(dp(7), dp(7), dp(7), dp(10))
-            background = card(false)
-            clipToOutline = true
+            setPadding(dp(6), dp(6), dp(6), dp(9))
+            background = card(false, density)
+            clipChildren = false
+            clipToPadding = false
+            alpha = 0.97f
         }
-        val frame = FrameLayout(parent.context)
+        val frame = FrameLayout(parent.context).apply { clipToOutline = true }
         val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(Color.rgb(20, 15, 31))
+            setBackgroundColor(0xFF17101F.toInt())
             clipToOutline = true
         }
-        frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(245)))
+        frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(248)))
+        val bottomFade = View(parent.context).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00100A17, 0xB80B0710.toInt()))
+        }
+        frame.addView(bottomFade, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(70), Gravity.BOTTOM))
         val rating = TextView(parent.context).apply {
             textSize = 11f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             setPadding(dp(8), dp(4), dp(8), dp(4))
             background = GradientDrawable().apply {
-                cornerRadius = dp(11).toFloat()
-                setColor(Color.argb(225, 62, 27, 105))
-                setStroke(dp(1), Color.rgb(189, 129, 255))
+                cornerRadius = dp(12).toFloat()
+                setColor(0xE5662CB0.toInt())
+                setStroke(dp(1), 0xFFDAB8FF.toInt())
             }
         }
         frame.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(8)
-            marginEnd = dp(8)
+            topMargin = dp(9); marginEnd = dp(9)
         })
-        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(245)))
+        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(248)))
+
         val title = TextView(parent.context).apply {
             textSize = 14f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(Color.WHITE)
-            gravity = Gravity.START
+            gravity = Gravity.END
             maxLines = 2
-            setPadding(dp(4), dp(9), dp(4), 0)
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(dp(5), dp(9), dp(5), 0)
         }
         root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         val meta = TextView(parent.context).apply {
-            textSize = 11f
-            setTextColor(Color.rgb(183, 168, 201))
-            gravity = Gravity.START
+            textSize = 11.5f
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            setTextColor(0xFFBDAFC9.toInt())
+            gravity = Gravity.END
             maxLines = 1
-            setPadding(dp(4), dp(2), dp(4), 0)
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(dp(5), dp(2), dp(5), 0)
         }
         root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(27)))
         return Holder(root, image, title, meta, rating)
@@ -98,33 +103,31 @@ internal class PosterStreamAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
+        val density = holder.itemView.resources.displayMetrics.density
         holder.itemView.tag = item.key
         holder.title.text = item.name
-        holder.meta.text = listOfNotNull(
-            item.year?.takeIf(String::isNotBlank),
-            item.genre?.takeIf(String::isNotBlank)?.substringBefore(',')
-        ).joinToString("  •  ")
+        holder.meta.text = listOfNotNull(item.year?.takeIf(String::isNotBlank), item.genre?.takeIf(String::isNotBlank)?.substringBefore(',')).joinToString("  •  ")
         holder.rating.apply {
             val value = item.rating?.takeIf(String::isNotBlank)
             visibility = if (value == null) View.GONE else View.VISIBLE
             text = value?.let { "★ $it" }.orEmpty()
         }
-        ArtworkLoader.load(holder.image, item.icon ?: item.backdrop)
-        if (position % 4 == 0) {
-            val next = (position + 1 until minOf(items.size, position + 9)).map { index ->
-                items[index].icon ?: items[index].backdrop
-            }
-            ArtworkLoader.prefetch(holder.itemView.context, next)
+        ArtworkLoader.load(holder.image, listOf(item.icon, item.backdrop))
+        if (position % 3 == 0) {
+            ArtworkLoader.prefetch(holder.itemView.context, (position + 1 until minOf(items.size, position + 13)).flatMap { index -> listOf(items[index].icon, items[index].backdrop) })
         }
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
-            view.background = card(focused)
+            view.background = card(focused, density)
+            holder.title.setTextColor(if (focused) 0xFFF6ECFF.toInt() else Color.WHITE)
+            holder.meta.setTextColor(if (focused) 0xFFD8C5E8.toInt() else 0xFFBDAFC9.toInt())
             view.animate().cancel()
             view.animate()
-                .scaleX(if (focused) 1.035f else 1f)
-                .scaleY(if (focused) 1.035f else 1f)
-                .translationZ(if (focused) 14f else 3f)
-                .setDuration(85)
+                .scaleX(if (focused) 1.055f else 1f)
+                .scaleY(if (focused) 1.055f else 1f)
+                .alpha(1f)
+                .translationZ(if (focused) 18f * density else 2f * density)
+                .setDuration(if (focused) 125L else 95L)
                 .start()
             if (focused) onFocus(item)
         }
@@ -136,22 +139,15 @@ internal class PosterStreamAdapter(
         super.onViewRecycled(holder)
     }
 
-    override fun getItemCount(): Int = items.size
+    override fun getItemCount() = items.size
 
-    internal class Holder(
-        itemView: View,
-        val image: ImageView,
-        val title: TextView,
-        val meta: TextView,
-        val rating: TextView
-    ) : RecyclerView.ViewHolder(itemView)
+    internal class Holder(itemView: View, val image: ImageView, val title: TextView, val meta: TextView, val rating: TextView) : RecyclerView.ViewHolder(itemView)
 
-    private fun card(focused: Boolean) = GradientDrawable(
+    private fun card(focused: Boolean, density: Float) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF5D2498.toInt(), 0xFF241330.toInt())
-        else intArrayOf(0xED181321.toInt(), 0xF00C0A12.toInt())
+        if (focused) intArrayOf(0xFF6B2EA8.toInt(), 0xFF24142E.toInt()) else intArrayOf(0xE8171220.toInt(), 0xF00B0910.toInt())
     ).apply {
-        cornerRadius = 20f
-        setStroke(if (focused) 3 else 1, if (focused) 0xFFE0B5FF.toInt() else 0x554D376B)
+        cornerRadius = 18f * density
+        setStroke(if (focused) (2.2f * density).toInt().coerceAtLeast(2) else (1f * density).toInt().coerceAtLeast(1), if (focused) 0xFFE7C8FF.toInt() else 0x3F5A446D)
     }
 }

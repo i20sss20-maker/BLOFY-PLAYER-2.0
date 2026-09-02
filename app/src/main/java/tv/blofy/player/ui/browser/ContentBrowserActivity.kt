@@ -74,17 +74,19 @@ class ContentBrowserActivity : AppCompatActivity() {
     private val phoneMode get() = deviceKind == DeviceClass.Kind.PHONE
     private val previewEnabled get() = kind == KIND_LIVE && !phoneMode
     private val statePrefs by lazy { getSharedPreferences("blofy_browser_state", MODE_PRIVATE) }
+    private val headingTypeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
+    private val bodyTypeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(if (phoneMode) dp(16) else dp(22), if (phoneMode) dp(14) else dp(18), if (phoneMode) dp(16) else dp(22), if (phoneMode) dp(14) else dp(18))
+            setPadding(if (phoneMode) dp(16) else dp(26), if (phoneMode) dp(14) else dp(20), if (phoneMode) dp(16) else dp(26), if (phoneMode) dp(14) else dp(22))
             background = AppCompatResources.getDrawable(this@ContentBrowserActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
         }
-        root.addView(buildHeader(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(64) else dp(72)))
+        root.addView(buildHeader(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(64) else dp(76)))
 
         val body = LinearLayout(this).apply {
             orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
@@ -92,28 +94,30 @@ class ContentBrowserActivity : AppCompatActivity() {
             clipToPadding = false
         }
         categoryList = RecyclerView(this).apply {
-            layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, false)
-            else LinearLayoutManager(this@ContentBrowserActivity)
+            layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, false) else LinearLayoutManager(this@ContentBrowserActivity)
             background = browserPanelBackground(true)
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setPadding(dp(8), dp(9), dp(8), dp(9))
+            clipChildren = false
+            clipToPadding = false
         }
         streamList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@ContentBrowserActivity)
             background = browserPanelBackground(false)
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(7), dp(7), dp(7), dp(7))
+            setPadding(dp(9), dp(9), dp(9), dp(9))
+            clipChildren = false
+            clipToPadding = false
         }
 
         if (phoneMode) {
             body.addView(categoryList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(88)).apply { bottomMargin = dp(8) })
             body.addView(streamList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            // TV: compact categories, readable channel names, large preview.
-            body.addView(categoryList, LinearLayout.LayoutParams(dp(245), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(12) })
-            body.addView(streamList, LinearLayout.LayoutParams(dp(430), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(16) })
+            body.addView(categoryList, LinearLayout.LayoutParams(dp(260), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(14) })
+            body.addView(streamList, LinearLayout.LayoutParams(dp(465), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(18) })
             if (previewEnabled) body.addView(createPreviewPanel(), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         }
         root.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -145,8 +149,7 @@ class ContentBrowserActivity : AppCompatActivity() {
                 val displayed = if (kind == KIND_LIVE) listOf(allLiveCategory()) + rows else listOf(allCategory()) + rows
                 categoryAdapter.submit(displayed)
                 val saved = savedCategoryId()
-                val initial = rows.firstOrNull { it.remoteId == saved }?.remoteId
-                    ?: if (kind == KIND_LIVE) rows.firstOrNull()?.remoteId else null
+                val initial = rows.firstOrNull { it.remoteId == saved }?.remoteId ?: if (kind == KIND_LIVE) rows.firstOrNull()?.remoteId else null
                 if (streamsJob == null) loadStreams(initial)
                 categoryList.post { categoryList.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
             }
@@ -158,69 +161,75 @@ class ContentBrowserActivity : AppCompatActivity() {
         gravity = Gravity.CENTER_VERTICAL
         layoutDirection = View.LAYOUT_DIRECTION_RTL
         addView(TextView(this@ContentBrowserActivity).apply {
-            text = when (kind) {
-                KIND_MOVIE -> "الأفلام"
-                KIND_SERIES -> "المسلسلات"
-                else -> "البث المباشر"
-            }
-            textSize = if (phoneMode) 25f else 30f
-            typeface = Typeface.DEFAULT_BOLD
+            text = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
+            textSize = if (phoneMode) 25f else 32f
+            typeface = headingTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            includeFontPadding = false
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         searchInput = EditText(this@ContentBrowserActivity).apply {
             hint = "⌕  بحث من أول حرف"
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
-            textSize = 15f
+            textSize = 15.5f
+            typeface = bodyTypeface
             setTextColor(Color.WHITE)
-            setHintTextColor(0xFFAE9ABD.toInt())
-            setPadding(dp(16), 0, dp(16), 0)
+            setHintTextColor(0xFFB8A8C8.toInt())
+            setPadding(dp(18), 0, dp(18), 0)
             background = searchBackground(false)
-            setOnFocusChangeListener { view, focused -> view.background = searchBackground(focused) }
+            setOnFocusChangeListener { view, focused ->
+                view.background = searchBackground(focused)
+                view.animate().cancel()
+                view.animate().scaleX(if (focused) 1.02f else 1f).scaleY(if (focused) 1.02f else 1f).setDuration(100).start()
+            }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = runSearch(s?.toString().orEmpty())
                 override fun afterTextChanged(s: Editable?) = Unit
             })
         }
-        addView(searchInput, LinearLayout.LayoutParams(if (phoneMode) dp(270) else dp(345), if (phoneMode) dp(48) else dp(52)))
+        addView(searchInput, LinearLayout.LayoutParams(if (phoneMode) dp(270) else dp(365), if (phoneMode) dp(48) else dp(54)))
     }
 
     private fun createPreviewPanel() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(14), dp(14), dp(14), dp(14))
+        setPadding(dp(16), dp(16), dp(16), dp(16))
         background = previewPanelBackground()
+        clipChildren = false
         previewTitle = TextView(this@ContentBrowserActivity).apply {
             text = "اختر قناة"
-            textSize = 22f
-            typeface = Typeface.DEFAULT_BOLD
+            textSize = 24f
+            typeface = headingTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.RIGHT
+            includeFontPadding = false
         }
-        addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)))
+        addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
         previewMeta = TextView(this@ContentBrowserActivity).apply {
             text = "المعاينة تبدأ تلقائيًا"
-            textSize = 13f
+            textSize = 13.5f
+            typeface = bodyTypeface
             setTextColor(BLOFY_PURPLE_SOFT)
             gravity = Gravity.RIGHT
         }
-        addView(previewMeta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)))
+        addView(previewMeta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)))
         previewView = PlayerView(this@ContentBrowserActivity).apply {
             useController = false
             player = null
             isFocusable = false
-            setShutterBackgroundColor(Color.BLACK)
-            resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+            setShutterBackgroundColor(0xFF08060D.toInt())
+            resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
         }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         addView(TextView(this@ContentBrowserActivity).apply {
             text = "OK ملء الشاشة   •   ↑↓ القنوات   •   ضغط مطوّل للأرشيف"
             textSize = 13f
-            setTextColor(0xFFB9A8CA.toInt())
+            typeface = bodyTypeface
+            setTextColor(0xFFC3B5D1.toInt())
             gravity = Gravity.CENTER
-            setPadding(0, dp(10), 0, 0)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)))
+            setPadding(0, dp(12), 0, 0)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
     }
 
     private fun loadStreams(categoryId: String?) {
@@ -257,30 +266,21 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (!::provider.isInitialized) return
         searchJob = lifecycleScope.launch {
             delay(45L)
-            val all = withContext(Dispatchers.IO) {
-                BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, null).first()
-            }
-            val matches = withContext(Dispatchers.Default) {
-                all.asSequence().filter { it.name.contains(query, ignoreCase = true) }.take(700).toList()
-            }
+            val all = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, null).first() }
+            val matches = withContext(Dispatchers.Default) { all.asSequence().filter { it.name.contains(query, ignoreCase = true) }.take(700).toList() }
             if (searchInput.text?.toString()?.trim() == query) streamAdapter.submit(matches)
         }
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_SEARCH) {
-            searchInput.requestFocus(); return true
-        }
+        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_SEARCH) { searchInput.requestFocus(); return true }
         return super.dispatchKeyEvent(event)
     }
 
     private fun schedulePreview(stream: StreamEntity, immediate: Boolean = false) {
         if (!previewEnabled || !::provider.isInitialized || stream.key == lastPreviewKey) return
         previewJob?.cancel()
-        previewJob = lifecycleScope.launch {
-            if (!immediate) delay(160L)
-            startPreview(stream)
-        }
+        previewJob = lifecycleScope.launch { if (!immediate) delay(140L); startPreview(stream) }
     }
 
     private fun startPreview(stream: StreamEntity) {
@@ -294,7 +294,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         lastPreviewKey = stream.key
         rememberStream(stream)
         previewTitle?.text = stream.name
-        previewMeta?.text = if (stream.archiveEnabled) "بث مباشر • أرشيف متوفر" else "بث مباشر"
+        previewMeta?.text = if (stream.archiveEnabled) "بث مباشر  •  أرشيف متوفر" else "بث مباشر"
         previewSession?.play(url)
         refreshShortEpg(stream)
     }
@@ -305,9 +305,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         val last = epgRefreshAt[stream.remoteId] ?: 0L
         if (now - last < 120_000L) return
         epgRefreshAt[stream.remoteId] = now
-        lifecycleScope.launch {
-            runCatching { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncShortEpg(provider, stream.remoteId) }
-        }
+        lifecycleScope.launch { runCatching { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncShortEpg(provider, stream.remoteId) } }
     }
 
     private fun stopPreview() {
@@ -320,12 +318,10 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun openStream(stream: StreamEntity) {
         when (stream.kind) {
             KIND_SERIES -> startActivity(Intent(this, SeriesDetailsActivity::class.java).apply {
-                putExtra(SeriesDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
-                putExtra(SeriesDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
+                putExtra(SeriesDetailsActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(SeriesDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
             })
             KIND_MOVIE -> startActivity(Intent(this, MovieDetailsActivity::class.java).apply {
-                putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
-                putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
+                putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
             })
             else -> {
                 rememberStream(stream)
@@ -341,8 +337,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (!::provider.isInitialized || !stream.archiveEnabled || provider.providerType.equals("m3u", true)) return
         stopPreview()
         startActivity(Intent(this, CatchupActivity::class.java).apply {
-            putExtra(CatchupActivity.EXTRA_PROVIDER_ID, provider.id)
-            putExtra(CatchupActivity.EXTRA_CONTENT_KEY, stream.key)
+            putExtra(CatchupActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(CatchupActivity.EXTRA_CONTENT_KEY, stream.key)
         })
     }
 
@@ -367,10 +362,7 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (resumedOnce && previewEnabled && ::provider.isInitialized && searchInput.text.isNullOrBlank()) {
-            lastPreviewKey = null
-            restartSavedPreview()
-        }
+        if (resumedOnce && previewEnabled && ::provider.isInitialized && searchInput.text.isNullOrBlank()) { lastPreviewKey = null; restartSavedPreview() }
         resumedOnce = true
     }
 
@@ -382,14 +374,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         }
     }
 
-    private fun rememberCategory(categoryId: String?) {
-        if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.edit().putString(categoryKey(), categoryId).apply()
-    }
-
-    private fun rememberStream(stream: StreamEntity) {
-        if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.edit().putString(streamKey(), stream.key).apply()
-    }
-
+    private fun rememberCategory(categoryId: String?) { if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.edit().putString(categoryKey(), categoryId).apply() }
+    private fun rememberStream(stream: StreamEntity) { if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.edit().putString(streamKey(), stream.key).apply() }
     private fun savedCategoryId(): String? = if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.getString(categoryKey(), null) else null
     private fun savedStreamKey(): String? = if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.getString(streamKey(), null) else null
     private fun categoryKey() = "${provider.id}:live:last_category"
@@ -398,9 +384,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun allLiveCategory() = CategoryEntity("${provider.id}:live:$ALL_CATEGORY_ID", provider.id, ALL_CATEGORY_ID, KIND_LIVE, "كل القنوات", -1)
     private fun allCategory() = CategoryEntity("${provider.id}:$kind:$ALL_CATEGORY_ID", provider.id, ALL_CATEGORY_ID, kind, if (kind == KIND_MOVIE) "كل الأفلام" else "كل المسلسلات", -1)
 
-    override fun onDestroy() {
-        streamsJob?.cancel(); searchJob?.cancel(); stopPreview(); super.onDestroy()
-    }
+    override fun onDestroy() { streamsJob?.cancel(); searchJob?.cancel(); stopPreview(); super.onDestroy() }
 
     private fun profile(provider: ProviderEntity) = ProviderProfile(
         providerKey = provider.id,
@@ -413,18 +397,17 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun browserPanelBackground(emphasis: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (emphasis) intArrayOf(0xE8231633.toInt(), 0xF0110C1A.toInt()) else intArrayOf(0xE6191224.toInt(), 0xF00B0912.toInt())
-    ).apply { cornerRadius = dp(18).toFloat(); setStroke(dp(1), if (emphasis) 0x665E3A87 else 0x454A355F) }
+        if (emphasis) intArrayOf(0xEA241731.toInt(), 0xF0100B18.toInt()) else intArrayOf(0xEA181121.toInt(), 0xF00A0810.toInt())
+    ).apply { cornerRadius = dp(22).toFloat(); setStroke(dp(1), if (emphasis) 0x706A4290 else 0x504D3762) }
 
     private fun previewPanelBackground() = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xEF1E1230.toInt(), 0xF5080710.toInt())
-    ).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0x706E3CAE) }
+        GradientDrawable.Orientation.TL_BR, intArrayOf(0xF0201432.toInt(), 0xF6080710.toInt())
+    ).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), 0x807A48B6.toInt()) }
 
     private fun searchBackground(focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF8436D5.toInt(), 0xFF5620A5.toInt()) else intArrayOf(0xDD21132C.toInt(), 0xE5130B1C.toInt())
-    ).apply { cornerRadius = dp(15).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x66573B70) }
+        if (focused) intArrayOf(0xFF8342CF.toInt(), 0xFF5A269C.toInt()) else intArrayOf(0xE0221730.toInt(), 0xEB120B1B.toInt())
+    ).apply { cornerRadius = dp(18).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFE8CEFF.toInt() else 0x665D4077) }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -434,6 +417,6 @@ class ContentBrowserActivity : AppCompatActivity() {
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
         private const val ALL_CATEGORY_ID = "__all__"
-        private val BLOFY_PURPLE_SOFT = Color.rgb(195, 135, 255)
+        private val BLOFY_PURPLE_SOFT = Color.rgb(208, 164, 255)
     }
 }
