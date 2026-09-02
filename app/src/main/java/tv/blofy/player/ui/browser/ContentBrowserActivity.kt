@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -17,9 +18,9 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -33,8 +34,8 @@ import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
 import tv.blofy.player.core.security.ParentalGate
-import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.CatalogRecoveryPolicy
+import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.ProviderEntity
@@ -51,7 +52,7 @@ import tv.blofy.player.ui.player.PlayerActivity
 class ContentBrowserActivity : AppCompatActivity() {
     private lateinit var provider: ProviderEntity
     private lateinit var categoryAdapter: FocusTextAdapter<CategoryEntity>
-    private lateinit var streamAdapter: FocusTextAdapter<StreamEntity>
+    private lateinit var streamAdapter: LiveChannelAdapter
     private var streamsJob: Job? = null
     private var catalogRefreshJob: Job? = null
     private var previewJob: Job? = null
@@ -128,9 +129,9 @@ class ContentBrowserActivity : AppCompatActivity() {
             body.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 92).apply { bottomMargin = 10 })
             body.addView(streamList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            body.addView(categoryList, LinearLayout.LayoutParams(250, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 16 })
+            body.addView(categoryList, LinearLayout.LayoutParams(250, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 20 })
             if (previewEnabled) {
-                body.addView(streamList, LinearLayout.LayoutParams(390, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 18 })
+                body.addView(streamList, LinearLayout.LayoutParams(420, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 22 })
                 body.addView(createPreviewPanel(), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             } else {
                 body.addView(streamList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
@@ -139,8 +140,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
-        streamAdapter = FocusTextAdapter(
-            label = { (if (it.locked) "🔒 " else "") + it.name + if (kind == KIND_LIVE && it.archiveEnabled) "  ⏱" else "" },
+        streamAdapter = LiveChannelAdapter(
             onClick = ::openStream,
             onFocus = {
                 if (previewEnabled && !it.locked) {
@@ -159,6 +159,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         )
         categoryList.adapter = categoryAdapter
         streamList.adapter = streamAdapter
+        installTvFocusBridge()
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -178,6 +179,37 @@ class ContentBrowserActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun installTvFocusBridge() {
+        if (phoneMode) return
+        categoryList.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return@setOnKeyListener false
+            focusFirstChannel()
+        }
+        streamList.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_LEFT) return@setOnKeyListener false
+            focusCurrentCategory()
+        }
+    }
+
+    private fun focusFirstChannel(): Boolean {
+        if (streamAdapter.itemCount == 0) return false
+        val existing = streamList.findViewHolderForAdapterPosition(0)?.itemView
+        if (existing != null) return existing.requestFocus()
+        streamList.scrollToPosition(0)
+        streamList.post { streamList.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
+        return true
+    }
+
+    private fun focusCurrentCategory(): Boolean {
+        val lm = categoryList.layoutManager as? LinearLayoutManager ?: return false
+        val pos = lm.findFirstVisibleItemPosition().coerceAtLeast(0)
+        val existing = categoryList.findViewHolderForAdapterPosition(pos)?.itemView
+        if (existing != null) return existing.requestFocus()
+        categoryList.scrollToPosition(pos)
+        categoryList.post { categoryList.findViewHolderForAdapterPosition(pos)?.itemView?.requestFocus() }
+        return true
     }
 
     private fun createCatalogStatusRow() = LinearLayout(this).apply {
@@ -226,7 +258,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             text = "● مباشر  •  المعاينة تبدأ تلقائيًا"
             textSize = 13f
             typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.PurpleSoft)
+            setTextColor(BlofyTvDesign.Mint)
             gravity = Gravity.RIGHT
             setPadding(4, 0, 4, 10)
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 34))
@@ -239,7 +271,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         addView(TextView(this@ContentBrowserActivity).apply {
-            text = "OK ملء الشاشة   •   ↑↓ القنوات   •   ضغط مطوّل للأرشيف"
+            text = "OK ملء الشاشة   •   ↑↓ القنوات   •   ← رجوع للفئات   •   ضغط مطوّل للأرشيف"
             textSize = 12.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -254,15 +286,15 @@ class ContentBrowserActivity : AppCompatActivity() {
         currentCategoryId = categoryId
         rememberCategory(categoryId)
         lastPreviewKey = null
-        stopPreview()
+        previewJob?.cancel()
         streamsJob?.cancel()
         streamsJob = lifecycleScope.launch {
             BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, categoryId).collect { items ->
                 streamAdapter.submit(items)
                 if (kind != KIND_LIVE) updateCatalogState(items, categoryId)
-                if (previewEnabled && items.isNotEmpty() && previewSession == null) {
+                if (previewEnabled && items.isNotEmpty()) {
                     val target = items.firstOrNull { it.key == savedStreamKey() && !it.locked } ?: items.firstOrNull { !it.locked }
-                    if (target != null) schedulePreview(target, immediate = true)
+                    if (target != null) schedulePreview(target, immediate = previewSession == null)
                 }
             }
         }
@@ -278,12 +310,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             showCatalogStatus("لا يوجد محتوى في هذا القسم • اختر ${allCategory().name}", retry = false)
             return
         }
-        if (CatalogRecoveryPolicy.shouldAutoRefresh(
-                kind = kind,
-                itemCount = items.size,
-                attempted = catalogRepairAttempted,
-                refreshInProgress = catalogRefreshJob?.isActive == true
-            )) {
+        if (CatalogRecoveryPolicy.shouldAutoRefresh(kind, items.size, catalogRepairAttempted, catalogRefreshJob?.isActive == true)) {
             refreshMissingCatalog()
         } else if (catalogRefreshJob?.isActive != true) {
             showCatalogStatus("لا توجد ${catalogLabel()} محفوظة", retry = true)
@@ -310,18 +337,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             } catch (error: Throwable) {
                 Result.failure(error)
             }
-
             val count = BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, null).first().size
-            if (count > 0) {
-                hideCatalogStatus()
-            } else {
-                val message = if (result.isFailure) {
-                    "تعذر تحميل ${catalogLabel()} • تحقق من القائمة ثم أعد المحاولة"
-                } else {
-                    "القائمة لا تحتوي على ${catalogLabel()}"
-                }
-                showCatalogStatus(message, retry = true)
-            }
+            if (count > 0) hideCatalogStatus() else showCatalogStatus(if (result.isFailure) "تعذر تحميل ${catalogLabel()} • تحقق من القائمة ثم أعد المحاولة" else "القائمة لا تحتوي على ${catalogLabel()}", retry = true)
         }
     }
 
@@ -360,7 +377,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (!previewEnabled || !::provider.isInitialized || stream.locked || stream.key == lastPreviewKey) return
         previewJob?.cancel()
         previewJob = lifecycleScope.launch {
-            if (!immediate) delay(220)
+            if (!immediate) delay(180)
             startPreview(stream)
         }
     }
@@ -386,11 +403,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         val last = epgRefreshAt[stream.remoteId] ?: 0L
         if (now - last < 120_000L) return
         epgRefreshAt[stream.remoteId] = now
-        lifecycleScope.launch {
-            runCatching {
-                PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncShortEpg(provider, stream.remoteId)
-            }
-        }
+        lifecycleScope.launch { runCatching { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncShortEpg(provider, stream.remoteId) } }
     }
 
     private fun stopPreview() {
@@ -488,10 +501,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun streamKey() = "${provider.id}:live:last_stream"
 
     override fun onDestroy() {
-        streamsJob?.cancel()
-        catalogRefreshJob?.cancel()
-        stopPreview()
-        super.onDestroy()
+        streamsJob?.cancel(); catalogRefreshJob?.cancel(); stopPreview(); super.onDestroy()
     }
 
     private fun profile(provider: ProviderEntity) = ProviderProfile(
