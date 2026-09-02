@@ -10,13 +10,12 @@ import kotlinx.coroutines.launch
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Commercial-style stale-while-revalidate catalog engine.
- *
- * Cached Room data is always used immediately by the UI. This engine only refreshes stale
- * catalogs in the background, so entering Home / Movies / Series never waits for the server.
+ * Cached Room data is always used immediately by the UI while stale catalogs refresh in background.
  */
 object BackgroundCatalogEngine {
     private const val PREFS = "blofy_background_catalog"
@@ -25,21 +24,18 @@ object BackgroundCatalogEngine {
     private const val STARTUP_GRACE_MS = 1_500L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val running = ConcurrentHashMap.newKeySet<String>()
+    // Collections.newSetFromMap is available on API 23 and keeps the same concurrent set semantics.
+    private val running: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     fun kick(context: Context) {
         val app = context.applicationContext
         scope.launch {
-            // Give launcher/Home a short head start so disk/network work never competes with first paint.
             delay(STARTUP_GRACE_MS)
             val dao = BlofyDatabase.get(app).dao()
             val provider = dao.providers().first().firstOrNull() ?: return@launch
 
-            // Warm likely artwork before the user opens Movies/Series.
             val warm = runCatching { dao.latestHomeStreams(provider.id, WARM_ART_LIMIT) }.getOrDefault(emptyList())
-            if (warm.isNotEmpty()) {
-                ArtworkLoader.warmPrefetch(app, warm.map { it.icon ?: it.backdrop })
-            }
+            if (warm.isNotEmpty()) ArtworkLoader.warmPrefetch(app, warm.map { it.icon ?: it.backdrop })
 
             if (!dao.hasCatalog(provider.id)) return@launch
             val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -49,10 +45,7 @@ object BackgroundCatalogEngine {
             if (!running.add(provider.id)) return@launch
 
             try {
-                // Existing Room rows stay available while each replacement transaction completes.
-                val result = PlaylistSyncPolicy.run {
-                    PlaylistManager(XtreamClient.api, dao).syncAll(provider)
-                }
+                val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(provider) }
                 if (result.freshItemCount > 0 && result.failedSectionCount == 0) {
                     prefs.edit().putLong(key, System.currentTimeMillis()).apply()
                     val refreshedWarm = runCatching { dao.latestHomeStreams(provider.id, WARM_ART_LIMIT) }.getOrDefault(emptyList())
