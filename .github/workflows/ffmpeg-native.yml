@@ -108,17 +108,30 @@ jobs:
           test -s "$APK"
           unzip -Z1 "$AAR" > "$RUNNER_TEMP/ffmpeg-aar-files.txt"
           unzip -Z1 "$APK" > "$RUNNER_TEMP/ffmpeg-apk-files.txt"
+
+          require_entry() {
+            local archive_label="$1"
+            local listing="$2"
+            local entry="$3"
+            if ! grep -Fxq "$entry" "$listing"; then
+              echo "::error::$archive_label is missing required entry: $entry"
+              echo "--- relevant $archive_label entries ---"
+              grep -E '(^|/)(ffmpeg|open_source)|libffmpegJNI\.so' "$listing" || true
+              exit 1
+            fi
+          }
+
           for license_asset in \
             assets/open_source/THIRD_PARTY_NOTICES.txt \
             assets/open_source/ffmpeg/LICENSE.md \
             assets/open_source/ffmpeg/COPYING.LGPLv2.1 \
             assets/open_source/ffmpeg/SOURCE_OFFER.txt \
             assets/open_source/androidx-media/LICENSE; do
-            grep -Fxq "$license_asset" "$RUNNER_TEMP/ffmpeg-apk-files.txt"
+            require_entry "APK" "$RUNNER_TEMP/ffmpeg-apk-files.txt" "$license_asset"
           done
           for abi in armeabi-v7a arm64-v8a x86 x86_64; do
-            grep -Fxq "jni/$abi/libffmpegJNI.so" "$RUNNER_TEMP/ffmpeg-aar-files.txt"
-            grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/ffmpeg-apk-files.txt"
+            require_entry "FFmpeg AAR" "$RUNNER_TEMP/ffmpeg-aar-files.txt" "jni/$abi/libffmpegJNI.so"
+            require_entry "APK" "$RUNNER_TEMP/ffmpeg-apk-files.txt" "lib/$abi/libffmpegJNI.so"
           done
 
           "$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION/zipalign" \
@@ -136,11 +149,21 @@ jobs:
 
           for abi in arm64-v8a x86_64; do
             mapfile -t libraries < <(find "$verify_dir/lib/$abi" -maxdepth 1 -type f -name '*.so' -print | sort)
-            ((${#libraries[@]} > 0))
+            if ((${#libraries[@]} == 0)); then
+              echo "::error::APK has no native libraries for required 64-bit ABI: $abi"
+              exit 1
+            fi
             for library in "${libraries[@]}"; do
-              "$llvm_readelf" -h "$library" | grep -Eq 'Class:[[:space:]]+ELF64'
+              if ! "$llvm_readelf" -h "$library" | grep -Eq 'Class:[[:space:]]+ELF64'; then
+                echo "::error file=${library#$verify_dir/}::Expected ELF64 native library"
+                exit 1
+              fi
               mapfile -t load_alignments < <("$llvm_objdump" -p "$library" | awk '$1 == "LOAD" { print $NF }')
-              ((${#load_alignments[@]} > 0))
+              if ((${#load_alignments[@]} == 0)); then
+                echo "::error file=${library#$verify_dir/}::No ELF LOAD alignment records found"
+                "$llvm_objdump" -p "$library" || true
+                exit 1
+              fi
               for alignment in "${load_alignments[@]}"; do
                 if [[ ! "$alignment" =~ ^2\*\*([0-9]+)$ ]] || ((BASH_REMATCH[1] < 14)); then
                   echo "::error file=${library#$verify_dir/}::ELF LOAD alignment $alignment is below 2**14"
