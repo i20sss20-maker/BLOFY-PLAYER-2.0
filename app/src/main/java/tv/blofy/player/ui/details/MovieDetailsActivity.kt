@@ -39,11 +39,24 @@ class MovieDetailsActivity : AppCompatActivity() {
             background = AppCompatResources.getDrawable(this@MovieDetailsActivity, R.drawable.blofy_home_background)
             clipChildren = false
         }
+        val backdrop = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            alpha = 0.34f
+            setBackgroundColor(0xFF06050A.toInt())
+        }
+        root.addView(backdrop, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        root.addView(View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(0xFB07050C.toInt(), 0xD70B0711.toInt(), 0x8D130C1E.toInt(), 0x4A170B29.toInt())
+            )
+        }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(68), dp(48), dp(68), dp(48))
+            setPadding(dp(68), dp(46), dp(68), dp(46))
             clipChildren = false
         }
         root.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -56,12 +69,14 @@ class MovieDetailsActivity : AppCompatActivity() {
             val watch = dao.watchState(contentKey)
             val url = ContentUrlResolver.movie(provider, stream)
 
+            ArtworkLoader.load(backdrop, listOf(stream.backdrop, stream.icon))
+
             val posterCard = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(11), dp(11), dp(11), dp(11))
+                setPadding(dp(10), dp(10), dp(10), dp(10))
                 background = cardBackground()
-                elevation = dp(6).toFloat()
+                elevation = dp(8).toFloat()
             }
             val poster = ImageView(this@MovieDetailsActivity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
@@ -69,7 +84,7 @@ class MovieDetailsActivity : AppCompatActivity() {
             }
             posterCard.addView(poster, LinearLayout.LayoutParams(dp(300), dp(448)))
             ArtworkLoader.load(poster, listOf(stream.icon, stream.backdrop))
-            body.addView(posterCard, LinearLayout.LayoutParams(dp(324), dp(472)).apply { marginStart = dp(46) })
+            body.addView(posterCard, LinearLayout.LayoutParams(dp(324), dp(472)).apply { marginStart = dp(48) })
 
             val info = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
@@ -77,8 +92,18 @@ class MovieDetailsActivity : AppCompatActivity() {
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
             }
             info.addView(TextView(this@MovieDetailsActivity).apply {
+                text = "BLOFY  •  فيلم"
+                textSize = 13.5f
+                typeface = bodyTypeface
+                setTextColor(ACCENT_MINT)
+                gravity = Gravity.END
+                includeFontPadding = false
+                background = badgeBackground()
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
+            info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.name
-                textSize = 42f
+                textSize = 43f
                 typeface = headingTypeface
                 setTextColor(Color.WHITE)
                 gravity = Gravity.END
@@ -87,7 +112,6 @@ class MovieDetailsActivity : AppCompatActivity() {
             })
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = buildList {
-                    add("فيلم")
                     stream.year?.takeIf { it.isNotBlank() }?.let(::add)
                     stream.genre?.takeIf { it.isNotBlank() }?.substringBefore(',')?.let(::add)
                     stream.duration?.takeIf { it.isNotBlank() }?.let(::add)
@@ -96,7 +120,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 }.joinToString("  •  ")
                 textSize = 16f
                 typeface = bodyTypeface
-                setTextColor(0xFFD0A8F0.toInt())
+                setTextColor(0xFFD4B4EE.toInt())
                 gravity = Gravity.END
                 setPadding(0, dp(10), 0, dp(20))
             })
@@ -105,7 +129,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 textSize = 17.5f
                 typeface = bodyTypeface
                 maxLines = 6
-                setTextColor(0xFFE5DFEA.toInt())
+                setTextColor(0xFFE9E4EE.toInt())
                 gravity = Gravity.END
                 setLineSpacing(dp(2).toFloat(), 1.16f)
                 setPadding(0, 0, 0, dp(26))
@@ -116,13 +140,14 @@ class MovieDetailsActivity : AppCompatActivity() {
             if (resumeMs > 30_000L && durationMs > 0L) {
                 val percent = ((resumeMs * 100L) / durationMs).coerceIn(1, 99)
                 info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = "متابعة المشاهدة  •  $percent%"
+                    text = "◷  متابعة المشاهدة  •  $percent%"
                     textSize = 15f
                     typeface = bodyTypeface
-                    setTextColor(0xFFC9B0DC.toInt())
+                    setTextColor(0xFFD7C3E5.toInt())
                     gravity = Gravity.END
-                    setPadding(0, 0, 0, dp(14))
-                })
+                    setPadding(dp(12), dp(8), dp(12), dp(8))
+                    background = progressBackground()
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(16) })
             }
 
             val row = LinearLayout(this@MovieDetailsActivity).apply {
@@ -131,9 +156,13 @@ class MovieDetailsActivity : AppCompatActivity() {
                 gravity = Gravity.END
                 clipChildren = false
             }
-            val play = actionButton(if (resumeMs > 30_000L) "▶  استئناف" else "▶  شاهد الآن") { openPlayer(provider, stream, url, resumeMs) }
-            row.addView(play, LinearLayout.LayoutParams(dp(205), dp(72)).apply { marginStart = dp(12) })
-            if (resumeMs > 30_000L) row.addView(actionButton("من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(dp(180), dp(72)).apply { marginStart = dp(12) })
+            val play = actionButton(if (resumeMs > 30_000L) "▶  استئناف" else "▶  شاهد الآن", primary = true) {
+                openPlayer(provider, stream, url, resumeMs)
+            }
+            row.addView(play, LinearLayout.LayoutParams(dp(215), dp(72)).apply { marginStart = dp(12) })
+            if (resumeMs > 30_000L) {
+                row.addView(actionButton("↺  من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(dp(190), dp(72)).apply { marginStart = dp(12) })
+            }
             favoriteButton = actionButton(if (stream.favorite) "★  المفضلة" else "☆  المفضلة") {
                 lifecycleScope.launch {
                     val current = dao.stream(contentKey) ?: return@launch
@@ -141,7 +170,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                     favoriteButton.text = if (!current.favorite) "★  المفضلة" else "☆  المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(180), dp(72)).apply { marginStart = dp(12) })
+            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(185), dp(72)).apply { marginStart = dp(12) })
             info.addView(row)
             body.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             play.requestFocus()
@@ -164,7 +193,7 @@ class MovieDetailsActivity : AppCompatActivity() {
         })
     }
 
-    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
+    private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
         textSize = 15.5f
@@ -172,14 +201,14 @@ class MovieDetailsActivity : AppCompatActivity() {
         isFocusable = true
         includeFontPadding = false
         setTextColor(Color.WHITE)
-        background = buttonBackground(false)
+        background = buttonBackground(false, primary)
         setOnFocusChangeListener { view, focused ->
-            view.background = buttonBackground(focused)
+            view.background = buttonBackground(focused, primary)
             view.animate().cancel()
             view.animate()
-                .scaleX(if (focused) 1.04f else 1f)
-                .scaleY(if (focused) 1.04f else 1f)
-                .translationZ(if (focused) 18f else 2f)
+                .scaleX(if (focused) 1.045f else 1f)
+                .scaleY(if (focused) 1.045f else 1f)
+                .translationZ(if (focused) 20f else 2f)
                 .setDuration(if (focused) 115L else 90L)
                 .start()
         }
@@ -187,16 +216,33 @@ class MovieDetailsActivity : AppCompatActivity() {
     }
 
     private fun cardBackground() = GradientDrawable().apply {
-        cornerRadius = dp(24).toFloat()
-        setColor(0xE4181124.toInt())
-        setStroke(dp(1), 0x705D3E78)
+        cornerRadius = dp(26).toFloat()
+        setColor(0xD9140E1C.toInt())
+        setStroke(dp(1), 0x805D3E78.toInt())
     }
 
-    private fun buttonBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF8342CF.toInt(), 0xFF5D269F.toInt()) else intArrayOf(0xE61B1428.toInt(), 0xED100B19.toInt())
+    private fun badgeBackground() = GradientDrawable().apply {
+        cornerRadius = dp(14).toFloat()
+        setColor(0x99221631.toInt())
+        setStroke(dp(1), 0x665D4779)
+    }
+
+    private fun progressBackground() = GradientDrawable().apply {
+        cornerRadius = dp(14).toFloat()
+        setColor(0x9A1A1125.toInt())
+        setStroke(dp(1), 0x554D3764)
+    }
+
+    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT,
+        when {
+            focused -> intArrayOf(0xFF9552DD.toInt(), 0xFF692EBC.toInt())
+            primary -> intArrayOf(0xFF7337C4.toInt(), 0xFF4A1F8B.toInt())
+            else -> intArrayOf(0xE61B1428.toInt(), 0xED100B19.toInt())
+        }
     ).apply {
         cornerRadius = dp(18).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFE8CEFF.toInt() else 0x66533A69)
+        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFF0DDFF.toInt() else 0x66533A69)
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
@@ -204,5 +250,6 @@ class MovieDetailsActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"
         const val EXTRA_CONTENT_KEY = "content_key"
+        private const val ACCENT_MINT = 0xFF78EAD3.toInt()
     }
 }
