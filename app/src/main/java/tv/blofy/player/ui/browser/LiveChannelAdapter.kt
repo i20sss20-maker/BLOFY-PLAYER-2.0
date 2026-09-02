@@ -24,6 +24,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 
 internal class LiveChannelAdapter(
     private val onClick: (StreamEntity) -> Unit,
@@ -45,42 +46,59 @@ internal class LiveChannelAdapter(
     override fun getItemId(position: Int) = itemKey(items[position]).hashCode().toLong()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
-        val d = parent.resources.displayMetrics.density
-        fun dp(v: Int) = (v * d).toInt()
-        val row = LinearLayout(parent.context).apply {
-            orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(8), dp(14), dp(8)); isFocusable = true; isClickable = true; isLongClickable = true; background = rowBackground(false)
+        val context = parent.context
+        fun dp(v: Int) = TvUiTuning.dp(context, v)
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(7), dp(14), dp(7))
+            isFocusable = true
+            isFocusableInTouchMode = true
+            isClickable = true
+            isLongClickable = true
+            background = rowBackground(false)
         }
-        val logo = ImageView(parent.context).apply {
-            scaleType = ImageView.ScaleType.CENTER_INSIDE; setPadding(dp(6), dp(6), dp(6), dp(6))
-            background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(0xFF120D1A.toInt()); setStroke(dp(1), 0xFF4A365F.toInt()) }
+        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(82)).apply {
+            bottomMargin = dp(7)
+            marginStart = dp(2)
+            marginEnd = dp(2)
         }
-        row.addView(logo, LinearLayout.LayoutParams(dp(62), dp(62)).apply { marginStart = dp(14) })
+        val logo = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(0xFF120D1A.toInt())
+                setStroke(dp(1), 0xFF4A365F.toInt())
+            }
+        }
+        row.addView(logo, LinearLayout.LayoutParams(dp(60), dp(60)).apply { marginStart = dp(13) })
 
-        val textBox = LinearLayout(parent.context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT }
-        val title = TextView(parent.context).apply {
-            textSize = 15.5f; typeface = BlofyTvDesign.LabelTypeface; setTextColor(BlofyTvDesign.TextPrimary); maxLines = 1
+        val textBox = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT }
+        val title = TextView(context).apply {
+            textSize = TvUiTuning.sp(context, 15.5f); typeface = BlofyTvDesign.LabelTypeface; setTextColor(BlofyTvDesign.TextPrimary); maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END; gravity = Gravity.RIGHT
         }
-        val meta = TextView(parent.context).apply {
-            textSize = 11.5f; typeface = BlofyTvDesign.MediumTypeface; setTextColor(BlofyTvDesign.TextMuted); maxLines = 1
+        val meta = TextView(context).apply {
+            textSize = TvUiTuning.sp(context, 11.5f); typeface = BlofyTvDesign.MediumTypeface; setTextColor(BlofyTvDesign.TextMuted); maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END; gravity = Gravity.RIGHT
         }
-        val progress = ProgressBar(parent.context, null, android.R.attr.progressBarStyleHorizontal).apply {
+        val progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 1000; progress = 0; visibility = View.INVISIBLE
             progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
             progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF31233E.toInt())
         }
         textBox.addView(title, LinearLayout.LayoutParams(-1, 0, 1f))
-        textBox.addView(meta, LinearLayout.LayoutParams(-1, dp(22)))
-        textBox.addView(progress, LinearLayout.LayoutParams(-1, dp(5)).apply { topMargin = dp(2) })
-        row.addView(textBox, LinearLayout.LayoutParams(0, dp(66), 1f))
+        textBox.addView(meta, LinearLayout.LayoutParams(-1, dp(21)))
+        textBox.addView(progress, LinearLayout.LayoutParams(-1, dp(4)).apply { topMargin = dp(2) })
+        row.addView(textBox, LinearLayout.LayoutParams(0, dp(64), 1f))
 
-        val badge = TextView(parent.context).apply {
-            textSize = 10f; typeface = BlofyTvDesign.LabelTypeface; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.CENTER
-            background = GradientDrawable().apply { cornerRadius = dp(11).toFloat(); setColor(0x66382252); setStroke(dp(1), 0x995F3D82.toInt()) }
+        val badge = TextView(context).apply {
+            textSize = TvUiTuning.sp(context, 10f); typeface = BlofyTvDesign.LabelTypeface; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.CENTER
+            background = GradientDrawable().apply { cornerRadius = dp(10).toFloat(); setColor(0x66382252); setStroke(dp(1), 0x995F3D82.toInt()) }
         }
-        row.addView(badge, LinearLayout.LayoutParams(dp(60), dp(34)))
+        row.addView(badge, LinearLayout.LayoutParams(dp(58), dp(32)))
         return Holder(row, logo, title, meta, badge, progress)
     }
 
@@ -103,9 +121,12 @@ internal class LiveChannelAdapter(
             holder.meta.setTextColor(if (focused) 0xFFE8D8FA.toInt() else BlofyTvDesign.TextMuted)
             holder.badge.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.PurpleSoft)
             view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.026f else 1f).scaleY(if (focused) 1.026f else 1f)
-                .translationX(if (focused) 5f else 0f).translationZ(if (focused) 15f else 1f)
-                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs).start()
+            view.animate()
+                .scaleX(if (focused) 1.012f else 1f)
+                .scaleY(if (focused) 1.012f else 1f)
+                .translationZ(if (focused) 13f else 1f)
+                .setDuration(if (focused) 70L else 58L)
+                .start()
             if (focused) {
                 onFocus(item)
                 loadLocalEpg(holder, item, retryAfterFocus = true)
@@ -116,7 +137,7 @@ internal class LiveChannelAdapter(
     private fun loadLocalEpg(holder: Holder, item: StreamEntity, retryAfterFocus: Boolean) {
         holder.epgJob?.cancel()
         holder.epgJob = scope.launch {
-            if (retryAfterFocus) delay(850L)
+            if (retryAfterFocus) delay(700L)
             val now = System.currentTimeMillis()
             val current = withContext(Dispatchers.IO) {
                 BlofyDatabase.get(holder.itemView.context.applicationContext).dao()
@@ -156,5 +177,8 @@ internal class LiveChannelAdapter(
     private fun rowBackground(focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) intArrayOf(0xFF7542C7.toInt(), 0xFF42275F.toInt()) else intArrayOf(0xE6251A35.toInt(), 0xEB18111F.toInt())
-    ).apply { cornerRadius = 20f; setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF433253.toInt()) }
+    ).apply {
+        cornerRadius = 16f
+        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF433253.toInt())
+    }
 }
