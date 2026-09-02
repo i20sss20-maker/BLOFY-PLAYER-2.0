@@ -1,8 +1,6 @@
 package tv.blofy.player.ui.common
 
 import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
@@ -57,37 +55,49 @@ class FocusTextAdapter<T>(
 
     override fun getItemId(position: Int): Long = itemKey?.invoke(items[position])?.hashCode()?.toLong() ?: super.getItemId(position)
 
-    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) { super.onAttachedToRecyclerView(recyclerView); attachedRecyclerView = recyclerView }
-    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) { if (attachedRecyclerView === recyclerView) attachedRecyclerView = null; restorePending = false; super.onDetachedFromRecyclerView(recyclerView) }
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        super.onAttachedToRecyclerView(recyclerView)
+        attachedRecyclerView = recyclerView
+        recyclerView.layoutDirection = View.LAYOUT_DIRECTION_RTL
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        if (attachedRecyclerView === recyclerView) attachedRecyclerView = null
+        restorePending = false
+        super.onDetachedFromRecyclerView(recyclerView)
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val density = parent.resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
         val view = TextView(parent.context).apply {
-            textSize = 16f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            textDirection = View.TEXT_DIRECTION_RTL
+            textSize = BlofyTvDesign.LabelSp
+            typeface = BlofyTvDesign.BodyTypeface
             setTextColor(TEXT_IDLE)
-            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setPadding(dp(18), 0, dp(18), 0)
-            minHeight = dp(54)
+            setPadding(dp(20), 0, dp(20), 0)
+            minHeight = dp(58)
             isFocusable = true
+            isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
-            background = background(false, density)
-            alpha = 0.94f
+            background = itemBackground(false, density)
+            alpha = 0.96f
             setOnFocusChangeListener { v, focused ->
                 (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
                 v.animate().cancel()
                 v.animate()
-                    .scaleX(if (focused) 1.028f else 1f)
-                    .scaleY(if (focused) 1.028f else 1f)
-                    .alpha(if (focused) 1f else 0.94f)
-                    .translationZ(if (focused) dp(12).toFloat() else dp(2).toFloat())
-                    .setDuration(if (focused) 115L else 90L)
+                    .scaleX(if (focused) 1.035f else 1f)
+                    .scaleY(if (focused) 1.035f else 1f)
+                    .alpha(if (focused) 1f else 0.96f)
+                    .translationZ(if (focused) dp(16).toFloat() else dp(2).toFloat())
+                    .setDuration(if (focused) 120L else 90L)
                     .start()
-                v.background = background(focused, density)
+                v.background = itemBackground(focused, density)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
                         items.getOrNull(pos)?.let { item ->
@@ -108,9 +118,9 @@ class FocusTextAdapter<T>(
         holder.text.animate().cancel()
         holder.text.scaleX = 1f
         holder.text.scaleY = 1f
-        holder.text.alpha = 0.94f
+        holder.text.alpha = 0.96f
         holder.text.translationZ = 2f * density
-        holder.text.background = background(false, density)
+        holder.text.background = itemBackground(false, density)
         holder.text.setTextColor(TEXT_IDLE)
         holder.text.text = label(item)
         holder.text.tag = position
@@ -129,7 +139,7 @@ class FocusTextAdapter<T>(
         holder.text.animate().cancel()
         holder.text.scaleX = 1f
         holder.text.scaleY = 1f
-        holder.text.alpha = 0.94f
+        holder.text.alpha = 0.96f
         holder.text.translationZ = 0f
         holder.text.tag = null
         holder.text.setOnClickListener(null)
@@ -140,14 +150,17 @@ class FocusTextAdapter<T>(
     override fun getItemCount() = items.size
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
 
-    private fun background(focused: Boolean, density: Float) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF7B36CF.toInt(), 0xFF35194E.toInt())
-        else intArrayOf(0xCC1B1526.toInt(), 0xE30E0B15.toInt())
+    private fun itemBackground(focused: Boolean, density: Float) = android.graphics.drawable.GradientDrawable(
+        android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+        if (focused) intArrayOf(0xFF6F35B7.toInt(), 0xFF2D1B43.toInt())
+        else intArrayOf(0xE61A1424.toInt(), 0xEA0D0A13.toInt())
     ).apply {
-        cornerRadius = 16f * density
-        setStroke(if (focused) (2f * density).toInt().coerceAtLeast(2) else (1f * density).toInt().coerceAtLeast(1), if (focused) 0xFFE7C7FF.toInt() else 0x3D6B527D)
+        cornerRadius = 17f * density
+        setStroke(
+            if (focused) (2f * density).toInt().coerceAtLeast(2) else (1f * density).toInt().coerceAtLeast(1),
+            if (focused) 0xFFF0DBFF.toInt() else 0x4A604878
+        )
     }
 
-    companion object { private val TEXT_IDLE = Color.rgb(224, 217, 232) }
+    companion object { private val TEXT_IDLE = Color.rgb(230, 224, 236) }
 }
