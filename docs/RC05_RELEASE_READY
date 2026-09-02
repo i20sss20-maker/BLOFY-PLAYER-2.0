@@ -1,31 +1,16 @@
 BLOFY PLAYER 2.0 rc05 release gate
 
-Final signed candidate:
-- full professional TV UI polish merged to main
-- resilient multi-source poster fallback with retry, memory/disk cache and prefetch
-- real rotating home banners with artwork fallback and smoother transitions
-- unified TV typography, spacing, rounded cards, focus glow and motion across key screens
-- improved live TV category/channel layout, larger preview and clearer D-pad focus
-- movie and series detail screens polished with unified typography/buttons and artwork fallback
-- TV settings visually rebuilt while retaining current functional options
-- instant search from the first character across live, movies and series
-- cached catalog navigation to avoid reloading lists on every entry
-- series episodes use local cache first and fetch only when missing
-- external player support removed from UI, manifest and code paths
-- parental lock/PIN feature removed and legacy locked state cleared by migration
-- local storage management with safe cache cleanup added to settings
-- silent long-running live stall recovery added without changing playback engine, URL or format
-- private «مشتركين BLOFY» login added with username/password only and upstream host kept in backend environment
-- Room schema migration repaired through database version 8 without deleting playlists, cached catalog, favorites or resume state
-- home startup now reads only a limited recent-content set instead of loading the full movie/series catalog
-- movie/series search now queries SQLite directly and first entry avoids the heavy all-content view on large playlists
-- series episode screen rebuilt for RTL TV navigation with horizontal seasons and full-width episodes
-- VOD remote seek added: left/right seeks ±10 seconds when the player HUD is hidden while preserving normal HUD focus navigation
-- current Media3 1.6.1 + FFmpeg playback engine, transport, URL resolution and fallbacks retained
-- Android CI passed on final stabilization head 407a8b8eaecc3de97a2a644dce734fbc4a5e56f4 (Run #528)
-- production activation backend verified healthy after subscriber proxy deployment
-- production signed RC05 rebuild requested from stabilized main after catalog/TV UX fixes
-- web portal «مشتركين BLOFY» integration merged in PR #18; Android CI #531 and Activation CI #83 passed
-- final theme/UX pass merged from PR #19 at commit 6f3f963ced58281c43cc312c1857dfac4ee3983e; Android CI #547 and FFmpeg Native #145 passed
-- signed release rebuild requested from final polished main on 2026-09-02
-- final signed rebuild requested after PR #21 merge at main commit 1a47580f02d0ff721d21ca6a1fe2a9ad94826a87
+Final signed v339 restoration candidate:
+- user-approved v339 content UI restored on main: home, live/content browser, movie/series catalogs, details, episodes, search and player HUD
+- original v339 home background, right-side navigation, spacing, card composition and remote-focus behavior restored
+- current splash/login infrastructure, BLOFY subscriber backend and provider management retained
+- large-playlist 96% completion fix, cache-first loading, partial-cache protection and Room migrations retained
+- resilient poster loader with retry, memory/disk cache and prefetch retained
+- local storage management and safe cache cleanup retained
+- silent long-running live stall recovery retained
+- current Media3 1.6.1 + FFmpeg engine, stream transport, URL resolution and fallback policy retained unchanged
+- parental PIN remains disabled through a no-op compatibility bridge; no lock screen is restored
+- external-player UI remains disabled; compatibility calls always continue through BLOFY's internal player
+- Android Unit tests, Lint and assembleDebug passed in BLOFY Android CI Run #575 for the v339 restoration branch
+- verified restoration head: ad574968119b06439b53a322f25d5a0ad32c916e
+- production signed rc05 rebuild requested on 2026-09-02 after fast-forwarding the verified restoration to main
