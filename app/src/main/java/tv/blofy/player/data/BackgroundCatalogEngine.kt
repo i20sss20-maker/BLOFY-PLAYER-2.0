@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.data.local.BlofyDatabase
@@ -21,6 +22,7 @@ object BackgroundCatalogEngine {
     private const val PREFS = "blofy_background_catalog"
     private const val REFRESH_AFTER_MS = 6 * 60 * 60_000L
     private const val WARM_ART_LIMIT = 28
+    private const val STARTUP_GRACE_MS = 1_500L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val running = ConcurrentHashMap.newKeySet<String>()
@@ -28,10 +30,12 @@ object BackgroundCatalogEngine {
     fun kick(context: Context) {
         val app = context.applicationContext
         scope.launch {
+            // Give launcher/Home a short head start so disk/network work never competes with first paint.
+            delay(STARTUP_GRACE_MS)
             val dao = BlofyDatabase.get(app).dao()
             val provider = dao.providers().first().firstOrNull() ?: return@launch
 
-            // Warm the images the user is most likely to open next, without blocking Home.
+            // Warm likely artwork before the user opens Movies/Series.
             val warm = runCatching { dao.latestHomeStreams(provider.id, WARM_ART_LIMIT) }.getOrDefault(emptyList())
             if (warm.isNotEmpty()) {
                 ArtworkLoader.warmPrefetch(app, warm.map { it.icon ?: it.backdrop })
@@ -45,7 +49,7 @@ object BackgroundCatalogEngine {
             if (!running.add(provider.id)) return@launch
 
             try {
-                // Stale content remains visible while each replacement transaction completes.
+                // Existing Room rows stay available while each replacement transaction completes.
                 val result = PlaylistSyncPolicy.run {
                     PlaylistManager(XtreamClient.api, dao).syncAll(provider)
                 }
@@ -55,7 +59,7 @@ object BackgroundCatalogEngine {
                     ArtworkLoader.warmPrefetch(app, refreshedWarm.map { it.icon ?: it.backdrop })
                 }
             } catch (_: Throwable) {
-                // Background refresh is best-effort. Cached catalog remains usable.
+                // Best effort only: stale cache remains the source of truth until a later retry succeeds.
             } finally {
                 running.remove(provider.id)
             }
