@@ -14,11 +14,14 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -27,19 +30,23 @@ import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 
-/** Dedicated TV catalog: server-order categories on the left, premium poster grid on the right. */
+/** Dedicated TV catalog with incremental paging for very large providers. */
 class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var categoryAdapter: FocusTextAdapter<CategoryEntity>
     private lateinit var posterAdapter: PosterStreamAdapter
     private lateinit var categoryList: RecyclerView
     private lateinit var posterGrid: RecyclerView
     private lateinit var countView: TextView
-    private var streamsJob: Job? = null
+    private var pageJob: Job? = null
     private var categoryFocusJob: Job? = null
     private var providerId = ""
     private var selectedCategoryId: String? = null
     private var categoryRows: List<CategoryEntity> = emptyList()
     private var initialFocusRequested = false
+    private var loadedItems: List<StreamEntity> = emptyList()
+    private var totalItems = 0
+    private var loadingPage = false
+    private var generation = 0
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty().ifBlank { KIND_MOVIE } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -104,8 +111,9 @@ class PosterCatalogActivity : AppCompatActivity() {
         header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(38)))
         content.addView(header)
 
+        val manager = GridLayoutManager(this, GRID_COLUMNS)
         posterGrid = RecyclerView(this).apply {
-            layoutManager = GridLayoutManager(this@PosterCatalogActivity, GRID_COLUMNS)
+            layoutManager = manager
             setPadding(dp(4), dp(6), dp(8), dp(24))
             clipChildren = false
             clipToPadding = false
@@ -113,12 +121,22 @@ class PosterCatalogActivity : AppCompatActivity() {
             setHasFixedSize(true)
             recycledViewPool.setMaxRecycledViews(0, 30)
             descendantFocusability = ViewGroupFocus.AFTER_DESCENDANTS
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (dy <= 0 || loadingPage || loadedItems.size >= totalItems) return
+                    val last = manager.findLastVisibleItemPosition()
+                    if (last >= loadedItems.size - PREFETCH_THRESHOLD) loadNextPage()
+                }
+            })
         }
         content.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         setContentView(root)
 
-        posterAdapter = PosterStreamAdapter(onClick = ::openItem)
+        posterAdapter = PosterStreamAdapter(onClick = ::openItem, onFocus = { item ->
+            val index = loadedItems.indexOfFirst { it.key == item.key }
+            if (index >= loadedItems.size - PREFETCH_THRESHOLD) loadNextPage()
+        })
         posterGrid.adapter = posterAdapter
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
@@ -135,7 +153,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             dao.categories(provider.id, kind).collect { categories ->
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
-                if (selectedCategoryId == null && streamsJob == null) loadStreams(null, immediate = true)
+                if (selectedCategoryId == null && loadedItems.isEmpty() && pageJob == null) loadStreams(null, immediate = true)
                 if (!initialFocusRequested) {
                     initialFocusRequested = true
                     categoryList.post { requestCategoryFocus(0) }
@@ -166,16 +184,46 @@ class PosterCatalogActivity : AppCompatActivity() {
     private fun loadStreams(categoryId: String?, immediate: Boolean) {
         if (providerId.isBlank()) return
         if (immediate) categoryFocusJob?.cancel()
-        if (selectedCategoryId == categoryId && streamsJob?.isActive == true) return
+        if (selectedCategoryId == categoryId && loadedItems.isNotEmpty()) return
         selectedCategoryId = categoryId
-        streamsJob?.cancel()
-        streamsJob = lifecycleScope.launch {
-            BlofyDatabase.get(applicationContext).dao().streams(providerId, kind, categoryId).collect { items ->
-                posterAdapter.submit(items)
-                countView.text = "${items.size} ${if (kind == KIND_SERIES) "مسلسل" else "فيلم"}"
-                if (items.isNotEmpty()) {
-                    ArtworkLoader.prefetch(this@PosterCatalogActivity, items.take(15).map { it.icon ?: it.backdrop })
-                }
+        generation += 1
+        pageJob?.cancel()
+        loadedItems = emptyList()
+        totalItems = 0
+        loadingPage = false
+        posterAdapter.submit(emptyList())
+        countView.text = "..."
+        loadNextPage(reset = true)
+    }
+
+    private fun loadNextPage(reset: Boolean = false) {
+        if (providerId.isBlank() || loadingPage) return
+        if (!reset && totalItems > 0 && loadedItems.size >= totalItems) return
+        val requestGeneration = generation
+        val offset = if (reset) 0 else loadedItems.size
+        loadingPage = true
+        pageJob = lifecycleScope.launch {
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val categoryId = selectedCategoryId
+            val result = withContext(Dispatchers.IO) {
+                val total = if (categoryId == null) dao.catalogCountAll(providerId, kind)
+                else dao.catalogCountInCategory(providerId, kind, categoryId)
+                val page = if (categoryId == null) dao.catalogPageAll(providerId, kind, PAGE_SIZE, offset)
+                else dao.catalogPageInCategory(providerId, kind, categoryId, PAGE_SIZE, offset)
+                total to page
+            }
+            if (requestGeneration != generation) return@launch
+            totalItems = result.first
+            loadedItems = if (offset == 0) result.second else loadedItems + result.second
+            posterAdapter.submit(loadedItems)
+            countView.text = "${loadedItems.size} / $totalItems ${if (kind == KIND_SERIES) "مسلسل" else "فيلم"}"
+            if (result.second.isNotEmpty()) {
+                ArtworkLoader.prefetch(this@PosterCatalogActivity, result.second.take(18).map { it.icon ?: it.backdrop })
+            }
+            loadingPage = false
+        }.also { job ->
+            job.invokeOnCompletion {
+                if (requestGeneration == generation) runOnUiThread { loadingPage = false }
             }
         }
     }
@@ -235,9 +283,11 @@ class PosterCatalogActivity : AppCompatActivity() {
         setStroke(dp(1), 0xFF49375E.toInt())
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
     override fun onDestroy() {
         categoryFocusJob?.cancel()
-        streamsJob?.cancel()
+        pageJob?.cancel()
+        generation += 1
         super.onDestroy()
     }
 
@@ -248,6 +298,8 @@ class PosterCatalogActivity : AppCompatActivity() {
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
         private const val GRID_COLUMNS = 5
+        private const val PAGE_SIZE = 240
+        private const val PREFETCH_THRESHOLD = 45
         private const val ALL_CATEGORY_ID = "__all__"
         private const val EXTRA_PROVIDER_ID_SHARED = "provider_id"
         private const val EXTRA_CONTENT_KEY_SHARED = "content_key"
