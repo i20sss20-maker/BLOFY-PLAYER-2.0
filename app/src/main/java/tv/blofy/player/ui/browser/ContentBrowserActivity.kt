@@ -2,7 +2,6 @@ package tv.blofy.player.ui.browser
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
@@ -44,6 +43,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catchup.CatchupActivity
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -77,59 +77,63 @@ class ContentBrowserActivity : AppCompatActivity() {
     private val phoneMode get() = deviceKind == DeviceClass.Kind.PHONE
     private val previewEnabled get() = kind == KIND_LIVE && !phoneMode
     private val statePrefs by lazy { getSharedPreferences("blofy_browser_state", MODE_PRIVATE) }
-    private val headingTypeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
-    private val bodyTypeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
+    private val headingTypeface by lazy { BlofyTvDesign.HeadingTypeface }
+    private val bodyTypeface by lazy { BlofyTvDesign.BodyTypeface }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(if (phoneMode) dp(16) else dp(26), if (phoneMode) dp(14) else dp(20), if (phoneMode) dp(16) else dp(26), if (phoneMode) dp(14) else dp(22))
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(if (phoneMode) dp(16) else dp(28), if (phoneMode) dp(14) else dp(22), if (phoneMode) dp(16) else dp(28), if (phoneMode) dp(14) else dp(24))
             background = AppCompatResources.getDrawable(this@ContentBrowserActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
         }
-        root.addView(buildHeader(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(64) else dp(76)))
+        root.addView(buildHeader(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(64) else dp(80)))
         stateView = TextView(this).apply {
             text = "جاري تجهيز المحتوى…"
-            textSize = if (phoneMode) 12.5f else 13.5f
+            textSize = if (phoneMode) 12.5f else BlofyTvDesign.CaptionSp
             typeface = bodyTypeface
-            setTextColor(BLOFY_PURPLE_SOFT)
+            setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            setPadding(dp(14), 0, dp(14), 0)
+            setPadding(dp(16), 0, dp(16), 0)
         }
-        root.addView(stateView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(34) else dp(40)))
+        root.addView(stateView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(34) else dp(42)))
 
         val body = LinearLayout(this).apply {
             orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
             clipChildren = false
             clipToPadding = false
         }
         categoryList = RecyclerView(this).apply {
-            layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, false) else LinearLayoutManager(this@ContentBrowserActivity)
-            background = browserPanelBackground(true)
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, true) else LinearLayoutManager(this@ContentBrowserActivity)
+            background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(8), dp(9), dp(8), dp(9))
+            setPadding(dp(9), dp(10), dp(9), dp(10))
             clipChildren = false
             clipToPadding = false
         }
         streamList = RecyclerView(this).apply {
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
             layoutManager = LinearLayoutManager(this@ContentBrowserActivity)
-            background = browserPanelBackground(false)
+            background = BlofyTvDesign.surface(dp(24).toFloat(), false)
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(9), dp(9), dp(9), dp(9))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             clipChildren = false
             clipToPadding = false
         }
 
         if (phoneMode) {
-            body.addView(categoryList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(88)).apply { bottomMargin = dp(8) })
+            body.addView(categoryList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(90)).apply { bottomMargin = dp(10) })
             body.addView(streamList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            body.addView(categoryList, LinearLayout.LayoutParams(dp(260), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(14) })
-            body.addView(streamList, LinearLayout.LayoutParams(dp(465), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(18) })
+            body.addView(categoryList, LinearLayout.LayoutParams(dp(266), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginStart = dp(16) })
+            body.addView(streamList, LinearLayout.LayoutParams(dp(472), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginStart = dp(18) })
             if (previewEnabled) body.addView(createPreviewPanel(), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         }
         root.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -174,26 +178,32 @@ class ContentBrowserActivity : AppCompatActivity() {
         layoutDirection = View.LAYOUT_DIRECTION_RTL
         addView(TextView(this@ContentBrowserActivity).apply {
             text = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
-            textSize = if (phoneMode) 25f else 32f
-            typeface = headingTypeface
-            setTextColor(Color.WHITE)
+            if (phoneMode) {
+                textSize = 25f
+                typeface = headingTypeface
+                setTextColor(Color.WHITE)
+                includeFontPadding = false
+            } else {
+                BlofyTvDesign.applyTitle(this)
+            }
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            includeFontPadding = false
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         searchInput = EditText(this@ContentBrowserActivity).apply {
             hint = "⌕  بحث من أول حرف"
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
-            textSize = 15.5f
+            textSize = BlofyTvDesign.LabelSp
             typeface = bodyTypeface
-            setTextColor(Color.WHITE)
-            setHintTextColor(0xFFB8A8C8.toInt())
-            setPadding(dp(18), 0, dp(18), 0)
+            setTextColor(BlofyTvDesign.TextPrimary)
+            setHintTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(20), 0, dp(20), 0)
             background = searchBackground(false)
             setOnFocusChangeListener { view, focused ->
                 view.background = searchBackground(focused)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.02f else 1f).scaleY(if (focused) 1.02f else 1f).setDuration(100).start()
+                view.animate().scaleX(if (focused) 1.018f else 1f).scaleY(if (focused) 1.018f else 1f).translationZ(if (focused) 14f else 1f).setDuration(110).start()
             }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -201,47 +211,45 @@ class ContentBrowserActivity : AppCompatActivity() {
                 override fun afterTextChanged(s: Editable?) = Unit
             })
         }
-        addView(searchInput, LinearLayout.LayoutParams(if (phoneMode) dp(270) else dp(365), if (phoneMode) dp(48) else dp(54)))
+        addView(searchInput, LinearLayout.LayoutParams(if (phoneMode) dp(270) else dp(370), if (phoneMode) dp(48) else dp(56)))
     }
 
     private fun createPreviewPanel() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(16), dp(16), dp(16), dp(16))
-        background = previewPanelBackground()
+        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        setPadding(dp(18), dp(18), dp(18), dp(18))
+        background = BlofyTvDesign.elevatedSurface(dp(26).toFloat())
         clipChildren = false
         previewTitle = TextView(this@ContentBrowserActivity).apply {
             text = "اختر قناة"
-            textSize = 24f
-            typeface = headingTypeface
-            setTextColor(Color.WHITE)
+            BlofyTvDesign.applyHeading(this)
             gravity = Gravity.RIGHT
-            includeFontPadding = false
         }
-        addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
+        addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
         previewMeta = TextView(this@ContentBrowserActivity).apply {
             text = "المعاينة تبدأ تلقائيًا"
-            textSize = 13.5f
+            textSize = BlofyTvDesign.CaptionSp
             typeface = bodyTypeface
-            setTextColor(BLOFY_PURPLE_SOFT)
+            setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.RIGHT
         }
-        addView(previewMeta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)))
+        addView(previewMeta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
         previewView = PlayerView(this@ContentBrowserActivity).apply {
             useController = false
             player = null
             isFocusable = false
-            setShutterBackgroundColor(0xFF08060D.toInt())
+            setShutterBackgroundColor(BlofyTvDesign.Background)
             resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
         }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         addView(TextView(this@ContentBrowserActivity).apply {
             text = "OK ملء الشاشة   •   ↑↓ القنوات   •   ضغط مطوّل للأرشيف"
-            textSize = 13f
+            textSize = BlofyTvDesign.CaptionSp
             typeface = bodyTypeface
-            setTextColor(0xFFC3B5D1.toInt())
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
             setPadding(0, dp(12), 0, 0)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
     }
 
     private fun loadStreams(categoryId: String?) {
@@ -449,19 +457,11 @@ class ContentBrowserActivity : AppCompatActivity() {
         providerKind = tv.blofy.player.core.provider.ProviderKind.from(provider.providerType)
     )
 
-    private fun browserPanelBackground(emphasis: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (emphasis) intArrayOf(0xEA241731.toInt(), 0xF0100B18.toInt()) else intArrayOf(0xEA181121.toInt(), 0xF00A0810.toInt())
-    ).apply { cornerRadius = dp(22).toFloat(); setStroke(dp(1), if (emphasis) 0x706A4290 else 0x504D3762) }
-
-    private fun previewPanelBackground() = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR, intArrayOf(0xF0201432.toInt(), 0xF6080710.toInt())
-    ).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), 0x807A48B6.toInt()) }
-
-    private fun searchBackground(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF8342CF.toInt(), 0xFF5A269C.toInt()) else intArrayOf(0xE0221730.toInt(), 0xEB120B1B.toInt())
-    ).apply { cornerRadius = dp(18).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFE8CEFF.toInt() else 0x665D4077) }
+    private fun searchBackground(focused: Boolean) = if (focused) {
+        BlofyTvDesign.primaryButton(dp(19).toFloat(), true)
+    } else {
+        BlofyTvDesign.secondaryButton(dp(19).toFloat(), false)
+    }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -472,6 +472,5 @@ class ContentBrowserActivity : AppCompatActivity() {
         const val KIND_SERIES = "series"
         private const val ALL_CATEGORY_ID = "__all__"
         private const val MAX_SEARCH_RESULTS = 900
-        private val BLOFY_PURPLE_SOFT = Color.rgb(208, 164, 255)
     }
 }
