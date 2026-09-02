@@ -13,16 +13,21 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
+import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.home.HomeActivity
+import tv.blofy.player.ui.login.CatalogLoadingActivity
 
 class ProviderManagerActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
@@ -43,12 +48,12 @@ class ProviderManagerActivity : AppCompatActivity() {
         }
 
         root.addView(TextView(this).apply {
-            text = "إدارة قوائم التشغيل"
+            text = "قوائم BLOFY"
             BlofyTvDesign.applyTitle(this)
             gravity = Gravity.RIGHT
         })
         root.addView(TextView(this).apply {
-            text = "اختر طريقة الدخول أو بدّل بين القوائم المحفوظة"
+            text = "اتصل مباشرة بالقائمة المحفوظة أو عدّل بياناتها"
             textSize = 16f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
@@ -56,7 +61,7 @@ class ProviderManagerActivity : AppCompatActivity() {
             setPadding(0, dp(6), 0, 0)
         })
         status = TextView(this).apply {
-            text = "مشتركين BLOFY يخفي رابط السيرفر ويحتاج اسم المستخدم وكلمة المرور فقط"
+            text = "مشتركين BLOFY يحتاج اسم المستخدم وكلمة المرور فقط"
             textSize = 13.5f
             typeface = BlofyTvDesign.BodyTypeface
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
@@ -74,16 +79,16 @@ class ProviderManagerActivity : AppCompatActivity() {
             gravity = Gravity.RIGHT
             clipChildren = false
         }
-        val subscriberButton = actionButton("subscriber", "مشتركين BLOFY", primary = true) {
+        val subscriberButton = actionButton("subscriber", "+  مشتركين BLOFY", primary = true) {
             startActivity(Intent(this, BlofySubscriberActivity::class.java))
         }
         addButton = actionButton("add", "+  Xtream / M3U") {
             startActivity(Intent(this, PlaylistActivity::class.java).putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true))
         }
-        actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(310), dp(68)).apply { marginStart = dp(12) })
-        actions.addView(addButton, LinearLayout.LayoutParams(dp(280), dp(68)))
-        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(72)).apply {
-            bottomMargin = dp(20); gravity = Gravity.RIGHT
+        actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(310), dp(64)).apply { marginStart = dp(12) })
+        actions.addView(addButton, LinearLayout.LayoutParams(dp(270), dp(64)))
+        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(70)).apply {
+            bottomMargin = dp(18); gravity = Gravity.RIGHT
         })
 
         root.addView(TextView(this).apply {
@@ -92,7 +97,7 @@ class ProviderManagerActivity : AppCompatActivity() {
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
 
         list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -117,7 +122,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         list.removeAllViews()
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
-                text = "ما عندك قوائم محفوظة حتى الآن\nابدأ بمشتركين BLOFY أو أضف Xtream / M3U"
+                text = "ما عندك قوائم محفوظة حتى الآن\nأضف مشترك BLOFY أو Xtream / M3U"
                 setTextColor(BlofyTvDesign.TextSecondary)
                 textSize = 18f
                 typeface = BlofyTvDesign.BodyTypeface
@@ -135,8 +140,8 @@ class ProviderManagerActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(20), dp(12), dp(20), dp(12))
-                background = if (provider.enabled) BlofyTvDesign.surface(dp(22).toFloat(), true) else BlofyTvDesign.surface(dp(22).toFloat(), false)
+                setPadding(dp(18), dp(10), dp(18), dp(10))
+                background = if (provider.enabled) BlofyTvDesign.surface(dp(20).toFloat(), true) else BlofyTvDesign.surface(dp(20).toFloat(), false)
                 clipChildren = false
             }
 
@@ -158,18 +163,18 @@ class ProviderManagerActivity : AppCompatActivity() {
                     append("  •  ")
                     append(if (provider.name == "مشتركين BLOFY") "BLOFY Secure" else provider.providerType.uppercase())
                 }
-                textSize = 13.5f
+                textSize = 13f
                 typeface = BlofyTvDesign.BodyTypeface
                 gravity = Gravity.RIGHT
                 setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
             })
-            row.addView(info, LinearLayout.LayoutParams(0, dp(70), 1f))
+            row.addView(info, LinearLayout.LayoutParams(0, dp(66), 1f))
 
-            row.addView(actionButton("${provider.id}:select", if (provider.enabled) "نشطة" else "اختيار", primary = !provider.enabled) { activate(provider) }, LinearLayout.LayoutParams(dp(126), dp(58)).apply { marginStart = dp(8) })
-            row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(dp(118), dp(58)).apply { marginStart = dp(8) })
-            row.addView(actionButton("${provider.id}:refresh", "تحديث") { refresh(provider) }, LinearLayout.LayoutParams(dp(118), dp(58)).apply { marginStart = dp(8) })
-            row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(dp(110), dp(58)))
-            list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(96)).apply { bottomMargin = dp(10) })
+            row.addView(actionButton("${provider.id}:connect", "▶  اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(dp(140), dp(56)).apply { marginStart = dp(8) })
+            row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(dp(116), dp(56)).apply { marginStart = dp(8) })
+            row.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(dp(120), dp(56)).apply { marginStart = dp(8) })
+            row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(dp(104), dp(56)))
+            list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(90)).apply { bottomMargin = dp(9) })
         }
         restoreFocus()
     }
@@ -177,16 +182,29 @@ class ProviderManagerActivity : AppCompatActivity() {
     private fun restoreFocus() {
         if (!isTv) return
         val key = FocusMemory.restore(this, SCREEN_KEY)
-        val target = key?.let(focusButtons::get) ?: focusButtons["subscriber"] ?: addButton
+        val target = key?.let(focusButtons::get)
+            ?: focusButtons.entries.firstOrNull { it.key.endsWith(":connect") }?.value
+            ?: focusButtons["subscriber"]
+            ?: addButton
         target.post { if (!isFinishing) target.requestFocus() }
     }
 
-    private fun activate(provider: ProviderEntity) {
+    private fun connect(provider: ProviderEntity) {
+        status.text = "جاري فتح ${provider.name}..."
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            dao.disableAllProviders()
-            dao.activateProvider(provider.id)
-            status.text = "تم اختيار ${provider.name}"
+            withContext(Dispatchers.IO) {
+                dao.disableAllProviders()
+                dao.activateProvider(provider.id)
+            }
+            val cached = withContext(Dispatchers.IO) {
+                CatalogSyncState.isReady(applicationContext, provider.id) && dao.hasStreamsForProvider(provider.id)
+            }
+            if (cached) {
+                startActivity(Intent(this@ProviderManagerActivity, HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            } else {
+                startActivity(Intent(this@ProviderManagerActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
+            }
         }
     }
 
@@ -202,12 +220,12 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun refresh(provider: ProviderEntity) {
-        status.text = "جاري تحديث ${provider.name}..."
+        status.text = "جاري مزامنة ${provider.name}..."
         lifecycleScope.launch {
             runCatching {
                 PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(provider)
-            }.onSuccess { status.text = "تم تحديث ${provider.name}" }
-                .onFailure { status.text = "فشل التحديث: ${it.message ?: "خطأ اتصال"}" }
+            }.onSuccess { status.text = "تمت مزامنة ${provider.name}" }
+                .onFailure { status.text = "فشلت المزامنة • حاول مرة أخرى" }
         }
     }
 
@@ -226,7 +244,7 @@ class ProviderManagerActivity : AppCompatActivity() {
     private fun actionButton(key: String, label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
-        textSize = 14.5f
+        textSize = 14f
         typeface = BlofyTvDesign.BodyTypeface
         setTextColor(Color.WHITE)
         stateListAnimator = null
