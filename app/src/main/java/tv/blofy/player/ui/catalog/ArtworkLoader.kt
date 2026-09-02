@@ -14,23 +14,26 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
-/** Resilient artwork loader for large TV catalogs: memory + disk cache + multi-source fallback. */
+/** Fast artwork loader for TV catalogs: visible images are prioritised, disk persistence is off the render path. */
 object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
     private const val MAX_DISK_BYTES = 260L * 1024L * 1024L
     private val main = Handler(Looper.getMainLooper())
-    private val pool = Executors.newFixedThreadPool(8)
+    private val visiblePool = Executors.newFixedThreadPool(10)
+    private val backgroundPool = Executors.newFixedThreadPool(2)
+    private val trimCounter = AtomicInteger(0)
     private val placeholder = ColorDrawable(Color.rgb(24, 16, 34))
     private val client = OkHttpClient.Builder()
-        .connectTimeout(4, TimeUnit.SECONDS)
-        .readTimeout(9, TimeUnit.SECONDS)
-        .callTimeout(13, TimeUnit.SECONDS)
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(7, TimeUnit.SECONDS)
+        .callTimeout(10, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
-    private val cache = object : LruCache<String, Bitmap>(42 * 1024) {
+    private val cache = object : LruCache<String, Bitmap>(56 * 1024) {
         override fun sizeOf(key: String, value: Bitmap) = (value.byteCount / 1024).coerceAtLeast(1)
     }
 
@@ -47,44 +50,52 @@ object ArtworkLoader {
             view.setImageBitmap(it)
             return
         }
+
         val app = view.context.applicationContext
-        pool.execute {
+        visiblePool.execute {
             var result: Bitmap? = null
+            var downloadedUrl: String? = null
             for (url in urls) {
                 result = cache.get(url)?.takeIf { !it.isRecycled }
-                    ?: readDisk(app.cacheDir, url)
-                    ?: downloadWithRetry(url)?.also { bmp ->
-                        cache.put(url, bmp)
-                        writeDisk(app.cacheDir, url, bmp)
+                    ?: readDisk(app.cacheDir, url)?.also { cache.put(url, it) }
+                    ?: downloadWithRetry(url)?.also {
+                        cache.put(url, it)
+                        downloadedUrl = url
                     }
                 if (result != null) break
             }
+
+            val bitmap = result
             main.post {
                 if (view.tag == requestKey) {
-                    if (result != null && !result!!.isRecycled) view.setImageBitmap(result)
+                    if (bitmap != null && !bitmap.isRecycled) view.setImageBitmap(bitmap)
                     else view.setImageDrawable(placeholder)
                 }
+            }
+
+            // Never make the user wait for JPEG compression / directory trimming.
+            if (bitmap != null && downloadedUrl != null) {
+                val url = downloadedUrl!!
+                backgroundPool.execute { writeDisk(app.cacheDir, url, bitmap) }
             }
         }
     }
 
     fun prefetch(context: android.content.Context, urls: List<String?>) {
-        urls.mapNotNull(::normalizeUrl).distinct().take(24).forEach { url ->
-            if (cache.get(url) != null) return@forEach
-            val app = context.applicationContext
-            pool.execute {
-                val bmp = readDisk(app.cacheDir, url) ?: downloadWithRetry(url)?.also { writeDisk(app.cacheDir, url, it) }
-                if (bmp != null) cache.put(url, bmp)
+        val app = context.applicationContext
+        urls.mapNotNull(::normalizeUrl).distinct().take(18).forEach { url ->
+            if (cache.get(url) != null || diskFile(app.cacheDir, url).isFile) return@forEach
+            backgroundPool.execute {
+                val bmp = downloadWithRetry(url) ?: return@execute
+                cache.put(url, bmp)
+                writeDisk(app.cacheDir, url, bmp)
             }
         }
     }
 
     private fun downloadWithRetry(url: String): Bitmap? {
-        repeat(2) { attempt ->
-            runCatching { download(url) }.getOrNull()?.let { return it }
-            if (attempt == 0) runCatching { Thread.sleep(120L) }
-        }
-        return null
+        runCatching { download(url) }.getOrNull()?.let { return it }
+        return runCatching { download(url) }.getOrNull()
     }
 
     private fun download(url: String): Bitmap? {
@@ -98,7 +109,7 @@ object ArtworkLoader {
             val declared = body.contentLength()
             if (declared > MAX_IMAGE_BYTES) return null
             val bytes = body.byteStream().use { input ->
-                val out = java.io.ByteArrayOutputStream()
+                val out = java.io.ByteArrayOutputStream(if (declared in 1..MAX_IMAGE_BYTES.toLong()) declared.toInt() else 64 * 1024)
                 val buffer = ByteArray(32 * 1024)
                 while (true) {
                     val read = input.read(buffer)
@@ -121,20 +132,32 @@ object ArtworkLoader {
     private fun readDisk(cacheDir: File, url: String): Bitmap? {
         val file = diskFile(cacheDir, url)
         if (!file.isFile || file.length() <= 0L) return null
-        val bmp = BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 })
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { file.delete(); return null }
+        val bmp = BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply {
+            inPreferredConfig = Bitmap.Config.RGB_565
+            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, 420, 630)
+        })
         if (bmp == null) file.delete() else file.setLastModified(System.currentTimeMillis())
         return bmp
     }
 
     private fun writeDisk(cacheDir: File, url: String, bitmap: Bitmap) {
+        if (bitmap.isRecycled) return
         val dir = File(cacheDir, "blofy_posters").apply { mkdirs() }
         val file = File(dir, hash(url) + ".jpg")
-        runCatching { file.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }; trimDisk(dir) }
+        if (!file.isFile || file.length() <= 0L) {
+            runCatching { file.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 84, it) } }
+        }
+        // Directory scans are expensive on TV boxes. Trim occasionally instead of after every image.
+        if (trimCounter.incrementAndGet() % 32 == 0) trimDisk(dir)
     }
 
     private fun trimDisk(dir: File) {
         val files = dir.listFiles()?.filter { it.isFile } ?: return
         var total = files.sumOf { it.length() }
+        if (total <= MAX_DISK_BYTES) return
         files.sortedBy { it.lastModified() }.forEach { file ->
             if (total <= MAX_DISK_BYTES) return
             total -= file.length(); file.delete()
