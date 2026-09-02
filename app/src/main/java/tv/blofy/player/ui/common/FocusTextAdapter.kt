@@ -59,6 +59,12 @@ class FocusTextAdapter<T>(
         super.onAttachedToRecyclerView(recyclerView)
         attachedRecyclerView = recyclerView
         recyclerView.layoutDirection = View.LAYOUT_DIRECTION_RTL
+        recyclerView.textDirection = View.TEXT_DIRECTION_RTL
+        recyclerView.post {
+            recyclerView.parent?.let { parent ->
+                if (parent is View) parent.layoutDirection = View.LAYOUT_DIRECTION_RTL
+            }
+        }
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
