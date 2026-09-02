@@ -2,15 +2,18 @@ BLOFY PLAYER 2.0 rc05 release gate
 
 Final signed v339 restoration candidate:
 - user-approved v339 content UI restored on main: home, live/content browser, movie/series catalogs, details, episodes, search and player HUD
-- original v339 home background, right-side navigation, spacing, card composition and remote-focus behavior restored
+- original v339 home background, right-side navigation, spacing, card composition and remote-focus behavior retained
 - current splash/login infrastructure, BLOFY subscriber backend and provider management retained
 - large-playlist 96% completion fix, cache-first loading, partial-cache protection and Room migrations retained
 - resilient poster loader with retry, memory/disk cache and prefetch retained
 - local storage management and safe cache cleanup retained
 - silent long-running live stall recovery retained
 - current Media3 1.6.1 + FFmpeg engine, stream transport, URL resolution and fallback policy retained unchanged
-- parental PIN remains disabled through a no-op compatibility bridge; no lock screen is restored
-- external-player UI remains disabled; compatibility calls always continue through BLOFY's internal player
-- Android Unit tests, Lint and assembleDebug passed in BLOFY Android CI Run #575 for the v339 restoration branch
-- verified restoration head: ad574968119b06439b53a322f25d5a0ad32c916e
-- production signed rc05 rebuild requested on 2026-09-02 after fast-forwarding the verified restoration to main
+- visible play/pause and ±10-second controls restored inside the v339 movie/episode HUD
+- LEFT/RIGHT remote seeking restored when the HUD is hidden; focused HUD navigation remains unchanged
+- play/pause labels are synchronized with actual playback state and seeks are bounded to media duration
+- disabled external-player button and misleading external-player error messages removed
+- parental PIN remains disabled through the existing no-op compatibility bridge; no lock screen is restored
+- Android Unit tests, Lint and assembleDebug passed in BLOFY Android CI Run #578 on verified head 66ab9cfd56b3a3f4fdc08840b957a1728ff38d90
+- verified player repair merged to main as 351093903ef03722d080923970c4fa3259208374
+- production signed rc05 rebuild requested on 2026-09-02 after the verified v339 player repair merge
