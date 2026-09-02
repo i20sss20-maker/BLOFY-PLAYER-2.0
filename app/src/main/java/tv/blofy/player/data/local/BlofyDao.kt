@@ -42,8 +42,8 @@ interface BlofyDao {
 
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun catalogCountAll(providerId: String, kind: String): Int
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId") suspend fun catalogCountInCategory(providerId: String, kind: String, categoryId: String): Int
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind ORDER BY name LIMIT :limit OFFSET :offset") suspend fun catalogPageAll(providerId: String, kind: String, limit: Int, offset: Int): List<StreamEntity>
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId ORDER BY name LIMIT :limit OFFSET :offset") suspend fun catalogPageInCategory(providerId: String, kind: String, categoryId: String, limit: Int, offset: Int): List<StreamEntity>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind ORDER BY rowid LIMIT :limit OFFSET :offset") suspend fun catalogPageAll(providerId: String, kind: String, limit: Int, offset: Int): List<StreamEntity>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId ORDER BY rowid LIMIT :limit OFFSET :offset") suspend fun catalogPageInCategory(providerId: String, kind: String, categoryId: String, limit: Int, offset: Int): List<StreamEntity>
 
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind IN ('movie','series') ORDER BY COALESCE(addedAt, 0) DESC, name LIMIT :limit") suspend fun latestHomeStreams(providerId: String, limit: Int = 14): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (name LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' OR year LIKE '%' || :query || '%') ORDER BY name LIMIT :limit") suspend fun searchCatalog(providerId: String, kind: String, query: String, limit: Int = 300): List<StreamEntity>
