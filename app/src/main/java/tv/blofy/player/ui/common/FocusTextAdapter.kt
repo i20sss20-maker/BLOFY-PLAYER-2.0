@@ -6,6 +6,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.recyclerview.widget.AsyncListDiffer
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 
@@ -16,7 +17,11 @@ class FocusTextAdapter<T>(
     private val onLongClick: ((T) -> Unit)? = null,
     private val itemKey: ((T) -> String)? = null
 ) : RecyclerView.Adapter<FocusTextAdapter<T>.Holder>() {
-    private val items = mutableListOf<T>()
+    private val differ = AsyncListDiffer(this, object : DiffUtil.ItemCallback<T>() {
+        override fun areItemsTheSame(oldItem: T, newItem: T): Boolean = itemKey?.let { it(oldItem) == it(newItem) } ?: (oldItem == newItem)
+        override fun areContentsTheSame(oldItem: T, newItem: T): Boolean = oldItem == newItem
+    })
+    private val items: List<T> get() = differ.currentList
     private var focusedKey: String? = null
     private var focusedPosition: Int = RecyclerView.NO_POSITION
     private var restorePending = false
@@ -27,38 +32,32 @@ class FocusTextAdapter<T>(
     fun submit(newItems: List<T>) {
         val listOwnedFocus = attachedRecyclerView?.hasFocus() == true
         val previousKey = focusedKey
-        val oldItems = items.toList()
-        val nextItems = newItems.toList()
-        val keyOf = itemKey
-        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldListSize() = oldItems.size
-            override fun getNewListSize() = nextItems.size
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                val oldItem = oldItems[oldItemPosition]
-                val newItem = nextItems[newItemPosition]
-                return if (keyOf != null) keyOf(oldItem) == keyOf(newItem) else oldItem == newItem
+        val previousPosition = focusedPosition
+        differ.submitList(newItems.toList()) {
+            focusedPosition = when {
+                previousKey != null && itemKey != null -> items.indexOfFirst { itemKey.invoke(it) == previousKey }
+                previousPosition != RecyclerView.NO_POSITION && items.isNotEmpty() -> previousPosition.coerceIn(0, items.lastIndex)
+                else -> RecyclerView.NO_POSITION
             }
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int) = oldItems[oldItemPosition] == nextItems[newItemPosition]
-        }, false)
-        items.clear(); items.addAll(nextItems)
-        focusedPosition = when {
-            previousKey != null && keyOf != null -> items.indexOfFirst { keyOf(it) == previousKey }
-            focusedPosition != RecyclerView.NO_POSITION && items.isNotEmpty() -> focusedPosition.coerceIn(0, items.lastIndex)
-            else -> RecyclerView.NO_POSITION
+            if (focusedPosition < 0) focusedPosition = RecyclerView.NO_POSITION
+            restorePending = listOwnedFocus && focusedPosition != RecyclerView.NO_POSITION
+            if (restorePending) attachedRecyclerView?.post {
+                attachedRecyclerView?.findViewHolderForAdapterPosition(focusedPosition)?.itemView?.requestFocus()
+            }
         }
-        if (focusedPosition < 0) focusedPosition = RecyclerView.NO_POSITION
-        restorePending = listOwnedFocus && focusedPosition != RecyclerView.NO_POSITION
-        diff.dispatchUpdatesTo(this)
     }
 
     fun clearFocusMemory() {
-        focusedKey = null; focusedPosition = RecyclerView.NO_POSITION; restorePending = false
+        focusedKey = null
+        focusedPosition = RecyclerView.NO_POSITION
+        restorePending = false
     }
 
     override fun getItemId(position: Int): Long = itemKey?.invoke(items[position])?.hashCode()?.toLong() ?: super.getItemId(position)
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
-        super.onAttachedToRecyclerView(recyclerView); attachedRecyclerView = recyclerView
+        super.onAttachedToRecyclerView(recyclerView)
+        attachedRecyclerView = recyclerView
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
@@ -75,7 +74,10 @@ class FocusTextAdapter<T>(
             gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(24, 0, 24, 0)
-            isFocusable = true; isFocusableInTouchMode = true; isClickable = true; isLongClickable = true
+            isFocusable = true
+            isFocusableInTouchMode = true
+            isClickable = true
+            isLongClickable = true
             background = itemBackground(false)
             setOnFocusChangeListener { v, focused ->
                 (v as TextView).setTextColor(Color.WHITE)
@@ -84,12 +86,11 @@ class FocusTextAdapter<T>(
                     .translationZ(if (focused) 12f else 2f).setDuration(if (focused) 85L else 70L).start()
                 v.background = itemBackground(focused)
                 if (focused) {
-                    (v.tag as? Int)?.let { pos ->
-                        items.getOrNull(pos)?.let { item ->
-                            focusedPosition = pos
-                            focusedKey = itemKey?.invoke(item)
-                            onFocus?.invoke(item)
-                        }
+                    val pos = (v.tag as? Int) ?: RecyclerView.NO_POSITION
+                    items.getOrNull(pos)?.let { item ->
+                        focusedPosition = pos
+                        focusedKey = itemKey?.invoke(item)
+                        onFocus?.invoke(item)
                     }
                 }
             }
@@ -108,7 +109,8 @@ class FocusTextAdapter<T>(
         if (restorePending && position == focusedPosition) {
             holder.text.post {
                 if (holder.bindingAdapterPosition == focusedPosition && holder.text.visibility == View.VISIBLE) {
-                    holder.text.requestFocus(); restorePending = false
+                    holder.text.requestFocus()
+                    restorePending = false
                 }
             }
         }
