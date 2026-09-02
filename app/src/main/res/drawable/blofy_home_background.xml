@@ -1,17 +1,17 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="315" android:startColor="#FFFFFF" android:centerColor="#F8F7FA" android:endColor="#F1F0F4" />
+            <gradient android:angle="315" android:startColor="#0C0915" android:centerColor="#171024" android:endColor="#090711" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <gradient android:type="radial" android:centerX="0.94" android:centerY="0.03" android:gradientRadius="680dp" android:startColor="#16A56BEB" android:endColor="#00FFFFFF" />
+            <gradient android:type="radial" android:centerX="0.92" android:centerY="0.08" android:gradientRadius="760dp" android:startColor="#664C1A86" android:endColor="#00100A18" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <gradient android:type="radial" android:centerX="0.08" android:centerY="0.92" android:gradientRadius="560dp" android:startColor="#0D7131CF" android:endColor="#00FFFFFF" />
+            <gradient android:type="radial" android:centerX="0.08" android:centerY="0.92" android:gradientRadius="620dp" android:startColor="#3D7131CF" android:endColor="#00090711" />
         </shape>
     </item>
 </layer-list>
