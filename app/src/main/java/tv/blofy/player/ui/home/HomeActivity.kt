@@ -63,12 +63,17 @@ class HomeActivity : AppCompatActivity() {
         shell.addView(main, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
 
         main.addView(TextView(this).apply {
-            text = "مرحبًا بك في BLOFY PLAYER"
+            text = "BLOFY PLAYER"
+            textSize = 12f; letterSpacing = .13f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT)
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)))
+        main.addView(TextView(this).apply {
+            text = "وش بتشاهد اليوم؟"
             textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)))
 
-        main.addView(buildHero(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.5f))
+        main.addView(buildHero(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.55f))
 
         val quick = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
@@ -76,21 +81,21 @@ class HomeActivity : AppCompatActivity() {
             setPadding(0, dp(14), 0, dp(14)); clipChildren = false
         }
         quick.addView(infoCard("تابع المشاهدة", "أكمل من آخر نقطة", "continue", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginStart = dp(12) })
-        quick.addView(infoCard("آخر القنوات", "ارجع مباشرة للبث", "recent", Intent(this, RecentChannelsActivity::class.java)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        quick.addView(infoCard("آخر القنوات", "ارجع للبث فورًا", "recent", Intent(this, RecentChannelsActivity::class.java)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         main.addView(quick, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, .72f))
 
         main.addView(TextView(this).apply {
-            text = "استكشف"
-            textSize = 19f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.RIGHT
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
+            text = "استكشف BLOFY"
+            textSize = 18.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.RIGHT
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)))
 
         val cards = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER; clipChildren = false
         }
         addStory(cards, "live_story", "البث المباشر", "قنواتك الآن", contentIntent("live"))
-        addStory(cards, "movie_story", "الأفلام", "كل السينما", contentIntent("movie"))
-        addStory(cards, "series_story", "المسلسلات", "المواسم والحلقات", contentIntent("series"))
+        addStory(cards, "movie_story", "الأفلام", "سينما", contentIntent("movie"))
+        addStory(cards, "series_story", "المسلسلات", "مواسم وحلقات", contentIntent("series"))
         addStory(cards, "favorite_story", "المفضلة", "اختياراتك", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addStory(cards, "search_story", "البحث", "ابحث فورًا", Intent(this, SearchActivity::class.java))
         main.addView(cards, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, .62f))
@@ -102,7 +107,7 @@ class HomeActivity : AppCompatActivity() {
         gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
         layoutDirection = View.LAYOUT_DIRECTION_RTL
         setPadding(dp(14), dp(14), dp(14), dp(14))
-        background = surface(true)
+        background = surface(false)
         elevation = dp(5).toFloat()
         addView(ImageView(this@HomeActivity).apply {
             setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE; adjustViewBounds = true
@@ -120,10 +125,10 @@ class HomeActivity : AppCompatActivity() {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         layoutDirection = View.LAYOUT_DIRECTION_RTL; setPadding(dp(14), 0, dp(14), 0)
         addView(TextView(this@HomeActivity).apply { text = label; textSize = 15.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-        addView(TextView(this@HomeActivity).apply { text = icon; textSize = 21f; setTextColor(PURPLE); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(40), LinearLayout.LayoutParams.MATCH_PARENT))
+        addView(TextView(this@HomeActivity).apply { text = icon; textSize = 21f; setTextColor(PURPLE_BRIGHT); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(40), LinearLayout.LayoutParams.MATCH_PARENT))
     }.also { it.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { bottomMargin = dp(5) } }
 
-    private fun sideSelected(icon: String, label: String) = sideBase(icon, label).apply { background = softPurpleSurface() }
+    private fun sideSelected(icon: String, label: String) = sideBase(icon, label).apply { background = selectedSurface() }
 
     private fun sideAction(key: String, icon: String, label: String, intent: Intent) = sideBase(icon, label).apply {
         id = View.generateViewId(); isFocusable = true; isFocusableInTouchMode = true; isClickable = true
@@ -140,12 +145,12 @@ class HomeActivity : AppCompatActivity() {
     private fun buildHero() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
         layoutDirection = View.LAYOUT_DIRECTION_RTL; setPadding(dp(38), dp(24), dp(38), dp(24))
-        background = heroSurface(); elevation = dp(4).toFloat()
-        addView(TextView(this@HomeActivity).apply { text = "BLOFY PREMIUM"; textSize = 13f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE); gravity = Gravity.RIGHT })
-        addView(TextView(this@HomeActivity).apply { text = "كل محتواك في مكان واحد"; textSize = 37f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.RIGHT; setPadding(0, dp(7), 0, 0) })
-        addView(TextView(this@HomeActivity).apply { text = "بث مباشر، أفلام ومسلسلات بواجهة سريعة وواضحة مصممة للتلفزيون."; textSize = 17f; setTextColor(TEXT_SECONDARY); gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(20)) })
+        background = heroSurface(); elevation = dp(5).toFloat()
+        addView(TextView(this@HomeActivity).apply { text = "BLOFY PREMIUM"; textSize = 13f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT); gravity = Gravity.RIGHT })
+        addView(TextView(this@HomeActivity).apply { text = "كل محتواك في مكان واحد"; textSize = 38f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT; setPadding(0, dp(7), 0, 0) })
+        addView(TextView(this@HomeActivity).apply { text = "بث مباشر، أفلام ومسلسلات بواجهة مصممة للتلفزيون وسريعة بالريموت."; textSize = 17f; setTextColor(TEXT_SECONDARY); gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(20)) })
         val row = LinearLayout(this@HomeActivity).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.RIGHT }
-        row.addView(heroButton("شاهد الآن", "hero_watch", contentIntent("live"), true), LinearLayout.LayoutParams(dp(180), dp(60)).apply { marginStart = dp(10) })
+        row.addView(heroButton("شاهد البث", "hero_watch", contentIntent("live"), true), LinearLayout.LayoutParams(dp(180), dp(60)).apply { marginStart = dp(10) })
         row.addView(heroButton("استكشف الأفلام", "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(185), dp(60)))
         addView(row)
     }
@@ -153,9 +158,8 @@ class HomeActivity : AppCompatActivity() {
     private fun heroButton(label: String, key: String, intent: Intent, primary: Boolean) = Button(this).apply {
         text = label; isAllCaps = false; textSize = 15.5f; typeface = Typeface.DEFAULT_BOLD
         isFocusable = true; isFocusableInTouchMode = true
-        setTextColor(if (primary) Color.WHITE else TEXT_PRIMARY); background = buttonSurface(primary, false)
+        setTextColor(Color.WHITE); background = buttonSurface(primary, false)
         setOnFocusChangeListener { view, focused ->
-            setTextColor(if (primary || focused) Color.WHITE else TEXT_PRIMARY)
             view.background = buttonSurface(primary, focused)
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
             view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).setDuration(85).start()
@@ -169,7 +173,7 @@ class HomeActivity : AppCompatActivity() {
         background = surface(false); isFocusable = true; isFocusableInTouchMode = true; isClickable = true
         addView(TextView(this@HomeActivity).apply { text = title; textSize = 20f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.RIGHT })
         addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 13f; setTextColor(TEXT_MUTED); gravity = Gravity.RIGHT; setPadding(0, dp(5), 0, dp(10)) })
-        addView(TextView(this@HomeActivity).apply { text = "استمرار  ←"; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE); gravity = Gravity.RIGHT })
+        addView(TextView(this@HomeActivity).apply { text = "استمرار  ←"; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT); gravity = Gravity.RIGHT })
         setOnFocusChangeListener { view, focused ->
             view.background = surface(focused)
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
@@ -222,30 +226,30 @@ class HomeActivity : AppCompatActivity() {
     }
     private fun compactButton(key: String, label: String, intent: Intent) = Button(this).apply {
         text = label; isAllCaps = false; textSize = if (deviceKind == DeviceClass.Kind.PHONE) 15f else 16f; setTextColor(TEXT_PRIMARY); background = compactTile(false)
-        setOnFocusChangeListener { view, focused -> setTextColor(if (focused) Color.WHITE else TEXT_PRIMARY); view.background = compactTile(focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key) }
+        setOnFocusChangeListener { view, focused -> setTextColor(Color.WHITE); view.background = compactTile(focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key) }
         setOnClickListener { startActivity(intent) }; registerAction(key, this)
     }
 
     private fun registerAction(key: String, view: View) { actionViews[key] = view; if (firstAction == null) firstAction = view }
     private fun restoreFocus() { if (deviceKind != DeviceClass.Kind.TV) return; val saved = FocusMemory.restore(this, SCREEN_KEY); val target = saved?.let { actionViews[it] } ?: firstAction ?: actionViews.values.firstOrNull(); target?.post { target.requestFocus() } }
-    private fun childrenTextColor(layout: LinearLayout, focused: Boolean) { for (i in 0 until layout.childCount) (layout.getChildAt(i) as? TextView)?.setTextColor(if (focused) Color.WHITE else if (i == layout.childCount - 1) PURPLE else TEXT_PRIMARY) }
+    private fun childrenTextColor(layout: LinearLayout, focused: Boolean) { for (i in 0 until layout.childCount) (layout.getChildAt(i) as? TextView)?.setTextColor(if (focused) Color.WHITE else if (i == layout.childCount - 1) PURPLE_BRIGHT else TEXT_PRIMARY) }
 
-    private fun surface(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(if (focused) 0xFFF4EEFF.toInt() else Color.WHITE); setStroke(if (focused) dp(2) else dp(1), if (focused) PURPLE else 0xFFE0DCE7.toInt()) }
-    private fun softPurpleSurface() = GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(0xFFF0E7FF.toInt()); setStroke(dp(1), 0xFFD0B5F2.toInt()) }
-    private fun transparentSurface(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (focused) PURPLE else Color.TRANSPARENT); if (focused) setStroke(dp(1), 0xFFB58DE8.toInt()) }
-    private fun heroSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFFFFFFFF.toInt(), 0xFFF4EEFC.toInt())).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), 0xFFDDD4E8.toInt()) }
-    private fun storySurface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF8245D8.toInt(), 0xFF6630B5.toInt()) else intArrayOf(0xFFFFFFFF.toInt(), 0xFFF8F5FB.toInt())).apply { cornerRadius = dp(17).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB991E9.toInt() else 0xFFE0DCE7.toInt()) }
-    private fun buttonSurface(primary: Boolean, focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (primary || focused) if (focused) 0xFF7A3ED2.toInt() else PURPLE else Color.WHITE); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB991E9.toInt() else 0xFFD8D2E0.toInt()) }
-    private fun compactTile(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(if (focused) PURPLE else theme.surface); setStroke(dp(if (focused) 2 else 1), if (focused) 0xFFB991E9.toInt() else 0xFFD8D2E0.toInt()) }
+    private fun surface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF633A8D.toInt(), 0xFF2A183D.toInt()) else intArrayOf(0xFF241A35.toInt(), 0xFF15101E.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) PURPLE_BRIGHT else 0xFF4B385E.toInt()) }
+    private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF7D3FCE.toInt(), 0xFF4A246F.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFFB887F0.toInt()) }
+    private fun transparentSurface(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (focused) 0xFF5B2D86.toInt() else Color.TRANSPARENT); if (focused) setStroke(dp(1), 0xFF9D69D0.toInt()) }
+    private fun heroSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF321A46.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), 0xFF624178.toInt()) }
+    private fun storySurface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF8245D8.toInt(), 0xFF4B246D.toInt()) else intArrayOf(0xFF2A1D39.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(17).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFC49AF2.toInt() else 0xFF4B385E.toInt()) }
+    private fun buttonSurface(primary: Boolean, focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, if (primary || focused) intArrayOf(if (focused) 0xFFA653FF.toInt() else 0xFF843FE6.toInt(), if (focused) 0xFF7130D2.toInt() else 0xFF5720AD.toInt()) else intArrayOf(0xFF30213F.toInt(), 0xFF1A1325.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFE8D3FF.toInt() else 0xFF563C69.toInt()) }
+    private fun compactTile(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(if (focused) 0xFF63379B.toInt() else 0xFF241A35.toInt()); setStroke(dp(if (focused) 2 else 1), if (focused) PURPLE_BRIGHT else 0xFF4B385E.toInt()) }
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START }
-    private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(PURPLE); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }
+    private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
         private const val SCREEN_KEY = "home"
-        private val PURPLE = Color.rgb(105, 49, 190)
-        private val TEXT_PRIMARY = Color.rgb(28, 24, 34)
-        private val TEXT_SECONDARY = Color.rgb(78, 72, 86)
-        private val TEXT_MUTED = Color.rgb(126, 118, 138)
+        private val PURPLE_BRIGHT = Color.rgb(169, 91, 255)
+        private val TEXT_PRIMARY = Color.rgb(249, 247, 252)
+        private val TEXT_SECONDARY = Color.rgb(221, 214, 230)
+        private val TEXT_MUTED = Color.rgb(168, 157, 183)
     }
 }
