@@ -45,8 +45,19 @@ class CatalogLoadingActivity : AppCompatActivity() {
         buildUi()
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         if (providerId.isBlank()) { fail("تعذر تحديد قائمة التشغيل"); return }
-        CatalogSyncState.markPending(applicationContext, providerId)
-        lifecycleScope.launch { sync(providerId) }
+        val forceRefresh = intent.getBooleanExtra(EXTRA_FORCE_REFRESH, false)
+        lifecycleScope.launch {
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val hasCachedCatalog = withContext(Dispatchers.IO) { dao.hasCatalog(providerId) }
+            val ready = CatalogSyncState.isReady(applicationContext, providerId)
+            if (!forceRefresh && ready && hasCachedCatalog) {
+                startActivity(Intent(this@CatalogLoadingActivity, HomeActivity::class.java))
+                finish()
+                return@launch
+            }
+            CatalogSyncState.markPending(applicationContext, providerId)
+            sync(providerId)
+        }
     }
 
     private fun buildUi() {
@@ -211,5 +222,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    companion object { const val EXTRA_PROVIDER_ID = "provider_id" }
+    companion object {
+        const val EXTRA_PROVIDER_ID = "provider_id"
+        const val EXTRA_FORCE_REFRESH = "force_refresh"
+    }
 }
