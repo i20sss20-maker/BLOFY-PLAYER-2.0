@@ -277,7 +277,7 @@ class LoginActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             addView(emptyPlaylistView("بعد التفعيل، تظهر هنا القوائم المحفوظة في الموقع"), LinearLayout.LayoutParams(dp(430), dp(72)))
         }
-        scroller.addView(playlistRow, HorizontalScrollView.LayoutParams(HorizontalScrollView.LayoutParams.WRAP_CONTENT, HorizontalScrollView.LayoutParams.MATCH_PARENT))
+        scroller.addView(playlistRow, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
         addView(scroller, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
     }
 
