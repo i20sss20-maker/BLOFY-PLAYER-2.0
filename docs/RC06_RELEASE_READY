@@ -1,0 +1,9 @@
+BLOFY PLAYER 2.0 rc06 signed release gate
+
+- exact user-approved v339 visual identity retained
+- verified playback engines, cache, activation, FFmpeg and large-playlist fixes retained
+- repaired player HUD behavior retained
+- applicationId remains tv.blofy.player.v2
+- versionCode promoted to 2000007
+- versionName promoted to 2.0.0-rc06
+- production signed APK/AAB requested after successful rc05 candidate verification
