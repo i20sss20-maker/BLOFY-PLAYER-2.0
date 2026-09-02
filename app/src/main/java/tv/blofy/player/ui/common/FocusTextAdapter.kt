@@ -1,7 +1,7 @@
 package tv.blofy.player.ui.common
 
 import android.graphics.Color
-import android.text.TextUtils
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -22,7 +22,9 @@ class FocusTextAdapter<T>(
     private var restorePending = false
     private var attachedRecyclerView: RecyclerView? = null
 
-    init { setHasStableIds(itemKey != null) }
+    init {
+        setHasStableIds(itemKey != null)
+    }
 
     fun submit(newItems: List<T>) {
         val listOwnedFocus = attachedRecyclerView?.hasFocus() == true
@@ -31,16 +33,21 @@ class FocusTextAdapter<T>(
         val nextItems = newItems.toList()
         val keyOf = itemKey
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldListSize() = oldItems.size
-            override fun getNewListSize() = nextItems.size
+            override fun getOldListSize(): Int = oldItems.size
+            override fun getNewListSize(): Int = nextItems.size
+
             override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
                 val oldItem = oldItems[oldItemPosition]
                 val newItem = nextItems[newItemPosition]
                 return if (keyOf != null) keyOf(oldItem) == keyOf(newItem) else oldItem == newItem
             }
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int) = oldItems[oldItemPosition] == nextItems[newItemPosition]
+
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                oldItems[oldItemPosition] == nextItems[newItemPosition]
         }, false)
-        items.clear(); items.addAll(nextItems)
+
+        items.clear()
+        items.addAll(nextItems)
         focusedPosition = when {
             previousKey != null && keyOf != null -> items.indexOfFirst { keyOf(it) == previousKey }
             focusedPosition != RecyclerView.NO_POSITION && items.isNotEmpty() -> focusedPosition.coerceIn(0, items.lastIndex)
@@ -51,18 +58,20 @@ class FocusTextAdapter<T>(
         diff.dispatchUpdatesTo(this)
     }
 
-    fun clearFocusMemory() { focusedKey = null; focusedPosition = RecyclerView.NO_POSITION; restorePending = false }
+    fun clearFocusMemory() {
+        focusedKey = null
+        focusedPosition = RecyclerView.NO_POSITION
+        restorePending = false
+    }
 
-    override fun getItemId(position: Int): Long = itemKey?.invoke(items[position])?.hashCode()?.toLong() ?: super.getItemId(position)
+    override fun getItemId(position: Int): Long {
+        val key = itemKey ?: return super.getItemId(position)
+        return key(items[position]).hashCode().toLong()
+    }
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
         attachedRecyclerView = recyclerView
-        recyclerView.layoutDirection = View.LAYOUT_DIRECTION_RTL
-        recyclerView.textDirection = View.TEXT_DIRECTION_RTL
-        recyclerView.post {
-            recyclerView.parent?.let { parent -> if (parent is View) parent.layoutDirection = View.LAYOUT_DIRECTION_RTL }
-        }
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
@@ -72,36 +81,25 @@ class FocusTextAdapter<T>(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
-        val density = parent.resources.displayMetrics.density
-        fun dp(v: Int) = (v * density).toInt()
         val view = TextView(parent.context).apply {
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            textDirection = View.TEXT_DIRECTION_RTL
-            textSize = BlofyTvDesign.LabelSp
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.TextSecondary)
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setPadding(dp(16), 0, dp(16), 0)
-            minHeight = dp(54)
+            textSize = 17f
+            setTextColor(TEXT_IDLE)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(22, 0, 22, 0)
             isFocusable = true
-            isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
-            background = BlofyTvDesign.surface(dp(16).toFloat(), false)
-            alpha = 0.97f
+            background = background(false)
             setOnFocusChangeListener { v, focused ->
-                (v as TextView).setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
+                (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
                 v.animate().cancel()
                 v.animate()
                     .scaleX(if (focused) 1.02f else 1f)
                     .scaleY(if (focused) 1.02f else 1f)
-                    .alpha(if (focused) 1f else 0.97f)
-                    .translationZ(if (focused) dp(14).toFloat() else dp(2).toFloat())
-                    .setDuration(if (focused) 105L else 85L)
+                    .translationZ(if (focused) 10f else 2f)
+                    .setDuration(75)
                     .start()
-                v.background = BlofyTvDesign.surface(dp(16).toFloat(), focused)
+                v.background = background(focused)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
                         items.getOrNull(pos)?.let { item ->
@@ -118,40 +116,37 @@ class FocusTextAdapter<T>(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
-        val density = holder.text.resources.displayMetrics.density
-        fun dp(v: Int) = (v * density).toInt()
-        holder.text.animate().cancel()
-        holder.text.scaleX = 1f
-        holder.text.scaleY = 1f
-        holder.text.alpha = 0.97f
-        holder.text.translationZ = 2f * density
-        holder.text.background = BlofyTvDesign.surface(dp(16).toFloat(), false)
-        holder.text.setTextColor(BlofyTvDesign.TextSecondary)
         holder.text.text = label(item)
         holder.text.tag = position
         holder.text.setOnClickListener { onClick(item) }
-        holder.text.setOnLongClickListener { onLongClick?.invoke(item); onLongClick != null }
+        holder.text.setOnLongClickListener {
+            onLongClick?.invoke(item)
+            onLongClick != null
+        }
         if (restorePending && position == focusedPosition) {
             holder.text.post {
                 if (holder.bindingAdapterPosition == focusedPosition && holder.text.visibility == View.VISIBLE) {
-                    holder.text.requestFocus(); restorePending = false
+                    holder.text.requestFocus()
+                    restorePending = false
                 }
             }
         }
     }
 
-    override fun onViewRecycled(holder: Holder) {
-        holder.text.animate().cancel()
-        holder.text.scaleX = 1f
-        holder.text.scaleY = 1f
-        holder.text.alpha = 0.97f
-        holder.text.translationZ = 0f
-        holder.text.tag = null
-        holder.text.setOnClickListener(null)
-        holder.text.setOnLongClickListener(null)
-        super.onViewRecycled(holder)
+    override fun getItemCount(): Int = items.size
+
+    inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
+
+    private fun background(focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        if (focused) intArrayOf(0xFF7930D7.toInt(), 0xFF32164F.toInt())
+        else intArrayOf(0xD91C162C.toInt(), 0xE8110E1B.toInt())
+    ).apply {
+        cornerRadius = 16f
+        setStroke(if (focused) 2 else 1, if (focused) 0xFFE1B8FF.toInt() else 0x554D376B)
     }
 
-    override fun getItemCount() = items.size
-    inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
+    companion object {
+        private val TEXT_IDLE = Color.rgb(232, 226, 239)
+    }
 }
