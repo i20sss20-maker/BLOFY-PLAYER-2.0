@@ -78,25 +78,32 @@ class BlofySubscriberActivity : AppCompatActivity() {
                 isEnabled = false; username.isEnabled = false; password.isEnabled = false; status.text = "جاري التحقق وتجهيز الاشتراك..."
                 lifecycleScope.launch {
                     try {
-                        val provider = withContext(Dispatchers.IO) {
+                        withContext(Dispatchers.IO) {
                             val session = BlofySubscriberClient.createSession(applicationContext, endpoint, user, pass)
                             val dao = BlofyDatabase.get(applicationContext).dao()
                             val providerId = UUID.nameUUIDFromBytes("blofy-subscriber".toByteArray()).toString()
                             val next = ProviderEntity(providerId, "مشتركين BLOFY", session.baseUrl, session.username, session.password, "xtream", "ts", "cronet", "media3", true, true, System.currentTimeMillis())
-                            val hadCatalog = dao.hasCatalog(providerId)
-                            if (!hadCatalog) {
+                            val readyCatalog = CatalogSyncState.isReady(applicationContext, providerId) && dao.hasCatalog(providerId)
+                            if (!readyCatalog) {
+                                CatalogSyncState.markPending(applicationContext, providerId)
+                                dao.clearProviderCatalog(providerId)
                                 dao.upsertProvider(next)
-                                val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(next) }
-                                check(result.freshItemCount > 0) { "لم يرجع الاشتراك أي محتوى" }
-                                check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الاشتراك" }
-                                dao.saveAndActivateProvider(next)
+                                try {
+                                    val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(next) }
+                                    check(result.freshItemCount > 0) { "لم يرجع الاشتراك أي محتوى" }
+                                    check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الاشتراك" }
+                                    dao.saveAndActivateProvider(next)
+                                    CatalogSyncState.markReady(applicationContext, providerId)
+                                } catch (error: Throwable) {
+                                    dao.clearProviderCatalog(providerId)
+                                    CatalogSyncState.markPending(applicationContext, providerId)
+                                    throw error
+                                }
                             } else {
                                 dao.upsertProvider(next)
                                 dao.disableAllProviders(); dao.activateProvider(providerId)
                             }
-                            CatalogSyncState.markReady(applicationContext, providerId)
                             runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
-                            next
                         }
                         setResult(RESULT_OK); status.text = "تم الحفظ • جاري الدخول"
                         startActivity(Intent(this@BlofySubscriberActivity, HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)); finish()
