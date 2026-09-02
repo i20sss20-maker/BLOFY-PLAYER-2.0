@@ -21,6 +21,9 @@ interface BlofyDao {
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId") suspend fun allCategoriesForProvider(providerId: String): List<CategoryEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId") suspend fun allStreamsForProvider(providerId: String): List<StreamEntity>
+    @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId") suspend fun streamCountForProvider(providerId: String): Int
+    @Query("SELECT EXISTS(SELECT 1 FROM streams WHERE providerId = :providerId LIMIT 1)") suspend fun hasStreamsForProvider(providerId: String): Boolean
+    suspend fun hasCatalog(providerId: String): Boolean = hasStreamsForProvider(providerId)
     @Query("SELECT * FROM episodes WHERE providerId = :providerId") suspend fun allEpisodesForProvider(providerId: String): List<EpisodeEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertCategories(items: List<CategoryEntity>)
@@ -62,7 +65,8 @@ interface BlofyDao {
     @Query("DELETE FROM streams WHERE providerId = :providerId") suspend fun clearProviderStreams(providerId: String)
     @Query("DELETE FROM epg WHERE providerId = :providerId") suspend fun clearProviderEpg(providerId: String)
 
-    @Transaction suspend fun discardStagedCatalog(stagedProviderId: String) { clearProviderCategories(stagedProviderId); clearProviderStreams(stagedProviderId); clearProviderEpisodes(stagedProviderId); clearProviderEpg(stagedProviderId); deleteProvider(stagedProviderId) }
+    @Transaction suspend fun clearProviderCatalog(providerId: String) { clearProviderCategories(providerId); clearProviderStreams(providerId); clearProviderEpisodes(providerId); clearProviderEpg(providerId) }
+    @Transaction suspend fun discardStagedCatalog(stagedProviderId: String) { clearProviderCatalog(stagedProviderId); deleteProvider(stagedProviderId) }
 
     @Query("""UPDATE categories SET hidden = COALESCE((SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId LIMIT 1),(SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId || '.0' LIMIT 1),categories.hidden) WHERE providerId = :stagedProviderId""") suspend fun inheritStagedCategoryFlags(stagedProviderId: String, targetProviderId: String)
     @Query("""UPDATE streams SET favorite = COALESCE((SELECT old.favorite FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId LIMIT 1),(SELECT old.favorite FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0' LIMIT 1),streams.favorite), locked = COALESCE((SELECT old.locked FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId LIMIT 1),(SELECT old.locked FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0' LIMIT 1),streams.locked) WHERE providerId = :stagedProviderId""") suspend fun inheritStagedStreamFlags(stagedProviderId: String, targetProviderId: String)
@@ -73,7 +77,7 @@ interface BlofyDao {
     @Transaction
     suspend fun promoteStagedCatalog(stagedProviderId: String, targetProvider: ProviderEntity) {
         inheritStagedCategoryFlags(stagedProviderId, targetProvider.id); inheritStagedStreamFlags(stagedProviderId, targetProvider.id)
-        clearProviderCategories(targetProvider.id); clearProviderStreams(targetProvider.id); clearProviderEpisodes(targetProvider.id); clearProviderEpg(targetProvider.id)
+        clearProviderCatalog(targetProvider.id)
         promoteStagedCategoriesInPlace(stagedProviderId, targetProvider.id); promoteStagedStreamsInPlace(stagedProviderId, targetProvider.id); promoteStagedEpisodesInPlace(stagedProviderId, targetProvider.id); clearProviderEpg(stagedProviderId)
         upsertProvider(targetProvider.copy(enabled = true)); disableAllProviders(); activateProvider(targetProvider.id, targetProvider.updatedAt); deleteProvider(stagedProviderId)
     }

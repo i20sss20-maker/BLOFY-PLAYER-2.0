@@ -48,6 +48,7 @@ class PosterCatalogActivity : AppCompatActivity() {
     private var selectedCategoryId: String? = null
     private var categoryRows: List<CategoryEntity> = emptyList()
     private var currentRows: List<StreamEntity> = emptyList()
+    private var lastPosterKey: String? = null
     private var initialFocusRequested = false
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty().ifBlank { KIND_MOVIE } }
 
@@ -56,7 +57,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            setPadding(dp(24), dp(18), dp(24), dp(20))
+            setPadding(dp(22), dp(16), dp(22), dp(18))
             background = AppCompatResources.getDrawable(this@PosterCatalogActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -66,14 +67,14 @@ class PosterCatalogActivity : AppCompatActivity() {
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
         header.addView(TextView(this).apply {
             text = if (kind == KIND_SERIES) "المسلسلات" else "الأفلام"
-            textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
-        }, LinearLayout.LayoutParams(0, dp(58), 1f))
-        countView = TextView(this).apply { textSize = 14f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), 0) }
+            textSize = 28f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
+        }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        countView = TextView(this).apply { textSize = 13.5f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), 0, dp(10), 0) }
         header.addView(countView)
         searchInput = EditText(this).apply {
-            hint = "⌕  بحث من أول حرف"; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setTextColor(Color.WHITE); setHintTextColor(0xFFAF9BBB.toInt()); textSize = 15f; setPadding(dp(16), 0, dp(16), 0)
-            background = searchBackground(false); isFocusable = true
+            hint = "⌕  بحث"; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setTextColor(Color.WHITE); setHintTextColor(0xFFAF9BBB.toInt()); textSize = 14f; setPadding(dp(14), 0, dp(14), 0)
+            background = searchBackground(false); isFocusable = true; isFocusableInTouchMode = true
             setOnFocusChangeListener { view, focused -> view.background = searchBackground(focused) }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -81,37 +82,37 @@ class PosterCatalogActivity : AppCompatActivity() {
                 override fun afterTextChanged(s: Editable?) = Unit
             })
         }
-        header.addView(searchInput, LinearLayout.LayoutParams(dp(320), dp(50)))
+        header.addView(searchInput, LinearLayout.LayoutParams(dp(270), dp(46)))
         content.addView(header)
 
         emptyView = TextView(this).apply {
-            text = "جاري تجهيز المحتوى…"; textSize = 16f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            text = "جاري تجهيز المحتوى…"; textSize = 15f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(Color.rgb(211, 193, 226)); gravity = Gravity.CENTER; visibility = View.VISIBLE
-            setPadding(dp(28), dp(18), dp(28), dp(18)); background = stateBackground()
+            setPadding(dp(24), dp(14), dp(24), dp(14)); background = stateBackground()
         }
-        content.addView(emptyView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply { topMargin = dp(8); bottomMargin = dp(10) })
+        content.addView(emptyView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(62)).apply { topMargin = dp(6); bottomMargin = dp(8) })
 
         posterGrid = RecyclerView(this).apply {
             layoutManager = GridLayoutManager(this@PosterCatalogActivity, GRID_COLUMNS)
-            setPadding(dp(4), dp(4), dp(8), dp(22)); clipChildren = false; clipToPadding = false; itemAnimator = null; setHasFixedSize(true)
+            setPadding(dp(4), dp(4), dp(8), dp(20)); clipChildren = false; clipToPadding = false; itemAnimator = null; setHasFixedSize(true)
             recycledViewPool.setMaxRecycledViews(0, 40); descendantFocusability = ViewGroupFocus.AFTER_DESCENDANTS
         }
         content.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(16) })
+        root.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(12) })
 
         val rail = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.TOP; layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(9), dp(12), dp(9), dp(12)); background = categoryBackground()
+            setPadding(dp(8), dp(10), dp(8), dp(10)); background = categoryBackground()
         }
-        rail.addView(TextView(this).apply { text = "الفئات"; textSize = 19f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46)))
+        rail.addView(TextView(this).apply { text = "الفئات"; textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)))
         categoryList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@PosterCatalogActivity); clipChildren = false; clipToPadding = false; itemAnimator = null; setHasFixedSize(true)
         }
         rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(rail, LinearLayout.LayoutParams(dp(238), LinearLayout.LayoutParams.MATCH_PARENT))
+        root.addView(rail, LinearLayout.LayoutParams(dp(208), LinearLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
 
-        posterAdapter = PosterStreamAdapter(onClick = ::openItem)
+        posterAdapter = PosterStreamAdapter(onClick = ::openItem, onFocus = { lastPosterKey = it.key })
         posterGrid.adapter = posterAdapter
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
@@ -157,6 +158,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         if (providerId.isBlank()) return
         if (selectedCategoryId == categoryId && streamsJob?.isActive == true) return
         selectedCategoryId = categoryId
+        lastPosterKey = null
         streamsJob?.cancel()
         streamsJob = lifecycleScope.launch {
             BlofyDatabase.get(applicationContext).dao().streams(providerId, kind, categoryId).collect { items ->
@@ -194,9 +196,13 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun requestPosterFocus(): Boolean {
         if (posterAdapter.itemCount == 0) return false
-        val existing = posterGrid.findViewHolderForAdapterPosition(0)?.itemView
+        val remembered = lastPosterKey?.let { key -> currentRows.indexOfFirst { it.key == key }.takeIf { it >= 0 } }
+        val target = remembered ?: minOf(GRID_COLUMNS - 1, posterAdapter.itemCount - 1)
+        val existing = posterGrid.findViewHolderForAdapterPosition(target)?.itemView
         if (existing != null) return existing.requestFocus()
-        posterGrid.scrollToPosition(0); posterGrid.post { posterGrid.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }; return true
+        posterGrid.scrollToPosition(target)
+        posterGrid.post { posterGrid.findViewHolderForAdapterPosition(target)?.itemView?.requestFocus() }
+        return true
     }
 
     private fun requestSelectedCategoryFocus(): Boolean {
@@ -227,6 +233,7 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun openItem(stream: StreamEntity) {
         if (providerId.isBlank()) return
+        lastPosterKey = stream.key
         val target = if (stream.kind == KIND_SERIES || kind == KIND_SERIES) SeriesDetailsActivity::class.java else MovieDetailsActivity::class.java
         startActivity(Intent(this, target).apply { putExtra(EXTRA_PROVIDER_ID_SHARED, providerId); putExtra(EXTRA_CONTENT_KEY_SHARED, stream.key) })
     }

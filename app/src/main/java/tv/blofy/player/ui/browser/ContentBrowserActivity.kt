@@ -67,9 +67,11 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var previewMeta: TextView? = null
     private var currentCategoryId: String? = null
     private var currentRows: List<StreamEntity> = emptyList()
+    private var displayedCategories: List<CategoryEntity> = emptyList()
     private var searchUniverse: List<StreamEntity> = emptyList()
     private var searchUniverseReady = false
     private var lastPreviewKey: String? = null
+    private var initialFocusRequested = false
     private var resumedOnce = false
     private val epgRefreshAt = mutableMapOf<String, Long>()
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND) ?: KIND_LIVE }
@@ -85,21 +87,21 @@ class ContentBrowserActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(if (phoneMode) dp(16) else dp(28), if (phoneMode) dp(14) else dp(22), if (phoneMode) dp(16) else dp(28), if (phoneMode) dp(14) else dp(24))
+            setPadding(if (phoneMode) dp(16) else dp(22), if (phoneMode) dp(14) else dp(16), if (phoneMode) dp(16) else dp(22), if (phoneMode) dp(14) else dp(18))
             background = AppCompatResources.getDrawable(this@ContentBrowserActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
         }
-        root.addView(buildHeader(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(64) else dp(80)))
+        root.addView(buildHeader(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(64) else dp(68)))
         stateView = TextView(this).apply {
             text = "جاري تجهيز المحتوى…"
             textSize = if (phoneMode) 12.5f else BlofyTvDesign.CaptionSp
             typeface = bodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            setPadding(dp(16), 0, dp(16), 0)
+            setPadding(dp(12), 0, dp(12), 0)
         }
-        root.addView(stateView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(34) else dp(42)))
+        root.addView(stateView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(34) else dp(36)))
 
         val body = LinearLayout(this).apply {
             orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
@@ -110,20 +112,20 @@ class ContentBrowserActivity : AppCompatActivity() {
         categoryList = RecyclerView(this).apply {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, true) else LinearLayoutManager(this@ContentBrowserActivity)
-            background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
+            background = BlofyTvDesign.elevatedSurface(dp(22).toFloat())
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(9), dp(10), dp(9), dp(10))
+            setPadding(dp(7), dp(8), dp(7), dp(8))
             clipChildren = false
             clipToPadding = false
         }
         streamList = RecyclerView(this).apply {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             layoutManager = LinearLayoutManager(this@ContentBrowserActivity)
-            background = BlofyTvDesign.surface(dp(24).toFloat(), false)
+            background = BlofyTvDesign.surface(dp(22).toFloat(), false)
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             clipChildren = false
             clipToPadding = false
         }
@@ -132,8 +134,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             body.addView(categoryList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(90)).apply { bottomMargin = dp(10) })
             body.addView(streamList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            body.addView(categoryList, LinearLayout.LayoutParams(dp(266), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginStart = dp(16) })
-            body.addView(streamList, LinearLayout.LayoutParams(dp(472), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginStart = dp(18) })
+            body.addView(categoryList, LinearLayout.LayoutParams(dp(210), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginStart = dp(12) })
+            body.addView(streamList, LinearLayout.LayoutParams(dp(382), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginStart = dp(14) })
             if (previewEnabled) body.addView(createPreviewPanel(), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         }
         root.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -162,12 +164,16 @@ class ContentBrowserActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
             dao.categories(provider.id, kind).collect { rows ->
-                val displayed = if (kind == KIND_LIVE) listOf(allLiveCategory()) + rows else listOf(allCategory()) + rows
-                categoryAdapter.submit(displayed)
+                displayedCategories = if (kind == KIND_LIVE) listOf(allLiveCategory()) + rows else listOf(allCategory()) + rows
+                categoryAdapter.submit(displayedCategories)
                 val saved = savedCategoryId()
                 val initial = rows.firstOrNull { it.remoteId == saved }?.remoteId ?: if (kind == KIND_LIVE) rows.firstOrNull()?.remoteId else null
                 if (streamsJob == null) loadStreams(initial)
-                categoryList.post { categoryList.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
+                if (!initialFocusRequested) {
+                    initialFocusRequested = true
+                    val position = displayedCategories.indexOfFirst { categoryId(it) == initial }.takeIf { it >= 0 } ?: 0
+                    categoryList.post { requestCategoryFocus(position) }
+                }
             }
         }
     }
@@ -185,25 +191,28 @@ class ContentBrowserActivity : AppCompatActivity() {
                 includeFontPadding = false
             } else {
                 BlofyTvDesign.applyTitle(this)
+                textSize = 27f
             }
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         searchInput = EditText(this@ContentBrowserActivity).apply {
-            hint = "⌕  بحث من أول حرف"
+            hint = "⌕  بحث"
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
-            textSize = BlofyTvDesign.LabelSp
+            textSize = 14f
             typeface = bodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             setHintTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(20), 0, dp(20), 0)
+            setPadding(dp(16), 0, dp(16), 0)
             background = searchBackground(false)
+            isFocusable = true
+            isFocusableInTouchMode = true
             setOnFocusChangeListener { view, focused ->
                 view.background = searchBackground(focused)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.018f else 1f).scaleY(if (focused) 1.018f else 1f).translationZ(if (focused) 14f else 1f).setDuration(110).start()
+                view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).translationZ(if (focused) 12f else 1f).setDuration(100).start()
             }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -211,21 +220,21 @@ class ContentBrowserActivity : AppCompatActivity() {
                 override fun afterTextChanged(s: Editable?) = Unit
             })
         }
-        addView(searchInput, LinearLayout.LayoutParams(if (phoneMode) dp(270) else dp(370), if (phoneMode) dp(48) else dp(56)))
+        addView(searchInput, LinearLayout.LayoutParams(if (phoneMode) dp(270) else dp(270), if (phoneMode) dp(48) else dp(48)))
     }
 
     private fun createPreviewPanel() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         layoutDirection = View.LAYOUT_DIRECTION_RTL
-        setPadding(dp(18), dp(18), dp(18), dp(18))
-        background = BlofyTvDesign.elevatedSurface(dp(26).toFloat())
+        setPadding(dp(14), dp(14), dp(14), dp(14))
+        background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
         clipChildren = false
         previewTitle = TextView(this@ContentBrowserActivity).apply {
             text = "اختر قناة"
             BlofyTvDesign.applyHeading(this)
             gravity = Gravity.RIGHT
         }
-        addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+        addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
         previewMeta = TextView(this@ContentBrowserActivity).apply {
             text = "المعاينة تبدأ تلقائيًا"
             textSize = BlofyTvDesign.CaptionSp
@@ -233,7 +242,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.RIGHT
         }
-        addView(previewMeta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
+        addView(previewMeta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)))
         previewView = PlayerView(this@ContentBrowserActivity).apply {
             useController = false
             player = null
@@ -248,8 +257,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             typeface = bodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
-            setPadding(0, dp(12), 0, 0)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+            setPadding(0, dp(8), 0, 0)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)))
     }
 
     private fun loadStreams(categoryId: String?) {
@@ -295,23 +304,13 @@ class ContentBrowserActivity : AppCompatActivity() {
         stateView.text = "بحث: $query"
         searchJob = lifecycleScope.launch {
             delay(35L)
-            val all = if (searchUniverseReady) {
-                searchUniverse
-            } else {
-                withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, null).first() }.also {
-                    searchUniverse = it
-                    searchUniverseReady = true
-                }
-            }
+            val all = if (searchUniverseReady) searchUniverse else withContext(Dispatchers.IO) {
+                BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, null).first()
+            }.also { searchUniverse = it; searchUniverseReady = true }
             val matches = withContext(Dispatchers.Default) {
-                all.asSequence()
-                    .filter {
-                        it.name.contains(query, ignoreCase = true) ||
-                            it.genre?.contains(query, ignoreCase = true) == true ||
-                            it.year?.contains(query, ignoreCase = true) == true
-                    }
-                    .take(MAX_SEARCH_RESULTS)
-                    .toList()
+                all.asSequence().filter {
+                    it.name.contains(query, ignoreCase = true) || it.genre?.contains(query, ignoreCase = true) == true || it.year?.contains(query, ignoreCase = true) == true
+                }.take(MAX_SEARCH_RESULTS).toList()
             }
             if (searchInput.text?.toString()?.trim() == query) showRows(matches, searching = true)
         }
@@ -335,8 +334,49 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_SEARCH) { searchInput.requestFocus(); return true }
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_SEARCH -> { searchInput.requestFocus(); return true }
+                KeyEvent.KEYCODE_DPAD_LEFT -> if (!phoneMode && isFocusInside(categoryList) && requestStreamFocus()) return true
+                KeyEvent.KEYCODE_DPAD_RIGHT -> if (!phoneMode && isFocusInside(streamList) && requestCurrentCategoryFocus()) return true
+            }
+        }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun requestStreamFocus(): Boolean {
+        if (streamAdapter.itemCount == 0) return false
+        val savedKey = savedStreamKey()
+        val index = currentRows.indexOfFirst { it.key == savedKey }.takeIf { it >= 0 } ?: 0
+        val existing = streamList.findViewHolderForAdapterPosition(index)?.itemView
+        if (existing != null) return existing.requestFocus()
+        streamList.scrollToPosition(index)
+        streamList.post { streamList.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
+        return true
+    }
+
+    private fun requestCurrentCategoryFocus(): Boolean {
+        val index = displayedCategories.indexOfFirst { categoryId(it) == currentCategoryId }.takeIf { it >= 0 } ?: 0
+        return requestCategoryFocus(index)
+    }
+
+    private fun requestCategoryFocus(position: Int): Boolean {
+        if (categoryAdapter.itemCount == 0) return false
+        val safe = position.coerceIn(0, categoryAdapter.itemCount - 1)
+        val existing = categoryList.findViewHolderForAdapterPosition(safe)?.itemView
+        if (existing != null) return existing.requestFocus()
+        categoryList.scrollToPosition(safe)
+        categoryList.post { categoryList.findViewHolderForAdapterPosition(safe)?.itemView?.requestFocus() }
+        return true
+    }
+
+    private fun isFocusInside(parent: View): Boolean {
+        var child: View? = currentFocus
+        while (child != null) {
+            if (child === parent) return true
+            child = child.parent as? View
+        }
+        return false
     }
 
     private fun schedulePreview(stream: StreamEntity, immediate: Boolean = false) {
@@ -457,12 +497,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         providerKind = tv.blofy.player.core.provider.ProviderKind.from(provider.providerType)
     )
 
-    private fun searchBackground(focused: Boolean) = if (focused) {
-        BlofyTvDesign.primaryButton(dp(19).toFloat(), true)
-    } else {
-        BlofyTvDesign.secondaryButton(dp(19).toFloat(), false)
-    }
-
+    private fun searchBackground(focused: Boolean) = if (focused) BlofyTvDesign.primaryButton(dp(17).toFloat(), true) else BlofyTvDesign.secondaryButton(dp(17).toFloat(), false)
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     companion object {
