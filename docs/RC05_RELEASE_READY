@@ -13,6 +13,10 @@ Final signed candidate:
 - series episodes use local cache first and fetch only when missing
 - external player support removed from UI, manifest and code paths
 - parental lock/PIN feature removed and legacy locked state cleared by migration
+- local storage management with safe cache cleanup added to settings
+- silent long-running live stall recovery added without changing playback engine, URL or format
+- private «مشتركين BLOFY» login added with username/password only and upstream host kept in backend environment
 - current Media3 1.6.1 + FFmpeg playback engine, transport, URL resolution and fallbacks retained
-- Android CI and native FFmpeg verification passed before merge
-- production signed RC05 rebuild requested from full polish merge commit 068c98b7b57652c5aaf45ade4cc5d7e914468492
+- Android CI, Activation CI and native FFmpeg verification passed before final signed build
+- production activation backend verified healthy after subscriber proxy deployment
+- production signed RC05 rebuild requested from final main commit 10927d6278c5e97cde12e68119ea476853a739d5
