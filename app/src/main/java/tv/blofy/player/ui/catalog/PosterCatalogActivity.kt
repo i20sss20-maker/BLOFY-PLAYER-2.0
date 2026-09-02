@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
-import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -43,10 +42,11 @@ class PosterCatalogActivity : AppCompatActivity() {
     private var selectedCategoryId: String? = null
     private var categoryRows: List<CategoryEntity> = emptyList()
     private var initialFocusRequested = false
-    private var loadedItems: List<StreamEntity> = emptyList()
+    private val loadedItems = ArrayList<StreamEntity>(256)
     private var totalItems = 0
     private var loadingPage = false
     private var generation = 0
+    private val statePrefs by lazy { getSharedPreferences("blofy_catalog_state", MODE_PRIVATE) }
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty().ifBlank { KIND_MOVIE } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -119,7 +119,8 @@ class PosterCatalogActivity : AppCompatActivity() {
             clipToPadding = false
             itemAnimator = null
             setHasFixedSize(true)
-            recycledViewPool.setMaxRecycledViews(0, 30)
+            recycledViewPool.setMaxRecycledViews(0, 36)
+            setItemViewCacheSize(20)
             descendantFocusability = ViewGroupFocus.AFTER_DESCENDANTS
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
@@ -134,6 +135,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         setContentView(root)
 
         posterAdapter = PosterStreamAdapter(onClick = ::openItem, onFocus = { item ->
+            rememberPoster(item)
             val index = loadedItems.indexOfFirst { it.key == item.key }
             if (index >= loadedItems.size - PREFETCH_THRESHOLD) loadNextPage()
         })
@@ -153,10 +155,14 @@ class PosterCatalogActivity : AppCompatActivity() {
             dao.categories(provider.id, kind).collect { categories ->
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
-                if (selectedCategoryId == null && loadedItems.isEmpty() && pageJob == null) loadStreams(null, immediate = true)
+                if (selectedCategoryId == null && loadedItems.isEmpty() && pageJob == null) {
+                    val saved = savedCategoryId()
+                    val initial = saved?.takeIf { id -> categories.any { it.remoteId == id } }
+                    loadStreams(initial, immediate = true)
+                }
                 if (!initialFocusRequested) {
                     initialFocusRequested = true
-                    categoryList.post { requestCategoryFocus(0) }
+                    categoryList.post { requestSelectedCategoryFocus() }
                 }
             }
         }
@@ -176,7 +182,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         if (providerId.isBlank() || selectedCategoryId == categoryId) return
         categoryFocusJob?.cancel()
         categoryFocusJob = lifecycleScope.launch {
-            delay(85L)
+            delay(90L)
             loadStreams(categoryId, immediate = false)
         }
     }
@@ -186,12 +192,13 @@ class PosterCatalogActivity : AppCompatActivity() {
         if (immediate) categoryFocusJob?.cancel()
         if (selectedCategoryId == categoryId && loadedItems.isNotEmpty()) return
         selectedCategoryId = categoryId
+        rememberCategory(categoryId)
         generation += 1
         pageJob?.cancel()
-        loadedItems = emptyList()
+        loadedItems.clear()
         totalItems = 0
         loadingPage = false
-        posterAdapter.submit(emptyList())
+        posterAdapter.replace(emptyList())
         countView.text = "..."
         loadNextPage(reset = true)
     }
@@ -214,13 +221,20 @@ class PosterCatalogActivity : AppCompatActivity() {
             }
             if (requestGeneration != generation) return@launch
             totalItems = result.first
-            loadedItems = if (offset == 0) result.second else loadedItems + result.second
-            posterAdapter.submit(loadedItems)
+            if (offset == 0) {
+                loadedItems.clear()
+                loadedItems.addAll(result.second)
+                posterAdapter.replace(result.second)
+            } else {
+                loadedItems.addAll(result.second)
+                posterAdapter.append(result.second)
+            }
             countView.text = "${loadedItems.size} / $totalItems ${if (kind == KIND_SERIES) "مسلسل" else "فيلم"}"
             if (result.second.isNotEmpty()) {
-                ArtworkLoader.prefetch(this@PosterCatalogActivity, result.second.take(18).map { it.icon ?: it.backdrop })
+                ArtworkLoader.prefetch(this@PosterCatalogActivity, result.second.take(24).map { it.icon ?: it.backdrop })
             }
             loadingPage = false
+            if (offset == 0) restoreSavedPosterIfVisible()
         }.also { job ->
             job.invokeOnCompletion {
                 if (requestGeneration == generation) runOnUiThread { loadingPage = false }
@@ -228,17 +242,28 @@ class PosterCatalogActivity : AppCompatActivity() {
         }
     }
 
+    private fun restoreSavedPosterIfVisible() {
+        val key = savedPosterKey() ?: return
+        val index = loadedItems.indexOfFirst { it.key == key }
+        if (index < 0) return
+        posterGrid.scrollToPosition(index)
+        posterGrid.post { posterGrid.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
+    }
+
     private fun requestPosterFocus(): Boolean {
         if (posterAdapter.itemCount == 0) return false
-        val existing = posterGrid.findViewHolderForAdapterPosition(0)?.itemView
+        val saved = savedPosterKey()
+        val index = saved?.let { key -> loadedItems.indexOfFirst { it.key == key } }?.takeIf { it >= 0 } ?: 0
+        val existing = posterGrid.findViewHolderForAdapterPosition(index)?.itemView
         if (existing != null) return existing.requestFocus()
-        posterGrid.scrollToPosition(0)
-        posterGrid.post { posterGrid.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
+        posterGrid.scrollToPosition(index)
+        posterGrid.post { posterGrid.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
         return true
     }
 
     private fun requestSelectedCategoryFocus(): Boolean {
-        val targetId = selectedCategoryId
+        if (!::categoryAdapter.isInitialized || categoryAdapter.itemCount == 0) return false
+        val targetId = selectedCategoryId ?: savedCategoryId()
         val position = categoryRows.indexOfFirst { categoryRemoteId(it) == targetId }.takeIf { it >= 0 } ?: 0
         return requestCategoryFocus(position)
     }
@@ -270,11 +295,29 @@ class PosterCatalogActivity : AppCompatActivity() {
     }
 
     private fun openItem(stream: StreamEntity) {
+        rememberPoster(stream)
         startActivity(Intent(this, if (kind == KIND_SERIES) SeriesDetailsActivity::class.java else MovieDetailsActivity::class.java).apply {
             putExtra(EXTRA_PROVIDER_ID_SHARED, providerId)
             putExtra(EXTRA_CONTENT_KEY_SHARED, stream.key)
         })
     }
+
+    private fun rememberCategory(categoryId: String?) {
+        if (providerId.isBlank()) return
+        val editor = statePrefs.edit()
+        if (categoryId == null) editor.remove(categoryStateKey()) else editor.putString(categoryStateKey(), categoryId)
+        editor.apply()
+    }
+
+    private fun rememberPoster(stream: StreamEntity) {
+        if (providerId.isBlank()) return
+        statePrefs.edit().putString(posterStateKey(), stream.key).apply()
+    }
+
+    private fun savedCategoryId(): String? = if (providerId.isBlank()) null else statePrefs.getString(categoryStateKey(), null)
+    private fun savedPosterKey(): String? = if (providerId.isBlank()) null else statePrefs.getString(posterStateKey(), null)
+    private fun categoryStateKey() = "$providerId:$kind:last_category"
+    private fun posterStateKey() = "$providerId:$kind:last_poster"
 
     private fun allCategory() = CategoryEntity("$providerId:$kind:$ALL_CATEGORY_ID", providerId, ALL_CATEGORY_ID, kind, if (kind == KIND_SERIES) "كل المسلسلات" else "كل الأفلام", -1)
     private fun categoryRemoteId(category: CategoryEntity) = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
@@ -299,7 +342,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         const val KIND_SERIES = "series"
         private const val GRID_COLUMNS = 5
         private const val PAGE_SIZE = 240
-        private const val PREFETCH_THRESHOLD = 45
+        private const val PREFETCH_THRESHOLD = 55
         private const val ALL_CATEGORY_ID = "__all__"
         private const val EXTRA_PROVIDER_ID_SHARED = "provider_id"
         private const val EXTRA_CONTENT_KEY_SHARED = "content_key"
