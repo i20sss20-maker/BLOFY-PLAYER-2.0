@@ -77,8 +77,10 @@ object BlofyTvDesign {
         view.isFocusable = true
         view.isFocusableInTouchMode = true
         view.background = if (primary) primaryButton(radius, false) else secondaryButton(radius, false)
+        (view as? TextView)?.setTextColor(if (primary) Color.WHITE else TextPrimary)
         view.setOnFocusChangeListener { v, focused ->
             v.background = if (primary) primaryButton(radius, focused) else secondaryButton(radius, focused)
+            (v as? TextView)?.setTextColor(if (primary) Color.WHITE else TextPrimary)
             v.animate().cancel()
             v.animate().scaleX(if (focused) scale else 1f).scaleY(if (focused) scale else 1f)
                 .translationZ(if (focused) 18f else 2f).alpha(1f).setDuration(if (focused) 105L else 85L).start()
