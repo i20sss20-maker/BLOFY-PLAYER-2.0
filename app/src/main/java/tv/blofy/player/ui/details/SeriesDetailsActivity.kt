@@ -45,14 +45,14 @@ class SeriesDetailsActivity : AppCompatActivity() {
         }
         val backdrop = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            alpha = 0.42f
+            alpha = 0.48f
             setBackgroundColor(0xFF06050A.toInt())
         }
         root.addView(backdrop, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(View(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0x520A0610, 0xA90A0710.toInt(), 0xEA08060D.toInt(), 0xFF07050B.toInt())
+                intArrayOf(0x6A0A0610, 0xBC0A0710.toInt(), 0xEE08060D.toInt(), 0xFF07050B.toInt())
             )
         }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
@@ -60,7 +60,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(72), dp(38), dp(72), dp(38))
+            setPadding(dp(58), dp(34), dp(58), dp(34))
             clipChildren = false
         }
         root.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -72,7 +72,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             clipChildren = false
             setPadding(dp(8), 0, dp(8), 0)
         }
-        body.addView(panel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(34) })
+        body.addView(panel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(26) })
 
         val posterCard = FrameLayout(this).apply {
             background = posterBackground()
@@ -86,7 +86,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
         posterCard.addView(poster, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT).apply {
             setMargins(dp(8), dp(8), dp(8), dp(8))
         })
-        body.addView(posterCard, LinearLayout.LayoutParams(dp(306), dp(454)).apply { marginStart = dp(22) })
+        body.addView(posterCard, LinearLayout.LayoutParams(dp(264), dp(396)).apply { marginStart = dp(20) })
         setContentView(root)
 
         lifecycleScope.launch {
@@ -111,60 +111,77 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 gravity = Gravity.RIGHT
                 includeFontPadding = false
                 background = badgeBackground()
-                setPadding(dp(14), dp(7), dp(14), dp(7))
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
+                setPadding(dp(13), dp(6), dp(13), dp(6))
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.name
-                textSize = 45f
+                textSize = 43f
                 typeface = headingTypeface
                 setTextColor(Color.WHITE)
                 gravity = Gravity.RIGHT
                 includeFontPadding = false
                 maxLines = 2
             })
-            panel.addView(TextView(this@SeriesDetailsActivity).apply {
+
+            val metaRow = LinearLayout(this@SeriesDetailsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            }
+            metaRow.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = buildList {
                     stream.year?.takeIf(String::isNotBlank)?.let(::add)
                     stream.genre?.takeIf(String::isNotBlank)?.substringBefore(',')?.let(::add)
                     if (seasons > 0) add("$seasons موسم")
                     if (allEpisodes.isNotEmpty()) add("${allEpisodes.size} حلقة")
-                    stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
                 }.joinToString("  •  ")
-                textSize = 16f
+                textSize = 15.5f
                 typeface = bodyTypeface
                 setTextColor(SOFT)
-                gravity = Gravity.RIGHT
-                setPadding(0, dp(9), 0, dp(18))
-            })
+                gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(0, dp(44), 1f))
+            stream.rating?.takeIf { it.isNotBlank() }?.let { rating ->
+                metaRow.addView(TextView(this@SeriesDetailsActivity).apply {
+                    text = "★  $rating"
+                    textSize = 14.5f
+                    typeface = bodyTypeface
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.CENTER
+                    background = badgeBackground()
+                    setPadding(dp(13), dp(7), dp(13), dp(7))
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12) })
+            }
+            panel.addView(metaRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(4); bottomMargin = dp(10) })
+
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.plot?.takeIf(String::isNotBlank) ?: "اختر الموسم والحلقة لبدء المشاهدة."
-                textSize = 17f
+                textSize = 16.5f
                 typeface = bodyTypeface
                 maxLines = 4
                 setTextColor(0xFFE8E2EC.toInt())
                 gravity = Gravity.RIGHT
                 setLineSpacing(dp(2).toFloat(), 1.14f)
-                setPadding(0, 0, 0, dp(20))
+                setPadding(0, 0, 0, dp(16))
             })
 
             resume?.let { r ->
                 val pct = if (r.durationMs > 0) ((r.positionMs * 100) / r.durationMs).toInt().coerceIn(1, 99) else 0
                 panel.addView(TextView(this@SeriesDetailsActivity).apply {
                     text = "◷  تتابع الآن  •  الموسم ${r.episode.season}  •  الحلقة ${r.episode.episode}${if (pct > 0) "  •  $pct%" else ""}"
-                    textSize = 14.5f
+                    textSize = 14f
                     typeface = bodyTypeface
                     setTextColor(0xFFE5D8EF.toInt())
                     gravity = Gravity.RIGHT
-                    setPadding(dp(14), dp(9), dp(14), dp(9))
+                    setPadding(dp(13), dp(8), dp(13), dp(8))
                     background = progressBackground()
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
                 if (r.durationMs > 0) panel.addView(ProgressBar(this@SeriesDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
                     max = 100
                     progress = pct
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(7)).apply {
-                    topMargin = dp(9)
-                    bottomMargin = dp(16)
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(6)).apply {
+                    topMargin = dp(8)
+                    bottomMargin = dp(14)
                 })
             }
 
@@ -179,8 +196,8 @@ class SeriesDetailsActivity : AppCompatActivity() {
             resume?.let { r ->
                 val resumeButton = actionButton("▶  استئناف الحلقة", primary = true) { launchEpisode(provider, r.episode, r.positionMs) }
                 primary = resumeButton
-                row.addView(resumeButton, LinearLayout.LayoutParams(dp(230), dp(66)).apply { marginStart = dp(10) })
-                row.addView(actionButton("↺  من البداية") { launchEpisode(provider, r.episode, 0L) }, LinearLayout.LayoutParams(dp(172), dp(66)).apply { marginStart = dp(10) })
+                row.addView(resumeButton, LinearLayout.LayoutParams(dp(214), dp(60)).apply { marginStart = dp(9) })
+                row.addView(actionButton("↺  من البداية") { launchEpisode(provider, r.episode, 0L) }, LinearLayout.LayoutParams(dp(162), dp(60)).apply { marginStart = dp(9) })
             }
             val episodes = actionButton("▤  المواسم والحلقات", primary = resume == null) {
                 startActivity(Intent(this@SeriesDetailsActivity, EpisodesActivity::class.java).apply {
@@ -190,7 +207,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 })
             }
             if (primary == null) primary = episodes
-            row.addView(episodes, LinearLayout.LayoutParams(dp(230), dp(66)).apply { marginStart = dp(10) })
+            row.addView(episodes, LinearLayout.LayoutParams(dp(218), dp(60)).apply { marginStart = dp(9) })
 
             favoriteButton = actionButton(if (stream.favorite) "★  المفضلة" else "☆  المفضلة") {
                 lifecycleScope.launch {
@@ -199,9 +216,9 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     favoriteButton.text = if (!current.favorite) "★  المفضلة" else "☆  المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(170), dp(66)).apply { marginStart = dp(10) })
+            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(160), dp(60)).apply { marginStart = dp(9) })
             panel.addView(row)
-            primary?.requestFocus()
+            primary?.post { primary?.requestFocus() }
         }
     }
 
@@ -227,7 +244,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
     private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
-        textSize = 15f
+        textSize = 14.5f
         typeface = bodyTypeface
         isFocusable = true
         isFocusableInTouchMode = true
@@ -239,17 +256,17 @@ class SeriesDetailsActivity : AppCompatActivity() {
             view.background = buttonBackground(focused, primary)
             view.animate().cancel()
             view.animate()
-                .scaleX(if (focused) 1.055f else 1f)
-                .scaleY(if (focused) 1.055f else 1f)
-                .translationZ(if (focused) dp(18).toFloat() else dp(2).toFloat())
-                .setDuration(if (focused) 125L else 95L)
+                .scaleX(if (focused) 1.05f else 1f)
+                .scaleY(if (focused) 1.05f else 1f)
+                .translationZ(if (focused) dp(16).toFloat() else dp(2).toFloat())
+                .setDuration(if (focused) 120L else 90L)
                 .start()
         }
         setOnClickListener { action() }
     }
 
     private fun posterBackground() = GradientDrawable().apply {
-        cornerRadius = dp(24).toFloat()
+        cornerRadius = dp(22).toFloat()
         setColor(0xE5130D1B.toInt())
         setStroke(dp(1), 0x995B3B75.toInt())
     }
@@ -274,7 +291,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             else -> intArrayOf(0xF022182E.toInt(), 0xF0140D1D.toInt())
         }
     ).apply {
-        cornerRadius = dp(17).toFloat()
+        cornerRadius = dp(16).toFloat()
         setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x77543B69)
     }
 
