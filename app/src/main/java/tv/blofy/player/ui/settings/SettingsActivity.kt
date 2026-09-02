@@ -81,7 +81,7 @@ class SettingsActivity : AppCompatActivity() {
             includeFontPadding = false
         })
         titleBox.addView(TextView(this).apply {
-            text = "تحكم بالتشغيل والصوت والترجمة والأداء والقوائم"
+            text = "التشغيل والصوت والترجمة والأداء والقوائم"
             textSize = 14f
             typeface = bodyTypeface
             setTextColor(MUTED)
@@ -130,11 +130,8 @@ class SettingsActivity : AppCompatActivity() {
         addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
         addCard(actionCard("↻  تحديث المحتوى", "تحديث يدوي فقط") { refreshLibrary() })
         addCard(actionCard("↔  HTTP / HTTPS", if (p?.allowCrossProtocolRedirects == true) "السماح بالتحويل" else "مغلق") { provider?.let { saveProvider(it.copy(allowCrossProtocolRedirects = !it.allowCrossProtocolRedirects)) } })
-
-        addCard(actionCard("⚙  المحركات", "Media3 + FFmpeg + VLC") { status.text = "✓  محركات ومسارات التشغيل الحالية محفوظة بدون تغيير" })
         addCard(actionCard("✓  حالة النظام", "الفحص والتوافق") { startActivity(Intent(this, SystemStatusActivity::class.java)) })
-        addCard(actionCard("ⓘ  الكاش المحلي", "فتح فوري للقوائم") { status.text = "✓  القنوات والأفلام والمسلسلات تفتح من قاعدة البيانات المحلية" })
-        addCard(actionCard("⟲  استعادة الإعدادات", "القيم الافتراضية") { prefs.edit().clear().apply(); buildPage() })
+        addCard(actionCard("⟲  استعادة الإعدادات", "رجوع للوضع الافتراضي") { restoreDefaults() })
 
         linkFocus(back)
         page.addView(grid, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -231,6 +228,28 @@ class SettingsActivity : AppCompatActivity() {
             BlofyDatabase.get(applicationContext).dao().upsertProvider(saved)
             provider = saved
             status.text = "✓  تم حفظ الإعداد"
+        }
+    }
+
+    private fun restoreDefaults() {
+        prefs.edit().clear().apply()
+        val active = provider
+        if (active == null) {
+            status.text = "✓  تمت استعادة الإعدادات الافتراضية"
+            buildPage()
+            return
+        }
+        lifecycleScope.launch {
+            val reset = active.copy(
+                preferredEngine = "media3",
+                preferredTransport = "cronet",
+                liveFormat = "ts",
+                allowCrossProtocolRedirects = false,
+                updatedAt = System.currentTimeMillis()
+            )
+            BlofyDatabase.get(applicationContext).dao().upsertProvider(reset)
+            provider = reset
+            buildPage()
         }
     }
 

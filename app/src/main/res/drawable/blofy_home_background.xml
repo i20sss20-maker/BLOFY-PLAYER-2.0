@@ -1,34 +1,51 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Deep neutral base keeps artwork readable and avoids the cheap full-purple wash. -->
     <item>
         <shape android:shape="rectangle">
             <gradient
                 android:angle="315"
-                android:endColor="#030308"
-                android:startColor="#17102A" />
+                android:startColor="#15101F"
+                android:centerColor="#09070D"
+                android:endColor="#020205" />
         </shape>
     </item>
 
+    <!-- Controlled BLOFY accent near the navigation / hero edge. -->
     <item>
         <shape android:shape="rectangle">
             <gradient
-                android:centerX="0.90"
-                android:centerY="0.08"
-                android:endColor="#00190A3B"
-                android:gradientRadius="620dp"
-                android:startColor="#7A6E1CCA"
-                android:type="radial" />
+                android:type="radial"
+                android:centerX="0.92"
+                android:centerY="0.05"
+                android:gradientRadius="760dp"
+                android:startColor="#6A7D32D2"
+                android:endColor="#00140A2B" />
         </shape>
     </item>
 
+    <!-- Secondary glow adds depth without competing with posters or text. -->
     <item>
         <shape android:shape="rectangle">
             <gradient
-                android:centerX="0.06"
-                android:centerY="0.92"
-                android:endColor="#00000000"
-                android:gradientRadius="420dp"
-                android:startColor="#303B24A3"
-                android:type="radial" />
+                android:type="radial"
+                android:centerX="0.05"
+                android:centerY="0.96"
+                android:gradientRadius="520dp"
+                android:startColor="#2843279C"
+                android:endColor="#00000000" />
+        </shape>
+    </item>
+
+    <!-- Soft center vignette anchors TV focus and improves contrast on large panels. -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.52"
+                android:centerY="0.48"
+                android:gradientRadius="980dp"
+                android:startColor="#00140E1C"
+                android:endColor="#52000000" />
         </shape>
     </item>
 </layer-list>
