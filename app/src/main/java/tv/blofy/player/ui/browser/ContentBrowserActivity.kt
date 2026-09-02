@@ -2,7 +2,6 @@ package tv.blofy.player.ui.browser
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -87,25 +86,25 @@ class ContentBrowserActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(if (phoneMode) dp(16) else dp(22), if (phoneMode) dp(14) else dp(16), if (phoneMode) dp(16) else dp(22), if (phoneMode) dp(14) else dp(18))
+            setPadding(if (phoneMode) dp(16) else dp(24), if (phoneMode) dp(14) else dp(18), if (phoneMode) dp(16) else dp(24), if (phoneMode) dp(14) else dp(20))
             background = AppCompatResources.getDrawable(this@ContentBrowserActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
         }
-        root.addView(buildHeader(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(64) else dp(68)))
+        root.addView(buildHeader(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(64) else dp(72)))
         stateView = TextView(this).apply {
             text = "جاري تجهيز المحتوى…"
-            textSize = if (phoneMode) 12.5f else BlofyTvDesign.CaptionSp
+            textSize = if (phoneMode) 12.5f else 12.5f
             typeface = bodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
             setPadding(dp(12), 0, dp(12), 0)
         }
-        root.addView(stateView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(34) else dp(36)))
+        root.addView(stateView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(34) else dp(38)))
 
         val body = LinearLayout(this).apply {
             orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = if (phoneMode) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
             clipChildren = false
             clipToPadding = false
         }
@@ -113,19 +112,21 @@ class ContentBrowserActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, true) else LinearLayoutManager(this@ContentBrowserActivity)
             background = BlofyTvDesign.elevatedSurface(dp(22).toFloat())
+            elevation = dp(3).toFloat()
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(7), dp(8), dp(7), dp(8))
+            setPadding(dp(8), dp(10), dp(8), dp(10))
             clipChildren = false
             clipToPadding = false
         }
         streamList = RecyclerView(this).apply {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             layoutManager = LinearLayoutManager(this@ContentBrowserActivity)
-            background = BlofyTvDesign.surface(dp(22).toFloat(), false)
+            background = BlofyTvDesign.elevatedSurface(dp(22).toFloat())
+            elevation = dp(3).toFloat()
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setPadding(dp(9), dp(10), dp(9), dp(10))
             clipChildren = false
             clipToPadding = false
         }
@@ -134,8 +135,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             body.addView(categoryList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(90)).apply { bottomMargin = dp(10) })
             body.addView(streamList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            body.addView(categoryList, LinearLayout.LayoutParams(dp(210), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginStart = dp(12) })
-            body.addView(streamList, LinearLayout.LayoutParams(dp(382), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginStart = dp(14) })
+            body.addView(categoryList, LinearLayout.LayoutParams(dp(226), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(14) })
+            body.addView(streamList, LinearLayout.LayoutParams(dp(398), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(16) })
             if (previewEnabled) body.addView(createPreviewPanel(), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         }
         root.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -184,19 +185,14 @@ class ContentBrowserActivity : AppCompatActivity() {
         layoutDirection = View.LAYOUT_DIRECTION_RTL
         addView(TextView(this@ContentBrowserActivity).apply {
             text = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
-            if (phoneMode) {
-                textSize = 25f
-                typeface = headingTypeface
-                setTextColor(Color.WHITE)
-                includeFontPadding = false
-            } else {
-                BlofyTvDesign.applyTitle(this)
-                textSize = 27f
-            }
+            textSize = if (phoneMode) 25f else 29f
+            typeface = headingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            includeFontPadding = false
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         searchInput = EditText(this@ContentBrowserActivity).apply {
-            hint = "⌕  بحث"
+            hint = "⌕  ابحث عن قناة"
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             textSize = 14f
@@ -205,12 +201,14 @@ class ContentBrowserActivity : AppCompatActivity() {
             setHintTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(16), 0, dp(16), 0)
+            setPadding(dp(18), 0, dp(18), 0)
             background = searchBackground(false)
             isFocusable = true
             isFocusableInTouchMode = true
             setOnFocusChangeListener { view, focused ->
                 view.background = searchBackground(focused)
+                (view as EditText).setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextPrimary)
+                view.setHintTextColor(if (focused) 0xFFEADFFF.toInt() else BlofyTvDesign.TextMuted)
                 view.animate().cancel()
                 view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).translationZ(if (focused) 12f else 1f).setDuration(100).start()
             }
@@ -220,45 +218,49 @@ class ContentBrowserActivity : AppCompatActivity() {
                 override fun afterTextChanged(s: Editable?) = Unit
             })
         }
-        addView(searchInput, LinearLayout.LayoutParams(if (phoneMode) dp(270) else dp(270), if (phoneMode) dp(48) else dp(48)))
+        addView(searchInput, LinearLayout.LayoutParams(if (phoneMode) dp(270) else dp(310), if (phoneMode) dp(48) else dp(50)))
     }
 
     private fun createPreviewPanel() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         layoutDirection = View.LAYOUT_DIRECTION_RTL
-        setPadding(dp(14), dp(14), dp(14), dp(14))
+        setPadding(dp(18), dp(16), dp(18), dp(16))
         background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
+        elevation = dp(4).toFloat()
         clipChildren = false
         previewTitle = TextView(this@ContentBrowserActivity).apply {
             text = "اختر قناة"
-            BlofyTvDesign.applyHeading(this)
+            textSize = 22f
+            typeface = headingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT
         }
-        addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
+        addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
         previewMeta = TextView(this@ContentBrowserActivity).apply {
             text = "المعاينة تبدأ تلقائيًا"
-            textSize = BlofyTvDesign.CaptionSp
+            textSize = 13f
             typeface = bodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.RIGHT
         }
-        addView(previewMeta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)))
+        addView(previewMeta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)))
         previewView = PlayerView(this@ContentBrowserActivity).apply {
             useController = false
             player = null
             isFocusable = false
-            setShutterBackgroundColor(BlofyTvDesign.Background)
+            setShutterBackgroundColor(Color.BLACK)
             resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            background = BlofyTvDesign.surface(dp(20).toFloat(), false)
         }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         addView(TextView(this@ContentBrowserActivity).apply {
             text = "OK ملء الشاشة   •   ↑↓ القنوات   •   ضغط مطوّل للأرشيف"
-            textSize = BlofyTvDesign.CaptionSp
+            textSize = 12.5f
             typeface = bodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, 0)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
     }
 
     private fun loadStreams(categoryId: String?) {
@@ -337,8 +339,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_SEARCH -> { searchInput.requestFocus(); return true }
-                KeyEvent.KEYCODE_DPAD_LEFT -> if (!phoneMode && isFocusInside(categoryList) && requestStreamFocus()) return true
-                KeyEvent.KEYCODE_DPAD_RIGHT -> if (!phoneMode && isFocusInside(streamList) && requestCurrentCategoryFocus()) return true
+                KeyEvent.KEYCODE_DPAD_RIGHT -> if (!phoneMode && isFocusInside(categoryList) && requestStreamFocus()) return true
+                KeyEvent.KEYCODE_DPAD_LEFT -> if (!phoneMode && isFocusInside(streamList) && requestCurrentCategoryFocus()) return true
             }
         }
         return super.dispatchKeyEvent(event)
@@ -396,7 +398,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         lastPreviewKey = stream.key
         rememberStream(stream)
         previewTitle?.text = stream.name
-        previewMeta?.text = if (stream.archiveEnabled) "بث مباشر  •  أرشيف متوفر" else "بث مباشر"
+        previewMeta?.text = if (stream.archiveEnabled) "● مباشر   •   أرشيف متوفر" else "● مباشر"
         previewSession?.play(url)
         refreshShortEpg(stream)
     }
