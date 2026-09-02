@@ -53,6 +53,9 @@ interface BlofyDao {
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY name")
     fun streams(providerId: String, kind: String, categoryId: String?): Flow<List<StreamEntity>>
 
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind IN ('movie','series') ORDER BY COALESCE(addedAt, 0) DESC, name LIMIT :limit")
+    suspend fun latestHomeStreams(providerId: String, limit: Int = 14): List<StreamEntity>
+
     @Query("SELECT * FROM streams WHERE key = :contentKey LIMIT 1") suspend fun stream(contentKey: String): StreamEntity?
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND favorite = 1 ORDER BY name") fun favorites(providerId: String): Flow<List<StreamEntity>>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND name LIKE '%' || :query || '%' ORDER BY name LIMIT :limit") suspend fun searchStreams(providerId: String, query: String, limit: Int = 80): List<StreamEntity>
@@ -102,13 +105,6 @@ interface BlofyDao {
         deleteProvider(stagedProviderId)
     }
 
-    /*
-     * Promotion runs after download reaches 96%. The old correlated queries filtered
-     * providerId/kind/remoteId for every staged row and became extremely slow on large
-     * catalogs because those columns did not have a matching composite index. The
-     * canonical content key is the table primary key, so these scalar lookups hit the
-     * SQLite PK index directly and keep promotion close to linear time.
-     */
     @Query("""
         UPDATE categories
         SET hidden = COALESCE(
