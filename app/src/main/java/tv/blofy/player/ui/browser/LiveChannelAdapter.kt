@@ -9,7 +9,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.R
 import tv.blofy.player.data.local.StreamEntity
@@ -22,21 +21,32 @@ internal class LiveChannelAdapter(
     private val onLongClick: (StreamEntity) -> Unit,
     private val itemKey: (StreamEntity) -> String
 ) : RecyclerView.Adapter<LiveChannelAdapter.Holder>() {
-    private val items = mutableListOf<StreamEntity>()
+    private val items = ArrayList<StreamEntity>(256)
     private var focusedKey: String? = null
 
     init { setHasStableIds(true) }
 
-    fun submit(newItems: List<StreamEntity>) {
-        val old = items.toList()
-        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldListSize() = old.size
-            override fun getNewListSize() = newItems.size
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int) = itemKey(old[oldItemPosition]) == itemKey(newItems[newItemPosition])
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int) = old[oldItemPosition] == newItems[newItemPosition]
-        }, false)
-        items.clear(); items.addAll(newItems); diff.dispatchUpdatesTo(this)
+    fun submit(newItems: List<StreamEntity>) = replace(newItems)
+
+    fun replace(newItems: List<StreamEntity>) {
+        items.clear()
+        items.addAll(newItems)
+        notifyDataSetChanged()
     }
+
+    fun append(newItems: List<StreamEntity>) {
+        if (newItems.isEmpty()) return
+        val start = items.size
+        items.addAll(newItems)
+        notifyItemRangeInserted(start, newItems.size)
+    }
+
+    fun indexOfKey(key: String?): Int {
+        if (key.isNullOrBlank()) return -1
+        return items.indexOfFirst { itemKey(it) == key }
+    }
+
+    fun itemAt(position: Int): StreamEntity? = items.getOrNull(position)
 
     override fun getItemId(position: Int) = itemKey(items[position]).hashCode().toLong()
 
@@ -83,6 +93,7 @@ internal class LiveChannelAdapter(
         holder.badge.text = if (item.archiveEnabled) "⏱" else "●"
         val art = item.icon ?: item.backdrop
         if (!art.isNullOrBlank()) ArtworkLoader.load(holder.logo, art) else {
+            ArtworkLoader.cancel(holder.logo)
             holder.logo.setImageResource(R.drawable.blofy_logo)
         }
         holder.itemView.setOnClickListener { onClick(item) }
@@ -96,6 +107,12 @@ internal class LiveChannelAdapter(
             view.animate().scaleX(if (focused) 1.018f else 1f).scaleY(if (focused) 1.018f else 1f).translationZ(if (focused) 12f else 1f).setDuration(80).start()
             if (focused) onFocus(item)
         }
+    }
+
+    override fun onViewRecycled(holder: Holder) {
+        ArtworkLoader.cancel(holder.logo)
+        holder.logo.setImageDrawable(null)
+        super.onViewRecycled(holder)
     }
 
     override fun getItemCount() = items.size
