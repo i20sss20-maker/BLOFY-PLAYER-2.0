@@ -1,24 +1,24 @@
-name: BLOFY RC05 Signed Release
+name: BLOFY RC06 Signed Release
 
 on:
   push:
     branches: [main]
     paths:
-      - docs/RC05_RELEASE_READY
+      - docs/RC06_RELEASE_READY
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: blofy-rc05-signed-release
+  group: blofy-rc06-signed-release
   cancel-in-progress: false
 
 env:
   PRODUCTION_ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
-  EXPECTED_VERSION_CODE: "2000006"
-  EXPECTED_VERSION_NAME: 2.0.0-rc05
+  EXPECTED_VERSION_CODE: "2000007"
+  EXPECTED_VERSION_NAME: 2.0.0-rc06
   EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
   MEDIA3_VERSION: "1.6.1"
   FFMPEG_VERSION: n6.0
@@ -45,7 +45,7 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Validate rc05 and signing inputs
+      - name: Validate rc06 and signing inputs
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
@@ -59,8 +59,8 @@ jobs:
             [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
           done
           [[ "$EXPECTED_CERT_SHA256" =~ ^[0-9A-F]{64}$ ]] || { echo "::error::Invalid certificate SHA-256"; exit 1; }
-          grep -Fq 'versionCode = 2000006' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc05"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000007' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc06"' app/build.gradle.kts
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
 
       - name: Install Android native and signing toolchain
@@ -155,8 +155,8 @@ jobs:
           mkdir -p release
           apk="app/build/outputs/apk/release/app-release.apk"
           aab="app/build/outputs/bundle/release/app-release.aab"
-          out_apk="release/BLOFY-PLAYER-2.0-rc05.apk"
-          out_aab="release/BLOFY-PLAYER-2.0-rc05.aab"
+          out_apk="release/BLOFY-PLAYER-2.0-rc06.apk"
+          out_aab="release/BLOFY-PLAYER-2.0-rc06.aab"
           cp "$apk" "$out_apk"
           cp "$aab" "$out_aab"
           tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
@@ -173,11 +173,11 @@ jobs:
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
             grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/apk-files.txt"
           done
-          (cd release && sha256sum BLOFY-PLAYER-2.0-rc05.apk BLOFY-PLAYER-2.0-rc05.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
+          (cd release && sha256sum BLOFY-PLAYER-2.0-rc06.apk BLOFY-PLAYER-2.0-rc06.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc05-signed-${{ github.sha }}
+          name: BLOFY-PLAYER-2.0-rc06-signed-${{ github.sha }}
           path: release/
           if-no-files-found: error
           retention-days: 30
