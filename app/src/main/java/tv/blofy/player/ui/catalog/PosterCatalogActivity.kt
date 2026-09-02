@@ -48,8 +48,6 @@ class PosterCatalogActivity : AppCompatActivity() {
     private var selectedCategoryId: String? = null
     private var categoryRows: List<CategoryEntity> = emptyList()
     private var currentRows: List<StreamEntity> = emptyList()
-    private var searchUniverse: List<StreamEntity> = emptyList()
-    private var searchUniverseReady = false
     private var initialFocusRequested = false
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty().ifBlank { KIND_MOVIE } }
 
@@ -64,40 +62,18 @@ class PosterCatalogActivity : AppCompatActivity() {
             clipToPadding = false
         }
 
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            clipChildren = false
-            clipToPadding = false
-        }
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-        }
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
         header.addView(TextView(this).apply {
             text = if (kind == KIND_SERIES) "المسلسلات" else "الأفلام"
-            textSize = 30f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.START
+            textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
         }, LinearLayout.LayoutParams(0, dp(58), 1f))
-        countView = TextView(this).apply {
-            textSize = 14f
-            setTextColor(PURPLE_SOFT)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), 0, dp(12), 0)
-        }
+        countView = TextView(this).apply { textSize = 14f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), 0) }
         header.addView(countView)
         searchInput = EditText(this).apply {
-            hint = "⌕  بحث من أول حرف"
-            isSingleLine = true
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setTextColor(Color.WHITE)
-            setHintTextColor(0xFFAF9BBB.toInt())
-            textSize = 15f
-            setPadding(dp(16), 0, dp(16), 0)
-            background = searchBackground(false)
-            isFocusable = true
+            hint = "⌕  بحث من أول حرف"; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setTextColor(Color.WHITE); setHintTextColor(0xFFAF9BBB.toInt()); textSize = 15f; setPadding(dp(16), 0, dp(16), 0)
+            background = searchBackground(false); isFocusable = true
             setOnFocusChangeListener { view, focused -> view.background = searchBackground(focused) }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -109,53 +85,27 @@ class PosterCatalogActivity : AppCompatActivity() {
         content.addView(header)
 
         emptyView = TextView(this).apply {
-            text = "جاري تجهيز المحتوى…"
-            textSize = 16f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setTextColor(Color.rgb(211, 193, 226))
-            gravity = Gravity.CENTER
-            visibility = View.VISIBLE
-            setPadding(dp(28), dp(18), dp(28), dp(18))
-            background = stateBackground()
+            text = "جاري تجهيز المحتوى…"; textSize = 16f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(Color.rgb(211, 193, 226)); gravity = Gravity.CENTER; visibility = View.VISIBLE
+            setPadding(dp(28), dp(18), dp(28), dp(18)); background = stateBackground()
         }
-        content.addView(emptyView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply {
-            topMargin = dp(8)
-            bottomMargin = dp(10)
-        })
+        content.addView(emptyView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply { topMargin = dp(8); bottomMargin = dp(10) })
 
         posterGrid = RecyclerView(this).apply {
             layoutManager = GridLayoutManager(this@PosterCatalogActivity, GRID_COLUMNS)
-            setPadding(dp(4), dp(4), dp(8), dp(22))
-            clipChildren = false
-            clipToPadding = false
-            itemAnimator = null
-            setHasFixedSize(true)
-            recycledViewPool.setMaxRecycledViews(0, 40)
-            descendantFocusability = ViewGroupFocus.AFTER_DESCENDANTS
+            setPadding(dp(4), dp(4), dp(8), dp(22)); clipChildren = false; clipToPadding = false; itemAnimator = null; setHasFixedSize(true)
+            recycledViewPool.setMaxRecycledViews(0, 40); descendantFocusability = ViewGroupFocus.AFTER_DESCENDANTS
         }
         content.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(16) })
 
         val rail = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.TOP
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(9), dp(12), dp(9), dp(12))
-            background = categoryBackground()
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.TOP; layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(9), dp(12), dp(9), dp(12)); background = categoryBackground()
         }
-        rail.addView(TextView(this).apply {
-            text = "الفئات"
-            textSize = 19f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46)))
+        rail.addView(TextView(this).apply { text = "الفئات"; textSize = 19f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46)))
         categoryList = RecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@PosterCatalogActivity, RecyclerView.VERTICAL, false)
-            clipChildren = false
-            clipToPadding = false
-            itemAnimator = null
-            setHasFixedSize(true)
+            layoutManager = LinearLayoutManager(this@PosterCatalogActivity); clipChildren = false; clipToPadding = false; itemAnimator = null; setHasFixedSize(true)
         }
         rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(rail, LinearLayout.LayoutParams(dp(238), LinearLayout.LayoutParams.MATCH_PARENT))
@@ -178,10 +128,15 @@ class PosterCatalogActivity : AppCompatActivity() {
             dao.categories(provider.id, kind).collect { categories ->
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
-                if (selectedCategoryId == null && streamsJob == null) loadStreams(null)
+                if (streamsJob == null) {
+                    val initial = categories.firstOrNull()?.remoteId
+                    selectedCategoryId = initial
+                    loadStreams(initial)
+                }
                 if (!initialFocusRequested) {
                     initialFocusRequested = true
-                    categoryList.post { requestCategoryFocus(0) }
+                    val initialPosition = if (categories.isNotEmpty()) 1 else 0
+                    categoryList.post { requestCategoryFocus(initialPosition) }
                 }
             }
         }
@@ -192,10 +147,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> if (isFocusInside(categoryList) && requestPosterFocus()) return true
                 KeyEvent.KEYCODE_DPAD_RIGHT -> if (isFocusInside(posterGrid) && isAtRightGridEdge() && requestSelectedCategoryFocus()) return true
-                KeyEvent.KEYCODE_SEARCH -> {
-                    searchInput.requestFocus()
-                    return true
-                }
+                KeyEvent.KEYCODE_SEARCH -> { searchInput.requestFocus(); return true }
             }
         }
         return super.dispatchKeyEvent(event)
@@ -209,10 +161,6 @@ class PosterCatalogActivity : AppCompatActivity() {
         streamsJob = lifecycleScope.launch {
             BlofyDatabase.get(applicationContext).dao().streams(providerId, kind, categoryId).collect { items ->
                 currentRows = items
-                if (categoryId == null) {
-                    searchUniverse = items
-                    searchUniverseReady = true
-                }
                 if (searchInput.text.isNullOrBlank()) showRows(items)
             }
         }
@@ -221,31 +169,12 @@ class PosterCatalogActivity : AppCompatActivity() {
     private fun runLocalSearch(raw: String) {
         searchJob?.cancel()
         val query = raw.trim()
-        if (query.isEmpty()) {
-            showRows(currentRows)
-            return
-        }
+        if (query.isEmpty()) { showRows(currentRows); return }
+        if (providerId.isBlank()) return
         searchJob = lifecycleScope.launch {
             delay(35L)
-            val all = if (searchUniverseReady) {
-                searchUniverse
-            } else {
-                withContext(Dispatchers.IO) {
-                    BlofyDatabase.get(applicationContext).dao().streams(providerId, kind, null).first()
-                }.also {
-                    searchUniverse = it
-                    searchUniverseReady = true
-                }
-            }
-            val filtered = withContext(Dispatchers.Default) {
-                all.asSequence()
-                    .filter { row ->
-                        row.name.contains(query, true) ||
-                            row.genre?.contains(query, true) == true ||
-                            row.year?.contains(query, true) == true
-                    }
-                    .take(MAX_SEARCH_RESULTS)
-                    .toList()
+            val filtered = withContext(Dispatchers.IO) {
+                BlofyDatabase.get(applicationContext).dao().searchCatalog(providerId, kind, query, MAX_SEARCH_RESULTS)
             }
             if (searchInput.text?.toString()?.trim() == query) showRows(filtered, searching = true)
         }
@@ -253,13 +182,8 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun showRows(items: List<StreamEntity>, searching: Boolean = false) {
         posterAdapter.submit(items)
-        countView.text = when {
-            searching -> "${items.size} نتيجة"
-            kind == KIND_SERIES -> "${items.size} مسلسل"
-            else -> "${items.size} فيلم"
-        }
-        val empty = items.isEmpty()
-        emptyView.visibility = if (empty) View.VISIBLE else View.GONE
+        countView.text = when { searching -> "${items.size} نتيجة"; kind == KIND_SERIES -> "${items.size} مسلسل"; else -> "${items.size} فيلم" }
+        val empty = items.isEmpty(); emptyView.visibility = if (empty) View.VISIBLE else View.GONE
         emptyView.text = when {
             !empty -> ""
             searching -> "لا توجد نتائج لهذا البحث\nجرّب اسمًا أو سنة أو تصنيفًا آخر"
@@ -272,9 +196,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         if (posterAdapter.itemCount == 0) return false
         val existing = posterGrid.findViewHolderForAdapterPosition(0)?.itemView
         if (existing != null) return existing.requestFocus()
-        posterGrid.scrollToPosition(0)
-        posterGrid.post { posterGrid.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
-        return true
+        posterGrid.scrollToPosition(0); posterGrid.post { posterGrid.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }; return true
     }
 
     private fun requestSelectedCategoryFocus(): Boolean {
@@ -287,9 +209,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         val safe = position.coerceIn(0, categoryAdapter.itemCount - 1)
         val existing = categoryList.findViewHolderForAdapterPosition(safe)?.itemView
         if (existing != null) return existing.requestFocus()
-        categoryList.scrollToPosition(safe)
-        categoryList.post { categoryList.findViewHolderForAdapterPosition(safe)?.itemView?.requestFocus() }
-        return true
+        categoryList.scrollToPosition(safe); categoryList.post { categoryList.findViewHolderForAdapterPosition(safe)?.itemView?.requestFocus() }; return true
     }
 
     private fun isAtRightGridEdge(): Boolean {
@@ -301,78 +221,30 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun isFocusInside(parent: View): Boolean {
         var child: View? = currentFocus
-        while (child != null) {
-            if (child === parent) return true
-            child = child.parent as? View
-        }
+        while (child != null) { if (child === parent) return true; child = child.parent as? View }
         return false
     }
 
     private fun openItem(stream: StreamEntity) {
         if (providerId.isBlank()) return
         val target = if (stream.kind == KIND_SERIES || kind == KIND_SERIES) SeriesDetailsActivity::class.java else MovieDetailsActivity::class.java
-        startActivity(Intent(this, target).apply {
-            putExtra(EXTRA_PROVIDER_ID_SHARED, providerId)
-            putExtra(EXTRA_CONTENT_KEY_SHARED, stream.key)
-        })
+        startActivity(Intent(this, target).apply { putExtra(EXTRA_PROVIDER_ID_SHARED, providerId); putExtra(EXTRA_CONTENT_KEY_SHARED, stream.key) })
     }
 
-    private fun allCategory() = CategoryEntity(
-        "$providerId:$kind:$ALL_CATEGORY_ID",
-        providerId,
-        ALL_CATEGORY_ID,
-        kind,
-        if (kind == KIND_SERIES) "كل المسلسلات" else "كل الأفلام",
-        -1
-    )
-
+    private fun allCategory() = CategoryEntity("$providerId:$kind:$ALL_CATEGORY_ID", providerId, ALL_CATEGORY_ID, kind, if (kind == KIND_SERIES) "كل المسلسلات" else "كل الأفلام", -1)
     private fun categoryRemoteId(category: CategoryEntity) = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
-
-    private fun categoryBackground() = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0xE81A1429.toInt(), 0xF00C0A15.toInt())
-    ).apply {
-        cornerRadius = dp(20).toFloat()
-        setStroke(dp(1), 0x594A355F)
-    }
-
-    private fun stateBackground() = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0xA5241830.toInt(), 0xB5120C1A.toInt())
-    ).apply {
-        cornerRadius = dp(18).toFloat()
-        setStroke(dp(1), 0x554E3866)
-    }
-
-    private fun searchBackground(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF9140DF.toInt(), 0xFF6420BE.toInt()) else intArrayOf(0xDD25152F.toInt(), 0xE6150D1D.toInt())
-    ).apply {
-        cornerRadius = dp(15).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x665D3E79)
-    }
-
+    private fun categoryBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xE81A1429.toInt(), 0xF00C0A15.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0x594A355F) }
+    private fun stateBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xA5241830.toInt(), 0xB5120C1A.toInt())).apply { cornerRadius = dp(18).toFloat(); setStroke(dp(1), 0x554E3866) }
+    private fun searchBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, if (focused) intArrayOf(0xFF9140DF.toInt(), 0xFF6420BE.toInt()) else intArrayOf(0xDD25152F.toInt(), 0xE6150D1D.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x665D3E79) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    override fun onDestroy() {
-        streamsJob?.cancel()
-        searchJob?.cancel()
-        super.onDestroy()
-    }
-
-    private object ViewGroupFocus {
-        const val AFTER_DESCENDANTS = 0x40000
-    }
+    override fun onDestroy() { streamsJob?.cancel(); searchJob?.cancel(); super.onDestroy() }
+    private object ViewGroupFocus { const val AFTER_DESCENDANTS = 0x40000 }
 
     companion object {
-        const val EXTRA_KIND = "kind"
-        const val KIND_MOVIE = "movie"
-        const val KIND_SERIES = "series"
-        private const val GRID_COLUMNS = 6
-        private const val ALL_CATEGORY_ID = "__all__"
-        private const val MAX_SEARCH_RESULTS = 900
-        private const val EXTRA_PROVIDER_ID_SHARED = "provider_id"
-        private const val EXTRA_CONTENT_KEY_SHARED = "content_key"
+        const val EXTRA_KIND = "kind"; const val KIND_MOVIE = "movie"; const val KIND_SERIES = "series"
+        private const val GRID_COLUMNS = 6; private const val ALL_CATEGORY_ID = "__all__"; private const val MAX_SEARCH_RESULTS = 300
+        private const val EXTRA_PROVIDER_ID_SHARED = "provider_id"; private const val EXTRA_CONTENT_KEY_SHARED = "content_key"
         private val PURPLE_SOFT = Color.rgb(195, 135, 255)
     }
 }
