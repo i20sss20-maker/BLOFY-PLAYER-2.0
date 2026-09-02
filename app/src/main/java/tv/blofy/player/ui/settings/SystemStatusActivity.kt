@@ -1,51 +1,75 @@
 package tv.blofy.player.ui.settings
 
-import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.BuildConfig
+import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
-import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.ui.common.BlofyTvDesign
 import java.text.DateFormat
 import java.util.Date
 
 class SystemStatusActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val theme = ThemeManager.current(this)
+
+        val root = ScrollView(this).apply {
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            background = AppCompatResources.getDrawable(this@SystemStatusActivity, R.drawable.blofy_home_background)
+            isFillViewport = true
+        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.TOP
-            setPadding(48, 38, 48, 38)
-            setBackgroundColor(theme.background)
+            gravity = Gravity.TOP or Gravity.RIGHT
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(56), dp(42), dp(56), dp(48))
         }
+        root.addView(content)
+
         content.addView(TextView(this).apply {
-            text = "BLOFY System Status"
-            textSize = 30f
-            setTextColor(Color.WHITE)
+            text = "حالة BLOFY PLAYER"
+            BlofyTvDesign.applyHeroTitle(this)
+            textSize = 34f
+            gravity = Gravity.RIGHT
         })
         content.addView(TextView(this).apply {
-            text = "معلومات النسخة المستخدمة في اختبار Alpha"
-            textSize = 14f
-            setTextColor(theme.accent)
-            setPadding(0, 6, 0, 22)
+            text = "معلومات النسخة والجهاز والقائمة النشطة"
+            textSize = 15f
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            gravity = Gravity.RIGHT
+            setPadding(0, dp(8), 0, dp(24))
         })
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.TOP or Gravity.RIGHT
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(26), dp(22), dp(26), dp(22))
+            background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
+            elevation = dp(8).toFloat()
+        }
         val body = TextView(this).apply {
             text = "جاري قراءة الحالة..."
-            textSize = 17f
-            setTextColor(Color.rgb(225, 220, 235))
-            setLineSpacing(10f, 1f)
+            textSize = 16.5f
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            gravity = Gravity.RIGHT
+            setLineSpacing(dp(7).toFloat(), 1.04f)
         }
-        content.addView(body)
-        setContentView(ScrollView(this).apply { addView(content) })
+        card.addView(body)
+        content.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        setContentView(root)
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -54,35 +78,35 @@ class SystemStatusActivity : AppCompatActivity() {
             val device = DeviceClass.detect(this@SystemStatusActivity)
             val activationText = when {
                 activation == null -> "غير موجودة"
-                activation.activated && activation.expiresAt == null -> "مفعّل • Lifetime/بدون انتهاء محلي"
+                activation.activated && activation.expiresAt == null -> "مفعّل • بدون تاريخ انتهاء محلي"
                 activation.activated && activation.expiresAt != null -> "مفعّل • ينتهي ${formatTime(activation.expiresAt)}"
                 activation.expiresAt != null && activation.expiresAt <= System.currentTimeMillis() -> "منتهي • ${formatTime(activation.expiresAt)}"
                 else -> "غير مفعّل"
             }
             body.text = buildString {
-                appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                appendLine("Build: ${BuildConfig.BUILD_SHA.take(12)}")
-                appendLine("Device class: ${device.name}")
-                appendLine("FFmpeg native: ${if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "مدمج" else "غير مدمج"}")
-                appendLine("Activation endpoint: ${if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) "غير مضبوط" else "مضبوط"}")
-                appendLine("Activation: $activationText")
-                appendLine("Last activation check: ${activation?.lastCheckAt?.let(::formatTime) ?: "—"}")
+                appendLine("النسخة: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                appendLine("البناء: ${BuildConfig.BUILD_SHA.take(12)}")
+                appendLine("نوع الجهاز: ${device.name}")
+                appendLine("FFmpeg: ${if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "مدمج وجاهز" else "غير مدمج"}")
+                appendLine("خدمة التفعيل: ${if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) "غير مضبوطة" else "متصلة"}")
+                appendLine("حالة التفعيل: $activationText")
+                appendLine("آخر تحقق: ${activation?.lastCheckAt?.let(::formatTime) ?: "—"}")
                 appendLine()
                 if (provider == null) {
-                    appendLine("Provider: لا توجد قائمة نشطة")
+                    appendLine("القائمة النشطة: لا توجد قائمة")
                 } else {
-                    appendLine("Provider: ${provider.name}")
-                    appendLine("Provider type: ${provider.providerType.uppercase()}")
-                    appendLine("Live format: ${provider.liveFormat.uppercase()}")
-                    appendLine("Transport: ${provider.preferredTransport.uppercase()}")
-                    appendLine("Redirects: ${if (provider.allowCrossProtocolRedirects) "ON" else "OFF"}")
-                    appendLine("External player: يدوي فقط • لا خروج تلقائي من BLOFY")
+                    appendLine("القائمة النشطة: ${provider.name}")
+                    appendLine("النوع: ${provider.providerType.uppercase()}")
+                    appendLine("صيغة البث: ${provider.liveFormat.uppercase()}")
+                    appendLine("النقل: ${provider.preferredTransport.uppercase()}")
+                    appendLine("إعادة التوجيه: ${if (provider.allowCrossProtocolRedirects) "مفعّلة" else "متوقفة"}")
                 }
                 appendLine()
-                appendLine("ملاحظة: هذه الشاشة لا تعرض اسم المستخدم أو كلمة المرور أو رابط يحتوي بيانات دخول.")
+                append("لا يتم عرض اسم المستخدم أو كلمة المرور أو أي رابط يحتوي بيانات دخول في هذه الشاشة.")
             }
         }
     }
 
     private fun formatTime(value: Long): String = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(value))
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
