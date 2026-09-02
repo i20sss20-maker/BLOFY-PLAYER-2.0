@@ -104,7 +104,7 @@ class MobileContentActivity : AppCompatActivity() {
         }
     }
 
-    private inner class PremiumTextAdapter(values: List<String>) : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, values) {
+    private inner class PremiumTextAdapter(values: List<String>) : ArrayAdapter<String>(this@MobileContentActivity, android.R.layout.simple_list_item_1, values) {
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View = style(super.getView(position, convertView, parent))
         override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View = style(super.getDropDownView(position, convertView, parent))
         private fun style(view: View): View = view.apply {
