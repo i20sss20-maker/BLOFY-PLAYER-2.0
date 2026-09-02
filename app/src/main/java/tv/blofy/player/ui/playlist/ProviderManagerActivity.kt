@@ -2,23 +2,27 @@ package tv.blofy.player.ui.playlist
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
+import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.common.BlofyTvDesign
 
 class ProviderManagerActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
@@ -31,42 +35,75 @@ class ProviderManagerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(52, 36, 52, 36)
-            setBackgroundColor(Color.rgb(5, 5, 10))
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(58), dp(34), dp(58), dp(34))
+            background = AppCompatResources.getDrawable(this@ProviderManagerActivity, R.drawable.blofy_home_background)
+            clipChildren = false
+            clipToPadding = false
         }
+
         root.addView(TextView(this).apply {
             text = "إدارة قوائم التشغيل"
-            textSize = 31f
+            BlofyTvDesign.applyTitle(this)
             gravity = Gravity.RIGHT
-            setTextColor(Color.WHITE)
+        })
+        root.addView(TextView(this).apply {
+            text = "اختر طريقة الدخول أو بدّل بين القوائم المحفوظة"
+            textSize = 16f
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.TextSecondary)
+            gravity = Gravity.RIGHT
+            setPadding(0, dp(6), 0, 0)
         })
         status = TextView(this).apply {
-            text = "اختر طريقة الدخول أو إدارة القوائم المحفوظة"
-            textSize = 15f
-            gravity = Gravity.RIGHT
-            setTextColor(Color.rgb(185, 140, 255))
-            setPadding(0, 6, 0, 18)
+            text = "مشتركين BLOFY يخفي رابط السيرفر ويحتاج اسم المستخدم وكلمة المرور فقط"
+            textSize = 13.5f
+            typeface = BlofyTvDesign.BodyTypeface
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            setPadding(dp(14), 0, dp(14), 0)
+            background = BlofyTvDesign.badge(dp(14).toFloat())
         }
-        root.addView(status)
+        root.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
+            topMargin = dp(14); bottomMargin = dp(18)
+        })
 
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.RIGHT
+            clipChildren = false
         }
-        val subscriberButton = actionButton("subscriber", "مشتركين BLOFY") {
+        val subscriberButton = actionButton("subscriber", "مشتركين BLOFY", primary = true) {
             startActivity(Intent(this, BlofySubscriberActivity::class.java))
         }
-        addButton = actionButton("add", "+ Xtream / M3U") {
+        addButton = actionButton("add", "+  Xtream / M3U") {
             startActivity(Intent(this, PlaylistActivity::class.java).putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true))
         }
-        actions.addView(subscriberButton, LinearLayout.LayoutParams(300, 76).apply { marginStart = 14 })
-        actions.addView(addButton, LinearLayout.LayoutParams(280, 76))
-        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 76).apply { bottomMargin = 20; gravity = Gravity.RIGHT })
+        actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(310), dp(68)).apply { marginStart = dp(12) })
+        actions.addView(addButton, LinearLayout.LayoutParams(dp(280), dp(68)))
+        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(72)).apply {
+            bottomMargin = dp(20); gravity = Gravity.RIGHT
+        })
 
-        list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL }
-        val scroll = ScrollView(this).apply { addView(list) }
+        root.addView(TextView(this).apply {
+            text = "القوائم المحفوظة"
+            textSize = 20f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)))
+
+        list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(0, dp(8), 0, dp(12))
+        }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            addView(list)
+        }
         root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
@@ -80,40 +117,59 @@ class ProviderManagerActivity : AppCompatActivity() {
         list.removeAllViews()
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
-                text = "لا توجد قوائم محفوظة • اختر مشتركين BLOFY أو أضف Xtream / M3U"
-                setTextColor(Color.LTGRAY)
+                text = "ما عندك قوائم محفوظة حتى الآن\nابدأ بمشتركين BLOFY أو أضف Xtream / M3U"
+                setTextColor(BlofyTvDesign.TextSecondary)
                 textSize = 18f
+                typeface = BlofyTvDesign.BodyTypeface
                 gravity = Gravity.RIGHT
-                setPadding(0, 20, 0, 0)
+                setLineSpacing(dp(4).toFloat(), 1.12f)
+                setPadding(dp(22), dp(24), dp(22), dp(24))
+                background = BlofyTvDesign.elevatedSurface(dp(22).toFloat())
             })
             restoreFocus()
             return
         }
+
         items.forEach { provider ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(18, 12, 18, 12)
-                background = panel(provider.enabled)
+                setPadding(dp(20), dp(12), dp(20), dp(12))
+                background = if (provider.enabled) BlofyTvDesign.surface(dp(22).toFloat(), true) else BlofyTvDesign.surface(dp(22).toFloat(), false)
+                clipChildren = false
             }
-            row.addView(TextView(this).apply {
-                text = buildString {
-                    append(if (provider.enabled) "● " else "○ ")
-                    append(provider.name)
-                    append("  •  ")
-                    append(if (provider.name == "مشتركين BLOFY") "BLOFY" else provider.providerType.uppercase())
-                }
-                textSize = 17f
-                gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-                setTextColor(Color.WHITE)
-            }, LinearLayout.LayoutParams(0, 68, 1f))
 
-            row.addView(actionButton("${provider.id}:select", if (provider.enabled) "نشطة" else "اختيار") { activate(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginStart = 8 })
-            row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginStart = 8 })
-            row.addView(actionButton("${provider.id}:refresh", "تحديث") { refresh(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginStart = 8 })
-            row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(120, 62))
-            list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 92).apply { bottomMargin = 10 })
+            val info = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+            }
+            info.addView(TextView(this).apply {
+                text = provider.name
+                textSize = 18f
+                typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                gravity = Gravity.RIGHT
+                setTextColor(Color.WHITE)
+            })
+            info.addView(TextView(this).apply {
+                text = buildString {
+                    append(if (provider.enabled) "● القائمة النشطة" else "○ قائمة محفوظة")
+                    append("  •  ")
+                    append(if (provider.name == "مشتركين BLOFY") "BLOFY Secure" else provider.providerType.uppercase())
+                }
+                textSize = 13.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                gravity = Gravity.RIGHT
+                setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
+            })
+            row.addView(info, LinearLayout.LayoutParams(0, dp(70), 1f))
+
+            row.addView(actionButton("${provider.id}:select", if (provider.enabled) "نشطة" else "اختيار", primary = !provider.enabled) { activate(provider) }, LinearLayout.LayoutParams(dp(126), dp(58)).apply { marginStart = dp(8) })
+            row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(dp(118), dp(58)).apply { marginStart = dp(8) })
+            row.addView(actionButton("${provider.id}:refresh", "تحديث") { refresh(provider) }, LinearLayout.LayoutParams(dp(118), dp(58)).apply { marginStart = dp(8) })
+            row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(dp(110), dp(58)))
+            list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(96)).apply { bottomMargin = dp(10) })
         }
         restoreFocus()
     }
@@ -167,35 +223,21 @@ class ProviderManagerActivity : AppCompatActivity() {
         }
     }
 
-    private fun actionButton(key: String, label: String, action: () -> Unit) = Button(this).apply {
+    private fun actionButton(key: String, label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
         textSize = 14.5f
+        typeface = BlofyTvDesign.BodyTypeface
         setTextColor(Color.WHITE)
-        isFocusable = true
-        isFocusableInTouchMode = true
-        background = button(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = button(focused)
-            view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).translationZ(if (focused) 14f else 2f).setDuration(100).start()
-            if (focused && isTv) FocusMemory.save(this@ProviderManagerActivity, SCREEN_KEY, key)
+        stateListAnimator = null
+        BlofyTvDesign.installTvFocus(this, dp(17).toFloat(), 1.04f, primary) {
+            if (isTv) FocusMemory.save(this@ProviderManagerActivity, SCREEN_KEY, key)
         }
         setOnClickListener { action() }
         focusButtons[key] = this
     }
 
-    private fun button(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 18f
-        setColor(if (focused) Color.rgb(92, 39, 153) else Color.rgb(24, 20, 34))
-        setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else Color.rgb(58, 48, 74))
-    }
-
-    private fun panel(active: Boolean) = GradientDrawable().apply {
-        cornerRadius = 20f
-        setColor(if (active) Color.rgb(28, 20, 44) else Color.rgb(13, 12, 20))
-        setStroke(if (active) 2 else 1, if (active) Color.rgb(126, 44, 255) else Color.rgb(42, 36, 54))
-    }
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object { private const val SCREEN_KEY = "provider_manager" }
 }
