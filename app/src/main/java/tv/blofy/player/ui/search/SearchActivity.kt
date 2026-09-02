@@ -99,7 +99,7 @@ class SearchActivity : AppCompatActivity() {
                     val q = s?.toString().orEmpty()
                     if (q.isBlank()) {
                         results.removeAllViews()
-                        hint.text = "القنوات، الأفلام والمسلسلات تظهر من أول حرف"
+                        this@SearchActivity.hint.text = "القنوات، الأفلام والمسلسلات تظهر من أول حرف"
                         return
                     }
                     searchJob = lifecycleScope.launch {
