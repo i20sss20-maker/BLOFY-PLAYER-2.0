@@ -57,7 +57,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(10), dp(12), dp(10), dp(12))
             background = categoryBackground()
-            elevation = dp(3).toFloat()
+            elevation = dp(4).toFloat()
         }
         rail.addView(TextView(this).apply {
             text = "الفئات"
@@ -214,10 +214,9 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun allCategory() = CategoryEntity("$providerId:$kind:$ALL_CATEGORY_ID", providerId, ALL_CATEGORY_ID, kind, if (kind == KIND_SERIES) "كل المسلسلات" else "كل الأفلام", -1)
     private fun categoryRemoteId(category: CategoryEntity) = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
-    private fun categoryBackground() = GradientDrawable().apply {
+    private fun categoryBackground() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF241A36.toInt(), 0xFF171122.toInt())).apply {
         cornerRadius = dp(22).toFloat()
-        setColor(0xFFFFFFFF.toInt())
-        setStroke(dp(1), 0xFFE2DEE8.toInt())
+        setStroke(dp(1), 0xFF49375E.toInt())
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     override fun onDestroy() { streamsJob?.cancel(); super.onDestroy() }
