@@ -36,11 +36,8 @@ class SeriesDetailsActivity : AppCompatActivity() {
         if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }
 
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(54), dp(38), dp(54), dp(38))
-            background = AppCompatResources.getDrawable(this@SeriesDetailsActivity, R.drawable.blofy_home_background)
+            orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_LTR; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(54), dp(38), dp(54), dp(38)); background = AppCompatResources.getDrawable(this@SeriesDetailsActivity, R.drawable.blofy_home_background)
         }
         val poster = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
@@ -48,11 +45,8 @@ class SeriesDetailsActivity : AppCompatActivity() {
             clipToOutline = true
         }
         root.addView(poster, LinearLayout.LayoutParams(dp(310), dp(465)).apply { marginEnd = dp(42) })
-
         val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.END
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.END; layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
         root.addView(panel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         setContentView(root)
@@ -61,7 +55,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
-            ArtworkLoader.load(poster, stream.icon)
+            ArtworkLoader.load(poster, listOf(stream.icon, stream.backdrop))
             val allEpisodes = dao.episodes(providerId, stream.remoteId).first()
             val resume = allEpisodes.mapNotNull { episode ->
                 val watch = dao.watchState(episode.key) ?: return@mapNotNull null
@@ -69,16 +63,11 @@ class SeriesDetailsActivity : AppCompatActivity() {
             }.maxByOrNull { it.updatedAt }
             val seasons = allEpisodes.map { it.season }.distinct().size
 
-            panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = stream.name; textSize = 38f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
-            })
+            panel.addView(TextView(this@SeriesDetailsActivity).apply { text = stream.name; textSize = 38f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = buildList {
-                    add("مسلسل")
-                    stream.year?.takeIf(String::isNotBlank)?.let(::add)
-                    stream.genre?.takeIf(String::isNotBlank)?.let(::add)
-                    if (seasons > 0) add("$seasons موسم")
-                    if (allEpisodes.isNotEmpty()) add("${allEpisodes.size} حلقة")
+                    add("مسلسل"); stream.year?.takeIf(String::isNotBlank)?.let(::add); stream.genre?.takeIf(String::isNotBlank)?.let(::add)
+                    if (seasons > 0) add("$seasons موسم"); if (allEpisodes.isNotEmpty()) add("${allEpisodes.size} حلقة")
                     stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
                 }.joinToString("  •  ")
                 textSize = 16f; setTextColor(SOFT); gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(18))
@@ -109,14 +98,11 @@ class SeriesDetailsActivity : AppCompatActivity() {
             }
             val episodes = actionButton("المواسم والحلقات") {
                 startActivity(Intent(this@SeriesDetailsActivity, EpisodesActivity::class.java).apply {
-                    putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, providerId)
-                    putExtra(EpisodesActivity.EXTRA_SERIES_ID, stream.remoteId)
-                    putExtra(EpisodesActivity.EXTRA_SERIES_NAME, stream.name)
+                    putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, providerId); putExtra(EpisodesActivity.EXTRA_SERIES_ID, stream.remoteId); putExtra(EpisodesActivity.EXTRA_SERIES_NAME, stream.name)
                 })
             }
             if (primary == null) primary = episodes
             row.addView(episodes, LinearLayout.LayoutParams(dp(230), dp(74)).apply { marginStart = dp(10) })
-
             favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
                 lifecycleScope.launch {
                     val current = dao.stream(contentKey) ?: return@launch
@@ -125,27 +111,18 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 }
             }
             row.addView(favoriteButton, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
-            panel.addView(row)
-            primary?.requestFocus()
+            panel.addView(row); primary?.requestFocus()
         }
     }
 
     private fun launchEpisode(provider: ProviderEntity, episode: EpisodeEntity, resumeMs: Long) {
         startActivity(Intent(this, PlayerActivity::class.java).apply {
-            putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.episode(provider, episode))
-            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)
-            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
-            putExtra(PlayerActivity.EXTRA_KIND, "episode")
-            putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
-            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
-            putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+            putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.episode(provider, episode)); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(PlayerActivity.EXTRA_KIND, "episode"); putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport); putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
             putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode))
-            putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
-            putExtra(PlayerActivity.EXTRA_TITLE, episode.title)
-            putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
-            putExtra(PlayerActivity.EXTRA_SEASON, episode.season)
-            putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode)); putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
+            putExtra(PlayerActivity.EXTRA_TITLE, episode.title); putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId); putExtra(PlayerActivity.EXTRA_SEASON, episode.season); putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
         })
     }
 
@@ -158,7 +135,6 @@ class SeriesDetailsActivity : AppCompatActivity() {
         cornerRadius = dp(16).toFloat(); setColor(if (focused) PURPLE else 0xD31A1427.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x665C3E80)
     }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-
     private data class Resume(val episode: EpisodeEntity, val positionMs: Long, val durationMs: Long, val updatedAt: Long)
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_CONTENT_KEY = "content_key"
