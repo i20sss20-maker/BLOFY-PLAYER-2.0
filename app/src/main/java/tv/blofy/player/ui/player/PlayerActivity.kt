@@ -32,7 +32,6 @@ import kotlinx.coroutines.launch
 import tv.blofy.player.BlofyApp
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.playback.ContentUrlResolver
-import tv.blofy.player.core.playback.ExternalPlayerLauncher
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderKind
@@ -63,8 +62,8 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var audioButton: Button
     private lateinit var subtitleButton: Button
     private lateinit var qualityButton: Button
-    private lateinit var externalButton: Button
     private lateinit var favoriteButton: Button
+    private lateinit var playPauseButton: Button
     private var progressBar: ProgressBar? = null
     private var positionView: TextView? = null
     private var durationView: TextView? = null
@@ -103,7 +102,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val profile = profileFromIntent()
         session = BlofyPlaybackSession(context = this, profile = profile, contentKind = kind.ifBlank { "unknown" }) {
-            Toast.makeText(this, if (kind == "live") "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى أو زر خارجي" else "تعذر تشغيل هذا المحتوى داخل BLOFY • المشغل الخارجي متاح يدويًا", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, if (kind == "live") "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى" else "تعذر تشغيل هذا المحتوى داخل BLOFY", Toast.LENGTH_LONG).show()
         }
         session.player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -111,7 +110,14 @@ class PlayerActivity : AppCompatActivity() {
                     autoNextTriggered = true
                     playAdjacentEpisode(1, automatic = true)
                 }
-                if (kind != "live") updateProgressUi()
+                if (kind != "live") {
+                    updateProgressUi()
+                    updatePlayPauseLabel()
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (kind != "live") updatePlayPauseLabel()
             }
         })
         buildPlayerUi()
@@ -186,30 +192,55 @@ class PlayerActivity : AppCompatActivity() {
             hud.addView(timeline)
         }
 
-        val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.START or Gravity.CENTER_VERTICAL }
-        audioButton = controlButton("🔊  الصوت") { showTrackDialog(C.TRACK_TYPE_AUDIO) }
-        subtitleButton = controlButton("CC  الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
-        qualityButton = controlButton("▣  الجودة") { showVideoQualityDialog() }
-        externalButton = controlButton("↗  خارجي") { launchExternalPlayer() }
-        favoriteButton = controlButton("☆  المفضلة") { toggleFavorite() }.apply { visibility = if (kind == "episode") View.GONE else View.VISIBLE }
-
         if (kind == "live") {
-            controls.addView(TextView(this).apply {
-                text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لإظهار معلومات البرنامج"
-                textSize = 14f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER_VERTICAL
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 62))
-        } else {
-            controls.addView(audioButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
-            controls.addView(subtitleButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
-            controls.addView(qualityButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
-            controls.addView(externalButton, LinearLayout.LayoutParams(166, 68).apply { marginEnd = 10 })
-            controls.addView(favoriteButton, LinearLayout.LayoutParams(184, 68).apply { marginEnd = 10 })
-            if (kind == "episode") {
-                controls.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(150, 68).apply { marginEnd = 10 })
-                controls.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(150, 68))
+            val liveHint = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
             }
+            liveHint.addView(TextView(this).apply {
+                text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لإظهار معلومات البرنامج"
+                textSize = 14f
+                setTextColor(PURPLE_SOFT)
+                gravity = Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 62))
+            hud.addView(liveHint)
+        } else {
+            val playbackControls = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                clipChildren = false
+            }
+            val rewindButton = controlButton("−10 ث") { seekBy(-10_000L); showHudBriefly() }
+            playPauseButton = controlButton("⏸  إيقاف") { togglePlayPause() }
+            val forwardButton = controlButton("+10 ث") { seekBy(10_000L); showHudBriefly() }
+            playbackControls.addView(forwardButton, LinearLayout.LayoutParams(150, 64).apply { marginStart = 10 })
+            playbackControls.addView(playPauseButton, LinearLayout.LayoutParams(190, 64).apply { marginStart = 10 })
+            playbackControls.addView(rewindButton, LinearLayout.LayoutParams(150, 64))
+            hud.addView(playbackControls, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 10 })
+
+            val options = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                clipChildren = false
+            }
+            audioButton = controlButton("🔊  الصوت") { showTrackDialog(C.TRACK_TYPE_AUDIO) }
+            subtitleButton = controlButton("CC  الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
+            qualityButton = controlButton("▣  الجودة") { showVideoQualityDialog() }
+            favoriteButton = controlButton("☆  المفضلة") { toggleFavorite() }.apply { visibility = if (kind == "episode") View.GONE else View.VISIBLE }
+            options.addView(audioButton, LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 })
+            options.addView(subtitleButton, LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 })
+            options.addView(qualityButton, LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 })
+            if (kind != "episode") {
+                options.addView(favoriteButton, LinearLayout.LayoutParams(184, 64))
+            } else {
+                options.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(150, 64).apply { marginStart = 10 })
+                options.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(150, 64))
+            }
+            hud.addView(options)
         }
-        hud.addView(controls)
         root.addView(hud, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
         setContentView(root)
         playerView.requestFocus()
@@ -233,6 +264,23 @@ class PlayerActivity : AppCompatActivity() {
         setStroke(if (focused) 2 else 1, if (focused) Color.WHITE else 0x66553B70)
     }
 
+    private fun togglePlayPause() {
+        if (session.player.isPlaying) session.player.pause() else session.player.play()
+        updatePlayPauseLabel()
+        showHudBriefly()
+    }
+
+    private fun updatePlayPauseLabel() {
+        if (!::playPauseButton.isInitialized) return
+        playPauseButton.text = if (session.player.isPlaying) "⏸  إيقاف" else "▶  تشغيل"
+    }
+
+    private fun seekBy(deltaMs: Long) {
+        val duration = session.player.duration.takeIf { it > 0L }
+        val target = (session.player.currentPosition + deltaMs).coerceAtLeast(0L)
+        session.player.seekTo(if (duration != null) target.coerceAtMost(duration) else target)
+    }
+
     private fun updateProgressUi() {
         if (kind == "live" || !::session.isInitialized) return
         val position = session.player.currentPosition.coerceAtLeast(0L)
@@ -254,9 +302,17 @@ class PlayerActivity : AppCompatActivity() {
         if (hud.visibility == View.VISIBLE && routed.action in HUD_NAVIGATION_ACTIONS) keepHudVisible()
         return when (routed.action) {
             RemoteAction.BACK -> { if (hud.visibility == View.VISIBLE) { hideHud(); true } else { finish(); true } }
-            RemoteAction.PLAY_PAUSE -> { if (session.player.isPlaying) session.player.pause() else session.player.play(); if (kind != "live") showHudBriefly(); true }
-            RemoteAction.FAST_FORWARD -> { if (kind != "live") { session.player.seekTo(session.player.currentPosition + 10_000L); showHudBriefly() }; true }
-            RemoteAction.REWIND -> { if (kind != "live") { session.player.seekTo((session.player.currentPosition - 10_000L).coerceAtLeast(0L)); showHudBriefly() }; true }
+            RemoteAction.PLAY_PAUSE -> { if (kind != "live") togglePlayPause() else if (session.player.isPlaying) session.player.pause() else session.player.play(); true }
+            RemoteAction.FAST_FORWARD -> { if (kind != "live") { seekBy(10_000L); showHudBriefly() }; true }
+            RemoteAction.REWIND -> { if (kind != "live") { seekBy(-10_000L); showHudBriefly() }; true }
+            RemoteAction.RIGHT -> {
+                if (kind != "live" && hud.visibility != View.VISIBLE) { seekBy(10_000L); showHudBriefly(); true }
+                else super.dispatchKeyEvent(event)
+            }
+            RemoteAction.LEFT -> {
+                if (kind != "live" && hud.visibility != View.VISIBLE) { seekBy(-10_000L); showHudBriefly(); true }
+                else super.dispatchKeyEvent(event)
+            }
             RemoteAction.CHANNEL_NEXT -> { when (kind) { "live" -> switchLive(1); "episode" -> playAdjacentEpisode(1); else -> return super.dispatchKeyEvent(event) }; true }
             RemoteAction.CHANNEL_PREVIOUS -> { when (kind) { "live" -> switchLive(-1); "episode" -> playAdjacentEpisode(-1); else -> return super.dispatchKeyEvent(event) }; true }
             RemoteAction.DIGIT -> { if (kind == "live" && routed.digit != null) { handleChannelDigit(routed.digit); true } else super.dispatchKeyEvent(event) }
@@ -321,7 +377,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showHud() {
         keepHudVisible(); hud.visibility = View.VISIBLE; if (kind != "live") updateProgressUi()
-        if (kind == "live") playerView.requestFocus() else audioButton.requestFocus()
+        if (kind == "live") playerView.requestFocus() else playPauseButton.requestFocus()
     }
     private fun hideHud() { keepHudVisible(); hud.visibility = View.GONE; playerView.requestFocus() }
     private fun keepHudVisible() { if (::hud.isInitialized) hud.removeCallbacks(hideHudRunnable) }
@@ -391,7 +447,15 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun time(ms: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
-    private fun showHudBriefly() { keepHudVisible(); hud.visibility = View.VISIBLE; if (kind != "live") updateProgressUi(); hud.postDelayed(hideHudRunnable, if (kind == "live") 2200L else 3200L) }
+    private fun showHudBriefly() {
+        keepHudVisible()
+        hud.visibility = View.VISIBLE
+        if (kind != "live") {
+            updateProgressUi()
+            updatePlayPauseLabel()
+        }
+        hud.postDelayed(hideHudRunnable, if (kind == "live") 2200L else 3200L)
+    }
 
     private fun showTrackDialog(trackType: Int) {
         val groups = session.player.currentTracks.groups.filter { it.type == trackType && it.length > 0 }
@@ -428,10 +492,6 @@ class PlayerActivity : AppCompatActivity() {
         return listOfNotNull(resolution, fps, bitrate, format.codecs).joinToString(" • ")
     }
 
-    private fun launchExternalPlayer() {
-        val url = session.player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
-        if (url.isBlank() || !ExternalPlayerLauncher.launch(this, url, currentTitle)) Toast.makeText(this, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
-    }
     private fun trackLabel(format: Format, type: Int): String {
         val language = format.language?.uppercase() ?: if (type == C.TRACK_TYPE_AUDIO) "AUDIO" else "SUB"; val label = format.label?.takeIf { it.isNotBlank() }; val codec = format.codecs?.takeIf { it.isNotBlank() }
         return listOfNotNull(label, language, codec).distinct().joinToString(" • ")
