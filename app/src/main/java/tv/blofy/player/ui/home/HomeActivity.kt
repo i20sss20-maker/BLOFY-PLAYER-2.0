@@ -57,7 +57,7 @@ class HomeActivity : AppCompatActivity() {
         override fun run() {
             if (heroItems.size > 1 && !heroPrimary.hasFocus() && !heroSecondary.hasFocus()) {
                 heroIndex = (heroIndex + 1) % heroItems.size
-                renderHero(animated = true)
+                renderHero(true)
             }
             handler.postDelayed(this, HERO_INTERVAL_MS)
         }
@@ -72,28 +72,27 @@ class HomeActivity : AppCompatActivity() {
     private fun buildHome(): FrameLayout {
         val root = FrameLayout(this).apply {
             background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background)
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
             clipChildren = false
             clipToPadding = false
         }
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(18), dp(16), dp(18), dp(16))
             clipChildren = false
             clipToPadding = false
         }
         root.addView(shell, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        shell.addView(buildSidebar(), LinearLayout.LayoutParams(dp(194), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(18) })
 
         val main = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(0, 0, dp(18), 0)
             clipChildren = false
             clipToPadding = false
         }
         shell.addView(main, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-        shell.addView(buildSidebar(), LinearLayout.LayoutParams(dp(194), LinearLayout.LayoutParams.MATCH_PARENT))
 
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -110,7 +109,6 @@ class HomeActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(0, dp(56), 1f))
         top.addView(navButton("⌕  بحث", Intent(this, SearchActivity::class.java)), LinearLayout.LayoutParams(dp(158), dp(50)))
         main.addView(top)
-
         main.addView(buildHero(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.5f))
 
         val quick = LinearLayout(this).apply {
@@ -156,7 +154,7 @@ class HomeActivity : AppCompatActivity() {
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(dp(122), dp(90)).apply { bottomMargin = dp(10) })
-        addView(sideItem("⌂", "الرئيسية", null, selected = true))
+        addView(sideItem("⌂", "الرئيسية", null, true))
         addView(sideItem("◉", "بث مباشر", contentIntent("live")))
         addView(sideItem("▣", "الأفلام", contentIntent("movie")))
         addView(sideItem("▤", "المسلسلات", contentIntent("series")))
@@ -189,20 +187,13 @@ class HomeActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(dp(38), LinearLayout.LayoutParams.MATCH_PARENT))
         if (!selected) {
-            setOnFocusChangeListener { view, focused ->
-                view.background = focusBackground(focused)
-                view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.03f else 1f).scaleY(if (focused) 1.03f else 1f).translationZ(if (focused) 14f else 2f).setDuration(if (focused) 110L else 85L).start()
-            }
+            setOnFocusChangeListener { view, focused -> animateFocus(view, focused) }
             setOnClickListener { intent?.let(::startActivity) }
         }
     }.also { it.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { bottomMargin = dp(6) } }
 
     private fun buildHero(): FrameLayout {
-        val frame = FrameLayout(this).apply {
-            background = heroPanel()
-            clipToOutline = true
-        }
+        val frame = FrameLayout(this).apply { background = heroPanel(); clipToOutline = true }
         heroImage = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             alpha = 0.66f
@@ -210,7 +201,7 @@ class HomeActivity : AppCompatActivity() {
         }
         frame.addView(heroImage, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         frame.addView(View(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF5080610.toInt(), 0xB20D0915.toInt(), 0x240B0710))
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0x300B0710, 0xB20D0915.toInt(), 0xF5080610.toInt()))
         }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
         val info = LinearLayout(this).apply {
@@ -219,53 +210,18 @@ class HomeActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(44), dp(26), dp(44), dp(26))
         }
-        heroBadge = TextView(this).apply {
-            text = "BLOFY"
-            textSize = 13.5f
-            typeface = bodyTypeface
-            setTextColor(0xFF73EBD0.toInt())
-            gravity = Gravity.RIGHT
-        }
-        heroTitle = TextView(this).apply {
-            text = "محتواك جاهز"
-            textSize = 39f
-            typeface = headingTypeface
-            includeFontPadding = false
-            setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
-            maxLines = 2
-            setPadding(0, dp(7), 0, 0)
-        }
-        heroMeta = TextView(this).apply {
-            textSize = 15.5f
-            typeface = bodyTypeface
-            setTextColor(0xFFD7BCEF.toInt())
-            gravity = Gravity.RIGHT
-            setPadding(0, dp(9), 0, dp(10))
-        }
-        heroPlot = TextView(this).apply {
-            text = "أحدث الأفلام والمسلسلات من قائمتك"
-            textSize = 16.5f
-            typeface = bodyTypeface
-            setTextColor(0xFFE8E1EC.toInt())
-            gravity = Gravity.RIGHT
-            maxLines = 3
-            setLineSpacing(dp(2).toFloat(), 1.13f)
-            setPadding(0, 0, 0, dp(18))
-        }
+        heroBadge = TextView(this).apply { text = "BLOFY"; textSize = 13.5f; typeface = bodyTypeface; setTextColor(0xFF73EBD0.toInt()); gravity = Gravity.RIGHT }
+        heroTitle = TextView(this).apply { text = "محتواك جاهز"; textSize = 39f; typeface = headingTypeface; includeFontPadding = false; setTextColor(Color.WHITE); gravity = Gravity.RIGHT; maxLines = 2; setPadding(0, dp(7), 0, 0) }
+        heroMeta = TextView(this).apply { textSize = 15.5f; typeface = bodyTypeface; setTextColor(0xFFD7BCEF.toInt()); gravity = Gravity.RIGHT; setPadding(0, dp(9), 0, dp(10)) }
+        heroPlot = TextView(this).apply { text = "أحدث الأفلام والمسلسلات من قائمتك"; textSize = 16.5f; typeface = bodyTypeface; setTextColor(0xFFE8E1EC.toInt()); gravity = Gravity.RIGHT; maxLines = 3; setLineSpacing(dp(2).toFloat(), 1.13f); setPadding(0, 0, 0, dp(18)) }
         info.addView(heroBadge)
         info.addView(heroTitle, LinearLayout.LayoutParams(dp(760), LinearLayout.LayoutParams.WRAP_CONTENT))
         info.addView(heroMeta, LinearLayout.LayoutParams(dp(760), LinearLayout.LayoutParams.WRAP_CONTENT))
         info.addView(heroPlot, LinearLayout.LayoutParams(dp(760), LinearLayout.LayoutParams.WRAP_CONTENT))
 
-        val actions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.RIGHT
-            clipChildren = false
-        }
-        heroPrimary = heroButton("▶  التفاصيل", primary = true) { openHeroItem() }
-        heroSecondary = heroButton("التالي  ›", primary = false) { nextHero() }
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.RIGHT; clipChildren = false }
+        heroPrimary = heroButton("▶  التفاصيل", true) { openHeroItem() }
+        heroSecondary = heroButton("التالي  ›", false) { nextHero() }
         actions.addView(heroPrimary, LinearLayout.LayoutParams(dp(188), dp(60)).apply { marginStart = dp(12) })
         actions.addView(heroSecondary, LinearLayout.LayoutParams(dp(150), dp(60)))
         info.addView(actions)
@@ -278,18 +234,14 @@ class HomeActivity : AppCompatActivity() {
             val loaded = withContext(Dispatchers.IO) {
                 val dao = BlofyDatabase.get(applicationContext).dao()
                 val provider = dao.providers().first().firstOrNull() ?: return@withContext null
-                val movies = dao.streams(provider.id, "movie", null).first()
-                val series = dao.streams(provider.id, "series", null).first()
-                provider.id to (movies + series)
-                    .sortedWith(compareByDescending<StreamEntity> { it.addedAt ?: 0L }.thenBy { it.name })
-                    .take(14)
+                provider.id to dao.latestHomeStreams(provider.id, 14)
             } ?: return@launch
             providerId = loaded.first
             heroItems = loaded.second
             heroIndex = 0
-            renderHero(animated = false)
+            renderHero(false)
             renderFeatured()
-            ArtworkLoader.prefetch(this@HomeActivity, heroItems.take(10).flatMap { listOf(it.backdrop, it.icon) })
+            ArtworkLoader.prefetch(this@HomeActivity, heroItems.take(8).flatMap { listOf(it.backdrop, it.icon) })
             handler.removeCallbacks(rotateHero)
             handler.postDelayed(rotateHero, HERO_INTERVAL_MS)
         }
@@ -300,9 +252,9 @@ class HomeActivity : AppCompatActivity() {
         val candidates = listOf(item.backdrop, item.icon)
         if (animated) {
             heroImage.animate().cancel()
-            heroImage.animate().alpha(0.18f).setDuration(130).withEndAction {
+            heroImage.animate().alpha(0.18f).setDuration(120).withEndAction {
                 ArtworkLoader.load(heroImage, candidates)
-                heroImage.animate().alpha(0.66f).setDuration(300).start()
+                heroImage.animate().alpha(0.66f).setDuration(260).start()
             }.start()
         } else {
             ArtworkLoader.load(heroImage, candidates)
@@ -310,11 +262,7 @@ class HomeActivity : AppCompatActivity() {
         }
         heroBadge.text = if (item.kind == "series") "مسلسل" else "فيلم"
         heroTitle.text = item.name
-        heroMeta.text = listOfNotNull(
-            item.year?.takeIf { it.isNotBlank() },
-            item.genre?.takeIf { it.isNotBlank() }?.substringBefore(','),
-            item.rating?.takeIf { it.isNotBlank() }?.let { "★ $it" }
-        ).joinToString("  •  ")
+        heroMeta.text = listOfNotNull(item.year?.takeIf { it.isNotBlank() }, item.genre?.takeIf { it.isNotBlank() }?.substringBefore(','), item.rating?.takeIf { it.isNotBlank() }?.let { "★ $it" }).joinToString("  •  ")
         heroPlot.text = item.plot?.takeIf { it.isNotBlank() } ?: "اكتشف هذا المحتوى الآن على BLOFY PLAYER"
     }
 
@@ -327,29 +275,12 @@ class HomeActivity : AppCompatActivity() {
                 isClickable = true
                 background = focusBackground(false)
                 clipToOutline = true
-                val image = ImageView(this@HomeActivity).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    setBackgroundColor(0xFF15101E.toInt())
-                }
+                val image = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(0xFF15101E.toInt()) }
                 addView(image, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
                 ArtworkLoader.load(image, listOf(item.icon, item.backdrop))
-                addView(View(this@HomeActivity).apply {
-                    background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00100A17, 0xE20A0710.toInt()))
-                }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-                addView(TextView(this@HomeActivity).apply {
-                    text = item.name
-                    textSize = 13.5f
-                    typeface = bodyTypeface
-                    setTextColor(Color.WHITE)
-                    gravity = Gravity.BOTTOM or Gravity.RIGHT
-                    maxLines = 2
-                    setPadding(dp(13), dp(8), dp(13), dp(13))
-                }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-                setOnFocusChangeListener { view, focused ->
-                    view.background = focusBackground(focused)
-                    view.animate().cancel()
-                    view.animate().scaleX(if (focused) 1.055f else 1f).scaleY(if (focused) 1.055f else 1f).translationZ(if (focused) 20f else 2f).setDuration(if (focused) 115L else 90L).start()
-                }
+                addView(View(this@HomeActivity).apply { background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00100A17, 0xE20A0710.toInt())) }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                addView(TextView(this@HomeActivity).apply { text = item.name; textSize = 13.5f; typeface = bodyTypeface; setTextColor(Color.WHITE); gravity = Gravity.BOTTOM or Gravity.RIGHT; maxLines = 2; setPadding(dp(13), dp(8), dp(13), dp(13)) }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                setOnFocusChangeListener { view, focused -> animateFocus(view, focused, 1.055f) }
                 setOnClickListener { openItem(item) }
             }
             featuredRow.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginStart = dp(6); marginEnd = dp(6) })
@@ -359,7 +290,7 @@ class HomeActivity : AppCompatActivity() {
     private fun nextHero() {
         if (heroItems.isEmpty()) return
         heroIndex = (heroIndex + 1) % heroItems.size
-        renderHero(animated = true)
+        renderHero(true)
     }
 
     private fun openHeroItem() = heroItems.getOrNull(heroIndex)?.let(::openItem)
@@ -383,11 +314,7 @@ class HomeActivity : AppCompatActivity() {
         background = focusBackground(false)
         addView(TextView(this@HomeActivity).apply { text = title; textSize = 17.5f; typeface = headingTypeface; setTextColor(Color.WHITE); gravity = Gravity.RIGHT; includeFontPadding = false })
         addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 12.5f; typeface = bodyTypeface; setTextColor(TEXT_MUTED); gravity = Gravity.RIGHT; setPadding(0, dp(5), 0, 0) })
-        setOnFocusChangeListener { view, focused ->
-            view.background = focusBackground(focused)
-            view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.03f else 1f).scaleY(if (focused) 1.03f else 1f).translationZ(if (focused) 14f else 2f).setDuration(if (focused) 110L else 85L).start()
-        }
+        setOnFocusChangeListener { view, focused -> animateFocus(view, focused) }
         setOnClickListener { startActivity(intent) }
     }
 
@@ -411,6 +338,12 @@ class HomeActivity : AppCompatActivity() {
         setOnClickListener { action() }
     }
 
+    private fun animateFocus(view: View, focused: Boolean, focusedScale: Float = 1.03f) {
+        view.background = focusBackground(focused)
+        view.animate().cancel()
+        view.animate().scaleX(if (focused) focusedScale else 1f).scaleY(if (focused) focusedScale else 1f).translationZ(if (focused) 14f else 2f).setDuration(if (focused) 110L else 85L).start()
+    }
+
     private fun contentIntent(kind: String): Intent {
         val device = DeviceClass.detect(this)
         if (device == DeviceClass.Kind.PHONE) return Intent(this, MobileContentActivity::class.java).putExtra(MobileContentActivity.EXTRA_KIND, kind)
@@ -418,34 +351,11 @@ class HomeActivity : AppCompatActivity() {
         else Intent(this, PosterCatalogActivity::class.java).putExtra(PosterCatalogActivity.EXTRA_KIND, if (kind == "series") PosterCatalogActivity.KIND_SERIES else PosterCatalogActivity.KIND_MOVIE)
     }
 
-    private fun panelBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF0171020.toInt(), 0xF50A0710.toInt())).apply {
-        cornerRadius = dp(24).toFloat(); setStroke(dp(1), 0x60523A68)
-    }
-
-    private fun heroPanel() = GradientDrawable().apply {
-        cornerRadius = dp(28).toFloat(); setColor(0xFF0B0811.toInt()); setStroke(dp(1), 0x70654582)
-    }
-
-    private fun selectedBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF6530BE.toInt(), 0xFF8D3BC7.toInt())).apply {
-        cornerRadius = dp(18).toFloat(); setStroke(dp(1), 0xFFDDB4FF.toInt())
-    }
-
-    private fun focusBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF6932A6.toInt(), 0xFF2A1838.toInt()) else intArrayOf(0xEC191322.toInt(), 0xF10B0911.toInt())
-    ).apply {
-        cornerRadius = dp(19).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFE7C6FF.toInt() else 0x554D385F)
-    }
-
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        when {
-            focused -> intArrayOf(0xFF914DDA.toInt(), 0xFF672DB1.toInt())
-            primary -> intArrayOf(0xFF6A2DBC.toInt(), 0xFF461B82.toInt())
-            else -> intArrayOf(0xE3271930.toInt(), 0xEA150D1D.toInt())
-        }
-    ).apply {
-        cornerRadius = dp(18).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFF0DEFF.toInt() else 0x665E4079)
-    }
-
+    private fun panelBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF0171020.toInt(), 0xF50A0710.toInt())).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), 0x60523A68) }
+    private fun heroPanel() = GradientDrawable().apply { cornerRadius = dp(28).toFloat(); setColor(0xFF0B0811.toInt()); setStroke(dp(1), 0x70654582) }
+    private fun selectedBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF6530BE.toInt(), 0xFF8D3BC7.toInt())).apply { cornerRadius = dp(18).toFloat(); setStroke(dp(1), 0xFFDDB4FF.toInt()) }
+    private fun focusBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF6932A6.toInt(), 0xFF2A1838.toInt()) else intArrayOf(0xEC191322.toInt(), 0xF10B0911.toInt())).apply { cornerRadius = dp(19).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFE7C6FF.toInt() else 0x554D385F) }
+    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, when { focused -> intArrayOf(0xFF914DDA.toInt(), 0xFF672DB1.toInt()); primary -> intArrayOf(0xFF6A2DBC.toInt(), 0xFF461B82.toInt()); else -> intArrayOf(0xE3271930.toInt(), 0xEA150D1D.toInt()) }).apply { cornerRadius = dp(18).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFF0DEFF.toInt() else 0x665E4079) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
