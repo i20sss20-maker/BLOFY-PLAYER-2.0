@@ -1,12 +1,14 @@
 package tv.blofy.player.data
 
+/**
+ * Catalogs are cache-first. Opening or returning to a screen must never trigger a network
+ * re-download. Refresh is explicit from Settings or when the active playlist/provider changes.
+ */
 object CatalogRecoveryPolicy {
-    private val recoverableKinds = setOf("movie", "series")
-
     fun shouldAutoRefresh(
         kind: String,
         itemCount: Int,
         attempted: Boolean,
         refreshInProgress: Boolean
-    ): Boolean = kind in recoverableKinds && itemCount == 0 && !attempted && !refreshInProgress
+    ): Boolean = false
 }

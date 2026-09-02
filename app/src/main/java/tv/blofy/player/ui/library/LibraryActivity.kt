@@ -16,7 +16,6 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
-import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
@@ -61,18 +60,11 @@ class LibraryActivity : AppCompatActivity() {
             list.removeAllViews()
             if (mode == MODE_CONTINUE) {
                 val states = withContext(Dispatchers.IO) { dao.continueWatching(provider.id).first() }
-                val entries = withContext(Dispatchers.IO) {
-                    resolveContinueWatching(dao, provider.id, states)
-                }
+                val entries = withContext(Dispatchers.IO) { resolveContinueWatching(dao, provider.id, states) }
                 if (entries.isEmpty()) showMessage("لا يوجد محتوى للاستئناف")
                 entries.forEach { entry ->
                     when (entry) {
-                        is ContinueWatchingEntry.StreamEntry -> addRow(
-                            provider.id,
-                            provider.liveFormat,
-                            entry.stream,
-                            entry.state.positionMs
-                        )
+                        is ContinueWatchingEntry.StreamEntry -> addRow(provider.id, provider.liveFormat, entry.stream, entry.state.positionMs)
                         is ContinueWatchingEntry.EpisodeEntry -> addEpisodeRow(provider, entry)
                     }
                 }
@@ -92,7 +84,6 @@ class LibraryActivity : AppCompatActivity() {
     ): List<ContinueWatchingEntry> {
         val streams = LinkedHashMap<String, StreamEntity>()
         val episodes = LinkedHashMap<String, EpisodeEntity>()
-
         states.forEach { state ->
             if (state.kind == "episode") {
                 dao.episode(state.contentKey)?.let { episodes[state.contentKey] = it }
@@ -102,18 +93,13 @@ class LibraryActivity : AppCompatActivity() {
                     ?: dao.episode(state.contentKey)?.let { episodes[state.contentKey] = it }
             }
         }
-
-        val parentSeries = if (episodes.isEmpty()) {
-            emptyList()
-        } else {
-            dao.streams(providerId, "series", null).first()
-        }
+        val parentSeries = if (episodes.isEmpty()) emptyList() else dao.streams(providerId, "series", null).first()
         return ContinueWatchingResolver.resolve(states, streams, episodes, parentSeries)
     }
 
     private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
         val row = TextView(this).apply {
-            text = "${if (stream.locked) "🔒 " else ""}${kindLabel(stream.kind)}   •   ${stream.name}"
+            text = "${kindLabel(stream.kind)}   •   ${stream.name}"
             textSize = 18f
             setTextColor(Color.WHITE)
             setPadding(24, 17, 24, 17)
@@ -125,7 +111,7 @@ class LibraryActivity : AppCompatActivity() {
                 view.background = rowBackground(focused)
                 view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(100).start()
             }
-            setOnClickListener { guardedOpen(providerId, liveFormat, stream, resumeMs) }
+            setOnClickListener { open(providerId, liveFormat, stream, resumeMs) }
         }
         list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
     }
@@ -133,9 +119,9 @@ class LibraryActivity : AppCompatActivity() {
     private fun addEpisodeRow(provider: ProviderEntity, entry: ContinueWatchingEntry.EpisodeEntry) {
         val episode = entry.episode
         val parent = entry.parentSeries
+        val seriesName = parent?.name?.takeIf(String::isNotBlank) ?: "مسلسل"
         val row = TextView(this).apply {
-            val seriesName = parent?.name?.takeIf(String::isNotBlank) ?: "مسلسل"
-            text = "${if (parent?.locked == true) "🔒 " else ""}EPISODE   •   $seriesName   •   S${episode.season} E${episode.episode}   •   ${episode.title}"
+            text = "EPISODE   •   $seriesName   •   S${episode.season} E${episode.episode}   •   ${episode.title}"
             textSize = 18f
             setTextColor(Color.WHITE)
             setPadding(24, 17, 24, 17)
@@ -147,20 +133,9 @@ class LibraryActivity : AppCompatActivity() {
                 view.background = rowBackground(focused)
                 view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(100).start()
             }
-            setOnClickListener {
-                val play = { openEpisode(provider, episode, entry.state.positionMs, seriesName) }
-                if (parent?.locked == true) ParentalGate.requirePin(this@LibraryActivity, play) else play()
-            }
+            setOnClickListener { openEpisode(provider, episode, entry.state.positionMs, seriesName) }
         }
         list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
-    }
-
-    private fun guardedOpen(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
-        if (stream.locked) {
-            ParentalGate.requirePin(this) { open(providerId, liveFormat, stream, resumeMs) }
-        } else {
-            open(providerId, liveFormat, stream, resumeMs)
-        }
     }
 
     private fun open(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
@@ -176,10 +151,7 @@ class LibraryActivity : AppCompatActivity() {
             "live" -> lifecycleScope.launch {
                 val dao = BlofyDatabase.get(applicationContext).dao()
                 val provider = withContext(Dispatchers.IO) { dao.provider(providerId) } ?: return@launch
-                val profile = ProviderProfile(
-                    providerKey = provider.id,
-                    liveFormat = if (liveFormat.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS
-                )
+                val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (liveFormat.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
                 startActivity(Intent(this@LibraryActivity, PlayerActivity::class.java).apply {
                     putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.live(provider, profile, stream))
                     putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
@@ -201,10 +173,7 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun openEpisode(provider: ProviderEntity, episode: EpisodeEntity, resumeMs: Long, seriesName: String) {
         val url = runCatching { ContentUrlResolver.episode(provider, episode) }.getOrNull()
-        if (url == null) {
-            showMessage("تعذر تجهيز رابط الحلقة")
-            return
-        }
+        if (url == null) { showMessage("تعذر تجهيز رابط الحلقة"); return }
         startActivity(Intent(this, PlayerActivity::class.java).apply {
             putExtra(PlayerActivity.EXTRA_URL, url)
             putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)

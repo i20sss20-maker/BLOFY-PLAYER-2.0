@@ -2,6 +2,7 @@ package tv.blofy.player.ui.search
 
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
@@ -10,6 +11,7 @@ import android.view.Gravity
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -22,7 +24,6 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
-import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
@@ -33,27 +34,43 @@ import tv.blofy.player.ui.player.PlayerActivity
 class SearchActivity : AppCompatActivity() {
     private lateinit var input: EditText
     private lateinit var results: LinearLayout
+    private lateinit var status: TextView
     private var searchJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(50, 38, 50, 38)
-            setBackgroundColor(Color.rgb(5, 5, 10))
+            setPadding(dp(42), dp(30), dp(42), dp(30))
+            setBackgroundColor(Color.rgb(7, 5, 13))
+            layoutDirection = LinearLayout.LAYOUT_DIRECTION_RTL
         }
         root.addView(TextView(this).apply {
-            text = "بحث BLOFY"
-            textSize = 29f
+            text = "البحث"
+            textSize = 31f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
+            gravity = Gravity.RIGHT
         })
+        root.addView(TextView(this).apply {
+            text = "نتائج فورية من أول حرف في القنوات والأفلام والمسلسلات"
+            textSize = 14f
+            setTextColor(Color.rgb(191, 171, 216))
+            gravity = Gravity.RIGHT
+            setPadding(0, dp(4), 0, dp(16))
+        })
+
         input = EditText(this).apply {
-            hint = "اكتب اسم قناة أو فيلم أو مسلسل"
+            hint = "اكتب حرفًا واحدًا أو أكثر..."
+            textSize = 19f
             setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
+            setHintTextColor(Color.rgb(137, 127, 151))
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             isFocusable = true
+            setPadding(dp(22), 0, dp(22), 0)
+            background = searchBox(false)
+            setOnFocusChangeListener { view, focused -> view.background = searchBox(focused) }
             setOnEditorActionListener { _, _, _ ->
                 searchJob?.cancel()
                 runSearch(text?.toString().orEmpty(), moveFocus = true)
@@ -66,19 +83,30 @@ class SearchActivity : AppCompatActivity() {
                     val query = s?.toString().orEmpty()
                     if (query.isBlank()) {
                         results.removeAllViews()
+                        status.text = ""
                         return
                     }
                     searchJob = lifecycleScope.launch {
-                        delay(180L)
+                        delay(60L)
                         runSearch(query, moveFocus = false)
                     }
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
         }
+        root.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)))
+
+        status = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Color.rgb(195, 135, 255))
+            gravity = Gravity.RIGHT
+            setPadding(0, dp(10), 0, dp(8))
+        }
+        root.addView(status)
+
         results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        root.addView(results, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val scroll = ScrollView(this).apply { isFillViewport = true; addView(results) }
+        root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         input.requestFocus()
     }
@@ -87,6 +115,7 @@ class SearchActivity : AppCompatActivity() {
         val normalized = query.trim()
         if (normalized.isEmpty()) {
             results.removeAllViews()
+            status.text = ""
             return
         }
         lifecycleScope.launch {
@@ -99,37 +128,30 @@ class SearchActivity : AppCompatActivity() {
             val items = withContext(Dispatchers.IO) { ContentRepository(dao).search(provider.id, normalized) }
             if (input.text?.toString()?.trim() != normalized) return@launch
             results.removeAllViews()
+            status.text = "${items.size} نتيجة"
             if (items.isEmpty()) {
                 showMessage("لا توجد نتائج")
                 return@launch
             }
-            items.take(100).forEach { stream ->
+            items.take(200).forEach { stream ->
                 val row = TextView(this@SearchActivity).apply {
-                    text = "${if (stream.locked) "🔒 " else ""}${kindLabel(stream.kind)}   •   ${stream.name}"
-                    textSize = 18f
+                    text = "${kindLabel(stream.kind)}   •   ${stream.name}"
+                    textSize = 17f
                     setTextColor(Color.WHITE)
-                    setPadding(24, 17, 24, 17)
-                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(22), dp(15), dp(22), dp(15))
+                    gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
                     isFocusable = true
                     isClickable = true
                     background = rowBackground(false)
                     setOnFocusChangeListener { view, focused ->
                         view.background = rowBackground(focused)
-                        view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(100).start()
+                        view.animate().scaleX(if (focused) 1.012f else 1f).scaleY(if (focused) 1.012f else 1f).setDuration(80).start()
                     }
-                    setOnClickListener { guardedOpen(provider.id, provider.liveFormat, stream) }
+                    setOnClickListener { openStream(provider.id, provider.liveFormat, stream) }
                 }
-                results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
+                results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(62)).apply { topMargin = dp(5) })
             }
             if (moveFocus) results.getChildAt(0)?.requestFocus()
-        }
-    }
-
-    private fun guardedOpen(providerId: String, liveFormat: String, stream: StreamEntity) {
-        if (stream.locked) {
-            ParentalGate.requirePin(this) { openStream(providerId, liveFormat, stream) }
-        } else {
-            openStream(providerId, liveFormat, stream)
         }
     }
 
@@ -169,27 +191,37 @@ class SearchActivity : AppCompatActivity() {
     }
 
     private fun kindLabel(kind: String) = when (kind) {
-        "live" -> "LIVE"
-        "movie" -> "MOVIE"
-        "series" -> "SERIES"
-        else -> kind.uppercase()
+        "live" -> "بث مباشر"
+        "movie" -> "فيلم"
+        "series" -> "مسلسل"
+        else -> kind
+    }
+
+    private fun searchBox(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = dp(18).toFloat()
+        setColor(if (focused) 0xFF241631.toInt() else 0xEB14101D.toInt())
+        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFD8A6FF.toInt() else 0x66543C69)
     }
 
     private fun rowBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 16f
-        setColor(if (focused) Color.rgb(65, 31, 110) else Color.rgb(18, 17, 28))
-        if (focused) setStroke(2, Color.rgb(185, 130, 255))
+        cornerRadius = dp(15).toFloat()
+        setColor(if (focused) 0xFF5E2792.toInt() else 0xE5191422.toInt())
+        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFE3BCFF.toInt() else 0x554C385E)
     }
 
     private fun showMessage(text: String) {
         results.removeAllViews()
+        status.text = ""
         results.addView(TextView(this).apply {
             this.text = text
             textSize = 18f
             setTextColor(Color.LTGRAY)
-            setPadding(0, 24, 0, 0)
+            gravity = Gravity.RIGHT
+            setPadding(0, dp(24), 0, 0)
         })
     }
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
         searchJob?.cancel()
