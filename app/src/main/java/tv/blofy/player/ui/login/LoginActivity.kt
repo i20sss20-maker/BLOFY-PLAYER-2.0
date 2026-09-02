@@ -130,7 +130,7 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.TOP
             addView(emptyPlaylistView("بعد إضافة القوائم ستظهر هنا، وكل قائمة يمكن تشغيلها مباشرة"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(70)))
         }
-        scroll.addView(playlistRow, ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT))
+        scroll.addView(playlistRow, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
         playlistsPanel.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER; setPadding(0,dp(10),0,0) }
