@@ -1,9 +1,7 @@
 package tv.blofy.player.ui.login
 
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.ImageView
@@ -27,10 +25,11 @@ import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
 import java.util.UUID
 
-/** Performs catalog sync before the user enters Home. First load writes directly to the final provider to avoid a huge promote transaction. */
 class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var percent: TextView
     private lateinit var stage: TextView
@@ -42,58 +41,50 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        TvUiTuning.enter(this)
         buildUi()
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
-        if (providerId.isBlank()) {
-            fail("تعذر تحديد قائمة التشغيل")
-            return
-        }
+        if (providerId.isBlank()) { fail("تعذر تحديد قائمة التشغيل"); return }
         CatalogSyncState.markPending(applicationContext, providerId)
         lifecycleScope.launch { sync(providerId) }
     }
 
     private fun buildUi() {
+        fun u(v: Int) = TvUiTuning.dp(this, v)
+        fun s(v: Float) = TvUiTuning.sp(this, v)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(80), dp(44), dp(80), dp(44))
+            setPadding(u(72), u(40), u(72), u(40))
             background = AppCompatResources.getDrawable(this@CatalogLoadingActivity, R.drawable.blofy_home_background)
         }
-
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(54), dp(34), dp(54), dp(32))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(28).toFloat()
-                setColor(0xE8151024.toInt())
-                setStroke(dp(1), 0xFF5C357F.toInt())
-            }
+            setPadding(u(52), u(34), u(52), u(34))
+            background = BlofyTvDesign.glassSurface(u(BlofyTvDesign.PanelRadius).toFloat())
+            elevation = u(6).toFloat()
         }
-
         panel.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
-        }, LinearLayout.LayoutParams(dp(170), dp(96)))
-
+        }, LinearLayout.LayoutParams(u(176), u(96)))
         panel.addView(TextView(this).apply {
             text = "جاري تجهيز مكتبتك"
-            textSize = 28f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            BlofyTvDesign.applyTitle(this)
+            textSize = s(30f)
             gravity = Gravity.CENTER
-            setPadding(0, dp(4), 0, dp(2))
+            setPadding(0, u(4), 0, u(4))
         })
-
         panel.addView(TextView(this).apply {
-            text = "يتم تحميل الباقة وحفظها محليًا مرة واحدة، وبعدها يكون الدخول مباشرًا"
-            textSize = 14f
-            setTextColor(0xFFB7A8C9.toInt())
+            text = "يتم تحميل الباقة وحفظها محليًا، وبعدها يكون الدخول أسرع من الكاش"
+            BlofyTvDesign.applyBody(this)
+            textSize = s(14f)
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(18))
+            setPadding(0, 0, 0, u(20))
         })
-
         val progressRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -102,38 +93,35 @@ class CatalogLoadingActivity : AppCompatActivity() {
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             progress = 0
-            progressTintList = android.content.res.ColorStateList.valueOf(0xFF8D39FF.toInt())
-            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF2D243A.toInt())
+            progressTintList = ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+            progressBackgroundTintList = ColorStateList.valueOf(BlofyTvDesign.Divider)
         }
-        progressRow.addView(progress, LinearLayout.LayoutParams(0, dp(14), 1f).apply { marginEnd = dp(22) })
+        progressRow.addView(progress, LinearLayout.LayoutParams(0, u(12), 1f).apply { marginEnd = u(24) })
         percent = TextView(this).apply {
             text = "0%"
-            textSize = 34f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            textSize = s(40f)
+            typeface = BlofyTvDesign.DisplayTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
+            includeFontPadding = false
         }
-        progressRow.addView(percent, LinearLayout.LayoutParams(dp(120), dp(54)))
-        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(62)))
-
+        progressRow.addView(percent, LinearLayout.LayoutParams(u(132), u(64)))
+        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(72)))
         stage = TextView(this).apply {
             text = "جاري الاتصال بالخادم..."
-            textSize = 19f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            BlofyTvDesign.applyHeading(this)
+            textSize = s(20f)
             gravity = Gravity.CENTER
-            setPadding(0, dp(12), 0, dp(4))
+            setPadding(0, u(12), 0, u(6))
         }
         panel.addView(stage)
-
         panel.addView(TextView(this).apply {
-            text = "يمكن أن يستغرق أول تحميل وقتًا حسب حجم الباقة، لكن التحضير النهائي لن يعيد نسخ المكتبة كاملة"
-            textSize = 13f
-            setTextColor(0xFF9587A8.toInt())
+            text = "أول تحميل يعتمد على حجم الباقة وسرعة السيرفر. بعد الحفظ، القوائم تفتح من التخزين المحلي."
+            BlofyTvDesign.applyCaption(this)
+            textSize = s(12.5f)
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(24))
+            setPadding(0, 0, 0, u(22))
         })
-
         val steps = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -147,73 +135,47 @@ class CatalogLoadingActivity : AppCompatActivity() {
         steps.addView(contentStep, stepParams())
         steps.addView(prepareStep, stepParams())
         steps.addView(readyStep, stepParams())
-        panel.addView(steps, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
-
-        root.addView(panel, LinearLayout.LayoutParams(dp(980), LinearLayout.LayoutParams.WRAP_CONTENT))
+        panel.addView(steps, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(60)))
+        root.addView(panel, LinearLayout.LayoutParams(u(980), LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
     }
 
     private fun step(value: String) = TextView(this).apply {
         text = value
-        textSize = 13f
-        setTextColor(0xFF756B82.toInt())
+        textSize = TvUiTuning.sp(this@CatalogLoadingActivity, 12.5f)
+        typeface = BlofyTvDesign.MediumTypeface
+        setTextColor(BlofyTvDesign.TextMuted)
         gravity = Gravity.CENTER
     }
 
-    private fun stepParams() = LinearLayout.LayoutParams(0, dp(50), 1f).apply {
-        marginStart = dp(5)
-        marginEnd = dp(5)
+    private fun stepParams() = LinearLayout.LayoutParams(0, TvUiTuning.dp(this, 50), 1f).apply {
+        marginStart = TvUiTuning.dp(this@CatalogLoadingActivity, 5)
+        marginEnd = TvUiTuning.dp(this@CatalogLoadingActivity, 5)
     }
 
     private suspend fun sync(providerId: String) {
         val dao = BlofyDatabase.get(applicationContext).dao()
-        val target = withContext(Dispatchers.IO) { dao.provider(providerId) }
-            ?: return fail("قائمة التشغيل غير موجودة")
-
+        val target = withContext(Dispatchers.IO) { dao.provider(providerId) } ?: return fail("قائمة التشغيل غير موجودة")
         val firstLoad = withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
-        val syncProvider: ProviderEntity = if (firstLoad) {
-            target.copy(enabled = true, updatedAt = System.currentTimeMillis())
-        } else {
-            target.copy(id = UUID.randomUUID().toString(), enabled = false)
-        }
-
+        val syncProvider: ProviderEntity = if (firstLoad) target.copy(enabled = true, updatedAt = System.currentTimeMillis()) else target.copy(id = UUID.randomUUID().toString(), enabled = false)
         try {
             render(5, if (firstLoad) "بدء التحميل السريع للباقة..." else "بدء تحديث الباقة...")
-            val result = PlaylistSyncPolicy.run {
-                withContext(Dispatchers.IO) {
-                    PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider) { p ->
-                        withContext(Dispatchers.Main.immediate) { renderProgress(p) }
-                    }
-                }
-            }
+            val result = PlaylistSyncPolicy.run { withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider) { p -> withContext(Dispatchers.Main.immediate) { renderProgress(p) } } } }
             check(result.freshItemCount > 0) { "لم يرجع السيرفر محتوى صالح" }
             check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الباقة" }
-
             render(96, if (firstLoad) "جاري إنهاء المكتبة..." else "جاري حفظ التحديث بأمان...")
             withContext(Dispatchers.IO) {
-                if (firstLoad) {
-                    dao.saveAndActivateProvider(syncProvider.copy(enabled = true, updatedAt = System.currentTimeMillis()))
-                } else {
-                    dao.promoteStagedCatalog(
-                        syncProvider.id,
-                        target.copy(enabled = true, updatedAt = System.currentTimeMillis())
-                    )
-                }
+                if (firstLoad) dao.saveAndActivateProvider(syncProvider.copy(enabled = true, updatedAt = System.currentTimeMillis()))
+                else dao.promoteStagedCatalog(syncProvider.id, target.copy(enabled = true, updatedAt = System.currentTimeMillis()))
             }
-
             CatalogSyncState.markReady(applicationContext, providerId)
             render(100, "المكتبة جاهزة")
-            startActivity(Intent(this, HomeActivity::class.java))
-            finish()
+            startActivity(Intent(this, HomeActivity::class.java)); finish()
         } catch (cancelled: CancellationException) {
-            withContext(Dispatchers.IO) {
-                if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
-            }
+            withContext(Dispatchers.IO) { if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id) }
             throw cancelled
         } catch (error: Throwable) {
-            withContext(Dispatchers.IO) {
-                if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
-            }
+            withContext(Dispatchers.IO) { if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id) }
             fail("تعذر تجهيز المكتبة: ${error.message ?: "خطأ غير معروف"}")
         }
     }
@@ -233,10 +195,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
         progress.progress = safe
         percent.text = "$safe%"
         stage.text = label
-        serverStep.setTextColor(if (safe >= 5) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
-        contentStep.setTextColor(if (safe >= 15) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
-        prepareStep.setTextColor(if (safe >= 90) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
-        readyStep.setTextColor(if (safe >= 100) 0xFF45E3C2.toInt() else 0xFF756B82.toInt())
+        serverStep.setTextColor(if (safe >= 5) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        contentStep.setTextColor(if (safe >= 15) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        prepareStep.setTextColor(if (safe >= 90) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        readyStep.setTextColor(if (safe >= 100) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
         serverStep.text = if (safe >= 15) "✓  الاتصال بالخادم" else "●  الاتصال بالخادم"
         contentStep.text = if (safe >= 90) "✓  جلب المحتوى" else "○  جلب المحتوى"
         prepareStep.text = if (safe >= 100) "✓  تحضير المكتبة" else "○  تحضير المكتبة"
@@ -245,13 +207,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private fun fail(message: String) {
         stage.text = message
-        stage.setTextColor(0xFFFF879B.toInt())
+        stage.setTextColor(BlofyTvDesign.Error)
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-
-    companion object {
-        const val EXTRA_PROVIDER_ID = "provider_id"
-    }
+    companion object { const val EXTRA_PROVIDER_ID = "provider_id" }
 }
