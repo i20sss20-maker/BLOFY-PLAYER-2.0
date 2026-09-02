@@ -2,7 +2,6 @@ package tv.blofy.player.ui.player
 
 import android.app.AlertDialog
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
@@ -47,6 +46,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.common.BlofyTvDesign
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -135,56 +135,93 @@ class PlayerActivity : AppCompatActivity() {
         root.addView(playerView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         channelNumberView = TextView(this).apply {
-            textSize = 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-            setPadding(24, 10, 24, 10)
-            background = GradientDrawable().apply { cornerRadius = 18f; setColor(Color.argb(225, 43, 18, 76)); setStroke(2, PURPLE_SOFT) }
+            textSize = 32f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(26, 12, 26, 12)
+            background = BlofyTvDesign.primaryButton(20f, false)
             visibility = View.GONE
         }
-        root.addView(channelNumberView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = 34; marginEnd = 42 })
+        root.addView(channelNumberView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = 36; marginEnd = 44 })
 
         hud = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(44, 28, 44, 34)
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xE60B0813.toInt(), 0xFA08060D.toInt())).apply {
-                cornerRadii = floatArrayOf(30f, 30f, 30f, 30f, 0f, 0f, 0f, 0f)
-                setStroke(1, 0x553C2956)
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(48, 30, 48, 36)
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xE50D0916.toInt(), 0xFC07050C.toInt())).apply {
+                cornerRadii = floatArrayOf(34f, 34f, 34f, 34f, 0f, 0f, 0f, 0f)
+                setStroke(1, 0x70513A6C)
             }
             visibility = View.GONE
         }
 
         val eyebrow = TextView(this).apply {
             text = if (kind == "live") "BLOFY LIVE" else if (kind == "episode") "BLOFY SERIES" else "BLOFY CINEMA"
-            textSize = 12f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_SOFT); letterSpacing = .08f
-            setPadding(0, 0, 0, 5)
+            textSize = BlofyTvDesign.CaptionSp
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.Mint)
+            letterSpacing = .06f
+            gravity = Gravity.RIGHT
+            setPadding(0, 0, 0, 6)
         }
         hud.addView(eyebrow)
 
         titleView = TextView(this).apply {
-            textSize = 25f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 1
-            setPadding(0, 0, 0, 8)
+            textSize = 27f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            maxLines = 1
+            gravity = Gravity.RIGHT
+            setPadding(0, 0, 0, 10)
         }
         hud.addView(titleView)
 
         epgView = TextView(this).apply {
-            textSize = 15f; setTextColor(Color.rgb(214, 203, 228)); setPadding(0, 0, 0, 16)
+            textSize = 15.5f
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.TextSecondary)
+            gravity = Gravity.RIGHT
             visibility = if (kind == "live") View.VISIBLE else View.GONE
-            background = if (kind == "live") GradientDrawable().apply { cornerRadius = 14f; setColor(0x4D281D39); setStroke(1, 0x554F3868) } else null
-            if (kind == "live") setPadding(18, 12, 18, 12)
+            background = if (kind == "live") BlofyTvDesign.badge(16f) else null
+            if (kind == "live") setPadding(20, 13, 20, 13)
         }
         hud.addView(epgView)
 
         if (kind != "live") {
-            val timeline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 4, 0, 14) }
-            positionView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(Color.WHITE); gravity = Gravity.CENTER_VERTICAL }
-            durationView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(Color.rgb(190, 180, 205)); gravity = Gravity.CENTER_VERTICAL }
+            val timeline = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutDirection = View.LAYOUT_DIRECTION_LTR
+                setPadding(0, 10, 0, 16)
+            }
+            positionView = TextView(this).apply {
+                text = "00:00"
+                textSize = 13.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.TextPrimary)
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            durationView = TextView(this).apply {
+                text = "00:00"
+                textSize = 13.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = Gravity.CENTER_VERTICAL
+            }
             progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progress = 0 }
-            timeline.addView(positionView, LinearLayout.LayoutParams(72, 36))
-            timeline.addView(progressBar, LinearLayout.LayoutParams(0, 18, 1f).apply { marginEnd = 14; marginStart = 14 })
-            timeline.addView(durationView, LinearLayout.LayoutParams(72, 36))
+            timeline.addView(positionView, LinearLayout.LayoutParams(78, 38))
+            timeline.addView(progressBar, LinearLayout.LayoutParams(0, 20, 1f).apply { marginEnd = 16; marginStart = 16 })
+            timeline.addView(durationView, LinearLayout.LayoutParams(78, 38))
             hud.addView(timeline)
         }
 
-        val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.START or Gravity.CENTER_VERTICAL }
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            clipChildren = false
+        }
         audioButton = controlButton("🔊  الصوت") { showTrackDialog(C.TRACK_TYPE_AUDIO) }
         subtitleButton = controlButton("CC  الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
         qualityButton = controlButton("▣  الجودة") { showVideoQualityDialog() }
@@ -192,17 +229,20 @@ class PlayerActivity : AppCompatActivity() {
 
         if (kind == "live") {
             controls.addView(TextView(this).apply {
-                text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لإظهار معلومات البرنامج"
-                textSize = 14f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER_VERTICAL
+                text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لمعلومات البرنامج"
+                textSize = 14f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.PurpleSoft)
+                gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 62))
         } else {
-            controls.addView(audioButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
-            controls.addView(subtitleButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
-            controls.addView(qualityButton, LinearLayout.LayoutParams(176, 68).apply { marginEnd = 10 })
-            controls.addView(favoriteButton, LinearLayout.LayoutParams(184, 68).apply { marginEnd = 10 })
+            controls.addView(audioButton, LinearLayout.LayoutParams(180, 68).apply { marginStart = 10 })
+            controls.addView(subtitleButton, LinearLayout.LayoutParams(180, 68).apply { marginStart = 10 })
+            controls.addView(qualityButton, LinearLayout.LayoutParams(180, 68).apply { marginStart = 10 })
+            controls.addView(favoriteButton, LinearLayout.LayoutParams(188, 68).apply { marginStart = 10 })
             if (kind == "episode") {
-                controls.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(150, 68).apply { marginEnd = 10 })
-                controls.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(150, 68))
+                controls.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(154, 68).apply { marginStart = 10 })
+                controls.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(154, 68))
             }
         }
         hud.addView(controls)
@@ -213,20 +253,13 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun controlButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; isFocusable = true; isFocusableInTouchMode = true; textSize = 14f
-        typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); background = controlBackground(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = controlBackground(focused)
-            view.animate().scaleX(if (focused) 1.055f else 1f).scaleY(if (focused) 1.055f else 1f).setDuration(100L).start()
-            if (focused) keepHudVisible()
-        }
+        text = label
+        isAllCaps = false
+        textSize = BlofyTvDesign.LabelSp
+        typeface = BlofyTvDesign.BodyTypeface
+        setTextColor(Color.WHITE)
+        BlofyTvDesign.installTvFocus(this, 19f, 1.045f, primary = false) { keepHudVisible() }
         setOnClickListener { action() }
-    }
-
-    private fun controlBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 18f
-        setColor(if (focused) PURPLE else 0xD5231A31.toInt())
-        setStroke(if (focused) 2 else 1, if (focused) Color.WHITE else 0x66553B70)
     }
 
     private fun updateProgressUi() {
@@ -487,7 +520,6 @@ class PlayerActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_URL = "url"; const val EXTRA_CONTENT_KEY = "content_key"; const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_KIND = "kind"; const val EXTRA_LIVE_FORMAT = "live_format"; const val EXTRA_PROVIDER_TYPE = "provider_type"; const val EXTRA_PREFERRED_TRANSPORT = "preferred_transport"; const val EXTRA_PREFERRED_ENGINE = "preferred_engine"; const val EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS = "allow_cross_protocol_redirects"; const val EXTRA_FALLBACK_URL = "fallback_url"; const val EXTRA_RESUME_MS = "resume_ms"; const val EXTRA_STREAM_ID = "stream_id"; const val EXTRA_CATEGORY_ID = "category_id"; const val EXTRA_TITLE = "title"; const val EXTRA_SERIES_ID = "series_id"; const val EXTRA_SEASON = "season"; const val EXTRA_EPISODE = "episode"
-        private val PURPLE = Color.rgb(111, 54, 218); private val PURPLE_SOFT = Color.rgb(196, 157, 255)
         private val HUD_NAVIGATION_ACTIONS = setOf(RemoteAction.OK, RemoteAction.UP, RemoteAction.DOWN, RemoteAction.LEFT, RemoteAction.RIGHT)
     }
 }
