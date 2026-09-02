@@ -3,13 +3,10 @@ package tv.blofy.player.ui.series
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
-import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -41,7 +38,6 @@ class EpisodesActivity : AppCompatActivity() {
     private lateinit var seasonList: RecyclerView
     private lateinit var episodeList: RecyclerView
     private lateinit var status: TextView
-    private lateinit var seasonSummary: TextView
     private lateinit var retryButton: Button
     private var allEpisodes: List<EpisodeEntity> = emptyList()
     private var selectedSeason: Int? = null
@@ -62,105 +58,67 @@ class EpisodesActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(30), dp(22), dp(30), dp(26))
+            setPadding(dp(42), dp(28), dp(42), dp(32))
             background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
         }
 
         val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.RIGHT
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(8), 0, dp(8), dp(10))
+            setPadding(dp(6), 0, dp(6), dp(14))
         }
         header.addView(TextView(this).apply {
             text = seriesName.ifBlank { "الحلقات" }
             BlofyTvDesign.applyTitle(this)
-            textSize = 29f
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.RIGHT
             maxLines = 1
-        }, LinearLayout.LayoutParams(0, dp(58), 1f))
+        })
         status = TextView(this).apply {
             text = "جاري تجهيز الحلقات..."
             BlofyTvDesign.applyCaption(this)
-            textSize = 13.5f
+            textSize = 14f
             setTextColor(BlofyTvDesign.PurpleSoft)
-            gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.RIGHT
+            setPadding(0, dp(7), 0, 0)
         }
-        header.addView(status, LinearLayout.LayoutParams(dp(430), dp(58)))
-        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(68)))
+        header.addView(status)
+        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(88)))
 
-        val body = LinearLayout(this).apply {
+        val seasonHeader = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
-            clipChildren = false
-            clipToPadding = false
-        }
-
-        val infoFrame = FrameLayout(this).apply {
-            background = panelBackground()
-            elevation = dp(5).toFloat()
-            clipChildren = true
-        }
-        val watermark = TextView(this).apply {
-            text = "BLOFY"
-            textSize = 54f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(0x18FFFFFF)
-            gravity = Gravity.CENTER
-            rotation = -8f
-            isFocusable = false
-        }
-        infoFrame.addView(watermark, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(180), Gravity.CENTER))
-
-        val info = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.TOP
-            setPadding(dp(18), dp(18), dp(18), dp(18))
+            setPadding(dp(18), dp(10), dp(18), dp(10))
+            background = BlofyTvDesign.elevatedSurface(dp(22).toFloat())
+            elevation = dp(5).toFloat()
         }
-        info.addView(TextView(this).apply {
-            text = "الموسم"
-            BlofyTvDesign.applyCaption(this)
-            setTextColor(BlofyTvDesign.Mint)
-            gravity = Gravity.RIGHT
-        })
-        seasonSummary = TextView(this).apply {
-            text = "جاري التجهيز…"
-            BlofyTvDesign.applyHeading(this)
-            textSize = 22f
-            gravity = Gravity.RIGHT
-            setPadding(0, dp(6), 0, dp(14))
-        }
-        info.addView(seasonSummary)
-        info.addView(TextView(this).apply {
+        seasonHeader.addView(TextView(this).apply {
             text = "المواسم"
-            BlofyTvDesign.applyCaption(this)
-            setTextColor(BlofyTvDesign.TextSecondary)
-            gravity = Gravity.RIGHT
-            setPadding(0, 0, 0, dp(8))
-        })
+            BlofyTvDesign.applyHeading(this)
+            textSize = 18f
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(dp(130), LinearLayout.LayoutParams.MATCH_PARENT))
         seasonList = RecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@EpisodesActivity)
+            layoutManager = LinearLayoutManager(this@EpisodesActivity, RecyclerView.HORIZONTAL, true)
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             itemAnimator = null
             setHasFixedSize(true)
+            isHorizontalScrollBarEnabled = false
             clipChildren = false
             clipToPadding = false
-            setPadding(0, dp(2), 0, dp(2))
+            setPadding(dp(10), 0, dp(10), 0)
         }
-        info.addView(seasonList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        retryButton = actionButton("↻  تحديث الحلقات") { lifecycleScope.launch { syncEpisodes(currentProvider()) } }.apply { visibility = View.GONE }
-        info.addView(retryButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(10) })
-        infoFrame.addView(info, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        body.addView(infoFrame, LinearLayout.LayoutParams(dp(330), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(16) })
+        seasonHeader.addView(seasonList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        root.addView(seasonHeader, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(88)).apply { bottomMargin = dp(16) })
 
         val episodesPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(18), dp(14), dp(18), dp(14))
-            background = BlofyTvDesign.elevatedSurface(dp(22).toFloat())
+            setPadding(dp(18), dp(14), dp(18), dp(16))
+            background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
             elevation = dp(5).toFloat()
         }
         val episodesTitle = LinearLayout(this).apply {
@@ -171,14 +129,14 @@ class EpisodesActivity : AppCompatActivity() {
         episodesTitle.addView(TextView(this).apply {
             text = "الحلقات"
             BlofyTvDesign.applyHeading(this)
-            textSize = 20f
+            textSize = 19f
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(0, dp(42), 1f))
+        }, LinearLayout.LayoutParams(0, dp(44), 1f))
         episodesTitle.addView(TextView(this).apply {
             text = "↑↓ تنقل  •  OK تشغيل"
             BlofyTvDesign.applyCaption(this)
             gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(dp(220), dp(42)))
+        }, LinearLayout.LayoutParams(dp(220), dp(44)))
         episodesPanel.addView(episodesTitle)
 
         episodeList = RecyclerView(this).apply {
@@ -186,13 +144,15 @@ class EpisodesActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(3), dp(5), dp(3), dp(4))
+            setPadding(dp(4), dp(5), dp(4), dp(4))
             clipChildren = false
             clipToPadding = false
         }
         episodesPanel.addView(episodeList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        body.addView(episodesPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-        root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(episodesPanel, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        retryButton = actionButton("↻  تحديث الحلقات") { lifecycleScope.launch { syncEpisodes(currentProvider()) } }.apply { visibility = View.GONE }
+        root.addView(retryButton, LinearLayout.LayoutParams(dp(250), dp(58)).apply { topMargin = dp(12); gravity = Gravity.RIGHT })
         setContentView(root)
 
         lifecycleScope.launch {
@@ -222,16 +182,6 @@ class EpisodesActivity : AppCompatActivity() {
                 updateStatus()
             }
         }
-    }
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_RIGHT -> if (isFocusInside(seasonList) && requestEpisodeFocus()) return true
-                KeyEvent.KEYCODE_DPAD_LEFT -> if (isFocusInside(episodeList) && requestSeasonFocus()) return true
-            }
-        }
-        return super.dispatchKeyEvent(event)
     }
 
     override fun onResume() {
@@ -312,15 +262,17 @@ class EpisodesActivity : AppCompatActivity() {
             else -> ""
         }
         val cleanTitle = episode.title.ifBlank { "الحلقة ${episode.episode}" }
-        return "%02d   •   %s%s".format(episode.episode, cleanTitle, progressText)
+        return "الحلقة ${episode.episode}   •   $cleanTitle$progressText"
     }
 
     private fun updateStatus() {
-        val seasonEpisodes = selectedSeason?.let { season -> allEpisodes.count { it.season == season } } ?: 0
-        seasonSummary.text = selectedSeason?.let { "الموسم $it\n$seasonEpisodes حلقة" } ?: "لا يوجد موسم"
         if (allEpisodes.isNotEmpty()) {
             val seasons = allEpisodes.map { it.season }.distinct().size
-            status.text = if (syncInProgress) "جاري التحديث بالخلفية  •  ${allEpisodes.size} حلقة متاحة" else "$seasons موسم  •  ${allEpisodes.size} حلقة  •  جاهزة من الكاش"
+            status.text = if (syncInProgress) {
+                "جاري التحديث بالخلفية  •  ${allEpisodes.size} حلقة متاحة الآن"
+            } else {
+                "$seasons موسم  •  ${allEpisodes.size} حلقة  •  جاهزة فورًا من التخزين المحلي"
+            }
             return
         }
         status.text = when (loadState) {
@@ -338,14 +290,12 @@ class EpisodesActivity : AppCompatActivity() {
         FocusMemory.save(this, seasonMemoryKey(), season.toString())
         seasonAdapter.submit(allEpisodes.map { it.season }.distinct().sorted())
         if (changed) refreshEpisodes(false)
-        updateStatus()
     }
 
     private fun refreshEpisodes(restoreFocus: Boolean) {
         if (!::episodeAdapter.isInitialized) return
         val visible = selectedSeason?.let { season -> allEpisodes.filter { it.season == season }.sortedBy { it.episode } } ?: emptyList()
         episodeAdapter.submit(visible)
-        updateStatus()
         if (!restoreFocus || !DeviceClass.isTv(this) || visible.isEmpty()) return
         val remembered = FocusMemory.restore(this, episodeMemoryKey())
         val index = visible.indexOfFirst { it.key == remembered }.let { if (it < 0) 0 else it }
@@ -356,34 +306,6 @@ class EpisodesActivity : AppCompatActivity() {
     private fun rememberEpisode(episode: EpisodeEntity) {
         FocusMemory.save(this, episodeMemoryKey(), episode.key)
         FocusMemory.save(this, seasonMemoryKey(), episode.season.toString())
-    }
-
-    private fun requestEpisodeFocus(): Boolean {
-        if (!::episodeAdapter.isInitialized || episodeAdapter.itemCount == 0) return false
-        val remembered = FocusMemory.restore(this, episodeMemoryKey())
-        val visible = selectedSeason?.let { s -> allEpisodes.filter { it.season == s }.sortedBy { it.episode } }.orEmpty()
-        val index = visible.indexOfFirst { it.key == remembered }.let { if (it < 0) 0 else it }
-        episodeList.scrollToPosition(index)
-        episodeList.post { episodeList.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
-        return true
-    }
-
-    private fun requestSeasonFocus(): Boolean {
-        if (!::seasonAdapter.isInitialized || seasonAdapter.itemCount == 0) return false
-        val seasons = allEpisodes.map { it.season }.distinct().sorted()
-        val index = seasons.indexOf(selectedSeason).let { if (it < 0) 0 else it }
-        seasonList.scrollToPosition(index)
-        seasonList.post { seasonList.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
-        return true
-    }
-
-    private fun isFocusInside(parent: View): Boolean {
-        var child: View? = currentFocus
-        while (child != null) {
-            if (child === parent) return true
-            child = child.parent as? View
-        }
-        return false
     }
 
     private fun openEpisode(provider: ProviderEntity, episode: EpisodeEntity) {
@@ -423,16 +345,11 @@ class EpisodesActivity : AppCompatActivity() {
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
-        textSize = 14f
+        textSize = 15f
         typeface = BlofyTvDesign.BodyTypeface
         setTextColor(Color.WHITE)
-        BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.035f, false)
+        BlofyTvDesign.installTvFocus(this, dp(17).toFloat(), 1.035f, false)
         setOnClickListener { action() }
-    }
-
-    private fun panelBackground() = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xE81A1326.toInt(), 0xF00B0811.toInt())).apply {
-        cornerRadius = dp(22).toFloat()
-        setStroke(dp(1), 0x66563E70)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

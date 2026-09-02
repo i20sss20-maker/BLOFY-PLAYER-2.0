@@ -40,14 +40,14 @@ class MovieDetailsActivity : AppCompatActivity() {
         }
         val backdrop = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            alpha = 0.48f
+            alpha = 0.42f
             setBackgroundColor(BlofyTvDesign.Background)
         }
         root.addView(backdrop, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(View(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0xFF07050C.toInt(), 0xF208060E.toInt(), 0xD20D0917.toInt(), 0x6B160B26.toInt())
+                intArrayOf(0xFA07050C.toInt(), 0xED0A0710.toInt(), 0xC50E0918.toInt(), 0x5A160B26.toInt())
             )
         }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
@@ -55,7 +55,7 @@ class MovieDetailsActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(58), dp(34), dp(58), dp(34))
+            setPadding(dp(72), dp(42), dp(72), dp(42))
             clipChildren = false
         }
         root.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -73,24 +73,23 @@ class MovieDetailsActivity : AppCompatActivity() {
             val posterCard = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(8), dp(8), dp(8), dp(8))
-                background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
-                elevation = dp(10).toFloat()
+                setPadding(dp(9), dp(9), dp(9), dp(9))
+                background = BlofyTvDesign.elevatedSurface(dp(28).toFloat())
+                elevation = dp(12).toFloat()
             }
             val poster = ImageView(this@MovieDetailsActivity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setBackgroundColor(BlofyTvDesign.Surface)
             }
-            posterCard.addView(poster, LinearLayout.LayoutParams(dp(248), dp(372)))
+            posterCard.addView(poster, LinearLayout.LayoutParams(dp(286), dp(430)))
             ArtworkLoader.load(poster, listOf(stream.icon, stream.backdrop))
-            body.addView(posterCard, LinearLayout.LayoutParams(dp(264), dp(388)).apply { marginStart = dp(44) })
+            body.addView(posterCard, LinearLayout.LayoutParams(dp(306), dp(450)).apply { marginStart = dp(52) })
 
             val info = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 clipChildren = false
-                setPadding(0, 0, dp(8), 0)
             }
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = "BLOFY  •  فيلم"
@@ -100,57 +99,39 @@ class MovieDetailsActivity : AppCompatActivity() {
                 gravity = Gravity.RIGHT
                 includeFontPadding = false
                 background = BlofyTvDesign.badge(dp(14).toFloat())
-                setPadding(dp(13), dp(6), dp(13), dp(6))
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
+                setPadding(dp(13), dp(7), dp(13), dp(7))
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(14) })
 
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.name
                 BlofyTvDesign.applyHeroTitle(this)
-                textSize = 43f
                 gravity = Gravity.RIGHT
                 maxLines = 2
-                includeFontPadding = false
             })
 
-            val metaRow = LinearLayout(this@MovieDetailsActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
-                gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            }
-            metaRow.addView(TextView(this@MovieDetailsActivity).apply {
+            info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = buildList {
                     stream.year?.takeIf { it.isNotBlank() }?.let(::add)
                     stream.genre?.takeIf { it.isNotBlank() }?.substringBefore(',')?.let(::add)
                     stream.duration?.takeIf { it.isNotBlank() }?.let(::add)
+                    stream.rating?.takeIf { it.isNotBlank() }?.let { add("★ $it") }
                     stream.extension?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
                 }.joinToString("  •  ")
-                textSize = 15.5f
+                textSize = 16f
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(BlofyTvDesign.PurpleSoft)
-                gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            }, LinearLayout.LayoutParams(0, dp(44), 1f))
-            stream.rating?.takeIf { it.isNotBlank() }?.let { rating ->
-                metaRow.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = "★  $rating"
-                    textSize = 14.5f
-                    typeface = BlofyTvDesign.BodyTypeface
-                    setTextColor(Color.WHITE)
-                    gravity = Gravity.CENTER
-                    background = BlofyTvDesign.badge(dp(14).toFloat())
-                    setPadding(dp(13), dp(7), dp(13), dp(7))
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12) })
-            }
-            info.addView(metaRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(5); bottomMargin = dp(12) })
+                gravity = Gravity.RIGHT
+                setPadding(0, dp(10), 0, dp(20))
+            })
 
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.plot?.takeIf { it.isNotBlank() } ?: "استمتع بالمشاهدة على BLOFY PLAYER"
                 BlofyTvDesign.applyBody(this)
-                textSize = 16.5f
-                maxLines = 5
+                maxLines = 6
                 gravity = Gravity.RIGHT
-                setLineSpacing(dp(2).toFloat(), 1.14f)
-                setPadding(0, 0, 0, dp(20))
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+                setLineSpacing(dp(2).toFloat(), 1.16f)
+                setPadding(0, 0, 0, dp(26))
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(10) })
 
             val resumeMs = watch?.positionMs ?: 0L
             val durationMs = watch?.durationMs ?: 0L
@@ -158,13 +139,13 @@ class MovieDetailsActivity : AppCompatActivity() {
                 val percent = ((resumeMs * 100L) / durationMs).coerceIn(1, 99)
                 info.addView(TextView(this@MovieDetailsActivity).apply {
                     text = "◷  متابعة المشاهدة  •  $percent%"
-                    textSize = 14.5f
+                    textSize = 15f
                     typeface = BlofyTvDesign.BodyTypeface
                     setTextColor(BlofyTvDesign.TextSecondary)
                     gravity = Gravity.RIGHT
-                    setPadding(dp(13), dp(8), dp(13), dp(8))
+                    setPadding(dp(13), dp(9), dp(13), dp(9))
                     background = BlofyTvDesign.badge(dp(14).toFloat())
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(16) })
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(18) })
             }
 
             val row = LinearLayout(this@MovieDetailsActivity).apply {
@@ -176,9 +157,9 @@ class MovieDetailsActivity : AppCompatActivity() {
             val play = actionButton(if (resumeMs > 30_000L) "▶  استئناف" else "▶  شاهد الآن", primary = true) {
                 openPlayer(provider, stream, url, resumeMs)
             }
-            row.addView(play, LinearLayout.LayoutParams(dp(202), dp(60)).apply { marginStart = dp(10) })
+            row.addView(play, LinearLayout.LayoutParams(dp(220), dp(68)).apply { marginStart = dp(12) })
             if (resumeMs > 30_000L) {
-                row.addView(actionButton("↺  من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(dp(176), dp(60)).apply { marginStart = dp(10) })
+                row.addView(actionButton("↺  من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(dp(190), dp(68)).apply { marginStart = dp(12) })
             }
             favoriteButton = actionButton(if (stream.favorite) "★  المفضلة" else "☆  المفضلة") {
                 lifecycleScope.launch {
@@ -187,7 +168,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                     favoriteButton.text = if (!current.favorite) "★  المفضلة" else "☆  المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(172), dp(60)).apply { marginStart = dp(10) })
+            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(185), dp(68)).apply { marginStart = dp(12) })
             info.addView(row)
             body.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             play.post { play.requestFocus() }
@@ -213,11 +194,11 @@ class MovieDetailsActivity : AppCompatActivity() {
     private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
-        textSize = 15f
+        textSize = 15.5f
         typeface = BlofyTvDesign.BodyTypeface
         includeFontPadding = false
         setTextColor(Color.WHITE)
-        BlofyTvDesign.installTvFocus(this, dp(18).toFloat(), 1.04f, primary)
+        BlofyTvDesign.installTvFocus(this, dp(19).toFloat(), 1.045f, primary)
         setOnClickListener { action() }
     }
 

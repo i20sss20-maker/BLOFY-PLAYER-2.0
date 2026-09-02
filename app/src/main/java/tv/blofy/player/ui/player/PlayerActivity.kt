@@ -144,22 +144,22 @@ class PlayerActivity : AppCompatActivity() {
         root.addView(playerView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         channelNumberView = TextView(this).apply {
-            textSize = 28f
+            textSize = 32f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            setPadding(dp(18), dp(8), dp(18), dp(8))
-            background = BlofyTvDesign.primaryButton(dp(16).toFloat(), true)
+            setPadding(dp(22), dp(10), dp(22), dp(10))
+            background = BlofyTvDesign.primaryButton(dp(18).toFloat(), true)
             visibility = View.GONE
         }
-        root.addView(channelNumberView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = dp(28); marginEnd = dp(34) })
+        root.addView(channelNumberView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = dp(34); marginEnd = dp(42) })
 
         hud = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(30), dp(16), dp(30), dp(18))
-            background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
-            elevation = dp(10).toFloat()
+            setPadding(dp(44), dp(24), dp(44), dp(30))
+            background = BlofyTvDesign.elevatedSurface(dp(28).toFloat())
+            elevation = dp(12).toFloat()
             visibility = View.GONE
             clipChildren = false
         }
@@ -169,45 +169,45 @@ class PlayerActivity : AppCompatActivity() {
             BlofyTvDesign.applyCaption(this)
             setTextColor(BlofyTvDesign.Mint)
             gravity = Gravity.RIGHT
-            letterSpacing = .05f
-            setPadding(0, 0, 0, dp(3))
+            letterSpacing = .06f
+            setPadding(0, 0, 0, dp(5))
         }
         hud.addView(eyebrow)
 
         titleView = TextView(this).apply {
             BlofyTvDesign.applyHeading(this)
-            textSize = 21f
+            textSize = 25f
             gravity = Gravity.RIGHT
             maxLines = 1
-            setPadding(0, 0, 0, dp(5))
+            setPadding(0, 0, 0, dp(8))
         }
         hud.addView(titleView)
 
         epgView = TextView(this).apply {
             BlofyTvDesign.applyBody(this)
-            textSize = 14f
+            textSize = 15f
             gravity = Gravity.RIGHT
             visibility = if (kind == "live") View.VISIBLE else View.GONE
             if (kind == "live") {
-                background = BlofyTvDesign.badge(dp(13).toFloat())
-                setPadding(dp(14), dp(8), dp(14), dp(8))
+                background = BlofyTvDesign.badge(dp(14).toFloat())
+                setPadding(dp(18), dp(11), dp(18), dp(11))
             }
         }
-        hud.addView(epgView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = if (kind == "live") dp(6) else 0 })
+        hud.addView(epgView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = if (kind == "live") dp(10) else 0 })
 
         if (kind != "live") {
             val timeline = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 layoutDirection = View.LAYOUT_DIRECTION_LTR
-                setPadding(0, dp(1), 0, dp(8))
+                setPadding(0, dp(2), 0, dp(13))
             }
             positionView = TextView(this).apply { text = "00:00"; BlofyTvDesign.applyCaption(this); setTextColor(Color.WHITE); gravity = Gravity.CENTER }
             durationView = TextView(this).apply { text = "00:00"; BlofyTvDesign.applyCaption(this); gravity = Gravity.CENTER }
             progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progress = 0 }
-            timeline.addView(positionView, LinearLayout.LayoutParams(dp(64), dp(30)))
-            timeline.addView(progressBar, LinearLayout.LayoutParams(0, dp(12), 1f).apply { marginEnd = dp(10); marginStart = dp(10) })
-            timeline.addView(durationView, LinearLayout.LayoutParams(dp(64), dp(30)))
+            timeline.addView(positionView, LinearLayout.LayoutParams(dp(76), dp(36)))
+            timeline.addView(progressBar, LinearLayout.LayoutParams(0, dp(18), 1f).apply { marginEnd = dp(14); marginStart = dp(14) })
+            timeline.addView(durationView, LinearLayout.LayoutParams(dp(76), dp(36)))
             hud.addView(timeline)
         }
 
@@ -217,7 +217,7 @@ class PlayerActivity : AppCompatActivity() {
                 BlofyTvDesign.applyCaption(this)
                 setTextColor(BlofyTvDesign.PurpleSoft)
                 gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
         } else {
             val playbackControls = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -228,10 +228,10 @@ class PlayerActivity : AppCompatActivity() {
             val rewind = controlButton("−10 ث") { seekBy(-10_000L); showHudBriefly() }
             playPauseButton = controlButton("⏸  إيقاف") { togglePlayPause() }
             val forward = controlButton("+10 ث") { seekBy(10_000L); showHudBriefly() }
-            playbackControls.addView(forward, LinearLayout.LayoutParams(dp(122), dp(52)).apply { marginStart = dp(8) })
-            playbackControls.addView(playPauseButton, LinearLayout.LayoutParams(dp(164), dp(52)).apply { marginStart = dp(8) })
-            playbackControls.addView(rewind, LinearLayout.LayoutParams(dp(122), dp(52)))
-            hud.addView(playbackControls, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(6) })
+            playbackControls.addView(forward, LinearLayout.LayoutParams(dp(148), dp(64)).apply { marginStart = dp(10) })
+            playbackControls.addView(playPauseButton, LinearLayout.LayoutParams(dp(190), dp(64)).apply { marginStart = dp(10) })
+            playbackControls.addView(rewind, LinearLayout.LayoutParams(dp(148), dp(64)))
+            hud.addView(playbackControls, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
 
             val options = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -243,21 +243,21 @@ class PlayerActivity : AppCompatActivity() {
             subtitleButton = controlButton("CC  الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
             qualityButton = controlButton("▣  الجودة") { showVideoQualityDialog() }
             favoriteButton = controlButton("☆  المفضلة") { toggleFavorite() }.apply { visibility = if (kind == "episode") View.GONE else View.VISIBLE }
-            options.addView(audioButton, LinearLayout.LayoutParams(dp(142), dp(50)).apply { marginStart = dp(7) })
-            options.addView(subtitleButton, LinearLayout.LayoutParams(dp(142), dp(50)).apply { marginStart = dp(7) })
-            options.addView(qualityButton, LinearLayout.LayoutParams(dp(142), dp(50)).apply { marginStart = dp(7) })
-            if (kind != "episode") options.addView(favoriteButton, LinearLayout.LayoutParams(dp(150), dp(50)))
+            options.addView(audioButton, LinearLayout.LayoutParams(dp(166), dp(62)).apply { marginStart = dp(9) })
+            options.addView(subtitleButton, LinearLayout.LayoutParams(dp(166), dp(62)).apply { marginStart = dp(9) })
+            options.addView(qualityButton, LinearLayout.LayoutParams(dp(166), dp(62)).apply { marginStart = dp(9) })
+            if (kind != "episode") options.addView(favoriteButton, LinearLayout.LayoutParams(dp(176), dp(62)))
             if (kind == "episode") {
-                options.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(dp(124), dp(50)).apply { marginStart = dp(7) })
-                options.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(dp(124), dp(50)))
+                options.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(dp(145), dp(62)).apply { marginStart = dp(9) })
+                options.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(dp(145), dp(62)))
             }
             hud.addView(options)
         }
 
         root.addView(hud, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply {
-            marginStart = dp(14)
-            marginEnd = dp(14)
-            bottomMargin = dp(12)
+            marginStart = dp(18)
+            marginEnd = dp(18)
+            bottomMargin = dp(16)
         })
         setContentView(root)
         playerView.requestFocus()
@@ -267,12 +267,12 @@ class PlayerActivity : AppCompatActivity() {
     private fun controlButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
-        textSize = 13.5f
+        textSize = 14f
         typeface = BlofyTvDesign.BodyTypeface
         setTextColor(Color.WHITE)
         gravity = Gravity.CENTER
         includeFontPadding = false
-        BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.035f, false) { keepHudVisible() }
+        BlofyTvDesign.installTvFocus(this, dp(18).toFloat(), 1.04f, false) { keepHudVisible() }
         setOnClickListener { action() }
     }
 
@@ -507,7 +507,7 @@ class PlayerActivity : AppCompatActivity() {
         keepHudVisible()
         hud.visibility = View.VISIBLE
         if (kind != "live") updateProgressUi()
-        hud.postDelayed(hideHudRunnable, if (kind == "live") 2500L else 4500L)
+        hud.postDelayed(hideHudRunnable, if (kind == "live") 2200L else 3800L)
     }
 
     private fun showTrackDialog(trackType: Int) {
