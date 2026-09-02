@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/server.mjs",
-    "check": "node --check src/server.mjs && node --check src/portal.mjs && node --check src/auth-protection.mjs && node --check src/diagnostics-sanitizer.mjs && node --check src/release-metadata.mjs",
+    "start": "node src/bootstrap.mjs",
+    "check": "node --check src/bootstrap.mjs && node --check src/subscriber-proxy-hook.mjs && node --check src/server.mjs && node --check src/portal.mjs && node --check src/auth-protection.mjs && node --check src/diagnostics-sanitizer.mjs && node --check src/release-metadata.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "engines": {

@@ -20,6 +20,7 @@
         <activity android:name=".ui.series.EpisodesActivity" android:exported="false" />
         <activity android:name=".ui.browser.ContentBrowserActivity" android:exported="false" />
         <activity android:name=".ui.playlist.ProviderManagerActivity" android:exported="false" />
+        <activity android:name=".ui.playlist.BlofySubscriberActivity" android:exported="false" />
         <activity android:name=".ui.playlist.PlaylistActivity" android:exported="false" />
         <activity android:name=".ui.login.CatalogLoadingActivity" android:exported="false" />
         <activity android:name=".ui.player.PlayerActivity" android:exported="false" android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize" />
