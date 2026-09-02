@@ -2,8 +2,6 @@ package tv.blofy.player.ui.series
 
 import android.app.AlertDialog
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
@@ -62,7 +60,7 @@ class EpisodesActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(30), dp(22), dp(30), dp(26))
+            setPadding(dp(34), dp(24), dp(34), dp(28))
             background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -77,19 +75,21 @@ class EpisodesActivity : AppCompatActivity() {
         header.addView(TextView(this).apply {
             text = seriesName.ifBlank { "الحلقات" }
             BlofyTvDesign.applyTitle(this)
-            textSize = 29f
+            textSize = 30f
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
             maxLines = 1
-        }, LinearLayout.LayoutParams(0, dp(58), 1f))
+        }, LinearLayout.LayoutParams(0, dp(60), 1f))
         status = TextView(this).apply {
             text = "جاري تجهيز الحلقات..."
             BlofyTvDesign.applyCaption(this)
             textSize = 13.5f
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
+            background = BlofyTvDesign.badge(dp(14).toFloat())
+            setPadding(dp(14), 0, dp(14), 0)
         }
-        header.addView(status, LinearLayout.LayoutParams(dp(430), dp(58)))
-        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(68)))
+        header.addView(status, LinearLayout.LayoutParams(dp(430), dp(42)))
+        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(70)))
 
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -99,7 +99,7 @@ class EpisodesActivity : AppCompatActivity() {
         }
 
         val infoFrame = FrameLayout(this).apply {
-            background = panelBackground()
+            background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
             elevation = dp(5).toFloat()
             clipChildren = true
         }
@@ -107,7 +107,7 @@ class EpisodesActivity : AppCompatActivity() {
             text = "BLOFY"
             textSize = 54f
             typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(0x18FFFFFF)
+            setTextColor(0x12682ACC)
             gravity = Gravity.CENTER
             rotation = -8f
             isFocusable = false
@@ -118,7 +118,7 @@ class EpisodesActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.TOP
-            setPadding(dp(18), dp(18), dp(18), dp(18))
+            setPadding(dp(20), dp(20), dp(20), dp(20))
         }
         info.addView(TextView(this).apply {
             text = "الموسم"
@@ -129,7 +129,7 @@ class EpisodesActivity : AppCompatActivity() {
         seasonSummary = TextView(this).apply {
             text = "جاري التجهيز…"
             BlofyTvDesign.applyHeading(this)
-            textSize = 22f
+            textSize = 23f
             gravity = Gravity.RIGHT
             setPadding(0, dp(6), 0, dp(14))
         }
@@ -159,8 +159,8 @@ class EpisodesActivity : AppCompatActivity() {
         val episodesPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(18), dp(14), dp(18), dp(14))
-            background = BlofyTvDesign.elevatedSurface(dp(22).toFloat())
+            setPadding(dp(20), dp(16), dp(20), dp(16))
+            background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
             elevation = dp(5).toFloat()
         }
         val episodesTitle = LinearLayout(this).apply {
@@ -171,14 +171,14 @@ class EpisodesActivity : AppCompatActivity() {
         episodesTitle.addView(TextView(this).apply {
             text = "الحلقات"
             BlofyTvDesign.applyHeading(this)
-            textSize = 20f
+            textSize = 21f
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(0, dp(42), 1f))
+        }, LinearLayout.LayoutParams(0, dp(44), 1f))
         episodesTitle.addView(TextView(this).apply {
             text = "↑↓ تنقل  •  OK تشغيل"
             BlofyTvDesign.applyCaption(this)
             gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(dp(220), dp(42)))
+        }, LinearLayout.LayoutParams(dp(220), dp(44)))
         episodesPanel.addView(episodesTitle)
 
         episodeList = RecyclerView(this).apply {
@@ -186,7 +186,7 @@ class EpisodesActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(3), dp(5), dp(3), dp(4))
+            setPadding(dp(3), dp(6), dp(3), dp(5))
             clipChildren = false
             clipToPadding = false
         }
@@ -425,14 +425,9 @@ class EpisodesActivity : AppCompatActivity() {
         isAllCaps = false
         textSize = 14f
         typeface = BlofyTvDesign.BodyTypeface
-        setTextColor(Color.WHITE)
+        setTextColor(BlofyTvDesign.TextPrimary)
         BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.035f, false)
         setOnClickListener { action() }
-    }
-
-    private fun panelBackground() = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xE81A1326.toInt(), 0xF00B0811.toInt())).apply {
-        cornerRadius = dp(22).toFloat()
-        setStroke(dp(1), 0x66563E70)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
