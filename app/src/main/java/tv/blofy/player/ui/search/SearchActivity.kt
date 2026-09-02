@@ -28,6 +28,7 @@ import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
@@ -47,17 +48,25 @@ class SearchActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = "بحث BLOFY"
             textSize = 29f
-            setTextColor(TEXT_PRIMARY)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+        })
+        root.addView(TextView(this).apply {
+            text = "ابحث في القنوات والأفلام والمسلسلات فورًا"
+            textSize = 13.5f
+            setTextColor(BlofyTvDesign.TextMuted)
+            setPadding(0, 4, 0, 14)
         })
         input = EditText(this).apply {
             hint = "اكتب اسم قناة أو فيلم أو مسلسل"
-            setTextColor(TEXT_PRIMARY)
-            setHintTextColor(TEXT_MUTED)
-            setBackgroundColor(Color.WHITE)
+            setTextColor(BlofyTvDesign.TextPrimary)
+            setHintTextColor(BlofyTvDesign.TextMuted)
+            background = searchField(false)
             setPadding(22, 8, 22, 8)
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             isFocusable = true
+            setOnFocusChangeListener { _, focused -> background = searchField(focused) }
             setOnEditorActionListener { _, _, _ ->
                 searchJob?.cancel()
                 runSearch(text?.toString().orEmpty(), moveFocus = true)
@@ -69,7 +78,7 @@ class SearchActivity : AppCompatActivity() {
                     searchJob?.cancel()
                     val query = s?.toString().orEmpty()
                     if (query.isBlank()) { results.removeAllViews(); return }
-                    searchJob = lifecycleScope.launch { delay(180L); runSearch(query, moveFocus = false) }
+                    searchJob = lifecycleScope.launch { delay(150L); runSearch(query, moveFocus = false) }
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
@@ -95,21 +104,23 @@ class SearchActivity : AppCompatActivity() {
             items.take(100).forEach { stream ->
                 val row = TextView(this@SearchActivity).apply {
                     text = "${if (stream.locked) "🔒 " else ""}${kindLabel(stream.kind)}   •   ${stream.name}"
-                    textSize = 18f
-                    setTextColor(TEXT_PRIMARY)
-                    setPadding(24, 17, 24, 17)
+                    textSize = 17f
+                    typeface = BlofyTvDesign.BodyTypeface
+                    setTextColor(BlofyTvDesign.TextPrimary)
+                    setPadding(24, 16, 24, 16)
                     gravity = Gravity.CENTER_VERTICAL
                     isFocusable = true
                     isClickable = true
                     background = rowBackground(false)
                     setOnFocusChangeListener { view, focused ->
-                        setTextColor(if (focused) Color.WHITE else TEXT_PRIMARY)
+                        setTextColor(Color.WHITE)
                         view.background = rowBackground(focused)
-                        view.animate().scaleX(if (focused) 1.012f else 1f).scaleY(if (focused) 1.012f else 1f).translationZ(if (focused) 8f else 1f).setDuration(80).start()
+                        view.animate().cancel()
+                        view.animate().scaleX(if (focused) 1.012f else 1f).scaleY(if (focused) 1.012f else 1f).translationZ(if (focused) 8f else 1f).setDuration(75).start()
                     }
                     setOnClickListener { guardedOpen(provider.id, provider.liveFormat, stream) }
                 }
-                results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
+                results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 64).apply { topMargin = 7 })
             }
             if (moveFocus) results.getChildAt(0)?.requestFocus()
         }
@@ -141,23 +152,23 @@ class SearchActivity : AppCompatActivity() {
 
     private fun kindLabel(kind: String) = when (kind) { "live" -> "LIVE"; "movie" -> "MOVIE"; "series" -> "SERIES"; else -> kind.uppercase() }
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable().apply {
+    private fun searchField(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 20f
+        setColor(0xFF21172F.toInt())
+        setStroke(if (focused) 3 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF513D67.toInt())
+    }
+
+    private fun rowBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+        if (focused) intArrayOf(0xFF7B3CD1.toInt(), 0xFF4B257F.toInt()) else intArrayOf(0xFF241A36.toInt(), 0xFF191222.toInt())
+    ).apply {
         cornerRadius = 16f
-        setColor(if (focused) PURPLE else Color.WHITE)
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFB991E9.toInt() else 0xFFE1DCE8.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF49375E.toInt())
     }
 
     private fun showMessage(text: String) {
         results.removeAllViews()
-        results.addView(TextView(this).apply { this.text = text; textSize = 18f; setTextColor(TEXT_SECONDARY); setPadding(0, 24, 0, 0) })
+        results.addView(TextView(this).apply { this.text = text; textSize = 18f; setTextColor(BlofyTvDesign.TextSecondary); setPadding(0, 24, 0, 0) })
     }
 
     override fun onDestroy() { searchJob?.cancel(); super.onDestroy() }
-
-    companion object {
-        private val TEXT_PRIMARY = Color.rgb(28, 24, 34)
-        private val TEXT_SECONDARY = Color.rgb(78, 72, 86)
-        private val TEXT_MUTED = Color.rgb(128, 120, 139)
-        private val PURPLE = Color.rgb(105, 49, 190)
-    }
 }
