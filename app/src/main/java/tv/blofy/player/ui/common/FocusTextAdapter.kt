@@ -47,51 +47,36 @@ class FocusTextAdapter<T>(
         }
     }
 
-    fun clearFocusMemory() {
-        focusedKey = null
-        focusedPosition = RecyclerView.NO_POSITION
-        restorePending = false
-    }
+    fun clearFocusMemory() { focusedKey = null; focusedPosition = RecyclerView.NO_POSITION; restorePending = false }
 
     override fun getItemId(position: Int): Long = itemKey?.invoke(items[position])?.hashCode()?.toLong() ?: super.getItemId(position)
-
-    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
-        super.onAttachedToRecyclerView(recyclerView)
-        attachedRecyclerView = recyclerView
-    }
-
-    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
-        if (attachedRecyclerView === recyclerView) attachedRecyclerView = null
-        restorePending = false
-        super.onDetachedFromRecyclerView(recyclerView)
-    }
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) { super.onAttachedToRecyclerView(recyclerView); attachedRecyclerView = recyclerView }
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) { if (attachedRecyclerView === recyclerView) attachedRecyclerView = null; restorePending = false; super.onDetachedFromRecyclerView(recyclerView) }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val view = TextView(parent.context).apply {
-            textSize = 16.5f
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.TextPrimary)
+            textSize = 15.5f
+            typeface = BlofyTvDesign.MediumTypeface
+            setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(24, 0, 24, 0)
-            isFocusable = true
-            isFocusableInTouchMode = true
-            isClickable = true
-            isLongClickable = true
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            isFocusable = true; isFocusableInTouchMode = true; isClickable = true; isLongClickable = true
             background = itemBackground(false)
             setOnFocusChangeListener { v, focused ->
-                (v as TextView).setTextColor(Color.WHITE)
+                val textView = v as TextView
                 v.animate().cancel()
-                v.animate().scaleX(if (focused) 1.022f else 1f).scaleY(if (focused) 1.022f else 1f)
-                    .translationZ(if (focused) 12f else 2f).setDuration(if (focused) 85L else 70L).start()
+                textView.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
+                textView.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
                 v.background = itemBackground(focused)
+                v.animate().scaleX(if (focused) 1.026f else 1f).scaleY(if (focused) 1.026f else 1f)
+                    .translationX(if (focused) 6f else 0f).translationZ(if (focused) 14f else 2f)
+                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs).start()
                 if (focused) {
                     val pos = (v.tag as? Int) ?: RecyclerView.NO_POSITION
-                    items.getOrNull(pos)?.let { item ->
-                        focusedPosition = pos
-                        focusedKey = itemKey?.invoke(item)
-                        onFocus?.invoke(item)
-                    }
+                    items.getOrNull(pos)?.let { item -> focusedPosition = pos; focusedKey = itemKey?.invoke(item); onFocus?.invoke(item) }
                 }
             }
         }
@@ -102,29 +87,20 @@ class FocusTextAdapter<T>(
         val item = items[position]
         holder.text.text = label(item)
         holder.text.tag = position
-        holder.text.setTextColor(BlofyTvDesign.TextPrimary)
+        if (!holder.text.hasFocus()) { holder.text.typeface = BlofyTvDesign.MediumTypeface; holder.text.setTextColor(BlofyTvDesign.TextSecondary) }
         holder.text.background = itemBackground(holder.text.hasFocus())
         holder.text.setOnClickListener { onClick(item) }
         holder.text.setOnLongClickListener { onLongClick?.invoke(item); onLongClick != null }
-        if (restorePending && position == focusedPosition) {
-            holder.text.post {
-                if (holder.bindingAdapterPosition == focusedPosition && holder.text.visibility == View.VISIBLE) {
-                    holder.text.requestFocus()
-                    restorePending = false
-                }
-            }
+        if (restorePending && position == focusedPosition) holder.text.post {
+            if (holder.bindingAdapterPosition == focusedPosition && holder.text.visibility == View.VISIBLE) { holder.text.requestFocus(); restorePending = false }
         }
     }
 
     override fun getItemCount() = items.size
-
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
 
     private fun itemBackground(focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF7139BE.toInt(), 0xFF402461.toInt()) else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
-    ).apply {
-        cornerRadius = 18f
-        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF463455.toInt())
-    }
+        if (focused) intArrayOf(0xFF7139BE.toInt(), 0xFF402461.toInt()) else intArrayOf(0xFF21172F.toInt(), 0xFF17101F.toInt())
+    ).apply { cornerRadius = 18f; setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF3D2D4A.toInt()) }
 }
