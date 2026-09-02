@@ -57,6 +57,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private lateinit var categoryList: RecyclerView
     private lateinit var streamList: RecyclerView
     private lateinit var searchInput: EditText
+    private lateinit var stateView: TextView
     private var streamsJob: Job? = null
     private var searchJob: Job? = null
     private var previewJob: Job? = null
@@ -66,6 +67,8 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var previewMeta: TextView? = null
     private var currentCategoryId: String? = null
     private var currentRows: List<StreamEntity> = emptyList()
+    private var searchUniverse: List<StreamEntity> = emptyList()
+    private var searchUniverseReady = false
     private var lastPreviewKey: String? = null
     private var resumedOnce = false
     private val epgRefreshAt = mutableMapOf<String, Long>()
@@ -87,6 +90,15 @@ class ContentBrowserActivity : AppCompatActivity() {
             clipToPadding = false
         }
         root.addView(buildHeader(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(64) else dp(76)))
+        stateView = TextView(this).apply {
+            text = "جاري تجهيز المحتوى…"
+            textSize = if (phoneMode) 12.5f else 13.5f
+            typeface = bodyTypeface
+            setTextColor(BLOFY_PURPLE_SOFT)
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            setPadding(dp(14), 0, dp(14), 0)
+        }
+        root.addView(stateView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, if (phoneMode) dp(34) else dp(40)))
 
         val body = LinearLayout(this).apply {
             orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
@@ -239,12 +251,17 @@ class ContentBrowserActivity : AppCompatActivity() {
         rememberCategory(categoryId)
         lastPreviewKey = null
         stopPreview()
+        stateView.text = "جاري تجهيز ${if (kind == KIND_LIVE) "القنوات" else "المحتوى"}…"
         streamsJob?.cancel()
         streamsJob = lifecycleScope.launch {
             BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, categoryId).collect { items ->
                 currentRows = items
+                if (categoryId == null) {
+                    searchUniverse = items
+                    searchUniverseReady = true
+                }
                 if (searchInput.text.isNullOrBlank()) {
-                    streamAdapter.submit(items)
+                    showRows(items)
                     if (previewEnabled && items.isNotEmpty() && previewSession == null) {
                         val target = items.firstOrNull { it.key == savedStreamKey() } ?: items.first()
                         schedulePreview(target, true)
@@ -258,17 +275,54 @@ class ContentBrowserActivity : AppCompatActivity() {
         searchJob?.cancel()
         val query = raw.trim()
         if (query.isEmpty()) {
-            streamAdapter.submit(currentRows)
-            if (previewEnabled && currentRows.isNotEmpty()) schedulePreview(currentRows.first(), true)
+            showRows(currentRows)
+            if (previewEnabled && currentRows.isNotEmpty()) {
+                val target = currentRows.firstOrNull { it.key == savedStreamKey() } ?: currentRows.first()
+                schedulePreview(target, true)
+            }
             return
         }
         stopPreview()
         if (!::provider.isInitialized) return
+        stateView.text = "بحث: $query"
         searchJob = lifecycleScope.launch {
-            delay(45L)
-            val all = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, null).first() }
-            val matches = withContext(Dispatchers.Default) { all.asSequence().filter { it.name.contains(query, ignoreCase = true) }.take(700).toList() }
-            if (searchInput.text?.toString()?.trim() == query) streamAdapter.submit(matches)
+            delay(35L)
+            val all = if (searchUniverseReady) {
+                searchUniverse
+            } else {
+                withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, null).first() }.also {
+                    searchUniverse = it
+                    searchUniverseReady = true
+                }
+            }
+            val matches = withContext(Dispatchers.Default) {
+                all.asSequence()
+                    .filter {
+                        it.name.contains(query, ignoreCase = true) ||
+                            it.genre?.contains(query, ignoreCase = true) == true ||
+                            it.year?.contains(query, ignoreCase = true) == true
+                    }
+                    .take(MAX_SEARCH_RESULTS)
+                    .toList()
+            }
+            if (searchInput.text?.toString()?.trim() == query) showRows(matches, searching = true)
+        }
+    }
+
+    private fun showRows(items: List<StreamEntity>, searching: Boolean = false) {
+        streamAdapter.submit(items)
+        stateView.text = when {
+            items.isEmpty() && searching -> "لا توجد نتائج • جرّب اسمًا أو تصنيفًا آخر"
+            items.isEmpty() && kind == KIND_LIVE -> "لا توجد قنوات محفوظة في هذه الفئة"
+            items.isEmpty() -> "لا يوجد محتوى محفوظ في هذه الفئة"
+            searching -> "${items.size} نتيجة"
+            kind == KIND_LIVE -> "${items.size} قناة"
+            kind == KIND_SERIES -> "${items.size} مسلسل"
+            else -> "${items.size} فيلم"
+        }
+        if (items.isEmpty() && previewEnabled) {
+            previewTitle?.text = "لا توجد قناة"
+            previewMeta?.text = "اختر فئة أخرى أو حدّث المحتوى من الإعدادات"
         }
     }
 
@@ -417,6 +471,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
         private const val ALL_CATEGORY_ID = "__all__"
+        private const val MAX_SEARCH_RESULTS = 900
         private val BLOFY_PURPLE_SOFT = Color.rgb(208, 164, 255)
     }
 }

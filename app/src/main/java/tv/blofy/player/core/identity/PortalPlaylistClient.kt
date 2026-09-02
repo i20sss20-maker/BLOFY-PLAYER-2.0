@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit
 object PortalPlaylistClient {
     data class SyncResult(
         val activeProvider: ProviderEntity?,
+        val providers: List<ProviderEntity>,
         val changedProviderIds: Set<String>,
         val remoteCount: Int
     )
@@ -34,7 +35,7 @@ object PortalPlaylistClient {
 
     suspend fun sync(context: Context, baseUrl: String, dao: BlofyDao): SyncResult = withContext(Dispatchers.IO) {
         val endpoint = baseUrl.trim().trimEnd('/')
-        if (endpoint.isBlank()) return@withContext SyncResult(null, emptySet(), 0)
+        if (endpoint.isBlank()) return@withContext SyncResult(null, emptyList(), emptySet(), 0)
 
         val auth = JSONObject().apply {
             put("deviceId", DeviceIdentity.deviceId(context))
@@ -44,6 +45,7 @@ object PortalPlaylistClient {
         val local = dao.allProviders().first()
         val localById = local.associateBy { it.id }
         val changed = linkedSetOf<String>()
+        val providers = ArrayList<ProviderEntity>(remote.size)
         var remoteActive: ProviderEntity? = null
 
         remote.forEach { item ->
@@ -62,20 +64,17 @@ object PortalPlaylistClient {
                 enabled = item.active,
                 updatedAt = item.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
             )
+            providers += next
             val contentChanged = existing == null ||
                 existing.baseUrl != next.baseUrl || existing.username != next.username ||
                 existing.password != next.password || existing.providerType != next.providerType
             if (contentChanged) changed += next.id
-            // Connection fields received from the portal are candidates until LoginActivity
-            // validates them against a fresh staging catalog. Safe metadata-only changes may be
-            // stored while preserving the current active flag.
             if (!contentChanged && existing != next) {
                 dao.upsertProvider(next.copy(enabled = existing.enabled))
             }
             if (item.active) remoteActive = next
         }
 
-        // Preserve local-only providers by publishing them to the portal after device authorization.
         val remoteIds = remote.mapTo(hashSetOf()) { it.id }
         local.filterNot { it.id in remoteIds }.forEach { provider ->
             try {
@@ -87,12 +86,20 @@ object PortalPlaylistClient {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                // A portal upload failure must not discard a successfully downloaded profile.
+                // Portal upload failure must not discard a successfully downloaded profile.
             }
         }
 
         val activeCandidate = remoteActive ?: dao.providers().first().firstOrNull()
-        SyncResult(activeCandidate, changed, remote.size)
+        SyncResult(activeCandidate, providers, changed, remote.size)
+    }
+
+    suspend fun selectProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao) = withContext(Dispatchers.IO) {
+        val selected = provider.copy(enabled = true, updatedAt = System.currentTimeMillis())
+        pushProvider(context, baseUrl, selected)
+        dao.upsertProvider(selected)
+        dao.saveAndActivateProvider(selected)
+        selected
     }
 
     suspend fun pushProvider(context: Context, baseUrl: String, provider: ProviderEntity) = withContext(Dispatchers.IO) {
