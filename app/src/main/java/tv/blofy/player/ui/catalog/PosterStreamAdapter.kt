@@ -52,20 +52,20 @@ internal class PosterStreamAdapter(
         val frame = FrameLayout(parent.context)
         val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(Color.rgb(236, 233, 240))
+            setBackgroundColor(Color.rgb(20, 15, 31))
             clipToOutline = true
         }
         frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(250)))
         val rating = TextView(parent.context).apply {
             textSize = 11.5f
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setTextColor(BlofyTvDesign.PurpleDeep)
+            setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             setPadding(dp(8), dp(4), dp(8), dp(4))
             background = GradientDrawable().apply {
                 cornerRadius = dp(11).toFloat()
-                setColor(0xF5FFFFFF.toInt())
-                setStroke(dp(1), 0xFFD8C5F2.toInt())
+                setColor(0xE85A2A82.toInt())
+                setStroke(dp(1), BlofyTvDesign.PurpleBright)
             }
         }
         frame.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
@@ -110,9 +110,9 @@ internal class PosterStreamAdapter(
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
             view.background = card(focused)
-            holder.title.setTextColor(if (focused) BlofyTvDesign.PurpleDeep else BlofyTvDesign.TextPrimary)
+            holder.title.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextPrimary)
             view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).translationZ(if (focused) 12f else 2f).setDuration(80).start()
+            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).translationZ(if (focused) 14f else 2f).setDuration(85).start()
             if (focused) onFocus(item)
         }
     }
@@ -125,9 +125,10 @@ internal class PosterStreamAdapter(
 
     internal class Holder(itemView: View, val image: ImageView, val title: TextView, val meta: TextView, val rating: TextView) : RecyclerView.ViewHolder(itemView)
 
-    private fun card(focused: Boolean) = GradientDrawable().apply {
+    private fun card(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+        if (focused) intArrayOf(0xFF62379B.toInt(), 0xFF25172F.toInt()) else intArrayOf(0xFF241A32.toInt(), 0xFF15101E.toInt())
+    ).apply {
         cornerRadius = 20f
-        setColor(if (focused) 0xFFF6F0FF.toInt() else 0xFFFFFFFF.toInt())
-        setStroke(if (focused) 3 else 1, if (focused) BlofyTvDesign.Purple else 0xFFE2DEE8.toInt())
+        setStroke(if (focused) 3 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF49375E.toInt())
     }
 }
