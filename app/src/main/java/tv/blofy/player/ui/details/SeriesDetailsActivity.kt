@@ -2,7 +2,6 @@ package tv.blofy.player.ui.details
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
@@ -24,13 +23,12 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.series.EpisodesActivity
 
 class SeriesDetailsActivity : AppCompatActivity() {
     private lateinit var favoriteButton: Button
-    private val headingTypeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
-    private val bodyTypeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,14 +43,14 @@ class SeriesDetailsActivity : AppCompatActivity() {
         }
         val backdrop = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            alpha = 0.48f
-            setBackgroundColor(0xFF06050A.toInt())
+            alpha = 0.22f
+            setBackgroundColor(BlofyTvDesign.Background)
         }
         root.addView(backdrop, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(View(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0x6A0A0610, 0xBC0A0710.toInt(), 0xEE08060D.toInt(), 0xFF07050B.toInt())
+                intArrayOf(0x26FFFFFF, 0xB8FFFFFF.toInt(), 0xF2F7F5FA.toInt(), 0xFFF5F5F8.toInt())
             )
         }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
@@ -75,13 +73,13 @@ class SeriesDetailsActivity : AppCompatActivity() {
         body.addView(panel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(26) })
 
         val posterCard = FrameLayout(this).apply {
-            background = posterBackground()
-            elevation = dp(10).toFloat()
+            background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
+            elevation = dp(8).toFloat()
             clipToOutline = true
         }
         val poster = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(0xFF15111E.toInt())
+            setBackgroundColor(BlofyTvDesign.Surface)
         }
         posterCard.addView(poster, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT).apply {
             setMargins(dp(8), dp(8), dp(8), dp(8))
@@ -105,22 +103,18 @@ class SeriesDetailsActivity : AppCompatActivity() {
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = "BLOFY  •  مسلسل"
-                textSize = 13f
-                typeface = bodyTypeface
-                setTextColor(ACCENT_MINT)
+                BlofyTvDesign.applyCaption(this)
+                setTextColor(BlofyTvDesign.Mint)
                 gravity = Gravity.RIGHT
-                includeFontPadding = false
-                background = badgeBackground()
+                background = BlofyTvDesign.badge(dp(14).toFloat())
                 setPadding(dp(13), dp(6), dp(13), dp(6))
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.name
+                BlofyTvDesign.applyHeroTitle(this)
                 textSize = 43f
-                typeface = headingTypeface
-                setTextColor(Color.WHITE)
                 gravity = Gravity.RIGHT
-                includeFontPadding = false
                 maxLines = 2
             })
 
@@ -136,19 +130,18 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     if (seasons > 0) add("$seasons موسم")
                     if (allEpisodes.isNotEmpty()) add("${allEpisodes.size} حلقة")
                 }.joinToString("  •  ")
+                BlofyTvDesign.applyBody(this)
                 textSize = 15.5f
-                typeface = bodyTypeface
-                setTextColor(SOFT)
+                setTextColor(BlofyTvDesign.PurpleSoft)
                 gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
             }, LinearLayout.LayoutParams(0, dp(44), 1f))
             stream.rating?.takeIf { it.isNotBlank() }?.let { rating ->
                 metaRow.addView(TextView(this@SeriesDetailsActivity).apply {
                     text = "★  $rating"
-                    textSize = 14.5f
-                    typeface = bodyTypeface
-                    setTextColor(Color.WHITE)
+                    BlofyTvDesign.applyLabel(this)
+                    setTextColor(BlofyTvDesign.PurpleDeep)
                     gravity = Gravity.CENTER
-                    background = badgeBackground()
+                    background = BlofyTvDesign.badge(dp(14).toFloat())
                     setPadding(dp(13), dp(7), dp(13), dp(7))
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12) })
             }
@@ -156,10 +149,9 @@ class SeriesDetailsActivity : AppCompatActivity() {
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.plot?.takeIf(String::isNotBlank) ?: "اختر الموسم والحلقة لبدء المشاهدة."
+                BlofyTvDesign.applyBody(this)
                 textSize = 16.5f
-                typeface = bodyTypeface
                 maxLines = 4
-                setTextColor(0xFFE8E2EC.toInt())
                 gravity = Gravity.RIGHT
                 setLineSpacing(dp(2).toFloat(), 1.14f)
                 setPadding(0, 0, 0, dp(16))
@@ -169,20 +161,15 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 val pct = if (r.durationMs > 0) ((r.positionMs * 100) / r.durationMs).toInt().coerceIn(1, 99) else 0
                 panel.addView(TextView(this@SeriesDetailsActivity).apply {
                     text = "◷  تتابع الآن  •  الموسم ${r.episode.season}  •  الحلقة ${r.episode.episode}${if (pct > 0) "  •  $pct%" else ""}"
-                    textSize = 14f
-                    typeface = bodyTypeface
-                    setTextColor(0xFFE5D8EF.toInt())
+                    BlofyTvDesign.applyCaption(this)
+                    setTextColor(BlofyTvDesign.TextSecondary)
                     gravity = Gravity.RIGHT
                     setPadding(dp(13), dp(8), dp(13), dp(8))
-                    background = progressBackground()
+                    background = BlofyTvDesign.badge(dp(14).toFloat())
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
                 if (r.durationMs > 0) panel.addView(ProgressBar(this@SeriesDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
-                    max = 100
-                    progress = pct
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(6)).apply {
-                    topMargin = dp(8)
-                    bottomMargin = dp(14)
-                })
+                    max = 100; progress = pct
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(6)).apply { topMargin = dp(8); bottomMargin = dp(14) })
             }
 
             val row = LinearLayout(this@SeriesDetailsActivity).apply {
@@ -190,7 +177,6 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 clipChildren = false
-                clipToPadding = false
             }
             var primary: Button? = null
             resume?.let { r ->
@@ -245,54 +231,11 @@ class SeriesDetailsActivity : AppCompatActivity() {
         text = label
         isAllCaps = false
         textSize = 14.5f
-        typeface = bodyTypeface
-        isFocusable = true
-        isFocusableInTouchMode = true
+        typeface = BlofyTvDesign.BodyTypeface
         includeFontPadding = false
-        setTextColor(Color.WHITE)
-        background = buttonBackground(false, primary)
-        stateListAnimator = null
-        setOnFocusChangeListener { view, focused ->
-            view.background = buttonBackground(focused, primary)
-            view.animate().cancel()
-            view.animate()
-                .scaleX(if (focused) 1.05f else 1f)
-                .scaleY(if (focused) 1.05f else 1f)
-                .translationZ(if (focused) dp(16).toFloat() else dp(2).toFloat())
-                .setDuration(if (focused) 120L else 90L)
-                .start()
-        }
+        setTextColor(if (primary) Color.WHITE else BlofyTvDesign.TextPrimary)
+        BlofyTvDesign.installTvFocus(this, dp(18).toFloat(), 1.04f, primary)
         setOnClickListener { action() }
-    }
-
-    private fun posterBackground() = GradientDrawable().apply {
-        cornerRadius = dp(22).toFloat()
-        setColor(0xE5130D1B.toInt())
-        setStroke(dp(1), 0x995B3B75.toInt())
-    }
-
-    private fun badgeBackground() = GradientDrawable().apply {
-        cornerRadius = dp(14).toFloat()
-        setColor(0xA5221533.toInt())
-        setStroke(dp(1), 0x775D4779)
-    }
-
-    private fun progressBackground() = GradientDrawable().apply {
-        cornerRadius = dp(14).toFloat()
-        setColor(0xB31A1125.toInt())
-        setStroke(dp(1), 0x665A3E72)
-    }
-
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        when {
-            focused -> intArrayOf(0xFFA765F1.toInt(), 0xFF7537C8.toInt())
-            primary -> intArrayOf(0xFF7E3CCD.toInt(), 0xFF542292.toInt())
-            else -> intArrayOf(0xF022182E.toInt(), 0xF0140D1D.toInt())
-        }
-    ).apply {
-        cornerRadius = dp(16).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x77543B69)
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
@@ -301,7 +244,5 @@ class SeriesDetailsActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"
         const val EXTRA_CONTENT_KEY = "content_key"
-        private val SOFT = Color.rgb(215, 188, 235)
-        private const val ACCENT_MINT = 0xFF78EAD3.toInt()
     }
 }
