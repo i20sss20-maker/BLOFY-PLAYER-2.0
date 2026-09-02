@@ -78,7 +78,7 @@ class FocusTextAdapter<T>(
             background = background(false, density)
             alpha = 0.94f
             setOnFocusChangeListener { v, focused ->
-                (v as TextView).setTextColor(Color.WHITE)
+                (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
                 v.animate().cancel()
                 v.animate()
                     .scaleX(if (focused) 1.028f else 1f)
@@ -104,6 +104,14 @@ class FocusTextAdapter<T>(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
+        val density = holder.text.resources.displayMetrics.density
+        holder.text.animate().cancel()
+        holder.text.scaleX = 1f
+        holder.text.scaleY = 1f
+        holder.text.alpha = 0.94f
+        holder.text.translationZ = 2f * density
+        holder.text.background = background(false, density)
+        holder.text.setTextColor(TEXT_IDLE)
         holder.text.text = label(item)
         holder.text.tag = position
         holder.text.setOnClickListener { onClick(item) }
@@ -115,6 +123,18 @@ class FocusTextAdapter<T>(
                 }
             }
         }
+    }
+
+    override fun onViewRecycled(holder: Holder) {
+        holder.text.animate().cancel()
+        holder.text.scaleX = 1f
+        holder.text.scaleY = 1f
+        holder.text.alpha = 0.94f
+        holder.text.translationZ = 0f
+        holder.text.tag = null
+        holder.text.setOnClickListener(null)
+        holder.text.setOnLongClickListener(null)
+        super.onViewRecycled(holder)
     }
 
     override fun getItemCount() = items.size
