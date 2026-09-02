@@ -16,7 +16,12 @@ Final signed candidate:
 - local storage management with safe cache cleanup added to settings
 - silent long-running live stall recovery added without changing playback engine, URL or format
 - private «مشتركين BLOFY» login added with username/password only and upstream host kept in backend environment
+- Room schema migration repaired through database version 8 without deleting playlists, cached catalog, favorites or resume state
+- home startup now reads only a limited recent-content set instead of loading the full movie/series catalog
+- movie/series search now queries SQLite directly and first entry avoids the heavy all-content view on large playlists
+- series episode screen rebuilt for RTL TV navigation with horizontal seasons and full-width episodes
+- VOD remote seek added: left/right seeks ±10 seconds when the player HUD is hidden while preserving normal HUD focus navigation
 - current Media3 1.6.1 + FFmpeg playback engine, transport, URL resolution and fallbacks retained
-- Android CI, Activation CI and native FFmpeg verification passed before final signed build
+- Android CI passed on final stabilization head 407a8b8eaecc3de97a2a644dce734fbc4a5e56f4 (Run #528)
 - production activation backend verified healthy after subscriber proxy deployment
-- production signed RC05 rebuild requested from final main commit 10927d6278c5e97cde12e68119ea476853a739d5
+- production signed RC05 rebuild requested from stabilized main after catalog/TV UX fixes
