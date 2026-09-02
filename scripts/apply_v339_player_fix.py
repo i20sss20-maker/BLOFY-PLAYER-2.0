@@ -1,0 +1,209 @@
+from pathlib import Path
+import re
+
+path = Path("app/src/main/java/tv/blofy/player/ui/player/PlayerActivity.kt")
+source = path.read_text(encoding="utf-8")
+
+
+def replace_once(old: str, new: str, label: str) -> None:
+    global source
+    count = source.count(old)
+    if count != 1:
+        raise SystemExit(f"{label}: expected one match, found {count}")
+    source = source.replace(old, new, 1)
+
+
+def regex_once(pattern: str, replacement: str, label: str) -> None:
+    global source
+    source, count = re.subn(pattern, replacement, source, count=1, flags=re.S)
+    if count != 1:
+        raise SystemExit(f"{label}: expected one match, found {count}")
+
+
+replace_once(
+    "import tv.blofy.player.core.playback.ExternalPlayerLauncher\n",
+    "",
+    "remove disabled external-player import",
+)
+replace_once(
+    """    private lateinit var qualityButton: Button
+    private lateinit var externalButton: Button
+    private lateinit var favoriteButton: Button
+""",
+    """    private lateinit var qualityButton: Button
+    private lateinit var favoriteButton: Button
+    private lateinit var playPauseButton: Button
+""",
+    "restore play/pause field",
+)
+replace_once(
+    'Toast.makeText(this, if (kind == "live") "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى أو زر خارجي" else "تعذر تشغيل هذا المحتوى داخل BLOFY • المشغل الخارجي متاح يدويًا", Toast.LENGTH_LONG).show()',
+    'Toast.makeText(this, if (kind == "live") "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى" else "تعذر تشغيل هذا المحتوى داخل BLOFY", Toast.LENGTH_LONG).show()',
+    "remove misleading external-player error",
+)
+
+regex_once(
+    r"""        session\.player\.addListener\(object : Player\.Listener \{.*?        \}\)\n        buildPlayerUi\(\)""",
+    """        session.player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED && kind == "episode" && !autoNextTriggered) {
+                    autoNextTriggered = true
+                    playAdjacentEpisode(1, automatic = true)
+                }
+                if (kind != "live") {
+                    updateProgressUi()
+                    updatePlayPauseLabel()
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (kind != "live") updatePlayPauseLabel()
+            }
+        })
+        buildPlayerUi()""",
+    "restore player-state listener behavior",
+)
+
+regex_once(
+    r"""        val controls = LinearLayout\(this\)\.apply \{ orientation = LinearLayout\.HORIZONTAL; gravity = Gravity\.START or Gravity\.CENTER_VERTICAL \}\n.*?        hud\.addView\(controls\)\n""",
+    """        if (kind == "live") {
+            val liveHint = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+            }
+            liveHint.addView(TextView(this).apply {
+                text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لإظهار معلومات البرنامج"
+                textSize = 14f
+                setTextColor(PURPLE_SOFT)
+                gravity = Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 62))
+            hud.addView(liveHint)
+        } else {
+            val playbackControls = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                clipChildren = false
+            }
+            val rewindButton = controlButton("−10 ث") { seekBy(-10_000L); showHudBriefly() }
+            playPauseButton = controlButton("⏸  إيقاف") { togglePlayPause() }
+            val forwardButton = controlButton("+10 ث") { seekBy(10_000L); showHudBriefly() }
+            playbackControls.addView(forwardButton, LinearLayout.LayoutParams(150, 64).apply { marginStart = 10 })
+            playbackControls.addView(playPauseButton, LinearLayout.LayoutParams(190, 64).apply { marginStart = 10 })
+            playbackControls.addView(rewindButton, LinearLayout.LayoutParams(150, 64))
+            hud.addView(playbackControls, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 10 })
+
+            val options = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                clipChildren = false
+            }
+            audioButton = controlButton("🔊  الصوت") { showTrackDialog(C.TRACK_TYPE_AUDIO) }
+            subtitleButton = controlButton("CC  الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
+            qualityButton = controlButton("▣  الجودة") { showVideoQualityDialog() }
+            favoriteButton = controlButton("☆  المفضلة") { toggleFavorite() }.apply { visibility = if (kind == "episode") View.GONE else View.VISIBLE }
+            options.addView(audioButton, LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 })
+            options.addView(subtitleButton, LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 })
+            options.addView(qualityButton, LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 })
+            if (kind != "episode") {
+                options.addView(favoriteButton, LinearLayout.LayoutParams(184, 64))
+            } else {
+                options.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(150, 64).apply { marginStart = 10 })
+                options.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(150, 64))
+            }
+            hud.addView(options)
+        }
+""",
+    "restore playback and track controls in v339 HUD",
+)
+
+replace_once(
+    """    private fun controlBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 18f
+        setColor(if (focused) PURPLE else 0xD5231A31.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) Color.WHITE else 0x66553B70)
+    }
+""",
+    """    private fun controlBackground(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 18f
+        setColor(if (focused) PURPLE else 0xD5231A31.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) Color.WHITE else 0x66553B70)
+    }
+
+    private fun togglePlayPause() {
+        if (session.player.isPlaying) session.player.pause() else session.player.play()
+        updatePlayPauseLabel()
+        showHudBriefly()
+    }
+
+    private fun updatePlayPauseLabel() {
+        if (!::playPauseButton.isInitialized) return
+        playPauseButton.text = if (session.player.isPlaying) "⏸  إيقاف" else "▶  تشغيل"
+    }
+
+    private fun seekBy(deltaMs: Long) {
+        val duration = session.player.duration.takeIf { it > 0L }
+        val target = (session.player.currentPosition + deltaMs).coerceAtLeast(0L)
+        session.player.seekTo(if (duration != null) target.coerceAtMost(duration) else target)
+    }
+""",
+    "restore playback helpers",
+)
+
+replace_once(
+    '            RemoteAction.PLAY_PAUSE -> { if (session.player.isPlaying) session.player.pause() else session.player.play(); if (kind != "live") showHudBriefly(); true }',
+    '            RemoteAction.PLAY_PAUSE -> { if (kind != "live") togglePlayPause() else if (session.player.isPlaying) session.player.pause() else session.player.play(); true }',
+    "restore play/pause remote behavior",
+)
+replace_once(
+    '            RemoteAction.FAST_FORWARD -> { if (kind != "live") { session.player.seekTo(session.player.currentPosition + 10_000L); showHudBriefly() }; true }',
+    '            RemoteAction.FAST_FORWARD -> { if (kind != "live") { seekBy(10_000L); showHudBriefly() }; true }',
+    "restore bounded fast-forward",
+)
+replace_once(
+    '            RemoteAction.REWIND -> { if (kind != "live") { session.player.seekTo((session.player.currentPosition - 10_000L).coerceAtLeast(0L)); showHudBriefly() }; true }',
+    """            RemoteAction.REWIND -> { if (kind != "live") { seekBy(-10_000L); showHudBriefly() }; true }
+            RemoteAction.RIGHT -> {
+                if (kind != "live" && hud.visibility != View.VISIBLE) { seekBy(10_000L); showHudBriefly(); true }
+                else super.dispatchKeyEvent(event)
+            }
+            RemoteAction.LEFT -> {
+                if (kind != "live" && hud.visibility != View.VISIBLE) { seekBy(-10_000L); showHudBriefly(); true }
+                else super.dispatchKeyEvent(event)
+            }""",
+    "restore left/right seeking outside HUD",
+)
+replace_once(
+    '        if (kind == "live") playerView.requestFocus() else audioButton.requestFocus()',
+    '        if (kind == "live") playerView.requestFocus() else playPauseButton.requestFocus()',
+    "focus primary playback control",
+)
+replace_once(
+    '    private fun showHudBriefly() { keepHudVisible(); hud.visibility = View.VISIBLE; if (kind != "live") updateProgressUi(); hud.postDelayed(hideHudRunnable, if (kind == "live") 2200L else 3200L) }',
+    """    private fun showHudBriefly() {
+        keepHudVisible()
+        hud.visibility = View.VISIBLE
+        if (kind != "live") {
+            updateProgressUi()
+            updatePlayPauseLabel()
+        }
+        hud.postDelayed(hideHudRunnable, if (kind == "live") 2200L else 3200L)
+    }""",
+    "keep playback label synchronized",
+)
+regex_once(
+    r"""    private fun launchExternalPlayer\(\) \{.*?\n    \}\n    private fun trackLabel""",
+    "    private fun trackLabel",
+    "remove disabled external-player action",
+)
+
+for token in ["ExternalPlayerLauncher", "externalButton", "زر خارجي", "المشغل الخارجي"]:
+    if token in source:
+        raise SystemExit(f"forbidden token remains: {token}")
+for token in ["playPauseButton", "RemoteAction.RIGHT", "RemoteAction.LEFT", "togglePlayPause()", "seekBy(10_000L)"]:
+    if token not in source:
+        raise SystemExit(f"required token missing: {token}")
+
+path.write_text(source, encoding="utf-8")
