@@ -23,12 +23,14 @@ object BlofyTvDesign {
     val TextMuted = Color.rgb(166, 157, 179)
     val Divider = Color.rgb(63, 48, 78)
 
-    const val HeroTitleSp = 43f
-    const val TitleSp = 34f
-    const val HeadingSp = 23f
-    const val BodySp = 16.5f
-    const val LabelSp = 15.5f
-    const val CaptionSp = 13f
+    // Compact TV typography tuned for 1080p/4K living-room viewing.
+    // Keep hierarchy clear without letting labels/categories dominate the artwork.
+    const val HeroTitleSp = 39f
+    const val TitleSp = 30f
+    const val HeadingSp = 20f
+    const val BodySp = 15f
+    const val LabelSp = 14f
+    const val CaptionSp = 12f
 
     val HeadingTypeface: Typeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
     val BodyTypeface: Typeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
@@ -100,7 +102,7 @@ object BlofyTvDesign {
         typeface = BodyTypeface
         setTextColor(TextSecondary)
         includeFontPadding = false
-        setLineSpacing(0f, 1.15f)
+        setLineSpacing(0f, 1.12f)
     }
 
     fun applyLabel(text: TextView) = text.apply {
