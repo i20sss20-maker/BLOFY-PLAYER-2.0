@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
@@ -34,6 +35,7 @@ class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var posterGrid: RecyclerView
     private lateinit var countView: TextView
     private var streamsJob: Job? = null
+    private var categoryFocusJob: Job? = null
     private var providerId = ""
     private var selectedCategoryId: String? = null
     private var categoryRows: List<CategoryEntity> = emptyList()
@@ -120,8 +122,8 @@ class PosterCatalogActivity : AppCompatActivity() {
         posterGrid.adapter = posterAdapter
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
-            onClick = { loadStreams(categoryRemoteId(it)) },
-            onFocus = { loadStreams(categoryRemoteId(it)) },
+            onClick = { loadStreams(categoryRemoteId(it), immediate = true) },
+            onFocus = { scheduleCategoryLoad(categoryRemoteId(it)) },
             itemKey = { it.key }
         )
         categoryList.adapter = categoryAdapter
@@ -133,7 +135,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             dao.categories(provider.id, kind).collect { categories ->
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
-                if (selectedCategoryId == null && streamsJob == null) loadStreams(null)
+                if (selectedCategoryId == null && streamsJob == null) loadStreams(null, immediate = true)
                 if (!initialFocusRequested) {
                     initialFocusRequested = true
                     categoryList.post { requestCategoryFocus(0) }
@@ -152,14 +154,28 @@ class PosterCatalogActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    private fun loadStreams(categoryId: String?) {
-        if (providerId.isBlank() || selectedCategoryId == categoryId && streamsJob?.isActive == true) return
+    private fun scheduleCategoryLoad(categoryId: String?) {
+        if (providerId.isBlank() || selectedCategoryId == categoryId) return
+        categoryFocusJob?.cancel()
+        categoryFocusJob = lifecycleScope.launch {
+            delay(85L)
+            loadStreams(categoryId, immediate = false)
+        }
+    }
+
+    private fun loadStreams(categoryId: String?, immediate: Boolean) {
+        if (providerId.isBlank()) return
+        if (immediate) categoryFocusJob?.cancel()
+        if (selectedCategoryId == categoryId && streamsJob?.isActive == true) return
         selectedCategoryId = categoryId
         streamsJob?.cancel()
         streamsJob = lifecycleScope.launch {
             BlofyDatabase.get(applicationContext).dao().streams(providerId, kind, categoryId).collect { items ->
                 posterAdapter.submit(items)
                 countView.text = "${items.size} ${if (kind == KIND_SERIES) "مسلسل" else "فيلم"}"
+                if (items.isNotEmpty()) {
+                    ArtworkLoader.prefetch(this@PosterCatalogActivity, items.take(15).map { it.icon ?: it.backdrop })
+                }
             }
         }
     }
@@ -219,7 +235,11 @@ class PosterCatalogActivity : AppCompatActivity() {
         setStroke(dp(1), 0xFF49375E.toInt())
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-    override fun onDestroy() { streamsJob?.cancel(); super.onDestroy() }
+    override fun onDestroy() {
+        categoryFocusJob?.cancel()
+        streamsJob?.cancel()
+        super.onDestroy()
+    }
 
     private object ViewGroupFocus { const val AFTER_DESCENDANTS = 0x40000 }
 
