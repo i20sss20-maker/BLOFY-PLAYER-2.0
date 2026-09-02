@@ -83,25 +83,25 @@ class FocusTextAdapter<T>(
             gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setPadding(dp(20), 0, dp(20), 0)
-            minHeight = dp(60)
+            setPadding(dp(16), 0, dp(16), 0)
+            minHeight = dp(54)
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
-            background = BlofyTvDesign.surface(dp(18).toFloat(), false)
+            background = BlofyTvDesign.surface(dp(16).toFloat(), false)
             alpha = 0.97f
             setOnFocusChangeListener { v, focused ->
                 (v as TextView).setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
                 v.animate().cancel()
                 v.animate()
-                    .scaleX(if (focused) 1.025f else 1f)
-                    .scaleY(if (focused) 1.025f else 1f)
+                    .scaleX(if (focused) 1.02f else 1f)
+                    .scaleY(if (focused) 1.02f else 1f)
                     .alpha(if (focused) 1f else 0.97f)
-                    .translationZ(if (focused) dp(16).toFloat() else dp(2).toFloat())
-                    .setDuration(if (focused) 115L else 90L)
+                    .translationZ(if (focused) dp(14).toFloat() else dp(2).toFloat())
+                    .setDuration(if (focused) 105L else 85L)
                     .start()
-                v.background = BlofyTvDesign.surface(dp(18).toFloat(), focused)
+                v.background = BlofyTvDesign.surface(dp(16).toFloat(), focused)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
                         items.getOrNull(pos)?.let { item ->
@@ -125,7 +125,7 @@ class FocusTextAdapter<T>(
         holder.text.scaleY = 1f
         holder.text.alpha = 0.97f
         holder.text.translationZ = 2f * density
-        holder.text.background = BlofyTvDesign.surface(dp(18).toFloat(), false)
+        holder.text.background = BlofyTvDesign.surface(dp(16).toFloat(), false)
         holder.text.setTextColor(BlofyTvDesign.TextSecondary)
         holder.text.text = label(item)
         holder.text.tag = position
