@@ -20,12 +20,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * Fast artwork loader for TV catalogs.
- *
- * Visible artwork is scheduled ahead of speculative prefetch work, while network requests remain
- * deduplicated by URL. Broken URLs get a short negative cache and disk persistence never blocks UI.
- */
 object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
     private const val MAX_DISK_BYTES = 260L * 1024L * 1024L
@@ -33,11 +27,7 @@ object ArtworkLoader {
 
     private enum class Priority(val weight: Int) { VISIBLE(0), PREFETCH(1) }
 
-    private class PriorityTask(
-        val priority: Priority,
-        val sequence: Long,
-        private val block: () -> Unit
-    ) : Runnable {
+    private class PriorityTask(val priority: Priority, val sequence: Long, private val block: () -> Unit) : Runnable {
         override fun run() = block()
     }
 
@@ -52,14 +42,7 @@ object ArtworkLoader {
         val byPriority = left.priority.weight.compareTo(right.priority.weight)
         if (byPriority != 0) byPriority else left.sequence.compareTo(right.sequence)
     }
-    private val networkPool = ThreadPoolExecutor(
-        workerCount,
-        workerCount,
-        30L,
-        TimeUnit.SECONDS,
-        taskQueue
-    ).apply { allowCoreThreadTimeOut(false) }
-
+    private val networkPool = ThreadPoolExecutor(workerCount, workerCount, 30L, TimeUnit.SECONDS, taskQueue).apply { allowCoreThreadTimeOut(false) }
     private val trimCounter = AtomicInteger(0)
     private val inFlight = ConcurrentHashMap<String, CompletableFuture<Bitmap?>>()
     private val failedUntil = ConcurrentHashMap<String, Long>()
@@ -78,6 +61,8 @@ object ArtworkLoader {
     }
 
     fun load(view: ImageView, rawUrl: String?) = load(view, listOf(rawUrl))
+    fun loadPriority(view: ImageView, rawUrl: String?) = load(view, rawUrl)
+    fun loadPriority(view: ImageView, candidates: List<String?>) = load(view, candidates)
 
     fun load(view: ImageView, candidates: List<String?>) {
         cancel(view)
@@ -107,15 +92,12 @@ object ArtworkLoader {
                     }
                 if (bitmap != null) break
             }
-
             val result = bitmap
             main.post {
                 if (view.tag == requestKey) {
-                    if (result != null && !result.isRecycled) view.setImageBitmap(result)
-                    else view.setImageDrawable(skeleton())
+                    if (result != null && !result.isRecycled) view.setImageBitmap(result) else view.setImageDrawable(skeleton())
                 }
             }
-
             if (result != null && resolvedUrl != null) {
                 val url = resolvedUrl!!
                 backgroundPool.execute { writeDisk(app.cacheDir, url, result) }
@@ -123,10 +105,7 @@ object ArtworkLoader {
         }
     }
 
-    /** Stops delivery to a recycled view; shared network work can still satisfy another consumer. */
-    fun cancel(view: ImageView) {
-        view.tag = null
-    }
+    fun cancel(view: ImageView) { view.tag = null }
 
     fun prefetch(context: android.content.Context, urls: List<String?>) {
         val app = context.applicationContext
@@ -146,31 +125,25 @@ object ArtworkLoader {
     private fun sharedDownload(url: String, priority: Priority): CompletableFuture<Bitmap?> {
         if (isNegative(url)) return CompletableFuture.completedFuture(null)
         inFlight[url]?.let { return it }
-
         val future = CompletableFuture<Bitmap?>()
         val existing = inFlight.putIfAbsent(url, future)
         if (existing != null) return existing
-
-        val task = PriorityTask(priority, taskSequence.incrementAndGet()) {
+        networkPool.execute(PriorityTask(priority, taskSequence.incrementAndGet()) {
             try {
                 val result = downloadWithRetry(url)
-                if (result == null) failedUntil[url] = System.currentTimeMillis() + NEGATIVE_CACHE_MS
-                else failedUntil.remove(url)
+                if (result == null) failedUntil[url] = System.currentTimeMillis() + NEGATIVE_CACHE_MS else failedUntil.remove(url)
                 future.complete(result)
             } catch (error: Throwable) {
                 future.completeExceptionally(error)
             } finally {
                 inFlight.remove(url, future)
             }
-        }
-        networkPool.execute(task)
+        })
         return future
     }
 
     private fun downloadWithRetry(url: String): Bitmap? {
-        repeat(2) {
-            runCatching { execute(url) }.getOrNull()?.let { return it }
-        }
+        repeat(2) { runCatching { execute(url) }.getOrNull()?.let { return it } }
         return null
     }
 
@@ -223,9 +196,7 @@ object ArtworkLoader {
         if (bitmap.isRecycled) return
         val dir = File(cacheDir, "blofy_posters").apply { mkdirs() }
         val file = File(dir, hash(url) + ".jpg")
-        if (!file.isFile || file.length() <= 0L) {
-            runCatching { file.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 84, it) } }
-        }
+        if (!file.isFile || file.length() <= 0L) runCatching { file.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 84, it) } }
         if (trimCounter.incrementAndGet() % 32 == 0) trimDisk(dir)
     }
 
@@ -235,7 +206,8 @@ object ArtworkLoader {
         if (total <= MAX_DISK_BYTES) return
         files.sortedBy { it.lastModified() }.forEach { file ->
             if (total <= MAX_DISK_BYTES) return
-            total -= file.length(); file.delete()
+            total -= file.length()
+            file.delete()
         }
     }
 
@@ -248,20 +220,14 @@ object ArtworkLoader {
         return true
     }
 
-    private fun skeleton() = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xFF21182D.toInt(), 0xFF30203F.toInt(), 0xFF17111F.toInt())
-    ).apply { cornerRadius = 18f }
-
+    private fun skeleton() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF21182D.toInt(), 0xFF30203F.toInt(), 0xFF17111F.toInt())).apply { cornerRadius = 18f }
     private fun diskFile(cacheDir: File, url: String) = File(File(cacheDir, "blofy_posters"), hash(url) + ".jpg")
     private fun hash(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
     private fun sampleSize(w: Int, h: Int, tw: Int, th: Int): Int { var s = 1; while (w / (s * 2) >= tw && h / (s * 2) >= th) s *= 2; return s }
 
     private fun normalizeUrl(raw: String?): String? {
         val value = raw?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", true) } ?: return null
-        return runCatching { java.net.URI(value) }.getOrNull()?.takeIf {
-            (it.scheme.equals("https", true) || it.scheme.equals("http", true)) && !it.host.isNullOrBlank()
-        }?.let { value }
+        return runCatching { java.net.URI(value) }.getOrNull()?.takeIf { (it.scheme.equals("https", true) || it.scheme.equals("http", true)) && !it.host.isNullOrBlank() }?.let { value }
     }
 
     private fun adaptiveWorkerCount(): Int {
