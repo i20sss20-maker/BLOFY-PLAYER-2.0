@@ -2,16 +2,18 @@ package tv.blofy.player.ui.catalog
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
 import android.widget.ImageView
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.security.MessageDigest
+import java.util.Collections
+import java.util.WeakHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -24,7 +26,7 @@ object ArtworkLoader {
     private val visiblePool = Executors.newFixedThreadPool(10)
     private val backgroundPool = Executors.newFixedThreadPool(2)
     private val trimCounter = AtomicInteger(0)
-    private val placeholder = ColorDrawable(Color.rgb(24, 16, 34))
+    private val activeCalls = Collections.synchronizedMap(WeakHashMap<ImageView, Call>())
     private val client = OkHttpClient.Builder()
         .connectTimeout(3, TimeUnit.SECONDS)
         .readTimeout(7, TimeUnit.SECONDS)
@@ -40,10 +42,11 @@ object ArtworkLoader {
     fun load(view: ImageView, rawUrl: String?) = load(view, listOf(rawUrl))
 
     fun load(view: ImageView, candidates: List<String?>) {
+        cancel(view)
         val urls = candidates.mapNotNull(::normalizeUrl).distinct()
         val requestKey = urls.joinToString("|")
         view.tag = requestKey
-        view.setImageDrawable(placeholder)
+        view.setImageDrawable(skeleton())
         if (urls.isEmpty()) return
 
         urls.firstNotNullOfOrNull { cache.get(it)?.takeIf { bmp -> !bmp.isRecycled } }?.let {
@@ -56,9 +59,10 @@ object ArtworkLoader {
             var result: Bitmap? = null
             var downloadedUrl: String? = null
             for (url in urls) {
+                if (view.tag != requestKey) return@execute
                 result = cache.get(url)?.takeIf { !it.isRecycled }
                     ?: readDisk(app.cacheDir, url)?.also { cache.put(url, it) }
-                    ?: downloadWithRetry(url)?.also {
+                    ?: download(view, requestKey, url)?.also {
                         cache.put(url, it)
                         downloadedUrl = url
                     }
@@ -69,11 +73,11 @@ object ArtworkLoader {
             main.post {
                 if (view.tag == requestKey) {
                     if (bitmap != null && !bitmap.isRecycled) view.setImageBitmap(bitmap)
-                    else view.setImageDrawable(placeholder)
+                    else view.setImageDrawable(skeleton())
                 }
+                activeCalls.remove(view)
             }
 
-            // Never make the user wait for JPEG compression / directory trimming.
             if (bitmap != null && downloadedUrl != null) {
                 val url = downloadedUrl!!
                 backgroundPool.execute { writeDisk(app.cacheDir, url, bitmap) }
@@ -81,29 +85,51 @@ object ArtworkLoader {
         }
     }
 
+    fun cancel(view: ImageView) {
+        activeCalls.remove(view)?.cancel()
+        view.tag = null
+    }
+
     fun prefetch(context: android.content.Context, urls: List<String?>) {
         val app = context.applicationContext
         urls.mapNotNull(::normalizeUrl).distinct().take(18).forEach { url ->
             if (cache.get(url) != null || diskFile(app.cacheDir, url).isFile) return@forEach
             backgroundPool.execute {
-                val bmp = downloadWithRetry(url) ?: return@execute
+                val bmp = downloadBackground(url) ?: return@execute
                 cache.put(url, bmp)
                 writeDisk(app.cacheDir, url, bmp)
             }
         }
     }
 
-    private fun downloadWithRetry(url: String): Bitmap? {
-        runCatching { download(url) }.getOrNull()?.let { return it }
-        return runCatching { download(url) }.getOrNull()
+    private fun download(view: ImageView, requestKey: String, url: String): Bitmap? {
+        repeat(2) {
+            if (view.tag != requestKey) return null
+            runCatching { downloadCall(view, requestKey, url) }.getOrNull()?.let { return it }
+        }
+        return null
     }
 
-    private fun download(url: String): Bitmap? {
-        val request = Request.Builder().url(url)
-            .header("User-Agent", "Mozilla/5.0 (Linux; Android TV) BLOFY-PLAYER/2.0")
-            .header("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
-            .build()
-        client.newCall(request).execute().use { response ->
+    private fun downloadBackground(url: String): Bitmap? {
+        repeat(2) { runCatching { execute(client.newCall(request(url))) }.getOrNull()?.let { return it } }
+        return null
+    }
+
+    private fun downloadCall(view: ImageView, requestKey: String, url: String): Bitmap? {
+        if (view.tag != requestKey) return null
+        val call = client.newCall(request(url))
+        activeCalls[view]?.cancel()
+        activeCalls[view] = call
+        return execute(call)
+    }
+
+    private fun request(url: String) = Request.Builder().url(url)
+        .header("User-Agent", "Mozilla/5.0 (Linux; Android TV) BLOFY-PLAYER/2.0")
+        .header("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
+        .build()
+
+    private fun execute(call: Call): Bitmap? {
+        call.execute().use { response ->
             if (!response.isSuccessful) return null
             val body = response.body ?: return null
             val declared = body.contentLength()
@@ -150,7 +176,6 @@ object ArtworkLoader {
         if (!file.isFile || file.length() <= 0L) {
             runCatching { file.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 84, it) } }
         }
-        // Directory scans are expensive on TV boxes. Trim occasionally instead of after every image.
         if (trimCounter.incrementAndGet() % 32 == 0) trimDisk(dir)
     }
 
@@ -162,6 +187,10 @@ object ArtworkLoader {
             if (total <= MAX_DISK_BYTES) return
             total -= file.length(); file.delete()
         }
+    }
+
+    private fun skeleton() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF21182D.toInt(), 0xFF30203F.toInt(), 0xFF17111F.toInt())).apply {
+        cornerRadius = 18f
     }
 
     private fun diskFile(cacheDir: File, url: String) = File(File(cacheDir, "blofy_posters"), hash(url) + ".jpg")
