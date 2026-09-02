@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -34,6 +35,7 @@ class SettingsActivity : AppCompatActivity() {
     private var provider: ProviderEntity? = null
     private lateinit var status: TextView
     private lateinit var grid: GridLayout
+    private lateinit var storageCard: Button
     private val prefs by lazy { getSharedPreferences(PREFS, MODE_PRIVATE) }
     private val headingTypeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
     private val bodyTypeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
@@ -81,7 +83,7 @@ class SettingsActivity : AppCompatActivity() {
             includeFontPadding = false
         })
         titleBox.addView(TextView(this).apply {
-            text = "التشغيل والصوت والترجمة والأداء والقوائم"
+            text = "التشغيل والصوت والترجمة والأداء والقوائم والتخزين"
             textSize = 14f
             typeface = bodyTypeface
             setTextColor(MUTED)
@@ -129,6 +131,8 @@ class SettingsActivity : AppCompatActivity() {
         addCard(actionCard("🌐  لغة التطبيق", currentLanguageLabel()) { chooseLanguage() })
         addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
         addCard(actionCard("↻  تحديث المحتوى", "تحديث يدوي فقط") { refreshLibrary() })
+        storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
+        addCard(storageCard)
         addCard(actionCard("↔  HTTP / HTTPS", if (p?.allowCrossProtocolRedirects == true) "السماح بالتحويل" else "مغلق") { provider?.let { saveProvider(it.copy(allowCrossProtocolRedirects = !it.allowCrossProtocolRedirects)) } })
         addCard(actionCard("✓  حالة النظام", "الفحص والتوافق") { startActivity(Intent(this, SystemStatusActivity::class.java)) })
         addCard(actionCard("⟲  استعادة الإعدادات", "رجوع للوضع الافتراضي") { restoreDefaults() })
@@ -144,6 +148,7 @@ class SettingsActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)).apply { topMargin = dp(14) })
         scroll.addView(page)
         setContentView(scroll)
+        updateStorageCard()
         grid.post { if (grid.childCount > 0) grid.getChildAt(0).requestFocus() }
     }
 
@@ -261,6 +266,64 @@ class SettingsActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(active) }
             }.onSuccess { status.text = "✓  اكتمل تحديث القنوات والأفلام والمسلسلات" }
                 .onFailure { status.text = "تعذر التحديث — البيانات المحفوظة بقيت كما هي" }
+        }
+    }
+
+    private fun updateStorageCard() {
+        if (!::storageCard.isInitialized) return
+        lifecycleScope.launch {
+            val stats = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext) }
+            if (!isFinishing && ::storageCard.isInitialized) {
+                storageCard.text = "💾  التخزين المحلي\n${LocalStorageManager.format(applicationContext, stats.totalBytes)} مستخدم • إدارة وتنظيف"
+            }
+        }
+    }
+
+    private fun showStorageManager() {
+        lifecycleScope.launch {
+            val stats = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext) }
+            val database = LocalStorageManager.format(applicationContext, stats.databaseBytes)
+            val temporary = LocalStorageManager.format(applicationContext, stats.temporaryBytes)
+            val total = LocalStorageManager.format(applicationContext, stats.totalBytes)
+            AlertDialog.Builder(this@SettingsActivity)
+                .setTitle("التخزين المحلي")
+                .setMessage(
+                    "المستخدم حاليًا: $total\n\n" +
+                        "• القنوات والأفلام والمسلسلات والحلقات والبيانات المحفوظة: $database\n" +
+                        "• الصور والملفات المؤقتة: $temporary\n\n" +
+                        "التنظيف الآمن يحذف الملفات المؤقتة وبيانات EPG القديمة فقط. " +
+                        "لن يحذف التفعيل أو قوائم التشغيل أو المفضلة أو الاستئناف أو الكتالوج المحفوظ."
+                )
+                .setPositiveButton("تنظيف آمن") { _, _ -> confirmSafeCleanup() }
+                .setNegativeButton("إغلاق", null)
+                .show()
+        }
+    }
+
+    private fun confirmSafeCleanup() {
+        AlertDialog.Builder(this)
+            .setTitle("تنظيف التخزين")
+            .setMessage("سيتم حذف الصور والملفات المؤقتة وبيانات دليل البرامج المؤقتة فقط. بيانات العميل وقوائم التشغيل ستبقى محفوظة.")
+            .setPositiveButton("تنظيف") { _, _ -> cleanSafeStorage() }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun cleanSafeStorage() {
+        status.text = "جاري تنظيف التخزين المحلي..."
+        lifecycleScope.launch {
+            val before = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext).totalBytes }
+            runCatching {
+                withContext(Dispatchers.IO) { LocalStorageManager.cleanSafely(applicationContext) }
+            }.onSuccess {
+                val after = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext).totalBytes }
+                val freed = (before - after).coerceAtLeast(0L)
+                status.text = "✓  تم تنظيف ${LocalStorageManager.format(applicationContext, freed)} بدون حذف القوائم أو الاستئناف"
+                updateStorageCard()
+            }.onFailure {
+                status.text = "تعذر تنظيف بعض الملفات — بياناتك المحفوظة لم تتأثر"
+                updateStorageCard()
+            }
         }
     }
 
