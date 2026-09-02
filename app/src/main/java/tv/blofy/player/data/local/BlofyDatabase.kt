@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-internal const val BLOFY_DATABASE_VERSION = 6
+internal const val BLOFY_DATABASE_VERSION = 7
 
 @Database(
     entities = [
@@ -175,6 +175,30 @@ abstract class BlofyDatabase : RoomDatabase() {
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_categoryId_name` ON `streams` (`providerId`, `kind`, `categoryId`, `name`)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_name` ON `streams` (`providerId`, `name`)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_addedAt` ON `streams` (`providerId`, `kind`, `addedAt`)")
+                }
+            },
+            object : Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // v6 shipped with more than one schema identity during the RC cycle.
+                    // Reconcile every index expected by the current entities without
+                    // deleting playlists, cached catalog, favorites, or watch progress.
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_categories_providerId` ON `categories` (`providerId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_categories_kind` ON `categories` (`kind`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_categories_providerId_kind_orderIndex` ON `categories` (`providerId`, `kind`, `orderIndex`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId` ON `streams` (`providerId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_categoryId` ON `streams` (`categoryId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_kind` ON `streams` (`kind`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_categoryId_name` ON `streams` (`providerId`, `kind`, `categoryId`, `name`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_name` ON `streams` (`providerId`, `name`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_addedAt` ON `streams` (`providerId`, `kind`, `addedAt`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_episodes_providerId` ON `episodes` (`providerId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_episodes_seriesId` ON `episodes` (`seriesId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_episodes_season` ON `episodes` (`season`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_watch_state_providerId` ON `watch_state` (`providerId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_watch_state_kind` ON `watch_state` (`kind`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_epg_providerId` ON `epg` (`providerId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_epg_streamId` ON `epg` (`streamId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_epg_startMs` ON `epg` (`startMs`)")
                 }
             }
         )
