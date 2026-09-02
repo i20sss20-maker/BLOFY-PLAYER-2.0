@@ -251,8 +251,22 @@ class PlayerActivity : AppCompatActivity() {
         return when (routed.action) {
             RemoteAction.BACK -> { if (hud.visibility == View.VISIBLE) { hideHud(); true } else { finish(); true } }
             RemoteAction.PLAY_PAUSE -> { if (session.player.isPlaying) session.player.pause() else session.player.play(); if (kind != "live") showHudBriefly(); true }
-            RemoteAction.FAST_FORWARD -> { if (kind != "live") { session.player.seekTo(session.player.currentPosition + 10_000L); showHudBriefly() }; true }
-            RemoteAction.REWIND -> { if (kind != "live") { session.player.seekTo((session.player.currentPosition - 10_000L).coerceAtLeast(0L)); showHudBriefly() }; true }
+            RemoteAction.FAST_FORWARD -> { if (kind != "live") { seekBy(10_000L); showHudBriefly() }; true }
+            RemoteAction.REWIND -> { if (kind != "live") { seekBy(-10_000L); showHudBriefly() }; true }
+            RemoteAction.RIGHT -> {
+                if (kind != "live" && hud.visibility != View.VISIBLE) {
+                    seekBy(10_000L)
+                    showHudBriefly()
+                    true
+                } else super.dispatchKeyEvent(event)
+            }
+            RemoteAction.LEFT -> {
+                if (kind != "live" && hud.visibility != View.VISIBLE) {
+                    seekBy(-10_000L)
+                    showHudBriefly()
+                    true
+                } else super.dispatchKeyEvent(event)
+            }
             RemoteAction.CHANNEL_NEXT -> { when (kind) { "live" -> switchLive(1); "episode" -> playAdjacentEpisode(1); else -> return super.dispatchKeyEvent(event) }; true }
             RemoteAction.CHANNEL_PREVIOUS -> { when (kind) { "live" -> switchLive(-1); "episode" -> playAdjacentEpisode(-1); else -> return super.dispatchKeyEvent(event) }; true }
             RemoteAction.DIGIT -> { if (kind == "live" && routed.digit != null) { handleChannelDigit(routed.digit); true } else super.dispatchKeyEvent(event) }
@@ -267,6 +281,15 @@ class PlayerActivity : AppCompatActivity() {
             }
             else -> super.dispatchKeyEvent(event)
         }
+    }
+
+    private fun seekBy(deltaMs: Long) {
+        if (kind == "live" || !::session.isInitialized) return
+        val duration = session.player.duration
+        val current = session.player.currentPosition.coerceAtLeast(0L)
+        val target = if (duration > 0L) (current + deltaMs).coerceIn(0L, duration) else (current + deltaMs).coerceAtLeast(0L)
+        session.player.seekTo(target)
+        updateProgressUi()
     }
 
     private fun playAdjacentEpisode(delta: Int, automatic: Boolean = false) {
