@@ -26,4 +26,5 @@ Final signed candidate:
 - production activation backend verified healthy after subscriber proxy deployment
 - production signed RC05 rebuild requested from stabilized main after catalog/TV UX fixes
 - web portal «مشتركين BLOFY» integration merged in PR #18; Android CI #531 and Activation CI #83 passed
-- signed release rebuild requested from main commit b08fbbd374fd80a597adf9606a66fe1b92623357 on 2026-09-02
+- final theme/UX pass merged from PR #19 at commit 6f3f963ced58281c43cc312c1857dfac4ee3983e; Android CI #547 and FFmpeg Native #145 passed
+- signed release rebuild requested from final polished main on 2026-09-02
