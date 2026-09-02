@@ -29,9 +29,15 @@ object BlofyTvDesign {
     const val BodySp = 15f
     const val LabelSp = 14f
     const val CaptionSp = 12f
+    const val FocusInMs = 92L
+    const val FocusOutMs = 72L
+    const val SectionTransitionMs = 115L
 
+    val DisplayTypeface: Typeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
     val HeadingTypeface: Typeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
-    val BodyTypeface: Typeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
+    val LabelTypeface: Typeface by lazy { Typeface.create("sans-serif-medium", Typeface.BOLD) }
+    val BodyTypeface: Typeface by lazy { Typeface.create("sans-serif", Typeface.NORMAL) }
+    val MediumTypeface: Typeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
 
     fun surface(radius: Float = 24f, focused: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
@@ -65,12 +71,12 @@ object BlofyTvDesign {
         setStroke(1, 0xFF76539A.toInt())
     }
 
-    fun applyTitle(text: TextView) = text.apply { textSize = TitleSp; typeface = HeadingTypeface; setTextColor(TextPrimary); includeFontPadding = false }
-    fun applyHeroTitle(text: TextView) = text.apply { textSize = HeroTitleSp; typeface = HeadingTypeface; setTextColor(TextPrimary); includeFontPadding = false }
+    fun applyTitle(text: TextView) = text.apply { textSize = TitleSp; typeface = DisplayTypeface; setTextColor(TextPrimary); includeFontPadding = false }
+    fun applyHeroTitle(text: TextView) = text.apply { textSize = HeroTitleSp; typeface = DisplayTypeface; setTextColor(TextPrimary); includeFontPadding = false }
     fun applyHeading(text: TextView) = text.apply { textSize = HeadingSp; typeface = HeadingTypeface; setTextColor(TextPrimary); includeFontPadding = false }
     fun applyBody(text: TextView) = text.apply { textSize = BodySp; typeface = BodyTypeface; setTextColor(TextSecondary); includeFontPadding = false; setLineSpacing(0f, 1.12f) }
-    fun applyLabel(text: TextView) = text.apply { textSize = LabelSp; typeface = BodyTypeface; setTextColor(TextPrimary); includeFontPadding = false }
-    fun applyCaption(text: TextView) = text.apply { textSize = CaptionSp; typeface = BodyTypeface; setTextColor(TextMuted); includeFontPadding = false }
+    fun applyLabel(text: TextView) = text.apply { textSize = LabelSp; typeface = LabelTypeface; setTextColor(TextPrimary); includeFontPadding = false }
+    fun applyCaption(text: TextView) = text.apply { textSize = CaptionSp; typeface = MediumTypeface; setTextColor(TextMuted); includeFontPadding = false }
 
     fun installTvFocus(view: View, radius: Float = 20f, scale: Float = 1.025f, primary: Boolean = false, onFocused: (() -> Unit)? = null) {
         view.isFocusable = true
@@ -82,7 +88,7 @@ object BlofyTvDesign {
             (v as? TextView)?.setTextColor(TextPrimary)
             v.animate().cancel()
             v.animate().scaleX(if (focused) scale else 1f).scaleY(if (focused) scale else 1f)
-                .translationZ(if (focused) 18f else 2f).alpha(1f).setDuration(if (focused) 95L else 75L).start()
+                .translationZ(if (focused) 18f else 2f).alpha(1f).setDuration(if (focused) FocusInMs else FocusOutMs).start()
             if (focused) onFocused?.invoke()
         }
     }
