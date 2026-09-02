@@ -6,4 +6,5 @@ BLOFY PLAYER 2.0 rc06 signed release gate
 - applicationId remains tv.blofy.player.v2
 - versionCode promoted to 2000007
 - versionName promoted to 2.0.0-rc06
-- production signed APK/AAB requested after successful rc05 candidate verification
+- production signed APK/AAB requested after successful Android CI #664 and FFmpeg Native #151
+- final signed release triggered from premium-cinematic-v2
