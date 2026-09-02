@@ -109,13 +109,19 @@ class PosterCatalogActivity : AppCompatActivity() {
         content.addView(header)
 
         emptyView = TextView(this).apply {
-            textSize = 15f
-            setTextColor(Color.rgb(190, 173, 210))
-            gravity = Gravity.RIGHT
-            visibility = View.GONE
-            setPadding(dp(8), 0, dp(8), dp(8))
+            text = "جاري تجهيز المحتوى…"
+            textSize = 16f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(Color.rgb(211, 193, 226))
+            gravity = Gravity.CENTER
+            visibility = View.VISIBLE
+            setPadding(dp(28), dp(18), dp(28), dp(18))
+            background = stateBackground()
         }
-        content.addView(emptyView)
+        content.addView(emptyView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply {
+            topMargin = dp(8)
+            bottomMargin = dp(10)
+        })
 
         posterGrid = RecyclerView(this).apply {
             layoutManager = GridLayoutManager(this@PosterCatalogActivity, GRID_COLUMNS)
@@ -252,11 +258,13 @@ class PosterCatalogActivity : AppCompatActivity() {
             kind == KIND_SERIES -> "${items.size} مسلسل"
             else -> "${items.size} فيلم"
         }
-        emptyView.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
-        emptyView.text = if (items.isEmpty()) {
-            if (searching) "لا توجد نتائج • جرّب اسمًا أو سنة أو تصنيفًا آخر" else "لا يوجد محتوى محفوظ في هذه الفئة • التحديث يدوي فقط من الإعدادات"
-        } else {
-            ""
+        val empty = items.isEmpty()
+        emptyView.visibility = if (empty) View.VISIBLE else View.GONE
+        emptyView.text = when {
+            !empty -> ""
+            searching -> "لا توجد نتائج لهذا البحث\nجرّب اسمًا أو سنة أو تصنيفًا آخر"
+            kind == KIND_SERIES -> "لا توجد مسلسلات محفوظة في هذه الفئة\nيمكنك تحديث المحتوى يدويًا من الإعدادات"
+            else -> "لا توجد أفلام محفوظة في هذه الفئة\nيمكنك تحديث المحتوى يدويًا من الإعدادات"
         }
     }
 
@@ -326,6 +334,14 @@ class PosterCatalogActivity : AppCompatActivity() {
     ).apply {
         cornerRadius = dp(20).toFloat()
         setStroke(dp(1), 0x594A355F)
+    }
+
+    private fun stateBackground() = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT,
+        intArrayOf(0xA5241830.toInt(), 0xB5120C1A.toInt())
+    ).apply {
+        cornerRadius = dp(18).toFloat()
+        setStroke(dp(1), 0x554E3866)
     }
 
     private fun searchBackground(focused: Boolean) = GradientDrawable(
