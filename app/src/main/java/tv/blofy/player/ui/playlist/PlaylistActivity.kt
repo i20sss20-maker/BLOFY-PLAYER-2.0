@@ -111,12 +111,20 @@ class PlaylistActivity : AppCompatActivity() {
                     val id = existing?.id ?: UUID.nameUUIDFromBytes("$type|$baseUrl|$user".toByteArray()).toString()
                     val next = ProviderEntity(id, name.text.toString().trim().ifBlank { if (isM3u) "BLOFY M3U" else "BLOFY Server" }, if (isM3u) baseUrl else baseUrl.trimEnd('/'), user, pass, type,
                         existing?.liveFormat ?: "ts", existing?.preferredTransport ?: "cronet", existing?.preferredEngine ?: "media3", existing?.allowCrossProtocolRedirects ?: true, true, System.currentTimeMillis())
-                    val hadCatalog = dao.hasCatalog(id)
-                    if (!hadCatalog) {
+                    val hasCatalog = dao.hasCatalog(id)
+                    val cacheReady = hasCatalog && CatalogSyncState.isReady(applicationContext, id)
+                    if (!cacheReady) {
+                        CatalogSyncState.markPending(applicationContext, id)
                         dao.upsertProvider(next)
-                        val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(next) }
-                        check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }; check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
-                        dao.saveAndActivateProvider(next)
+                        try {
+                            if (hasCatalog) dao.clearProviderCatalog(id)
+                            val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(next) }
+                            check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }; check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
+                            dao.saveAndActivateProvider(next)
+                        } catch (error: Throwable) {
+                            withContext(NonCancellable) { dao.clearProviderCatalog(id) }
+                            throw error
+                        }
                     } else if (existing != null && (existing.baseUrl != next.baseUrl || existing.username != next.username || existing.password != next.password || existing.providerType != next.providerType)) {
                         val staging = next.copy(id = UUID.randomUUID().toString(), enabled = false); var promoted = false
                         try {
