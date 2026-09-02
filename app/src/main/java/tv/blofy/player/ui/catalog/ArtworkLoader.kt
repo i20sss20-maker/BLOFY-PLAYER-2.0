@@ -7,26 +7,39 @@ import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
 import android.widget.ImageView
-import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.security.MessageDigest
-import java.util.Collections
-import java.util.WeakHashMap
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Fast artwork loader for TV catalogs: visible images are prioritised, disk persistence is off the render path. */
+/**
+ * Fast artwork loader for TV catalogs.
+ *
+ * - memory + disk cache
+ * - one in-flight network request per URL (deduplicated across views)
+ * - short negative cache for broken artwork URLs
+ * - concurrency adapts to device CPU/RAM
+ * - disk persistence never blocks visible rendering
+ */
 object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
     private const val MAX_DISK_BYTES = 260L * 1024L * 1024L
+    private const val NEGATIVE_CACHE_MS = 5 * 60_000L
+
     private val main = Handler(Looper.getMainLooper())
-    private val visiblePool = Executors.newFixedThreadPool(10)
+    private val workerCount = adaptiveWorkerCount()
+    private val coordinatorPool = Executors.newFixedThreadPool(if (workerCount <= 4) 2 else 4)
+    private val networkPool = Executors.newFixedThreadPool(workerCount)
     private val backgroundPool = Executors.newFixedThreadPool(2)
     private val trimCounter = AtomicInteger(0)
-    private val activeCalls = Collections.synchronizedMap(WeakHashMap<ImageView, Call>())
+    private val inFlight = ConcurrentHashMap<String, CompletableFuture<Bitmap?>>()
+    private val failedUntil = ConcurrentHashMap<String, Long>()
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(3, TimeUnit.SECONDS)
         .readTimeout(7, TimeUnit.SECONDS)
@@ -35,7 +48,8 @@ object ArtworkLoader {
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
-    private val cache = object : LruCache<String, Bitmap>(56 * 1024) {
+
+    private val cache = object : LruCache<String, Bitmap>(memoryCacheKb()) {
         override fun sizeOf(key: String, value: Bitmap) = (value.byteCount / 1024).coerceAtLeast(1)
     }
 
@@ -55,81 +69,82 @@ object ArtworkLoader {
         }
 
         val app = view.context.applicationContext
-        visiblePool.execute {
-            var result: Bitmap? = null
-            var downloadedUrl: String? = null
+        coordinatorPool.execute {
+            var bitmap: Bitmap? = null
+            var resolvedUrl: String? = null
             for (url in urls) {
                 if (view.tag != requestKey) return@execute
-                result = cache.get(url)?.takeIf { !it.isRecycled }
+                if (isNegative(url)) continue
+                bitmap = cache.get(url)?.takeIf { !it.isRecycled }
                     ?: readDisk(app.cacheDir, url)?.also { cache.put(url, it) }
-                    ?: download(view, requestKey, url)?.also {
+                    ?: sharedDownload(url).getOrNull()?.also {
                         cache.put(url, it)
-                        downloadedUrl = url
+                        resolvedUrl = url
                     }
-                if (result != null) break
+                if (bitmap != null) break
             }
 
-            val bitmap = result
+            val result = bitmap
             main.post {
                 if (view.tag == requestKey) {
-                    if (bitmap != null && !bitmap.isRecycled) view.setImageBitmap(bitmap)
+                    if (result != null && !result.isRecycled) view.setImageBitmap(result)
                     else view.setImageDrawable(skeleton())
                 }
-                activeCalls.remove(view)
             }
 
-            if (bitmap != null && downloadedUrl != null) {
-                val url = downloadedUrl!!
-                backgroundPool.execute { writeDisk(app.cacheDir, url, bitmap) }
+            if (result != null && resolvedUrl != null) {
+                val url = resolvedUrl!!
+                backgroundPool.execute { writeDisk(app.cacheDir, url, result) }
             }
         }
     }
 
+    /** Stops delivery to a recycled view. Shared network work is retained only when another consumer may reuse it. */
     fun cancel(view: ImageView) {
-        activeCalls.remove(view)?.cancel()
         view.tag = null
     }
 
     fun prefetch(context: android.content.Context, urls: List<String?>) {
         val app = context.applicationContext
-        urls.mapNotNull(::normalizeUrl).distinct().take(18).forEach { url ->
-            if (cache.get(url) != null || diskFile(app.cacheDir, url).isFile) return@forEach
-            backgroundPool.execute {
-                val bmp = downloadBackground(url) ?: return@execute
-                cache.put(url, bmp)
-                writeDisk(app.cacheDir, url, bmp)
+        urls.mapNotNull(::normalizeUrl).distinct().take(prefetchLimit()).forEach { url ->
+            if (cache.get(url) != null || diskFile(app.cacheDir, url).isFile || isNegative(url)) return@forEach
+            sharedDownload(url).whenComplete { bmp, _ ->
+                if (bmp != null && !bmp.isRecycled) {
+                    cache.put(url, bmp)
+                    backgroundPool.execute { writeDisk(app.cacheDir, url, bmp) }
+                }
             }
         }
     }
 
-    private fun download(view: ImageView, requestKey: String, url: String): Bitmap? {
+    /** Used by Home to quietly prepare the first catalog posters before the user opens a section. */
+    fun warmPrefetch(context: android.content.Context, urls: List<String?>) = prefetch(context, urls)
+
+    private fun sharedDownload(url: String): CompletableFuture<Bitmap?> {
+        if (isNegative(url)) return CompletableFuture.completedFuture(null)
+        return inFlight.computeIfAbsent(url) {
+            CompletableFuture.supplyAsync({
+                val result = downloadWithRetry(url)
+                if (result == null) failedUntil[url] = System.currentTimeMillis() + NEGATIVE_CACHE_MS
+                else failedUntil.remove(url)
+                result
+            }, networkPool).whenComplete { _, _ -> inFlight.remove(url) }
+        }
+    }
+
+    private fun downloadWithRetry(url: String): Bitmap? {
         repeat(2) {
-            if (view.tag != requestKey) return null
-            runCatching { downloadCall(view, requestKey, url) }.getOrNull()?.let { return it }
+            runCatching { execute(url) }.getOrNull()?.let { return it }
         }
         return null
     }
 
-    private fun downloadBackground(url: String): Bitmap? {
-        repeat(2) { runCatching { execute(client.newCall(request(url))) }.getOrNull()?.let { return it } }
-        return null
-    }
-
-    private fun downloadCall(view: ImageView, requestKey: String, url: String): Bitmap? {
-        if (view.tag != requestKey) return null
-        val call = client.newCall(request(url))
-        activeCalls[view]?.cancel()
-        activeCalls[view] = call
-        return execute(call)
-    }
-
-    private fun request(url: String) = Request.Builder().url(url)
-        .header("User-Agent", "Mozilla/5.0 (Linux; Android TV) BLOFY-PLAYER/2.0")
-        .header("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
-        .build()
-
-    private fun execute(call: Call): Bitmap? {
-        call.execute().use { response ->
+    private fun execute(url: String): Bitmap? {
+        val request = Request.Builder().url(url)
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android TV) BLOFY-PLAYER/2.0")
+            .header("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
+            .build()
+        client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return null
             val body = response.body ?: return null
             val declared = body.contentLength()
@@ -189,17 +204,55 @@ object ArtworkLoader {
         }
     }
 
-    private fun skeleton() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF21182D.toInt(), 0xFF30203F.toInt(), 0xFF17111F.toInt())).apply {
-        cornerRadius = 18f
+    private fun isNegative(url: String): Boolean {
+        val until = failedUntil[url] ?: return false
+        if (until <= System.currentTimeMillis()) {
+            failedUntil.remove(url, until)
+            return false
+        }
+        return true
     }
+
+    private fun skeleton() = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        intArrayOf(0xFF21182D.toInt(), 0xFF30203F.toInt(), 0xFF17111F.toInt())
+    ).apply { cornerRadius = 18f }
 
     private fun diskFile(cacheDir: File, url: String) = File(File(cacheDir, "blofy_posters"), hash(url) + ".jpg")
     private fun hash(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
     private fun sampleSize(w: Int, h: Int, tw: Int, th: Int): Int { var s = 1; while (w / (s * 2) >= tw && h / (s * 2) >= th) s *= 2; return s }
+
     private fun normalizeUrl(raw: String?): String? {
         val value = raw?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", true) } ?: return null
         return runCatching { java.net.URI(value) }.getOrNull()?.takeIf {
             (it.scheme.equals("https", true) || it.scheme.equals("http", true)) && !it.host.isNullOrBlank()
         }?.let { value }
     }
+
+    private fun adaptiveWorkerCount(): Int {
+        val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        val maxMb = Runtime.getRuntime().maxMemory() / (1024L * 1024L)
+        return when {
+            maxMb <= 192 || cores <= 4 -> 4
+            maxMb <= 384 || cores <= 6 -> 6
+            else -> 8
+        }
+    }
+
+    private fun memoryCacheKb(): Int {
+        val maxMb = Runtime.getRuntime().maxMemory() / (1024L * 1024L)
+        return when {
+            maxMb <= 192 -> 32 * 1024
+            maxMb <= 384 -> 48 * 1024
+            else -> 64 * 1024
+        }
+    }
+
+    private fun prefetchLimit(): Int = when {
+        workerCount <= 4 -> 12
+        workerCount <= 6 -> 18
+        else -> 24
+    }
+
+    private fun <T> CompletableFuture<T>.getOrNull(): T? = runCatching { get() }.getOrNull()
 }
