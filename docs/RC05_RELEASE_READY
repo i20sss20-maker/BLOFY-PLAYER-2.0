@@ -25,3 +25,5 @@ Final signed candidate:
 - Android CI passed on final stabilization head 407a8b8eaecc3de97a2a644dce734fbc4a5e56f4 (Run #528)
 - production activation backend verified healthy after subscriber proxy deployment
 - production signed RC05 rebuild requested from stabilized main after catalog/TV UX fixes
+- web portal «مشتركين BLOFY» integration merged in PR #18; Android CI #531 and Activation CI #83 passed
+- signed release rebuild requested from main commit b08fbbd374fd80a597adf9606a66fe1b92623357 on 2026-09-02
