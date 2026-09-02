@@ -1,17 +1,18 @@
 BLOFY PLAYER 2.0 rc05 release gate
 
 Final signed candidate:
-- professional polish pass merged to main
-- real rotating home banners from cached catalog artwork
+- full professional TV UI polish merged to main
+- resilient multi-source poster fallback with retry, memory/disk cache and prefetch
+- real rotating home banners with artwork fallback and smoother transitions
+- unified TV typography, spacing, rounded cards, focus glow and motion across key screens
+- improved live TV category/channel layout, larger preview and clearer D-pad focus
+- movie and series detail screens polished with unified typography/buttons and artwork fallback
+- TV settings visually rebuilt while retaining current functional options
 - instant search from the first character across live, movies and series
 - cached catalog navigation to avoid reloading lists on every entry
 - series episodes use local cache first and fetch only when missing
-- live TV layout, channel readability, preview area and remote focus improved
-- movie and series navigation/details repaired after the v339 merge regression
-- TV settings rebuilt for clear D-pad navigation
 - external player support removed from UI, manifest and code paths
 - parental lock/PIN feature removed and legacy locked state cleared by migration
-- database v6 indexes added for provider/kind/category/name/addedAt performance
 - current Media3 1.6.1 + FFmpeg playback engine, transport, URL resolution and fallbacks retained
 - Android CI and native FFmpeg verification passed before merge
-- production signed RC05 rebuild requested from professional polish merge commit 4ca1ba159b83538e86cade71aed8c0d87674a13e
+- production signed RC05 rebuild requested from full polish merge commit 068c98b7b57652c5aaf45ade4cc5d7e914468492
