@@ -23,6 +23,7 @@ interface BlofyDao {
     @Query("SELECT * FROM streams WHERE providerId = :providerId") suspend fun allStreamsForProvider(providerId: String): List<StreamEntity>
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId") suspend fun streamCountForProvider(providerId: String): Int
     @Query("SELECT EXISTS(SELECT 1 FROM streams WHERE providerId = :providerId LIMIT 1)") suspend fun hasStreamsForProvider(providerId: String): Boolean
+    suspend fun hasCatalog(providerId: String): Boolean = hasStreamsForProvider(providerId)
     @Query("SELECT * FROM episodes WHERE providerId = :providerId") suspend fun allEpisodesForProvider(providerId: String): List<EpisodeEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertCategories(items: List<CategoryEntity>)
