@@ -11,9 +11,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.security.MessageDigest
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.FutureTask
 import java.util.concurrent.PriorityBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -44,7 +44,7 @@ object ArtworkLoader {
     }
     private val networkPool = ThreadPoolExecutor(workerCount, workerCount, 30L, TimeUnit.SECONDS, taskQueue).apply { allowCoreThreadTimeOut(false) }
     private val trimCounter = AtomicInteger(0)
-    private val inFlight = ConcurrentHashMap<String, CompletableFuture<Bitmap?>>()
+    private val inFlight = ConcurrentHashMap<String, FutureTask<Bitmap?>>()
     private val failedUntil = ConcurrentHashMap<String, Long>()
 
     private val client = OkHttpClient.Builder()
@@ -111,10 +111,11 @@ object ArtworkLoader {
         val app = context.applicationContext
         urls.mapNotNull(::normalizeUrl).distinct().take(prefetchLimit()).forEach { url ->
             if (cache.get(url) != null || diskFile(app.cacheDir, url).isFile || isNegative(url)) return@forEach
-            sharedDownload(url, Priority.PREFETCH).whenComplete { bmp, _ ->
+            backgroundPool.execute {
+                val bmp = sharedDownload(url, Priority.PREFETCH).getOrNull()
                 if (bmp != null && !bmp.isRecycled) {
                     cache.put(url, bmp)
-                    backgroundPool.execute { writeDisk(app.cacheDir, url, bmp) }
+                    writeDisk(app.cacheDir, url, bmp)
                 }
             }
         }
@@ -122,19 +123,21 @@ object ArtworkLoader {
 
     fun warmPrefetch(context: android.content.Context, urls: List<String?>) = prefetch(context, urls)
 
-    private fun sharedDownload(url: String, priority: Priority): CompletableFuture<Bitmap?> {
-        if (isNegative(url)) return CompletableFuture.completedFuture(null)
+    private fun sharedDownload(url: String, priority: Priority): FutureTask<Bitmap?> {
+        if (isNegative(url)) return FutureTask<Bitmap?> { null }.apply { run() }
         inFlight[url]?.let { return it }
-        val future = CompletableFuture<Bitmap?>()
+
+        val future = FutureTask<Bitmap?> {
+            val result = downloadWithRetry(url)
+            if (result == null) failedUntil[url] = System.currentTimeMillis() + NEGATIVE_CACHE_MS else failedUntil.remove(url)
+            result
+        }
         val existing = inFlight.putIfAbsent(url, future)
         if (existing != null) return existing
+
         networkPool.execute(PriorityTask(priority, taskSequence.incrementAndGet()) {
             try {
-                val result = downloadWithRetry(url)
-                if (result == null) failedUntil[url] = System.currentTimeMillis() + NEGATIVE_CACHE_MS else failedUntil.remove(url)
-                future.complete(result)
-            } catch (error: Throwable) {
-                future.completeExceptionally(error)
+                future.run()
             } finally {
                 inFlight.remove(url, future)
             }
@@ -255,5 +258,5 @@ object ArtworkLoader {
         else -> 24
     }
 
-    private fun <T> CompletableFuture<T>.getOrNull(): T? = runCatching { get() }.getOrNull()
+    private fun <T> FutureTask<T>.getOrNull(): T? = runCatching { get() }.getOrNull()
 }
