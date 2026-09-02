@@ -12,18 +12,17 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
-import tv.blofy.player.core.playback.ExternalPlayerLauncher
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.player.PlayerActivity
 
 class MovieDetailsActivity : AppCompatActivity() {
@@ -40,7 +39,7 @@ class MovieDetailsActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(58), dp(44), dp(58), dp(44))
+            setPadding(dp(58), dp(40), dp(58), dp(40))
         }
         root.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
@@ -55,29 +54,38 @@ class MovieDetailsActivity : AppCompatActivity() {
             val posterCard = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(10), dp(10), dp(10), dp(10))
+                setPadding(dp(9), dp(9), dp(9), dp(9))
                 background = cardBackground()
                 elevation = dp(8).toFloat()
             }
             val poster = ImageView(this@MovieDetailsActivity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(0xFFF0EEF4.toInt())
+                setBackgroundColor(0xFF16101F.toInt())
             }
-            posterCard.addView(poster, LinearLayout.LayoutParams(dp(285), dp(425)))
+            posterCard.addView(poster, LinearLayout.LayoutParams(dp(300), dp(445)))
             ArtworkLoader.load(poster, stream.icon)
-            body.addView(posterCard, LinearLayout.LayoutParams(dp(310), dp(450)).apply { marginStart = dp(34) })
+            body.addView(posterCard, LinearLayout.LayoutParams(dp(320), dp(465)).apply { marginStart = dp(40) })
 
             val info = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_VERTICAL or Gravity.END
-                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setPadding(dp(16), dp(8), dp(16), dp(8))
             }
             info.addView(TextView(this@MovieDetailsActivity).apply {
-                text = stream.name
-                textSize = 38f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(TEXT_PRIMARY)
+                text = "BLOFY CINEMA"
+                textSize = 12f
+                letterSpacing = .11f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.PurpleBright)
                 gravity = Gravity.END
+            })
+            info.addView(TextView(this@MovieDetailsActivity).apply {
+                text = stream.name
+                textSize = 40f
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(BlofyTvDesign.TextPrimary)
+                gravity = Gravity.END
+                includeFontPadding = false
             })
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = buildList {
@@ -88,18 +96,20 @@ class MovieDetailsActivity : AppCompatActivity() {
                     stream.rating?.takeIf { it.isNotBlank() }?.let { add("★ $it") }
                     stream.extension?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
                 }.joinToString("  •  ")
-                textSize = 16f
-                setTextColor(PURPLE_SOFT)
+                textSize = 15.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.PurpleSoft)
                 gravity = Gravity.END
                 setPadding(0, dp(8), 0, dp(18))
             })
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.plot?.takeIf { it.isNotBlank() } ?: "استمتع بالمشاهدة على BLOFY PLAYER"
                 textSize = 17f
+                typeface = BlofyTvDesign.BodyTypeface
                 maxLines = 6
-                setTextColor(TEXT_SECONDARY)
+                setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = Gravity.END
-                setLineSpacing(0f, 1.18f)
+                setLineSpacing(0f, 1.2f)
                 setPadding(0, 0, 0, dp(24))
             })
 
@@ -109,7 +119,10 @@ class MovieDetailsActivity : AppCompatActivity() {
                 val percent = ((resumeMs * 100L) / durationMs).coerceIn(1, 99)
                 info.addView(TextView(this@MovieDetailsActivity).apply {
                     text = "متابعة المشاهدة  •  $percent%"
-                    textSize = 15f; setTextColor(PURPLE_SOFT); gravity = Gravity.END
+                    textSize = 14.5f
+                    typeface = BlofyTvDesign.BodyTypeface
+                    setTextColor(BlofyTvDesign.Mint)
+                    gravity = Gravity.END
                     setPadding(0, 0, 0, dp(12))
                 })
             }
@@ -119,23 +132,19 @@ class MovieDetailsActivity : AppCompatActivity() {
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.END
             }
-            val play = actionButton(if (resumeMs > 30_000L) "▶ استئناف" else "▶ شاهد الآن", true) { openPlayer(provider, stream, url, resumeMs) }
-            row.addView(play, LinearLayout.LayoutParams(dp(195), dp(74)).apply { marginStart = dp(10) })
-            if (resumeMs > 30_000L) row.addView(actionButton("من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
+            val play = actionButton(if (resumeMs > 30_000L) "▶  استئناف" else "▶  شاهد الآن", true) { openPlayer(provider, stream, url, resumeMs) }
+            row.addView(play, LinearLayout.LayoutParams(dp(200), dp(70)).apply { marginStart = dp(10) })
+            if (resumeMs > 30_000L) row.addView(actionButton("↺  من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(dp(180), dp(70)).apply { marginStart = dp(10) })
 
-            favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
+            favoriteButton = actionButton(if (stream.favorite) "★  المفضلة" else "☆  المفضلة") {
                 lifecycleScope.launch {
                     val current = dao.stream(contentKey) ?: return@launch
                     dao.setFavorite(contentKey, !current.favorite)
-                    favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة"
+                    favoriteButton.text = if (!current.favorite) "★  المفضلة" else "☆  المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
+            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(180), dp(70)).apply { marginStart = dp(10) })
             info.addView(row)
-
-            info.addView(actionButton("مشغل خارجي") {
-                if (!ExternalPlayerLauncher.launch(this@MovieDetailsActivity, url, stream.name)) Toast.makeText(this@MovieDetailsActivity, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(dp(180), dp(62)).apply { topMargin = dp(14); gravity = Gravity.END })
 
             body.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             play.requestFocus()
@@ -159,29 +168,40 @@ class MovieDetailsActivity : AppCompatActivity() {
     }
 
     private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true
-        setTextColor(if (primary) Color.WHITE else TEXT_PRIMARY)
+        text = label
+        isAllCaps = false
+        textSize = 15f
+        typeface = BlofyTvDesign.BodyTypeface
+        isFocusable = true
+        setTextColor(Color.WHITE)
         background = buttonBackground(false, primary)
         setOnFocusChangeListener { view, focused ->
-            setTextColor(if (primary || focused) Color.WHITE else TEXT_PRIMARY)
             view.background = buttonBackground(focused, primary)
             view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).translationZ(if (focused) dp(10).toFloat() else dp(2).toFloat()).setDuration(85).start()
         }
         setOnClickListener { action() }
     }
 
-    private fun cardBackground() = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(Color.WHITE); setStroke(dp(1), 0xFFE0DCE7.toInt()) }
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat()
-        setColor(when { primary -> if (focused) 0xFF7A3ED2.toInt() else 0xFF662BB7.toInt(); focused -> 0xFF6F35C5.toInt(); else -> Color.WHITE })
-        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB58DE8.toInt() else 0xFFDAD5E1.toInt())
+    private fun cardBackground() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF2B203B.toInt(), 0xFF17111F.toInt())).apply {
+        cornerRadius = dp(24).toFloat(); setStroke(dp(1), 0xFF58416F.toInt())
     }
+
+    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+        when {
+            primary && focused -> intArrayOf(0xFFA653FF.toInt(), 0xFF7130D2.toInt())
+            primary -> intArrayOf(0xFF843FE6.toInt(), 0xFF5720AD.toInt())
+            focused -> intArrayOf(0xFF633A8D.toInt(), 0xFF35214C.toInt())
+            else -> intArrayOf(0xFF2B203B.toInt(), 0xFF1A1325.toInt())
+        }
+    ).apply {
+        cornerRadius = dp(18).toFloat()
+        setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.PurpleBright else 0xFF513C67.toInt())
+    }
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     companion object {
-        const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_CONTENT_KEY = "content_key"
-        private val TEXT_PRIMARY = Color.rgb(28, 24, 34)
-        private val TEXT_SECONDARY = Color.rgb(78, 72, 86)
-        private val PURPLE_SOFT = Color.rgb(102, 54, 164)
+        const val EXTRA_PROVIDER_ID = "provider_id"
+        const val EXTRA_CONTENT_KEY = "content_key"
     }
 }
