@@ -61,9 +61,7 @@ class FocusTextAdapter<T>(
         recyclerView.layoutDirection = View.LAYOUT_DIRECTION_RTL
         recyclerView.textDirection = View.TEXT_DIRECTION_RTL
         recyclerView.post {
-            recyclerView.parent?.let { parent ->
-                if (parent is View) parent.layoutDirection = View.LAYOUT_DIRECTION_RTL
-            }
+            recyclerView.parent?.let { parent -> if (parent is View) parent.layoutDirection = View.LAYOUT_DIRECTION_RTL }
         }
     }
 
@@ -81,29 +79,29 @@ class FocusTextAdapter<T>(
             textDirection = View.TEXT_DIRECTION_RTL
             textSize = BlofyTvDesign.LabelSp
             typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(TEXT_IDLE)
+            setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             setPadding(dp(20), 0, dp(20), 0)
-            minHeight = dp(58)
+            minHeight = dp(60)
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
-            background = itemBackground(false, density)
-            alpha = 0.96f
+            background = BlofyTvDesign.surface(dp(18).toFloat(), false)
+            alpha = 0.97f
             setOnFocusChangeListener { v, focused ->
-                (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
+                (v as TextView).setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
                 v.animate().cancel()
                 v.animate()
-                    .scaleX(if (focused) 1.035f else 1f)
-                    .scaleY(if (focused) 1.035f else 1f)
-                    .alpha(if (focused) 1f else 0.96f)
+                    .scaleX(if (focused) 1.025f else 1f)
+                    .scaleY(if (focused) 1.025f else 1f)
+                    .alpha(if (focused) 1f else 0.97f)
                     .translationZ(if (focused) dp(16).toFloat() else dp(2).toFloat())
-                    .setDuration(if (focused) 120L else 90L)
+                    .setDuration(if (focused) 115L else 90L)
                     .start()
-                v.background = itemBackground(focused, density)
+                v.background = BlofyTvDesign.surface(dp(18).toFloat(), focused)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
                         items.getOrNull(pos)?.let { item ->
@@ -121,13 +119,14 @@ class FocusTextAdapter<T>(
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
         val density = holder.text.resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
         holder.text.animate().cancel()
         holder.text.scaleX = 1f
         holder.text.scaleY = 1f
-        holder.text.alpha = 0.96f
+        holder.text.alpha = 0.97f
         holder.text.translationZ = 2f * density
-        holder.text.background = itemBackground(false, density)
-        holder.text.setTextColor(TEXT_IDLE)
+        holder.text.background = BlofyTvDesign.surface(dp(18).toFloat(), false)
+        holder.text.setTextColor(BlofyTvDesign.TextSecondary)
         holder.text.text = label(item)
         holder.text.tag = position
         holder.text.setOnClickListener { onClick(item) }
@@ -145,7 +144,7 @@ class FocusTextAdapter<T>(
         holder.text.animate().cancel()
         holder.text.scaleX = 1f
         holder.text.scaleY = 1f
-        holder.text.alpha = 0.96f
+        holder.text.alpha = 0.97f
         holder.text.translationZ = 0f
         holder.text.tag = null
         holder.text.setOnClickListener(null)
@@ -155,18 +154,4 @@ class FocusTextAdapter<T>(
 
     override fun getItemCount() = items.size
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
-
-    private fun itemBackground(focused: Boolean, density: Float) = android.graphics.drawable.GradientDrawable(
-        android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF6F35B7.toInt(), 0xFF2D1B43.toInt())
-        else intArrayOf(0xE61A1424.toInt(), 0xEA0D0A13.toInt())
-    ).apply {
-        cornerRadius = 17f * density
-        setStroke(
-            if (focused) (2f * density).toInt().coerceAtLeast(2) else (1f * density).toInt().coerceAtLeast(1),
-            if (focused) 0xFFF0DBFF.toInt() else 0x4A604878
-        )
-    }
-
-    companion object { private val TEXT_IDLE = Color.rgb(230, 224, 236) }
 }
