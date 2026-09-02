@@ -2,7 +2,6 @@ package tv.blofy.player.ui.details
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
@@ -23,6 +22,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.series.EpisodesActivity
 
@@ -50,10 +50,10 @@ class SeriesDetailsActivity : AppCompatActivity() {
         }
         val poster = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(0xFFF0EEF4.toInt())
+            setBackgroundColor(0xFF16101F.toInt())
         }
-        posterCard.addView(poster, LinearLayout.LayoutParams(dp(292), dp(447)))
-        root.addView(posterCard, LinearLayout.LayoutParams(dp(310), dp(465)).apply { marginEnd = dp(42) })
+        posterCard.addView(poster, LinearLayout.LayoutParams(dp(300), dp(450)))
+        root.addView(posterCard, LinearLayout.LayoutParams(dp(320), dp(470)).apply { marginEnd = dp(42) })
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -76,7 +76,20 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val seasons = allEpisodes.map { it.season }.distinct().size
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = stream.name; textSize = 38f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.RIGHT
+                text = "BLOFY SERIES"
+                textSize = 12f
+                letterSpacing = .11f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.PurpleBright)
+                gravity = Gravity.RIGHT
+            })
+            panel.addView(TextView(this@SeriesDetailsActivity).apply {
+                text = stream.name
+                textSize = 40f
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(BlofyTvDesign.TextPrimary)
+                gravity = Gravity.RIGHT
+                includeFontPadding = false
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = buildList {
@@ -87,50 +100,69 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     if (allEpisodes.isNotEmpty()) add("${allEpisodes.size} حلقة")
                     stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
                 }.joinToString("  •  ")
-                textSize = 16f; setTextColor(PURPLE_SOFT); gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(18))
+                textSize = 15.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.PurpleSoft)
+                gravity = Gravity.RIGHT
+                setPadding(0, dp(8), 0, dp(18))
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.plot?.takeIf(String::isNotBlank) ?: "اختر الموسم والحلقة لبدء المشاهدة."
-                textSize = 17f; maxLines = 5; setTextColor(TEXT_SECONDARY); gravity = Gravity.RIGHT; setPadding(0, 0, 0, dp(24))
+                textSize = 17f
+                typeface = BlofyTvDesign.BodyTypeface
+                maxLines = 5
+                setTextColor(BlofyTvDesign.TextSecondary)
+                gravity = Gravity.RIGHT
+                setLineSpacing(0f, 1.2f)
+                setPadding(0, 0, 0, dp(24))
             })
 
             resume?.let { r ->
                 val pct = if (r.durationMs > 0) ((r.positionMs * 100) / r.durationMs).toInt().coerceIn(1, 99) else 0
                 panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                    text = "استئناف الموسم ${r.episode.season} • الحلقة ${r.episode.episode}${if (pct > 0) "  •  $pct%" else ""}"
-                    textSize = 15f; setTextColor(PURPLE_SOFT); gravity = Gravity.RIGHT
+                    text = "متابعة الموسم ${r.episode.season} • الحلقة ${r.episode.episode}${if (pct > 0) "  •  $pct%" else ""}"
+                    textSize = 14.5f
+                    typeface = BlofyTvDesign.BodyTypeface
+                    setTextColor(BlofyTvDesign.Mint)
+                    gravity = Gravity.RIGHT
                 })
                 if (r.durationMs > 0) panel.addView(ProgressBar(this@SeriesDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
-                    max = 100; progress = pct; progressTintList = android.content.res.ColorStateList.valueOf(PURPLE)
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(8)).apply { topMargin = dp(8); bottomMargin = dp(18) })
+                    max = 100; progress = pct
+                    progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(7)).apply { topMargin = dp(8); bottomMargin = dp(18) })
             }
 
-            val row = LinearLayout(this@SeriesDetailsActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.RIGHT }
+            val row = LinearLayout(this@SeriesDetailsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                gravity = Gravity.RIGHT
+            }
             var primary: Button? = null
             resume?.let { r ->
-                val resumeButton = actionButton("▶ استئناف الحلقة", true) { launchEpisode(provider, r.episode, r.positionMs) }
+                val resumeButton = actionButton("▶  استئناف الحلقة", true) { launchEpisode(provider, r.episode, r.positionMs) }
                 primary = resumeButton
-                row.addView(resumeButton, LinearLayout.LayoutParams(dp(230), dp(74)).apply { marginStart = dp(10) })
-                row.addView(actionButton("من البداية") { launchEpisode(provider, r.episode, 0L) }, LinearLayout.LayoutParams(dp(180), dp(74)).apply { marginStart = dp(10) })
+                row.addView(resumeButton, LinearLayout.LayoutParams(dp(230), dp(70)).apply { marginStart = dp(10) })
+                row.addView(actionButton("↺  من البداية") { launchEpisode(provider, r.episode, 0L) }, LinearLayout.LayoutParams(dp(180), dp(70)).apply { marginStart = dp(10) })
             }
-            val episodes = actionButton("المواسم والحلقات", primary == null) {
+            val episodes = actionButton("▤  المواسم والحلقات", primary == null) {
                 startActivity(Intent(this@SeriesDetailsActivity, EpisodesActivity::class.java).apply {
                     putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, providerId)
                     putExtra(EpisodesActivity.EXTRA_SERIES_ID, stream.remoteId)
                     putExtra(EpisodesActivity.EXTRA_SERIES_NAME, stream.name)
+                    putExtra(EpisodesActivity.EXTRA_SERIES_ART, stream.icon ?: stream.backdrop)
                 })
             }
             if (primary == null) primary = episodes
-            row.addView(episodes, LinearLayout.LayoutParams(dp(230), dp(74)).apply { marginStart = dp(10) })
+            row.addView(episodes, LinearLayout.LayoutParams(dp(240), dp(70)).apply { marginStart = dp(10) })
 
-            favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
+            favoriteButton = actionButton(if (stream.favorite) "★  المفضلة" else "☆  المفضلة") {
                 lifecycleScope.launch {
                     val current = dao.stream(contentKey) ?: return@launch
                     dao.setFavorite(contentKey, !current.favorite)
-                    favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة"
+                    favoriteButton.text = if (!current.favorite) "★  المفضلة" else "☆  المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
+            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(180), dp(70)).apply { marginStart = dp(10) })
             panel.addView(row)
             primary?.requestFocus()
         }
@@ -156,25 +188,42 @@ class SeriesDetailsActivity : AppCompatActivity() {
     }
 
     private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(if (primary) Color.WHITE else TEXT_PRIMARY); background = buttonBackground(false, primary)
+        text = label
+        isAllCaps = false
+        textSize = 15f
+        typeface = BlofyTvDesign.BodyTypeface
+        isFocusable = true
+        setTextColor(Color.WHITE)
+        background = buttonBackground(false, primary)
         setOnFocusChangeListener { view, focused ->
-            setTextColor(if (primary || focused) Color.WHITE else TEXT_PRIMARY)
             view.background = buttonBackground(focused, primary)
             view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).translationZ(if (focused) dp(10).toFloat() else dp(2).toFloat()).setDuration(85).start()
         }
         setOnClickListener { action() }
     }
-    private fun cardBackground() = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(Color.WHITE); setStroke(dp(1), 0xFFE0DCE7.toInt()) }
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat(); setColor(when { primary -> if (focused) 0xFF7A3ED2.toInt() else PURPLE; focused -> 0xFF6F35C5.toInt(); else -> Color.WHITE })
-        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB58DE8.toInt() else 0xFFDAD5E1.toInt())
+
+    private fun cardBackground() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF2B203B.toInt(), 0xFF17111F.toInt())).apply {
+        cornerRadius = dp(24).toFloat(); setStroke(dp(1), 0xFF58416F.toInt())
     }
+
+    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+        when {
+            primary && focused -> intArrayOf(0xFFA653FF.toInt(), 0xFF7130D2.toInt())
+            primary -> intArrayOf(0xFF843FE6.toInt(), 0xFF5720AD.toInt())
+            focused -> intArrayOf(0xFF633A8D.toInt(), 0xFF35214C.toInt())
+            else -> intArrayOf(0xFF2B203B.toInt(), 0xFF1A1325.toInt())
+        }
+    ).apply {
+        cornerRadius = dp(18).toFloat()
+        setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.PurpleBright else 0xFF513C67.toInt())
+    }
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private data class Resume(val episode: EpisodeEntity, val positionMs: Long, val durationMs: Long, val updatedAt: Long)
+
     companion object {
-        const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_CONTENT_KEY = "content_key"
-        private val PURPLE = Color.rgb(102, 43, 183); private val PURPLE_SOFT = Color.rgb(102, 54, 164)
-        private val TEXT_PRIMARY = Color.rgb(28, 24, 34); private val TEXT_SECONDARY = Color.rgb(78, 72, 86)
+        const val EXTRA_PROVIDER_ID = "provider_id"
+        const val EXTRA_CONTENT_KEY = "content_key"
     }
 }
