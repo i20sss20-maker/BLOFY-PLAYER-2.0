@@ -60,9 +60,6 @@ class FocusTextAdapter<T>(
         attachedRecyclerView = recyclerView
         recyclerView.layoutDirection = View.LAYOUT_DIRECTION_RTL
         recyclerView.textDirection = View.TEXT_DIRECTION_RTL
-        recyclerView.post {
-            recyclerView.parent?.let { parent -> if (parent is View) parent.layoutDirection = View.LAYOUT_DIRECTION_RTL }
-        }
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
@@ -77,31 +74,31 @@ class FocusTextAdapter<T>(
         val view = TextView(parent.context).apply {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             textDirection = View.TEXT_DIRECTION_RTL
-            textSize = BlofyTvDesign.LabelSp
+            textSize = 14.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setPadding(dp(16), 0, dp(16), 0)
-            minHeight = dp(54)
+            setPadding(dp(18), 0, dp(18), 0)
+            minHeight = dp(58)
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
-            background = BlofyTvDesign.surface(dp(16).toFloat(), false)
-            alpha = 0.97f
+            background = BlofyTvDesign.surface(dp(15).toFloat(), false)
             setOnFocusChangeListener { v, focused ->
-                (v as TextView).setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
+                val text = v as TextView
+                text.setTextColor(if (focused) BlofyTvDesign.PurpleDeep else BlofyTvDesign.TextSecondary)
+                text.typeface = if (focused) BlofyTvDesign.HeadingTypeface else BlofyTvDesign.BodyTypeface
                 v.animate().cancel()
                 v.animate()
-                    .scaleX(if (focused) 1.02f else 1f)
-                    .scaleY(if (focused) 1.02f else 1f)
-                    .alpha(if (focused) 1f else 0.97f)
-                    .translationZ(if (focused) dp(14).toFloat() else dp(2).toFloat())
-                    .setDuration(if (focused) 105L else 85L)
+                    .scaleX(if (focused) 1.018f else 1f)
+                    .scaleY(if (focused) 1.018f else 1f)
+                    .translationZ(if (focused) dp(12).toFloat() else dp(2).toFloat())
+                    .setDuration(if (focused) 100L else 80L)
                     .start()
-                v.background = BlofyTvDesign.surface(dp(16).toFloat(), focused)
+                v.background = BlofyTvDesign.surface(dp(15).toFloat(), focused)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
                         items.getOrNull(pos)?.let { item ->
@@ -123,10 +120,10 @@ class FocusTextAdapter<T>(
         holder.text.animate().cancel()
         holder.text.scaleX = 1f
         holder.text.scaleY = 1f
-        holder.text.alpha = 0.97f
         holder.text.translationZ = 2f * density
-        holder.text.background = BlofyTvDesign.surface(dp(16).toFloat(), false)
+        holder.text.background = BlofyTvDesign.surface(dp(15).toFloat(), false)
         holder.text.setTextColor(BlofyTvDesign.TextSecondary)
+        holder.text.typeface = BlofyTvDesign.BodyTypeface
         holder.text.text = label(item)
         holder.text.tag = position
         holder.text.setOnClickListener { onClick(item) }
@@ -144,7 +141,6 @@ class FocusTextAdapter<T>(
         holder.text.animate().cancel()
         holder.text.scaleX = 1f
         holder.text.scaleY = 1f
-        holder.text.alpha = 0.97f
         holder.text.translationZ = 0f
         holder.text.tag = null
         holder.text.setOnClickListener(null)
