@@ -121,9 +121,14 @@ internal class PosterStreamAdapter(
     }
 
     override fun onViewRecycled(holder: Holder) {
-        holder.image.tag = null
+        ArtworkLoader.cancel(holder.image)
         holder.image.setImageDrawable(null)
         super.onViewRecycled(holder)
+    }
+
+    override fun onViewDetachedFromWindow(holder: Holder) {
+        ArtworkLoader.cancel(holder.image)
+        super.onViewDetachedFromWindow(holder)
     }
 
     override fun getItemCount(): Int = items.size
