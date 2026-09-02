@@ -25,11 +25,12 @@ import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
 import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.home.HomeActivity
 import java.util.UUID
 
-/** Performs the complete staged catalog sync before the user enters Home. */
+/** Performs catalog sync before the user enters Home. First load writes directly to the final provider to avoid a huge promote transaction. */
 class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var percent: TextView
     private lateinit var stage: TextView
@@ -86,7 +87,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         })
 
         panel.addView(TextView(this).apply {
-            text = "يتم تحميل الباقة كاملة وحفظها محليًا قبل الدخول"
+            text = "يتم تحميل الباقة وحفظها محليًا مرة واحدة، وبعدها يكون الدخول مباشرًا"
             textSize = 14f
             setTextColor(0xFFB7A8C9.toInt())
             gravity = Gravity.CENTER
@@ -126,8 +127,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
         panel.addView(stage)
 
         panel.addView(TextView(this).apply {
-            text = "يرجى الانتظار قليلاً..."
-            textSize = 14f
+            text = "يمكن أن يستغرق أول تحميل وقتًا حسب حجم الباقة، لكن التحضير النهائي لن يعيد نسخ المكتبة كاملة"
+            textSize = 13f
             setTextColor(0xFF9587A8.toInt())
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(24))
@@ -168,32 +169,52 @@ class CatalogLoadingActivity : AppCompatActivity() {
         val dao = BlofyDatabase.get(applicationContext).dao()
         val target = withContext(Dispatchers.IO) { dao.provider(providerId) }
             ?: return fail("قائمة التشغيل غير موجودة")
-        val staged = target.copy(id = UUID.randomUUID().toString(), enabled = false)
+
+        val firstLoad = withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
+        val syncProvider: ProviderEntity = if (firstLoad) {
+            target.copy(enabled = true, updatedAt = System.currentTimeMillis())
+        } else {
+            target.copy(id = UUID.randomUUID().toString(), enabled = false)
+        }
+
         try {
-            render(5, "بدء تحميل الباقة...")
+            render(5, if (firstLoad) "بدء التحميل السريع للباقة..." else "بدء تحديث الباقة...")
             val result = PlaylistSyncPolicy.run {
                 withContext(Dispatchers.IO) {
-                    PlaylistManager(XtreamClient.api, dao).syncAll(staged) { p ->
+                    PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider) { p ->
                         withContext(Dispatchers.Main.immediate) { renderProgress(p) }
                     }
                 }
             }
             check(result.freshItemCount > 0) { "لم يرجع السيرفر محتوى صالح" }
             check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الباقة" }
-            render(96, "جاري حفظ الباقة محليًا...")
+
+            render(96, if (firstLoad) "جاري إنهاء المكتبة..." else "جاري حفظ التحديث بأمان...")
             withContext(Dispatchers.IO) {
-                dao.promoteStagedCatalog(staged.id, target.copy(enabled = true, updatedAt = System.currentTimeMillis()))
+                if (firstLoad) {
+                    dao.saveAndActivateProvider(syncProvider.copy(enabled = true, updatedAt = System.currentTimeMillis()))
+                } else {
+                    dao.promoteStagedCatalog(
+                        syncProvider.id,
+                        target.copy(enabled = true, updatedAt = System.currentTimeMillis())
+                    )
+                }
             }
+
             CatalogSyncState.markReady(applicationContext, providerId)
-            render(100, "اكتمل التحميل")
+            render(100, "المكتبة جاهزة")
             startActivity(Intent(this, HomeActivity::class.java))
             finish()
         } catch (cancelled: CancellationException) {
-            withContext(Dispatchers.IO) { dao.discardStagedCatalog(staged.id) }
+            withContext(Dispatchers.IO) {
+                if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+            }
             throw cancelled
         } catch (error: Throwable) {
-            withContext(Dispatchers.IO) { dao.discardStagedCatalog(staged.id) }
-            fail(error.message ?: "تعذر تحميل الباقة")
+            withContext(Dispatchers.IO) {
+                if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+            }
+            fail("تعذر تجهيز المكتبة: ${error.message ?: "خطأ غير معروف"}")
         }
     }
 
@@ -204,7 +225,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.MOVIES -> "جاري تحميل الأفلام"
             PlaylistSyncStage.SERIES -> "جاري تحميل المسلسلات"
         }
-        render(p.percent, label)
+        render(p.percent.coerceAtMost(95), label)
     }
 
     private fun render(value: Int, label: String) {
