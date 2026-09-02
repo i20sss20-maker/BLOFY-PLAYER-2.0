@@ -45,6 +45,7 @@ data class CategoryEntity(
         Index("categoryId"),
         Index("kind"),
         Index(value = ["providerId", "kind", "categoryId", "name"]),
+        Index(value = ["providerId", "kind", "name"]),
         Index(value = ["providerId", "name"]),
         Index(value = ["providerId", "kind", "addedAt"])
     ]
