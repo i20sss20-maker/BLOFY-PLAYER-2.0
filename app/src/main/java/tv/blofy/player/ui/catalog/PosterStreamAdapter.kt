@@ -10,6 +10,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.recyclerview.widget.AsyncListDiffer
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.data.local.StreamEntity
@@ -19,19 +20,17 @@ internal class PosterStreamAdapter(
     private val onClick: (StreamEntity) -> Unit,
     private val onFocus: (StreamEntity) -> Unit = {}
 ) : RecyclerView.Adapter<PosterStreamAdapter.Holder>() {
-    private val items = mutableListOf<StreamEntity>()
+    private val differ = AsyncListDiffer(this, object : DiffUtil.ItemCallback<StreamEntity>() {
+        override fun areItemsTheSame(oldItem: StreamEntity, newItem: StreamEntity) = oldItem.key == newItem.key
+        override fun areContentsTheSame(oldItem: StreamEntity, newItem: StreamEntity) = oldItem == newItem
+    })
+    private val items: List<StreamEntity> get() = differ.currentList
 
     init { setHasStableIds(true) }
 
     fun submit(newItems: List<StreamEntity>) {
-        val oldItems = items.toList()
-        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldListSize() = oldItems.size
-            override fun getNewListSize() = newItems.size
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean = oldItems[oldItemPosition].key == newItems[newItemPosition].key
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean = oldItems[oldItemPosition] == newItems[newItemPosition]
-        }, false)
-        items.clear(); items.addAll(newItems); diff.dispatchUpdatesTo(this)
+        // AsyncListDiffer performs the expensive diff on a background executor.
+        differ.submitList(newItems.toList())
     }
 
     override fun getItemId(position: Int): Long = items[position].key.hashCode().toLong()
@@ -118,7 +117,9 @@ internal class PosterStreamAdapter(
     }
 
     override fun onViewRecycled(holder: Holder) {
-        holder.image.tag = null; holder.image.setImageDrawable(null); super.onViewRecycled(holder)
+        holder.image.tag = null
+        holder.image.setImageDrawable(null)
+        super.onViewRecycled(holder)
     }
 
     override fun getItemCount(): Int = items.size
