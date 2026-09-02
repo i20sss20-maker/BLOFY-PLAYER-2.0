@@ -36,6 +36,8 @@ interface BlofyDao {
     @Transaction suspend fun replaceActivation(state: ActivationEntity) { clearActivation(); upsertActivation(state) }
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, name") fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind ORDER BY name") fun streamsAll(providerId: String, kind: String): Flow<List<StreamEntity>>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId ORDER BY name") fun streamsInCategory(providerId: String, kind: String, categoryId: String): Flow<List<StreamEntity>>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY name") fun streams(providerId: String, kind: String, categoryId: String?): Flow<List<StreamEntity>>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind IN ('movie','series') ORDER BY COALESCE(addedAt, 0) DESC, name LIMIT :limit") suspend fun latestHomeStreams(providerId: String, limit: Int = 14): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (name LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' OR year LIKE '%' || :query || '%') ORDER BY name LIMIT :limit") suspend fun searchCatalog(providerId: String, kind: String, query: String, limit: Int = 300): List<StreamEntity>
