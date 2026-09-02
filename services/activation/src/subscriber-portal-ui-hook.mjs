@@ -38,20 +38,39 @@ export function injectSubscriberPortalUi(html) {
       var blofy = select.value === 'blofy';
       var base = qs('baseUrl');
       var name = qs('name');
+      var user = qs('username');
+      var pass = qs('password');
       var hint = qs('blofySubscriberHint');
       setHidden(fieldWrapper(base), blofy);
+      if (blofy) {
+        setHidden(fieldWrapper(user), false);
+        setHidden(fieldWrapper(pass), false);
+        if (fieldWrapper(user)) fieldWrapper(user).classList.remove('hidden');
+        if (fieldWrapper(pass)) fieldWrapper(pass).classList.remove('hidden');
+      }
       if (hint) hint.style.display = blofy ? 'block' : 'none';
       if (blofy) {
         if (name) name.value = 'مشتركين BLOFY';
         if (base) base.value = '';
-        var user = qs('username');
-        var pass = qs('password');
-        if (user) user.placeholder = 'اسم المستخدم';
-        if (pass) pass.placeholder = 'كلمة المرور';
-        status('أدخل بيانات اشتراك BLOFY فقط ثم اضغط حفظ.', false);
+        if (user) {
+          user.value = user.value || '';
+          user.placeholder = 'اسم المستخدم';
+          user.required = true;
+        }
+        if (pass) {
+          pass.value = pass.value || '';
+          pass.placeholder = 'كلمة المرور';
+          pass.required = true;
+        }
+        status('أدخل اسم المستخدم وكلمة المرور ثم اضغط حفظ.', false);
+      } else {
+        if (user) user.required = false;
+        if (pass) pass.required = false;
       }
     }
-    select.addEventListener('change', applyMode);
+    select.addEventListener('change', function () {
+      requestAnimationFrame(applyMode);
+    });
     applyMode();
   }
 
