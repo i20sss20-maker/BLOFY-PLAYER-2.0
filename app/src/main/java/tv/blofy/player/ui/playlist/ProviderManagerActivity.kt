@@ -31,17 +31,20 @@ class ProviderManagerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
             setPadding(52, 36, 52, 36)
             setBackgroundColor(Color.rgb(5, 5, 10))
         }
         root.addView(TextView(this).apply {
-            text = "قوائم التشغيل"
-            textSize = 30f
+            text = "إدارة قوائم التشغيل"
+            textSize = 31f
+            gravity = Gravity.RIGHT
             setTextColor(Color.WHITE)
         })
         status = TextView(this).apply {
-            text = "اختر القائمة النشطة أو أضف اشتراك BLOFY"
+            text = "اختر طريقة الدخول أو إدارة القوائم المحفوظة"
             textSize = 15f
+            gravity = Gravity.RIGHT
             setTextColor(Color.rgb(185, 140, 255))
             setPadding(0, 6, 0, 18)
         }
@@ -49,19 +52,20 @@ class ProviderManagerActivity : AppCompatActivity() {
 
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.START
-        }
-        addButton = actionButton("add", "+ إضافة قائمة") {
-            startActivity(Intent(this, PlaylistActivity::class.java))
+            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.RIGHT
         }
         val subscriberButton = actionButton("subscriber", "مشتركين BLOFY") {
             startActivity(Intent(this, BlofySubscriberActivity::class.java))
         }
-        actions.addView(addButton, LinearLayout.LayoutParams(260, 72).apply { marginEnd = 12 })
-        actions.addView(subscriberButton, LinearLayout.LayoutParams(280, 72))
-        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 72).apply { bottomMargin = 16 })
+        addButton = actionButton("add", "+ Xtream / M3U") {
+            startActivity(Intent(this, PlaylistActivity::class.java).putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true))
+        }
+        actions.addView(subscriberButton, LinearLayout.LayoutParams(300, 76).apply { marginStart = 14 })
+        actions.addView(addButton, LinearLayout.LayoutParams(280, 76))
+        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 76).apply { bottomMargin = 20; gravity = Gravity.RIGHT })
 
-        list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL }
         val scroll = ScrollView(this).apply { addView(list) }
         root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -76,9 +80,10 @@ class ProviderManagerActivity : AppCompatActivity() {
         list.removeAllViews()
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
-                text = "لا توجد قوائم محفوظة"
+                text = "لا توجد قوائم محفوظة • اختر مشتركين BLOFY أو أضف Xtream / M3U"
                 setTextColor(Color.LTGRAY)
                 textSize = 18f
+                gravity = Gravity.RIGHT
                 setPadding(0, 20, 0, 0)
             })
             restoreFocus()
@@ -87,6 +92,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         items.forEach { provider ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
+                layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(18, 12, 18, 12)
                 background = panel(provider.enabled)
@@ -96,15 +102,16 @@ class ProviderManagerActivity : AppCompatActivity() {
                     append(if (provider.enabled) "● " else "○ ")
                     append(provider.name)
                     append("  •  ")
-                    append(provider.providerType.uppercase())
+                    append(if (provider.name == "مشتركين BLOFY") "BLOFY" else provider.providerType.uppercase())
                 }
                 textSize = 17f
+                gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
                 setTextColor(Color.WHITE)
             }, LinearLayout.LayoutParams(0, 68, 1f))
 
-            row.addView(actionButton("${provider.id}:select", if (provider.enabled) "نشطة" else "اختيار") { activate(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginEnd = 8 })
-            row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginEnd = 8 })
-            row.addView(actionButton("${provider.id}:refresh", "تحديث") { refresh(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginEnd = 8 })
+            row.addView(actionButton("${provider.id}:select", if (provider.enabled) "نشطة" else "اختيار") { activate(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginStart = 8 })
+            row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginStart = 8 })
+            row.addView(actionButton("${provider.id}:refresh", "تحديث") { refresh(provider) }, LinearLayout.LayoutParams(135, 62).apply { marginStart = 8 })
             row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(120, 62))
             list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 92).apply { bottomMargin = 10 })
         }
@@ -114,7 +121,7 @@ class ProviderManagerActivity : AppCompatActivity() {
     private fun restoreFocus() {
         if (!isTv) return
         val key = FocusMemory.restore(this, SCREEN_KEY)
-        val target = key?.let(focusButtons::get) ?: addButton
+        val target = key?.let(focusButtons::get) ?: focusButtons["subscriber"] ?: addButton
         target.post { if (!isFinishing) target.requestFocus() }
     }
 
@@ -134,6 +141,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         }
         startActivity(Intent(this, PlaylistActivity::class.java).apply {
             putExtra(PlaylistActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true)
         })
     }
 
@@ -162,12 +170,15 @@ class ProviderManagerActivity : AppCompatActivity() {
     private fun actionButton(key: String, label: String, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
-        textSize = 14f
+        textSize = 14.5f
         setTextColor(Color.WHITE)
         isFocusable = true
+        isFocusableInTouchMode = true
         background = button(false)
         setOnFocusChangeListener { view, focused ->
             view.background = button(focused)
+            view.animate().cancel()
+            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).translationZ(if (focused) 14f else 2f).setDuration(100).start()
             if (focused && isTv) FocusMemory.save(this@ProviderManagerActivity, SCREEN_KEY, key)
         }
         setOnClickListener { action() }
@@ -175,13 +186,13 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun button(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 16f
-        setColor(if (focused) Color.rgb(75, 34, 125) else Color.rgb(24, 20, 34))
-        setStroke(if (focused) 3 else 1, if (focused) Color.rgb(190, 135, 255) else Color.rgb(58, 48, 74))
+        cornerRadius = 18f
+        setColor(if (focused) Color.rgb(92, 39, 153) else Color.rgb(24, 20, 34))
+        setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else Color.rgb(58, 48, 74))
     }
 
     private fun panel(active: Boolean) = GradientDrawable().apply {
-        cornerRadius = 18f
+        cornerRadius = 20f
         setColor(if (active) Color.rgb(28, 20, 44) else Color.rgb(13, 12, 20))
         setStroke(if (active) 2 else 1, if (active) Color.rgb(126, 44, 255) else Color.rgb(42, 36, 54))
     }
