@@ -4,6 +4,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+    id("androidx.baselineprofile")
 }
 
 val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
@@ -33,8 +34,8 @@ android {
         applicationId = "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2000007
-        versionName = "2.0.0-rc06"
+        versionCode = 2000008
+        versionName = "2.0.0-rc07"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "TMDB_TOKEN", "\"$tmdbTokenEscaped\"")
@@ -71,6 +72,10 @@ android {
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
 }
 
+baselineProfile {
+    automaticGenerationDuringBuild = false
+}
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation("androidx.core:core-ktx:1.15.0")
@@ -81,6 +86,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.6.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.6.1")
     implementation("androidx.media3:media3-ui:1.6.1")
+    implementation("androidx.media3:media3-session:1.6.1")
     implementation("androidx.media3:media3-datasource-cronet:1.6.1")
     implementation("androidx.media3:media3-database:1.6.1")
     implementation("com.google.android.gms:play-services-cronet:18.1.0")
@@ -88,14 +94,19 @@ dependencies {
     implementation("androidx.room:room-runtime:2.7.0")
     implementation("androidx.room:room-ktx:2.7.0")
     ksp("androidx.room:room-compiler:2.7.0")
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    implementation("androidx.tvprovider:tvprovider:1.1.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.zxing:core:3.5.3")
+    baselineProfile(project(":benchmark"))
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core-ktx:1.6.1")
     androidTestImplementation("androidx.test.ext:junit-ktx:1.2.1")
+    androidTestImplementation("androidx.work:work-testing:2.11.2")
 }
 
 val validateReleaseConfiguration = tasks.register("validateReleaseConfiguration") {
