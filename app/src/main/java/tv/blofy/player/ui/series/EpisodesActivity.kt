@@ -3,7 +3,6 @@ package tv.blofy.player.ui.series
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
@@ -19,6 +18,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
@@ -30,11 +30,12 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
 
 class EpisodesActivity : AppCompatActivity() {
-    private lateinit var episodeAdapter: FocusTextAdapter<EpisodeEntity>
+    private lateinit var episodeAdapter: EpisodeCardAdapter
     private lateinit var seasonAdapter: FocusTextAdapter<Int>
     private lateinit var seasonList: RecyclerView
     private lateinit var episodeList: RecyclerView
@@ -54,36 +55,69 @@ class EpisodesActivity : AppCompatActivity() {
         providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         seriesId = intent.getStringExtra(EXTRA_SERIES_ID).orEmpty()
         val seriesName = intent.getStringExtra(EXTRA_SERIES_NAME).orEmpty()
+        val seriesArt = intent.getStringExtra(EXTRA_SERIES_ART)
         if (providerId.isBlank() || seriesId.isBlank()) { finish(); return }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(28), dp(22), dp(28), dp(24))
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(30), dp(22), dp(30), dp(24))
             background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
+            text = "BLOFY SERIES"
+            textSize = 12f
+            letterSpacing = .11f
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.PurpleBright)
+            gravity = Gravity.RIGHT
+        })
+        root.addView(TextView(this).apply {
             text = seriesName.ifBlank { "الحلقات" }
-            textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.RIGHT
-            setPadding(dp(8), 0, 0, dp(4))
+            textSize = 31f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            gravity = Gravity.RIGHT
+            includeFontPadding = false
+            setPadding(0, dp(3), 0, dp(4))
         })
         status = TextView(this).apply {
-            text = "جاري تحميل الحلقات..."; textSize = 14f; setTextColor(PURPLE_SOFT); gravity = Gravity.RIGHT
-            setPadding(dp(8), 0, 0, dp(12))
+            text = "جاري تجهيز الحلقات..."
+            textSize = 13.5f
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.RIGHT
+            setPadding(0, 0, 0, dp(12))
         }
         root.addView(status)
-        retryButton = actionButton("إعادة تحميل الحلقات") { lifecycleScope.launch { syncEpisodes(currentProvider()) } }.apply { visibility = View.GONE }
-        root.addView(retryButton, LinearLayout.LayoutParams(dp(250), dp(64)).apply { bottomMargin = dp(10); gravity = Gravity.RIGHT })
+        retryButton = actionButton("↻  إعادة تحميل الحلقات") { lifecycleScope.launch { syncEpisodes(currentProvider()) } }.apply { visibility = View.GONE }
+        root.addView(retryButton, LinearLayout.LayoutParams(dp(250), dp(58)).apply { bottomMargin = dp(10); gravity = Gravity.RIGHT })
 
-        val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_LTR }
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            clipChildren = false
+            clipToPadding = false
+        }
         seasonList = RecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@EpisodesActivity); itemAnimator = null; setHasFixedSize(true)
-            setPadding(dp(8), dp(8), dp(8), dp(8)); background = panelBackground(true)
+            layoutManager = LinearLayoutManager(this@EpisodesActivity)
+            itemAnimator = null
+            setHasFixedSize(true)
+            setPadding(dp(9), dp(9), dp(9), dp(9))
+            background = panelBackground(true)
+            clipChildren = false
+            clipToPadding = false
         }
         episodeList = RecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@EpisodesActivity); itemAnimator = null; setHasFixedSize(true)
-            setPadding(dp(8), dp(8), dp(8), dp(8)); background = panelBackground(false)
+            layoutManager = LinearLayoutManager(this@EpisodesActivity)
+            itemAnimator = null
+            setHasFixedSize(true)
+            setPadding(dp(9), dp(9), dp(9), dp(9))
+            background = panelBackground(false)
+            clipChildren = false
+            clipToPadding = false
         }
-        body.addView(seasonList, LinearLayout.LayoutParams(dp(260), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(18) })
+        body.addView(seasonList, LinearLayout.LayoutParams(dp(245), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(22) })
         body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -91,11 +125,10 @@ class EpisodesActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
-            episodeAdapter = FocusTextAdapter(
-                label = { episodeLabel(it) },
+            episodeAdapter = EpisodeCardAdapter(
+                seriesArt = seriesArt,
                 onClick = { episode -> rememberEpisode(episode); openEpisode(provider, episode) },
-                onFocus = ::rememberEpisode,
-                itemKey = { it.key }
+                onFocus = ::rememberEpisode
             )
             seasonAdapter = FocusTextAdapter(
                 label = { season -> "الموسم $season" },
@@ -106,8 +139,15 @@ class EpisodesActivity : AppCompatActivity() {
             episodeList.adapter = episodeAdapter
             seasonList.adapter = seasonAdapter
             installTvFocusBridge()
+
+            val cached = dao.episodes(providerId, seriesId).first()
             launch { dao.episodes(providerId, seriesId).collect { renderEpisodes(it) } }
-            syncEpisodes(provider)
+            if (cached.isEmpty()) {
+                syncEpisodes(provider)
+            } else {
+                loadState = EpisodeLoadState.LOADED
+                status.text = "يتم عرض الحلقات المحفوظة فورًا"
+            }
         }
     }
 
@@ -153,8 +193,15 @@ class EpisodesActivity : AppCompatActivity() {
 
     private suspend fun syncEpisodes(provider: ProviderEntity) {
         if (syncInProgress) return
-        syncInProgress = true; loadState = EpisodeLoadState.LOADING; retryButton.visibility = View.GONE; updateStatus()
-        val result = runCatching { withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncSeriesEpisodes(provider, seriesId) } }
+        syncInProgress = true
+        loadState = EpisodeLoadState.LOADING
+        retryButton.visibility = View.GONE
+        updateStatus()
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncSeriesEpisodes(provider, seriesId)
+            }
+        }
         result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
         syncInProgress = false
         loadState = result.fold(
@@ -175,14 +222,19 @@ class EpisodesActivity : AppCompatActivity() {
             seasonAdapter.submit(seasons)
             val rememberedSeason = FocusMemory.restore(this@EpisodesActivity, seasonMemoryKey())?.toIntOrNull()
             if (selectedSeason == null || selectedSeason !in seasons) selectedSeason = rememberedSeason?.takeIf { it in seasons } ?: seasons.firstOrNull()
-            refreshEpisodes(!restoredOnce); restoredOnce = true
+            refreshEpisodes(!restoredOnce)
+            restoredOnce = true
             retryButton.visibility = if (allEpisodes.isEmpty() && loadState.canRetry) View.VISIBLE else View.GONE
             updateStatus()
         }
     }
 
     private suspend fun refreshWatchProgress() {
-        if (allEpisodes.isEmpty()) { watchProgress.clear(); return }
+        if (allEpisodes.isEmpty()) {
+            watchProgress.clear()
+            if (::episodeAdapter.isInitialized) episodeAdapter.setProgress(watchProgress)
+            return
+        }
         val dao = BlofyDatabase.get(applicationContext).dao()
         val states = dao.watchStates(providerId).associateBy { it.contentKey }
         watchProgress.clear()
@@ -195,22 +247,17 @@ class EpisodesActivity : AppCompatActivity() {
                 else -> 1
             }
         }
-    }
-
-    private fun episodeLabel(e: EpisodeEntity): String {
-        val progress = watchProgress[e.key] ?: 0
-        val suffix = when { progress >= 100 -> "  ✓ تمت المشاهدة"; progress > 0 -> "  •  استئناف $progress%"; else -> "" }
-        return "الحلقة ${e.episode}  •  ${e.title}$suffix"
+        if (::episodeAdapter.isInitialized) episodeAdapter.setProgress(watchProgress)
     }
 
     private fun updateStatus() {
         if (allEpisodes.isNotEmpty()) {
             val seasons = allEpisodes.map { it.season }.distinct().size
-            status.text = if (syncInProgress) "جاري تحديث الحلقات...  •  ${allEpisodes.size} حلقة محفوظة" else "$seasons موسم  •  ${allEpisodes.size} حلقة"
+            status.text = if (syncInProgress) "جاري تحديث الحلقات بالخلفية  •  ${allEpisodes.size} حلقة محفوظة" else "$seasons موسم  •  ${allEpisodes.size} حلقة  •  جاهزة من التخزين المحلي"
             return
         }
         status.text = when (loadState) {
-            EpisodeLoadState.LOADING -> "جاري تحميل الحلقات..."
+            EpisodeLoadState.LOADING -> "جاري تحميل الحلقات لأول مرة..."
             EpisodeLoadState.LOADED -> "جاري تجهيز الحلقات..."
             EpisodeLoadState.EMPTY_PROVIDER_RESPONSE -> "السيرفر لم يرسل حلقات لهذا المسلسل • حاول مرة أخرى"
             EpisodeLoadState.INVALID_PROVIDER_RESPONSE -> "رد السيرفر غير مكتمل • أعد تحميل الحلقات"
@@ -219,7 +266,8 @@ class EpisodesActivity : AppCompatActivity() {
     }
 
     private fun selectSeason(season: Int) {
-        val changed = selectedSeason != season; selectedSeason = season
+        val changed = selectedSeason != season
+        selectedSeason = season
         FocusMemory.save(this, seasonMemoryKey(), season.toString())
         if (changed) refreshEpisodes(false)
     }
@@ -228,6 +276,7 @@ class EpisodesActivity : AppCompatActivity() {
         if (!::episodeAdapter.isInitialized) return
         val visible = selectedSeason?.let { s -> allEpisodes.filter { it.season == s }.sortedBy { it.episode } } ?: emptyList()
         episodeAdapter.submit(visible)
+        episodeAdapter.setProgress(watchProgress)
         if (!restoreFocus || !DeviceClass.isTv(this) || visible.isEmpty()) return
         val remembered = FocusMemory.restore(this, episodeMemoryKey())
         val index = visible.indexOfFirst { it.key == remembered }.let { if (it < 0) 0 else it }
@@ -236,7 +285,8 @@ class EpisodesActivity : AppCompatActivity() {
     }
 
     private fun rememberEpisode(episode: EpisodeEntity) {
-        FocusMemory.save(this, episodeMemoryKey(), episode.key); FocusMemory.save(this, seasonMemoryKey(), episode.season.toString())
+        FocusMemory.save(this, episodeMemoryKey(), episode.key)
+        FocusMemory.save(this, seasonMemoryKey(), episode.season.toString())
     }
 
     private fun openEpisode(provider: ProviderEntity, episode: EpisodeEntity) {
@@ -255,36 +305,64 @@ class EpisodesActivity : AppCompatActivity() {
 
     private fun launchEpisode(provider: ProviderEntity, episode: EpisodeEntity, url: String, resume: Long) {
         startActivity(Intent(this, PlayerActivity::class.java).apply {
-            putExtra(PlayerActivity.EXTRA_URL, url); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key); putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
-            putExtra(PlayerActivity.EXTRA_KIND, "episode"); putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
-            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport); putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
-            putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects); putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode))
-            putExtra(PlayerActivity.EXTRA_RESUME_MS, resume); putExtra(PlayerActivity.EXTRA_TITLE, episode.title); putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
-            putExtra(PlayerActivity.EXTRA_SEASON, episode.season); putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
+            putExtra(PlayerActivity.EXTRA_URL, url)
+            putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key)
+            putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(PlayerActivity.EXTRA_KIND, "episode")
+            putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+            putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode))
+            putExtra(PlayerActivity.EXTRA_RESUME_MS, resume)
+            putExtra(PlayerActivity.EXTRA_TITLE, episode.title)
+            putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
+            putExtra(PlayerActivity.EXTRA_SEASON, episode.season)
+            putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
         })
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(TEXT_PRIMARY); background = buttonBackground(false)
+        text = label
+        isAllCaps = false
+        textSize = 14.5f
+        typeface = BlofyTvDesign.BodyTypeface
+        isFocusable = true
+        setTextColor(Color.WHITE)
+        background = buttonBackground(false)
         setOnFocusChangeListener { view, focused ->
-            setTextColor(if (focused) Color.WHITE else TEXT_PRIMARY)
             view.background = buttonBackground(focused)
             view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(85).start()
         }
         setOnClickListener { action() }
     }
-    private fun panelBackground(emphasis: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(20).toFloat(); setColor(if (emphasis) 0xFFFCFBFE.toInt() else Color.WHITE); setStroke(dp(1), if (emphasis) 0xFFD7CBE7.toInt() else 0xFFE1DCE8.toInt())
+
+    private fun panelBackground(emphasis: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+        if (emphasis) intArrayOf(0xFF2B203B.toInt(), 0xFF17111F.toInt()) else intArrayOf(0xFF241932.toInt(), 0xFF120D19.toInt())
+    ).apply {
+        cornerRadius = dp(22).toFloat()
+        setStroke(dp(1), if (emphasis) 0xFF5D4674.toInt() else 0xFF49375E.toInt())
     }
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (focused) PURPLE else Color.WHITE); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB58DE8.toInt() else 0xFFDAD5E1.toInt()) }
+
+    private fun buttonBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+        if (focused) intArrayOf(0xFFA653FF.toInt(), 0xFF7130D2.toInt()) else intArrayOf(0xFF30213F.toInt(), 0xFF1A1325.toInt())
+    ).apply {
+        cornerRadius = dp(16).toFloat()
+        setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.PurpleBright else 0xFF513C67.toInt())
+    }
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun seasonMemoryKey() = "episodes:$providerId:$seriesId:season"
     private fun episodeMemoryKey() = "episodes:$providerId:$seriesId:episode"
 
-    private enum class EpisodeLoadState(val canRetry: Boolean) { LOADING(false), LOADED(false), EMPTY_PROVIDER_RESPONSE(true), INVALID_PROVIDER_RESPONSE(true), ERROR(true) }
+    private enum class EpisodeLoadState(val canRetry: Boolean) {
+        LOADING(false), LOADED(false), EMPTY_PROVIDER_RESPONSE(true), INVALID_PROVIDER_RESPONSE(true), ERROR(true)
+    }
 
     companion object {
-        const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_SERIES_ID = "series_id"; const val EXTRA_SERIES_NAME = "series_name"
-        private val PURPLE = Color.rgb(105, 49, 190); private val PURPLE_SOFT = Color.rgb(102, 54, 164); private val TEXT_PRIMARY = Color.rgb(28, 24, 34)
+        const val EXTRA_PROVIDER_ID = "provider_id"
+        const val EXTRA_SERIES_ID = "series_id"
+        const val EXTRA_SERIES_NAME = "series_name"
+        const val EXTRA_SERIES_ART = "series_art"
     }
 }

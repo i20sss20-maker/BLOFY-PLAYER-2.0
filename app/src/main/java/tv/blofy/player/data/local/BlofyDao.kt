@@ -36,7 +36,26 @@ interface BlofyDao {
     @Transaction suspend fun replaceActivation(state: ActivationEntity) { clearActivation(); upsertActivation(state) }
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, name") fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind ORDER BY name") fun streamsAll(providerId: String, kind: String): Flow<List<StreamEntity>>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId ORDER BY name") fun streamsInCategory(providerId: String, kind: String, categoryId: String): Flow<List<StreamEntity>>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY name") fun streams(providerId: String, kind: String, categoryId: String?): Flow<List<StreamEntity>>
+
+    @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun catalogCountAll(providerId: String, kind: String): Int
+    @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId") suspend fun catalogCountInCategory(providerId: String, kind: String, categoryId: String): Int
+
+    // Legacy OFFSET queries remain available for compatibility, but large TV catalogs use keyset paging below.
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind ORDER BY rowid LIMIT :limit OFFSET :offset") suspend fun catalogPageAll(providerId: String, kind: String, limit: Int, offset: Int): List<StreamEntity>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId ORDER BY rowid LIMIT :limit OFFSET :offset") suspend fun catalogPageInCategory(providerId: String, kind: String, categoryId: String, limit: Int, offset: Int): List<StreamEntity>
+
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
+    suspend fun catalogPageAfterAll(providerId: String, kind: String, afterRowId: Long, limit: Int): List<StreamEntity>
+
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
+    suspend fun catalogPageAfterInCategory(providerId: String, kind: String, categoryId: String, afterRowId: Long, limit: Int): List<StreamEntity>
+
+    @Query("SELECT rowid FROM streams WHERE `key` = :contentKey LIMIT 1")
+    suspend fun streamRowId(contentKey: String): Long?
+
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind IN ('movie','series') ORDER BY COALESCE(addedAt, 0) DESC, name LIMIT :limit") suspend fun latestHomeStreams(providerId: String, limit: Int = 14): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (name LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' OR year LIKE '%' || :query || '%') ORDER BY name LIMIT :limit") suspend fun searchCatalog(providerId: String, kind: String, query: String, limit: Int = 300): List<StreamEntity>
 

@@ -8,6 +8,10 @@ plugins {
 
 val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+val tmdbToken = providers.gradleProperty("BLOFY_TMDB_TOKEN")
+    .orElse(providers.environmentVariable("BLOFY_TMDB_TOKEN"))
+    .orElse("").get().trim()
+val tmdbTokenEscaped = tmdbToken.replace("\\", "\\\\").replace("\"", "\\\"")
 val buildSha = providers.gradleProperty("BLOFY_BUILD_SHA")
     .orElse(providers.environmentVariable("GITHUB_SHA"))
     .orElse("local").get().trim().ifBlank { "local" }
@@ -33,6 +37,7 @@ android {
         versionName = "2.0.0-rc06"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
+        buildConfigField("String", "TMDB_TOKEN", "\"$tmdbTokenEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
         buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
     }
@@ -57,12 +62,17 @@ android {
         }
     }
     buildFeatures { viewBinding = true; buildConfig = true }
-    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
+    }
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.10.1")
