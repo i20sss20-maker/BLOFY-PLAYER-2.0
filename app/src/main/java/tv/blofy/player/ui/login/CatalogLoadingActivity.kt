@@ -14,6 +14,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
@@ -51,8 +52,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             val hasCachedCatalog = withContext(Dispatchers.IO) { dao.hasCatalog(providerId) }
             val ready = CatalogSyncState.isReady(applicationContext, providerId)
             if (!forceRefresh && ready && hasCachedCatalog) {
-                startActivity(Intent(this@CatalogLoadingActivity, HomeActivity::class.java))
-                finish()
+                openHome()
                 return@launch
             }
             CatalogSyncState.markPending(applicationContext, providerId)
@@ -171,7 +171,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
         val syncProvider: ProviderEntity = if (firstLoad) target.copy(enabled = true, updatedAt = System.currentTimeMillis()) else target.copy(id = UUID.randomUUID().toString(), enabled = false)
         try {
             render(5, if (firstLoad) "بدء التحميل السريع للباقة..." else "بدء تحديث الباقة...")
-            val result = PlaylistSyncPolicy.run { withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider) { p -> withContext(Dispatchers.Main.immediate) { renderProgress(p) } } } }
+            val result = PlaylistSyncPolicy.run {
+                withContext(Dispatchers.IO) {
+                    PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider) { p ->
+                        withContext(Dispatchers.Main.immediate) { renderProgress(p) }
+                    }
+                }
+            }
             check(result.freshItemCount > 0) { "لم يرجع السيرفر محتوى صالح" }
             check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الباقة" }
             render(96, if (firstLoad) "جاري إنهاء المكتبة..." else "جاري حفظ التحديث بأمان...")
@@ -181,15 +187,30 @@ class CatalogLoadingActivity : AppCompatActivity() {
             }
             CatalogSyncState.markReady(applicationContext, providerId)
             render(100, "المكتبة جاهزة")
-            startActivity(Intent(this, HomeActivity::class.java)); finish()
+            delay(120)
+            openHome()
         } catch (cancelled: CancellationException) {
-            withContext(Dispatchers.IO) { if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id) }
+            withContext(Dispatchers.IO) {
+                if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+            }
             if (!firstLoad) CatalogSyncState.markReady(applicationContext, providerId)
             throw cancelled
         } catch (error: Throwable) {
-            withContext(Dispatchers.IO) { if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id) }
-            if (!firstLoad) CatalogSyncState.markReady(applicationContext, providerId)
-            fail("تعذر تحديث المكتبة: ${error.message ?: "خطأ غير معروف"} • النسخة المحفوظة ما زالت جاهزة")
+            withContext(Dispatchers.IO) {
+                if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+            }
+            if (!firstLoad) {
+                // A refresh is staged separately. If promotion/finalization fails, the user's
+                // previous catalog is still intact, so never strand the TV at 90%.
+                CatalogSyncState.markReady(applicationContext, providerId)
+                render(100, "تعذر تحديث النسخة الجديدة • تم فتح مكتبتك المحفوظة")
+                stage.setTextColor(BlofyTvDesign.Mint)
+                Toast.makeText(this, "تم الاحتفاظ بالنسخة المحفوظة وفتحها بأمان", Toast.LENGTH_SHORT).show()
+                delay(350)
+                openHome()
+            } else {
+                fail("تعذر تجهيز المكتبة: ${error.message ?: "خطأ غير معروف"}")
+            }
         }
     }
 
@@ -216,6 +237,11 @@ class CatalogLoadingActivity : AppCompatActivity() {
         contentStep.text = if (safe >= 90) "✓  جلب المحتوى" else "○  جلب المحتوى"
         prepareStep.text = if (safe >= 100) "✓  تحضير المكتبة" else "○  تحضير المكتبة"
         readyStep.text = if (safe >= 100) "✓  جاهز" else "○  جاهز"
+    }
+
+    private fun openHome() {
+        startActivity(Intent(this, HomeActivity::class.java))
+        finish()
     }
 
     private fun fail(message: String) {
