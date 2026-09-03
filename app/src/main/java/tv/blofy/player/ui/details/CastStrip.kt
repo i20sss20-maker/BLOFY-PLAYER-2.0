@@ -1,15 +1,15 @@
 package tv.blofy.player.ui.details
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.HorizontalScrollView
 import tv.blofy.player.R
 import tv.blofy.player.data.metadata.CinematicMetadataRepository
 import tv.blofy.player.ui.catalog.ArtworkLoader
@@ -37,6 +37,7 @@ internal object CastStrip {
                 gravity = Gravity.CENTER_HORIZONTAL
                 isFocusable = true
                 isFocusableInTouchMode = true
+                isClickable = true
                 setPadding(dp(5), dp(5), dp(5), dp(7))
                 background = background(false, dp(14))
                 setOnFocusChangeListener { view, focused ->
@@ -44,6 +45,12 @@ internal object CastStrip {
                     view.animate().cancel()
                     view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f)
                         .translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(65).start()
+                }
+                setOnClickListener {
+                    context.startActivity(Intent(context, PersonDetailsActivity::class.java).apply {
+                        putExtra(PersonDetailsActivity.EXTRA_NAME, person.name)
+                        putExtra(PersonDetailsActivity.EXTRA_PROFILE, person.profileUrl)
+                    })
                 }
             }
             val image = ImageView(context).apply {
