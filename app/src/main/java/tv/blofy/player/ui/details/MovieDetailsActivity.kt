@@ -55,9 +55,17 @@ class MovieDetailsActivity : AppCompatActivity() {
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
             val watch = dao.watchState(contentKey)
             val url = ContentUrlResolver.movie(provider, stream)
-            val metadata = withContext(Dispatchers.IO) {
-                CinematicMetadataRepository.movie(applicationContext, stream.name, stream.year)
+            val enrichment = withContext(Dispatchers.IO) {
+                val metadata = CinematicMetadataRepository.movie(applicationContext, stream.name, stream.year)
+                val similar = if (metadata == null) emptyList() else {
+                    val titles = CinematicMetadataRepository.recommendations(metadata)
+                    SimilarStrip.match(titles, dao.allStreamsForProvider(providerId), "movie")
+                        .filterNot { it.key == stream.key }
+                }
+                metadata to similar
             }
+            val metadata = enrichment.first
+            val similar = enrichment.second
 
             ArtworkLoader.loadPriority(backdrop, listOf(metadata?.backdropUrl, stream.backdrop, stream.icon))
             val posterCard = LinearLayout(this@MovieDetailsActivity).apply {
@@ -148,6 +156,17 @@ class MovieDetailsActivity : AppCompatActivity() {
                     setTextColor(Color.WHITE); gravity = Gravity.END; setPadding(0, dp(12), 0, dp(4))
                 })
                 info.addView(CastStrip.build(this@MovieDetailsActivity, metadata!!.cast), LinearLayout.LayoutParams(-1, dp(184)))
+            }
+            if (similar.isNotEmpty()) {
+                info.addView(TextView(this@MovieDetailsActivity).apply {
+                    text = "قد يعجبك أيضًا"; textSize = 15f; typeface = BlofyTvDesign.HeadingTypeface
+                    setTextColor(Color.WHITE); gravity = Gravity.END; setPadding(0, dp(10), 0, dp(4))
+                })
+                info.addView(SimilarStrip.build(this@MovieDetailsActivity, similar) { selected ->
+                    startActivity(Intent(this@MovieDetailsActivity, MovieDetailsActivity::class.java).apply {
+                        putExtra(EXTRA_PROVIDER_ID, providerId); putExtra(EXTRA_CONTENT_KEY, selected.key)
+                    })
+                }, LinearLayout.LayoutParams(-1, dp(234)))
             }
             body.addView(info, LinearLayout.LayoutParams(0, -1, 1f))
             play.requestFocus()
