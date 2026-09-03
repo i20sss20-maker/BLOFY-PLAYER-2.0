@@ -45,6 +45,23 @@ class FocusTextAdapter<T : Any>(
         }
     }
 
+    fun indexOfKey(key: String?): Int {
+        val resolver = itemKey ?: return -1
+        if (key.isNullOrBlank()) return -1
+        return items.indexOfFirst { resolver(it) == key }
+    }
+
+    fun focusedIndex(): Int = focusedPosition
+
+    fun requestFocusAt(position: Int): Boolean {
+        if (position !in items.indices) return false
+        focusedPosition = position
+        focusedKey = itemKey?.invoke(items[position])
+        restorePending = true
+        restoreFocusedView()
+        return true
+    }
+
     fun clearFocusMemory() {
         focusedKey = null
         focusedPosition = RecyclerView.NO_POSITION
@@ -56,6 +73,7 @@ class FocusTextAdapter<T : Any>(
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
         attached = recyclerView
+        recyclerView.preserveFocusAfterLayout = true
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
@@ -85,9 +103,9 @@ class FocusTextAdapter<T : Any>(
             ViewGroup.LayoutParams.MATCH_PARENT,
             TvUiTuning.dp(context, BlofyTvDesign.CategoryRowHeight)
         ).apply {
-            bottomMargin = TvUiTuning.dp(context, 6)
-            marginStart = TvUiTuning.dp(context, 2)
-            marginEnd = TvUiTuning.dp(context, 2)
+            bottomMargin = TvUiTuning.dp(context, 7)
+            marginStart = TvUiTuning.dp(context, 3)
+            marginEnd = TvUiTuning.dp(context, 3)
         }
         return Holder(view).also { holder ->
             view.setOnFocusChangeListener { focusedView, focused ->
@@ -97,10 +115,10 @@ class FocusTextAdapter<T : Any>(
                 text.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
                 focusedView.background = itemBackground(focused)
                 focusedView.animate()
-                    .scaleX(if (focused) 1.012f else 1f)
-                    .scaleY(if (focused) 1.012f else 1f)
-                    .translationZ(if (focused) 12f else 2f)
-                    .setDuration(if (focused) 70L else 58L)
+                    .scaleX(if (focused) 1.008f else 1f)
+                    .scaleY(if (focused) 1.008f else 1f)
+                    .translationZ(if (focused) 10f else 1f)
+                    .setDuration(if (focused) 58L else 48L)
                     .start()
                 if (focused) {
                     val position = holder.bindingAdapterPosition
@@ -144,7 +162,7 @@ class FocusTextAdapter<T : Any>(
     private fun restoreFocusedView() {
         val recycler = attached ?: return
         val position = focusedPosition
-        if (position == RecyclerView.NO_POSITION) return
+        if (position == RecyclerView.NO_POSITION || position !in items.indices) return
         val existing = recycler.findViewHolderForAdapterPosition(position)?.itemView
         if (existing != null) {
             existing.requestFocus()
@@ -160,10 +178,10 @@ class FocusTextAdapter<T : Any>(
 
     private fun itemBackground(focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF533078.toInt(), 0xFF251831.toInt())
+        if (focused) intArrayOf(0xFF593381.toInt(), 0xFF291A37.toInt())
         else intArrayOf(0xE61B1622.toInt(), 0xEE121019.toInt())
     ).apply {
-        cornerRadius = 16f
+        cornerRadius = 15f
         setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF342A3F.toInt())
     }
 }
