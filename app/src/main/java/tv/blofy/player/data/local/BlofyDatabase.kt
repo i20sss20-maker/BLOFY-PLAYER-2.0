@@ -6,7 +6,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import tv.blofy.player.core.text.ArabicSearchNormalizer
 
 internal const val BLOFY_DATABASE_VERSION = 9
 
@@ -207,41 +206,15 @@ abstract class BlofyDatabase : RoomDatabase() {
             },
             object : Migration(8, 9) {
                 override fun migrate(db: SupportSQLiteDatabase) {
+                    // Keep upgrades startup-safe: creating the FTS table is cheap; rebuilding a
+                    // large existing library is intentionally deferred until after first frame.
+                    // ContentRepository already falls back to LIKE search while the index is empty.
                     db.execSQL(
                         """
                         CREATE VIRTUAL TABLE IF NOT EXISTS `streams_fts`
                         USING FTS4(`contentKey`, `providerId`, `kind`, `searchable`, tokenize=unicode61)
                         """.trimIndent()
                     )
-                    // Existing installs get an immediately usable index. New/changed rows are
-                    // maintained by BlofyDao delta-sync transactions after migration.
-                    val cursor = db.query(
-                        "SELECT `key`, providerId, kind, name, genre, year, plot, releaseDate, streamType FROM streams"
-                    )
-                    val insert = db.compileStatement(
-                        "INSERT INTO streams_fts(contentKey,providerId,kind,searchable) VALUES(?,?,?,?)"
-                    )
-                    cursor.use {
-                        while (it.moveToNext()) {
-                            val contentKey = it.getString(0)
-                            val providerId = it.getString(1)
-                            val kind = it.getString(2)
-                            val searchable = ArabicSearchNormalizer.searchable(
-                                it.getString(3),
-                                it.getString(4),
-                                it.getString(5),
-                                it.getString(6),
-                                it.getString(7),
-                                it.getString(8)
-                            )
-                            insert.clearBindings()
-                            insert.bindString(1, contentKey)
-                            insert.bindString(2, providerId)
-                            insert.bindString(3, kind)
-                            insert.bindString(4, searchable)
-                            insert.executeInsert()
-                        }
-                    }
                 }
             }
         )
