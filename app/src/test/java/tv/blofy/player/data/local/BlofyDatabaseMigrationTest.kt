@@ -19,7 +19,8 @@ class BlofyDatabaseMigrationTest {
                 5 to 6,
                 6 to 7,
                 7 to 8,
-                8 to 9
+                8 to 9,
+                9 to 10
             ),
             migrationPath
         )
