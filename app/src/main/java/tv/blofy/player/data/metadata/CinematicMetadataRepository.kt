@@ -14,6 +14,8 @@ object CinematicMetadataRepository {
     private const val PREFS = "blofy_cinematic_metadata"
     private const val TTL_MS = 7L * 24L * 60L * 60L * 1000L
     private const val IMAGE_BASE = "https://image.tmdb.org/t/p/"
+    private const val YOUTUBE_WATCH_BASE = "https://www.youtube.com/watch?v="
+
     private val gson = Gson()
     private val client = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
@@ -46,6 +48,7 @@ object CinematicMetadataRepository {
         val posterUrl: String?,
         val backdropUrl: String?,
         val logoUrl: String?,
+        val trailerUrl: String? = null,
         val cast: List<Person>,
         val crew: List<Credit>,
         val fetchedAt: Long = System.currentTimeMillis()
@@ -57,8 +60,17 @@ object CinematicMetadataRepository {
         val titles: List<String>
     )
 
-    suspend fun movie(context: Context, title: String, year: String?): Metadata? = load(context, "movie", title, year)
-    suspend fun series(context: Context, title: String, year: String?): Metadata? = load(context, "tv", title, year)
+    suspend fun movie(
+        context: Context,
+        title: String,
+        year: String?
+    ): Metadata? = load(context, "movie", title, year)
+
+    suspend fun series(
+        context: Context,
+        title: String,
+        year: String?
+    ): Metadata? = load(context, "tv", title, year)
 
     suspend fun personWorks(query: String): PersonWorks? {
         val token = BuildConfig.TMDB_TOKEN.trim()
@@ -69,51 +81,86 @@ object CinematicMetadataRepository {
     suspend fun recommendations(metadata: Metadata): List<String> {
         val token = BuildConfig.TMDB_TOKEN.trim()
         if (token.isBlank()) return emptyList()
-        return runCatching { fetchRecommendations(metadata.kind, metadata.tmdbId, token) }.getOrDefault(emptyList())
+        return runCatching {
+            fetchRecommendations(metadata.kind, metadata.tmdbId, token)
+        }.getOrDefault(emptyList())
     }
 
     private fun cacheKey(kind: String, title: String, year: String?) =
         "$kind:${title.trim().lowercase()}:${year.orEmpty().trim()}"
 
-    private suspend fun load(context: Context, kind: String, title: String, year: String?): Metadata? {
+    private suspend fun load(
+        context: Context,
+        kind: String,
+        title: String,
+        year: String?
+    ): Metadata? {
         val key = cacheKey(kind, title, year)
-        readCache(context, key)?.let { if (System.currentTimeMillis() - it.fetchedAt < TTL_MS) return it }
+        readCache(context, key)?.let {
+            if (System.currentTimeMillis() - it.fetchedAt < TTL_MS) return it
+        }
         val token = BuildConfig.TMDB_TOKEN.trim()
         if (token.isBlank()) return readCache(context, key)
-        val result = runCatching { fetch(kind, title, year, token) }.getOrNull() ?: return readCache(context, key)
+        val result = runCatching { fetch(kind, title, year, token) }
+            .getOrNull()
+            ?: return readCache(context, key)
         writeCache(context, key, result)
         return result
     }
 
-    private fun fetch(kind: String, rawTitle: String, year: String?, token: String): Metadata? {
+    private fun fetch(
+        kind: String,
+        rawTitle: String,
+        year: String?,
+        token: String
+    ): Metadata? {
         val title = cleanTitle(rawTitle)
-        val searchUrl = "https://api.themoviedb.org/3/search/$kind".toHttpUrl().newBuilder()
+        val searchUrl = "https://api.themoviedb.org/3/search/$kind"
+            .toHttpUrl()
+            .newBuilder()
             .addQueryParameter("query", title)
             .addQueryParameter("language", "ar-SA")
             .addQueryParameter("include_adult", "false")
             .apply {
-                year?.trim()?.takeIf { it.length == 4 && it.all(Char::isDigit) }?.let {
-                    addQueryParameter(if (kind == "movie") "year" else "first_air_date_year", it)
-                }
-            }.build()
+                year?.trim()
+                    ?.takeIf { it.length == 4 && it.all(Char::isDigit) }
+                    ?.let {
+                        addQueryParameter(
+                            if (kind == "movie") "year" else "first_air_date_year",
+                            it
+                        )
+                    }
+            }
+            .build()
         val search = get<SearchResponse>(searchUrl.toString(), token) ?: return null
         val best = search.results.firstOrNull() ?: return null
-        val detailUrl = "https://api.themoviedb.org/3/$kind/${best.id}".toHttpUrl().newBuilder()
+
+        val detailUrl = "https://api.themoviedb.org/3/$kind/${best.id}"
+            .toHttpUrl()
+            .newBuilder()
             .addQueryParameter("language", "ar-SA")
-            .addQueryParameter("append_to_response", "credits,images")
+            .addQueryParameter("append_to_response", "credits,images,videos")
             .addQueryParameter("include_image_language", "ar,en,null")
             .build()
         val detail = get<DetailResponse>(detailUrl.toString(), token) ?: return null
+
         val cast = detail.credits?.cast.orEmpty().take(12).map {
             Person(it.id, it.name, it.character, image(it.profilePath, "w185"))
         }
         val crew = detail.credits?.crew.orEmpty()
-            .filter { it.job.equals("Director", true) || it.job.equals("Writer", true) || it.job.equals("Screenplay", true) || it.job.equals("Creator", true) }
+            .filter {
+                it.job.equals("Director", true) ||
+                    it.job.equals("Writer", true) ||
+                    it.job.equals("Screenplay", true) ||
+                    it.job.equals("Creator", true)
+            }
             .distinctBy { it.name to it.job }
             .take(6)
             .map { Credit(it.name, localizeJob(it.job)) }
         val logo = detail.images?.logos.orEmpty().firstOrNull()?.filePath
         val runtime = detail.runtime ?: detail.episodeRunTime?.firstOrNull()
+        val trailer = chooseTrailer(detail.videos?.results.orEmpty())
+
         return Metadata(
             tmdbId = detail.id,
             kind = kind,
@@ -123,40 +170,56 @@ object CinematicMetadataRepository {
             voteCount = detail.voteCount,
             releaseDate = detail.releaseDate ?: detail.firstAirDate,
             runtimeMinutes = runtime,
-            genres = detail.genres.orEmpty().mapNotNull { it.name?.takeIf(String::isNotBlank) },
+            genres = detail.genres.orEmpty()
+                .mapNotNull { it.name?.takeIf(String::isNotBlank) },
             posterUrl = image(detail.posterPath, "w500"),
             backdropUrl = image(detail.backdropPath, "w1280"),
             logoUrl = image(logo, "w500"),
+            trailerUrl = trailer,
             cast = cast,
             crew = crew
         )
     }
 
     private fun fetchPersonWorks(query: String, token: String): PersonWorks? {
-        val searchUrl = "https://api.themoviedb.org/3/search/person".toHttpUrl().newBuilder()
+        val searchUrl = "https://api.themoviedb.org/3/search/person"
+            .toHttpUrl()
+            .newBuilder()
             .addQueryParameter("query", query)
             .addQueryParameter("language", "ar-SA")
             .addQueryParameter("include_adult", "false")
             .build()
         val search = get<PersonSearchResponse>(searchUrl.toString(), token) ?: return null
         val person = search.results.firstOrNull() ?: return null
-        val creditsUrl = "https://api.themoviedb.org/3/person/${person.id}/combined_credits".toHttpUrl().newBuilder()
+        val creditsUrl = "https://api.themoviedb.org/3/person/${person.id}/combined_credits"
+            .toHttpUrl()
+            .newBuilder()
             .addQueryParameter("language", "ar-SA")
             .build()
         val credits = get<CombinedCreditsResponse>(creditsUrl.toString(), token) ?: return null
         val titles = credits.cast
-            .sortedWith(compareByDescending<CombinedCreditItem> { it.voteCount }.thenByDescending { it.popularity })
+            .sortedWith(
+                compareByDescending<CombinedCreditItem> { it.voteCount }
+                    .thenByDescending { it.popularity }
+            )
             .mapNotNull { (it.title ?: it.name)?.takeIf(String::isNotBlank) }
             .distinct()
             .take(18)
         return PersonWorks(person.name, image(person.profilePath, "w185"), titles)
     }
 
-    private fun fetchRecommendations(kind: String, tmdbId: Int, token: String): List<String> {
-        val url = "https://api.themoviedb.org/3/$kind/$tmdbId/recommendations".toHttpUrl().newBuilder()
+    private fun fetchRecommendations(
+        kind: String,
+        tmdbId: Int,
+        token: String
+    ): List<String> {
+        val url = "https://api.themoviedb.org/3/$kind/$tmdbId/recommendations"
+            .toHttpUrl()
+            .newBuilder()
             .addQueryParameter("language", "ar-SA")
             .build()
-        val response = get<RecommendationResponse>(url.toString(), token) ?: return emptyList()
+        val response = get<RecommendationResponse>(url.toString(), token)
+            ?: return emptyList()
         return response.results
             .mapNotNull { (it.title ?: it.name)?.takeIf(String::isNotBlank) }
             .distinct()
@@ -164,7 +227,11 @@ object CinematicMetadataRepository {
     }
 
     private inline fun <reified T> get(url: String, token: String): T? {
-        val request = Request.Builder().url(url).header("Authorization", "Bearer $token").header("Accept", "application/json").build()
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return null
             val body = response.body?.string() ?: return null
@@ -173,18 +240,41 @@ object CinematicMetadataRepository {
     }
 
     private fun readCache(context: Context, key: String): Metadata? {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, null) ?: return null
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(key, null)
+            ?: return null
         return runCatching { gson.fromJson(raw, Metadata::class.java) }.getOrNull()
     }
 
     private fun writeCache(context: Context, key: String, value: Metadata) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(key, gson.toJson(value)).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(key, gson.toJson(value))
+            .apply()
     }
 
-    private fun image(path: String?, size: String): String? = path?.takeIf(String::isNotBlank)?.let { IMAGE_BASE + size + it }
+    private fun image(path: String?, size: String): String? =
+        path?.takeIf(String::isNotBlank)?.let { IMAGE_BASE + size + it }
+
+    private fun chooseTrailer(videos: List<VideoItem>): String? {
+        val video = videos.asSequence()
+            .filter { it.site.equals("YouTube", true) }
+            .filter { it.type.equals("Trailer", true) || it.type.equals("Teaser", true) }
+            .filter { YOUTUBE_KEY.matches(it.key) }
+            .sortedWith(
+                compareByDescending<VideoItem> { it.official }
+                    .thenBy { if (it.type.equals("Trailer", true)) 0 else 1 }
+            )
+            .firstOrNull()
+            ?: return null
+        return YOUTUBE_WATCH_BASE + video.key
+    }
 
     private fun cleanTitle(value: String): String = value
-        .replace(Regex("(?i)\\b(4k|uhd|fhd|hd|sd|1080p|720p|2160p|arabic|مترجم|مدبلج)\\b"), " ")
+        .replace(
+            Regex("(?i)\\b(4k|uhd|fhd|hd|sd|1080p|720p|2160p|arabic|مترجم|مدبلج)\\b"),
+            " "
+        )
         .replace(Regex("[._|]+"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
@@ -196,25 +286,83 @@ object CinematicMetadataRepository {
         else -> job
     }
 
-    private data class SearchResponse(val results: List<SearchItem> = emptyList())
+    private data class SearchResponse(
+        val results: List<SearchItem> = emptyList()
+    )
+
     private data class SearchItem(val id: Int)
-    private data class NamedValue(val id: Int = 0, val name: String? = null)
-    private data class CreditResponse(val cast: List<CastItem> = emptyList(), val crew: List<CrewItem> = emptyList())
-    private data class CastItem(val id: Int, val name: String, val character: String? = null, @SerializedName("profile_path") val profilePath: String? = null)
-    private data class CrewItem(val name: String, val job: String)
-    private data class ImageItem(@SerializedName("file_path") val filePath: String? = null)
-    private data class ImagesResponse(val logos: List<ImageItem> = emptyList())
-    private data class PersonSearchResponse(val results: List<PersonSearchItem> = emptyList())
-    private data class PersonSearchItem(val id: Int, val name: String, @SerializedName("profile_path") val profilePath: String? = null)
-    private data class CombinedCreditsResponse(val cast: List<CombinedCreditItem> = emptyList())
+
+    private data class NamedValue(
+        val id: Int = 0,
+        val name: String? = null
+    )
+
+    private data class CreditResponse(
+        val cast: List<CastItem> = emptyList(),
+        val crew: List<CrewItem> = emptyList()
+    )
+
+    private data class CastItem(
+        val id: Int,
+        val name: String,
+        val character: String? = null,
+        @SerializedName("profile_path") val profilePath: String? = null
+    )
+
+    private data class CrewItem(
+        val name: String,
+        val job: String
+    )
+
+    private data class ImageItem(
+        @SerializedName("file_path") val filePath: String? = null
+    )
+
+    private data class ImagesResponse(
+        val logos: List<ImageItem> = emptyList()
+    )
+
+    private data class VideosResponse(
+        val results: List<VideoItem> = emptyList()
+    )
+
+    private data class VideoItem(
+        val key: String,
+        val site: String? = null,
+        val type: String? = null,
+        val official: Boolean = false
+    )
+
+    private data class PersonSearchResponse(
+        val results: List<PersonSearchItem> = emptyList()
+    )
+
+    private data class PersonSearchItem(
+        val id: Int,
+        val name: String,
+        @SerializedName("profile_path") val profilePath: String? = null
+    )
+
+    private data class CombinedCreditsResponse(
+        val cast: List<CombinedCreditItem> = emptyList()
+    )
+
     private data class CombinedCreditItem(
         val title: String? = null,
         val name: String? = null,
         @SerializedName("vote_count") val voteCount: Int = 0,
         val popularity: Double = 0.0
     )
-    private data class RecommendationResponse(val results: List<RecommendationItem> = emptyList())
-    private data class RecommendationItem(val title: String? = null, val name: String? = null)
+
+    private data class RecommendationResponse(
+        val results: List<RecommendationItem> = emptyList()
+    )
+
+    private data class RecommendationItem(
+        val title: String? = null,
+        val name: String? = null
+    )
+
     private data class DetailResponse(
         val id: Int,
         val title: String? = null,
@@ -230,6 +378,9 @@ object CinematicMetadataRepository {
         @SerializedName("poster_path") val posterPath: String? = null,
         @SerializedName("backdrop_path") val backdropPath: String? = null,
         val credits: CreditResponse? = null,
-        val images: ImagesResponse? = null
+        val images: ImagesResponse? = null,
+        val videos: VideosResponse? = null
     )
+
+    private val YOUTUBE_KEY = Regex("^[A-Za-z0-9_-]{6,32}$")
 }
