@@ -85,13 +85,13 @@ class FocusTextAdapter<T : Any>(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val context = parent.context
         val view = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 14f)
+            textSize = TvUiTuning.sp(context, 12.8f)
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(TvUiTuning.dp(context, 14), 0, TvUiTuning.dp(context, 14), 0)
-            maxLines = 1
+            setPadding(TvUiTuning.dp(context, 12), 0, TvUiTuning.dp(context, 12), 0)
+            maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             isFocusable = true
             isFocusableInTouchMode = true
@@ -99,11 +99,8 @@ class FocusTextAdapter<T : Any>(
             isLongClickable = true
             background = itemBackground(false)
         }
-        view.layoutParams = RecyclerView.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            TvUiTuning.dp(context, BlofyTvDesign.CategoryRowHeight)
-        ).apply {
-            bottomMargin = TvUiTuning.dp(context, 6)
+        view.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TvUiTuning.dp(context, 52)).apply {
+            bottomMargin = TvUiTuning.dp(context, 5)
             marginStart = TvUiTuning.dp(context, 2)
             marginEnd = TvUiTuning.dp(context, 2)
         }
@@ -111,15 +108,12 @@ class FocusTextAdapter<T : Any>(
             view.setOnFocusChangeListener { focusedView, focused ->
                 val text = focusedView as TextView
                 focusedView.animate().cancel()
+                focusedView.scaleX = 1f
+                focusedView.scaleY = 1f
+                focusedView.translationZ = if (focused) 4f else 0f
                 text.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
                 text.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
                 focusedView.background = itemBackground(focused)
-                focusedView.animate()
-                    .scaleX(if (focused) 1.006f else 1f)
-                    .scaleY(if (focused) 1.006f else 1f)
-                    .translationZ(if (focused) 9f else 1f)
-                    .setDuration(if (focused) 56L else 46L)
-                    .start()
                 if (focused) {
                     val position = holder.bindingAdapterPosition
                     items.getOrNull(position)?.let { item ->
@@ -141,10 +135,7 @@ class FocusTextAdapter<T : Any>(
         }
         holder.text.background = itemBackground(holder.text.hasFocus())
         holder.text.setOnClickListener { onClick(item) }
-        holder.text.setOnLongClickListener {
-            onLongClick?.invoke(item)
-            onLongClick != null
-        }
+        holder.text.setOnLongClickListener { onLongClick?.invoke(item); onLongClick != null }
         if (restorePending && position == focusedPosition) {
             holder.text.post {
                 if (holder.bindingAdapterPosition == focusedPosition && holder.text.visibility == View.VISIBLE) {
@@ -156,7 +147,6 @@ class FocusTextAdapter<T : Any>(
     }
 
     override fun getItemCount() = items.size
-
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
 
     private fun restoreFocusedView() {
@@ -178,10 +168,9 @@ class FocusTextAdapter<T : Any>(
 
     private fun itemBackground(focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF593381.toInt(), 0xFF291A37.toInt())
-        else intArrayOf(0xE61B1622.toInt(), 0xEE121019.toInt())
+        if (focused) intArrayOf(0xFF593381.toInt(), 0xFF291A37.toInt()) else intArrayOf(0xE61B1622.toInt(), 0xEE121019.toInt())
     ).apply {
-        cornerRadius = 14f
+        cornerRadius = 13f
         setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF342A3F.toInt())
     }
 }
