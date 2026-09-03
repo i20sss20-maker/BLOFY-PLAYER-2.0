@@ -8,6 +8,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.commercial.CommercialRuntime
+import tv.blofy.player.core.playback.SmartZappingInvalidator
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.catalog.ArtworkLoader
 
@@ -31,9 +32,14 @@ object BackgroundCatalogEngine {
 
         scope.launch {
             delay(STARTUP_GRACE_MS)
-            val dao = BlofyDatabase.get(app).dao()
-            val provider = dao.providers().first().firstOrNull() ?: return@launch
+            val database = BlofyDatabase.get(app)
+            val dao = database.dao()
+            runCatching {
+                database.openHelper.writableDatabase.execSQL("UPDATE streams SET locked = 0 WHERE locked != 0")
+                SmartZappingInvalidator.install(database)
+            }
 
+            val provider = dao.providers().first().firstOrNull() ?: return@launch
             val prefs = app.getSharedPreferences(INDEX_PREFS, Context.MODE_PRIVATE)
             val indexKey = INDEX_V9_PREFIX + provider.id
             if (!prefs.getBoolean(indexKey, false) && dao.hasCatalog(provider.id)) {
