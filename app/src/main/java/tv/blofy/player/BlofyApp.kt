@@ -6,9 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.commercial.CommercialConfigRepository
-import tv.blofy.player.core.commercial.CommercialRuntime
 import tv.blofy.player.core.commercial.CrashRecovery
-import tv.blofy.player.core.playback.SmartZappingInvalidator
 import tv.blofy.player.core.remote.QuickMenuInterceptor
 import tv.blofy.player.core.update.AppUpdateLifecycle
 import tv.blofy.player.data.BackgroundCatalogEngine
@@ -38,21 +36,12 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
 
-        // Never touch/open Room on the launch main thread. Existing RC06 installs may
-        // need the 8 -> 9 FTS migration across very large IPTV catalogs; opening Room
-        // here can block the first frame and leave Android showing only a black window.
-        applicationScope.launch {
-            val database = BlofyDatabase.get(this@BlofyApp)
-            database.openHelper.writableDatabase.execSQL("UPDATE streams SET locked = 0 WHERE locked != 0")
-            SmartZappingInvalidator.install(database)
-        }
+        // No Room open, migration, catalog read, artwork preload, or network wait is allowed on
+        // Application startup. Maintenance starts after a grace period on Dispatchers.IO.
+        BackgroundCatalogEngine.kick(this)
         applicationScope.launch {
             // Last-known-good config means an unavailable server never disables the app.
             CommercialConfigRepository.refresh(this@BlofyApp)
-        }
-
-        if (CommercialRuntime.feature(this, CommercialRuntime.FEATURE_BACKGROUND_SYNC)) {
-            BackgroundCatalogEngine.kick(this)
         }
     }
 }
