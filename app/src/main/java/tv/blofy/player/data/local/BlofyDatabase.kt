@@ -6,8 +6,9 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import tv.blofy.player.core.text.ArabicSearchNormalizer
 
-internal const val BLOFY_DATABASE_VERSION = 8
+internal const val BLOFY_DATABASE_VERSION = 9
 
 @Database(
     entities = [
@@ -17,7 +18,8 @@ internal const val BLOFY_DATABASE_VERSION = 8
         EpisodeEntity::class,
         WatchStateEntity::class,
         EpgEntity::class,
-        ActivationEntity::class
+        ActivationEntity::class,
+        StreamSearchFtsEntity::class
     ],
     version = BLOFY_DATABASE_VERSION,
     exportSchema = false
@@ -200,8 +202,46 @@ abstract class BlofyDatabase : RoomDatabase() {
             },
             object : Migration(7, 8) {
                 override fun migrate(db: SupportSQLiteDatabase) {
-                    // Accelerates category-free live/movie/series lists on very large catalogs.
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_name` ON `streams` (`providerId`, `kind`, `name`)")
+                }
+            },
+            object : Migration(8, 9) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE VIRTUAL TABLE IF NOT EXISTS `streams_fts`
+                        USING FTS4(`contentKey`, `providerId`, `kind`, `searchable`, tokenize=unicode61)
+                        """.trimIndent()
+                    )
+                    // Existing installs get an immediately usable index. New/changed rows are
+                    // maintained by BlofyDao delta-sync transactions after migration.
+                    val cursor = db.query(
+                        "SELECT `key`, providerId, kind, name, genre, year, plot, releaseDate, streamType FROM streams"
+                    )
+                    val insert = db.compileStatement(
+                        "INSERT INTO streams_fts(contentKey,providerId,kind,searchable) VALUES(?,?,?,?)"
+                    )
+                    cursor.use {
+                        while (it.moveToNext()) {
+                            val contentKey = it.getString(0)
+                            val providerId = it.getString(1)
+                            val kind = it.getString(2)
+                            val searchable = ArabicSearchNormalizer.searchable(
+                                it.getString(3),
+                                it.getString(4),
+                                it.getString(5),
+                                it.getString(6),
+                                it.getString(7),
+                                it.getString(8)
+                            )
+                            insert.clearBindings()
+                            insert.bindString(1, contentKey)
+                            insert.bindString(2, providerId)
+                            insert.bindString(3, kind)
+                            insert.bindString(4, searchable)
+                            insert.executeInsert()
+                        }
+                    }
                 }
             }
         )
