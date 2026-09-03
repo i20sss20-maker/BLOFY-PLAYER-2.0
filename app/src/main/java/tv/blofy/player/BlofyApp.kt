@@ -9,7 +9,6 @@ import tv.blofy.player.core.commercial.CommercialConfigRepository
 import tv.blofy.player.core.commercial.CrashRecovery
 import tv.blofy.player.core.remote.QuickMenuInterceptor
 import tv.blofy.player.core.update.AppUpdateLifecycle
-import tv.blofy.player.data.BackgroundCatalogEngine
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.ResumeStateWriter
 import tv.blofy.player.data.local.BlofyDatabase
@@ -36,12 +35,12 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
 
-        // No Room open, migration, catalog read, artwork preload, or network wait is allowed on
-        // Application startup. Maintenance starts after a grace period on Dispatchers.IO.
-        BackgroundCatalogEngine.kick(this)
+        // Absolutely no Room open, migration, catalog repair, artwork preload or network wait is
+        // allowed from Application startup. Catalog maintenance is started only after a screen has
+        // successfully opened the database and the UI is already interactive.
         applicationScope.launch {
             // Last-known-good config means an unavailable server never disables the app.
-            CommercialConfigRepository.refresh(this@BlofyApp)
+            runCatching { CommercialConfigRepository.refresh(this@BlofyApp) }
         }
     }
 }
