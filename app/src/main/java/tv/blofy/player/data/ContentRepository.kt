@@ -1,6 +1,7 @@
 package tv.blofy.player.data
 
 import kotlinx.coroutines.flow.Flow
+import tv.blofy.player.core.text.ArabicSearchNormalizer
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.EpgEntity
@@ -25,8 +26,17 @@ class ContentRepository(private val dao: BlofyDao) {
     fun epg(providerId: String, streamId: String, nowMs: Long = System.currentTimeMillis()): Flow<List<EpgEntity>> =
         dao.epg(providerId, streamId, nowMs)
 
-    suspend fun search(providerId: String, query: String): List<StreamEntity> =
-        if (query.isBlank()) emptyList() else dao.searchStreams(providerId, query.trim())
+    suspend fun search(providerId: String, query: String): List<StreamEntity> {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return emptyList()
+        val fts = ArabicSearchNormalizer.ftsQuery(trimmed)
+        if (fts.isNotBlank()) {
+            val indexed = runCatching { dao.searchStreamsFts(providerId, fts, 100) }.getOrDefault(emptyList())
+            if (indexed.isNotEmpty()) return indexed
+        }
+        // Compatibility fallback for a database that is still completing a migration/rebuild.
+        return dao.searchStreams(providerId, trimmed, 80)
+    }
 
     suspend fun setFavorite(contentKey: String, favorite: Boolean) = dao.setFavorite(contentKey, favorite)
 
