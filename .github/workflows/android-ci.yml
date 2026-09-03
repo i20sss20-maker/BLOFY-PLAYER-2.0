@@ -2,7 +2,7 @@ name: BLOFY Android CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, rc07-commercial-stability]
   pull_request:
   workflow_dispatch:
 
