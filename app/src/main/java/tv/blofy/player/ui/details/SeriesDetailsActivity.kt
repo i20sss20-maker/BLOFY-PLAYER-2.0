@@ -68,7 +68,17 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
-            val metadata = withContext(Dispatchers.IO) { CinematicMetadataRepository.series(applicationContext, stream.name, stream.year) }
+            val enrichment = withContext(Dispatchers.IO) {
+                val metadata = CinematicMetadataRepository.series(applicationContext, stream.name, stream.year)
+                val similar = if (metadata == null) emptyList() else {
+                    val titles = CinematicMetadataRepository.recommendations(metadata)
+                    SimilarStrip.match(titles, dao.allStreamsForProvider(providerId), "series")
+                        .filterNot { it.key == stream.key }
+                }
+                metadata to similar
+            }
+            val metadata = enrichment.first
+            val similar = enrichment.second
             ArtworkLoader.loadPriority(backdrop, listOf(metadata?.backdropUrl, stream.backdrop, stream.icon))
             ArtworkLoader.loadPriority(poster, listOf(metadata?.posterUrl, stream.icon, stream.backdrop))
 
@@ -159,6 +169,17 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     gravity = Gravity.RIGHT; setPadding(0, dp(11), 0, dp(4))
                 })
                 panel.addView(CastStrip.build(this@SeriesDetailsActivity, metadata!!.cast), LinearLayout.LayoutParams(-1, dp(180)))
+            }
+            if (similar.isNotEmpty()) {
+                panel.addView(TextView(this@SeriesDetailsActivity).apply {
+                    text = "قد يعجبك أيضًا"; textSize = 15f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(Color.WHITE)
+                    gravity = Gravity.RIGHT; setPadding(0, dp(10), 0, dp(4))
+                })
+                panel.addView(SimilarStrip.build(this@SeriesDetailsActivity, similar) { selected ->
+                    startActivity(Intent(this@SeriesDetailsActivity, SeriesDetailsActivity::class.java).apply {
+                        putExtra(EXTRA_PROVIDER_ID, providerId); putExtra(EXTRA_CONTENT_KEY, selected.key)
+                    })
+                }, LinearLayout.LayoutParams(-1, dp(234)))
             }
             primary?.requestFocus()
         }
