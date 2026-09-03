@@ -10,10 +10,16 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object SmartZappingCache {
     data class Key(val providerId: String, val categoryId: String?)
+
     data class Window(
         val previous: StreamEntity?,
         val current: StreamEntity?,
         val next: StreamEntity?
+    )
+
+    data class Position(
+        val number: Int,
+        val total: Int
     )
 
     private data class Entry(
@@ -40,7 +46,12 @@ object SmartZappingCache {
         return System.currentTimeMillis() - entry.createdAtMs <= TTL_MS
     }
 
-    fun adjacent(providerId: String, categoryId: String?, currentRemoteId: String, delta: Int): StreamEntity? {
+    fun adjacent(
+        providerId: String,
+        categoryId: String?,
+        currentRemoteId: String,
+        delta: Int
+    ): StreamEntity? {
         val entry = freshEntry(providerId, categoryId) ?: return null
         if (entry.items.isEmpty()) return null
         val current = entry.indexByRemoteId[currentRemoteId] ?: 0
@@ -51,6 +62,16 @@ object SmartZappingCache {
     fun byNumber(providerId: String, categoryId: String?, number: Int): StreamEntity? {
         if (number <= 0) return null
         return freshEntry(providerId, categoryId)?.items?.getOrNull(number - 1)
+    }
+
+    fun position(
+        providerId: String,
+        categoryId: String?,
+        currentRemoteId: String
+    ): Position? {
+        val entry = freshEntry(providerId, categoryId) ?: return null
+        val index = entry.indexByRemoteId[currentRemoteId] ?: return null
+        return Position(number = index + 1, total = entry.items.size)
     }
 
     fun window(providerId: String, categoryId: String?, currentRemoteId: String): Window {
