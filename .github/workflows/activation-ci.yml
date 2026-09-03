@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - rc07-commercial-stability
     paths:
       - 'services/activation/**'
       - '.github/workflows/activation-ci.yml'
