@@ -15,6 +15,7 @@ import tv.blofy.player.ui.catalog.SmartCollectionsActivity
 import tv.blofy.player.ui.home.ForYouActivity
 import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.library.RecentChannelsActivity
+import tv.blofy.player.ui.profile.ProfilesActivity
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 
@@ -28,14 +29,14 @@ class QuickMenuActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(22), dp(22), dp(22), dp(22))
+            setPadding(dp(22), dp(18), dp(22), dp(18))
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF261832.toInt(), 0xFF120D1A.toInt())).apply {
                 cornerRadius = dp(22).toFloat()
                 setStroke(dp(1), 0xFF68498A.toInt())
             }
             elevation = dp(16).toFloat()
         }
-        root.addView(panel, FrameLayout.LayoutParams(dp(370), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+        root.addView(panel, FrameLayout.LayoutParams(dp(390), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
 
         panel.addView(TextView(this).apply {
             text = "BLOFY QUICK MENU"
@@ -51,7 +52,7 @@ class QuickMenuActivity : AppCompatActivity() {
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.RIGHT
-            setPadding(0, dp(3), 0, dp(16))
+            setPadding(0, dp(3), 0, dp(12))
         })
 
         addAction(panel, "✦", "مختار لك", "Smart Home حسب مشاهداتك", Intent(this, ForYouActivity::class.java), true)
@@ -60,6 +61,7 @@ class QuickMenuActivity : AppCompatActivity() {
         addAction(panel, "★", "المفضلة", "اختياراتك المحفوظة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addAction(panel, "◉", "آخر القنوات", "ارجع للبث بسرعة", Intent(this, RecentChannelsActivity::class.java))
         addAction(panel, "◆", "BLOFY Collections", "الأعلى تقييمًا، 4K، عربي والجديد", Intent(this, SmartCollectionsActivity::class.java))
+        addAction(panel, "👤", "الملفات والحماية", "الرئيسي، أطفال وPIN", Intent(this, ProfilesActivity::class.java))
         addAction(panel, "⚙", "الإعدادات", "المشغل، المحتوى والتطبيق", Intent(this, SettingsActivity::class.java))
 
         setContentView(root)
@@ -74,45 +76,45 @@ class QuickMenuActivity : AppCompatActivity() {
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
-            setPadding(dp(15), dp(8), dp(15), dp(8))
+            setPadding(dp(15), dp(6), dp(15), dp(6))
             background = itemBackground(false, primary)
 
             addView(TextView(this@QuickMenuActivity).apply {
                 text = icon
-                textSize = 21f
+                textSize = 20f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(0xFFB574FF.toInt())
                 gravity = Gravity.CENTER
-            }, LinearLayout.LayoutParams(dp(48), dp(54)).apply { marginStart = dp(10) })
+            }, LinearLayout.LayoutParams(dp(48), dp(50)).apply { marginStart = dp(10) })
 
             val copy = LinearLayout(this@QuickMenuActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
                 addView(TextView(this@QuickMenuActivity).apply {
                     text = title
-                    textSize = 15.5f
+                    textSize = 15f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.WHITE)
                     gravity = Gravity.RIGHT
                 })
                 addView(TextView(this@QuickMenuActivity).apply {
                     text = subtitle
-                    textSize = 11f
+                    textSize = 10.7f
                     setTextColor(0xFFB2A7BE.toInt())
                     gravity = Gravity.RIGHT
                 })
             }
-            addView(copy, LinearLayout.LayoutParams(0, dp(58), 1f))
+            addView(copy, LinearLayout.LayoutParams(0, dp(54), 1f))
 
             setOnFocusChangeListener { view, focused ->
                 view.background = itemBackground(focused, primary)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.018f else 1f).scaleY(if (focused) 1.018f else 1f)
+                view.animate().scaleX(if (focused) 1.016f else 1f).scaleY(if (focused) 1.016f else 1f)
                     .translationZ(if (focused) dp(10).toFloat() else dp(1).toFloat()).setDuration(65).start()
             }
             setOnClickListener { startActivity(intent); finish() }
         }
-        parent.addView(row, LinearLayout.LayoutParams(-1, dp(72)).apply { bottomMargin = dp(7) })
+        parent.addView(row, LinearLayout.LayoutParams(-1, dp(64)).apply { bottomMargin = dp(6) })
     }
 
     private fun itemBackground(focused: Boolean, primary: Boolean) = GradientDrawable(
