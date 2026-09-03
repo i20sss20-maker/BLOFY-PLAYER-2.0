@@ -106,3 +106,5 @@ jobs:
       - name: Dump service log on failure
         if: failure()
         run: cat /tmp/blofy-activation.log || true
+
+# RC07 comprehensive gate rerun after startup hotfix
