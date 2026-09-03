@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "BLOFY-PLAYER-2.0"
 include(":app")
+include(":benchmark")
