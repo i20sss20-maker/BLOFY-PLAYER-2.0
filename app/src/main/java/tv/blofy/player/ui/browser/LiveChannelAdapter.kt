@@ -15,7 +15,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,15 +51,15 @@ internal class LiveChannelAdapter(
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(6), dp(12), dp(6))
+            setPadding(dp(10), dp(5), dp(12), dp(5))
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
             background = rowBackground(false)
         }
-        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(76)).apply {
-            bottomMargin = dp(6)
+        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(82)).apply {
+            bottomMargin = dp(5)
             marginStart = dp(2)
             marginEnd = dp(2)
         }
@@ -75,18 +74,22 @@ internal class LiveChannelAdapter(
         }
         row.addView(logo, LinearLayout.LayoutParams(dp(52), dp(52)).apply { marginStart = dp(10) })
 
-        val textBox = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT }
+        val textBox = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+        }
         val title = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 14f)
+            textSize = TvUiTuning.sp(context, 13.2f)
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            maxLines = 1
+            maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             gravity = Gravity.RIGHT
             includeFontPadding = false
+            setLineSpacing(0f, 1.02f)
         }
         val meta = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 10.8f)
+            textSize = TvUiTuning.sp(context, 10.2f)
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextMuted)
             maxLines = 1
@@ -95,17 +98,19 @@ internal class LiveChannelAdapter(
             includeFontPadding = false
         }
         val progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 1000; progress = 0; visibility = View.INVISIBLE
+            max = 1000
+            progress = 0
+            visibility = View.INVISIBLE
             progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
             progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF31233E.toInt())
         }
         textBox.addView(title, LinearLayout.LayoutParams(-1, 0, 1f))
-        textBox.addView(meta, LinearLayout.LayoutParams(-1, dp(18)))
+        textBox.addView(meta, LinearLayout.LayoutParams(-1, dp(17)))
         textBox.addView(progress, LinearLayout.LayoutParams(-1, dp(3)).apply { topMargin = dp(2) })
-        row.addView(textBox, LinearLayout.LayoutParams(0, dp(56), 1f))
+        row.addView(textBox, LinearLayout.LayoutParams(0, dp(63), 1f))
 
         val badge = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 8.8f)
+            textSize = TvUiTuning.sp(context, 8.5f)
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.CENTER
@@ -115,7 +120,7 @@ internal class LiveChannelAdapter(
                 setStroke(dp(1), 0x885F3D82.toInt())
             }
         }
-        row.addView(badge, LinearLayout.LayoutParams(dp(46), dp(26)).apply { marginStart = dp(8) })
+        row.addView(badge, LinearLayout.LayoutParams(dp(44), dp(25)).apply { marginStart = dp(7) })
         return Holder(row, logo, title, meta, badge, progress)
     }
 
@@ -127,41 +132,40 @@ internal class LiveChannelAdapter(
         holder.badge.text = if (item.archiveEnabled) "ARCH" else "LIVE"
         holder.progress.visibility = View.INVISIBLE
         val art = item.icon ?: item.backdrop
-        if (!art.isNullOrBlank()) ArtworkLoader.load(holder.logo, art) else { ArtworkLoader.cancel(holder.logo); holder.logo.setImageResource(R.drawable.blofy_logo) }
-        loadLocalEpg(holder, item, retryAfterFocus = false)
+        if (!art.isNullOrBlank()) ArtworkLoader.load(holder.logo, art) else {
+            ArtworkLoader.cancel(holder.logo)
+            holder.logo.setImageResource(R.drawable.blofy_logo)
+        }
+        // EPG is loaded once when the row is bound. Moving focus must stay purely visual and
+        // never schedule a database query; this keeps rapid DPAD navigation responsive on TV SoCs.
+        loadLocalEpg(holder, item)
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnLongClickListener { onLongClick(item); true }
         holder.itemView.setOnFocusChangeListener { view, focused ->
             if (focused) focusedKey = itemKey(item)
+            view.animate().cancel()
+            view.scaleX = 1f
+            view.scaleY = 1f
+            view.translationZ = if (focused) 3f else 0f
             view.background = rowBackground(focused)
             holder.title.setTextColor(Color.WHITE)
             holder.meta.setTextColor(if (focused) 0xFFE8D8FA.toInt() else BlofyTvDesign.TextMuted)
             holder.badge.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.PurpleSoft)
-            view.animate().cancel()
-            view.animate()
-                .scaleX(if (focused) 1.008f else 1f)
-                .scaleY(if (focused) 1.008f else 1f)
-                .translationZ(if (focused) 10f else 1f)
-                .setDuration(if (focused) 66L else 54L)
-                .start()
-            if (focused) {
-                onFocus(item)
-                loadLocalEpg(holder, item, retryAfterFocus = true)
-            }
+            if (focused) onFocus(item)
         }
     }
 
-    private fun loadLocalEpg(holder: Holder, item: StreamEntity, retryAfterFocus: Boolean) {
+    private fun loadLocalEpg(holder: Holder, item: StreamEntity) {
         holder.epgJob?.cancel()
         holder.epgJob = scope.launch {
-            if (retryAfterFocus) delay(500L)
             val now = System.currentTimeMillis()
             val current = withContext(Dispatchers.IO) {
                 BlofyDatabase.get(holder.itemView.context.applicationContext).dao()
                     .epg(item.providerId, item.remoteId, now, 2).first()
                     .firstOrNull { it.startMs <= now && it.endMs > now }
             }
-            if (holder.bindingAdapterPosition == RecyclerView.NO_POSITION || itemKey(item) != itemKey(items.getOrNull(holder.bindingAdapterPosition) ?: return@launch)) return@launch
+            val position = holder.bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION || itemKey(item) != itemKey(items.getOrNull(position) ?: return@launch)) return@launch
             if (current != null) {
                 val span = (current.endMs - current.startMs).coerceAtLeast(1L)
                 val pct = (((now - current.startMs).coerceIn(0L, span) * 1000L) / span).toInt()
@@ -175,10 +179,21 @@ internal class LiveChannelAdapter(
     }
 
     override fun onViewRecycled(holder: Holder) {
-        holder.epgJob?.cancel(); ArtworkLoader.cancel(holder.logo); holder.logo.setImageDrawable(null); super.onViewRecycled(holder)
+        holder.epgJob?.cancel()
+        ArtworkLoader.cancel(holder.logo)
+        holder.logo.setImageDrawable(null)
+        holder.itemView.animate().cancel()
+        holder.itemView.scaleX = 1f
+        holder.itemView.scaleY = 1f
+        holder.itemView.translationZ = 0f
+        super.onViewRecycled(holder)
     }
 
-    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) { scope.cancel(); super.onDetachedFromRecyclerView(recyclerView) }
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        scope.cancel()
+        super.onDetachedFromRecyclerView(recyclerView)
+    }
+
     override fun getItemCount() = items.size
 
     internal class Holder(
