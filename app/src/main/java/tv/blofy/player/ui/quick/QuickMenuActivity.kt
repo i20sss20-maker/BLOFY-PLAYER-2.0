@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import tv.blofy.player.ui.catalog.SmartCollectionsActivity
+import tv.blofy.player.ui.home.ForYouActivity
 import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.library.RecentChannelsActivity
 import tv.blofy.player.ui.search.SearchActivity
@@ -53,7 +54,8 @@ class QuickMenuActivity : AppCompatActivity() {
             setPadding(0, dp(3), 0, dp(16))
         })
 
-        addAction(panel, "⌕", "البحث الشامل", "قنوات، أفلام، مسلسلات وممثلين", Intent(this, SearchActivity::class.java), true)
+        addAction(panel, "✦", "مختار لك", "Smart Home حسب مشاهداتك", Intent(this, ForYouActivity::class.java), true)
+        addAction(panel, "⌕", "البحث الشامل", "قنوات، أفلام، مسلسلات وممثلين", Intent(this, SearchActivity::class.java))
         addAction(panel, "▶", "متابعة المشاهدة", "ارجع لآخر نقطة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE))
         addAction(panel, "★", "المفضلة", "اختياراتك المحفوظة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addAction(panel, "◉", "آخر القنوات", "ارجع للبث بسرعة", Intent(this, RecentChannelsActivity::class.java))
