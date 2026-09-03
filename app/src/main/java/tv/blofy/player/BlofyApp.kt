@@ -38,10 +38,13 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
 
-        val database = BlofyDatabase.get(this)
-        SmartZappingInvalidator.install(database)
+        // Never touch/open Room on the launch main thread. Existing RC06 installs may
+        // need the 8 -> 9 FTS migration across very large IPTV catalogs; opening Room
+        // here can block the first frame and leave Android showing only a black window.
         applicationScope.launch {
+            val database = BlofyDatabase.get(this@BlofyApp)
             database.openHelper.writableDatabase.execSQL("UPDATE streams SET locked = 0 WHERE locked != 0")
+            SmartZappingInvalidator.install(database)
         }
         applicationScope.launch {
             // Last-known-good config means an unavailable server never disables the app.
