@@ -108,10 +108,14 @@ jobs:
           BLOFY_RELEASE_STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
           BLOFY_RELEASE_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
           BLOFY_RELEASE_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+          BLOFY_TMDB_TOKEN: ${{ secrets.BLOFY_TMDB_TOKEN }}
         run: |
           set -euo pipefail
           aar="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-$MEDIA3_VERSION.aar"
-          gradle --no-daemon -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" testDebugUnitTest lintRelease assembleRelease bundleRelease
+          if [[ -z "${BLOFY_TMDB_TOKEN:-}" ]]; then
+            echo "::warning::BLOFY_TMDB_TOKEN is not configured; cinematic metadata will use server/catalog fallback only."
+          fi
+          gradle --no-daemon -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" -PBLOFY_TMDB_TOKEN="$BLOFY_TMDB_TOKEN" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" testDebugUnitTest lintRelease assembleRelease bundleRelease
       - name: Verify package version signature alignment and FFmpeg ABIs
         shell: bash
         run: |
