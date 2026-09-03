@@ -22,6 +22,15 @@ object SmartZappingCache {
         val total: Int
     )
 
+    data class ProviderStatus(
+        val cachedCategoryCount: Int,
+        val freshCategoryCount: Int,
+        val cachedChannelCount: Int,
+        val newestEntryAt: Long
+    ) {
+        val ready: Boolean get() = freshCategoryCount > 0 && cachedChannelCount > 0
+    }
+
     private data class Entry(
         val items: List<StreamEntity>,
         val indexByRemoteId: Map<String, Int>,
@@ -36,7 +45,9 @@ object SmartZappingCache {
         val stable = items.toList()
         entries[Key(providerId, categoryId)] = Entry(
             items = stable,
-            indexByRemoteId = stable.mapIndexed { index, item -> item.remoteId to index }.toMap(),
+            indexByRemoteId = stable.mapIndexed { index, item ->
+                item.remoteId to index
+            }.toMap(),
             createdAtMs = System.currentTimeMillis()
         )
     }
@@ -82,6 +93,19 @@ object SmartZappingCache {
         val current = entry.items[index]
         val next = entry.items[Math.floorMod(index + 1, entry.items.size)]
         return Window(previous, current, next)
+    }
+
+    fun status(providerId: String): ProviderStatus {
+        if (providerId.isBlank()) return ProviderStatus(0, 0, 0, 0L)
+        val now = System.currentTimeMillis()
+        val providerEntries = entries.entries.filter { it.key.providerId == providerId }
+        val freshEntries = providerEntries.filter { now - it.value.createdAtMs <= TTL_MS }
+        return ProviderStatus(
+            cachedCategoryCount = providerEntries.size,
+            freshCategoryCount = freshEntries.size,
+            cachedChannelCount = freshEntries.sumOf { it.value.items.size },
+            newestEntryAt = freshEntries.maxOfOrNull { it.value.createdAtMs } ?: 0L
+        )
     }
 
     fun invalidate(providerId: String) {
