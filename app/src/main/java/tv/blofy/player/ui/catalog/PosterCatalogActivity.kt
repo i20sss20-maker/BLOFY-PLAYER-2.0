@@ -53,7 +53,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            setPadding(dp(28), dp(22), dp(28), dp(24))
+            setPadding(dp(22), dp(16), dp(22), dp(18))
             background = AppCompatResources.getDrawable(this@PosterCatalogActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -62,26 +62,26 @@ class PosterCatalogActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(12), dp(14), dp(12), dp(14))
-            background = BlofyTvDesign.glassSurface(dp(22).toFloat())
-            elevation = dp(4).toFloat()
+            setPadding(dp(9), dp(10), dp(9), dp(10))
+            background = BlofyTvDesign.glassSurface(dp(20).toFloat())
+            elevation = dp(2).toFloat()
         }
         rail.addView(TextView(this).apply {
             text = "الفئات"
             BlofyTvDesign.applyHeading(this)
-            textSize = 19f
+            textSize = 17f
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)))
         categoryList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@PosterCatalogActivity)
             clipChildren = false
             clipToPadding = false
             itemAnimator = null
             setHasFixedSize(true)
-            setItemViewCacheSize(18)
+            setItemViewCacheSize(16)
         }
         rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(rail, LinearLayout.LayoutParams(dp(250), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(24) })
+        root.addView(rail, LinearLayout.LayoutParams(dp(208), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(16) })
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -96,30 +96,30 @@ class PosterCatalogActivity : AppCompatActivity() {
         header.addView(TextView(this).apply {
             text = if (kind == KIND_SERIES) "المسلسلات" else "الأفلام"
             BlofyTvDesign.applyTitle(this)
-            textSize = 32f
+            textSize = 28f
             gravity = Gravity.START
-        }, LinearLayout.LayoutParams(0, dp(64), 1f))
+        }, LinearLayout.LayoutParams(0, dp(54), 1f))
         countView = TextView(this).apply {
-            textSize = 13f
+            textSize = 12f
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.CENTER
-            setPadding(dp(14), 0, dp(14), 0)
-            background = BlofyTvDesign.badge(dp(12).toFloat())
+            setPadding(dp(12), 0, dp(12), 0)
+            background = BlofyTvDesign.badge(dp(11).toFloat())
         }
-        header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(40)))
+        header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(36)))
         content.addView(header)
 
         val manager = GridLayoutManager(this, GRID_COLUMNS)
         posterGrid = RecyclerView(this).apply {
             layoutManager = manager
-            setPadding(dp(6), dp(8), dp(10), dp(28))
+            setPadding(dp(4), dp(4), dp(6), dp(18))
             clipChildren = false
             clipToPadding = false
             itemAnimator = null
             setHasFixedSize(true)
-            recycledViewPool.setMaxRecycledViews(0, 32)
-            setItemViewCacheSize(18)
+            recycledViewPool.setMaxRecycledViews(0, 40)
+            setItemViewCacheSize(20)
             descendantFocusability = 0x40000
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
@@ -177,7 +177,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         if (providerId.isBlank() || selectedCategoryId == id) return
         categoryFocusJob?.cancel()
         categoryFocusJob = lifecycleScope.launch {
-            delay(90)
+            delay(70)
             loadStreams(id, false)
         }
     }
@@ -220,10 +220,8 @@ class PosterCatalogActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val categoryId = selectedCategoryId
             val result = withContext(Dispatchers.IO) {
-                val total = if (categoryId == null) dao.catalogCountAll(providerId, kind)
-                else dao.catalogCountInCategory(providerId, kind, categoryId)
-                val page = if (categoryId == null) dao.catalogPageAfterAll(providerId, kind, cursor, PAGE_SIZE)
-                else dao.catalogPageAfterInCategory(providerId, kind, categoryId, cursor, PAGE_SIZE)
+                val total = if (categoryId == null) dao.catalogCountAll(providerId, kind) else dao.catalogCountInCategory(providerId, kind, categoryId)
+                val page = if (categoryId == null) dao.catalogPageAfterAll(providerId, kind, cursor, PAGE_SIZE) else dao.catalogPageAfterInCategory(providerId, kind, categoryId, cursor, PAGE_SIZE)
                 Triple(total, page, page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor)
             }
             if (requestGeneration != generation) return@launch
@@ -238,14 +236,12 @@ class PosterCatalogActivity : AppCompatActivity() {
                 posterAdapter.append(result.second)
             }
             updateCount()
-            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.second.take(24).map { it.icon ?: it.backdrop })
+            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.second.take(30).map { it.icon ?: it.backdrop })
             loadingPage = false
             saveMemorySnapshot()
             if (reset) restoreSavedPosterIfVisible()
         }.also { job ->
-            job.invokeOnCompletion {
-                if (requestGeneration == generation) runOnUiThread { loadingPage = false }
-            }
+            job.invokeOnCompletion { if (requestGeneration == generation) runOnUiThread { loadingPage = false } }
         }
     }
 
@@ -320,9 +316,9 @@ class PosterCatalogActivity : AppCompatActivity() {
         const val EXTRA_KIND = "kind"
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
-        private const val GRID_COLUMNS = 4
+        private const val GRID_COLUMNS = 6
         private const val PAGE_SIZE = 200
-        private const val PREFETCH_THRESHOLD = 44
+        private const val PREFETCH_THRESHOLD = 60
         private const val ALL_CATEGORY_ID = "__all__"
     }
 }
