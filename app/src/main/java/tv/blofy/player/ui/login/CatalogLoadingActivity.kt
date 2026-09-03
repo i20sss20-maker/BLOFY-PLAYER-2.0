@@ -184,10 +184,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
             startActivity(Intent(this, HomeActivity::class.java)); finish()
         } catch (cancelled: CancellationException) {
             withContext(Dispatchers.IO) { if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id) }
+            if (!firstLoad) CatalogSyncState.markReady(applicationContext, providerId)
             throw cancelled
         } catch (error: Throwable) {
             withContext(Dispatchers.IO) { if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id) }
-            fail("تعذر تجهيز المكتبة: ${error.message ?: "خطأ غير معروف"}")
+            if (!firstLoad) CatalogSyncState.markReady(applicationContext, providerId)
+            fail("تعذر تحديث المكتبة: ${error.message ?: "خطأ غير معروف"} • النسخة المحفوظة ما زالت جاهزة")
         }
     }
 
