@@ -206,13 +206,20 @@ abstract class BlofyDatabase : RoomDatabase() {
             },
             object : Migration(8, 9) {
                 override fun migrate(db: SupportSQLiteDatabase) {
-                    // Keep upgrades startup-safe: creating the FTS table is cheap; rebuilding a
-                    // large existing library is intentionally deferred until after first frame.
-                    // ContentRepository already falls back to LIKE search while the index is empty.
+                    // Match Room's generated @Fts4 schema exactly enough for migration
+                    // validation. The previous untyped FTS columns could migrate SQLite
+                    // successfully but fail Room schema validation on real RC06 databases.
+                    // The expensive population remains deferred until after first frame.
                     db.execSQL(
                         """
                         CREATE VIRTUAL TABLE IF NOT EXISTS `streams_fts`
-                        USING FTS4(`contentKey`, `providerId`, `kind`, `searchable`, tokenize=unicode61)
+                        USING FTS4(
+                            `contentKey` TEXT NOT NULL,
+                            `providerId` TEXT NOT NULL,
+                            `kind` TEXT NOT NULL,
+                            `searchable` TEXT NOT NULL,
+                            tokenize=unicode61
+                        )
                         """.trimIndent()
                     )
                 }
