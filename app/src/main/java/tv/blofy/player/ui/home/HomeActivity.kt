@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
@@ -48,6 +49,39 @@ class HomeActivity : AppCompatActivity() {
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildTvHome() else buildCompactHome())
         restoreFocus()
         warmCatalogArtwork()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (deviceKind == DeviceClass.Kind.TV && event.action == KeyEvent.ACTION_DOWN) {
+            val focused = currentFocus
+            val key = actionViews.entries.firstOrNull { it.value === focused }?.key
+            if (key != null && event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && key.startsWith("side_")) {
+                val target = when (key) {
+                    "side_live" -> "hero_watch"
+                    "side_movies" -> "hero_movies"
+                    "side_series" -> "series_story"
+                    "side_collections" -> "collections"
+                    "side_favorites" -> "favorite_story"
+                    "side_search" -> "search_story"
+                    "side_settings" -> "search_story"
+                    else -> null
+                }
+                if (target != null && actionViews[target]?.requestFocus() == true) return true
+            }
+            if (key != null && event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !key.startsWith("side_")) {
+                val target = when (key) {
+                    "hero_watch", "live_story", "recent" -> "side_live"
+                    "hero_movies", "movie_story" -> "side_movies"
+                    "series_story" -> "side_series"
+                    "collections" -> "side_collections"
+                    "continue", "favorite_story" -> "side_favorites"
+                    "search_story" -> "side_search"
+                    else -> "side_live"
+                }
+                if (actionViews[target]?.requestFocus() == true) return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun warmCatalogArtwork() {
@@ -211,6 +245,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun heroButton(label: String, key: String, intent: Intent, primary: Boolean) = Button(this).apply {
+        id = View.generateViewId()
         text = label
         isAllCaps = false
         textSize = 15.5f
@@ -229,6 +264,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun infoCard(title: String, subtitle: String, key: String, intent: Intent) = LinearLayout(this).apply {
+        id = View.generateViewId()
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
         layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -251,6 +287,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun addStory(row: LinearLayout, key: String, title: String, subtitle: String, intent: Intent) {
         val card = LinearLayout(this).apply {
+            id = View.generateViewId()
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.BOTTOM or Gravity.RIGHT
             layoutDirection = View.LAYOUT_DIRECTION_RTL
