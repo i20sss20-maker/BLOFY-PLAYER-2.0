@@ -1,10 +1,12 @@
 BLOFY PLAYER 2.0 rc06 signed release gate
 
-- exact user-approved v339 visual identity retained
-- verified playback engines, cache, activation, FFmpeg and large-playlist fixes retained
-- repaired player HUD behavior retained
+- premium cinematic BLOFY interface and consolidated live guide retained
+- Smart Zapping, Server Intelligence, EPG, profiles, PIN, Smart Home and zero-reload catalog cache retained
+- TMDb cinematic metadata, cast, recommendations and search enrichment retained
+- activation portal, subscriber flow, FFmpeg and large-playlist fixes retained
 - applicationId remains tv.blofy.player.v2
-- versionCode promoted to 2000007
-- versionName promoted to 2.0.0-rc06
-- production signed APK/AAB requested after successful Android CI #664 and FFmpeg Native #151
-- final signed release triggered from premium-cinematic-v2
+- versionCode remains 2000007
+- versionName remains 2.0.0-rc06
+- final source commit before release trigger: 093da7f75d9658a38fa97eecb0b7ce8fefc09ace
+- verified by Android CI #747, Activation CI #164 and FFmpeg Native #234
+- production signed APK/AAB release requested from premium-cinematic-v2
