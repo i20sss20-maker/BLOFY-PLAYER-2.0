@@ -29,6 +29,7 @@ class BlofyPlaybackSession(
 ) {
     private var metric: PlaybackMetric? = null
     private var firstFrameRecorded = false
+    private var playStartedAtMs = 0L
     private var automaticRetries = 0
     private var alternateLiveFormatAttempted = false
     private var lastObservedLivePositionMs = Long.MIN_VALUE
@@ -72,12 +73,26 @@ class BlofyPlaybackSession(
                             metric = updated
                             PlaybackDiagnosticsUploader.enqueue(appContext, updated)
                         }
+                        val currentUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+                        if (currentUrl.isNotBlank() && playStartedAtMs > 0L) {
+                            PlaybackIntelligence.recordSuccess(
+                                appContext,
+                                profile.providerKey,
+                                contentKind,
+                                currentUrl,
+                                (SystemClock.elapsedRealtime() - playStartedAtMs).coerceAtLeast(0L)
+                            )
+                        }
                         firstFrameRecorded = true
                     }
                     resetLiveStallTimer(keepPosition = true)
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
+                    val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+                    if (failedUrl.isNotBlank()) {
+                        PlaybackIntelligence.recordFailure(appContext, profile.providerKey, contentKind, failedUrl)
+                    }
                     metric?.let {
                         val updated = PlaybackDiagnostics.error(it, error.errorCodeName, error.message)
                         metric = updated
@@ -86,27 +101,23 @@ class BlofyPlaybackSession(
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
                         automaticRetries++
                         retryHandler.post { retrySameUrl() }
-                    } else {
-                        val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
-                        if (failedUrl.isNotBlank()) {
-                            retryHandler.post {
-                                val alternateUrl = if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
-                                    ContentUrlResolver.alternateLiveFormat(failedUrl, profile)
+                    } else if (failedUrl.isNotBlank()) {
+                        retryHandler.post {
+                            val alternateUrl = if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
+                                ContentUrlResolver.alternateLiveFormat(failedUrl, profile)
+                            } else {
+                                null
+                            }
+                            if (alternateUrl != null) {
+                                alternateLiveFormatAttempted = true
+                                playInternalFallback(alternateUrl)
+                            } else {
+                                val configuredFallback = fallbackState.nextConfiguredUrl()
+                                if (configuredFallback != null) {
+                                    fallbackState.markConfiguredUrlAttempted(configuredFallback)
+                                    playInternalFallback(configuredFallback)
                                 } else {
-                                    null
-                                }
-                                if (alternateUrl != null) {
-                                    alternateLiveFormatAttempted = true
-                                    playInternalFallback(alternateUrl)
-                                } else {
-                                    val configuredFallback = fallbackState.nextConfiguredUrl()
-                                    if (configuredFallback != null) {
-                                        fallbackState.markConfiguredUrlAttempted(configuredFallback)
-                                        playInternalFallback(configuredFallback)
-                                    } else {
-                                        // Stay in BLOFY. Failures never launch another player automatically.
-                                        onTerminalError?.invoke(failedUrl)
-                                    }
+                                    onTerminalError?.invoke(failedUrl)
                                 }
                             }
                         }
@@ -116,17 +127,18 @@ class BlofyPlaybackSession(
         }
 
     fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null) {
-        // A channel switch supersedes any queued retry/fallback/watchdog work from the old URL.
         retryHandler.removeCallbacksAndMessages(null)
         automaticRetries = 0
         alternateLiveFormatAttempted = false
         liveStallRecoveries = 0
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
-        fallbackState.begin(url, fallbackUrl)
+        val preferredUrl = PlaybackIntelligence.preferredUrl(appContext, profile.providerKey, contentKind, url)
+        fallbackState.begin(preferredUrl, fallbackUrl)
         firstFrameRecorded = false
-        metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
-        val item = mediaItem(url)
+        playStartedAtMs = SystemClock.elapsedRealtime()
+        metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, preferredUrl)
+        val item = mediaItem(preferredUrl)
         player.setMediaItem(item)
         player.prepare()
         if (resumeMs > 0L) player.seekTo(resumeMs)
@@ -138,6 +150,7 @@ class BlofyPlaybackSession(
         val item = player.currentMediaItem ?: return
         val position = player.currentPosition.coerceAtLeast(0L)
         resetLiveStallTimer(keepPosition = false)
+        playStartedAtMs = SystemClock.elapsedRealtime()
         player.stop()
         player.setMediaItem(item)
         player.prepare()
@@ -198,10 +211,10 @@ class BlofyPlaybackSession(
     }
 
     private fun playInternalFallback(url: String) {
-        // Existing error fallback behavior stays unchanged. The stall watchdog never selects this path.
         fallbackState.markUrlAttempted(url)
         automaticRetries = MAX_AUTOMATIC_RETRIES
         firstFrameRecorded = false
+        playStartedAtMs = SystemClock.elapsedRealtime()
         resetLiveStallTimer(keepPosition = false)
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
         player.stop()
