@@ -1,0 +1,12 @@
+name: BLOFY RC07 Signed Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-release:
+    if: github.ref == 'refs/heads/rc07-commercial-stability'
+    uses: ./.github/workflows/rc07-release.yml
