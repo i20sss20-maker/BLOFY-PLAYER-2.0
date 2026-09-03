@@ -22,19 +22,23 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.LocalStorageManager
-import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
-import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class SettingsActivity : AppCompatActivity() {
     private var provider: ProviderEntity? = null
     private lateinit var status: TextView
     private lateinit var grid: GridLayout
     private lateinit var storageCard: Button
+    private lateinit var refreshCard: Button
     private val prefs by lazy { getSharedPreferences(PREFS, MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,6 +47,11 @@ class SettingsActivity : AppCompatActivity() {
             provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
             buildPage()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::status.isInitialized) updateSyncStatus()
     }
 
     private fun buildPage() {
@@ -88,7 +97,6 @@ class SettingsActivity : AppCompatActivity() {
         page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(88)))
 
         status = TextView(this).apply {
-            text = "✓  بياناتك محفوظة محليًا وتفتح بدون إعادة تحميل"
             textSize = 13.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
@@ -96,6 +104,7 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(dp(16), dp(10), dp(16), dp(10))
             background = BlofyTvDesign.badge(dp(14).toFloat())
         }
+        updateSyncStatus()
         page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { bottomMargin = dp(18) })
 
         grid = GridLayout(this).apply {
@@ -117,7 +126,8 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting("✦  حركة الواجهة", KEY_MOTION, arrayOf("smooth", "reduced"), arrayOf("سلسة", "خفيفة")))
         addCard(actionCard("🌐  لغة التطبيق", currentLanguageLabel()) { chooseLanguage() })
         addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
-        addCard(actionCard("↻  تحديث المحتوى", "يدوي عند الحاجة فقط") { refreshLibrary() })
+        refreshCard = actionCard("↻  تحديث المحتوى", syncSubtitle()) { refreshLibrary() }
+        addCard(refreshCard)
         storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
         addCard(storageCard)
         addCard(actionCard("✓  حالة النظام", "معلومات النسخة والجهاز") { startActivity(Intent(this, SystemStatusActivity::class.java)) })
@@ -160,7 +170,7 @@ class SettingsActivity : AppCompatActivity() {
         gravity = Gravity.CENTER
         includeFontPadding = false
         letterSpacing = 0.005f
-        BlofyTvDesign.installTvFocus(this, dp(if (compact) 18 else 21).toFloat(), if (compact) 1.03f else 1.035f, false)
+        BlofyTvDesign.installTvFocus(this, dp(if (compact) 18 else 21).toFloat(), if (compact) 1.02f else 1.018f, false)
         setOnClickListener { action() }
     }
 
@@ -197,13 +207,34 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun refreshLibrary() {
         val active = provider ?: run { status.text = "لا توجد قائمة تشغيل نشطة"; return }
-        status.text = "جاري التحديث اليدوي..."
-        lifecycleScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(active) }
-            }.onSuccess { status.text = "✓  اكتمل تحديث القنوات والأفلام والمسلسلات" }
-                .onFailure { status.text = "تعذر التحديث — البيانات المحفوظة بقيت كما هي" }
+        status.text = "جاري فتح التحديث الآمن... البيانات الحالية ستبقى متاحة حتى يكتمل"
+        startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
+            putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
+            putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
+        })
+    }
+
+    private fun updateSyncStatus() {
+        val active = provider
+        status.text = if (active == null) {
+            "لا توجد قائمة تشغيل نشطة"
+        } else {
+            val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
+            if (last > 0L) "✓  البيانات محفوظة محليًا • آخر تحديث ${formatSyncTime(last)}"
+            else "✓  البيانات محفوظة محليًا وتفتح بدون إعادة تحميل"
         }
+        if (::refreshCard.isInitialized) refreshCard.text = "↻  تحديث المحتوى\n${syncSubtitle()}"
+    }
+
+    private fun syncSubtitle(): String {
+        val active = provider ?: return "يدوي عند الحاجة فقط"
+        val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
+        return if (last > 0L) "آخر تحديث ${formatSyncTime(last)}" else "يدوي عند الحاجة فقط"
+    }
+
+    private fun formatSyncTime(value: Long): String {
+        val sameDay = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(value)) == SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+        return SimpleDateFormat(if (sameDay) "HH:mm" else "dd/MM HH:mm", Locale("ar")).format(Date(value))
     }
 
     private fun updateStorageCard() {
