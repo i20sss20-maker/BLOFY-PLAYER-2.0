@@ -85,12 +85,12 @@ class FocusTextAdapter<T : Any>(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val context = parent.context
         val view = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 15.5f)
+            textSize = TvUiTuning.sp(context, 14f)
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(TvUiTuning.dp(context, 18), 0, TvUiTuning.dp(context, 18), 0)
+            setPadding(TvUiTuning.dp(context, 14), 0, TvUiTuning.dp(context, 14), 0)
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             isFocusable = true
@@ -103,9 +103,9 @@ class FocusTextAdapter<T : Any>(
             ViewGroup.LayoutParams.MATCH_PARENT,
             TvUiTuning.dp(context, BlofyTvDesign.CategoryRowHeight)
         ).apply {
-            bottomMargin = TvUiTuning.dp(context, 7)
-            marginStart = TvUiTuning.dp(context, 3)
-            marginEnd = TvUiTuning.dp(context, 3)
+            bottomMargin = TvUiTuning.dp(context, 6)
+            marginStart = TvUiTuning.dp(context, 2)
+            marginEnd = TvUiTuning.dp(context, 2)
         }
         return Holder(view).also { holder ->
             view.setOnFocusChangeListener { focusedView, focused ->
@@ -115,10 +115,10 @@ class FocusTextAdapter<T : Any>(
                 text.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
                 focusedView.background = itemBackground(focused)
                 focusedView.animate()
-                    .scaleX(if (focused) 1.008f else 1f)
-                    .scaleY(if (focused) 1.008f else 1f)
-                    .translationZ(if (focused) 10f else 1f)
-                    .setDuration(if (focused) 58L else 48L)
+                    .scaleX(if (focused) 1.006f else 1f)
+                    .scaleY(if (focused) 1.006f else 1f)
+                    .translationZ(if (focused) 9f else 1f)
+                    .setDuration(if (focused) 56L else 46L)
                     .start()
                 if (focused) {
                     val position = holder.bindingAdapterPosition
@@ -181,7 +181,7 @@ class FocusTextAdapter<T : Any>(
         if (focused) intArrayOf(0xFF593381.toInt(), 0xFF291A37.toInt())
         else intArrayOf(0xE61B1622.toInt(), 0xEE121019.toInt())
     ).apply {
-        cornerRadius = 15f
+        cornerRadius = 14f
         setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF342A3F.toInt())
     }
 }
