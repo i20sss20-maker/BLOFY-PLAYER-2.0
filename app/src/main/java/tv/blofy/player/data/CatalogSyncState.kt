@@ -16,6 +16,10 @@ object CatalogSyncState {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getLong(UPDATED_PREFIX + providerId, 0L)
 
+    // Compatibility alias used by SettingsActivity. Keep both names to avoid coupling UI code
+    // to the storage implementation name.
+    fun lastSyncedAt(context: Context, providerId: String): Long = lastUpdatedAt(context, providerId)
+
     fun markPending(context: Context, providerId: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putBoolean(READY_PREFIX + providerId, false).apply()
