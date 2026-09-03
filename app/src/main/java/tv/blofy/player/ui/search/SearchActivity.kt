@@ -137,12 +137,19 @@ class SearchActivity : AppCompatActivity() {
             } else null
             val actorItems = if (actor != null) {
                 withContext(Dispatchers.IO) {
-                    actor.titles.asSequence()
-                        .flatMap { title -> dao.searchStreams(provider.id, title, 4).asSequence() }
-                        .filter { it.kind == "movie" || it.kind == "series" }
-                        .distinctBy { it.key }
-                        .take(28)
-                        .toList()
+                    val matched = ArrayList<StreamEntity>(28)
+                    val seen = HashSet<String>()
+                    for (title in actor.titles) {
+                        val hits = dao.searchStreams(provider.id, title, 4)
+                        for (item in hits) {
+                            if ((item.kind == "movie" || item.kind == "series") && seen.add(item.key)) {
+                                matched += item
+                                if (matched.size >= 28) break
+                            }
+                        }
+                        if (matched.size >= 28) break
+                    }
+                    matched
                 }
             } else emptyList()
             val items = (localItems + actorItems).distinctBy { it.key }.take(100)
