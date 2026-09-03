@@ -35,7 +35,10 @@ object PortalPlaylistClient {
 
     suspend fun sync(context: Context, baseUrl: String, dao: BlofyDao): SyncResult = withContext(Dispatchers.IO) {
         val endpoint = baseUrl.trim().trimEnd('/')
-        if (endpoint.isBlank()) return@withContext SyncResult(null, emptyList(), emptySet(), 0)
+        if (endpoint.isBlank()) {
+            val local = dao.allProviders().first()
+            return@withContext SyncResult(local.firstOrNull { it.enabled }, local, emptySet(), 0)
+        }
 
         val auth = JSONObject().apply {
             put("deviceId", DeviceIdentity.deviceId(context))
@@ -45,7 +48,7 @@ object PortalPlaylistClient {
         val local = dao.allProviders().first()
         val localById = local.associateBy { it.id }
         val changed = linkedSetOf<String>()
-        val providers = ArrayList<ProviderEntity>(remote.size)
+        val remoteProviders = ArrayList<ProviderEntity>(remote.size)
         var remoteActive: ProviderEntity? = null
 
         remote.forEach { item ->
@@ -64,14 +67,16 @@ object PortalPlaylistClient {
                 enabled = item.active,
                 updatedAt = item.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
             )
-            providers += next
+            remoteProviders += next
             val contentChanged = existing == null ||
                 existing.baseUrl != next.baseUrl || existing.username != next.username ||
                 existing.password != next.password || existing.providerType != next.providerType
             if (contentChanged) changed += next.id
-            if (!contentChanged && existing != next) {
-                dao.upsertProvider(next.copy(enabled = existing.enabled))
-            }
+
+            // Persist portal playlists locally immediately. This makes the device cache the source
+            // of truth for rendering and guarantees a transient portal/network failure never makes
+            // a previously visible playlist disappear from the login screen.
+            dao.upsertProvider(next.copy(enabled = if (item.active) true else existing?.enabled ?: false))
             if (item.active) remoteActive = next
         }
 
@@ -86,19 +91,31 @@ object PortalPlaylistClient {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                // Portal upload failure must not discard a successfully downloaded profile.
+                // Upload is best-effort. The local playlist remains valid and MUST stay visible.
             }
         }
 
-        val activeCandidate = remoteActive ?: dao.providers().first().firstOrNull()
-        SyncResult(activeCandidate, providers, changed, remote.size)
+        // Merge both sources instead of returning portal rows only. Local credentials are durable
+        // and must never vanish just because the portal has not received them yet.
+        val mergedById = linkedMapOf<String, ProviderEntity>()
+        local.forEach { mergedById[it.id] = it }
+        remoteProviders.forEach { remoteProvider ->
+            val old = mergedById[remoteProvider.id]
+            mergedById[remoteProvider.id] = remoteProvider.copy(
+                enabled = remoteProvider.enabled || (old?.enabled == true && remoteActive == null)
+            )
+        }
+        val merged = mergedById.values.sortedByDescending { it.updatedAt }
+        val activeCandidate = remoteActive ?: merged.firstOrNull { it.enabled } ?: merged.firstOrNull()
+        SyncResult(activeCandidate, merged, changed, remote.size)
     }
 
     suspend fun selectProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao) = withContext(Dispatchers.IO) {
         val selected = provider.copy(enabled = true, updatedAt = System.currentTimeMillis())
-        pushProvider(context, baseUrl, selected)
-        dao.upsertProvider(selected)
+        // Local activation is authoritative for responsiveness. Portal sync is best-effort and
+        // cannot block or undo a user's playlist selection.
         dao.saveAndActivateProvider(selected)
+        runCatching { pushProvider(context, baseUrl, selected) }
         selected
     }
 
