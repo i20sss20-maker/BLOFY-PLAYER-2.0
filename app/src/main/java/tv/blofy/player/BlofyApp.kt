@@ -5,6 +5,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import tv.blofy.player.core.commercial.CommercialConfigRepository
+import tv.blofy.player.core.commercial.CommercialRuntime
+import tv.blofy.player.core.commercial.CrashRecovery
 import tv.blofy.player.core.playback.SmartZappingInvalidator
 import tv.blofy.player.core.remote.QuickMenuInterceptor
 import tv.blofy.player.core.update.AppUpdateLifecycle
@@ -31,18 +34,22 @@ class BlofyApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashRecovery.install(this)
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
 
         val database = BlofyDatabase.get(this)
         SmartZappingInvalidator.install(database)
         applicationScope.launch {
-            database.openHelper
-                .writableDatabase
-                .execSQL("UPDATE streams SET locked = 0 WHERE locked != 0")
+            database.openHelper.writableDatabase.execSQL("UPDATE streams SET locked = 0 WHERE locked != 0")
+        }
+        applicationScope.launch {
+            // Last-known-good config means an unavailable server never disables the app.
+            CommercialConfigRepository.refresh(this@BlofyApp)
         }
 
-        // Cached content remains immediately available; refresh/prefetch runs independently.
-        BackgroundCatalogEngine.kick(this)
+        if (CommercialRuntime.feature(this, CommercialRuntime.FEATURE_BACKGROUND_SYNC)) {
+            BackgroundCatalogEngine.kick(this)
+        }
     }
 }
