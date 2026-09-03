@@ -11,6 +11,7 @@
         <activity android:name=".ui.catchup.CatchupActivity" android:exported="false" />
         <activity android:name=".ui.details.SeriesDetailsActivity" android:exported="false" />
         <activity android:name=".ui.details.MovieDetailsActivity" android:exported="false" />
+        <activity android:name=".ui.catalog.SmartCollectionsActivity" android:exported="false" />
         <activity android:name=".ui.catalog.PosterCatalogActivity" android:exported="false" />
         <activity android:name=".ui.library.RecentChannelsActivity" android:exported="false" />
         <activity android:name=".ui.library.LibraryActivity" android:exported="false" />
