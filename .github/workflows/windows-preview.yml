@@ -1,0 +1,39 @@
+name: BLOFY Windows Preview
+
+on:
+  push:
+    branches: [windows-preview-01]
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore windows/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
+      - name: Build
+        run: dotnet build windows/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj -c Release --no-restore
+      - name: Publish win-x64 self-contained
+        run: dotnet publish windows/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false -o publish/BLOFY-PLAYER-Windows
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifact | Out-Null
+          Compress-Archive -Path publish/BLOFY-PLAYER-Windows/* -DestinationPath artifact/BLOFY-PLAYER-Windows-Preview01-win-x64.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-Windows-Preview01-win-x64
+          path: artifact/BLOFY-PLAYER-Windows-Preview01-win-x64.zip
+          if-no-files-found: error
+          retention-days: 30
