@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
+import tv.blofy.player.core.text.ArabicSearchNormalizer
 
 @Dao
 interface BlofyDao {
@@ -17,19 +18,27 @@ interface BlofyDao {
     @Query("UPDATE providers SET enabled = 1, updatedAt = :updatedAt WHERE id = :providerId") suspend fun activateProvider(providerId: String, updatedAt: Long = System.currentTimeMillis())
     @Query("DELETE FROM providers WHERE id = :providerId") suspend fun deleteProvider(providerId: String)
 
-    @Transaction suspend fun saveAndActivateProvider(provider: ProviderEntity) { upsertProvider(provider.copy(enabled = true)); disableAllProviders(); activateProvider(provider.id, provider.updatedAt) }
+    @Transaction suspend fun saveAndActivateProvider(provider: ProviderEntity) {
+        upsertProvider(provider.copy(enabled = true))
+        disableAllProviders()
+        activateProvider(provider.id, provider.updatedAt)
+    }
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId") suspend fun allCategoriesForProvider(providerId: String): List<CategoryEntity>
+    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind") suspend fun categorySnapshot(providerId: String, kind: String): List<CategoryEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId") suspend fun allStreamsForProvider(providerId: String): List<StreamEntity>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun streamSnapshot(providerId: String, kind: String): List<StreamEntity>
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId") suspend fun streamCountForProvider(providerId: String): Int
     @Query("SELECT EXISTS(SELECT 1 FROM streams WHERE providerId = :providerId LIMIT 1)") suspend fun hasStreamsForProvider(providerId: String): Boolean
     suspend fun hasCatalog(providerId: String): Boolean = hasStreamsForProvider(providerId)
     @Query("SELECT * FROM episodes WHERE providerId = :providerId") suspend fun allEpisodesForProvider(providerId: String): List<EpisodeEntity>
+    @Query("SELECT * FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId") suspend fun episodeSnapshot(providerId: String, seriesId: String): List<EpisodeEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertCategories(items: List<CategoryEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertStreams(items: List<StreamEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEpisodes(items: List<EpisodeEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEpg(items: List<EpgEntity>)
+    @Insert suspend fun insertSearchRows(items: List<StreamSearchFtsEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertActivation(state: ActivationEntity)
     @Query("SELECT * FROM activation LIMIT 1") suspend fun activation(): ActivationEntity?
     @Query("DELETE FROM activation") suspend fun clearActivation()
@@ -59,14 +68,24 @@ interface BlofyDao {
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind IN ('movie','series') ORDER BY COALESCE(addedAt, 0) DESC, name LIMIT :limit") suspend fun latestHomeStreams(providerId: String, limit: Int = 14): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (name LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' OR year LIKE '%' || :query || '%') ORDER BY name LIMIT :limit") suspend fun searchCatalog(providerId: String, kind: String, query: String, limit: Int = 300): List<StreamEntity>
 
-    @Query("SELECT * FROM streams WHERE key = :contentKey LIMIT 1") suspend fun stream(contentKey: String): StreamEntity?
+    @Query("SELECT * FROM streams WHERE `key` = :contentKey LIMIT 1") suspend fun stream(contentKey: String): StreamEntity?
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND remoteId = :remoteId LIMIT 1") suspend fun streamByIdentity(providerId: String, kind: String, remoteId: String): StreamEntity?
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND favorite = 1 ORDER BY name") fun favorites(providerId: String): Flow<List<StreamEntity>>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND name LIKE '%' || :query || '%' ORDER BY name LIMIT :limit") suspend fun searchStreams(providerId: String, query: String, limit: Int = 80): List<StreamEntity>
-    @Query("UPDATE streams SET favorite = :favorite WHERE key = :contentKey") suspend fun setFavorite(contentKey: String, favorite: Boolean)
-    @Query("UPDATE streams SET locked = :locked WHERE key = :contentKey") suspend fun setLocked(contentKey: String, locked: Boolean)
+    @Query("""
+        SELECT streams.* FROM streams
+        INNER JOIN streams_fts ON streams.`key` = streams_fts.contentKey
+        WHERE streams_fts.providerId = :providerId AND streams_fts MATCH :query
+        ORDER BY streams.name LIMIT :limit
+    """)
+    suspend fun searchStreamsFts(providerId: String, query: String, limit: Int = 100): List<StreamEntity>
+    @Query("UPDATE streams SET favorite = :favorite WHERE `key` = :contentKey") suspend fun setFavorite(contentKey: String, favorite: Boolean)
+    @Query("UPDATE streams SET favorite = :favorite WHERE providerId = :providerId AND kind = :kind AND remoteId = :remoteId") suspend fun setFavoriteByIdentity(providerId: String, kind: String, remoteId: String, favorite: Boolean)
+    @Query("UPDATE streams SET locked = :locked WHERE `key` = :contentKey") suspend fun setLocked(contentKey: String, locked: Boolean)
 
     @Query("SELECT * FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId ORDER BY season, episode") fun episodes(providerId: String, seriesId: String): Flow<List<EpisodeEntity>>
-    @Query("SELECT * FROM episodes WHERE key = :contentKey LIMIT 1") suspend fun episode(contentKey: String): EpisodeEntity?
+    @Query("SELECT * FROM episodes WHERE `key` = :contentKey LIMIT 1") suspend fun episode(contentKey: String): EpisodeEntity?
+    @Query("SELECT * FROM episodes WHERE providerId = :providerId AND remoteId = :remoteId LIMIT 1") suspend fun episodeByRemoteId(providerId: String, remoteId: String): EpisodeEntity?
     @Query("SELECT * FROM epg WHERE providerId = :providerId AND streamId = :streamId AND endMs >= :nowMs ORDER BY startMs LIMIT :limit") fun epg(providerId: String, streamId: String, nowMs: Long, limit: Int = 20): Flow<List<EpgEntity>>
     @Query("SELECT * FROM epg WHERE providerId = :providerId AND streamId = :streamId AND startMs >= :sinceMs AND endMs <= :nowMs ORDER BY startMs DESC LIMIT :limit") suspend fun catchupEpg(providerId: String, streamId: String, sinceMs: Long, nowMs: Long, limit: Int = 300): List<EpgEntity>
 
@@ -77,15 +96,31 @@ interface BlofyDao {
 
     @Query("DELETE FROM categories WHERE providerId = :providerId AND kind = :kind") suspend fun clearCategories(providerId: String, kind: String)
     @Query("DELETE FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun clearStreams(providerId: String, kind: String)
+    @Query("DELETE FROM categories WHERE `key` IN (:keys)") suspend fun deleteCategoriesByKeys(keys: List<String>)
+    @Query("DELETE FROM streams WHERE `key` IN (:keys)") suspend fun deleteStreamsByKeys(keys: List<String>)
+    @Query("DELETE FROM episodes WHERE `key` IN (:keys)") suspend fun deleteEpisodesByKeys(keys: List<String>)
     @Query("DELETE FROM categories WHERE providerId = :providerId AND kind IN ('live', 'movie', 'series')") suspend fun clearM3uCategories(providerId: String)
     @Query("DELETE FROM streams WHERE providerId = :providerId AND kind IN ('live', 'movie', 'series')") suspend fun clearM3uStreams(providerId: String)
     @Query("DELETE FROM episodes WHERE providerId = :providerId") suspend fun clearProviderEpisodes(providerId: String)
     @Query("DELETE FROM categories WHERE providerId = :providerId") suspend fun clearProviderCategories(providerId: String)
     @Query("DELETE FROM streams WHERE providerId = :providerId") suspend fun clearProviderStreams(providerId: String)
     @Query("DELETE FROM epg WHERE providerId = :providerId") suspend fun clearProviderEpg(providerId: String)
+    @Query("DELETE FROM streams_fts WHERE providerId = :providerId") suspend fun clearSearchIndex(providerId: String)
+    @Query("DELETE FROM streams_fts WHERE providerId = :providerId AND kind = :kind") suspend fun clearSearchIndex(providerId: String, kind: String)
 
-    @Transaction suspend fun clearProviderCatalog(providerId: String) { clearProviderCategories(providerId); clearProviderStreams(providerId); clearProviderEpisodes(providerId); clearProviderEpg(providerId) }
-    @Transaction suspend fun discardStagedCatalog(stagedProviderId: String) { clearProviderCatalog(stagedProviderId); deleteProvider(stagedProviderId) }
+    @Transaction
+    suspend fun clearProviderCatalog(providerId: String) {
+        clearProviderCategories(providerId)
+        clearProviderStreams(providerId)
+        clearProviderEpisodes(providerId)
+        clearProviderEpg(providerId)
+        clearSearchIndex(providerId)
+    }
+
+    @Transaction suspend fun discardStagedCatalog(stagedProviderId: String) {
+        clearProviderCatalog(stagedProviderId)
+        deleteProvider(stagedProviderId)
+    }
 
     @Query("""UPDATE categories SET hidden = COALESCE((SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId LIMIT 1),(SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId || '.0' LIMIT 1),categories.hidden) WHERE providerId = :stagedProviderId""") suspend fun inheritStagedCategoryFlags(stagedProviderId: String, targetProviderId: String)
     @Query("""UPDATE streams SET favorite = COALESCE((SELECT old.favorite FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId LIMIT 1),(SELECT old.favorite FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0' LIMIT 1),streams.favorite), locked = COALESCE((SELECT old.locked FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId LIMIT 1),(SELECT old.locked FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0' LIMIT 1),streams.locked) WHERE providerId = :stagedProviderId""") suspend fun inheritStagedStreamFlags(stagedProviderId: String, targetProviderId: String)
@@ -95,17 +130,128 @@ interface BlofyDao {
 
     @Transaction
     suspend fun promoteStagedCatalog(stagedProviderId: String, targetProvider: ProviderEntity) {
-        inheritStagedCategoryFlags(stagedProviderId, targetProvider.id); inheritStagedStreamFlags(stagedProviderId, targetProvider.id)
+        inheritStagedCategoryFlags(stagedProviderId, targetProvider.id)
+        inheritStagedStreamFlags(stagedProviderId, targetProvider.id)
         clearProviderCatalog(targetProvider.id)
-        promoteStagedCategoriesInPlace(stagedProviderId, targetProvider.id); promoteStagedStreamsInPlace(stagedProviderId, targetProvider.id); promoteStagedEpisodesInPlace(stagedProviderId, targetProvider.id); clearProviderEpg(stagedProviderId)
-        upsertProvider(targetProvider.copy(enabled = true)); disableAllProviders(); activateProvider(targetProvider.id, targetProvider.updatedAt); deleteProvider(stagedProviderId)
+        promoteStagedCategoriesInPlace(stagedProviderId, targetProvider.id)
+        promoteStagedStreamsInPlace(stagedProviderId, targetProvider.id)
+        promoteStagedEpisodesInPlace(stagedProviderId, targetProvider.id)
+        clearProviderEpg(stagedProviderId)
+        clearSearchIndex(stagedProviderId)
+        rebuildSearchIndex(targetProvider.id)
+        upsertProvider(targetProvider.copy(enabled = true))
+        disableAllProviders()
+        activateProvider(targetProvider.id, targetProvider.updatedAt)
+        deleteProvider(stagedProviderId)
     }
 
-    @Transaction suspend fun replaceCatalog(providerId: String, kind: String, categories: List<CategoryEntity>, streams: List<StreamEntity>) { clearCategories(providerId, kind); clearStreams(providerId, kind); if (categories.isNotEmpty()) upsertCategories(categories); streams.chunked(CATALOG_INSERT_BATCH_SIZE).forEach { upsertStreams(it) } }
-    @Transaction suspend fun replaceM3uCatalog(providerId: String, categories: List<CategoryEntity>, streams: List<StreamEntity>, episodes: List<EpisodeEntity>) { clearM3uCategories(providerId); clearM3uStreams(providerId); clearProviderEpisodes(providerId); if (categories.isNotEmpty()) upsertCategories(categories); streams.chunked(CATALOG_INSERT_BATCH_SIZE).forEach { upsertStreams(it) }; episodes.chunked(CATALOG_INSERT_BATCH_SIZE).forEach { upsertEpisodes(it) } }
+    /**
+     * Applies only changed rows and deletions. Xtream still returns a full section, but unchanged
+     * rows are no longer deleted/reinserted, which keeps large libraries responsive and preserves
+     * stable rowids used by keyset paging.
+     */
+    @Transaction
+    suspend fun replaceCatalog(
+        providerId: String,
+        kind: String,
+        categories: List<CategoryEntity>,
+        streams: List<StreamEntity>
+    ) {
+        val oldCategories = categorySnapshot(providerId, kind).associateBy { it.key }
+        val oldStreams = streamSnapshot(providerId, kind).associateBy { it.key }
+        val incomingCategoryKeys = categories.asSequence().map { it.key }.toHashSet()
+        val incomingStreamKeys = streams.asSequence().map { it.key }.toHashSet()
+
+        oldCategories.keys.filterNot(incomingCategoryKeys::contains)
+            .chunked(SQLITE_BIND_BATCH_SIZE)
+            .forEach { if (it.isNotEmpty()) deleteCategoriesByKeys(it) }
+        oldStreams.keys.filterNot(incomingStreamKeys::contains)
+            .chunked(SQLITE_BIND_BATCH_SIZE)
+            .forEach { if (it.isNotEmpty()) deleteStreamsByKeys(it) }
+
+        categories.filter { oldCategories[it.key] != it }
+            .chunked(CATALOG_INSERT_BATCH_SIZE)
+            .forEach { if (it.isNotEmpty()) upsertCategories(it) }
+        streams.filter { oldStreams[it.key] != it }
+            .chunked(CATALOG_INSERT_BATCH_SIZE)
+            .forEach { if (it.isNotEmpty()) upsertStreams(it) }
+
+        rebuildSearchIndex(providerId, kind, streams)
+    }
+
+    @Transaction
+    suspend fun replaceM3uCatalog(
+        providerId: String,
+        categories: List<CategoryEntity>,
+        streams: List<StreamEntity>,
+        episodes: List<EpisodeEntity>
+    ) {
+        listOf("live", "movie", "series").forEach { kind ->
+            replaceCatalog(
+                providerId,
+                kind,
+                categories.filter { it.kind == kind },
+                streams.filter { it.kind == kind }
+            )
+        }
+        val old = allEpisodesForProvider(providerId).associateBy { it.key }
+        val incoming = episodes.associateBy { it.key }
+        old.keys.filterNot(incoming::containsKey)
+            .chunked(SQLITE_BIND_BATCH_SIZE)
+            .forEach { if (it.isNotEmpty()) deleteEpisodesByKeys(it) }
+        episodes.filter { old[it.key] != it }
+            .chunked(CATALOG_INSERT_BATCH_SIZE)
+            .forEach { if (it.isNotEmpty()) upsertEpisodes(it) }
+    }
+
     @Query("DELETE FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId") suspend fun clearEpisodes(providerId: String, seriesId: String)
-    @Transaction suspend fun replaceEpisodes(providerId: String, seriesId: String, episodes: List<EpisodeEntity>) { clearEpisodes(providerId, seriesId); if (episodes.isNotEmpty()) upsertEpisodes(episodes) }
+
+    @Transaction
+    suspend fun replaceEpisodes(providerId: String, seriesId: String, episodes: List<EpisodeEntity>) {
+        val old = episodeSnapshot(providerId, seriesId).associateBy { it.key }
+        val incoming = episodes.associateBy { it.key }
+        old.keys.filterNot(incoming::containsKey)
+            .chunked(SQLITE_BIND_BATCH_SIZE)
+            .forEach { if (it.isNotEmpty()) deleteEpisodesByKeys(it) }
+        episodes.filter { old[it.key] != it }
+            .chunked(CATALOG_INSERT_BATCH_SIZE)
+            .forEach { if (it.isNotEmpty()) upsertEpisodes(it) }
+    }
+
+    @Transaction
+    suspend fun rebuildSearchIndex(providerId: String) {
+        clearSearchIndex(providerId)
+        allStreamsForProvider(providerId)
+            .map(::searchRow)
+            .chunked(SEARCH_INSERT_BATCH_SIZE)
+            .forEach { if (it.isNotEmpty()) insertSearchRows(it) }
+    }
+
+    @Transaction
+    suspend fun rebuildSearchIndex(providerId: String, kind: String, streams: List<StreamEntity>) {
+        clearSearchIndex(providerId, kind)
+        streams.map(::searchRow)
+            .chunked(SEARCH_INSERT_BATCH_SIZE)
+            .forEach { if (it.isNotEmpty()) insertSearchRows(it) }
+    }
+
     @Query("DELETE FROM epg WHERE providerId = :providerId AND streamId = :streamId") suspend fun clearEpg(providerId: String, streamId: String)
 }
 
+private fun searchRow(stream: StreamEntity) = StreamSearchFtsEntity(
+    contentKey = stream.key,
+    providerId = stream.providerId,
+    kind = stream.kind,
+    searchable = ArabicSearchNormalizer.searchable(
+        stream.name,
+        stream.genre,
+        stream.year,
+        stream.plot,
+        stream.releaseDate,
+        stream.streamType
+    )
+)
+
 private const val CATALOG_INSERT_BATCH_SIZE = 1000
+private const val SEARCH_INSERT_BATCH_SIZE = 700
+private const val SQLITE_BIND_BATCH_SIZE = 800
