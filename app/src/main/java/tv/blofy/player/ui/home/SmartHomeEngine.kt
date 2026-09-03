@@ -13,17 +13,26 @@ internal object SmartHomeEngine {
 
     suspend fun build(dao: BlofyDao, providerId: String): Snapshot {
         val states = dao.watchStates(providerId).sortedByDescending { it.updatedAt }
-        val watched = states.mapNotNull { state -> dao.stream(state.contentKey) }
+
+        val watched = buildList {
+            for (state in states) {
+                dao.stream(state.contentKey)?.let { add(it) }
+            }
+        }
         val scores = watched.groupingBy { it.kind }.eachCount()
         val preferred = scores.maxByOrNull { it.value }?.key ?: "movie"
 
-        val continueItems = states.asSequence()
-            .filter { !it.completed && it.positionMs > 0L }
-            .mapNotNull { dao.stream(it.contentKey) }
-            .filter { it.kind == "movie" || it.kind == "series" }
-            .distinctBy { it.key }
-            .take(12)
-            .toList()
+        val continueItems = buildList {
+            val seen = hashSetOf<String>()
+            for (state in states) {
+                if (state.completed || state.positionMs <= 0L) continue
+                val item = dao.stream(state.contentKey) ?: continue
+                if ((item.kind == "movie" || item.kind == "series") && seen.add(item.key)) {
+                    add(item)
+                    if (size >= 12) break
+                }
+            }
+        }
 
         val latest = dao.latestHomeStreams(providerId, 80)
         val favoriteGenres = watched.asSequence()
@@ -34,16 +43,17 @@ internal object SmartHomeEngine {
             .eachCount()
             .entries.sortedByDescending { it.value }.take(4).map { it.key }
 
+        val continueKeys = continueItems.mapTo(hashSetOf()) { it.key }
         val ranked = latest.asSequence()
             .filter { it.kind == "movie" || it.kind == "series" }
-            .filterNot { item -> continueItems.any { it.key == item.key } }
+            .filterNot { it.key in continueKeys }
             .map { item ->
                 var score = 0
                 if (item.kind == preferred) score += 8
                 val g = item.genre.orEmpty().lowercase()
                 score += favoriteGenres.count { it in g } * 5
                 item.rating?.toDoubleOrNull()?.let { score += it.toInt() }
-                score += if ((item.addedAt ?: 0L) > 0L) 2 else 0
+                if ((item.addedAt ?: 0L) > 0L) score += 2
                 item to score
             }
             .sortedByDescending { it.second }
