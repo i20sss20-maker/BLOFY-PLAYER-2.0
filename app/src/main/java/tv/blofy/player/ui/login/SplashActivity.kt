@@ -12,13 +12,22 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
+import tv.blofy.player.data.local.BlofyDatabase
 
 class SplashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val statusView = TextView(this).apply {
+            text = "جاري تجهيز BLOFY..."
+            textSize = 13.5f
+            setTextColor(0xFFB8ABC7.toInt())
+            gravity = Gravity.CENTER
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -42,16 +51,24 @@ class SplashActivity : AppCompatActivity() {
             isIndeterminate = true
             indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFFB96CFF.toInt())
         }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { topMargin = dp(14) })
-        root.addView(TextView(this).apply {
-            text = "جاري تجهيز BLOFY..."
-            textSize = 13.5f
-            setTextColor(0xFFB8ABC7.toInt())
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { topMargin = dp(8) })
+        root.addView(statusView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { topMargin = dp(8) })
         setContentView(root)
 
         lifecycleScope.launch {
-            delay(550)
+            // The splash must be visible before Room opens. On upgrades from RC06,
+            // migration 8 -> 9 can index a very large catalog and must never block
+            // Android's cold-start frame with a black window.
+            val minimumSplash = async { delay(450) }
+            statusView.text = "جاري تهيئة مكتبتك..."
+            val databaseReady = async(Dispatchers.IO) {
+                runCatching {
+                    BlofyDatabase.get(applicationContext).openHelper.writableDatabase
+                }.isSuccess
+            }
+            minimumSplash.await()
+            val ready = databaseReady.await()
+            statusView.text = if (ready) "تم التجهيز" else "سيتم إصلاح المكتبة تلقائيًا"
+            delay(120)
             startActivity(Intent(this@SplashActivity, LoginActivity::class.java))
             finish()
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
