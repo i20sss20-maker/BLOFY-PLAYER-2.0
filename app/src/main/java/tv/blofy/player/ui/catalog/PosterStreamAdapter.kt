@@ -46,9 +46,9 @@ internal class PosterStreamAdapter(
             setBackgroundColor(Color.rgb(20, 15, 31))
             clipToOutline = true
         }
-        frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(184)))
+        frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(176)))
         val rating = TextView(parent.context).apply {
-            textSize = 9.8f
+            textSize = 9.4f
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -61,9 +61,9 @@ internal class PosterStreamAdapter(
             }
         }
         frame.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = dp(6); marginEnd = dp(6) })
-        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(184)))
+        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(176)))
         val title = TextView(parent.context).apply {
-            textSize = 11.8f
+            textSize = 11.2f
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.START
@@ -72,18 +72,17 @@ internal class PosterStreamAdapter(
             setPadding(dp(3), dp(5), dp(3), 0)
             includeFontPadding = false
         }
-        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(35)))
+        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
         val meta = TextView(parent.context).apply {
-            textSize = 9.8f
+            textSize = 9.4f
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.START
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(dp(3), 0, dp(3), 0)
-            visibility = View.INVISIBLE
         }
-        root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(18)))
+        root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(17)))
         return Holder(root, image, title, meta, rating)
     }
 
@@ -91,8 +90,12 @@ internal class PosterStreamAdapter(
         val item = items[position]
         holder.itemView.tag = item.key
         holder.title.text = item.name
-        holder.meta.text = listOfNotNull(item.year?.takeIf(String::isNotBlank), item.genre?.takeIf(String::isNotBlank)?.substringBefore(',')).joinToString("  •  ")
+        holder.meta.text = listOfNotNull(
+            item.year?.takeIf(String::isNotBlank),
+            item.genre?.takeIf(String::isNotBlank)?.substringBefore(',')
+        ).joinToString("  •  ")
         holder.rating.text = item.rating?.takeIf(String::isNotBlank)?.let { "★ $it" }.orEmpty()
+        holder.rating.visibility = if (holder.rating.text.isNotBlank()) View.VISIBLE else View.GONE
         renderFocus(holder, holder.itemView.hasFocus())
         ArtworkLoader.load(holder.image, item.icon ?: item.backdrop)
         if (position % 8 == 0) {
@@ -104,7 +107,7 @@ internal class PosterStreamAdapter(
             view.animate().cancel()
             view.scaleX = 1f
             view.scaleY = 1f
-            view.translationZ = if (focused) 5f else 0f
+            view.translationZ = if (focused) 3f else 0f
             renderFocus(holder, focused)
             if (focused) onFocus(item)
         }
@@ -114,8 +117,8 @@ internal class PosterStreamAdapter(
         holder.itemView.background = card(focused)
         holder.title.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
         holder.title.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
-        holder.meta.visibility = if (focused) View.VISIBLE else View.INVISIBLE
-        holder.rating.visibility = if (focused && holder.rating.text.isNotBlank()) View.VISIBLE else View.GONE
+        holder.meta.setTextColor(if (focused) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        holder.rating.alpha = if (focused) 1f else .92f
     }
 
     override fun onViewRecycled(holder: Holder) {
