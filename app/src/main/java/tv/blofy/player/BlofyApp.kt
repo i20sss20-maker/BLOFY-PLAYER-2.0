@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import tv.blofy.player.core.remote.QuickMenuInterceptor
 import tv.blofy.player.data.BackgroundCatalogEngine
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.ResumeStateWriter
@@ -28,6 +29,7 @@ class BlofyApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         applicationScope.launch {
             BlofyDatabase.get(this@BlofyApp)
                 .openHelper
