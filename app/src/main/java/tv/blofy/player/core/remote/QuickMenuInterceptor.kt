@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.Window
+import tv.blofy.player.ui.guide.LiveGuideActivity
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.quick.QuickMenuActivity
 
@@ -27,8 +28,8 @@ class QuickMenuInterceptor : Application.ActivityLifecycleCallbacks {
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (event.action == KeyEvent.ACTION_DOWN) {
-                if (event.keyCode == KeyEvent.KEYCODE_MENU) {
-                    openMenu()
+                if (isMenuOrGuide(event.keyCode)) {
+                    openContextMenu()
                     return true
                 }
                 if (isCenter(event.keyCode) && activity !is PlayerActivity) {
@@ -37,7 +38,7 @@ class QuickMenuInterceptor : Application.ActivityLifecycleCallbacks {
                         openedForPress = false
                     } else if (!openedForPress && event.eventTime - centerDownAt >= LONG_PRESS_MS) {
                         openedForPress = true
-                        openMenu()
+                        openContextMenu()
                         return true
                     }
                 }
@@ -50,12 +51,36 @@ class QuickMenuInterceptor : Application.ActivityLifecycleCallbacks {
             return original.dispatchKeyEvent(event)
         }
 
-        private fun openMenu() {
+        private fun openContextMenu() {
             if (activity.isFinishing || activity.isDestroyed) return
-            activity.startActivity(Intent(activity, QuickMenuActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            val target = if (activity is PlayerActivity) {
+                Intent(activity, LiveGuideActivity::class.java).apply {
+                    putExtra(
+                        LiveGuideActivity.EXTRA_CATEGORY_ID,
+                        activity.intent.getStringExtra(PlayerActivity.EXTRA_CATEGORY_ID)
+                    )
+                    putExtra(
+                        LiveGuideActivity.EXTRA_STREAM_ID,
+                        activity.intent.getStringExtra(PlayerActivity.EXTRA_STREAM_ID)
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                }
+            } else {
+                Intent(activity, QuickMenuActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            activity.startActivity(target)
         }
 
-        private fun isCenter(code: Int) = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_NUMPAD_ENTER
+        private fun isMenuOrGuide(code: Int) =
+            code == KeyEvent.KEYCODE_MENU ||
+                code == KeyEvent.KEYCODE_GUIDE ||
+                code == KeyEvent.KEYCODE_TV_CONTENTS_MENU
+
+        private fun isCenter(code: Int) =
+            code == KeyEvent.KEYCODE_DPAD_CENTER ||
+                code == KeyEvent.KEYCODE_ENTER ||
+                code == KeyEvent.KEYCODE_NUMPAD_ENTER
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
