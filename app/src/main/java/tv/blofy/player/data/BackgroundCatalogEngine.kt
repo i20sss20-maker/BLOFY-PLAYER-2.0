@@ -17,7 +17,9 @@ import tv.blofy.player.ui.catalog.ArtworkLoader
 object BackgroundCatalogEngine {
     private const val REFRESH_AFTER_MS = 6 * 60 * 60_000L
     private const val WARM_ART_LIMIT = 28
-    private const val STARTUP_GRACE_MS = 1_200L
+    private const val STARTUP_GRACE_MS = 1_500L
+    private const val INDEX_PREFS = "blofy_search_index"
+    private const val INDEX_V9_PREFIX = "v9_ready_"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -28,6 +30,20 @@ object BackgroundCatalogEngine {
             delay(STARTUP_GRACE_MS)
             val dao = BlofyDatabase.get(app).dao()
             val provider = dao.providers().first().firstOrNull() ?: return@launch
+
+            // RC06 -> RC07 upgrades create the FTS table instantly during migration. Backfill the
+            // existing catalog only after UI startup. If the process dies midway the flag remains
+            // false and the next launch retries safely; normal search keeps working via LIKE.
+            val prefs = app.getSharedPreferences(INDEX_PREFS, Context.MODE_PRIVATE)
+            val indexKey = INDEX_V9_PREFIX + provider.id
+            if (!prefs.getBoolean(indexKey, false) && dao.hasCatalog(provider.id)) {
+                val rebuilt = runCatching {
+                    dao.rebuildSearchIndex(provider.id)
+                    true
+                }.getOrDefault(false)
+                if (rebuilt) prefs.edit().putBoolean(indexKey, true).apply()
+            }
+
             val warm = runCatching { dao.latestHomeStreams(provider.id, WARM_ART_LIMIT) }
                 .getOrDefault(emptyList())
             if (warm.isNotEmpty()) ArtworkLoader.warmPrefetch(app, warm.map { it.icon ?: it.backdrop })
