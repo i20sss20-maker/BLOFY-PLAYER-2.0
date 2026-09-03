@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-internal const val BLOFY_DATABASE_VERSION = 9
+internal const val BLOFY_DATABASE_VERSION = 10
 
 @Database(
     entities = [
@@ -28,6 +28,21 @@ abstract class BlofyDatabase : RoomDatabase() {
 
     companion object {
         @Volatile private var instance: BlofyDatabase? = null
+
+        private fun createSearchFts(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS `streams_fts`
+                USING FTS4(
+                    `contentKey` TEXT NOT NULL,
+                    `providerId` TEXT NOT NULL,
+                    `kind` TEXT NOT NULL,
+                    `searchable` TEXT NOT NULL,
+                    tokenize=unicode61
+                )
+                """.trimIndent()
+            )
+        }
 
         internal val ALL_MIGRATIONS = arrayOf(
             object : Migration(1, 2) {
@@ -206,22 +221,19 @@ abstract class BlofyDatabase : RoomDatabase() {
             },
             object : Migration(8, 9) {
                 override fun migrate(db: SupportSQLiteDatabase) {
-                    // Match Room's generated @Fts4 schema exactly enough for migration
-                    // validation. The previous untyped FTS columns could migrate SQLite
-                    // successfully but fail Room schema validation on real RC06 databases.
-                    // The expensive population remains deferred until after first frame.
-                    db.execSQL(
-                        """
-                        CREATE VIRTUAL TABLE IF NOT EXISTS `streams_fts`
-                        USING FTS4(
-                            `contentKey` TEXT NOT NULL,
-                            `providerId` TEXT NOT NULL,
-                            `kind` TEXT NOT NULL,
-                            `searchable` TEXT NOT NULL,
-                            tokenize=unicode61
-                        )
-                        """.trimIndent()
-                    )
+                    // Population stays deferred until after first frame so large libraries never
+                    // block startup. This schema matches Room's @Fts4 declaration.
+                    createSearchFts(db)
+                }
+            },
+            object : Migration(9, 10) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Some early RC07 builds reached user devices with a malformed v9 FTS table.
+                    // Recreate only the disposable search index; providers, catalog, activation,
+                    // favorites and resume data remain untouched. Background maintenance rebuilds
+                    // the index after the UI is responsive.
+                    db.execSQL("DROP TABLE IF EXISTS `streams_fts`")
+                    createSearchFts(db)
                 }
             }
         )
