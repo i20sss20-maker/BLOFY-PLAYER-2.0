@@ -9,6 +9,7 @@ import android.util.LruCache
 import android.widget.ImageView
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import tv.blofy.player.core.commercial.CommercialRuntime
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -26,6 +27,7 @@ object ArtworkLoader {
     private const val NEGATIVE_CACHE_MS = 5 * 60_000L
 
     private enum class Priority(val weight: Int) { VISIBLE(0), PREFETCH(1) }
+    private data class Target(val width: Int, val height: Int, val diskBucket: Int)
 
     private class PriorityTask(val priority: Priority, val sequence: Long, private val block: () -> Unit) : Runnable {
         override fun run() = block()
@@ -67,13 +69,14 @@ object ArtworkLoader {
     fun load(view: ImageView, candidates: List<String?>) {
         cancel(view)
         val urls = candidates.mapNotNull(::normalizeUrl).distinct()
-        val requestKey = urls.joinToString("|")
+        val target = target(view.context)
+        val requestKey = urls.joinToString("|") + "@${target.diskBucket}"
         view.tag = requestKey
         view.setImageDrawable(skeleton())
         if (urls.isEmpty()) return
 
-        urls.firstNotNullOfOrNull { cache.get(it)?.takeIf { bmp -> !bmp.isRecycled } }?.let {
-            view.setImageBitmap(it)
+        urls.firstNotNullOfOrNull { url -> cache.get(cacheKey(url, target))?.takeIf { bmp -> !bmp.isRecycled } }?.let {
+            show(view, requestKey, it)
             return
         }
 
@@ -83,11 +86,12 @@ object ArtworkLoader {
             var resolvedUrl: String? = null
             for (url in urls) {
                 if (view.tag != requestKey) return@execute
-                if (isNegative(url)) continue
-                bitmap = cache.get(url)?.takeIf { !it.isRecycled }
-                    ?: readDisk(app.cacheDir, url)?.also { cache.put(url, it) }
-                    ?: sharedDownload(url, Priority.VISIBLE).getOrNull()?.also {
-                        cache.put(url, it)
+                val key = cacheKey(url, target)
+                if (isNegative(key)) continue
+                bitmap = cache.get(key)?.takeIf { !it.isRecycled }
+                    ?: readDisk(app.cacheDir, url, target)?.also { cache.put(key, it) }
+                    ?: sharedDownload(url, Priority.VISIBLE, target).getOrNull()?.also {
+                        cache.put(key, it)
                         resolvedUrl = url
                     }
                 if (bitmap != null) break
@@ -95,27 +99,33 @@ object ArtworkLoader {
             val result = bitmap
             main.post {
                 if (view.tag == requestKey) {
-                    if (result != null && !result.isRecycled) view.setImageBitmap(result) else view.setImageDrawable(skeleton())
+                    if (result != null && !result.isRecycled) show(view, requestKey, result)
+                    else view.setImageDrawable(skeleton())
                 }
             }
             if (result != null && resolvedUrl != null) {
                 val url = resolvedUrl!!
-                backgroundPool.execute { writeDisk(app.cacheDir, url, result) }
+                backgroundPool.execute { writeDisk(app.cacheDir, url, target, result) }
             }
         }
     }
 
-    fun cancel(view: ImageView) { view.tag = null }
+    fun cancel(view: ImageView) {
+        view.animate().cancel()
+        view.tag = null
+    }
 
     fun prefetch(context: android.content.Context, urls: List<String?>) {
         val app = context.applicationContext
-        urls.mapNotNull(::normalizeUrl).distinct().take(prefetchLimit()).forEach { url ->
-            if (cache.get(url) != null || diskFile(app.cacheDir, url).isFile || isNegative(url)) return@forEach
+        val target = target(app)
+        urls.mapNotNull(::normalizeUrl).distinct().take(prefetchLimit(app)).forEach { url ->
+            val key = cacheKey(url, target)
+            if (cache.get(key) != null || diskFile(app.cacheDir, url, target).isFile || isNegative(key)) return@forEach
             backgroundPool.execute {
-                val bmp = sharedDownload(url, Priority.PREFETCH).getOrNull()
+                val bmp = sharedDownload(url, Priority.PREFETCH, target).getOrNull()
                 if (bmp != null && !bmp.isRecycled) {
-                    cache.put(url, bmp)
-                    writeDisk(app.cacheDir, url, bmp)
+                    cache.put(key, bmp)
+                    writeDisk(app.cacheDir, url, target, bmp)
                 }
             }
         }
@@ -123,34 +133,41 @@ object ArtworkLoader {
 
     fun warmPrefetch(context: android.content.Context, urls: List<String?>) = prefetch(context, urls)
 
-    private fun sharedDownload(url: String, priority: Priority): FutureTask<Bitmap?> {
-        if (isNegative(url)) return FutureTask<Bitmap?> { null }.apply { run() }
-        inFlight[url]?.let { return it }
+    private fun show(view: ImageView, requestKey: String, bitmap: Bitmap) {
+        if (view.tag != requestKey) return
+        val fade = CommercialRuntime.feature(view.context, CommercialRuntime.FEATURE_IMAGE_FADE) &&
+            !CommercialRuntime.reducedMotion(view.context)
+        view.animate().cancel()
+        if (fade) view.alpha = .25f
+        view.setImageBitmap(bitmap)
+        if (fade) view.animate().alpha(1f).setDuration(120L).start() else view.alpha = 1f
+    }
+
+    private fun sharedDownload(url: String, priority: Priority, target: Target): FutureTask<Bitmap?> {
+        val key = cacheKey(url, target)
+        if (isNegative(key)) return FutureTask<Bitmap?> { null }.apply { run() }
+        inFlight[key]?.let { return it }
 
         val future = FutureTask<Bitmap?> {
-            val result = downloadWithRetry(url)
-            if (result == null) failedUntil[url] = System.currentTimeMillis() + NEGATIVE_CACHE_MS else failedUntil.remove(url)
+            val result = downloadWithRetry(url, target)
+            if (result == null) failedUntil[key] = System.currentTimeMillis() + NEGATIVE_CACHE_MS else failedUntil.remove(key)
             result
         }
-        val existing = inFlight.putIfAbsent(url, future)
+        val existing = inFlight.putIfAbsent(key, future)
         if (existing != null) return existing
 
         networkPool.execute(PriorityTask(priority, taskSequence.incrementAndGet()) {
-            try {
-                future.run()
-            } finally {
-                inFlight.remove(url, future)
-            }
+            try { future.run() } finally { inFlight.remove(key, future) }
         })
         return future
     }
 
-    private fun downloadWithRetry(url: String): Bitmap? {
-        repeat(2) { runCatching { execute(url) }.getOrNull()?.let { return it } }
+    private fun downloadWithRetry(url: String, target: Target): Bitmap? {
+        repeat(2) { runCatching { execute(url, target) }.getOrNull()?.let { return it } }
         return null
     }
 
-    private fun execute(url: String): Bitmap? {
+    private fun execute(url: String, target: Target): Bitmap? {
         val request = Request.Builder().url(url)
             .header("User-Agent", "Mozilla/5.0 (Linux; Android TV) BLOFY-PLAYER/2.0")
             .header("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
@@ -176,30 +193,32 @@ object ArtworkLoader {
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
             return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply {
                 inPreferredConfig = Bitmap.Config.RGB_565
-                inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, 420, 630)
+                inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, target.width, target.height)
             })
         }
     }
 
-    private fun readDisk(cacheDir: File, url: String): Bitmap? {
-        val file = diskFile(cacheDir, url)
+    private fun readDisk(cacheDir: File, url: String, target: Target): Bitmap? {
+        val file = diskFile(cacheDir, url, target)
         if (!file.isFile || file.length() <= 0L) return null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { file.delete(); return null }
         val bmp = BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply {
             inPreferredConfig = Bitmap.Config.RGB_565
-            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, 420, 630)
+            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, target.width, target.height)
         })
         if (bmp == null) file.delete() else file.setLastModified(System.currentTimeMillis())
         return bmp
     }
 
-    private fun writeDisk(cacheDir: File, url: String, bitmap: Bitmap) {
+    private fun writeDisk(cacheDir: File, url: String, target: Target, bitmap: Bitmap) {
         if (bitmap.isRecycled) return
         val dir = File(cacheDir, "blofy_posters").apply { mkdirs() }
-        val file = File(dir, hash(url) + ".jpg")
-        if (!file.isFile || file.length() <= 0L) runCatching { file.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 84, it) } }
+        val file = diskFile(cacheDir, url, target)
+        if (!file.isFile || file.length() <= 0L) runCatching {
+            file.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality(target), it) }
+        }
         if (trimCounter.incrementAndGet() % 32 == 0) trimDisk(dir)
     }
 
@@ -214,17 +233,30 @@ object ArtworkLoader {
         }
     }
 
-    private fun isNegative(url: String): Boolean {
-        val until = failedUntil[url] ?: return false
+    private fun isNegative(key: String): Boolean {
+        val until = failedUntil[key] ?: return false
         if (until <= System.currentTimeMillis()) {
-            failedUntil.remove(url, until)
+            failedUntil.remove(key, until)
             return false
         }
         return true
     }
 
+    private fun target(context: android.content.Context): Target = when (CommercialRuntime.imageMode(context)) {
+        CommercialRuntime.ImageMode.ECONOMY -> Target(280, 420, 280)
+        CommercialRuntime.ImageMode.HIGH -> Target(640, 960, 640)
+        CommercialRuntime.ImageMode.BALANCED -> Target(420, 630, 420)
+    }
+
+    private fun jpegQuality(target: Target): Int = when (target.diskBucket) {
+        280 -> 78
+        640 -> 90
+        else -> 84
+    }
+
+    private fun cacheKey(url: String, target: Target) = "$url@${target.diskBucket}"
     private fun skeleton() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF21182D.toInt(), 0xFF30203F.toInt(), 0xFF17111F.toInt())).apply { cornerRadius = 18f }
-    private fun diskFile(cacheDir: File, url: String) = File(File(cacheDir, "blofy_posters"), hash(url) + ".jpg")
+    private fun diskFile(cacheDir: File, url: String, target: Target) = File(File(cacheDir, "blofy_posters"), hash(cacheKey(url, target)) + ".jpg")
     private fun hash(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
     private fun sampleSize(w: Int, h: Int, tw: Int, th: Int): Int { var s = 1; while (w / (s * 2) >= tw && h / (s * 2) >= th) s *= 2; return s }
 
@@ -252,10 +284,13 @@ object ArtworkLoader {
         }
     }
 
-    private fun prefetchLimit(): Int = when {
-        workerCount <= 4 -> 12
-        workerCount <= 6 -> 18
-        else -> 24
+    private fun prefetchLimit(context: android.content.Context): Int {
+        if (CommercialRuntime.safeMode(context)) return 6
+        return when {
+            workerCount <= 4 -> 12
+            workerCount <= 6 -> 18
+            else -> 24
+        }
     }
 
     private fun <T> FutureTask<T>.getOrNull(): T? = runCatching { get() }.getOrNull()
