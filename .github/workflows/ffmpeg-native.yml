@@ -236,3 +236,5 @@ jobs:
             build/ffmpeg-native/build-info.txt
           if-no-files-found: error
           retention-days: 30
+
+# RC07 comprehensive gate rerun after startup hotfix
