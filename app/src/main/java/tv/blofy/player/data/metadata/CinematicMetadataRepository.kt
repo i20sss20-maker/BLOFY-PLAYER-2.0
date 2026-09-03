@@ -51,8 +51,26 @@ object CinematicMetadataRepository {
         val fetchedAt: Long = System.currentTimeMillis()
     )
 
+    data class PersonWorks(
+        val personName: String,
+        val profileUrl: String?,
+        val titles: List<String>
+    )
+
     suspend fun movie(context: Context, title: String, year: String?): Metadata? = load(context, "movie", title, year)
     suspend fun series(context: Context, title: String, year: String?): Metadata? = load(context, "tv", title, year)
+
+    suspend fun personWorks(query: String): PersonWorks? {
+        val token = BuildConfig.TMDB_TOKEN.trim()
+        if (token.isBlank() || query.trim().length < 2) return null
+        return runCatching { fetchPersonWorks(query.trim(), token) }.getOrNull()
+    }
+
+    suspend fun recommendations(metadata: Metadata): List<String> {
+        val token = BuildConfig.TMDB_TOKEN.trim()
+        if (token.isBlank()) return emptyList()
+        return runCatching { fetchRecommendations(metadata.kind, metadata.tmdbId, token) }.getOrDefault(emptyList())
+    }
 
     private fun cacheKey(kind: String, title: String, year: String?) =
         "$kind:${title.trim().lowercase()}:${year.orEmpty().trim()}"
@@ -114,6 +132,37 @@ object CinematicMetadataRepository {
         )
     }
 
+    private fun fetchPersonWorks(query: String, token: String): PersonWorks? {
+        val searchUrl = "https://api.themoviedb.org/3/search/person".toHttpUrl().newBuilder()
+            .addQueryParameter("query", query)
+            .addQueryParameter("language", "ar-SA")
+            .addQueryParameter("include_adult", "false")
+            .build()
+        val search = get<PersonSearchResponse>(searchUrl.toString(), token) ?: return null
+        val person = search.results.firstOrNull() ?: return null
+        val creditsUrl = "https://api.themoviedb.org/3/person/${person.id}/combined_credits".toHttpUrl().newBuilder()
+            .addQueryParameter("language", "ar-SA")
+            .build()
+        val credits = get<CombinedCreditsResponse>(creditsUrl.toString(), token) ?: return null
+        val titles = credits.cast
+            .sortedWith(compareByDescending<CombinedCreditItem> { it.voteCount }.thenByDescending { it.popularity })
+            .mapNotNull { (it.title ?: it.name)?.takeIf(String::isNotBlank) }
+            .distinct()
+            .take(18)
+        return PersonWorks(person.name, image(person.profilePath, "w185"), titles)
+    }
+
+    private fun fetchRecommendations(kind: String, tmdbId: Int, token: String): List<String> {
+        val url = "https://api.themoviedb.org/3/$kind/$tmdbId/recommendations".toHttpUrl().newBuilder()
+            .addQueryParameter("language", "ar-SA")
+            .build()
+        val response = get<RecommendationResponse>(url.toString(), token) ?: return emptyList()
+        return response.results
+            .mapNotNull { (it.title ?: it.name)?.takeIf(String::isNotBlank) }
+            .distinct()
+            .take(14)
+    }
+
     private inline fun <reified T> get(url: String, token: String): T? {
         val request = Request.Builder().url(url).header("Authorization", "Bearer $token").header("Accept", "application/json").build()
         client.newCall(request).execute().use { response ->
@@ -155,6 +204,17 @@ object CinematicMetadataRepository {
     private data class CrewItem(val name: String, val job: String)
     private data class ImageItem(@SerializedName("file_path") val filePath: String? = null)
     private data class ImagesResponse(val logos: List<ImageItem> = emptyList())
+    private data class PersonSearchResponse(val results: List<PersonSearchItem> = emptyList())
+    private data class PersonSearchItem(val id: Int, val name: String, @SerializedName("profile_path") val profilePath: String? = null)
+    private data class CombinedCreditsResponse(val cast: List<CombinedCreditItem> = emptyList())
+    private data class CombinedCreditItem(
+        val title: String? = null,
+        val name: String? = null,
+        @SerializedName("vote_count") val voteCount: Int = 0,
+        val popularity: Double = 0.0
+    )
+    private data class RecommendationResponse(val results: List<RecommendationItem> = emptyList())
+    private data class RecommendationItem(val title: String? = null, val name: String? = null)
     private data class DetailResponse(
         val id: Int,
         val title: String? = null,
