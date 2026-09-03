@@ -7,6 +7,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.playback.SmartZappingInvalidator
 import tv.blofy.player.core.remote.QuickMenuInterceptor
+import tv.blofy.player.core.update.AppUpdateLifecycle
 import tv.blofy.player.data.BackgroundCatalogEngine
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.ResumeStateWriter
@@ -31,6 +32,7 @@ class BlofyApp : Application() {
     override fun onCreate() {
         super.onCreate()
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
+        registerActivityLifecycleCallbacks(AppUpdateLifecycle())
 
         val database = BlofyDatabase.get(this)
         SmartZappingInvalidator.install(database)
