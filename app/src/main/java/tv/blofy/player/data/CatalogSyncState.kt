@@ -31,9 +31,10 @@ object CatalogSyncState {
             .putBoolean(READY_PREFIX + providerId, true)
             .putLong(UPDATED_PREFIX + providerId, System.currentTimeMillis())
             .apply()
-        // Never hold the loading screen while thousands of episodes are fetched. Cache them in
-        // bounded network batches after the main catalog is safely committed.
-        EpisodeCatalogPreloader.schedule(context.applicationContext, providerId)
+        // Restart from the first series after every successful catalog commit. Existing cached
+        // episodes are skipped by the worker, while any previously missed/failed series are
+        // revisited instead of being stranded behind an old WorkManager chain/backoff.
+        EpisodeCatalogPreloader.schedule(context.applicationContext, providerId, replace = true)
     }
 
     fun clear(context: Context, providerId: String) {
