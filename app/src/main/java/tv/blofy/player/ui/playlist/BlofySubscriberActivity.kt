@@ -11,6 +11,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -53,7 +54,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(if (phone) 22 else 54), dp(if (phone) 24 else 34), dp(if (phone) 22 else 54), dp(if (phone) 28 else 38))
         }
-        scroll.addView(root, ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT))
+        scroll.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
         root.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo)
@@ -189,8 +190,6 @@ class BlofySubscriberActivity : AppCompatActivity() {
                             existing.password != next.password
                         val readyCatalog = CatalogSyncState.isReady(applicationContext, providerId) && dao.hasCatalog(providerId)
 
-                        // Store the hidden proxy credentials, but leave all catalog loading to the
-                        // common CatalogLoadingActivity. This avoids two different sync/finalize paths.
                         dao.upsertProvider(next)
                         if (credentialsChanged || !readyCatalog) CatalogSyncState.markPending(applicationContext, providerId)
                         runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
