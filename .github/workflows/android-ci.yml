@@ -27,6 +27,23 @@ jobs:
           yes | "$sdkmanager" --licenses >/dev/null || true
           "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
           test -d "$ANDROID_HOME/platforms/android-36"
+      - name: Optimize TV home local feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          file="app/src/main/java/tv/blofy/player/ui/home/HomeActivity.kt"
+          python3 - "$file" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text(encoding='utf-8')
+          old = 'val all = dao.allStreamsForProvider(provider.id).filter { it.kind == "movie" || it.kind == "series" }'
+          new = 'val all = dao.latestHomeStreams(provider.id, 320)'
+          if old not in s:
+              raise SystemExit('HomeActivity bounded-feed target not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+          grep -Fq 'val all = dao.latestHomeStreams(provider.id, 320)' "$file"
       - name: Test lint and assemble
         shell: bash
         env:
@@ -62,6 +79,7 @@ jobs:
             echo "run=$GITHUB_RUN_NUMBER"
             echo "ffmpeg=false"
             echo "activation=https://blofy-player-2-0.vercel.app"
+            echo "home_bounded_cache=true"
             if [[ -n "${BLOFY_TMDB_TOKEN:-}" ]]; then echo "tmdb=true"; else echo "tmdb=false"; fi
           } > app/build/outputs/apk/debug/build-info.txt
           sha256sum "$APK" | tee app/build/outputs/apk/debug/app-debug.apk.sha256
