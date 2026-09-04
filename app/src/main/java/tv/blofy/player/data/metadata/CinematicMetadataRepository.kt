@@ -51,6 +51,10 @@ object CinematicMetadataRepository {
         val trailerUrl: String? = null,
         val cast: List<Person>,
         val crew: List<Credit>,
+        val countries: List<String>? = emptyList(),
+        val originalLanguage: String? = null,
+        val status: String? = null,
+        val networks: List<String>? = emptyList(),
         val confidence: Double = 1.0,
         val fetchedAt: Long = System.currentTimeMillis()
     )
@@ -98,22 +102,27 @@ object CinematicMetadataRepository {
     }
 
     private fun fetch(kind: String, rawTitle: String, year: String?, token: String): Metadata? {
-        val title = cleanTitle(rawTitle)
-        val searchUrl = "https://api.themoviedb.org/3/search/$kind"
-            .toHttpUrl().newBuilder()
-            .addQueryParameter("query", title)
-            .addQueryParameter("language", "ar-SA")
-            .addQueryParameter("include_adult", "false")
-            .apply {
-                normalizedYear(year)?.let {
-                    addQueryParameter(if (kind == "movie") "year" else "first_air_date_year", it)
-                }
-            }.build()
-        val search = get<SearchResponse>(searchUrl.toString(), token) ?: return null
-        val candidate = bestCandidate(kind, rawTitle, year, search.results) ?: return null
-        if (candidate.confidence < MIN_CONFIDENCE) return null
+        var candidate: ScoredCandidate? = null
+        for (query in titleVariants(rawTitle)) {
+            val searchUrl = "https://api.themoviedb.org/3/search/$kind"
+                .toHttpUrl().newBuilder()
+                .addQueryParameter("query", query)
+                .addQueryParameter("language", "ar-SA")
+                .addQueryParameter("include_adult", "false")
+                .apply {
+                    normalizedYear(year)?.let {
+                        addQueryParameter(if (kind == "movie") "year" else "first_air_date_year", it)
+                    }
+                }.build()
+            val search = get<SearchResponse>(searchUrl.toString(), token) ?: continue
+            val current = bestCandidate(kind, query, year, search.results) ?: continue
+            if (candidate == null || current.confidence > candidate.confidence) candidate = current
+            if (current.confidence >= 0.90) break
+        }
+        val resolved = candidate ?: return null
+        if (resolved.confidence < MIN_CONFIDENCE) return null
 
-        val detailUrl = "https://api.themoviedb.org/3/$kind/${candidate.item.id}"
+        val detailUrl = "https://api.themoviedb.org/3/$kind/${resolved.item.id}"
             .toHttpUrl().newBuilder()
             .addQueryParameter("language", "ar-SA")
             .addQueryParameter("append_to_response", "credits,images,videos")
@@ -135,6 +144,9 @@ object CinematicMetadataRepository {
         val logo = detail.images?.logos.orEmpty().firstOrNull()?.filePath
         val runtime = detail.runtime ?: detail.episodeRunTime?.firstOrNull()
         val trailer = chooseTrailer(detail.videos?.results.orEmpty())
+        val countries = detail.productionCountries.orEmpty().mapNotNull { it.name?.takeIf(String::isNotBlank) }
+            .ifEmpty { detail.originCountry.orEmpty().filter(String::isNotBlank) }
+        val networks = detail.networks.orEmpty().mapNotNull { it.name?.takeIf(String::isNotBlank) }
 
         return Metadata(
             tmdbId = detail.id,
@@ -152,7 +164,11 @@ object CinematicMetadataRepository {
             trailerUrl = trailer,
             cast = cast,
             crew = crew,
-            confidence = candidate.confidence
+            countries = countries,
+            originalLanguage = localizeLanguage(detail.originalLanguage),
+            status = localizeStatus(detail.status),
+            networks = networks,
+            confidence = resolved.confidence
         )
     }
 
@@ -236,9 +252,24 @@ object CinematicMetadataRepository {
         return YOUTUBE_WATCH_BASE + video.key
     }
 
+    private fun titleVariants(value: String): List<String> {
+        val clean = cleanTitle(value)
+        val withoutBrackets = clean.replace(Regex("[\\[(].*?[\\])]"), " ").replace(Regex("\\s+"), " ").trim()
+        val withoutYear = withoutBrackets.replace(Regex("\\b(19|20)\\d{2}\\b"), " ").replace(Regex("\\s+"), " ").trim()
+        val afterSeparator = clean.substringAfterLast(" - ", clean).trim()
+        return listOf(clean, withoutBrackets, withoutYear, afterSeparator)
+            .map { it.trim(' ', '-', ':') }
+            .filter { it.length >= 2 }
+            .distinct()
+            .take(4)
+    }
+
     private fun cleanTitle(value: String): String = value
-        .replace(Regex("(?i)\\b(4k|uhd|fhd|hd|sd|1080p|720p|2160p|arabic|مترجم|مدبلج)\\b"), " ")
-        .replace(Regex("[._|]+"), " ").replace(Regex("\\s+"), " ").trim()
+        .replace(Regex("(?i)\\b(4k|uhd|fhd|hd|sd|1080p|720p|2160p|arabic|ar|en|مترجم|مدبلج|عربي)\\b"), " ")
+        .replace(Regex("(?i)\\b(hdr|hdr10|dolby|vision|web[- .]?dl|bluray|blu[- ]?ray|x264|x265|hevc)\\b"), " ")
+        .replace(Regex("[._|]+"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 
     private fun normalizedYear(year: String?): String? = year?.trim()?.takeIf { it.length == 4 && it.all(Char::isDigit) }
 
@@ -247,6 +278,31 @@ object CinematicMetadataRepository {
         "writer", "screenplay" -> "الكاتب"
         "creator" -> "المنشئ"
         else -> job
+    }
+
+    private fun localizeLanguage(code: String?): String? = when (code?.lowercase()) {
+        "ar" -> "العربية"
+        "en" -> "الإنجليزية"
+        "fr" -> "الفرنسية"
+        "es" -> "الإسبانية"
+        "tr" -> "التركية"
+        "ko" -> "الكورية"
+        "ja" -> "اليابانية"
+        "hi" -> "الهندية"
+        null, "" -> null
+        else -> code.uppercase()
+    }
+
+    private fun localizeStatus(value: String?): String? = when (value?.lowercase()) {
+        "returning series" -> "مستمر"
+        "ended" -> "منتهي"
+        "released" -> "صدر"
+        "post production" -> "ما بعد الإنتاج"
+        "in production" -> "قيد الإنتاج"
+        "planned" -> "مخطط"
+        "canceled", "cancelled" -> "ملغي"
+        null, "" -> null
+        else -> value
     }
 
     private data class SearchResponse(val results: List<SearchItem> = emptyList())
@@ -259,6 +315,7 @@ object CinematicMetadataRepository {
         val popularity: Double = 0.0
     )
     private data class NamedValue(val id: Int = 0, val name: String? = null)
+    private data class CountryValue(@SerializedName("iso_3166_1") val code: String? = null, val name: String? = null)
     private data class CreditResponse(val cast: List<CastItem> = emptyList(), val crew: List<CrewItem> = emptyList())
     private data class CastItem(val id: Int, val name: String, val character: String? = null, @SerializedName("profile_path") val profilePath: String? = null)
     private data class CrewItem(val name: String, val job: String)
@@ -284,6 +341,11 @@ object CinematicMetadataRepository {
         val runtime: Int? = null,
         @SerializedName("episode_run_time") val episodeRunTime: List<Int>? = null,
         val genres: List<NamedValue>? = null,
+        @SerializedName("production_countries") val productionCountries: List<CountryValue>? = null,
+        @SerializedName("origin_country") val originCountry: List<String>? = null,
+        @SerializedName("original_language") val originalLanguage: String? = null,
+        val status: String? = null,
+        val networks: List<NamedValue>? = null,
         @SerializedName("poster_path") val posterPath: String? = null,
         @SerializedName("backdrop_path") val backdropPath: String? = null,
         val credits: CreditResponse? = null,
