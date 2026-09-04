@@ -153,7 +153,11 @@ function copyUpstreamHeaders(upstream, res, { textual = false } = {}) {
   for (const [key, value] of upstream.headers.entries()) {
     const lower = key.toLowerCase();
     if (['connection', 'transfer-encoding', 'content-security-policy', 'location'].includes(lower)) continue;
-    if (textual && lower === 'content-length') continue;
+    // Node fetch transparently decompresses gzip/br responses. Keeping the original
+    // content-encoding header after that makes Android/OkHttp try to decompress plain JSON
+    // again (for example actual 0x5b7b vs expected gzip 0x1f8b). Strip both headers whenever
+    // we touch textual content and let Node write a correct transfer encoding.
+    if (textual && ['content-length', 'content-encoding'].includes(lower)) continue;
     headers[lower] = value;
   }
   headers['cache-control'] = 'no-store';
@@ -201,7 +205,7 @@ async function pipeUpstream(req, res, url, token) {
     const headers = {};
     for (const [key, value] of upstream.headers.entries()) {
       const lower = key.toLowerCase();
-      if (!['content-length', 'connection', 'transfer-encoding', 'location'].includes(lower)) headers[lower] = value;
+      if (!['content-length', 'content-encoding', 'connection', 'transfer-encoding', 'location'].includes(lower)) headers[lower] = value;
     }
     headers['content-length'] = Buffer.byteLength(rewritten);
     headers['cache-control'] = 'no-store';
