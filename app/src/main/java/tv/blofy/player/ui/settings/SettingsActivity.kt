@@ -43,9 +43,14 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Draw the settings screen immediately. Opening Room can take a few seconds on some TV
+        // boxes after a large catalog import, and it must never leave the user on a blank screen.
+        buildPage()
         lifecycleScope.launch {
-            provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
-            buildPage()
+            provider = withContext(Dispatchers.IO) {
+                BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
+            }
+            if (!isFinishing) updateSyncStatus()
         }
     }
 
@@ -217,7 +222,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun updateSyncStatus() {
         val active = provider
         status.text = if (active == null) {
-            "لا توجد قائمة تشغيل نشطة"
+            "الإعدادات جاهزة • جاري قراءة حالة المكتبة"
         } else {
             val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
             if (last > 0L) "✓  البيانات محفوظة محليًا • آخر تحديث ${formatSyncTime(last)}"
