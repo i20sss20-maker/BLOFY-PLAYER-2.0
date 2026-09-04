@@ -5,10 +5,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
 
-/**
- * Provider metadata fallback used when TMDb is unavailable or cannot confidently match a title.
- * It never participates in playback and never persists/exposes provider credentials.
- */
+/** Provider metadata fallback. It never participates in playback or exposes credentials. */
 object XtreamMetadataFallback {
     suspend fun movie(provider: ProviderEntity, stream: StreamEntity): CinematicMetadataRepository.Metadata? =
         load(provider, stream, "get_vod_info", "vod_id", "movie")
@@ -36,25 +33,14 @@ object XtreamMetadataFallback {
         val root = runCatching { XtreamClient.api.objectResponse(url) }.getOrNull() ?: return null
         val info = map(root["info"])
         val movieData = map(root["movie_data"])
-        val source = LinkedHashMap<String, Any?>().apply {
-            putAll(movieData)
-            putAll(info)
-        }
+        val source = LinkedHashMap<String, Any?>().apply { putAll(movieData); putAll(info) }
         if (source.isEmpty()) return null
 
         val title = text(source, "name", "title", "o_name").ifBlank { stream.name }
         val plot = text(source, "plot", "description").ifBlank { stream.plot.orEmpty() }.ifBlank { null }
         val genreText = text(source, "genre", "genres").ifBlank { stream.genre.orEmpty() }
         val genres = splitValues(genreText)
-        val castText = text(source, "actors", "cast", "actor")
-        val cast = splitValues(castText).take(14).mapIndexed { index, name ->
-            CinematicMetadataRepository.Person(
-                id = -kotlin.math.abs((name + index).hashCode()).coerceAtLeast(1),
-                name = name,
-                character = null,
-                profileUrl = null
-            )
-        }
+        val cast = castValues(source).take(14)
         val crew = buildList {
             splitValues(text(source, "director")).take(3).forEach { add(CinematicMetadataRepository.Credit(it, "المخرج")) }
             splitValues(text(source, "writer", "writers")).take(3).forEach { add(CinematicMetadataRepository.Credit(it, "الكاتب")) }
@@ -100,6 +86,36 @@ object XtreamMetadataFallback {
         )
     }
 
+    private fun castValues(source: Map<String, Any?>): List<CinematicMetadataRepository.Person> {
+        val raw = source.entries.firstOrNull { it.key.equals("actors", true) || it.key.equals("cast", true) || it.key.equals("actor", true) }?.value
+        val structured = when (raw) {
+            is List<*> -> raw.mapNotNull { item ->
+                val row = item as? Map<*, *> ?: return@mapNotNull null
+                val name = row.entries.firstOrNull { it.key?.toString()?.equals("name", true) == true || it.key?.toString()?.equals("actor", true) == true }
+                    ?.value?.toString()?.trim().orEmpty()
+                if (name.isBlank()) return@mapNotNull null
+                val character = row.entries.firstOrNull { it.key?.toString()?.equals("character", true) == true || it.key?.toString()?.equals("role", true) == true }
+                    ?.value?.toString()?.trim()?.takeIf(String::isNotBlank)
+                val profile = row.entries.firstOrNull {
+                    val key = it.key?.toString().orEmpty()
+                    key.equals("profile", true) || key.equals("profile_url", true) || key.equals("image", true) || key.equals("photo", true)
+                }?.value?.toString()?.trim()?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+                CinematicMetadataRepository.Person(-kotlin.math.abs(name.hashCode()).coerceAtLeast(1), name, character, profile)
+            }
+            else -> emptyList()
+        }
+        if (structured.isNotEmpty()) return structured.distinctBy { it.name.lowercase() }
+
+        return splitValues(text(source, "actors", "cast", "actor")).mapIndexed { index, name ->
+            CinematicMetadataRepository.Person(
+                id = -kotlin.math.abs((name + index).hashCode()).coerceAtLeast(1),
+                name = name,
+                character = null,
+                profileUrl = null
+            )
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun map(value: Any?): Map<String, Any?> = when (value) {
         is Map<*, *> -> value.entries.associate { it.key.toString() to it.value }
@@ -112,7 +128,11 @@ object XtreamMetadataFallback {
             val result = when (value) {
                 is String -> value
                 is Number, is Boolean -> value.toString()
-                is List<*> -> value.filterNotNull().joinToString(", ") { it.toString() }
+                is List<*> -> value.filterNotNull().joinToString(", ") { item ->
+                    if (item is Map<*, *>) {
+                        item.entries.firstOrNull { it.key?.toString()?.equals("name", true) == true }?.value?.toString().orEmpty()
+                    } else item.toString()
+                }
                 else -> ""
             }.trim()
             if (result.isNotBlank() && result != "null") return result
@@ -121,12 +141,19 @@ object XtreamMetadataFallback {
     }
 
     private fun splitValues(value: String): List<String> = value
+        .replace("[", "")
+        .replace("]", "")
+        .replace("\"", "")
+        .replace("'", "")
         .replace("|", ",")
+        .replace(";", ",")
+        .replace(" • ", ",")
         .replace(" / ", ",")
+        .replace(Regex("\\s{2,}"), " ")
         .split(',')
         .map { it.trim() }
-        .filter { it.isNotBlank() && !it.equals("null", true) }
-        .distinct()
+        .filter { it.length >= 2 && !it.equals("null", true) }
+        .distinctBy { it.lowercase() }
 
     private fun number(value: Any?): Double? = when (value) {
         is Number -> value.toDouble().takeIf { it > 0.0 }
