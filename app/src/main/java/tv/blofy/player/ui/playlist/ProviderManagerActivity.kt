@@ -28,6 +28,7 @@ import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
+import java.util.UUID
 
 class ProviderManagerActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
@@ -161,7 +162,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                 text = buildString {
                     append(if (provider.enabled) "● القائمة النشطة" else "○ قائمة محفوظة")
                     append("  •  ")
-                    append(if (provider.name == "مشتركين BLOFY") "BLOFY Secure" else provider.providerType.uppercase())
+                    append(if (isBlofySubscriber(provider)) "BLOFY Secure" else provider.providerType.uppercase())
                 }
                 textSize = 13f
                 typeface = BlofyTvDesign.BodyTypeface
@@ -209,7 +210,7 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun edit(provider: ProviderEntity) {
-        if (provider.name == "مشتركين BLOFY" && provider.baseUrl.contains("/api/v1/subscribers/xtream")) {
+        if (isBlofySubscriber(provider)) {
             startActivity(Intent(this, BlofySubscriberActivity::class.java))
             return
         }
@@ -217,6 +218,14 @@ class ProviderManagerActivity : AppCompatActivity() {
             putExtra(PlaylistActivity.EXTRA_PROVIDER_ID, provider.id)
             putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true)
         })
+    }
+
+    private fun isBlofySubscriber(provider: ProviderEntity): Boolean {
+        val stableId = UUID.nameUUIDFromBytes("blofy-subscriber".toByteArray()).toString()
+        return provider.id == stableId ||
+            provider.name.equals("مشتركين BLOFY", ignoreCase = true) ||
+            provider.baseUrl.contains("/subscribers/", ignoreCase = true) ||
+            provider.baseUrl.contains("/subscriber/", ignoreCase = true)
     }
 
     private fun refresh(provider: ProviderEntity) {
