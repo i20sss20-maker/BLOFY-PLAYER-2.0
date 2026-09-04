@@ -17,6 +17,10 @@ import java.util.concurrent.TimeUnit
 /**
  * Fills the local episode table in small background batches after the main catalog is ready.
  * Home opens immediately; large servers continue caching series episodes without blocking TV UI.
+ *
+ * A batch is only advanced after every series in that batch either has cached episodes or returned
+ * a valid provider payload. Temporary network/provider failures retry the same batch; rows already
+ * cached on the previous attempt are skipped, so only the missing series are fetched again.
  */
 object EpisodeCatalogPreloader {
     private const val KEY_PROVIDER_ID = "provider_id"
@@ -67,20 +71,28 @@ class EpisodePreloadWorker(
 
         val manager = PlaylistManager(XtreamClient.api, dao)
         val end = (offset + EpisodeCatalogPreloader.batchSize()).coerceAtMost(allSeries.size)
+        var retryCurrentBatch = false
+
         for (index in offset until end) {
             if (isStopped) return Result.success()
             val series = allSeries[index]
             if (dao.episodeSnapshot(providerId, series.remoteId).isNotEmpty()) continue
             try {
-                manager.syncSeriesEpisodes(provider, series.remoteId)
+                val result = manager.syncSeriesEpisodes(provider, series.remoteId)
+                if (!result.payloadPresent) retryCurrentBatch = true
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                // One broken series must never block the rest of a large provider catalog.
+                // Continue this batch so one unstable title never blocks the other series. We then
+                // retry the same offset; everything cached successfully is skipped on the retry.
+                retryCurrentBatch = true
             }
         }
 
-        if (end < allSeries.size && CatalogSyncState.isReady(applicationContext, providerId)) {
+        if (!CatalogSyncState.isReady(applicationContext, providerId)) return Result.success()
+        if (retryCurrentBatch) return Result.retry()
+
+        if (end < allSeries.size) {
             EpisodeCatalogPreloader.schedule(applicationContext, providerId, end)
         }
         return Result.success()
