@@ -25,7 +25,6 @@ import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
-import tv.blofy.player.data.metadata.CinematicMetadataRepository
 import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -98,20 +97,9 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
-            val enrichment = withContext(Dispatchers.IO) {
-                // Read cast, crew, plot, country, artwork and runtime from the Xtream provider
-                // first. External cinematic metadata is only a fallback when the provider omits it.
-                val metadata = XtreamMetadataFallback.series(provider, stream)
-                    ?: CinematicMetadataRepository.series(applicationContext, stream.name, stream.year)
-                val similar = if (metadata == null || metadata.tmdbId <= 0) emptyList() else {
-                    val titles = CinematicMetadataRepository.recommendations(metadata)
-                    SimilarStrip.match(titles, dao.allStreamsForProvider(providerId), "series")
-                        .filterNot { it.key == stream.key }
-                }
-                metadata to similar
+            val metadata = withContext(Dispatchers.IO) {
+                XtreamMetadataFallback.series(provider, stream)
             }
-            val metadata = enrichment.first
-            val similar = enrichment.second
 
             ArtworkLoader.loadPriority(backdrop, listOf(metadata?.backdropUrl, stream.backdrop, stream.icon))
             ArtworkLoader.loadPriority(poster, listOf(metadata?.posterUrl, stream.icon, stream.backdrop))
@@ -302,22 +290,6 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 })
             }
 
-            if (similar.isNotEmpty()) {
-                panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                    text = "قد يعجبك أيضًا"
-                    textSize = 16f
-                    typeface = BlofyTvDesign.HeadingTypeface
-                    setTextColor(Color.WHITE)
-                    gravity = Gravity.RIGHT
-                    setPadding(0, dp(12), 0, dp(5))
-                })
-                panel.addView(SimilarStrip.build(this@SeriesDetailsActivity, similar) { selected ->
-                    startActivity(Intent(this@SeriesDetailsActivity, SeriesDetailsActivity::class.java).apply {
-                        putExtra(EXTRA_PROVIDER_ID, providerId)
-                        putExtra(EXTRA_CONTENT_KEY, selected.key)
-                    })
-                }, LinearLayout.LayoutParams(-1, dp(234)))
-            }
             primary?.requestFocus()
         }
     }

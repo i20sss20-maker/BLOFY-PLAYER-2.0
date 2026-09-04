@@ -7,10 +7,10 @@ import tv.blofy.player.data.remote.XtreamClient
 
 /** Provider metadata fallback. It never participates in playback or exposes credentials. */
 object XtreamMetadataFallback {
-    suspend fun movie(provider: ProviderEntity, stream: StreamEntity): CinematicMetadataRepository.Metadata? =
+    suspend fun movie(provider: ProviderEntity, stream: StreamEntity): ProviderMetadata.Metadata? =
         load(provider, stream, "get_vod_info", "vod_id", "movie")
 
-    suspend fun series(provider: ProviderEntity, stream: StreamEntity): CinematicMetadataRepository.Metadata? =
+    suspend fun series(provider: ProviderEntity, stream: StreamEntity): ProviderMetadata.Metadata? =
         load(provider, stream, "get_series_info", "series_id", "tv")
 
     private suspend fun load(
@@ -19,7 +19,7 @@ object XtreamMetadataFallback {
         action: String,
         idKey: String,
         kind: String
-    ): CinematicMetadataRepository.Metadata? {
+    ): ProviderMetadata.Metadata? {
         if (!provider.providerType.equals("xtream", true) || stream.remoteId.isBlank()) return null
         val url = runCatching {
             (provider.baseUrl.trim().trimEnd('/') + "/player_api.php").toHttpUrl().newBuilder()
@@ -42,8 +42,8 @@ object XtreamMetadataFallback {
         val genres = splitValues(genreText)
         val cast = castValues(source).take(14)
         val crew = buildList {
-            splitValues(text(source, "director")).take(3).forEach { add(CinematicMetadataRepository.Credit(it, "المخرج")) }
-            splitValues(text(source, "writer", "writers")).take(3).forEach { add(CinematicMetadataRepository.Credit(it, "الكاتب")) }
+            splitValues(text(source, "director")).take(3).forEach { add(ProviderMetadata.Credit(it, "المخرج")) }
+            splitValues(text(source, "writer", "writers")).take(3).forEach { add(ProviderMetadata.Credit(it, "الكاتب")) }
         }.distinctBy { it.name to it.job }
 
         val rating = number(source["rating"] ?: source["rating_5based"] ?: stream.rating)
@@ -62,13 +62,11 @@ object XtreamMetadataFallback {
             genres.isNotEmpty() || !poster.isNullOrBlank() || !backdrop.isNullOrBlank()
         if (!hasUsefulData) return null
 
-        return CinematicMetadataRepository.Metadata(
-            tmdbId = -1,
+        return ProviderMetadata.Metadata(
             kind = kind,
             title = title,
             overview = plot,
             rating = rating,
-            voteCount = 0,
             releaseDate = releaseDate,
             runtimeMinutes = durationMinutes,
             genres = genres,
@@ -82,11 +80,10 @@ object XtreamMetadataFallback {
             originalLanguage = language,
             status = status,
             networks = splitValues(text(source, "network", "networks")),
-            confidence = 1.0
         )
     }
 
-    private fun castValues(source: Map<String, Any?>): List<CinematicMetadataRepository.Person> {
+    private fun castValues(source: Map<String, Any?>): List<ProviderMetadata.Person> {
         val raw = source.entries.firstOrNull { it.key.equals("actors", true) || it.key.equals("cast", true) || it.key.equals("actor", true) }?.value
         val structured = when (raw) {
             is List<*> -> raw.mapNotNull { item ->
@@ -100,14 +97,14 @@ object XtreamMetadataFallback {
                     val key = it.key?.toString().orEmpty()
                     key.equals("profile", true) || key.equals("profile_url", true) || key.equals("image", true) || key.equals("photo", true)
                 }?.value?.toString()?.trim()?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
-                CinematicMetadataRepository.Person(-kotlin.math.abs(name.hashCode()).coerceAtLeast(1), name, character, profile)
+                ProviderMetadata.Person(-kotlin.math.abs(name.hashCode()).coerceAtLeast(1), name, character, profile)
             }
             else -> emptyList()
         }
         if (structured.isNotEmpty()) return structured.distinctBy { it.name.lowercase() }
 
         return splitValues(text(source, "actors", "cast", "actor")).mapIndexed { index, name ->
-            CinematicMetadataRepository.Person(
+            ProviderMetadata.Person(
                 id = -kotlin.math.abs((name + index).hashCode()).coerceAtLeast(1),
                 name = name,
                 character = null,

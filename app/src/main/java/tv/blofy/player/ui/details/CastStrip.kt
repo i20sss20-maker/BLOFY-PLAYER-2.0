@@ -11,12 +11,12 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import tv.blofy.player.R
-import tv.blofy.player.data.metadata.CinematicMetadataRepository
+import tv.blofy.player.data.metadata.ProviderMetadata
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 
 internal object CastStrip {
-    fun build(context: Context, people: List<CinematicMetadataRepository.Person>): View {
+    fun build(context: Context, people: List<ProviderMetadata.Person>): View {
         fun dp(v: Int) = (v * context.resources.displayMetrics.density).toInt()
         val scroll = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false

@@ -23,7 +23,6 @@ import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
-import tv.blofy.player.data.metadata.CinematicMetadataRepository
 import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -69,20 +68,9 @@ class MovieDetailsActivity : AppCompatActivity() {
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
             val watch = dao.watchState(contentKey)
             val url = ContentUrlResolver.movie(provider, stream)
-            val enrichment = withContext(Dispatchers.IO) {
-                // Provider/Xtream metadata is authoritative for BLOFY. TMDb is only a fallback
-                // when the server does not return usable details.
-                val metadata = XtreamMetadataFallback.movie(provider, stream)
-                    ?: CinematicMetadataRepository.movie(applicationContext, stream.name, stream.year)
-                val similar = if (metadata == null || metadata.tmdbId <= 0) emptyList() else {
-                    val titles = CinematicMetadataRepository.recommendations(metadata)
-                    SimilarStrip.match(titles, dao.allStreamsForProvider(providerId), "movie")
-                        .filterNot { it.key == stream.key }
-                }
-                metadata to similar
+            val metadata = withContext(Dispatchers.IO) {
+                XtreamMetadataFallback.movie(provider, stream)
             }
-            val metadata = enrichment.first
-            val similar = enrichment.second
 
             ArtworkLoader.loadPriority(backdrop, listOf(metadata?.backdropUrl, stream.backdrop, stream.icon))
 
@@ -263,23 +251,6 @@ class MovieDetailsActivity : AppCompatActivity() {
                     gravity = Gravity.END
                     setPadding(0, dp(12), 0, dp(4))
                 })
-            }
-
-            if (similar.isNotEmpty()) {
-                info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = "قد يعجبك أيضًا"
-                    textSize = 16f
-                    typeface = BlofyTvDesign.HeadingTypeface
-                    setTextColor(Color.WHITE)
-                    gravity = Gravity.END
-                    setPadding(0, dp(12), 0, dp(5))
-                })
-                info.addView(SimilarStrip.build(this@MovieDetailsActivity, similar) { selected ->
-                    startActivity(Intent(this@MovieDetailsActivity, MovieDetailsActivity::class.java).apply {
-                        putExtra(EXTRA_PROVIDER_ID, providerId)
-                        putExtra(EXTRA_CONTENT_KEY, selected.key)
-                    })
-                }, LinearLayout.LayoutParams(-1, dp(234)))
             }
 
             play.requestFocus()

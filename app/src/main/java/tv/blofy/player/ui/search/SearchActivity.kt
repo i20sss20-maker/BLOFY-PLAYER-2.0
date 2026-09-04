@@ -31,7 +31,6 @@ import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
-import tv.blofy.player.data.metadata.CinematicMetadataRepository
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -69,7 +68,7 @@ class SearchActivity : AppCompatActivity() {
             setPadding(0, dp(3), 0, dp(4))
         })
         hint = TextView(this).apply {
-            text = "القنوات، الأفلام، المسلسلات والممثلون من بحث واحد"
+            text = "القنوات، الأفلام والمسلسلات من بحث واحد"
             textSize = 13f
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.RIGHT
@@ -78,7 +77,7 @@ class SearchActivity : AppCompatActivity() {
         root.addView(hint)
 
         input = EditText(this).apply {
-            hint = "اكتب اسم محتوى أو ممثل"
+            hint = "اكتب اسم المحتوى"
             textSize = 18f
             setTextColor(Color.WHITE)
             setHintTextColor(BlofyTvDesign.TextMuted)
@@ -100,7 +99,7 @@ class SearchActivity : AppCompatActivity() {
                     val q = s?.toString().orEmpty()
                     if (q.isBlank()) {
                         results.removeAllViews()
-                        this@SearchActivity.hint.text = "القنوات، الأفلام، المسلسلات والممثلون من بحث واحد"
+                        this@SearchActivity.hint.text = "القنوات، الأفلام والمسلسلات من بحث واحد"
                         return
                     }
                     searchJob = lifecycleScope.launch {
@@ -131,35 +130,13 @@ class SearchActivity : AppCompatActivity() {
             val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
             if (provider == null) { showMessage("أضف قائمة تشغيل أولاً"); return@launch }
 
-            val localItems = withContext(Dispatchers.IO) { ContentRepository(dao).search(provider.id, q) }
-            val actor = if (q.length >= 4 && localItems.size < 20) {
-                withContext(Dispatchers.IO) { CinematicMetadataRepository.personWorks(q) }
-            } else null
-            val actorItems = if (actor != null) {
-                withContext(Dispatchers.IO) {
-                    val matched = ArrayList<StreamEntity>(28)
-                    val seen = HashSet<String>()
-                    for (title in actor.titles) {
-                        val hits = dao.searchStreams(provider.id, title, 4)
-                        for (item in hits) {
-                            if ((item.kind == "movie" || item.kind == "series") && seen.add(item.key)) {
-                                matched += item
-                                if (matched.size >= 28) break
-                            }
-                        }
-                        if (matched.size >= 28) break
-                    }
-                    matched
-                }
-            } else emptyList()
-            val items = (localItems + actorItems).distinctBy { it.key }.take(100)
+            val items = withContext(Dispatchers.IO) {
+                ContentRepository(dao).search(provider.id, q).distinctBy { it.key }.take(100)
+            }
 
             if (input.text?.toString()?.trim() != q) return@launch
             results.removeAllViews()
-            hint.text = when {
-                actor != null && actorItems.isNotEmpty() -> "${items.size} نتيجة • أعمال ${actor.personName} الموجودة في باقتك"
-                else -> "${items.size} نتيجة"
-            }
+            hint.text = "${items.size} نتيجة"
             if (items.isEmpty()) { showMessage("ما لقينا نتائج مطابقة داخل باقتك"); return@launch }
             items.forEach { stream ->
                 results.addView(
