@@ -70,8 +70,10 @@ class MovieDetailsActivity : AppCompatActivity() {
             val watch = dao.watchState(contentKey)
             val url = ContentUrlResolver.movie(provider, stream)
             val enrichment = withContext(Dispatchers.IO) {
-                val metadata = CinematicMetadataRepository.movie(applicationContext, stream.name, stream.year)
-                    ?: XtreamMetadataFallback.movie(provider, stream)
+                // Provider/Xtream metadata is authoritative for BLOFY. TMDb is only a fallback
+                // when the server does not return usable details.
+                val metadata = XtreamMetadataFallback.movie(provider, stream)
+                    ?: CinematicMetadataRepository.movie(applicationContext, stream.name, stream.year)
                 val similar = if (metadata == null || metadata.tmdbId <= 0) emptyList() else {
                     val titles = CinematicMetadataRepository.recommendations(metadata)
                     SimilarStrip.match(titles, dao.allStreamsForProvider(providerId), "movie")
@@ -254,7 +256,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 info.addView(CastStrip.build(this@MovieDetailsActivity, metadata!!.cast), LinearLayout.LayoutParams(-1, dp(184)))
             } else {
                 info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = "بيانات طاقم التمثيل غير متوفرة من المصدر الحالي"
+                    text = "بيانات طاقم التمثيل غير متوفرة من السيرفر"
                     textSize = 12f
                     typeface = BlofyTvDesign.BodyTypeface
                     setTextColor(BlofyTvDesign.TextMuted)
