@@ -26,10 +26,13 @@ import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.catalog.PosterCatalogActivity
 import tv.blofy.player.ui.catalog.SmartCollectionsActivity
+import tv.blofy.player.ui.details.MovieDetailsActivity
+import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.library.RecentChannelsActivity
 import tv.blofy.player.ui.mobile.MobileContentActivity
@@ -41,6 +44,14 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var deviceKind: DeviceClass.Kind
     private var firstAction: View? = null
     private val actionViews = linkedMapOf<String, View>()
+    private var heroItem: StreamEntity? = null
+    private var heroProviderId: String? = null
+    private var heroArtwork: ImageView? = null
+    private var heroKicker: TextView? = null
+    private var heroTitle: TextView? = null
+    private var heroMeta: TextView? = null
+    private var heroSubtitle: TextView? = null
+    private var heroPrimary: Button? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,6 +60,7 @@ class HomeActivity : AppCompatActivity() {
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildTvHome() else buildCompactHome())
         restoreFocus()
         warmCatalogArtwork()
+        if (deviceKind == DeviceClass.Kind.TV) loadDynamicHero()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -89,12 +101,56 @@ class HomeActivity : AppCompatActivity() {
             val urls = withContext(Dispatchers.IO) {
                 val dao = BlofyDatabase.get(applicationContext).dao()
                 val provider = dao.providers().first().firstOrNull() ?: return@withContext emptyList<String?>()
-                val movies = dao.catalogPageAfterAll(provider.id, "movie", 0L, 10)
-                val series = dao.catalogPageAfterAll(provider.id, "series", 0L, 10)
-                (movies + series).map { it.icon ?: it.backdrop }
+                dao.latestHomeStreams(provider.id, 18).map { it.backdrop ?: it.icon }
             }
             if (urls.isNotEmpty()) ArtworkLoader.warmPrefetch(this@HomeActivity, urls)
         }
+    }
+
+    private fun loadDynamicHero() {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                val dao = BlofyDatabase.get(applicationContext).dao()
+                val provider = dao.providers().first().firstOrNull() ?: return@withContext null
+                val candidates = dao.latestHomeStreams(provider.id, 24)
+                val selected = candidates.firstOrNull { !it.backdrop.isNullOrBlank() }
+                    ?: candidates.firstOrNull { !it.icon.isNullOrBlank() }
+                    ?: candidates.firstOrNull()
+                    ?: return@withContext null
+                provider.id to selected
+            } ?: return@launch
+            heroProviderId = result.first
+            heroItem = result.second
+            renderHero(result.second)
+        }
+    }
+
+    private fun renderHero(item: StreamEntity) {
+        heroKicker?.text = if (item.kind == "series") "جديد في BLOFY SERIES" else "جديد في BLOFY CINEMA"
+        heroTitle?.text = item.name
+        heroMeta?.text = buildList {
+            item.year?.takeIf(String::isNotBlank)?.let(::add)
+            item.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
+            item.genre?.substringBefore(',')?.trim()?.takeIf(String::isNotBlank)?.let(::add)
+            if (item.kind == "series") add("مسلسل") else add("فيلم")
+        }.joinToString("   •   ")
+        heroSubtitle?.text = item.plot?.takeIf(String::isNotBlank)?.take(190)
+            ?: if (item.kind == "series") "مسلسل مضاف حديثًا إلى مكتبتك — اكتشف المواسم والحلقات." else "فيلم مضاف حديثًا إلى مكتبتك — جاهز للمشاهدة الآن."
+        heroPrimary?.text = if (item.kind == "series") "عرض المسلسل" else "شاهد الآن"
+        heroArtwork?.let { ArtworkLoader.loadPriority(it, listOf(item.backdrop, item.icon)) }
+    }
+
+    private fun openHeroItem() {
+        val item = heroItem
+        val providerId = heroProviderId
+        if (item == null || providerId.isNullOrBlank()) {
+            startActivity(contentIntent("live"))
+            return
+        }
+        startActivity(Intent(this, if (item.kind == "series") SeriesDetailsActivity::class.java else MovieDetailsActivity::class.java).apply {
+            putExtra("provider_id", providerId)
+            putExtra("content_key", item.key)
+        })
     }
 
     private fun buildTvHome(): FrameLayout {
@@ -228,23 +284,75 @@ class HomeActivity : AppCompatActivity() {
         registerAction(key, this)
     }
 
-    private fun buildHero() = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
-        setPadding(dp(38), dp(24), dp(38), dp(24))
+    private fun buildHero() = FrameLayout(this).apply {
+        clipChildren = true
+        clipToPadding = true
         background = heroSurface()
         elevation = dp(5).toFloat()
-        addView(TextView(this@HomeActivity).apply { text = "BLOFY PREMIUM"; textSize = 13f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT); gravity = Gravity.RIGHT })
-        addView(TextView(this@HomeActivity).apply { text = "كل محتواك في مكان واحد"; textSize = 38f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT; setPadding(0, dp(7), 0, 0) })
-        addView(TextView(this@HomeActivity).apply { text = "بث مباشر، أفلام ومسلسلات بواجهة مصممة للتلفزيون وسريعة بالريموت."; textSize = 17f; setTextColor(TEXT_SECONDARY); gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(20)) })
-        val row = LinearLayout(this@HomeActivity).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.RIGHT }
-        row.addView(heroButton("شاهد البث", "hero_watch", contentIntent("live"), true), LinearLayout.LayoutParams(dp(180), dp(60)).apply { marginStart = dp(10) })
-        row.addView(heroButton("استكشف الأفلام", "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(185), dp(60)))
-        addView(row)
+
+        heroArtwork = ImageView(this@HomeActivity).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            alpha = .46f
+        }.also { addView(it, FrameLayout.LayoutParams(-1, -1)) }
+        addView(View(this@HomeActivity).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(0xF2171021.toInt(), 0xCA241532.toInt(), 0x5C17101F)
+            )
+        }, FrameLayout.LayoutParams(-1, -1))
+
+        val content = LinearLayout(this@HomeActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(38), dp(20), dp(38), dp(20))
+        }
+        heroKicker = TextView(this@HomeActivity).apply {
+            text = "BLOFY PREMIUM"
+            textSize = 12.5f
+            letterSpacing = .08f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(PURPLE_BRIGHT)
+            gravity = Gravity.RIGHT
+        }.also { content.addView(it) }
+        heroTitle = TextView(this@HomeActivity).apply {
+            text = "كل محتواك في مكان واحد"
+            textSize = 35f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.RIGHT
+            maxLines = 2
+            setPadding(0, dp(5), 0, 0)
+        }.also { content.addView(it) }
+        heroMeta = TextView(this@HomeActivity).apply {
+            text = "أفلام   •   مسلسلات   •   بث مباشر"
+            textSize = 13.5f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(0xFFE7D8F5.toInt())
+            gravity = Gravity.RIGHT
+            setPadding(0, dp(5), 0, 0)
+        }.also { content.addView(it) }
+        heroSubtitle = TextView(this@HomeActivity).apply {
+            text = "بث مباشر، أفلام ومسلسلات بواجهة مصممة للتلفزيون وسريعة بالريموت."
+            textSize = 15.5f
+            setTextColor(TEXT_SECONDARY)
+            gravity = Gravity.RIGHT
+            maxLines = 2
+            setPadding(0, dp(7), 0, dp(13))
+        }.also { content.addView(it) }
+        val row = LinearLayout(this@HomeActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.RIGHT
+        }
+        heroPrimary = actionHeroButton("شاهد الآن", "hero_watch", true) { openHeroItem() }
+        row.addView(heroPrimary, LinearLayout.LayoutParams(dp(180), dp(56)).apply { marginStart = dp(10) })
+        row.addView(heroButton("استكشف الأفلام", "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(185), dp(56)))
+        content.addView(row)
+        addView(content, FrameLayout.LayoutParams(-1, -1))
     }
 
-    private fun heroButton(label: String, key: String, intent: Intent, primary: Boolean) = Button(this).apply {
+    private fun actionHeroButton(label: String, key: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
         id = View.generateViewId()
         text = label
         isAllCaps = false
@@ -259,9 +367,11 @@ class HomeActivity : AppCompatActivity() {
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
             view.animate().scaleX(if (focused) 1.02f else 1f).scaleY(if (focused) 1.02f else 1f).setDuration(72).start()
         }
-        setOnClickListener { startActivity(intent) }
+        setOnClickListener { action() }
         registerAction(key, this)
     }
+
+    private fun heroButton(label: String, key: String, intent: Intent, primary: Boolean) = actionHeroButton(label, key, primary) { startActivity(intent) }
 
     private fun infoCard(title: String, subtitle: String, key: String, intent: Intent) = LinearLayout(this).apply {
         id = View.generateViewId()
