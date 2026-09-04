@@ -31,6 +31,9 @@ object CatalogSyncState {
             .putBoolean(READY_PREFIX + providerId, true)
             .putLong(UPDATED_PREFIX + providerId, System.currentTimeMillis())
             .apply()
+        // Never hold the loading screen while thousands of episodes are fetched. Cache them in
+        // bounded network batches after the main catalog is safely committed.
+        EpisodeCatalogPreloader.schedule(context.applicationContext, providerId)
     }
 
     fun clear(context: Context, providerId: String) {
