@@ -28,7 +28,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.login.CatalogLoadingActivity
-import tv.blofy.player.ui.playlist.ProviderManagerActivity
+import tv.blofy.player.ui.login.LoginActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -43,8 +43,6 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Draw the settings screen immediately. Opening Room can take a few seconds on some TV
-        // boxes after a large catalog import, and it must never leave the user on a blank screen.
         buildPage()
         lifecycleScope.launch {
             provider = withContext(Dispatchers.IO) {
@@ -130,7 +128,11 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting("▶  الحلقة التالية", KEY_AUTO_NEXT, arrayOf("ask", "on", "off"), arrayOf("اسألني", "تلقائي", "إيقاف")))
         addCard(cycleSetting("✦  حركة الواجهة", KEY_MOTION, arrayOf("smooth", "reduced"), arrayOf("سلسة", "خفيفة")))
         addCard(actionCard("🌐  لغة التطبيق", currentLanguageLabel()) { chooseLanguage() })
-        addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
+        addCard(actionCard("▤  قوائم التشغيل", "الرجوع لشاشة الدخول واختيار قائمة ثم اتصال") {
+            startActivity(Intent(this, LoginActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            })
+        })
         refreshCard = actionCard("↻  تحديث المحتوى", syncSubtitle()) { refreshLibrary() }
         addCard(refreshCard)
         storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
