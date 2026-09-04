@@ -28,12 +28,9 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.BlofySubscriberClient
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
-import tv.blofy.player.data.PlaylistManager
-import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
-import tv.blofy.player.data.remote.XtreamClient
-import tv.blofy.player.ui.home.HomeActivity
+import tv.blofy.player.ui.login.CatalogLoadingActivity
 import java.util.UUID
 
 class BlofySubscriberActivity : AppCompatActivity() {
@@ -163,14 +160,15 @@ class BlofySubscriberActivity : AppCompatActivity() {
             login.isEnabled = false
             username.isEnabled = false
             password.isEnabled = false
-            status.text = "جاري التحقق وتجهيز الاشتراك..."
+            status.text = "جاري التحقق من الاشتراك..."
 
             lifecycleScope.launch {
                 try {
-                    withContext(Dispatchers.IO) {
+                    val prepared = withContext(Dispatchers.IO) {
                         val session = BlofySubscriberClient.createSession(applicationContext, endpoint, user, pass)
                         val dao = BlofyDatabase.get(applicationContext).dao()
                         val providerId = UUID.nameUUIDFromBytes("blofy-subscriber".toByteArray()).toString()
+                        val existing = dao.provider(providerId)
                         val next = ProviderEntity(
                             providerId,
                             session.providerName.ifBlank { "مشتركين BLOFY" },
@@ -178,39 +176,33 @@ class BlofySubscriberActivity : AppCompatActivity() {
                             session.username,
                             session.password,
                             "xtream",
-                            "ts",
-                            "cronet",
-                            "media3",
-                            true,
-                            true,
+                            existing?.liveFormat ?: "ts",
+                            existing?.preferredTransport ?: "cronet",
+                            existing?.preferredEngine ?: "media3",
+                            existing?.allowCrossProtocolRedirects ?: true,
+                            existing?.enabled ?: false,
                             System.currentTimeMillis()
                         )
+                        val credentialsChanged = existing == null ||
+                            existing.baseUrl != next.baseUrl ||
+                            existing.username != next.username ||
+                            existing.password != next.password
                         val readyCatalog = CatalogSyncState.isReady(applicationContext, providerId) && dao.hasCatalog(providerId)
-                        if (!readyCatalog) {
-                            CatalogSyncState.markPending(applicationContext, providerId)
-                            dao.clearProviderCatalog(providerId)
-                            dao.upsertProvider(next)
-                            try {
-                                val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(next) }
-                                check(result.freshItemCount > 0) { "لم يرجع الاشتراك أي محتوى" }
-                                check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الاشتراك" }
-                                dao.saveAndActivateProvider(next)
-                                CatalogSyncState.markReady(applicationContext, providerId)
-                            } catch (error: Throwable) {
-                                dao.clearProviderCatalog(providerId)
-                                CatalogSyncState.markPending(applicationContext, providerId)
-                                throw error
-                            }
-                        } else {
-                            dao.upsertProvider(next)
-                            dao.disableAllProviders()
-                            dao.activateProvider(providerId)
-                        }
+
+                        // Store the hidden proxy credentials, but leave all catalog loading to the
+                        // common CatalogLoadingActivity. This avoids two different sync/finalize paths.
+                        dao.upsertProvider(next)
+                        if (credentialsChanged || !readyCatalog) CatalogSyncState.markPending(applicationContext, providerId)
                         runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
+                        Triple(providerId, credentialsChanged, readyCatalog)
                     }
+
                     setResult(RESULT_OK)
-                    status.text = "تم الحفظ • جاري الدخول"
-                    startActivity(Intent(this@BlofySubscriberActivity, HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                    status.text = "تم التحقق • جاري تجهيز المكتبة"
+                    startActivity(Intent(this@BlofySubscriberActivity, CatalogLoadingActivity::class.java).apply {
+                        putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, prepared.first)
+                        putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, prepared.second && prepared.third)
+                    })
                     finish()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -249,7 +241,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
         }
 
         panel.addView(TextView(this).apply {
-            text = "عنوان الخدمة الخاص مخفي داخل التطبيق"
+            text = "عنوان الخدمة الخاص مخفي ومحمي داخل BLOFY"
             textSize = 12f
             setTextColor(0xFF857B91.toInt())
             gravity = Gravity.CENTER
