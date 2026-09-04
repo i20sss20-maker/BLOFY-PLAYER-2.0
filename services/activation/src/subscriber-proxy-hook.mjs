@@ -153,10 +153,6 @@ function copyUpstreamHeaders(upstream, res, { textual = false } = {}) {
   for (const [key, value] of upstream.headers.entries()) {
     const lower = key.toLowerCase();
     if (['connection', 'transfer-encoding', 'content-security-policy', 'location'].includes(lower)) continue;
-    // Node fetch transparently decompresses gzip/br responses. Keeping the original
-    // content-encoding header after that makes Android/OkHttp try to decompress plain JSON
-    // again (for example actual 0x5b7b vs expected gzip 0x1f8b). Strip both headers whenever
-    // we touch textual content and let Node write a correct transfer encoding.
     if (textual && ['content-length', 'content-encoding'].includes(lower)) continue;
     headers[lower] = value;
   }
@@ -305,6 +301,14 @@ async function proxyRaw(req, res, requestUrl) {
 
 async function handleSubscriberRequest(req, res) {
   const requestUrl = new URL(req.url || '/', 'http://localhost');
+  if (req.method === 'GET' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/health`) {
+    return sendJson(res, available() ? 200 : 503, {
+      ok: available(),
+      hostConfigured: Boolean(subscriberHost),
+      encryptionReady: Boolean(encryptionKey && activationCredentials),
+      databaseReady: Boolean(pool)
+    });
+  }
   if (req.method === 'POST' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/session`) {
     await createSubscriberSession(req, res);
     return true;
