@@ -2,10 +2,6 @@ name: BLOFY RC07 Signed Release
 
 on:
   workflow_dispatch:
-  push:
-    branches: [rc07-commercial-stability]
-    paths:
-      - '.github/workflows/rc07-release.yml'
 
 permissions:
   contents: read
