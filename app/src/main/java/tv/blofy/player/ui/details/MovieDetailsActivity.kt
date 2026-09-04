@@ -24,6 +24,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.metadata.CinematicMetadataRepository
+import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.player.PlayerActivity
@@ -70,7 +71,8 @@ class MovieDetailsActivity : AppCompatActivity() {
             val url = ContentUrlResolver.movie(provider, stream)
             val enrichment = withContext(Dispatchers.IO) {
                 val metadata = CinematicMetadataRepository.movie(applicationContext, stream.name, stream.year)
-                val similar = if (metadata == null) emptyList() else {
+                    ?: XtreamMetadataFallback.movie(provider, stream)
+                val similar = if (metadata == null || metadata.tmdbId <= 0) emptyList() else {
                     val titles = CinematicMetadataRepository.recommendations(metadata)
                     SimilarStrip.match(titles, dao.allStreamsForProvider(providerId), "movie")
                         .filterNot { it.key == stream.key }
@@ -150,11 +152,13 @@ class MovieDetailsActivity : AppCompatActivity() {
                     (metadata?.releaseDate?.take(4) ?: stream.year)?.takeIf(String::isNotBlank)?.let(::add)
                     metadata?.runtimeMinutes?.takeIf { it > 0 }?.let { add("$it دقيقة") }
                         ?: stream.duration?.takeIf(String::isNotBlank)?.let(::add)
-                    metadata?.rating?.let { add("TMDb %.1f/10".format(java.util.Locale.US, it)) }
+                    metadata?.rating?.let { add("★ %.1f/10".format(java.util.Locale.US, it)) }
                         ?: stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
                     val genres = metadata?.genres?.filter(String::isNotBlank).orEmpty()
                     if (genres.isNotEmpty()) add(genres.take(3).joinToString(" / "))
                     else stream.genre?.takeIf(String::isNotBlank)?.let(::add)
+                    metadata?.countries?.takeIf { it.isNotEmpty() }?.let { add(it.take(2).joinToString(" / ")) }
+                    metadata?.originalLanguage?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
                     stream.extension?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
                 }.joinToString("   •   ")
                 textSize = 13.5f
