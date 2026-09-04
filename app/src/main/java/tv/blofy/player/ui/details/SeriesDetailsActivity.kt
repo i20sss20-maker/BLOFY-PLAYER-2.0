@@ -26,6 +26,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.metadata.CinematicMetadataRepository
+import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.player.PlayerActivity
@@ -98,8 +99,11 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
             val enrichment = withContext(Dispatchers.IO) {
-                val metadata = CinematicMetadataRepository.series(applicationContext, stream.name, stream.year)
-                val similar = if (metadata == null) emptyList() else {
+                // Read cast, crew, plot, country, artwork and runtime from the Xtream provider
+                // first. External cinematic metadata is only a fallback when the provider omits it.
+                val metadata = XtreamMetadataFallback.series(provider, stream)
+                    ?: CinematicMetadataRepository.series(applicationContext, stream.name, stream.year)
+                val similar = if (metadata == null || metadata.tmdbId <= 0) emptyList() else {
                     val titles = CinematicMetadataRepository.recommendations(metadata)
                     SimilarStrip.match(titles, dao.allStreamsForProvider(providerId), "series")
                         .filterNot { it.key == stream.key }
@@ -163,11 +167,13 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     if (seasons > 0) add("$seasons موسم")
                     if (allEpisodes.isNotEmpty()) add("${allEpisodes.size} حلقة")
                     metadata?.runtimeMinutes?.takeIf { it > 0 }?.let { add("$it دقيقة") }
-                    metadata?.rating?.let { add("TMDb %.1f/10".format(java.util.Locale.US, it)) }
+                    metadata?.rating?.let { add("★ %.1f/10".format(java.util.Locale.US, it)) }
                         ?: stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
                     val genres = metadata?.genres?.filter(String::isNotBlank).orEmpty()
                     if (genres.isNotEmpty()) add(genres.take(3).joinToString(" / "))
                     else stream.genre?.takeIf(String::isNotBlank)?.let(::add)
+                    metadata?.countries?.takeIf { it.isNotEmpty() }?.let { add(it.take(2).joinToString(" / ")) }
+                    metadata?.originalLanguage?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
                 }.joinToString("   •   ")
                 textSize = 13.5f
                 typeface = BlofyTvDesign.BodyTypeface
@@ -287,7 +293,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 panel.addView(CastStrip.build(this@SeriesDetailsActivity, metadata!!.cast), LinearLayout.LayoutParams(-1, dp(180)))
             } else {
                 panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                    text = "بيانات طاقم التمثيل غير متوفرة من المصدر الحالي"
+                    text = "بيانات طاقم التمثيل غير متوفرة من السيرفر"
                     textSize = 12f
                     typeface = BlofyTvDesign.BodyTypeface
                     setTextColor(BlofyTvDesign.TextMuted)
