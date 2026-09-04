@@ -27,14 +27,6 @@ jobs:
           yes | "$sdkmanager" --licenses >/dev/null || true
           "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
           test -d "$ANDROID_HOME/platforms/android-36"
-      - name: Apply subscriber compile hotfix
-        shell: bash
-        run: |
-          set -euo pipefail
-          file="app/src/main/java/tv/blofy/player/ui/playlist/BlofySubscriberActivity.kt"
-          sed -i '/import android.widget.EditText/a import android.widget.FrameLayout' "$file"
-          sed -i 's/ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT)/FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)/' "$file"
-          grep -Fq 'FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)' "$file"
       - name: Test lint and assemble
         shell: bash
         env:
