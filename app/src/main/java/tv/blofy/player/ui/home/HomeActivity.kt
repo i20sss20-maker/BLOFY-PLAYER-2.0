@@ -363,7 +363,7 @@ class HomeActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams(dp(154), dp(226)).apply { marginStart = dp(9); marginEnd = dp(3) }
             )
         }
-        scroll.addView(row, HorizontalScrollView.LayoutParams(-2, -1))
+        scroll.addView(row, FrameLayout.LayoutParams(-2, -1))
         parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(246)))
     }
 
@@ -387,7 +387,7 @@ class HomeActivity : AppCompatActivity() {
             wrap.addView(card, FrameLayout.LayoutParams(dp(148), dp(216), Gravity.END or Gravity.CENTER_VERTICAL))
             row.addView(wrap, LinearLayout.LayoutParams(dp(190), dp(224)).apply { marginStart = dp(8) })
         }
-        scroll.addView(row, HorizontalScrollView.LayoutParams(-2, -1))
+        scroll.addView(row, FrameLayout.LayoutParams(-2, -1))
         parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(244)))
     }
 
@@ -585,11 +585,11 @@ class HomeActivity : AppCompatActivity() {
 
         main.addView(TextView(this).apply { text = "وش بتشاهد اليوم؟"; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL }, LinearLayout.LayoutParams(-1, dp(44)))
 
-        val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; clipToPadding = false; descendantFocusability = View.FOCUS_AFTER_DESCENDANTS }
+        val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; clipToPadding = false; descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS }
         val feed = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; clipChildren = false; clipToPadding = false; setPadding(0, 0, 0, dp(28)) }
         homeFeed = feed
         feed.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(320)).apply { bottomMargin = dp(10) })
-        scroll.addView(feed, ScrollView.LayoutParams(-1, -2))
+        scroll.addView(feed, FrameLayout.LayoutParams(-1, -2))
         main.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
     }
