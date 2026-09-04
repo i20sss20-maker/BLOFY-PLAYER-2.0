@@ -90,11 +90,18 @@ class EpisodePreloadWorker(
         }
 
         if (!CatalogSyncState.isReady(applicationContext, providerId)) return Result.success()
-        if (retryCurrentBatch) return Result.retry()
+        // Retry transient provider failures, but never let one permanently broken/unsupported
+        // series block every later series in a very large catalog. A future catalog refresh starts
+        // again from offset 0 and will retry any still-missing titles.
+        if (retryCurrentBatch && runAttemptCount < MAX_BATCH_RETRIES) return Result.retry()
 
         if (end < allSeries.size) {
             EpisodeCatalogPreloader.schedule(applicationContext, providerId, end)
         }
         return Result.success()
+    }
+
+    companion object {
+        private const val MAX_BATCH_RETRIES = 2
     }
 }
