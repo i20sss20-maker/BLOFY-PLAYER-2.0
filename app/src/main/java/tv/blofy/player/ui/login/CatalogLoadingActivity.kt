@@ -58,7 +58,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 return@launch
             }
             if (!forceRefresh && catalogReady && hasCachedCatalog) {
-                // Resume interrupted one-time enrichment without re-downloading the base catalog.
                 CatalogSyncState.markReady(applicationContext, providerId)
                 awaitFullLocalCache(providerId)
                 openHome()
@@ -178,6 +177,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         val target = withContext(Dispatchers.IO) { dao.provider(providerId) } ?: return fail("قائمة التشغيل غير موجودة")
         val firstLoad = withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
         val syncProvider: ProviderEntity = if (firstLoad) target.copy(enabled = true, updatedAt = System.currentTimeMillis()) else target.copy(id = UUID.randomUUID().toString(), enabled = false)
+        var catalogCommitted = false
         try {
             render(5, if (firstLoad) "بدء التحميل الكامل للباقة..." else "بدء تحديث الباقة...")
             val result = PlaylistSyncPolicy.run {
@@ -194,6 +194,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 if (firstLoad) dao.saveAndActivateProvider(syncProvider.copy(enabled = true, updatedAt = System.currentTimeMillis()))
                 else dao.promoteStagedCatalog(syncProvider.id, target.copy(enabled = true, updatedAt = System.currentTimeMillis()))
             }
+            catalogCommitted = true
             if (!firstLoad) {
                 withContext(Dispatchers.IO) { ProviderMetadataCache.clearProvider(applicationContext, providerId) }
             }
@@ -203,12 +204,19 @@ class CatalogLoadingActivity : AppCompatActivity() {
             delay(120)
             openHome()
         } catch (cancelled: CancellationException) {
-            withContext(Dispatchers.IO) {
-                if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+            if (!catalogCommitted) {
+                withContext(Dispatchers.IO) {
+                    if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+                }
+                if (!firstLoad) CatalogSyncState.markReady(applicationContext, providerId)
             }
-            if (!firstLoad) CatalogSyncState.markReady(applicationContext, providerId)
             throw cancelled
         } catch (error: Throwable) {
+            if (catalogCommitted) {
+                CatalogSyncState.markReady(applicationContext, providerId)
+                fail("تعذر إكمال التخزين المحلي • افتح القائمة مرة أخرى وسيتم استكمال الناقص")
+                return
+            }
             withContext(Dispatchers.IO) {
                 if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
             }
