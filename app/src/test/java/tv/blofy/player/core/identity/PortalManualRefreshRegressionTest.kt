@@ -39,7 +39,16 @@ class PortalManualRefreshRegressionTest {
         }
     } as BlofyDao
 
-    @Before fun setup() { rows.clear(); server = MockWebServer(); server.start() }
+    @Before fun setup() {
+        rows.clear()
+        RuntimeEnvironment.getApplication<Application>()
+            .getSharedPreferences("blofy_portal_reconciliation_v1", 0)
+            .edit()
+            .clear()
+            .commit()
+        server = MockWebServer()
+        server.start()
+    }
     @After fun cleanup() { server.shutdown() }
 
     private fun provider(id: String, name: String = "My playlist") = ProviderEntity(
