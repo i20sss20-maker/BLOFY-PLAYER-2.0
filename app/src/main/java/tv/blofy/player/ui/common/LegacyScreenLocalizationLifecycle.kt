@@ -10,17 +10,18 @@ import android.widget.TextView
 import tv.blofy.player.R
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.home.HomeActivity
+import tv.blofy.player.ui.login.LoginActivity
 
 /**
- * Temporary compatibility bridge for the two large legacy programmatic screens while their
- * remaining inline labels are migrated to resources. It keeps English as the product default and
- * Arabic as a real resource override without touching playback, catalog or focus behavior.
+ * Temporary compatibility bridge for large legacy programmatic screens while their
+ * remaining inline labels are migrated to resources. English is the product default;
+ * Arabic remains available when the app locale is explicitly Arabic.
  */
 class LegacyScreenLocalizationLifecycle : Application.ActivityLifecycleCallbacks {
     private val listeners = java.util.WeakHashMap<Activity, ViewTreeObserver.OnGlobalLayoutListener>()
 
     override fun onActivityResumed(activity: Activity) {
-        if (activity !is HomeActivity && activity !is ContentBrowserActivity) return
+        if (activity !is HomeActivity && activity !is ContentBrowserActivity && activity !is LoginActivity) return
         val root = activity.window.decorView ?: return
         localizeTree(activity, root)
         if (listeners.containsKey(activity)) return
@@ -45,6 +46,17 @@ class LegacyScreenLocalizationLifecycle : Application.ActivityLifecycleCallbacks
     private fun localizeText(activity: Activity, view: TextView) {
         val raw = view.text?.toString().orEmpty()
         if (raw.isBlank()) return
+
+        // LoginActivity still contains legacy Arabic literals. Preserve them only when Arabic
+        // is the actively selected app locale; otherwise translate them to the English product UI.
+        if (activity is LoginActivity && !isArabic(activity)) {
+            val login = loginEnglish(raw)
+            if (login != null && login != raw) {
+                view.text = login
+                return
+            }
+        }
+
         val replacement = when (raw) {
             // Browser
             "إعادة المحاولة" -> activity.getString(R.string.browser_retry)
@@ -110,6 +122,69 @@ class LegacyScreenLocalizationLifecycle : Application.ActivityLifecycleCallbacks
             else -> dynamicReplacement(activity, raw)
         }
         if (replacement != null && replacement != raw) view.text = replacement
+    }
+
+    private fun isArabic(activity: Activity): Boolean =
+        activity.resources.configuration.locales[0]?.language.equals("ar", ignoreCase = true)
+
+    private fun loginEnglish(raw: String): String? {
+        val exact = when (raw) {
+            "كل شيء يبدأ من هنا" -> "Everything starts here"
+            "فعّل جهازك، اختر قائمتك، وادخل مباشرة إلى BLOFY" -> "Activate your device, choose a playlist, and enter BLOFY instantly"
+            "تفعيل جهاز BLOFY" -> "Activate BLOFY device"
+            "امسح الرمز بالكاميرا لإدارة هذا الجهاز بسرعة" -> "Scan the QR code to manage this device quickly"
+            "امسح QR" -> "Scan QR"
+            "أضف قائمتك" -> "Add playlist"
+            "ابدأ المشاهدة" -> "Start watching"
+            "رقم الجهاز" -> "Device ID"
+            "رمز الربط" -> "Pairing code"
+            "↻  تحديث حالة التفعيل" -> "↻  Refresh activation status"
+            "قوائم التشغيل" -> "Playlists"
+            "● جاهز للدخول" -> "● Ready"
+            "اختر قائمتك المحفوظة أو أضف قائمة جديدة. العودة لاحقًا تفتح من الكاش مباشرة." -> "Choose a saved playlist or add a new one. Future launches open directly from local cache."
+            "ما عندك قوائم إلى الآن • اضغط إضافة / إدارة" -> "No playlists yet • Select Add / Manage"
+            "＋  إضافة / إدارة القوائم" -> "＋  Add / Manage playlists"
+            "▶  دخول إلى BLOFY" -> "▶  Enter BLOFY"
+            "BLOFY SECURE SESSION  •  بياناتك محفوظة محليًا  •  القوائم لا يعاد تحميلها عند كل دخول" -> "BLOFY SECURE SESSION  •  Your data is stored locally  •  Playlists are not reloaded on every launch"
+            "فعّل جهازك ثم اختر قائمة التشغيل" -> "Activate your device, then choose a playlist"
+            "إضافة / إدارة القوائم" -> "Add / Manage playlists"
+            "دخول" -> "Enter"
+            "تحديث" -> "Refresh"
+            "جاري إنشاء هوية الجهاز..." -> "Creating device identity..."
+            "رمز تفعيل BLOFY" -> "BLOFY activation QR code"
+            "فتح سريع" -> "Fast launch"
+            "من الكاش" -> "From cache"
+            "قائمة آمنة" -> "Secure playlist"
+            "محفوظة محليًا" -> "Stored locally"
+            "جهاز واحد" -> "One device"
+            "هوية مستقرة" -> "Stable identity"
+            "تم إلغاء الاتصال" -> "Connection cancelled"
+            "إلغاء" -> "Cancel"
+            "أضف قائمة تشغيل أولاً" -> "Add a playlist first"
+            "جاري التحقق من تفعيل الجهاز..." -> "Checking device activation..."
+            "الجهاز مفعل • أضف قائمة" -> "Device activated • Add a playlist"
+            "تعذر التحقق من التفعيل" -> "Unable to verify activation"
+            "تعذر اختيار القائمة • حاول مرة أخرى" -> "Unable to select playlist • Try again"
+            "● القائمة النشطة   •   Xtream" -> "● Active playlist   •   Xtream"
+            "● القائمة النشطة   •   M3U" -> "● Active playlist   •   M3U"
+            "Xtream   •   اضغط OK للدخول" -> "Xtream   •   Press OK to enter"
+            "M3U   •   اضغط OK للدخول" -> "M3U   •   Press OK to enter"
+            "ابدأ بإضافة أول قائمة" -> "Add your first playlist"
+            "● الفترة التجريبية فعالة" -> "● Trial is active"
+            "● الجهاز مفعل وجاهز" -> "● Device activated and ready"
+            "انتهت صلاحية الجهاز" -> "Device access expired"
+            "الجهاز موقوف" -> "Device is blocked"
+            "حالة التفعيل غير معروفة" -> "Unknown activation status"
+            "في انتظار إضافة قائمة" -> "Waiting for a playlist"
+            else -> null
+        }
+        if (exact != null) return exact
+        return when {
+            raw.startsWith("جاري تجهيز ") -> "Preparing ${raw.removePrefix("جاري تجهيز ")}"
+            raw.startsWith("جاري اختيار ") -> "Selecting ${raw.removePrefix("جاري اختيار ")}"
+            raw.startsWith("● جاهز • ") -> "● Ready • ${raw.removePrefix("● جاهز • ")}"
+            else -> null
+        }
     }
 
     private fun dynamicReplacement(activity: Activity, raw: String): String? {
