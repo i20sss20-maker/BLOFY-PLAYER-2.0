@@ -17,6 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import tv.blofy.player.R
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.LoginActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
@@ -50,11 +51,11 @@ class RootExitConfirmationRegressionTest {
         assertFalse(RootExitConfirmationLifecycle.isRootScreen(ExitTestActivity::class.java))
     }
 
-    @Test fun backShowsYesNoAndDefaultsToNo() {
+    @Test fun backShowsLocalizedYesNoAndDefaultsToNo() {
         val dialog = show()
         assertTrue(dialog.isShowing)
-        assertEquals("نعم", dialog.getButton(DialogInterface.BUTTON_POSITIVE).text.toString())
-        assertEquals("لا", dialog.getButton(DialogInterface.BUTTON_NEGATIVE).text.toString())
+        assertEquals(activity.getString(R.string.yes), dialog.getButton(DialogInterface.BUTTON_POSITIVE).text.toString())
+        assertEquals(activity.getString(R.string.no), dialog.getButton(DialogInterface.BUTTON_NEGATIVE).text.toString())
         assertTrue(dialog.getButton(DialogInterface.BUTTON_NEGATIVE).hasFocus())
         assertFalse(activity.isFinishing)
     }
