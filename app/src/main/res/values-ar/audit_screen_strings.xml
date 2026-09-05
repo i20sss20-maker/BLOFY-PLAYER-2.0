@@ -55,4 +55,26 @@
     <string name="browser_no_saved_catalog">لا توجد %1$s محفوظة • حدّث المكتبة يدويًا</string>
     <string name="live_archive_available">مباشر • أرشيف متاح</string>
     <string name="live_now">مباشر الآن</string>
+    <string name="details_movie_type">فيلم</string>
+    <string name="details_series_type">مسلسل</string>
+    <string name="details_minutes">%1$d دقيقة</string>
+    <string name="details_story">القصة</string>
+    <string name="details_movie_no_description">لا يتوفر وصف لهذا الفيلم من السيرفر حاليًا.</string>
+    <string name="details_series_no_description">لا يتوفر وصف لهذا المسلسل من السيرفر حاليًا.</string>
+    <string name="details_continue_watching">متابعة المشاهدة   •   %1$d%%</string>
+    <string name="details_watch_now">▶  شاهد الآن</string>
+    <string name="details_resume">▶  استئناف</string>
+    <string name="details_start_over">↺  من البداية</string>
+    <string name="details_trailer">▷  الإعلان</string>
+    <string name="details_favorite_on">★  المفضلة</string>
+    <string name="details_favorite_off">☆  المفضلة</string>
+    <string name="details_cast">طاقم التمثيل</string>
+    <string name="details_cast_unavailable">بيانات طاقم التمثيل غير متوفرة من السيرفر.</string>
+    <string name="details_trailer_open_failed">تعذر فتح الإعلان على هذا الجهاز.</string>
+    <string name="details_seasons_count">%1$d موسم</string>
+    <string name="details_episodes_count">%1$d حلقة</string>
+    <string name="details_continue_episode">متابعة الموسم %1$d   •   الحلقة %2$d</string>
+    <string name="details_continue_episode_progress">متابعة الموسم %1$d   •   الحلقة %2$d   •   %3$d%%</string>
+    <string name="details_resume_episode">▶  استئناف الحلقة</string>
+    <string name="details_seasons_episodes">▤  المواسم والحلقات</string>
 </resources>
