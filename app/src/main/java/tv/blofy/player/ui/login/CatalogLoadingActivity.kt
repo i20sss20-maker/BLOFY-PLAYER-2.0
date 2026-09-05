@@ -25,6 +25,7 @@ import tv.blofy.player.data.PlaylistSyncProgress
 import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
@@ -50,8 +51,16 @@ class CatalogLoadingActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val hasCachedCatalog = withContext(Dispatchers.IO) { dao.hasCatalog(providerId) }
-            val ready = CatalogSyncState.isReady(applicationContext, providerId)
-            if (!forceRefresh && ready && hasCachedCatalog) {
+            val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
+            val fullyReady = CatalogSyncState.isFullyReady(applicationContext, providerId)
+            if (!forceRefresh && fullyReady && hasCachedCatalog) {
+                openHome()
+                return@launch
+            }
+            if (!forceRefresh && catalogReady && hasCachedCatalog) {
+                // Resume interrupted one-time enrichment without re-downloading the base catalog.
+                CatalogSyncState.markReady(applicationContext, providerId)
+                awaitFullLocalCache(providerId)
                 openHome()
                 return@launch
             }
@@ -89,7 +98,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             setPadding(0, u(4), 0, u(4))
         })
         panel.addView(TextView(this).apply {
-            text = "يتم تحميل الباقة وحفظها محليًا، وبعدها يكون الدخول أسرع من الكاش"
+            text = "يتم تحميل الباقة والتفاصيل والحلقات مرة واحدة وحفظها محليًا"
             BlofyTvDesign.applyBody(this)
             textSize = s(14f)
             setTextColor(BlofyTvDesign.TextMuted)
@@ -127,7 +136,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         panel.addView(stage)
         panel.addView(TextView(this).apply {
-            text = "أول تحميل يعتمد على حجم الباقة وسرعة السيرفر. بعد الحفظ، القوائم تفتح من التخزين المحلي."
+            text = "أول تحميل يعتمد على حجم الباقة وسرعة السيرفر. بعد اكتماله تفتح الصفحات من التخزين المحلي."
             BlofyTvDesign.applyCaption(this)
             textSize = s(12.5f)
             gravity = Gravity.CENTER
@@ -170,7 +179,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         val firstLoad = withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
         val syncProvider: ProviderEntity = if (firstLoad) target.copy(enabled = true, updatedAt = System.currentTimeMillis()) else target.copy(id = UUID.randomUUID().toString(), enabled = false)
         try {
-            render(5, if (firstLoad) "بدء التحميل السريع للباقة..." else "بدء تحديث الباقة...")
+            render(5, if (firstLoad) "بدء التحميل الكامل للباقة..." else "بدء تحديث الباقة...")
             val result = PlaylistSyncPolicy.run {
                 withContext(Dispatchers.IO) {
                     PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider) { p ->
@@ -185,8 +194,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 if (firstLoad) dao.saveAndActivateProvider(syncProvider.copy(enabled = true, updatedAt = System.currentTimeMillis()))
                 else dao.promoteStagedCatalog(syncProvider.id, target.copy(enabled = true, updatedAt = System.currentTimeMillis()))
             }
+            if (!firstLoad) {
+                withContext(Dispatchers.IO) { ProviderMetadataCache.clearProvider(applicationContext, providerId) }
+            }
             CatalogSyncState.markReady(applicationContext, providerId)
-            render(100, "المكتبة جاهزة")
+            awaitFullLocalCache(providerId)
+            render(100, "المكتبة كاملة وجاهزة")
             delay(120)
             openHome()
         } catch (cancelled: CancellationException) {
@@ -200,8 +213,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
             }
             if (!firstLoad) {
-                // A refresh is staged separately. If promotion/finalization fails, the user's
-                // previous catalog is still intact, so never strand the TV at 90%.
                 CatalogSyncState.markReady(applicationContext, providerId)
                 render(100, "تعذر تحديث النسخة الجديدة • تم فتح مكتبتك المحفوظة")
                 stage.setTextColor(BlofyTvDesign.Mint)
@@ -212,6 +223,25 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 fail("تعذر تجهيز المكتبة: ${error.message ?: "خطأ غير معروف"}")
             }
         }
+    }
+
+    private suspend fun awaitFullLocalCache(providerId: String) {
+        render(96, "جاري حفظ تفاصيل الأفلام والمسلسلات والحلقات...")
+        var pulse = 0
+        while (!CatalogSyncState.isFullyReady(applicationContext, providerId)) {
+            val metadataReady = CatalogSyncState.isMetadataReady(applicationContext, providerId)
+            val episodesReady = CatalogSyncState.areEpisodesReady(applicationContext, providerId)
+            val label = when {
+                !metadataReady && !episodesReady -> "حفظ التفاصيل والحلقات محليًا"
+                !metadataReady -> "حفظ تفاصيل وصور المحتوى من السيرفر"
+                !episodesReady -> "حفظ جميع المواسم والحلقات"
+                else -> "إنهاء المكتبة المحلية"
+            }
+            render(96 + (pulse % 3), label)
+            pulse += 1
+            delay(850L)
+        }
+        render(99, "تم حفظ المكتبة محليًا")
     }
 
     private fun renderProgress(p: PlaylistSyncProgress) {
