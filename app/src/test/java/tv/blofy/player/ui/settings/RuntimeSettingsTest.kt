@@ -42,7 +42,7 @@ class RuntimeSettingsTest {
             .putString(RuntimeSettings.KEY_AUDIO_OUTPUT, "stereo")
             .commit()
         assertFalse(RuntimeSettings.autoplayLive(app))
-        assertFalse(RuntimeSettings.askBeforeResume(app))
+        assertFalse(RuntimeSettings.askBeforeResume(app)) // EpisodesActivity resumes directly when false.
         assertEquals(RuntimeSettings.AutoNext.ON, RuntimeSettings.autoNext(app))
         assertEquals(RuntimeSettings.SubtitleLanguage.OFF, RuntimeSettings.subtitleLanguage(app))
         assertEquals(26f, RuntimeSettings.subtitleSizeSp(app), 0f)
