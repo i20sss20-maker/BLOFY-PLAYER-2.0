@@ -11,6 +11,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.DialogFragment
+import tv.blofy.player.R
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.LoginActivity
 
@@ -50,12 +51,10 @@ class RootExitConfirmationLifecycle : Application.ActivityLifecycleCallbacks {
 class RootExitConfirmationDialog : DialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
         AlertDialog.Builder(requireContext())
-            .setTitle("الخروج من BLOFY")
-            .setMessage("هل تريد الخروج من التطبيق؟")
-            .setPositiveButton("نعم") { _, _ ->
-                activity?.finishAffinity()
-            }
-            .setNegativeButton("لا", null)
+            .setTitle(R.string.exit_title)
+            .setMessage(R.string.exit_message)
+            .setPositiveButton(R.string.yes) { _, _ -> activity?.finishAffinity() }
+            .setNegativeButton(R.string.no, null)
             .create()
 
     override fun onStart() {
@@ -67,8 +66,6 @@ class RootExitConfirmationDialog : DialogFragment() {
         val no = alert.getButton(DialogInterface.BUTTON_NEGATIVE)
         val yes = alert.getButton(DialogInterface.BUTTON_POSITIVE)
 
-        // AlertDialog buttons can have View.NO_ID on some Android TV builds. Explicit IDs are
-        // required for nextFocus* to work reliably with a physical remote.
         if (no.id == View.NO_ID) no.id = View.generateViewId()
         if (yes.id == View.NO_ID) yes.id = View.generateViewId()
 
@@ -86,22 +83,17 @@ class RootExitConfirmationDialog : DialogFragment() {
         yes.nextFocusLeftId = no.id
         yes.nextFocusRightId = no.id
 
-        // Some receiver firmwares ignore AlertDialog nextFocus links. Handle horizontal DPAD as a
-        // second deterministic path so both choices are always reachable.
         no.setOnKeyListener { _, keyCode, event ->
             if (event.action == KeyEvent.ACTION_DOWN && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
-                yes.requestFocus()
-                true
+                yes.requestFocus(); true
             } else false
         }
         yes.setOnKeyListener { _, keyCode, event ->
             if (event.action == KeyEvent.ACTION_DOWN && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
-                no.requestFocus()
-                true
+                no.requestFocus(); true
             } else false
         }
 
-        // Safe default: a repeated OK must not accidentally close the application.
         no.post { if (dialog?.isShowing == true) no.requestFocus() }
     }
 }
