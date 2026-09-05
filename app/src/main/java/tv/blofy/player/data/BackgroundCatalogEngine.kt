@@ -25,8 +25,6 @@ object BackgroundCatalogEngine {
 
     fun kick(context: Context) {
         val app = context.applicationContext
-        // Older RC builds may already have registered a 6-hour WorkManager refresh. Cancel it once
-        // on startup so an upgraded install also obeys the new explicit-refresh-only contract.
         CatalogRefreshWorker.cancelLegacyAutomatic(app)
 
         scope.launch {
@@ -51,20 +49,11 @@ object BackgroundCatalogEngine {
 
             val warm = runCatching { dao.latestHomeStreams(provider.id, WARM_ART_LIMIT) }
                 .getOrDefault(emptyList())
-            if (warm.isNotEmpty()) {
-                ArtworkLoader.warmPrefetch(app, warm.map { it.backdrop ?: it.icon })
-            }
+            if (warm.isNotEmpty()) ArtworkLoader.warmPrefetch(app, warm.map { it.backdrop ?: it.icon })
 
-            // Resume an interrupted one-time preload. Existing cached rows are skipped and the
-            // provider's core catalog is never downloaded again here.
-            if (CatalogSyncState.isReady(app, provider.id)) {
-                if (!CatalogSyncState.areEpisodesReady(app, provider.id)) {
-                    EpisodeCatalogPreloader.schedule(app, provider.id, replace = false)
-                }
-                if (!CatalogSyncState.isMetadataReady(app, provider.id)) {
-                    MetadataCatalogPreloader.schedule(app, provider.id, replace = false)
-                }
-            }
+            // Resume only missing enrichment from its persisted checkpoint. The core catalog is
+            // never downloaded on startup and already-cached rows are reused.
+            CatalogSyncState.resumeEnrichment(app, provider.id)
         }
     }
 }
