@@ -16,11 +16,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Fills the local episode table in small background batches after the main catalog is ready.
- * Home opens immediately; large servers continue caching series episodes without blocking TV UI.
- *
- * A batch is only advanced after every series in that batch either has cached episodes or returned
- * a valid provider payload. Temporary network/provider failures retry the same batch; rows already
- * cached on the previous attempt are skipped, so only the missing series are fetched again.
+ * Existing cached episodes are reused; one unstable series never blocks every later title.
  */
 object EpisodeCatalogPreloader {
     private const val KEY_PROVIDER_ID = "provider_id"
@@ -61,13 +57,22 @@ class EpisodePreloadWorker(
 
         val dao = BlofyDatabase.get(applicationContext).dao()
         val provider = dao.provider(providerId) ?: return Result.success()
-        if (provider.providerType.equals("m3u", true)) return Result.success()
+        if (provider.providerType.equals("m3u", true)) {
+            CatalogSyncState.markEpisodesReady(applicationContext, providerId)
+            return Result.success()
+        }
         if (!CatalogSyncState.isReady(applicationContext, providerId)) return Result.retry()
 
         val allSeries = dao.streamSnapshot(providerId, "series")
-        if (allSeries.isEmpty()) return Result.success()
+        if (allSeries.isEmpty()) {
+            CatalogSyncState.markEpisodesReady(applicationContext, providerId)
+            return Result.success()
+        }
         val offset = EpisodeCatalogPreloader.offset(inputData)
-        if (offset >= allSeries.size) return Result.success()
+        if (offset >= allSeries.size) {
+            CatalogSyncState.markEpisodesReady(applicationContext, providerId)
+            return Result.success()
+        }
 
         val manager = PlaylistManager(XtreamClient.api, dao)
         val end = (offset + EpisodeCatalogPreloader.batchSize()).coerceAtMost(allSeries.size)
@@ -83,20 +88,17 @@ class EpisodePreloadWorker(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                // Continue this batch so one unstable title never blocks the other series. We then
-                // retry the same offset; everything cached successfully is skipped on the retry.
                 retryCurrentBatch = true
             }
         }
 
         if (!CatalogSyncState.isReady(applicationContext, providerId)) return Result.success()
-        // Retry transient provider failures, but never let one permanently broken/unsupported
-        // series block every later series in a very large catalog. A future catalog refresh starts
-        // again from offset 0 and will retry any still-missing titles.
         if (retryCurrentBatch && runAttemptCount < MAX_BATCH_RETRIES) return Result.retry()
 
         if (end < allSeries.size) {
             EpisodeCatalogPreloader.schedule(applicationContext, providerId, end)
+        } else {
+            CatalogSyncState.markEpisodesReady(applicationContext, providerId)
         }
         return Result.success()
     }
