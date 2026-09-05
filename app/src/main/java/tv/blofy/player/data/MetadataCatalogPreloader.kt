@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.data.metadata.XtreamMetadataFallback
+import tv.blofy.player.ui.catalog.ArtworkLoader
 import java.util.concurrent.TimeUnit
 
 /**
@@ -64,7 +65,8 @@ class MetadataPreloadWorker(
     override suspend fun doWork(): Result {
         val providerId = MetadataCatalogPreloader.providerId(inputData)
         if (providerId.isBlank()) return Result.failure()
-        val dao = BlofyDatabase.get(applicationContext).dao()
+        val database = BlofyDatabase.get(applicationContext)
+        val dao = database.dao()
         val provider = dao.provider(providerId) ?: return Result.success()
 
         if (provider.providerType.equals("m3u", true)) {
@@ -86,6 +88,7 @@ class MetadataPreloadWorker(
             return Result.success()
         }
 
+        val artworkUrls = ArrayList<String?>(page.size * 4)
         for (stream in page) {
             if (isStopped) return Result.success()
             if (ProviderMetadataCache.contains(applicationContext, stream.key)) continue
@@ -93,9 +96,43 @@ class MetadataPreloadWorker(
                 if (kind == "series") XtreamMetadataFallback.fetchSeries(provider, stream)
                 else XtreamMetadataFallback.fetchMovie(provider, stream)
             }.getOrNull()
-            // Even a valid "no extra metadata" response gets a marker so page opening never causes
-            // a retry loop. A future explicit refresh can clear/rebuild this cache if desired.
+
             ProviderMetadataCache.write(applicationContext, providerId, stream.key, metadata)
+            if (metadata != null) {
+                // Feed richer provider artwork/plot/rating back into the local stream row so Home
+                // can render banners immediately from Room without opening the detail endpoint.
+                runCatching {
+                    database.openHelper.writableDatabase.execSQL(
+                        """
+                        UPDATE streams SET
+                            icon = COALESCE(?, icon),
+                            backdrop = COALESCE(?, backdrop),
+                            plot = COALESCE(?, plot),
+                            genre = COALESCE(?, genre),
+                            releaseDate = COALESCE(?, releaseDate),
+                            rating = COALESCE(?, rating),
+                            duration = COALESCE(?, duration)
+                        WHERE `key` = ?
+                        """.trimIndent(),
+                        arrayOf(
+                            metadata.posterUrl?.takeIf(String::isNotBlank),
+                            metadata.backdropUrl?.takeIf(String::isNotBlank),
+                            metadata.overview?.takeIf(String::isNotBlank),
+                            metadata.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
+                            metadata.releaseDate?.takeIf(String::isNotBlank),
+                            metadata.rating?.toString(),
+                            metadata.runtimeMinutes?.toString(),
+                            stream.key
+                        )
+                    )
+                }
+                artworkUrls += metadata.backdropUrl
+                artworkUrls += metadata.posterUrl
+                metadata.cast.forEach { artworkUrls += it.profileUrl }
+            }
+        }
+        if (artworkUrls.any { !it.isNullOrBlank() }) {
+            ArtworkLoader.prefetch(applicationContext, artworkUrls)
         }
 
         val nextRowId = dao.streamRowId(page.last().key) ?: return Result.success()
