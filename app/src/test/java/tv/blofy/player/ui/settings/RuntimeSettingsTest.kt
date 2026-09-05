@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
 class RuntimeSettingsTest {
-    private val app get() = RuntimeEnvironment.getApplication<Application>()
+    private val app get() = RuntimeEnvironment.getApplication()
     private val prefs get() = app.getSharedPreferences(RuntimeSettings.PREFS, Context.MODE_PRIVATE)
 
     @Before fun setup() { prefs.edit().clear().commit() }
