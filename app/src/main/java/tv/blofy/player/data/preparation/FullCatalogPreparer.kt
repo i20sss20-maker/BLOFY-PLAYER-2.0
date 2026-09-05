@@ -77,7 +77,9 @@ object FullCatalogPreparer {
                 EntryPreparationPipeline.run(
                     home = { HomeSnapshotStore.rebuild(app, dao, provider) },
                     search = {
-                        dao.rebuildSearchIndex(providerId)
+                        // The FTS table is already maintained section-by-section by replaceCatalog(),
+                        // and promoteStagedCatalog() rebuilds it after a staged refresh. Rebuilding the
+                        // entire 200k+ catalog here duplicated that work and could pin first entry at 70%.
                         check(app.getSharedPreferences("blofy_search_index", Context.MODE_PRIVATE).edit()
                             .putBoolean("v9_ready_$providerId", true).commit()) { "Unable to persist search readiness" }
                     },
