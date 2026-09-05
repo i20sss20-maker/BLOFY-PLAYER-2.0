@@ -103,9 +103,10 @@ object ArtworkLoader {
                     else view.setImageDrawable(skeleton())
                 }
             }
-            if (result != null && resolvedUrl != null) {
-                val url = resolvedUrl!!
-                backgroundPool.execute { writeDisk(app.cacheDir, url, target, result) }
+            if (result != null) {
+                resolvedUrl?.let { url ->
+                    backgroundPool.execute { writeDisk(app.cacheDir, url, target, result) }
+                }
             }
         }
     }
