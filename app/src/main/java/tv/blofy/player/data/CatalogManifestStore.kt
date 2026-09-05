@@ -3,6 +3,7 @@ package tv.blofy.player.data
 import android.content.Context
 import com.google.gson.Gson
 import tv.blofy.player.data.local.BlofyDao
+import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.metadata.ProviderMetadataCache
 
@@ -28,13 +29,17 @@ object CatalogManifestStore {
     }
 
     suspend fun rebuild(context: Context, dao: BlofyDao, provider: ProviderEntity) {
+        val db = BlofyDatabase.get(context.applicationContext).openHelper.readableDatabase
+        val episodeCount = db.query("SELECT COUNT(*) FROM episodes WHERE providerId = ?", arrayOf(provider.id)).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getInt(0) else 0
+        }
         val manifest = Manifest(
             providerId = provider.id,
             generatedAt = System.currentTimeMillis(),
             liveCount = dao.catalogCountAll(provider.id, "live"),
             movieCount = dao.catalogCountAll(provider.id, "movie"),
             seriesCount = dao.catalogCountAll(provider.id, "series"),
-            episodeCount = dao.episodeCountForProvider(provider.id),
+            episodeCount = episodeCount,
             metadataCount = ProviderMetadataCache.count(context, provider.id),
             fullyReady = CatalogSyncState.isFullyReady(context, provider.id)
         )
