@@ -50,8 +50,8 @@ class RuntimeSettingsLifecycle : Application.ActivityLifecycleCallbacks {
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                 .setPreferredTextLanguage("ar")
         }
-        builder.setPreferredAudioChannelCount(
-            if (RuntimeSettings.preferStereoTrack(activity)) 2 else C.NO_VALUE
+        builder.setMaxAudioChannelCount(
+            if (RuntimeSettings.preferStereoTrack(activity)) 2 else Int.MAX_VALUE
         )
         player.trackSelectionParameters = builder.build()
 
