@@ -456,7 +456,8 @@ class LoginActivity : AppCompatActivity() {
         if (endpoint.isBlank()) dao.allProviders().first()
         else runSuspendCatching { PortalPlaylistClient.sync(applicationContext, endpoint, dao).providers }.getOrElse { dao.allProviders().first() }
 
-    private fun renderPortalPlaylists(providers: List<ProviderEntity>) {
+    private fun renderPortalPlaylists(allProviders: List<ProviderEntity>) {
+        val providers = tv.blofy.player.core.identity.PortalSyncBook.visible(this, allProviders)
         val row = playlistRow ?: return
         row.removeAllViews()
         if (providers.isEmpty()) {
@@ -532,7 +533,6 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun openCatalogLoading(providerId: String) {
-        CatalogSyncState.markPending(applicationContext, providerId)
         startActivity(Intent(this, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, providerId))
     }
 
@@ -545,7 +545,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) {
-        CatalogSyncState.isReady(applicationContext, providerId) && dao.hasStreamsForProvider(providerId)
+        CatalogSyncState.isFullyReady(applicationContext, providerId) && dao.hasStreamsForProvider(providerId)
     }
 
     private suspend fun <T> runSuspendCatching(block: suspend () -> T): Result<T> = try { Result.success(block()) }

@@ -14,6 +14,7 @@ interface BlofyDao {
     @Query("SELECT * FROM providers WHERE enabled = 1 ORDER BY updatedAt DESC") fun providers(): Flow<List<ProviderEntity>>
     @Query("SELECT * FROM providers ORDER BY updatedAt DESC") fun allProviders(): Flow<List<ProviderEntity>>
     @Query("SELECT * FROM providers WHERE id = :providerId LIMIT 1") suspend fun provider(providerId: String): ProviderEntity?
+    @Query("UPDATE providers SET enabled = 0 WHERE id = :providerId") suspend fun deactivateProvider(providerId: String)
     @Query("UPDATE providers SET enabled = 0") suspend fun disableAllProviders()
     @Query("UPDATE providers SET enabled = 1, updatedAt = :updatedAt WHERE id = :providerId") suspend fun activateProvider(providerId: String, updatedAt: Long = System.currentTimeMillis())
     @Query("DELETE FROM providers WHERE id = :providerId") suspend fun deleteProvider(providerId: String)
@@ -91,6 +92,9 @@ interface BlofyDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveWatchState(state: WatchStateEntity)
     @Query("SELECT * FROM watch_state WHERE contentKey = :contentKey LIMIT 1") suspend fun watchState(contentKey: String): WatchStateEntity?
+    @Query("SELECT w.* FROM watch_state w INNER JOIN episodes e ON e.`key` = w.contentKey WHERE e.providerId = :providerId AND e.seriesId = :seriesId")
+    suspend fun watchStatesForSeries(providerId: String, seriesId: String): List<WatchStateEntity>
+
     @Query("SELECT * FROM watch_state WHERE providerId = :providerId") suspend fun watchStates(providerId: String): List<WatchStateEntity>
     @Query("SELECT * FROM watch_state WHERE providerId = :providerId AND completed = 0 AND positionMs > 0 ORDER BY updatedAt DESC LIMIT :limit") fun continueWatching(providerId: String, limit: Int = 30): Flow<List<WatchStateEntity>>
 

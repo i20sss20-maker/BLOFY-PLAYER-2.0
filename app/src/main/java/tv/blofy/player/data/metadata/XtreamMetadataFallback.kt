@@ -41,6 +41,10 @@ object XtreamMetadataFallback {
         }.getOrNull() ?: return null
 
         val root = runCatching { XtreamClient.api.objectResponse(url) }.getOrNull() ?: return null
+        return parseResponse(provider, stream, root, kind)
+    }
+
+    internal fun parseResponse(provider: ProviderEntity, stream: StreamEntity, root: Map<String, Any?>, kind: String): ProviderMetadata.Metadata? {
         val info = map(root["info"])
         val movieData = map(root["movie_data"])
         val source = LinkedHashMap<String, Any?>().apply { putAll(movieData); putAll(info) }

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { groupPlaylists, playlistIdentity, playlistUuid } from './playlist-identity.mjs';
 
 function keyFromEnv() {
   const raw = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
@@ -180,8 +181,9 @@ export function createPortalHandlers({
       `SELECT id,name,provider_type,base_url_enc,username_enc,password_enc,active,revision,updated_at
        FROM device_playlists WHERE device_id=$1 ORDER BY active DESC, updated_at DESC`, [auth.deviceId]
     );
-    return json(res, 200, { items: result.rows.map((row) => ({
+    return json(res, 200, { items: groupPlaylists(result.rows, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY).map(({ primary: row, aliases }) => ({
       id: row.id,
+      aliasIds: aliases,
       name: row.name,
       providerType: row.provider_type,
       baseUrl: open(row.base_url_enc),
@@ -197,7 +199,7 @@ export function createPortalHandlers({
     const body = await readJson(req);
     const auth = await authenticate(req, body);
     if (!auth) return json(res, 403, { error: 'unauthorized_device' });
-    const id = cleanText(body.id, 64) || crypto.randomUUID();
+    let id = cleanText(body.id, 64) || crypto.randomUUID();
     const name = cleanText(body.name, 128) || 'BLOFY Playlist';
     const providerType = cleanText(body.providerType, 16).toLowerCase();
     const baseUrl = cleanText(body.baseUrl, 2048);
@@ -212,6 +214,13 @@ export function createPortalHandlers({
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // Serialize concurrent saves for this device before selecting an existing logical account.
+      await client.query('SELECT device_id FROM devices WHERE device_id=$1 FOR UPDATE', [auth.deviceId]);
+      const saved = await client.query('SELECT * FROM device_playlists WHERE device_id=$1', [auth.deviceId]);
+      const identity = playlistIdentity({ providerType, baseUrl, username, password }, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY);
+      const match = groupPlaylists(saved.rows, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY).find(group => group.identity === identity);
+      if (match) id = match.primary.id;
+      else if (!body.id) id = playlistUuid(identity);
       if (active) await client.query('UPDATE device_playlists SET active=FALSE,updated_at=NOW() WHERE device_id=$1', [auth.deviceId]);
       const result = await client.query(
         `INSERT INTO device_playlists(id,device_id,name,provider_type,base_url_enc,username_enc,password_enc,active,revision)
@@ -238,13 +247,25 @@ export function createPortalHandlers({
     const body = await readJson(req);
     const auth = await authenticate(req, body);
     if (!auth) return json(res, 403, { error: 'unauthorized_device' });
-    const result = await pool.query('DELETE FROM device_playlists WHERE id=$1 AND device_id=$2 RETURNING id,active', [id, auth.deviceId]);
-    const deleted = result.rows[0];
-    if (!deleted) return json(res, 404, { error: 'playlist_not_found' });
-    if (deleted.active) {
-      await pool.query(`UPDATE device_playlists SET active=TRUE,updated_at=NOW() WHERE id=(SELECT id FROM device_playlists WHERE device_id=$1 ORDER BY updated_at DESC LIMIT 1)`, [auth.deviceId]);
-    }
-    return json(res, 200, { deleted: true });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT device_id FROM devices WHERE device_id=$1 FOR UPDATE', [auth.deviceId]);
+      const existing = await client.query('SELECT * FROM device_playlists WHERE device_id=$1', [auth.deviceId]);
+      const group = groupPlaylists(existing.rows, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY)
+        .find(item => item.primary.id === id || item.aliases.includes(id));
+      if (!group) { await client.query('ROLLBACK'); return json(res, 404, { error: 'playlist_not_found' }); }
+      const ids = [group.primary.id, ...group.aliases];
+      await client.query('DELETE FROM device_playlists WHERE device_id=$1 AND id=ANY($2::uuid[])', [auth.deviceId, ids]);
+      if (group.primary.active) {
+        await client.query(`UPDATE device_playlists SET active=TRUE,updated_at=NOW() WHERE id=(SELECT id FROM device_playlists WHERE device_id=$1 ORDER BY updated_at DESC LIMIT 1)`, [auth.deviceId]);
+      }
+      await client.query('COMMIT');
+      return json(res, 200, { deleted: true, deletedIds: ids });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally { client.release(); }
   }
 
   return { list, upsert, remove };

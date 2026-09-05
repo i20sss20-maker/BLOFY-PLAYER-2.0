@@ -45,7 +45,7 @@ object ProviderMetadataCache {
             put("payload_json", metadata?.let(gson::toJson).orEmpty())
             put("updated_at", System.currentTimeMillis())
         }
-        helper(context).writableDatabase.insertWithOnConflict(TABLE, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        check(helper(context).writableDatabase.insertWithOnConflict(TABLE, null, values, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Unable to persist metadata" }
     }
 
     fun count(context: Context, providerId: String): Int {

@@ -17,7 +17,8 @@ object BlofySubscriberClient {
         val baseUrl: String,
         val username: String,
         val password: String,
-        val expiresAt: Long
+        val expiresAt: Long,
+        val providerId: String = ""
     )
 
     private val client = OkHttpClient.Builder()
@@ -77,7 +78,8 @@ object BlofySubscriberClient {
                 baseUrl = baseUrl,
                 username = proxyUser,
                 password = proxyPassword.ifBlank { "blofy" },
-                expiresAt = root.optLong("expiresAt")
+                expiresAt = root.optLong("expiresAt"),
+                providerId = root.optString("providerId").takeIf { runCatching { java.util.UUID.fromString(it) }.isSuccess }.orEmpty()
             )
         }
     }

@@ -68,7 +68,7 @@ class PlaylistActivity : AppCompatActivity() {
             setOnFocusChangeListener { view, focused -> if (tv) view.background = fieldBackground(focused) }
             if (passwordField) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
-        val name = field("اسم القائمة")
+        val name = field("اسم القائمة (اختياري)")
         val url = field("رابط السيرفر أو رابط M3U")
         val username = field("اسم المستخدم — اتركه فارغًا لـ M3U")
         val password = field("كلمة المرور — اتركها فارغة لـ M3U", true)
@@ -126,6 +126,7 @@ class PlaylistActivity : AppCompatActivity() {
                             throw error
                         }
                     } else if (existing != null && (existing.baseUrl != next.baseUrl || existing.username != next.username || existing.password != next.password || existing.providerType != next.providerType)) {
+                        CatalogSyncState.markPending(applicationContext, id)
                         val staging = next.copy(id = UUID.randomUUID().toString(), enabled = false); var promoted = false
                         try {
                             val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(staging) }
@@ -138,7 +139,7 @@ class PlaylistActivity : AppCompatActivity() {
                     next
                 }
                 setResult(RESULT_OK); status.text = if (connectAfter) "تم الحفظ • جاري الدخول" else "تم الحفظ"
-                if (connectAfter) { startActivity(Intent(this@PlaylistActivity, HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)); finish() } else finish()
+                if (connectAfter) { startActivity(Intent(this@PlaylistActivity, tv.blofy.player.ui.login.CatalogLoadingActivity::class.java).putExtra("provider_id", provider.id)); finish() } else finish()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { status.text = "تعذر تجهيز القائمة • ${error.message ?: "خطأ اتصال"}"; busy = false }
         }

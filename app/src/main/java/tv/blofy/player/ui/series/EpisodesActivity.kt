@@ -143,12 +143,10 @@ class EpisodesActivity : AppCompatActivity() {
             val cached = dao.episodes(providerId, seriesId).first()
             launch { dao.episodes(providerId, seriesId).collect { renderEpisodes(it) } }
             if (cached.isEmpty()) {
-                // Offline-first: entering the page never starts a provider request. The one-time
-                // episode preloader fills Room after the initial catalog sync; this collector will
-                // render the rows as soon as they arrive. Network retry remains an explicit action.
-                loadState = EpisodeLoadState.LOADING
-                status.text = "جاري تجهيز الحلقات وحفظها محليًا..."
-                retryButton.visibility = View.GONE
+                loadState = if (tv.blofy.player.data.CatalogSyncState.isFullyReady(applicationContext, providerId))
+                    EpisodeLoadState.EMPTY_PROVIDER_RESPONSE else EpisodeLoadState.ERROR
+                retryButton.visibility = View.VISIBLE
+                updateStatus()
             } else {
                 loadState = EpisodeLoadState.LOADED
                 status.text = "يتم عرض الحلقات المحفوظة فورًا"
@@ -241,7 +239,7 @@ class EpisodesActivity : AppCompatActivity() {
             return
         }
         val dao = BlofyDatabase.get(applicationContext).dao()
-        val states = dao.watchStates(providerId).associateBy { it.contentKey }
+        val states = dao.watchStatesForSeries(providerId, seriesId).associateBy { it.contentKey }
         watchProgress.clear()
         allEpisodes.forEach { e ->
             val w = states[e.key]

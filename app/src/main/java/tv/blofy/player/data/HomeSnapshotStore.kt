@@ -33,7 +33,6 @@ object HomeSnapshotStore {
 
     suspend fun rebuild(context: Context, dao: BlofyDao, provider: ProviderEntity) {
         val all = dao.latestHomeStreams(provider.id, MAX_CANDIDATES)
-        if (all.isEmpty()) return
         fun rating(stream: StreamEntity): Double = stream.rating?.replace(',', '.')?.toDoubleOrNull()?.let { if (it <= 5.0) it * 2.0 else it } ?: 0.0
         fun hasArabic(value: String) = value.any { it in '\u0600'..'\u06FF' }
         val snapshot = Snapshot(
@@ -48,7 +47,7 @@ object HomeSnapshotStore {
                 text.contains("4K") || text.contains("UHD") || text.contains("HDR")
             }.take(28).map { it.key }.toList()
         )
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(provider.id, gson.toJson(snapshot)).apply()
+        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(provider.id, gson.toJson(snapshot)).commit()) { "Unable to persist Home snapshot" }
     }
 
     fun clear(context: Context, providerId: String) {

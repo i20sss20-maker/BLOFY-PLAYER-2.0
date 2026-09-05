@@ -106,8 +106,9 @@ class SeriesDetailsActivity : AppCompatActivity() {
 
             val allEpisodes = dao.episodes(providerId, stream.remoteId).first()
             val resumeItems = mutableListOf<Resume>()
+            val statesByKey = dao.watchStatesForSeries(providerId, stream.remoteId).associateBy { it.contentKey }
             allEpisodes.forEach { episode ->
-                val state = dao.watchState(episode.key) ?: return@forEach
+                val state = statesByKey[episode.key] ?: return@forEach
                 if (!state.completed && state.positionMs > 15_000L) {
                     resumeItems += Resume(episode, state.positionMs, state.durationMs, state.updatedAt)
                 }

@@ -13,6 +13,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.core.network.awaitResponse
@@ -58,7 +59,14 @@ object PortalPlaylistClient {
             put("deviceId", DeviceIdentity.deviceId(context))
             put("activationCode", DeviceIdentity.activationCode(context))
         }
-        val remote = fetchRemote(endpoint, auth)
+        // Deletion intent is durable before contacting the server. A retry cannot resurrect it.
+        for (id in PortalSyncBook.pending(context)) {
+            try { deleteRemote(endpoint, auth, id); PortalSyncBook.acknowledgeDelete(context, id) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Keep pending and suppressed until a later successful retry. */ }
+        }
+        val pending = PortalSyncBook.pending(context)
+        val remote = fetchRemote(endpoint, auth).filterNot { it.id in pending || it.aliasIds.any(pending::contains) }
         val local = dao.allProviders().first()
         val localById = local.associateBy { it.id }
         val changed = linkedSetOf<String>()
@@ -66,9 +74,17 @@ object PortalPlaylistClient {
         var remoteActive: ProviderEntity? = null
 
         remote.forEach { item ->
-            val existing = localById[item.id]
+            val candidates = local.filter { it.id == item.id || it.id in item.aliasIds ||
+                (PortalSyncBook.isKnown(context, it.id) && PortalSyncBook.remoteId(context, it.id) == item.id) }
+            // Reuse the cached local ID; changing it would orphan favorites/resume/episode keys.
+            val existing = candidates.firstOrNull { CatalogSyncState.isFullyReady(context, it.id) && dao.hasCatalog(it.id) }
+                ?: candidates.firstOrNull { dao.hasCatalog(it.id) } ?: localById[item.id] ?: candidates.firstOrNull()
+            val localId = existing?.id ?: item.id
+            val aliases = (candidates.map { it.id } + item.aliasIds + item.id).toSet() - localId
+            PortalSyncBook.bind(context, localId, item.id, aliases)
+            aliases.forEach { dao.deactivateProvider(it) }
             val next = ProviderEntity(
-                id = item.id,
+                id = localId,
                 name = item.name,
                 baseUrl = if (item.providerType == "xtream") item.baseUrl.trimEnd('/') else item.baseUrl,
                 username = item.username,
@@ -85,7 +101,10 @@ object PortalPlaylistClient {
             val contentChanged = existing == null ||
                 existing.baseUrl != next.baseUrl || existing.username != next.username ||
                 existing.password != next.password || existing.providerType != next.providerType
-            if (contentChanged) changed += next.id
+            if (contentChanged) {
+                changed += next.id
+                CatalogSyncState.markPending(context, next.id)
+            }
 
             // Persist portal playlists locally immediately. This makes the device cache the source
             // of truth for rendering and guarantees a transient portal/network failure never makes
@@ -97,14 +116,20 @@ object PortalPlaylistClient {
         val remoteIds = remote.mapTo(hashSetOf()) { it.id }
         // The explicit "refresh from website" action is read-only remotely. It must never
         // recreate site-deleted rows by uploading every unmatched local record.
+        // Only a fully parsed successful list can confirm a deletion on the website.
+        val remoteAllIds = remote.flatMap { it.aliasIds + it.id }.toSet()
+        val siteDeleted = local.filter { PortalSyncBook.isKnown(context, it.id) &&
+            PortalSyncBook.remoteId(context, it.id) !in remoteAllIds }
+        PortalSyncBook.hide(context, siteDeleted.map { it.id }.toSet())
+        siteDeleted.forEach { dao.deactivateProvider(it.id) }
         if (mode == SyncMode.MERGE_AND_UPLOAD) {
-            local.filterNot { it.id in remoteIds }.forEach { provider ->
+            PortalSyncBook.visible(context, local).filterNot { PortalSyncBook.isKnown(context, it.id) || it.id in remoteIds }.forEach { provider ->
                 try {
                     push(
                         endpoint,
                         auth,
                         provider.copy(enabled = provider.enabled && remoteActive == null)
-                    )
+                    ).also { remoteId -> PortalSyncBook.bind(context, provider.id, remoteId) }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -123,7 +148,7 @@ object PortalPlaylistClient {
                 enabled = remoteProvider.enabled || (old?.enabled == true && remoteActive == null)
             )
         }
-        val merged = mergedById.values.sortedByDescending { it.updatedAt }
+        val merged = PortalSyncBook.visible(context, mergedById.values.toList()).sortedByDescending { it.updatedAt }
         val activeCandidate = remoteActive ?: merged.firstOrNull { it.enabled } ?: merged.firstOrNull()
         SyncResult(activeCandidate, merged, changed, remote.size)
     }
@@ -145,7 +170,37 @@ object PortalPlaylistClient {
             put("deviceId", DeviceIdentity.deviceId(context))
             put("activationCode", DeviceIdentity.activationCode(context))
         }
-        push(endpoint, auth, provider)
+        val remoteId = push(endpoint, auth, provider, PortalSyncBook.remoteId(context, provider.id))
+        PortalSyncBook.bind(context, provider.id, remoteId)
+    }
+
+    suspend fun removeProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao): Boolean = syncMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val remoteId = PortalSyncBook.remoteId(context, provider.id)
+            val ids = dao.allProviders().first().filter { it.id == provider.id ||
+                PortalSyncBook.remoteId(context, it.id) == remoteId }.map { it.id }.toSet()
+            PortalSyncBook.queueDelete(context, remoteId, ids)
+            ids.forEach { dao.deactivateProvider(it) }
+            val endpoint = baseUrl.trim().trimEnd('/')
+            if (endpoint.isBlank()) return@withContext false
+            val auth = JSONObject().apply {
+                put("deviceId", DeviceIdentity.deviceId(context)); put("activationCode", DeviceIdentity.activationCode(context))
+            }
+            try {
+                deleteRemote(endpoint, auth, remoteId)
+                PortalSyncBook.acknowledgeDelete(context, remoteId)
+                true
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { false }
+        }
+    }
+
+    private suspend fun deleteRemote(endpoint: String, auth: JSONObject, id: String) {
+        val request = Request.Builder().url("$endpoint/api/v1/portal/playlists/$id")
+            .delete(auth.toString().toRequestBody(jsonType)).build()
+        client.newCall(request).awaitResponse().use { response ->
+            check(response.isSuccessful || response.code == 404) { "portal_delete_failed" }
+        }
     }
 
     private suspend fun fetchRemote(endpoint: String, auth: JSONObject): List<RemotePlaylist> {
@@ -156,16 +211,19 @@ object PortalPlaylistClient {
         client.newCall(request).awaitResponse().use { response ->
             if (!response.isSuccessful) error("portal_list_http_${response.code}")
             val root = JSONObject(response.body?.string().orEmpty())
-            val items = root.optJSONArray("items") ?: JSONArray()
+            val items = checkNotNull(root.optJSONArray("items")) { "portal_invalid_list" }
             return buildList {
                 for (i in 0 until items.length()) {
-                    val row = items.optJSONObject(i) ?: continue
+                    val row = checkNotNull(items.optJSONObject(i)) { "portal_invalid_row" }
                     val type = row.optString("providerType").lowercase()
                     val url = row.optString("baseUrl").trim()
                     val id = row.optString("id").trim()
-                    if (id.isBlank() || type !in setOf("xtream", "m3u") || !PlaylistUrlPolicy.isValid(url)) continue
+                    check(id.isNotBlank() && type in setOf("xtream", "m3u") && PlaylistUrlPolicy.isValid(url)) { "portal_invalid_row" }
                     add(RemotePlaylist(
                         id = id,
+                        aliasIds = row.optJSONArray("aliasIds")?.let { aliases ->
+                            (0 until aliases.length()).map { aliases.getString(it) }.filter(String::isNotBlank)
+                        }.orEmpty(),
                         name = row.optString("name").ifBlank { "BLOFY Playlist" },
                         providerType = type,
                         baseUrl = url,
@@ -179,9 +237,9 @@ object PortalPlaylistClient {
         }
     }
 
-    private suspend fun push(endpoint: String, auth: JSONObject, provider: ProviderEntity) {
+    private suspend fun push(endpoint: String, auth: JSONObject, provider: ProviderEntity, remoteId: String = provider.id): String {
         val body = JSONObject(auth.toString()).apply {
-            put("id", provider.id)
+            put("id", remoteId)
             put("name", provider.name)
             put("providerType", provider.providerType)
             put("baseUrl", provider.baseUrl)
@@ -195,11 +253,14 @@ object PortalPlaylistClient {
             .build()
         client.newCall(request).awaitResponse().use { response ->
             if (!response.isSuccessful) error("portal_save_http_${response.code}")
+            val saved = JSONObject(response.body?.string().orEmpty())
+            return saved.optString("id").ifBlank { remoteId }
         }
     }
 
     private data class RemotePlaylist(
         val id: String,
+        val aliasIds: List<String>,
         val name: String,
         val providerType: String,
         val baseUrl: String,
