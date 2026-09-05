@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en" tools:ignore="MissingTranslation">
     <string name="app_name">BLOFY PLAYER</string>
     <string name="settings_title">Settings</string>
     <string name="settings_subtitle">Playback, playlists and storage options</string>
