@@ -91,6 +91,7 @@ class EpisodePreloadWorker(
         if (retryCurrentBatch && runAttemptCount < MAX_BATCH_RETRIES) return Result.retry()
 
         val nextRowId = dao.streamRowId(page.last().key) ?: return Result.retry()
+        CatalogSyncState.markEpisodesCheckpoint(applicationContext, providerId, nextRowId)
         if (page.size < EpisodeCatalogPreloader.batchSize()) {
             CatalogSyncState.markEpisodesReady(applicationContext, providerId)
         } else {
