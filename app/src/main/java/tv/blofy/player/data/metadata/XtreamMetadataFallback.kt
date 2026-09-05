@@ -1,16 +1,26 @@
 package tv.blofy.player.data.metadata
 
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import tv.blofy.player.BlofyApp
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
 
-/** Provider metadata fallback. It never participates in playback or exposes credentials. */
+/**
+ * Provider-only metadata. UI reads are local-only; network fetches are exposed only to the
+ * background preload worker so opening a movie/series page never starts another provider request.
+ */
 object XtreamMetadataFallback {
     suspend fun movie(provider: ProviderEntity, stream: StreamEntity): ProviderMetadata.Metadata? =
-        load(provider, stream, "get_vod_info", "vod_id", "movie")
+        BlofyApp.contextOrNull()?.let { ProviderMetadataCache.read(it, stream.key) }
 
     suspend fun series(provider: ProviderEntity, stream: StreamEntity): ProviderMetadata.Metadata? =
+        BlofyApp.contextOrNull()?.let { ProviderMetadataCache.read(it, stream.key) }
+
+    internal suspend fun fetchMovie(provider: ProviderEntity, stream: StreamEntity): ProviderMetadata.Metadata? =
+        load(provider, stream, "get_vod_info", "vod_id", "movie")
+
+    internal suspend fun fetchSeries(provider: ProviderEntity, stream: StreamEntity): ProviderMetadata.Metadata? =
         load(provider, stream, "get_series_info", "series_id", "tv")
 
     private suspend fun load(
