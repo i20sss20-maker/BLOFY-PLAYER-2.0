@@ -1,25 +1,13 @@
 <resources>
-    <string name="home_new_series">جديد في BLOFY SERIES</string>
-    <string name="home_new_movie">جديد في BLOFY CINEMA</string>
-    <string name="home_series_type">مسلسل</string>
-    <string name="home_movie_type">فيلم</string>
-    <string name="home_series_fallback">مسلسل مضاف حديثًا إلى مكتبتك — اكتشف المواسم والحلقات.</string>
-    <string name="home_movie_fallback">فيلم مضاف حديثًا إلى مكتبتك — جاهز للمشاهدة الآن.</string>
-    <string name="home_view_series">عرض المسلسل</string>
-    <string name="home_watch_now">شاهد الآن</string>
     <string name="home_preparing_library">جاري تجهيز مكتبتك</string>
     <string name="home_preparing_subtitle">نرتب المحتوى لك…</string>
-    <string name="home_library_ready">مكتبتك جاهزة للعرض</string>
-    <string name="home_library_ready_hint">أضف أو حدّث قائمة التشغيل، وبعدها بتظهر هنا البانرات والصفوف تلقائيًا.</string>
     <string name="home_continue_watching">تابع المشاهدة</string>
     <string name="home_continue_subtitle">أكمل من آخر نقطة</string>
     <string name="home_recently_watched">شاهدت مؤخرًا</string>
     <string name="home_recently_watched_subtitle">ارجع بسرعة لآخر ما فتحته</string>
     <string name="home_recently_added">أضيف حديثًا</string>
     <string name="home_recently_added_subtitle">آخر الأفلام والمسلسلات في مكتبتك</string>
-    <string name="home_top_rated">الأعلى تقييمًا</string>
     <string name="home_top_rated_subtitle">مختارات قوية حسب تقييم السيرفر</string>
-    <string name="home_arabic_picks">مختارات عربية</string>
     <string name="home_arabic_picks_subtitle">محتوى عربي في واجهة واحدة</string>
     <string name="home_no_arabic">ما لقينا محتوى عربي مصنف في هذه القائمة حاليًا.</string>
     <string name="home_4k_subtitle">للمحتوى عالي الجودة</string>
@@ -28,21 +16,15 @@
     <string name="home_quick_links_subtitle">وصل لأقسامك بضغطة واحدة</string>
     <string name="home_live_tv">البث المباشر</string>
     <string name="home_live_tv_subtitle">قنواتك الآن</string>
-    <string name="home_movies">الأفلام</string>
     <string name="home_movies_subtitle">سينما</string>
-    <string name="home_series">المسلسلات</string>
     <string name="home_series_subtitle">مواسم وحلقات</string>
-    <string name="home_favorites">المفضلة</string>
     <string name="home_favorites_subtitle">اختياراتك</string>
-    <string name="home_search">البحث</string>
     <string name="home_search_subtitle">ابحث فورًا</string>
     <string name="home_top10_subtitle">الأكثر تميزًا في مكتبتك الآن</string>
     <string name="home_episode_number">الحلقة %1$s</string>
     <string name="home_featured_for_you">مميز لك</string>
     <string name="home_featured_subtitle">اختيار بارز من مكتبتك</string>
     <string name="home_featured_fallback">اكتشف هذا الاختيار الآن.</string>
-    <string name="home_promo_headline">اكتشف أكثر مع BLOFY</string>
-    <string name="home_promo_subtitle">مختارات متجددة وتجربة تلفزيون مصممة عشان توصل للمحتوى بأقل عدد من الضغطات.</string>
     <string name="home_today_question">وش بتشاهد اليوم؟</string>
     <string name="home_sidebar_home">الرئيسية</string>
     <string name="home_sidebar_collections">مختارات</string>
@@ -50,7 +32,5 @@
     <string name="home_hero_default_title">كل محتواك في مكان واحد</string>
     <string name="home_hero_default_meta">أفلام   •   مسلسلات   •   بث مباشر</string>
     <string name="home_hero_default_subtitle">بث مباشر، أفلام ومسلسلات بواجهة مصممة للتلفزيون وسريعة بالريموت.</string>
-    <string name="home_explore_movies">استكشف الأفلام</string>
     <string name="home_compact_tagline">كل محتواك. أسرع. أبسط.</string>
-    <string name="home_recent_channels">آخر القنوات</string>
 </resources>
