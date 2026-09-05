@@ -40,8 +40,12 @@ class BlofyApp : Application() {
 
         // BLOFY's product language is English. Preserve an explicit user choice, but a fresh
         // install must not inherit Arabic merely because the Android TV system locale is Arabic.
+        val settings = getSharedPreferences("blofy_player_settings", MODE_PRIVATE)
         if (AppCompatDelegate.getApplicationLocales().isEmpty) {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
+            if (!settings.contains("app_language_tag")) {
+                settings.edit().putString("app_language_tag", "en").putString("app_language", "English").apply()
+            }
         }
 
         CrashRecovery.install(this)
