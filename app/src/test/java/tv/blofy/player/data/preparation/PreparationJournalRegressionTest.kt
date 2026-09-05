@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
 class PreparationJournalRegressionTest {
-    private val app get() = RuntimeEnvironment.getApplication<Application>()
+    private val app get() = RuntimeEnvironment.getApplication()
     @Before fun setup() { app.deleteDatabase("blofy-preparation-v1.db") }
     @After fun cleanup() { app.deleteDatabase("blofy-preparation-v1.db") }
 
