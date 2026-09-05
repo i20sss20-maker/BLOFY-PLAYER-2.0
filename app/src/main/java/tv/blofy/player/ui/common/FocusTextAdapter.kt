@@ -40,7 +40,7 @@ class FocusTextAdapter<T : Any>(
                 else -> RecyclerView.NO_POSITION
             }
             if (focusedPosition < 0) focusedPosition = RecyclerView.NO_POSITION
-            restorePending = owned && focusedPosition != RecyclerView.NO_POSITION
+            restorePending = owned && attached?.hasFocus() == true && focusedPosition != RecyclerView.NO_POSITION
             if (restorePending) attached?.post { restoreFocusedView() }
         }
     }
@@ -57,9 +57,8 @@ class FocusTextAdapter<T : Any>(
         if (position !in items.indices) return false
         focusedPosition = position
         focusedKey = itemKey?.invoke(items[position])
-        restorePending = true
-        restoreFocusedView()
-        return true
+        restorePending = false
+        return attached?.let { TwoPaneFocusGuard.focusItem(it, position) } ?: false
     }
 
     fun clearFocusMemory() {
@@ -115,6 +114,7 @@ class FocusTextAdapter<T : Any>(
                 text.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
                 focusedView.background = itemBackground(focused)
                 if (focused) {
+                    restorePending = false
                     val position = holder.bindingAdapterPosition
                     items.getOrNull(position)?.let { item ->
                         focusedPosition = position
@@ -138,7 +138,8 @@ class FocusTextAdapter<T : Any>(
         holder.text.setOnLongClickListener { onLongClick?.invoke(item); onLongClick != null }
         if (restorePending && position == focusedPosition) {
             holder.text.post {
-                if (holder.bindingAdapterPosition == focusedPosition && holder.text.visibility == View.VISIBLE) {
+                if (restorePending && attached?.hasFocus() == true &&
+                    holder.bindingAdapterPosition == focusedPosition && holder.text.visibility == View.VISIBLE) {
                     holder.text.requestFocus()
                     restorePending = false
                 }
@@ -151,6 +152,7 @@ class FocusTextAdapter<T : Any>(
 
     private fun restoreFocusedView() {
         val recycler = attached ?: return
+        if (!restorePending || !recycler.hasFocus()) { restorePending = false; return }
         val position = focusedPosition
         if (position == RecyclerView.NO_POSITION || position !in items.indices) return
         val existing = recycler.findViewHolderForAdapterPosition(position)?.itemView
@@ -160,7 +162,9 @@ class FocusTextAdapter<T : Any>(
         } else {
             recycler.scrollToPosition(position)
             recycler.post {
-                recycler.findViewHolderForAdapterPosition(position)?.itemView?.requestFocus()
+                if (restorePending && recycler.hasFocus() && position == focusedPosition) {
+                    recycler.findViewHolderForAdapterPosition(position)?.itemView?.requestFocus()
+                }
                 restorePending = false
             }
         }

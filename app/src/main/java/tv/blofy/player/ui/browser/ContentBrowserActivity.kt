@@ -43,6 +43,7 @@ import tv.blofy.player.ui.catchup.CatchupActivity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.FocusTextAdapter
+import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
@@ -183,7 +184,6 @@ class ContentBrowserActivity : AppCompatActivity() {
         )
         categoryList.adapter = categoryAdapter
         streamList.adapter = streamAdapter
-        installTvFocusBridge()
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -214,36 +214,26 @@ class ContentBrowserActivity : AppCompatActivity() {
         }
     }
 
-    private fun installTvFocusBridge() {
-        if (phoneMode) return
-        categoryList.setOnKeyListener { _, keyCode, event ->
-            if (event.action != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return@setOnKeyListener false
-            focusFirstChannel()
-        }
-        streamList.setOnKeyListener { _, keyCode, event ->
-            if (event.action != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_LEFT) return@setOnKeyListener false
-            focusCurrentCategory()
-        }
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // The Activity receives keys from focused channel/category children. A listener on the
+        // RecyclerView container alone does not reliably see those keys on TV receivers.
+        if (!phoneMode && ::categoryList.isInitialized && ::streamList.isInitialized &&
+            TwoPaneFocusGuard.handle(event, categoryList, streamList,
+                ::focusCurrentCategory, ::focusFirstChannel)) return true
+        return super.dispatchKeyEvent(event)
     }
 
     private fun focusFirstChannel(): Boolean {
         if (streamAdapter.itemCount == 0) return false
         val savedIndex = streamAdapter.indexOfKey(savedStreamKey()).takeIf { it >= 0 } ?: 0
-        val existing = streamList.findViewHolderForAdapterPosition(savedIndex)?.itemView
-        if (existing != null) return existing.requestFocus()
-        streamList.scrollToPosition(savedIndex)
-        streamList.post { streamList.findViewHolderForAdapterPosition(savedIndex)?.itemView?.requestFocus() }
-        return true
+        return TwoPaneFocusGuard.focusItem(streamList, savedIndex)
     }
 
     private fun focusCurrentCategory(): Boolean {
         val lm = categoryList.layoutManager as? LinearLayoutManager ?: return false
-        val pos = lm.findFirstVisibleItemPosition().coerceAtLeast(0)
-        val existing = categoryList.findViewHolderForAdapterPosition(pos)?.itemView
-        if (existing != null) return existing.requestFocus()
-        categoryList.scrollToPosition(pos)
-        categoryList.post { categoryList.findViewHolderForAdapterPosition(pos)?.itemView?.requestFocus() }
-        return true
+        val position = categoryAdapter.focusedIndex().takeIf { it in 0 until categoryAdapter.itemCount }
+            ?: lm.findFirstVisibleItemPosition().coerceAtLeast(0)
+        return TwoPaneFocusGuard.focusItem(categoryList, position)
     }
 
     private fun createCatalogStatusRow() = LinearLayout(this).apply {

@@ -139,6 +139,7 @@ internal class LiveChannelAdapter(
         // EPG is loaded once when the row is bound. Moving focus must stay purely visual and
         // never schedule a database query; this keeps rapid DPAD navigation responsive on TV SoCs.
         loadLocalEpg(holder, item)
+        renderFocus(holder, holder.itemView.hasFocus())
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnLongClickListener { onLongClick(item); true }
         holder.itemView.setOnFocusChangeListener { view, focused ->
@@ -147,12 +148,16 @@ internal class LiveChannelAdapter(
             view.scaleX = 1f
             view.scaleY = 1f
             view.translationZ = if (focused) 3f else 0f
-            view.background = rowBackground(focused)
-            holder.title.setTextColor(Color.WHITE)
-            holder.meta.setTextColor(if (focused) 0xFFE8D8FA.toInt() else BlofyTvDesign.TextMuted)
-            holder.badge.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.PurpleSoft)
+            renderFocus(holder, focused)
             if (focused) onFocus(item)
         }
+    }
+
+    private fun renderFocus(holder: Holder, focused: Boolean) {
+        holder.itemView.background = rowBackground(focused)
+        holder.title.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextPrimary)
+        holder.meta.setTextColor(if (focused) 0xFFE8D8FA.toInt() else BlofyTvDesign.TextMuted)
+        holder.badge.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.PurpleSoft)
     }
 
     private fun loadLocalEpg(holder: Holder, item: StreamEntity) {
@@ -186,6 +191,7 @@ internal class LiveChannelAdapter(
         holder.itemView.scaleX = 1f
         holder.itemView.scaleY = 1f
         holder.itemView.translationZ = 0f
+        renderFocus(holder, false)
         super.onViewRecycled(holder)
     }
 
