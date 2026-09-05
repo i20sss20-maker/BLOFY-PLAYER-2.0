@@ -14,6 +14,7 @@ import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.ResumeStateWriter
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
+import tv.blofy.player.ui.login.LoginPortalRefreshLifecycle
 
 class BlofyApp : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -38,6 +39,7 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
+        registerActivityLifecycleCallbacks(LoginPortalRefreshLifecycle())
 
         // Absolutely no Room open, migration, catalog repair, artwork preload or network wait is
         // allowed from Application startup. Catalog maintenance is started only after a screen has
