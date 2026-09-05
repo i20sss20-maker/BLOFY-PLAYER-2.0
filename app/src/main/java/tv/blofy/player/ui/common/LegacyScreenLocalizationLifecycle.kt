@@ -65,6 +65,8 @@ class LegacyScreenLocalizationLifecycle : Application.ActivityLifecycleCallbacks
             "شاهد الآن" -> activity.getString(R.string.home_watch_now)
             "جاري تجهيز مكتبتك" -> activity.getString(R.string.home_preparing)
             "نرتب المحتوى لك…" -> activity.getString(R.string.home_arranging)
+            "مكتبتك جاهزة للعرض" -> activity.getString(R.string.home_library_ready)
+            "أضف أو حدّث قائمة التشغيل، وبعدها بتظهر هنا البانرات والصفوف تلقائيًا." -> activity.getString(R.string.home_library_ready_hint)
             "الرئيسية" -> activity.getString(R.string.home_home)
             "البث المباشر" -> activity.getString(R.string.home_live)
             "الأفلام" -> activity.getString(R.string.home_movies)
@@ -73,12 +75,29 @@ class LegacyScreenLocalizationLifecycle : Application.ActivityLifecycleCallbacks
             "البحث" -> activity.getString(R.string.home_search)
             "الإعدادات" -> activity.getString(R.string.home_settings)
             "المجموعات" -> activity.getString(R.string.home_collections)
-            "متابعة المشاهدة" -> activity.getString(R.string.home_continue)
-            "شوهد مؤخرًا" -> activity.getString(R.string.home_recent)
-            "أضيف مؤخرًا" -> activity.getString(R.string.home_latest)
+            "تابع المشاهدة", "متابعة المشاهدة" -> activity.getString(R.string.home_continue)
+            "أكمل من آخر نقطة" -> activity.getString(R.string.home_continue_hint)
+            "شاهدت مؤخرًا", "شوهد مؤخرًا" -> activity.getString(R.string.home_recent)
+            "ارجع بسرعة لآخر ما فتحته" -> activity.getString(R.string.home_recent_hint)
+            "أضيف حديثًا", "أضيف مؤخرًا" -> activity.getString(R.string.home_latest)
+            "آخر الأفلام والمسلسلات في مكتبتك" -> activity.getString(R.string.home_latest_hint)
             "الأعلى تقييمًا" -> activity.getString(R.string.home_top_rated)
-            "اختيارات عربية" -> activity.getString(R.string.home_arabic_picks)
+            "مختارات قوية حسب تقييم السيرفر" -> activity.getString(R.string.home_top_rated_hint)
+            "مختارات عربية", "اختيارات عربية" -> activity.getString(R.string.home_arabic_picks)
+            "محتوى عربي في واجهة واحدة" -> activity.getString(R.string.home_arabic_picks_hint)
+            "ما لقينا محتوى عربي مصنف في هذه القائمة حاليًا." -> activity.getString(R.string.home_arabic_empty)
+            "للمحتوى عالي الجودة" -> activity.getString(R.string.home_4k_hint)
+            "ما فيه عناصر 4K/HDR واضحة في أسماء المحتوى حاليًا." -> activity.getString(R.string.home_4k_empty)
             "اختصارات سريعة" -> activity.getString(R.string.home_quick_shortcuts)
+            "وصل لأقسامك بضغطة واحدة" -> activity.getString(R.string.home_quick_shortcuts_hint)
+            "قنواتك الآن" -> activity.getString(R.string.home_live_now)
+            "سينما" -> activity.getString(R.string.home_cinema)
+            "مواسم وحلقات" -> activity.getString(R.string.home_seasons_episodes)
+            "اختياراتك" -> activity.getString(R.string.home_your_picks)
+            "ابحث فورًا" -> activity.getString(R.string.home_search_now)
+            "الأكثر تميزًا في مكتبتك الآن" -> activity.getString(R.string.home_top10_hint)
+            "مميز لك" -> activity.getString(R.string.home_featured)
+            "اختيار بارز من مكتبتك" -> activity.getString(R.string.home_featured_hint)
             else -> dynamicReplacement(activity, raw)
         }
         if (replacement != null && replacement != raw) view.text = replacement
@@ -106,6 +125,9 @@ class LegacyScreenLocalizationLifecycle : Application.ActivityLifecycleCallbacks
         if (raw.startsWith("لا توجد ") && raw.contains("محفوظة")) {
             val label = if (raw.contains("أفلام")) activity.getString(R.string.movies) else activity.getString(R.string.series)
             return activity.getString(R.string.browser_no_saved_catalog, label)
+        }
+        Regex("^الحلقة\\s+(\\d+)$").matchEntire(raw)?.let { match ->
+            return activity.getString(R.string.home_episode_hint, match.groupValues[1])
         }
         return null
     }
