@@ -81,6 +81,7 @@ class MetadataPreloadWorker(
 
         if (page.isEmpty()) {
             if (kind == "movie") {
+                CatalogSyncState.markMetadataCheckpoint(applicationContext, providerId, "series", 0L)
                 MetadataCatalogPreloader.schedule(applicationContext, providerId, "series", 0L)
             } else {
                 CatalogSyncState.markMetadataReady(applicationContext, providerId)
@@ -99,8 +100,6 @@ class MetadataPreloadWorker(
 
             ProviderMetadataCache.write(applicationContext, providerId, stream.key, metadata)
             if (metadata != null) {
-                // Feed richer provider artwork/plot/rating back into the local stream row so Home
-                // can render banners immediately from Room without opening the detail endpoint.
                 runCatching {
                     database.openHelper.writableDatabase.execSQL(
                         """
@@ -128,14 +127,13 @@ class MetadataPreloadWorker(
                 }
                 artworkUrls += metadata.backdropUrl
                 artworkUrls += metadata.posterUrl
-                metadata.cast.forEach { artworkUrls += it.profileUrl }
+                metadata.cast.take(6).forEach { artworkUrls += it.profileUrl }
             }
         }
-        if (artworkUrls.any { !it.isNullOrBlank() }) {
-            ArtworkLoader.prefetch(applicationContext, artworkUrls)
-        }
+        if (artworkUrls.any { !it.isNullOrBlank() }) ArtworkLoader.prefetch(applicationContext, artworkUrls)
 
         val nextRowId = dao.streamRowId(page.last().key) ?: return Result.success()
+        CatalogSyncState.markMetadataCheckpoint(applicationContext, providerId, kind, nextRowId)
         MetadataCatalogPreloader.schedule(applicationContext, providerId, kind, nextRowId)
         return Result.success()
     }
