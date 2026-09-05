@@ -67,7 +67,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
 
         val posterCard = LinearLayout(this).apply {
             gravity = Gravity.CENTER
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setPadding(dp(6), dp(6), dp(6), dp(6), )
             background = cardBackground()
             elevation = dp(8).toFloat()
         }
@@ -193,7 +193,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
 
             if (!metadata?.crew.isNullOrEmpty()) {
                 panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                    text = metadata!!.crew.joinToString("   •   ") { "${it.job}: ${it.name}" }
+                    text = metadata?.crew.orEmpty().joinToString("   •   ") { "${it.job}: ${it.name}" }
                     textSize = 11.5f
                     typeface = BlofyTvDesign.MediumTypeface
                     setTextColor(BlofyTvDesign.TextMuted)
@@ -278,7 +278,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     gravity = Gravity.RIGHT
                     setPadding(0, dp(14), 0, dp(5))
                 })
-                panel.addView(CastStrip.build(this@SeriesDetailsActivity, metadata!!.cast), LinearLayout.LayoutParams(-1, dp(180)))
+                panel.addView(CastStrip.build(this@SeriesDetailsActivity, metadata?.cast.orEmpty()), LinearLayout.LayoutParams(-1, dp(180)))
             } else {
                 panel.addView(TextView(this@SeriesDetailsActivity).apply {
                     text = "بيانات طاقم التمثيل غير متوفرة من السيرفر"
