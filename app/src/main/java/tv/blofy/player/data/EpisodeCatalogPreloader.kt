@@ -16,24 +16,25 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Fills the local episode table in small background batches after the main catalog is ready.
+ * Large providers are keyset-paged so we never materialize the full series catalog in memory.
  * Existing cached episodes are reused; one unstable series never blocks every later title.
  */
 object EpisodeCatalogPreloader {
     private const val KEY_PROVIDER_ID = "provider_id"
-    private const val KEY_OFFSET = "offset"
+    private const val KEY_AFTER_ROW_ID = "after_row_id"
     private const val BATCH_SIZE = 24
 
-    fun schedule(context: Context, providerId: String, offset: Int = 0, replace: Boolean = false) {
+    fun schedule(context: Context, providerId: String, afterRowId: Long = 0L, replace: Boolean = false) {
         if (providerId.isBlank()) return
         val request = OneTimeWorkRequestBuilder<EpisodePreloadWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setInputData(
                 Data.Builder()
                     .putString(KEY_PROVIDER_ID, providerId)
-                    .putInt(KEY_OFFSET, offset.coerceAtLeast(0))
+                    .putLong(KEY_AFTER_ROW_ID, afterRowId.coerceAtLeast(0L))
                     .build()
             )
-            .setInitialDelay(if (offset == 0) 1 else 2, TimeUnit.SECONDS)
+            .setInitialDelay(if (afterRowId == 0L) 1 else 2, TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
             "blofy-episodes-$providerId",
@@ -43,7 +44,7 @@ object EpisodeCatalogPreloader {
     }
 
     internal fun providerId(data: Data): String = data.getString(KEY_PROVIDER_ID).orEmpty()
-    internal fun offset(data: Data): Int = data.getInt(KEY_OFFSET, 0).coerceAtLeast(0)
+    internal fun afterRowId(data: Data): Long = data.getLong(KEY_AFTER_ROW_ID, 0L).coerceAtLeast(0L)
     internal fun batchSize(): Int = BATCH_SIZE
 }
 
@@ -63,24 +64,18 @@ class EpisodePreloadWorker(
         }
         if (!CatalogSyncState.isReady(applicationContext, providerId)) return Result.retry()
 
-        val allSeries = dao.streamSnapshot(providerId, "series")
-        if (allSeries.isEmpty()) {
-            CatalogSyncState.markEpisodesReady(applicationContext, providerId)
-            return Result.success()
-        }
-        val offset = EpisodeCatalogPreloader.offset(inputData)
-        if (offset >= allSeries.size) {
+        val afterRowId = EpisodeCatalogPreloader.afterRowId(inputData)
+        val page = dao.catalogPageAfterAll(providerId, "series", afterRowId, EpisodeCatalogPreloader.batchSize())
+        if (page.isEmpty()) {
             CatalogSyncState.markEpisodesReady(applicationContext, providerId)
             return Result.success()
         }
 
         val manager = PlaylistManager(XtreamClient.api, dao)
-        val end = (offset + EpisodeCatalogPreloader.batchSize()).coerceAtMost(allSeries.size)
         var retryCurrentBatch = false
 
-        for (index in offset until end) {
+        for (series in page) {
             if (isStopped) return Result.success()
-            val series = allSeries[index]
             if (dao.episodeSnapshot(providerId, series.remoteId).isNotEmpty()) continue
             try {
                 val result = manager.syncSeriesEpisodes(provider, series.remoteId)
@@ -95,10 +90,11 @@ class EpisodePreloadWorker(
         if (!CatalogSyncState.isReady(applicationContext, providerId)) return Result.success()
         if (retryCurrentBatch && runAttemptCount < MAX_BATCH_RETRIES) return Result.retry()
 
-        if (end < allSeries.size) {
-            EpisodeCatalogPreloader.schedule(applicationContext, providerId, end)
-        } else {
+        val nextRowId = dao.streamRowId(page.last().key) ?: return Result.retry()
+        if (page.size < EpisodeCatalogPreloader.batchSize()) {
             CatalogSyncState.markEpisodesReady(applicationContext, providerId)
+        } else {
+            EpisodeCatalogPreloader.schedule(applicationContext, providerId, nextRowId)
         }
         return Result.success()
     }
