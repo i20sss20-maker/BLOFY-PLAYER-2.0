@@ -41,7 +41,7 @@ class PortalManualRefreshRegressionTest {
 
     @Before fun setup() {
         rows.clear()
-        RuntimeEnvironment.getApplication<Application>()
+        RuntimeEnvironment.getApplication()
             .getSharedPreferences("blofy_portal_reconciliation_v1", 0)
             .edit()
             .clear()
