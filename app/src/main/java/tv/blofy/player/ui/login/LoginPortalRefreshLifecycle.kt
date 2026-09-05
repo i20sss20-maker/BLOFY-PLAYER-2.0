@@ -8,7 +8,6 @@ import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +26,7 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
         if (activity is LoginActivity) install(activity)
     }
 
-    private fun install(activity: AppCompatActivity) {
+    private fun install(activity: LoginActivity) {
         val content = activity.findViewById<FrameLayout>(android.R.id.content) ?: return
         if (content.findViewWithTag<View>(TAG) != null) return
         val density = activity.resources.displayMetrics.density
@@ -69,7 +68,7 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
                                 )
                             }
                             Toast.makeText(activity, activity.getString(R.string.refresh_site_success), Toast.LENGTH_SHORT).show()
-                            activity.recreate()
+                            activity.refreshPortalPlaylistsFromLocal()
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
