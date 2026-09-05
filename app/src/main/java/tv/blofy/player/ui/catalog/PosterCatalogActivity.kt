@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -45,14 +46,38 @@ class PosterCatalogActivity : AppCompatActivity() {
     private var lastRowId = 0L
     private var loadingPage = false
     private var generation = 0
+    private var gridColumns = 6
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty().ifBlank { KIND_MOVIE } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val deviceKind = DeviceClass.detect(this)
+        val widthDp = resources.configuration.screenWidthDp.takeIf { it > 0 } ?: resources.configuration.smallestScreenWidthDp
+        gridColumns = when (deviceKind) {
+            DeviceClass.Kind.TV -> if (widthDp >= 1600) 7 else if (widthDp >= 1000) 6 else 5
+            DeviceClass.Kind.TABLET -> if (widthDp >= 900) 5 else 4
+            DeviceClass.Kind.PHONE -> if (widthDp >= 600) 3 else 2
+        }
+        val outerPadding = when (deviceKind) {
+            DeviceClass.Kind.TV -> 22
+            DeviceClass.Kind.TABLET -> 16
+            DeviceClass.Kind.PHONE -> 8
+        }
+        val railWidth = when (deviceKind) {
+            DeviceClass.Kind.TV -> 208
+            DeviceClass.Kind.TABLET -> 168
+            DeviceClass.Kind.PHONE -> 108
+        }
+        val railGap = when (deviceKind) {
+            DeviceClass.Kind.TV -> 16
+            DeviceClass.Kind.TABLET -> 12
+            DeviceClass.Kind.PHONE -> 6
+        }
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            setPadding(dp(22), dp(16), dp(22), dp(18))
+            setPadding(dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 16), dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 18))
             background = AppCompatResources.getDrawable(this@PosterCatalogActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -61,16 +86,16 @@ class PosterCatalogActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(9), dp(10), dp(9), dp(10))
-            background = BlofyTvDesign.glassSurface(dp(20).toFloat())
+            setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 5 else 9), dp(8), dp(if (deviceKind == DeviceClass.Kind.PHONE) 5 else 9), dp(8))
+            background = BlofyTvDesign.glassSurface(dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20).toFloat())
             elevation = dp(2).toFloat()
         }
         rail.addView(TextView(this).apply {
-            text = "الفئات"
+            text = "Categories"
             BlofyTvDesign.applyHeading(this)
-            textSize = 17f
+            textSize = if (deviceKind == DeviceClass.Kind.PHONE) 13f else 17f
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 38 else 44)))
         categoryList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@PosterCatalogActivity)
             clipChildren = false
@@ -80,7 +105,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             setItemViewCacheSize(16)
         }
         rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(rail, LinearLayout.LayoutParams(dp(208), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(16) })
+        root.addView(rail, LinearLayout.LayoutParams(dp(railWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(railGap) })
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -93,26 +118,30 @@ class PosterCatalogActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
         header.addView(TextView(this).apply {
-            text = if (kind == KIND_SERIES) "المسلسلات" else "الأفلام"
+            text = if (kind == KIND_SERIES) "Series" else "Movies"
             BlofyTvDesign.applyTitle(this)
-            textSize = 28f
+            textSize = when (deviceKind) {
+                DeviceClass.Kind.TV -> 28f
+                DeviceClass.Kind.TABLET -> 24f
+                DeviceClass.Kind.PHONE -> 20f
+            }
             gravity = Gravity.START
-        }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        }, LinearLayout.LayoutParams(0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 54), 1f))
         countView = TextView(this).apply {
-            textSize = 12f
+            textSize = if (deviceKind == DeviceClass.Kind.PHONE) 10.5f else 12f
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.CENTER
-            setPadding(dp(12), 0, dp(12), 0)
+            setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12), 0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12), 0)
             background = BlofyTvDesign.badge(dp(11).toFloat())
         }
-        header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(36)))
+        header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 32 else 36)))
         content.addView(header)
 
-        val manager = GridLayoutManager(this, GRID_COLUMNS)
+        val manager = GridLayoutManager(this, gridColumns)
         posterGrid = RecyclerView(this).apply {
             layoutManager = manager
-            setPadding(dp(4), dp(4), dp(6), dp(18))
+            setPadding(dp(4), dp(4), dp(if (deviceKind == DeviceClass.Kind.PHONE) 2 else 6), dp(if (deviceKind == DeviceClass.Kind.PHONE) 10 else 18))
             clipChildren = false
             clipToPadding = false
             itemAnimator = null
@@ -240,7 +269,7 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun updateCount() {
         val suffix = if (hasMore) "+" else ""
-        countView.text = "${loadedItems.size}$suffix ${if (kind == KIND_SERIES) "مسلسل" else "فيلم"}"
+        countView.text = "${loadedItems.size}$suffix ${if (kind == KIND_SERIES) "series" else "movies"}"
     }
 
     private fun saveMemorySnapshot() {
@@ -268,7 +297,7 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun isAtLeftGridEdge(): Boolean {
         val holder = posterGrid.findContainingViewHolder(currentFocus ?: return false) ?: return false
-        return holder.bindingAdapterPosition != RecyclerView.NO_POSITION && holder.bindingAdapterPosition % GRID_COLUMNS == 0
+        return holder.bindingAdapterPosition != RecyclerView.NO_POSITION && holder.bindingAdapterPosition % gridColumns == 0
     }
 
     private fun isFocusInside(parent: View): Boolean {
@@ -287,7 +316,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         })
     }
 
-    private fun allCategory() = CategoryEntity("$providerId:$kind:$ALL_CATEGORY_ID", providerId, ALL_CATEGORY_ID, kind, if (kind == KIND_SERIES) "كل المسلسلات" else "كل الأفلام", -1)
+    private fun allCategory() = CategoryEntity("$providerId:$kind:$ALL_CATEGORY_ID", providerId, ALL_CATEGORY_ID, kind, if (kind == KIND_SERIES) "All Series" else "All Movies", -1)
     private fun categoryRemoteId(category: CategoryEntity) = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
@@ -298,7 +327,6 @@ class PosterCatalogActivity : AppCompatActivity() {
         const val EXTRA_KIND = "kind"
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
-        private const val GRID_COLUMNS = 6
         private const val PAGE_SIZE = 96
         private const val PREFETCH_THRESHOLD = 28
         private const val ALL_CATEGORY_ID = "__all__"
