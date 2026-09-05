@@ -1,0 +1,171 @@
+name: RC07 Source Hardening
+
+on:
+  push:
+    branches: [rc07-commercial-stability]
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rc07-commercial-stability
+          fetch-depth: 0
+      - name: Apply source hardening
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          # Permanently move the bounded/snapshot-backed Home logic into source.
+          p = Path('app/src/main/java/tv/blofy/player/ui/home/HomeActivity.kt')
+          s = p.read_text(encoding='utf-8')
+          if 'import tv.blofy.player.data.HomeSnapshotStore\n' not in s:
+              s = s.replace('import tv.blofy.player.data.local.BlofyDatabase\n', 'import tv.blofy.player.data.HomeSnapshotStore\nimport tv.blofy.player.data.local.BlofyDatabase\n', 1)
+          old = '''                val all = dao.allStreamsForProvider(provider.id).filter { it.kind == "movie" || it.kind == "series" }
+                val byKey = all.associateBy { it.key }
+                val states = dao.watchStates(provider.id).sortedByDescending { it.updatedAt }
+                val continueItems = states.filter { !it.completed && it.positionMs > 30_000L }
+                    .mapNotNull { byKey[it.contentKey] }.distinctBy { it.key }.take(16)
+                val recentItems = states.filter { it.positionMs > 0L }
+                    .mapNotNull { byKey[it.contentKey] }.distinctBy { it.key }.take(16)
+'''
+          new = '''                val snapshot = HomeSnapshotStore.read(applicationContext, provider.id)
+                val all = snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }
+                    ?: dao.latestHomeStreams(provider.id, 320)
+                val states = dao.watchStates(provider.id).sortedByDescending { it.updatedAt }
+
+                suspend fun resolveWatchItem(state: WatchStateEntity): StreamEntity? {
+                    dao.stream(state.contentKey)?.let { return it }
+                    val episode = dao.episode(state.contentKey) ?: return null
+                    val exact = dao.streamByIdentity(provider.id, "series", episode.seriesId)
+                    if (exact != null) return exact
+                    val normalized = episode.seriesId.trim().removeSuffix(".0")
+                    return if (normalized != episode.seriesId) dao.streamByIdentity(provider.id, "series", normalized) else null
+                }
+
+                suspend fun resolveStates(predicate: (WatchStateEntity) -> Boolean): List<StreamEntity> {
+                    val resolved = ArrayList<StreamEntity>(16)
+                    val seen = HashSet<String>()
+                    for (state in states) {
+                        if (!predicate(state)) continue
+                        val item = resolveWatchItem(state) ?: continue
+                        if (seen.add(item.key)) resolved += item
+                        if (resolved.size >= 16) break
+                    }
+                    return resolved
+                }
+
+                val continueItems = resolveStates { !it.completed && it.positionMs > 30_000L }
+                val recentItems = resolveStates { it.positionMs > 0L }
+'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif 'HomeSnapshotStore.read(applicationContext, provider.id)' not in s:
+              raise SystemExit('Home source target missing')
+          p.write_text(s, encoding='utf-8')
+
+          # Remove avoidable force unwraps.
+          replacements = {
+              'app/src/main/java/tv/blofy/player/ui/catalog/ArtworkLoader.kt': [
+                  ('''            if (result != null && resolvedUrl != null) {
+                val url = resolvedUrl!!
+                backgroundPool.execute { writeDisk(app.cacheDir, url, target, result) }
+            }''', '''            if (result != null) {
+                resolvedUrl?.let { url ->
+                    backgroundPool.execute { writeDisk(app.cacheDir, url, target, result) }
+                }
+            }''')],
+              'app/src/main/java/tv/blofy/player/ui/details/MovieDetailsActivity.kt': [('metadata!!.crew', 'metadata?.crew.orEmpty()'), ('metadata!!.cast', 'metadata?.cast.orEmpty()')],
+              'app/src/main/java/tv/blofy/player/ui/details/SeriesDetailsActivity.kt': [('metadata!!.crew', 'metadata?.crew.orEmpty()'), ('metadata!!.cast', 'metadata?.cast.orEmpty()')],
+              'app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt': [('currentCategoryId!!', 'currentCategoryId.orEmpty()')],
+          }
+          for file, pairs in replacements.items():
+              p = Path(file); s = p.read_text(encoding='utf-8')
+              for a, b in pairs: s = s.replace(a, b)
+              p.write_text(s, encoding='utf-8')
+
+          # Catalog pages never silently re-download provider sections.
+          p = Path('app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt')
+          s = p.read_text(encoding='utf-8')
+          if 'import tv.blofy.player.ui.login.CatalogLoadingActivity\n' not in s:
+              anchor = 'import tv.blofy.player.ui.details.SeriesDetailsActivity\n'
+              s = s.replace(anchor, anchor + 'import tv.blofy.player.ui.login.CatalogLoadingActivity\n', 1)
+          s = s.replace('import kotlinx.coroutines.CancellationException\n', '')
+          s = s.replace('import tv.blofy.player.data.CatalogRecoveryPolicy\n', '')
+          old = '''        if (CatalogRecoveryPolicy.shouldAutoRefresh(kind, items.size, catalogRepairAttempted, catalogRefreshJob?.isActive == true)) {
+            refreshMissingCatalog()
+        } else if (catalogRefreshJob?.isActive != true) {
+            showCatalogStatus("لا توجد ${catalogLabel()} محفوظة", retry = true)
+        }
+    }
+
+    private fun refreshMissingCatalog() {
+        if (!::provider.isInitialized || kind == KIND_LIVE || catalogRefreshJob?.isActive == true) return
+        catalogRepairAttempted = true
+        showCatalogStatus("جاري تحميل ${catalogLabel()}...", retry = false)
+        catalogRefreshJob = lifecycleScope.launch {
+            val result = try {
+                withContext(Dispatchers.IO) {
+                    val manager = PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao())
+                    when {
+                        provider.providerType.equals("m3u", true) -> manager.syncAll(provider)
+                        kind == KIND_MOVIE -> manager.syncVod(provider)
+                        else -> manager.syncSeries(provider)
+                    }
+                }
+                Result.success(Unit)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                Result.failure(error)
+            }
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val count = withContext(Dispatchers.IO) {
+                if (currentCategoryId == null) dao.catalogCountAll(provider.id, kind)
+                else dao.catalogCountInCategory(provider.id, kind, currentCategoryId.orEmpty())
+            }
+            if (count > 0) hideCatalogStatus() else showCatalogStatus(if (result.isFailure) "تعذر تحميل ${catalogLabel()} • تحقق من القائمة ثم أعد المحاولة" else "القائمة لا تحتوي على ${catalogLabel()}", retry = true)
+        }
+    }
+'''
+          new = '''        showCatalogStatus("لا توجد ${catalogLabel()} محفوظة • حدّث المكتبة يدويًا", retry = true)
+    }
+
+    private fun refreshMissingCatalog() {
+        if (!::provider.isInitialized || kind == KIND_LIVE) return
+        catalogRepairAttempted = true
+        startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
+            putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
+        })
+    }
+'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif 'حدّث المكتبة يدويًا' not in s:
+              raise SystemExit('Browser source target missing')
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Verify hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -RIn --include='*.kt' '!!' app/src/main/java
+          ! grep -RIn --include='*.kt' -E 'runBlocking|Thread\.sleep|GlobalScope|allowMainThreadQueries' app/src/main/java
+          grep -Fq 'HomeSnapshotStore.read(applicationContext, provider.id)' app/src/main/java/tv/blofy/player/ui/home/HomeActivity.kt
+          grep -Fq 'حدّث المكتبة يدويًا' app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt
+      - name: Commit hardening once
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'blofy-ci'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/src/main/java
+          git commit -m 'hardening(rc07): persist bounded home and remove crash-prone unwraps'
+          git push origin HEAD:rc07-commercial-stability
