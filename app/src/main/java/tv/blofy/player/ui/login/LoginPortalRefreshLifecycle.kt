@@ -15,10 +15,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
-import tv.blofy.player.ui.common.TvUiTuning
 
 /** Adds an explicit pull-only website refresh button to the root login screen. */
 class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
@@ -31,27 +31,33 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
         if (content.findViewWithTag<View>(TAG) != null) return
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
+        val kind = DeviceClass.detect(activity)
+        val compact = kind == DeviceClass.Kind.PHONE
+        val tablet = kind == DeviceClass.Kind.TABLET
 
         val button = Button(activity).apply {
             tag = TAG
-            text = "↻  تحديث من الموقع"
+            text = "↻  Refresh from website"
             isAllCaps = false
             isFocusable = true
-            isFocusableInTouchMode = true
+            isFocusableInTouchMode = kind == DeviceClass.Kind.TV
             typeface = BlofyTvDesign.BodyTypeface
+            textSize = if (compact) 12.5f else 14f
             setTextColor(BlofyTvDesign.TextPrimary)
-            background = BlofyTvDesign.elevatedSurface(dp(16).toFloat())
-            BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.03f, false) {}
+            background = BlofyTvDesign.elevatedSurface(dp(if (compact) 13 else 16).toFloat())
+            if (kind == DeviceClass.Kind.TV) {
+                BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.03f, false) {}
+            }
             setOnClickListener {
                 if (!isEnabled) return@setOnClickListener
-                lifecycleScope.launch {
+                activity.lifecycleScope.launch {
                     isEnabled = false
-                    text = "جاري التحديث…"
+                    text = "Refreshing…"
                     try {
                         val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
                         val dao = BlofyDatabase.get(activity.applicationContext).dao()
                         if (endpoint.isBlank()) {
-                            Toast.makeText(activity, "رابط BLOFY غير متاح", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(activity, "BLOFY website is unavailable", Toast.LENGTH_SHORT).show()
                         } else {
                             withContext(Dispatchers.IO) {
                                 PortalPlaylistClient.sync(
@@ -61,24 +67,30 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
                                     PortalPlaylistClient.SyncMode.PULL_ONLY
                                 )
                             }
-                            Toast.makeText(activity, "تم تحديث القوائم من الموقع", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(activity, "Playlists updated from website", Toast.LENGTH_SHORT).show()
                             activity.recreate()
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Throwable) {
-                        Toast.makeText(activity, "تعذر تحديث القوائم • حاول مرة أخرى", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(activity, "Unable to update playlists • try again", Toast.LENGTH_SHORT).show()
                     } finally {
                         isEnabled = true
-                        text = "↻  تحديث من الموقع"
+                        text = "↻  Refresh from website"
                     }
                 }
             }
         }
 
-        val params = FrameLayout.LayoutParams(dp(236), dp(50), Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(96)
-            marginEnd = dp(42)
+        val width = when {
+            compact -> FrameLayout.LayoutParams.MATCH_PARENT
+            tablet -> dp(250)
+            else -> dp(236)
+        }
+        val params = FrameLayout.LayoutParams(width, dp(if (compact) 48 else 50), Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(if (compact) 12 else 96)
+            marginEnd = dp(if (compact) 16 else if (tablet) 24 else 42)
+            if (compact) marginStart = dp(16)
         }
         content.addView(button, params)
     }
