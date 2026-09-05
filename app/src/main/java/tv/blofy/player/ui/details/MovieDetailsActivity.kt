@@ -181,7 +181,7 @@ class MovieDetailsActivity : AppCompatActivity() {
 
             if (!metadata?.crew.isNullOrEmpty()) {
                 info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = metadata!!.crew.joinToString("   •   ") { "${it.job}: ${it.name}" }
+                    text = metadata?.crew.orEmpty().joinToString("   •   ") { "${it.job}: ${it.name}" }
                     textSize = 11.5f
                     typeface = BlofyTvDesign.MediumTypeface
                     setTextColor(BlofyTvDesign.TextMuted)
@@ -241,7 +241,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                     gravity = Gravity.END
                     setPadding(0, dp(14), 0, dp(5))
                 })
-                info.addView(CastStrip.build(this@MovieDetailsActivity, metadata!!.cast), LinearLayout.LayoutParams(-1, dp(184)))
+                info.addView(CastStrip.build(this@MovieDetailsActivity, metadata?.cast.orEmpty()), LinearLayout.LayoutParams(-1, dp(184)))
             } else {
                 info.addView(TextView(this@MovieDetailsActivity).apply {
                     text = "بيانات طاقم التمثيل غير متوفرة من السيرفر"
