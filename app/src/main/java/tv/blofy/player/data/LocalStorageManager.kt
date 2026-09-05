@@ -10,59 +10,44 @@ object LocalStorageManager {
     data class StorageStats(
         val databaseBytes: Long,
         val temporaryBytes: Long,
-        val totalBytes: Long
+        val totalBytes: Long,
+        val artworkBytes: Long = 0L,
+        val otherPersistentBytes: Long = 0L,
     )
 
+    /** Includes all catalog/metadata/journal databases, WALs, pinned artwork and preferences. */
     fun stats(context: Context): StorageStats {
         val app = context.applicationContext
-        val databaseBytes = databaseFiles(app).sumOf(::sizeOf)
-        val temporaryBytes = listOfNotNull(app.cacheDir, app.externalCacheDir).sumOf(::sizeOf)
-        return StorageStats(
-            databaseBytes = databaseBytes,
-            temporaryBytes = temporaryBytes,
-            totalBytes = databaseBytes + temporaryBytes
-        )
+        val root = app.filesDir.parentFile
+        val databaseBytes = sizeOf(app.getDatabasePath("blofy-player-2.db").parentFile)
+        val artwork = File(app.filesDir, "blofy_library_art")
+        val artworkBytes = sizeOf(artwork)
+        val otherFiles = app.filesDir.listFiles()?.filterNot { it == artwork }?.sumOf(::sizeOf) ?: 0L
+        val persistent = otherFiles + sizeOf(root?.let { File(it, "shared_prefs") })
+        val temporaryBytes = listOfNotNull(app.cacheDir, app.externalCacheDir).distinctBy { it.absolutePath }.sumOf(::sizeOf)
+        return StorageStats(databaseBytes, temporaryBytes,
+            databaseBytes + artworkBytes + persistent + temporaryBytes, artworkBytes, persistent)
     }
 
     fun format(context: Context, bytes: Long): String =
         Formatter.formatFileSize(context.applicationContext, bytes.coerceAtLeast(0L))
 
-    /**
-     * Safe cleanup only removes disposable files and EPG rows. It deliberately keeps
-     * providers, activation, favorites, watch progress and the cached catalog so the
-     * customer can clean storage without turning the next app launch into a full reload.
-     */
+    /** Keeps pinned artwork, providers, activation, favorites, episodes and watch progress. */
     suspend fun cleanSafely(context: Context) {
         val app = context.applicationContext
         clearChildren(app.cacheDir)
         app.externalCacheDir?.let(::clearChildren)
-
         val dao = BlofyDatabase.get(app).dao()
-        dao.allProviders().first().forEach { provider ->
-            dao.clearProviderEpg(provider.id)
-        }
+        dao.allProviders().first().forEach { dao.clearProviderEpg(it.id) }
     }
 
-    private fun databaseFiles(context: Context): List<File> {
-        val main = context.getDatabasePath(DATABASE_NAME)
-        return listOf(
-            main,
-            File(main.path + "-wal"),
-            File(main.path + "-shm")
-        )
-    }
-
-    private fun sizeOf(file: File): Long {
-        if (!file.exists()) return 0L
+    private fun sizeOf(file: File?): Long {
+        if (file == null || !file.exists()) return 0L
         if (file.isFile) return file.length()
         return file.listFiles()?.sumOf(::sizeOf) ?: 0L
     }
 
     private fun clearChildren(directory: File) {
-        directory.listFiles()?.forEach { child ->
-            runCatching { child.deleteRecursively() }
-        }
+        directory.listFiles()?.forEach { child -> runCatching { child.deleteRecursively() } }
     }
-
-    private const val DATABASE_NAME = "blofy-player-2.db"
 }
