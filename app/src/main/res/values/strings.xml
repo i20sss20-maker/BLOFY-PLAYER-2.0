@@ -120,9 +120,10 @@
     <string name="setting_storage_used">%1$s used • manage and clean</string>
     <string name="storage_title">Local storage</string>
     <string name="storage_message">Currently used: %1$s\n\n• Catalog, episodes and saved data: %2$s\n• Artwork and temporary files: %3$s\n\nSafe cleanup does not remove activation, playlists, favorites or resume progress.</string>
+    <string name="storage_message_detailed">Currently used: %1$s\n\n• Catalog and databases: %2$s\n• Pinned artwork: %3$s\n• Saved app data: %4$s\n• Disposable cache: %5$s\n\nSafe cleanup removes only disposable cache and temporary guide data. It keeps activation, playlists, favorites, progress and pinned library artwork.</string>
     <string name="storage_safe_clean">Safe cleanup</string>
     <string name="storage_cleanup_title">Clean storage</string>
-    <string name="storage_cleanup_message">Only artwork, temporary files and temporary guide data will be removed. Customer data and playlists will stay saved.</string>
+    <string name="storage_cleanup_message">Only disposable cache and temporary guide data will be removed. Pinned library artwork, customer data and playlists will stay saved.</string>
     <string name="storage_cleaning">Cleaning local storage…</string>
     <string name="storage_cleaned">✓ Cleaned %1$s without deleting your data</string>
     <string name="storage_clean_failed">Could not clean some files — your data was not affected</string>
