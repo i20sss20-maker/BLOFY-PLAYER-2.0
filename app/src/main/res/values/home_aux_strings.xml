@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="person_server_identity">Name and image from server data</string>
     <string name="person_server_only_note">Only cast information sent by the server is shown. If the server does not provide a photo or additional details, BLOFY will not use an external source.</string>
     <string name="for_you_title">For you</string>
