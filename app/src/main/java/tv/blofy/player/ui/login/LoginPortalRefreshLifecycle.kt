@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
+import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.local.BlofyDatabase
@@ -37,7 +38,7 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
 
         val button = Button(activity).apply {
             tag = TAG
-            text = "↻  Refresh from website"
+            text = activity.getString(R.string.refresh_from_website)
             isAllCaps = false
             isFocusable = true
             isFocusableInTouchMode = kind == DeviceClass.Kind.TV
@@ -52,12 +53,12 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
                 if (!isEnabled) return@setOnClickListener
                 activity.lifecycleScope.launch {
                     isEnabled = false
-                    text = "Refreshing…"
+                    text = activity.getString(R.string.refreshing_from_website)
                     try {
                         val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
                         val dao = BlofyDatabase.get(activity.applicationContext).dao()
                         if (endpoint.isBlank()) {
-                            Toast.makeText(activity, "BLOFY website is unavailable", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(activity, activity.getString(R.string.refresh_site_missing), Toast.LENGTH_SHORT).show()
                         } else {
                             withContext(Dispatchers.IO) {
                                 PortalPlaylistClient.sync(
@@ -67,16 +68,16 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
                                     PortalPlaylistClient.SyncMode.PULL_ONLY
                                 )
                             }
-                            Toast.makeText(activity, "Playlists updated from website", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(activity, activity.getString(R.string.refresh_site_success), Toast.LENGTH_SHORT).show()
                             activity.recreate()
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Throwable) {
-                        Toast.makeText(activity, "Unable to update playlists • try again", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(activity, activity.getString(R.string.refresh_site_failed), Toast.LENGTH_SHORT).show()
                     } finally {
                         isEnabled = true
-                        text = "↻  Refresh from website"
+                        text = activity.getString(R.string.refresh_from_website)
                     }
                 }
             }
