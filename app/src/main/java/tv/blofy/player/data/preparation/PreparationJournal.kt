@@ -4,10 +4,14 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import java.io.Closeable
 import java.security.MessageDigest
 
 /** Private resumable ledger, independent from the playback/catalog schema. No log contains URLs. */
-class PreparationJournal(context: Context) : SQLiteOpenHelper(context.applicationContext, "blofy-preparation-v1.db", null, 1) {
+class PreparationJournal(context: Context) : SQLiteOpenHelper(context.applicationContext, "blofy-preparation-v1.db", null, 1), Closeable {
+    // The concrete helper owns this contract; do not depend on newer platform inheritance.
+    override fun close() = super.close()
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE runs(provider TEXT PRIMARY KEY NOT NULL,generation TEXT NOT NULL)")
         db.execSQL("CREATE TABLE units(provider TEXT NOT NULL,kind TEXT NOT NULL,item TEXT NOT NULL,value TEXT NOT NULL DEFAULT '',done INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(provider,kind,item))")
