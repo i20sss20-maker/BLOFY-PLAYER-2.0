@@ -136,7 +136,7 @@ class MobileContentActivity : AppCompatActivity() {
                     posterAdapter?.replace(items)
                 } else {
                     liveList?.adapter = PremiumTextAdapter(items.map {
-                        it.name + if (it.archiveEnabled) "  •  ARCH" else ""
+                        it.name + if (it.archiveEnabled) getString(R.string.mobile_archive_suffix) else ""
                     })
                 }
             }
