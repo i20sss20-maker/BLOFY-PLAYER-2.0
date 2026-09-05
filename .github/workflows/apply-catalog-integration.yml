@@ -27,15 +27,17 @@ jobs:
           base64 -d /tmp/integration.b64 | gzip -dc > /tmp/integration.patch
           echo 'b37c852f702f517643c9cefaaef05efd6ea0313de031a03dfdad9d61649db781  /tmp/integration.patch' | sha256sum -c -
           git apply --check /tmp/integration.patch
-      - name: Apply full catalog, focus and playlist reconciliation integration
+      - name: Apply app integration without workflow mutation
         shell: bash
         run: |
           set -euo pipefail
           git apply /tmp/integration.patch
+          # A GitHub App token cannot push workflow-file mutations. Keep those files
+          # at branch HEAD; they can be updated separately with the repository connector.
+          git checkout HEAD -- .github/workflows/rc07-release.yml .github/workflows/apply-catalog-integration.yml
           rm -f .github/blofy-full-integration.patch.gz.b64 \
                 .github/blofy-full-integration.patch.gz.b64.part2 \
-                .github/blofy-full-integration.patch.gz.b64.part3 \
-                .github/workflows/apply-catalog-integration.yml
+                .github/blofy-full-integration.patch.gz.b64.part3
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
