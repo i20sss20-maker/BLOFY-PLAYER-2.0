@@ -22,6 +22,30 @@ export function injectSubscriberPortalUi(html) {
     node.textContent = message || '';
     node.classList.toggle('bad', !!bad);
   }
+  function installOptionalName() {
+    var input = qs('name');
+    if (!input || input.dataset.blofyOptionalName === '1') return;
+    input.dataset.blofyOptionalName = '1';
+    input.required = false;
+    // Keep the optional marker when the user changes the portal language.
+    var labels = {
+      ar: 'اسم القائمة (اختياري)', en: 'Playlist name (optional)',
+      fr: 'Nom de la playlist (facultatif)', es: 'Nombre de la lista (opcional)',
+      pt: 'Nome da playlist (opcional)', de: 'Playlist-Name (optional)',
+      it: 'Nome della playlist (facoltativo)', tr: 'Oynatma listesi adı (isteğe bağlı)',
+      nl: 'Naam van afspeellijst (optioneel)', ru: 'Название плейлиста (необязательно)',
+      fa: 'نام فهرست (اختیاری)', ur: 'پلے لسٹ کا نام (اختیاری)',
+      hi: 'प्लेलिस्ट का नाम (वैकल्पिक)', id: 'Nama daftar putar (opsional)',
+      zh: '播放列表名称（可选）'
+    };
+    if (typeof translations !== 'undefined') {
+      Object.keys(labels).forEach(function (code) {
+        if (translations[code]) translations[code].playlistNameLabel = labels[code];
+      });
+    }
+    var label = input.labels && input.labels[0];
+    if (label) label.textContent = typeof t === 'function' ? t('playlistNameLabel') : labels.ar;
+  }
   function addSubscriberOption() {
     var select = qs('providerType');
     if (!select || select.dataset.blofySubscriberUi === '1') return;
@@ -49,7 +73,6 @@ export function injectSubscriberPortalUi(html) {
       var blofy = select.value === 'blofy';
       var credentials = blofy || select.value === 'xtream';
       var base = qs('baseUrl');
-      var name = qs('name');
       var user = qs('username');
       var pass = qs('password');
       var hint = qs('blofySubscriberHint');
@@ -62,7 +85,6 @@ export function injectSubscriberPortalUi(html) {
       }
       if (hint) hint.style.display = blofy ? 'block' : 'none';
       if (blofy) {
-        if (name && !name.value.trim()) name.value = 'مشتركين BLOFY';
         if (base) { base.value = ''; base.setCustomValidity(''); }
         if (user) user.placeholder = 'اسم المستخدم';
         if (pass) pass.placeholder = 'كلمة المرور';
@@ -121,11 +143,10 @@ export function injectSubscriberPortalUi(html) {
       status('جاري التحقق من اشتراك BLOFY…', false);
       try {
         var session = await createSubscriberSession();
-        var name = qs('name');
         var base = qs('baseUrl');
         var user = qs('username');
         var pass = qs('password');
-        if (name) name.value = session.providerName || 'مشتركين BLOFY';
+        // Session metadata must not overwrite the user's optional playlist name.
         if (base) base.value = session.baseUrl;
         if (user) user.value = session.username;
         if (pass) pass.value = session.password;
@@ -144,6 +165,7 @@ export function injectSubscriberPortalUi(html) {
   }
 
   function install() {
+    installOptionalName();
     addSubscriberOption();
     installSaveInterceptor();
   }
