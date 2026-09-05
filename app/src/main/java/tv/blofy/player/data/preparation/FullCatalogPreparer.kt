@@ -36,8 +36,8 @@ import java.util.concurrent.ConcurrentHashMap
  * Entry preparation is deliberately bounded. Huge Xtream libraries can contain 200k+ items;
  * blocking the user until every detail/episode/image request completes makes first launch unusable.
  *
- * The loading screen now waits for a durable base catalog + a small priority warm-up + home/search.
- * Remaining metadata, episodes and artwork continue from local checkpoints in a background scope.
+ * The loading screen waits for a durable base catalog + a small priority warm-up + home/search.
+ * Remaining metadata, episodes and artwork continue from local storage in a background scope.
  */
 object FullCatalogPreparer {
     private val locks = ConcurrentHashMap<String, Mutex>()
@@ -52,7 +52,7 @@ object FullCatalogPreparer {
 
     data class Update(val percent: Int, val label: String)
     class Incomplete(val missingDetails: Long, val missingImages: Long) : Exception(
-        "التخزين غير مكتمل: $missingDetails عنصر تفاصيل/حلقات و$missingImages صورة. أعد المحاولة لاستكمال الناقص."
+        "Library storage is incomplete: $missingDetails details/episodes and $missingImages images remain. Retry to continue."
     )
 
     /** 100% means the app is safe and fast to enter from local storage; deep enrichment continues. */
@@ -62,8 +62,8 @@ object FullCatalogPreparer {
                 val app = context.applicationContext
                 val db = BlofyDatabase.get(app)
                 val dao = db.dao()
-                val provider = checkNotNull(dao.provider(providerId)) { "قائمة التشغيل غير موجودة" }
-                check(CatalogSyncState.isReady(app, providerId)) { "قائمة المحتوى لم يكتمل حفظها" }
+                val provider = checkNotNull(dao.provider(providerId)) { "Playlist was not found" }
+                check(CatalogSyncState.isReady(app, providerId)) { "Catalog has not finished saving" }
                 val expectedEpoch = CatalogSyncState.lastUpdatedAt(app, providerId)
                 val generation = PreparationJournal.hash("${provider.baseUrl}|${provider.username}|${provider.password}|$expectedEpoch")
 
@@ -73,7 +73,7 @@ object FullCatalogPreparer {
                         CatalogSyncState.isReady(app, providerId) &&
                             CatalogSyncState.lastUpdatedAt(app, providerId) == expectedEpoch &&
                             current?.baseUrl == provider.baseUrl && current.username == provider.username && current.password == provider.password
-                    ) { "مصدر القائمة تغير أثناء التحميل؛ استكمل من شاشة القوائم" }
+                    ) { "Playlist source changed while preparing; continue from the playlist screen" }
                 }
 
                 PreparationJournal(app).use { journal ->
@@ -92,13 +92,13 @@ object FullCatalogPreparer {
                             block(page)
                             emitted += page.size
                             val next = checkNotNull(dao.streamRowId(page.last().key))
-                            check(next > after) { "تعذر متابعة فهرس المحتوى" }
+                            check(next > after) { "Unable to continue catalog index" }
                             after = next
                             if (limit != null && emitted >= limit) break
                         }
                     }
 
-                    progress(Update(32, "تجهيز المحتوى الأهم للدخول السريع..."))
+                    progress(Update(32, "Preparing priority content for fast entry…"))
                     if (!provider.providerType.equals("m3u", true)) {
                         for (kind in listOf("movie", "series")) {
                             pages(kind, ENTRY_DETAIL_PER_KIND) { page ->
@@ -115,7 +115,7 @@ object FullCatalogPreparer {
 
                     // Entry does not download hundreds of thousands of posters. Persist a bounded
                     // visible set; the rest is filled progressively in the background and on demand.
-                    progress(Update(55, "حفظ الصور الأساسية للمكتبة..."))
+                    progress(Update(55, "Saving essential library artwork…"))
                     var entryImages = 0
                     outer@ for (kind in listOf("movie", "series", "live")) {
                         pages(kind, 120) { page ->
@@ -134,34 +134,48 @@ object FullCatalogPreparer {
                         if (entryImages >= ENTRY_ARTWORK_LIMIT) break@outer
                     }
 
-                    progress(Update(82, "تجهيز الرئيسية من التخزين المحلي..."))
+                    progress(Update(82, "Preparing Home from local storage…"))
                     HomeSnapshotStore.rebuild(app, dao, provider)
-                    progress(Update(90, "تجهيز البحث المحلي..."))
+                    progress(Update(90, "Preparing local search…"))
                     dao.rebuildSearchIndex(providerId)
                     app.getSharedPreferences("blofy_search_index", Context.MODE_PRIVATE).edit()
                         .putBoolean("v9_ready_$providerId", true).commit()
 
-                    // These flags now mean the entry barrier is ready. Deep completion is tracked by
-                    // the preparation journal and continues independently without blocking the UI.
+                    // These flags mean the entry barrier is ready. Deep completion is tracked
+                    // independently and resumes on every app launch without blocking navigation.
                     CatalogSyncState.markMetadataReady(app, providerId)
                     CatalogSyncState.markEpisodesReady(app, providerId)
-                    progress(Update(96, "التحقق من جاهزية المكتبة..."))
+                    progress(Update(96, "Verifying library readiness…"))
                     CatalogManifestStore.rebuild(app, dao, provider, completionVerified = true)
                     ensureCurrentSource()
                     CatalogSyncState.markFullyReady(app, providerId, expectedEpoch)
                     check(CatalogSyncState.isFullyReady(app, providerId))
-                    progress(Update(100, "المكتبة جاهزة • استكمال التفاصيل يعمل بالخلفية"))
+                    progress(Update(100, "Library ready • extra details continue in the background"))
                 }
 
                 startBackground(app, providerId, expectedEpoch)
             }
         }
 
+    /**
+     * A fully-ready library opens immediately on later launches, so preparation is not entered again.
+     * Restart background enrichment explicitly to continue from durable metadata/episode/artwork files.
+     */
+    fun resumeBackground(context: Context, providerId: String) {
+        val app = context.applicationContext
+        val expectedEpoch = CatalogSyncState.lastUpdatedAt(app, providerId)
+        if (expectedEpoch <= 0L || !CatalogSyncState.isReady(app, providerId)) return
+        startBackground(app, providerId, expectedEpoch)
+    }
+
     private fun startBackground(app: Context, providerId: String, expectedEpoch: Long) {
         if (backgroundJobs[providerId]?.isActive == true) return
         backgroundJobs[providerId] = backgroundScope.launch {
-            runCatching { enrichAll(app, providerId, expectedEpoch) }
-            backgroundJobs.remove(providerId)
+            try {
+                runCatching { enrichAll(app, providerId, expectedEpoch) }
+            } finally {
+                backgroundJobs.remove(providerId)
+            }
         }
     }
 
@@ -184,8 +198,12 @@ object FullCatalogPreparer {
                     }
                 }
                 for (stream in page) {
-                    listOf(stream.icon, stream.backdrop, ProviderMetadataCache.read(app, stream.key)?.posterUrl,
-                        ProviderMetadataCache.read(app, stream.key)?.backdropUrl)
+                    listOf(
+                        stream.icon,
+                        stream.backdrop,
+                        ProviderMetadataCache.read(app, stream.key)?.posterUrl,
+                        ProviderMetadataCache.read(app, stream.key)?.backdropUrl
+                    )
                         .filterNotNull().map(String::trim).filter { it.isNotBlank() && it != "null" }.distinct()
                         .forEach { raw -> runCatching { ArtworkLoader.persist(app, resolve(provider, raw)) } }
                 }
@@ -200,7 +218,11 @@ object FullCatalogPreparer {
         if (provider.providerType.equals("m3u", true)) return
         val cached = ProviderMetadataCache.read(app, stream.key)
         val needsEpisodes = stream.kind == "series"
-        if (cached != null && !needsEpisodes) return
+        val episodesAlreadySaved = if (needsEpisodes) {
+            db.dao().episodeSnapshot(provider.id, stream.remoteId).isNotEmpty()
+        } else true
+        if (cached != null && (!needsEpisodes || episodesAlreadySaved)) return
+
         retryNetwork {
             val response = fetch(provider, stream)
             val metadata = XtreamMetadataFallback.parseResponse(
