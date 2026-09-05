@@ -65,6 +65,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 baselineProfile {
@@ -98,6 +99,8 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     baselineProfile(project(":benchmark"))
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core-ktx:1.6.1")
     androidTestImplementation("androidx.test.ext:junit-ktx:1.2.1")
