@@ -28,6 +28,12 @@ class PortalManualRefreshRegressionTest {
         when (method.name) {
             "allProviders" -> flowOf(rows.values.toList())
             "upsertProvider" -> { val provider = args!![0] as ProviderEntity; rows[provider.id] = provider; Unit }
+            "hasCatalog" -> rows.containsKey(args!![0] as String)
+            "deactivateProvider" -> {
+                val id = args!![0] as String
+                rows[id]?.let { rows[id] = it.copy(enabled = false) }
+                Unit
+            }
             "toString" -> "ManualRefreshFakeDao"
             else -> error("Unexpected database method: ${method.name}")
         }
