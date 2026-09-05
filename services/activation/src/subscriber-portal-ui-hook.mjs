@@ -11,7 +11,11 @@ export function injectSubscriberPortalUi(html) {
 (function () {
   function qs(id) { return document.getElementById(id); }
   function fieldWrapper(input) { return input && input.closest ? input.closest('.field') : null; }
-  function setHidden(node, hidden) { if (node) node.style.display = hidden ? 'none' : ''; }
+  function setHidden(node, hidden) {
+    if (!node) return;
+    node.classList.toggle('hidden', hidden);
+    node.style.display = hidden ? 'none' : '';
+  }
   function status(message, bad) {
     var node = qs('editorStatus');
     if (!node) return;
@@ -20,48 +24,68 @@ export function injectSubscriberPortalUi(html) {
   }
   function addSubscriberOption() {
     var select = qs('providerType');
-    if (!select || select.querySelector('option[value="blofy"]')) return;
-    var option = document.createElement('option');
-    option.value = 'blofy';
-    option.textContent = 'مشتركين BLOFY';
-    option.dataset.blofySubscriber = '1';
-    select.insertBefore(option, select.firstChild);
+    if (!select || select.dataset.blofySubscriberUi === '1') return;
+    select.dataset.blofySubscriberUi = '1';
+    if (!select.querySelector('option[value="blofy"]')) {
+      var option = document.createElement('option');
+      option.value = 'blofy';
+      option.textContent = 'مشتركين BLOFY';
+      option.dataset.blofySubscriber = '1';
+      select.insertBefore(option, select.firstChild);
+    }
 
-    var badge = document.createElement('div');
-    badge.id = 'blofySubscriberHint';
-    badge.style.cssText = 'display:none;margin-top:12px;padding:12px 14px;border:1px solid rgba(177,108,255,.35);border-radius:14px;background:rgba(139,55,255,.10);color:#d9c4ff;font-size:13px;line-height:1.65';
-    badge.textContent = 'دخول BLOFY الخاص: أدخل اسم المستخدم وكلمة المرور فقط. عنوان السيرفر محفوظ داخل BLOFY ولا يظهر في الموقع أو التطبيق.';
-    var grid = select.closest('.form-grid');
-    if (grid) grid.appendChild(badge);
+    var badge = qs('blofySubscriberHint');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.id = 'blofySubscriberHint';
+      badge.className = 'full';
+      badge.style.cssText = 'display:none;margin-top:12px;padding:12px 14px;border:1px solid rgba(177,108,255,.35);border-radius:14px;background:rgba(139,55,255,.10);color:#d9c4ff;font-size:13px;line-height:1.65';
+      badge.textContent = 'دخول BLOFY الخاص: أدخل اسم المستخدم وكلمة المرور فقط. عنوان السيرفر محفوظ داخل BLOFY ولا يظهر في الموقع أو التطبيق.';
+      var grid = select.closest('.form-grid');
+      if (grid) grid.appendChild(badge);
+    }
 
     function applyMode() {
       var blofy = select.value === 'blofy';
+      var credentials = blofy || select.value === 'xtream';
       var base = qs('baseUrl');
       var name = qs('name');
+      var user = qs('username');
+      var pass = qs('password');
       var hint = qs('blofySubscriberHint');
       setHidden(fieldWrapper(base), blofy);
+      setHidden(fieldWrapper(user), !credentials);
+      setHidden(fieldWrapper(pass), !credentials);
+      if (!credentials) {
+        if (user) user.value = '';
+        if (pass) pass.value = '';
+      }
       if (hint) hint.style.display = blofy ? 'block' : 'none';
       if (blofy) {
-        if (name) name.value = 'مشتركين BLOFY';
-        if (base) base.value = '';
-        var user = qs('username');
-        var pass = qs('password');
+        if (name && !name.value.trim()) name.value = 'مشتركين BLOFY';
+        if (base) { base.value = ''; base.setCustomValidity(''); }
         if (user) user.placeholder = 'اسم المستخدم';
         if (pass) pass.placeholder = 'كلمة المرور';
         status('أدخل بيانات اشتراك BLOFY فقط ثم اضغط حفظ.', false);
       }
     }
-    select.addEventListener('change', applyMode);
+    // Replace the legacy Xtream-only handler rather than racing its change event.
+    // clearEditor/edit call typeUi directly, so keep programmatic resets in sync too.
+    if (typeof typeUi === 'function') typeUi = applyMode;
+    select.onchange = applyMode;
     applyMode();
   }
 
   async function createSubscriberSession() {
-    var deviceId = (qs('deviceId') && qs('deviceId').value || '').trim();
-    var activationCode = (qs('activationCode') && qs('activationCode').value || '').trim();
+    // login() intentionally clears the visible device inputs after authentication.
+    // Use the current portal session, never those cleared fields or stale storage.
+    var device = typeof auth !== 'undefined' && auth;
+    var deviceId = String(device && device.deviceId || '').trim();
+    var activationCode = String(device && device.activationCode || '').trim();
     var username = (qs('username') && qs('username').value || '').trim();
     var password = (qs('password') && qs('password').value || '');
     if (!username || !password) throw new Error('أدخل اسم المستخدم وكلمة المرور');
-    if (!deviceId || !activationCode) throw new Error('بيانات الجهاز غير مكتملة');
+    if (!deviceId || !activationCode) throw new Error('بيانات الجهاز غير مكتملة؛ سجّل دخول الجهاز مرة أخرى');
 
     var response = await fetch('/api/v1/subscribers/session', {
       method: 'POST',
