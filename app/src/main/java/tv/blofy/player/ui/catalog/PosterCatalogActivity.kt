@@ -85,13 +85,13 @@ class PosterCatalogActivity : AppCompatActivity() {
         val rail = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 5 else 9), dp(8), dp(if (deviceKind == DeviceClass.Kind.PHONE) 5 else 9), dp(8))
             background = BlofyTvDesign.glassSurface(dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20).toFloat())
             elevation = dp(2).toFloat()
         }
         rail.addView(TextView(this).apply {
-            text = "Categories"
+            text = getString(R.string.categories)
             BlofyTvDesign.applyHeading(this)
             textSize = if (deviceKind == DeviceClass.Kind.PHONE) 13f else 17f
             gravity = Gravity.CENTER
@@ -115,10 +115,10 @@ class PosterCatalogActivity : AppCompatActivity() {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
         }
         header.addView(TextView(this).apply {
-            text = if (kind == KIND_SERIES) "Series" else "Movies"
+            text = getString(if (kind == KIND_SERIES) R.string.series else R.string.movies)
             BlofyTvDesign.applyTitle(this)
             textSize = when (deviceKind) {
                 DeviceClass.Kind.TV -> 28f
@@ -269,7 +269,11 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun updateCount() {
         val suffix = if (hasMore) "+" else ""
-        countView.text = "${loadedItems.size}$suffix ${if (kind == KIND_SERIES) "series" else "movies"}"
+        countView.text = getString(
+            if (kind == KIND_SERIES) R.string.series_count else R.string.movie_count,
+            loadedItems.size,
+            suffix
+        )
     }
 
     private fun saveMemorySnapshot() {
@@ -316,7 +320,14 @@ class PosterCatalogActivity : AppCompatActivity() {
         })
     }
 
-    private fun allCategory() = CategoryEntity("$providerId:$kind:$ALL_CATEGORY_ID", providerId, ALL_CATEGORY_ID, kind, if (kind == KIND_SERIES) "All Series" else "All Movies", -1)
+    private fun allCategory() = CategoryEntity(
+        "$providerId:$kind:$ALL_CATEGORY_ID",
+        providerId,
+        ALL_CATEGORY_ID,
+        kind,
+        getString(if (kind == KIND_SERIES) R.string.all_series else R.string.all_movies),
+        -1
+    )
     private fun categoryRemoteId(category: CategoryEntity) = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
