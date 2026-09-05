@@ -1,9 +1,12 @@
 package tv.blofy.player.ui.settings
 
 import android.content.Context
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 
 /** Single runtime source for user-facing settings. Values intentionally match SettingsActivity. */
+@OptIn(UnstableApi::class)
 object RuntimeSettings {
     const val PREFS = "blofy_player_settings"
     const val KEY_MOTION = "motion_mode"
