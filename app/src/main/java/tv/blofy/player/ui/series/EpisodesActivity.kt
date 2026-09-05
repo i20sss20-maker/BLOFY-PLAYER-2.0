@@ -143,7 +143,12 @@ class EpisodesActivity : AppCompatActivity() {
             val cached = dao.episodes(providerId, seriesId).first()
             launch { dao.episodes(providerId, seriesId).collect { renderEpisodes(it) } }
             if (cached.isEmpty()) {
-                syncEpisodes(provider)
+                // Offline-first: entering the page never starts a provider request. The one-time
+                // episode preloader fills Room after the initial catalog sync; this collector will
+                // render the rows as soon as they arrive. Network retry remains an explicit action.
+                loadState = EpisodeLoadState.LOADING
+                status.text = "جاري تجهيز الحلقات وحفظها محليًا..."
+                retryButton.visibility = View.GONE
             } else {
                 loadState = EpisodeLoadState.LOADED
                 status.text = "يتم عرض الحلقات المحفوظة فورًا"
