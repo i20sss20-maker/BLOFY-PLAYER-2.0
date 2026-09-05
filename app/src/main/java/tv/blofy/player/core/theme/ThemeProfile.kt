@@ -9,9 +9,9 @@ data class ThemeProfile(
     @ColorInt val accent: Int,
     @ColorInt val background: Int,
     @ColorInt val surface: Int,
-    val focusScale: Float = 1.06f,
-    val focusElevationDp: Float = 14f,
-    val motionMs: Long = 130L
+    val focusScale: Float = 1.05f,
+    val focusElevationDp: Float = 12f,
+    val motionMs: Long = 110L
 )
 
 object BlofyThemes {
@@ -19,18 +19,23 @@ object BlofyThemes {
         id = "vision",
         loginLayout = "blofy_login_vision",
         homeLayout = "blofy_home_vision",
-        accent = 0xFF8B37FF.toInt(),
-        background = 0xFF07070D.toInt(),
-        surface = 0xFF12101D.toInt()
+        accent = 0xFF682ACC.toInt(),
+        background = 0xFFF5F5F8.toInt(),
+        surface = 0xFFFFFFFF.toInt(),
+        focusScale = 1.035f,
+        focusElevationDp = 12f,
+        motionMs = 95L
     )
 
     val CINEMA = ThemeProfile(
         id = "cinema",
         loginLayout = "blofy_login_cinema",
         homeLayout = "blofy_home_cinema",
-        accent = 0xFFA84FFF.toInt(),
-        background = 0xFF05040A.toInt(),
-        surface = 0xFF171125.toInt(),
-        focusScale = 1.05f
+        accent = 0xFF8245E1.toInt(),
+        background = 0xFFF8F7FA.toInt(),
+        surface = 0xFFFCFBFE.toInt(),
+        focusScale = 1.035f,
+        focusElevationDp = 12f,
+        motionMs = 95L
     )
 }
