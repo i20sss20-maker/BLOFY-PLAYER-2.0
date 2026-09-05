@@ -18,7 +18,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,7 +33,6 @@ import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
 import tv.blofy.player.core.security.ParentalGate
-import tv.blofy.player.data.CatalogRecoveryPolicy
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
@@ -47,6 +45,7 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
+import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.player.PlayerActivity
 
 @OptIn(markerClass = [UnstableApi::class])
@@ -406,40 +405,16 @@ class ContentBrowserActivity : AppCompatActivity() {
             showCatalogStatus("لا يوجد محتوى في هذا القسم • اختر ${allCategory().name}", retry = false)
             return
         }
-        if (CatalogRecoveryPolicy.shouldAutoRefresh(kind, items.size, catalogRepairAttempted, catalogRefreshJob?.isActive == true)) {
-            refreshMissingCatalog()
-        } else if (catalogRefreshJob?.isActive != true) {
-            showCatalogStatus("لا توجد ${catalogLabel()} محفوظة", retry = true)
-        }
+        showCatalogStatus("لا توجد ${catalogLabel()} محفوظة • حدّث المكتبة يدويًا", retry = true)
     }
 
     private fun refreshMissingCatalog() {
-        if (!::provider.isInitialized || kind == KIND_LIVE || catalogRefreshJob?.isActive == true) return
+        if (!::provider.isInitialized || kind == KIND_LIVE) return
         catalogRepairAttempted = true
-        showCatalogStatus("جاري تحميل ${catalogLabel()}...", retry = false)
-        catalogRefreshJob = lifecycleScope.launch {
-            val result = try {
-                withContext(Dispatchers.IO) {
-                    val manager = PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao())
-                    when {
-                        provider.providerType.equals("m3u", true) -> manager.syncAll(provider)
-                        kind == KIND_MOVIE -> manager.syncVod(provider)
-                        else -> manager.syncSeries(provider)
-                    }
-                }
-                Result.success(Unit)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Throwable) {
-                Result.failure(error)
-            }
-            val dao = BlofyDatabase.get(applicationContext).dao()
-            val count = withContext(Dispatchers.IO) {
-                if (currentCategoryId == null) dao.catalogCountAll(provider.id, kind)
-                else dao.catalogCountInCategory(provider.id, kind, currentCategoryId!!)
-            }
-            if (count > 0) hideCatalogStatus() else showCatalogStatus(if (result.isFailure) "تعذر تحميل ${catalogLabel()} • تحقق من القائمة ثم أعد المحاولة" else "القائمة لا تحتوي على ${catalogLabel()}", retry = true)
-        }
+        startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
+            putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
+        })
     }
 
     private fun showCatalogStatus(message: String, retry: Boolean) {
@@ -587,7 +562,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             val fallback = if (saved == null) {
                 withContext(Dispatchers.IO) {
                     if (currentCategoryId == null) dao.catalogPageAfterAll(provider.id, KIND_LIVE, 0L, 1).firstOrNull()
-                    else dao.catalogPageAfterInCategory(provider.id, KIND_LIVE, currentCategoryId!!, 0L, 1).firstOrNull()
+                    else dao.catalogPageAfterInCategory(provider.id, KIND_LIVE, currentCategoryId.orEmpty(), 0L, 1).firstOrNull()
                 }
             } else null
             val target = saved ?: fallback
