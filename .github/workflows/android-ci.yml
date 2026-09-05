@@ -54,9 +54,10 @@ jobs:
               s = s.replace(import_anchor, 'import tv.blofy.player.data.HomeSnapshotStore\n' + import_anchor, 1)
           old = 'val all = dao.allStreamsForProvider(provider.id).filter { it.kind == "movie" || it.kind == "series" }'
           new = '''val snapshot = HomeSnapshotStore.read(applicationContext, provider.id)\n                val all = snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }\n                    ?: dao.latestHomeStreams(provider.id, 320)'''
-          if old not in s:
+          if old in s:
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          elif 'HomeSnapshotStore.read(applicationContext, provider.id)' not in s:
               raise SystemExit('HomeActivity bounded-feed target not found')
-          p.write_text(s.replace(old, new, 1), encoding='utf-8')
           PY
           grep -Fq 'HomeSnapshotStore.read(applicationContext, provider.id)' "$file"
           grep -Fq 'dao.latestHomeStreams(provider.id, 320)' "$file"
@@ -72,7 +73,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BLOFY-gradle-diagnostics-${{ github.sha }}
-          path: gradle-ci.log
+          path: |
+            gradle-ci.log
+            app/build/test-results/testDebugUnitTest/*.xml
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/lint-results-debug.*
           if-no-files-found: ignore
           retention-days: 7
       - name: Stamp standard build
