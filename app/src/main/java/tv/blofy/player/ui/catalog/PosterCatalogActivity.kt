@@ -26,6 +26,7 @@ import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.FocusTextAdapter
+import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 
@@ -190,10 +191,9 @@ class PosterCatalogActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && isFocusInside(categoryList) && requestPosterFocus()) return true
-            if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && isFocusInside(posterGrid) && isAtLeftGridEdge() && requestSelectedCategoryFocus()) return true
-        }
+        if (::categoryList.isInitialized && ::posterGrid.isInitialized &&
+            TwoPaneFocusGuard.handle(event, categoryList, posterGrid,
+                ::requestSelectedCategoryFocus, ::requestPosterFocus)) return true
         return super.dispatchKeyEvent(event)
     }
 
@@ -284,33 +284,12 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun memoryKey() = "$providerId:$kind:${selectedCategoryId ?: ALL_CATEGORY_ID}"
 
-    private fun requestPosterFocus(): Boolean {
-        if (posterAdapter.itemCount == 0) return false
-        posterGrid.scrollToPosition(0)
-        posterGrid.post { posterGrid.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
-        return true
-    }
+    private fun requestPosterFocus(): Boolean = TwoPaneFocusGuard.focusItem(posterGrid, 0)
 
     private fun requestSelectedCategoryFocus(): Boolean {
         if (categoryAdapter.itemCount == 0) return false
         val position = categoryRows.indexOfFirst { categoryRemoteId(it) == selectedCategoryId }.takeIf { it >= 0 } ?: 0
-        categoryList.scrollToPosition(position)
-        categoryList.post { categoryList.findViewHolderForAdapterPosition(position)?.itemView?.requestFocus() }
-        return true
-    }
-
-    private fun isAtLeftGridEdge(): Boolean {
-        val holder = posterGrid.findContainingViewHolder(currentFocus ?: return false) ?: return false
-        return holder.bindingAdapterPosition != RecyclerView.NO_POSITION && holder.bindingAdapterPosition % gridColumns == 0
-    }
-
-    private fun isFocusInside(parent: View): Boolean {
-        var child: View? = currentFocus
-        while (child != null) {
-            if (child === parent) return true
-            child = child.parent as? View
-        }
-        return false
+        return TwoPaneFocusGuard.focusItem(categoryList, position)
     }
 
     private fun openItem(stream: StreamEntity) {
@@ -338,8 +317,8 @@ class PosterCatalogActivity : AppCompatActivity() {
         const val EXTRA_KIND = "kind"
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
-        private const val PAGE_SIZE = 96
-        private const val PREFETCH_THRESHOLD = 28
         private const val ALL_CATEGORY_ID = "__all__"
+        private const val PAGE_SIZE = 120
+        private const val PREFETCH_THRESHOLD = 36
     }
 }
