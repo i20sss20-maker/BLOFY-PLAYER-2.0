@@ -53,6 +53,8 @@ function browser({ mode = 'xtream', authenticated = true, responseOk = true } = 
   }
   for (const id of ['grid', 'providerType', 'baseUrl', 'name', 'username', 'password', 'deviceId', 'activationCode', 'editorStatus', 'saveBtn']) element(id);
   for (const id of ['baseUrl', 'username', 'password']) nodes[id].wrapper = element();
+  nodes.name.labels = [element('nameLabel')];
+  nodes.name.required = true;
   nodes.providerType.value = mode;
   const context = vm.createContext({
     document: {
@@ -66,12 +68,15 @@ function browser({ mode = 'xtream', authenticated = true, responseOk = true } = 
     fetch: async (url, options) => {
       requests.push({ url, body: JSON.parse(options.body) });
       return { ok: responseOk, json: async () => responseOk
-        ? { baseUrl: 'https://portal.example.com/subscriber', username: 'proxy-user', password: 'opaque-test-session' }
+        ? { baseUrl: 'https://portal.example.com/subscriber', username: 'proxy-user', password: 'opaque-test-session', providerName: 'مشتركين BLOFY' }
         : { error: 'subscriber_login_failed' } };
     }
   });
   vm.runInContext(`
     const $ = id => document.getElementById(id);
+    const translations = { ar: { playlistNameLabel: 'اسم القائمة' }, en: { playlistNameLabel: 'Playlist name' } };
+    let locale = 'ar';
+    function t(key) { return translations[locale][key]; }
     let auth = ${authenticated ? JSON.stringify({ deviceId: 'BLOFY-TEST-0001', activationCode: '123456' }) : 'null'};
     function typeUi() {
       const isXtream = $('providerType').value === 'xtream';
@@ -81,7 +86,7 @@ function browser({ mode = 'xtream', authenticated = true, responseOk = true } = 
     $('providerType').onchange = typeUi;
     typeUi();
   `, context);
-  nodes.saveBtn.onclick = () => saves.push({ type: nodes.providerType.value, baseUrl: nodes.baseUrl.value, username: nodes.username.value, password: nodes.password.value });
+  nodes.saveBtn.onclick = () => saves.push({ name: nodes.name.value, type: nodes.providerType.value, baseUrl: nodes.baseUrl.value, username: nodes.username.value, password: nodes.password.value });
   vm.runInContext(injectedScript(), context);
   return {
     nodes, requests, saves, observers, context,
@@ -112,7 +117,7 @@ test('BLOFY reveals both credentials from M3U and hides only the host', async ()
   assert.equal(hidden(b.nodes.username.wrapper), false);
   assert.equal(hidden(b.nodes.password.wrapper), false);
   assert.equal(hidden(b.nodes.baseUrl.wrapper), true);
-  assert.equal(b.nodes.name.value, 'مشتركين BLOFY');
+  assert.equal(b.nodes.name.value, '');
   assert.equal(b.nodes.baseUrl.validityMessage, '');
 });
 
@@ -162,7 +167,7 @@ test('uses authenticated device state after login cleared the visible inputs', a
     deviceId: 'BLOFY-TEST-0001', activationCode: '123456', username: 'subscriber', password: ' spaced password '
   } });
   assert.equal(b.saves.length, 1);
-  assert.deepEqual(b.saves[0], { type: 'xtream', baseUrl: 'https://portal.example.com/subscriber', username: 'proxy-user', password: 'opaque-test-session' });
+  assert.deepEqual(b.saves[0], { name: '', type: 'xtream', baseUrl: 'https://portal.example.com/subscriber', username: 'proxy-user', password: 'opaque-test-session' });
 });
 
 test('logged-out pages cannot fall back to stale visible device values', async () => {
@@ -206,4 +211,51 @@ test('mutation observer does not duplicate options, hints, or save handlers', ()
   assert.equal(b.nodes.providerType.children.length, 1);
   assert.equal(b.nodes.grid.children.length, 1);
   assert.equal(b.nodes.saveBtn.listeners.length, 1);
+});
+
+test('playlist name is optional and labelled in Arabic and English', () => {
+  const b = browser();
+  assert.equal(b.nodes.name.required, false);
+  assert.equal(b.nodes.nameLabel.textContent, 'اسم القائمة (اختياري)');
+  assert.equal(vm.runInContext("locale = 'en'; t('playlistNameLabel')", b.context), 'Playlist name (optional)');
+  assert.equal(b.nodes.name.value, '');
+});
+
+test('subscriber session metadata cannot rename the user playlist during save', async () => {
+  const b = browser({ mode: 'blofy' });
+  b.nodes.name.value = 'قائمتي الخاصة';
+  b.nodes.username.value = 'subscriber';
+  b.nodes.password.value = 'secret';
+  await b.save();
+  assert.equal(b.saves.length, 1);
+  assert.equal(b.saves[0].name, 'قائمتي الخاصة');
+  assert.equal(b.nodes.name.value, 'قائمتي الخاصة');
+});
+
+test('blank name survives mode switches and successful subscriber saving', async () => {
+  const b = browser();
+  for (const mode of ['blofy', 'xtream', 'm3u', 'blofy']) {
+    await b.change(mode);
+    assert.equal(b.nodes.name.value, '');
+  }
+  b.nodes.username.value = 'subscriber';
+  b.nodes.password.value = 'secret';
+  await b.save();
+  assert.equal(b.saves.length, 1);
+  assert.equal(b.saves[0].name, '');
+});
+
+test('editing and clearing a saved name do not restore the subscriber label', async () => {
+  const b = browser({ mode: 'blofy' });
+  b.nodes.name.value = 'مشتركين BLOFY';
+  vm.runInContext('typeUi()', b.context);
+  assert.equal(b.nodes.name.value, 'مشتركين BLOFY');
+  b.nodes.name.value = '';
+  vm.runInContext('typeUi()', b.context);
+  b.observers.forEach(callback => callback());
+  b.nodes.username.value = 'subscriber';
+  b.nodes.password.value = 'secret';
+  await b.save();
+  assert.equal(b.saves.length, 1);
+  assert.equal(b.saves[0].name, '');
 });
