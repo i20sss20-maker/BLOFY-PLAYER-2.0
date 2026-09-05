@@ -55,4 +55,26 @@
     <string name="browser_no_saved_catalog">No saved %1$s • refresh the library manually</string>
     <string name="live_archive_available">Live • archive available</string>
     <string name="live_now">Live now</string>
+    <string name="details_movie_type">Movie</string>
+    <string name="details_series_type">Series</string>
+    <string name="details_minutes">%1$d min</string>
+    <string name="details_story">Story</string>
+    <string name="details_movie_no_description">No description is currently available for this movie from the server.</string>
+    <string name="details_series_no_description">No description is currently available for this series from the server.</string>
+    <string name="details_continue_watching">Continue watching   •   %1$d%%</string>
+    <string name="details_watch_now">▶  Watch now</string>
+    <string name="details_resume">▶  Resume</string>
+    <string name="details_start_over">↺  Start over</string>
+    <string name="details_trailer">▷  Trailer</string>
+    <string name="details_favorite_on">★  Favorite</string>
+    <string name="details_favorite_off">☆  Favorite</string>
+    <string name="details_cast">Cast</string>
+    <string name="details_cast_unavailable">Cast information is not available from the server.</string>
+    <string name="details_trailer_open_failed">Could not open the trailer on this device.</string>
+    <string name="details_seasons_count">%1$d seasons</string>
+    <string name="details_episodes_count">%1$d episodes</string>
+    <string name="details_continue_episode">Continue season %1$d   •   episode %2$d</string>
+    <string name="details_continue_episode_progress">Continue season %1$d   •   episode %2$d   •   %3$d%%</string>
+    <string name="details_resume_episode">▶  Resume episode</string>
+    <string name="details_seasons_episodes">▤  Seasons &amp; episodes</string>
 </resources>
