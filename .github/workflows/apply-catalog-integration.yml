@@ -21,8 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           cat .github/blofy-full-integration.patch.gz.b64 \
-              .github/blofy-full-integration.patch.gz.b64.part2 \
-              .github/blofy-full-integration.patch.gz.b64.part3 > /tmp/integration.b64
+              .github/blofy-full-integration.patch.gz.b64.part2 > /tmp/integration.b64
           test "$(wc -c < /tmp/integration.b64)" -eq 29772
           echo '723fcfb0f1a8657af246d69db9cf2e46a6182d11ac33266dc6946e7e2652952b  /tmp/integration.b64' | sha256sum -c -
           base64 -d /tmp/integration.b64 | gzip -dc > /tmp/integration.patch
