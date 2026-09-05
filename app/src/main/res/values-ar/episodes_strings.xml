@@ -1,0 +1,16 @@
+<resources>
+    <string name="episodes_retry">↻ إعادة تحميل الحلقات</string>
+    <string name="episodes_preparing">جاري تجهيز الحلقات…</string>
+    <string name="episodes_cached">يتم عرض الحلقات المحفوظة فورًا</string>
+    <string name="episodes_season">الموسم %1$d</string>
+    <string name="episodes_loading_first">جاري تحميل هذا المسلسل الآن…</string>
+    <string name="episodes_updating">جاري تحديث الحلقات بالخلفية • %1$d محفوظة</string>
+    <string name="episodes_ready">%1$d موسم • %2$d حلقة • جاهزة من التخزين المحلي</string>
+    <string name="episodes_empty_response">السيرفر لم يرسل حلقات لهذا المسلسل • حاول مرة أخرى</string>
+    <string name="episodes_invalid_response">رد السيرفر غير مكتمل • أعد تحميل الحلقات</string>
+    <string name="episodes_load_error">تعذر تحميل الحلقات • تحقق من الاتصال ثم أعد المحاولة</string>
+    <string name="episodes_current_title">الحلقة %1$d • %2$s</string>
+    <string name="episodes_resume_message">لديك مشاهدة سابقة. هل تريد الاستئناف أو البدء من البداية؟</string>
+    <string name="episodes_resume">استئناف</string>
+    <string name="episodes_start_over">من البداية</string>
+</resources>
