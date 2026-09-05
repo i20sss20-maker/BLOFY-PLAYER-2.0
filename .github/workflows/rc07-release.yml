@@ -2,6 +2,7 @@ name: BLOFY RC07 Signed Release
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
