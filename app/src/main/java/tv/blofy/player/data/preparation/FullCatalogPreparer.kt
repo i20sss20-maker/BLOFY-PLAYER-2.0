@@ -38,6 +38,7 @@ object FullCatalogPreparer {
         "التخزين غير مكتمل: $missingDetails عنصر تفاصيل/حلقات و$missingImages صورة. أعد المحاولة لاستكمال الناقص."
     )
 
+    // 100% is emitted only after catalog details, episodes, artwork, Home/search and manifest are durable.
     suspend fun prepare(context: Context, providerId: String, progress: suspend (Update) -> Unit) =
         locks.getOrPut(providerId) { Mutex() }.withLock {
             withContext(Dispatchers.IO) {
