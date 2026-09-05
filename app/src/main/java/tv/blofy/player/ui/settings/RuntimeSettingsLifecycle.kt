@@ -55,29 +55,39 @@ class RuntimeSettingsLifecycle : Application.ActivityLifecycleCallbacks {
         )
         player.trackSelectionParameters = builder.build()
 
-        if (activity.intent.getStringExtra(PlayerActivity.EXTRA_KIND) == PlayerActivity.KIND_EPISODE) {
-            val mode = RuntimeSettings.autoNext(activity)
-            // PlayerActivity's existing ended callback remains the ON implementation. Holding this
-            // flag true suppresses it for ASK/OFF without touching session/player internals.
-            setBooleanField(activity, "autoNextTriggered", mode != RuntimeSettings.AutoNext.ON)
-            if (mode == RuntimeSettings.AutoNext.ASK && !listeners.containsKey(activity)) {
-                val listener = object : Player.Listener {
-                    override fun onPlaybackStateChanged(playbackState: Int) {
-                        if (playbackState != Player.STATE_ENDED || activity.isFinishing) return
-                        AlertDialog.Builder(activity)
-                            .setTitle(activity.getString(R.string.next_episode_title))
-                            .setMessage(activity.getString(R.string.next_episode_message))
-                            .setPositiveButton(activity.getString(R.string.next_episode_play)) { _, _ ->
-                                invokeAdjacentEpisode(activity)
-                            }
-                            .setNegativeButton(activity.getString(R.string.next_episode_not_now), null)
-                            .show()
-                    }
+        if (activity.intent.getStringExtra(PlayerActivity.EXTRA_KIND) != "episode") return
+        val mode = RuntimeSettings.autoNext(activity)
+        listeners.remove(activity)?.let(player::removeListener)
+        if (mode == RuntimeSettings.AutoNext.ON) {
+            setBooleanField(activity, "autoNextTriggered", false)
+            return
+        }
+
+        // PlayerActivity's existing ended callback remains the ON implementation. Holding this
+        // flag true suppresses it for ASK/OFF without touching session/player routing.
+        setBooleanField(activity, "autoNextTriggered", true)
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (activity.isFinishing) return
+                if (playbackState != Player.STATE_ENDED) {
+                    // Manual previous/next plays inside the same Activity and resets the private
+                    // guard. Reassert the user's ASK/OFF choice for the newly started episode.
+                    setBooleanField(activity, "autoNextTriggered", true)
+                    return
                 }
-                listeners[activity] = listener
-                player.addListener(listener)
+                if (mode != RuntimeSettings.AutoNext.ASK) return
+                AlertDialog.Builder(activity)
+                    .setTitle(activity.getString(R.string.next_episode_title))
+                    .setMessage(activity.getString(R.string.next_episode_message))
+                    .setPositiveButton(activity.getString(R.string.next_episode_play)) { _, _ ->
+                        invokeAdjacentEpisode(activity)
+                    }
+                    .setNegativeButton(activity.getString(R.string.next_episode_not_now), null)
+                    .show()
             }
         }
+        listeners[activity] = listener
+        player.addListener(listener)
     }
 
     private fun invokeAdjacentEpisode(activity: PlayerActivity) {
