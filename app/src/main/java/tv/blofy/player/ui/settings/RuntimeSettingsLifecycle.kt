@@ -55,7 +55,7 @@ class RuntimeSettingsLifecycle : Application.ActivityLifecycleCallbacks {
         )
         player.trackSelectionParameters = builder.build()
 
-        if (activity.intent.getStringExtra(PlayerActivity.EXTRA_KIND) != "episode") return
+        if (activity.intent.getStringExtra(PlayerActivity.EXTRA_KIND) != KIND_EPISODE) return
         val mode = RuntimeSettings.autoNext(activity)
         listeners.remove(activity)?.let(player::removeListener)
         if (mode == RuntimeSettings.AutoNext.ON) {
@@ -123,4 +123,6 @@ class RuntimeSettingsLifecycle : Application.ActivityLifecycleCallbacks {
     override fun onActivityPaused(activity: Activity) = Unit
     override fun onActivityStopped(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+
+    companion object { private const val KIND_EPISODE = "episode" }
 }
