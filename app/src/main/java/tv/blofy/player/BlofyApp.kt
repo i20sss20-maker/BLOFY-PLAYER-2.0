@@ -1,6 +1,7 @@
 package tv.blofy.player
 
 import android.app.Application
+import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +32,7 @@ class BlofyApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        current = this
         CrashRecovery.install(this)
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
@@ -42,5 +44,10 @@ class BlofyApp : Application() {
             // Last-known-good config means an unavailable server never disables the app.
             runCatching { CommercialConfigRepository.refresh(this@BlofyApp) }
         }
+    }
+
+    companion object {
+        @Volatile private var current: BlofyApp? = null
+        fun contextOrNull(): Context? = current?.applicationContext
     }
 }
