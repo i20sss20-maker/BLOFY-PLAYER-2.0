@@ -8,6 +8,7 @@ import android.widget.Button
 import android.view.View
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import tv.blofy.player.data.preparation.FullCatalogPreparer
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -22,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import tv.blofy.player.R
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
@@ -64,10 +66,14 @@ class CatalogLoadingActivity : AppCompatActivity() {
         if (loadJob?.isActive == true) return
         retryButton.visibility = View.GONE
         stage.setTextColor(BlofyTvDesign.TextPrimary)
+        // Never leave the user staring at a fake 0%. We are doing real local preflight work now.
+        render(1, "فحص المكتبة المحفوظة...")
         loadJob = lifecycleScope.launch {
             try {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val hasCachedCatalog = withContext(Dispatchers.IO) { dao.hasCatalog(providerId) }
+                val hasCachedCatalog = withTimeout(20_000) {
+                    withContext(Dispatchers.IO) { dao.hasCatalog(providerId) }
+                }
                 val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
                 if (!forceRefresh && CatalogSyncState.isFullyReady(applicationContext, providerId) && hasCachedCatalog) {
                     openHome()
@@ -79,6 +85,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
                     sync(providerId)
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: TimeoutCancellationException) {
+                fail("تعذر بدء تجهيز المكتبة خلال 20 ثانية • أعد المحاولة، ولن يتم مسح المحفوظ")
+            }
             catch (error: Exception) { fail(preparationMessage(error)) }
         }
     }
@@ -202,8 +211,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private suspend fun sync(providerId: String) {
         val dao = BlofyDatabase.get(applicationContext).dao()
-        val target = withContext(Dispatchers.IO) { dao.provider(providerId) } ?: return fail("قائمة التشغيل غير موجودة")
-        val firstLoad = withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
+        val target = withTimeout(20_000) {
+            withContext(Dispatchers.IO) { dao.provider(providerId) }
+        } ?: return fail("قائمة التشغيل غير موجودة")
+        val firstLoad = withTimeout(20_000) {
+            withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
+        }
         val syncProvider: ProviderEntity = if (firstLoad) target.copy(enabled = true, updatedAt = System.currentTimeMillis()) else target.copy(id = UUID.randomUUID().toString(), enabled = false)
         var catalogCommitted = false
         try {
