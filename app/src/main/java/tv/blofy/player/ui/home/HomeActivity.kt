@@ -29,6 +29,9 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
+import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.HomeSnapshotStore
+import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.WatchStateEntity
@@ -93,6 +96,20 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         theme = ThemeManager.current(this)
         deviceKind = DeviceClass.detect(this)
+        // A direct intent must not bypass the same readiness check as the login screen.
+        setContentView(FrameLayout(this).apply { background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background) })
+        lifecycleScope.launch {
+            val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull() }
+            if (provider != null && !CatalogSyncState.isFullyReady(applicationContext, provider.id)) {
+                startActivity(Intent(this@HomeActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
+                finish()
+                return@launch
+            }
+            showReadyHome()
+        }
+    }
+
+    private fun showReadyHome() {
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildTvHome() else buildCompactHome())
         restoreFocus()
         warmCatalogArtwork()
@@ -124,7 +141,23 @@ class HomeActivity : AppCompatActivity() {
                 }
                 if (target != null && actionViews[target]?.requestFocus() == true) return true
             }
-            if (key != null && event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !key.startsWith("side_")) {
+            if (key != null && event.keyCode in setOf(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT) && !key.startsWith("side_")) {
+                val row = HomeFocusPolicy.row(key)
+                val siblings = if (row == null) listOf(key) else actionViews.keys.filter { HomeFocusPolicy.row(it) == row }
+                val move = HomeFocusPolicy.horizontal(siblings.indexOf(key), siblings.size,
+                    left = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT, rtl = true)
+                when (move) {
+                    is HomeFocusPolicy.Move.Item -> {
+                        val next = actionViews[siblings[move.index]]
+                        if (next != null) {
+                            next.requestFocus()
+                            next.requestRectangleOnScreen(android.graphics.Rect(0, 0, next.width, next.height), false)
+                        }
+                        return true
+                    }
+                    HomeFocusPolicy.Move.Stay -> return true
+                    HomeFocusPolicy.Move.Sidebar -> Unit
+                }
                 val target = when {
                     key.startsWith("poster_series_") -> "side_series"
                     key.startsWith("poster_continue_") || key.startsWith("poster_recent_") -> "side_favorites"
@@ -178,7 +211,9 @@ class HomeActivity : AppCompatActivity() {
                 val provider = dao.providers().first().firstOrNull() ?: return@withContext null
                 val latest = dao.latestHomeStreams(provider.id, 100)
                 if (latest.isEmpty()) return@withContext null
-                val all = dao.allStreamsForProvider(provider.id).filter { it.kind == "movie" || it.kind == "series" }
+                val snapshot = HomeSnapshotStore.read(applicationContext, provider.id)
+                val all = snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }
+                    ?: dao.latestHomeStreams(provider.id, 320)
                 val byKey = all.associateBy { it.key }
                 val states = dao.watchStates(provider.id).sortedByDescending { it.updatedAt }
                 val continueItems = states.filter { !it.completed && it.positionMs > 30_000L }
@@ -292,6 +327,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun renderHomeFeed(data: HomeData) {
         val feed = homeFeed ?: return
+        actionViews.keys.filter { it.startsWith("poster_") || it.startsWith("top10_") || it.endsWith("_story") || it == "featured" }.toList().forEach { actionViews.remove(it) }
         while (feed.childCount > 1) feed.removeViewAt(1)
 
         if (data.continueWatching.isNotEmpty()) {

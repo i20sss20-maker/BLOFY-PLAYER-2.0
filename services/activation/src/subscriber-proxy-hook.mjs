@@ -1,5 +1,6 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { groupPlaylists, playlistIdentity, playlistUuid } from './playlist-identity.mjs';
 import { Readable, Transform } from 'node:stream';
 import pg from 'pg';
 import { createActivationCredentialCodec, isAuthLocked } from './auth-protection.mjs';
@@ -252,7 +253,12 @@ async function createSubscriberSession(req, res) {
     d: deviceId,
     exp: Date.now() + Math.max(60 * 60 * 1000, Math.min(SESSION_TTL_MS, 90 * 24 * 60 * 60 * 1000))
   });
+  const source = { providerType: 'xtream', baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`, username: token, password: 'blofy' };
+  const identity = playlistIdentity(source, deviceId, PLAYLIST_ENCRYPTION_KEY);
+  const saved = await pool.query('SELECT * FROM device_playlists WHERE device_id=$1', [deviceId]);
+  const existing = groupPlaylists(saved.rows, deviceId, PLAYLIST_ENCRYPTION_KEY).find(group => group.identity === identity);
   return sendJson(res, 200, {
+    providerId: existing?.primary.id || playlistUuid(identity),
     providerName: 'مشتركين BLOFY',
     providerType: 'xtream',
     baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`,

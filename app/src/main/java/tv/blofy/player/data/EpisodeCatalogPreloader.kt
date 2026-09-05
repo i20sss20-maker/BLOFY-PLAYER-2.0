@@ -52,55 +52,5 @@ class EpisodePreloadWorker(
     appContext: Context,
     params: WorkerParameters
 ) : CoroutineWorker(appContext, params) {
-    override suspend fun doWork(): Result {
-        val providerId = EpisodeCatalogPreloader.providerId(inputData)
-        if (providerId.isBlank()) return Result.failure()
-
-        val dao = BlofyDatabase.get(applicationContext).dao()
-        val provider = dao.provider(providerId) ?: return Result.success()
-        if (provider.providerType.equals("m3u", true)) {
-            CatalogSyncState.markEpisodesReady(applicationContext, providerId)
-            return Result.success()
-        }
-        if (!CatalogSyncState.isReady(applicationContext, providerId)) return Result.retry()
-
-        val afterRowId = EpisodeCatalogPreloader.afterRowId(inputData)
-        val page = dao.catalogPageAfterAll(providerId, "series", afterRowId, EpisodeCatalogPreloader.batchSize())
-        if (page.isEmpty()) {
-            CatalogSyncState.markEpisodesReady(applicationContext, providerId)
-            return Result.success()
-        }
-
-        val manager = PlaylistManager(XtreamClient.api, dao)
-        var retryCurrentBatch = false
-
-        for (series in page) {
-            if (isStopped) return Result.success()
-            if (dao.episodeSnapshot(providerId, series.remoteId).isNotEmpty()) continue
-            try {
-                val result = manager.syncSeriesEpisodes(provider, series.remoteId)
-                if (!result.payloadPresent) retryCurrentBatch = true
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                retryCurrentBatch = true
-            }
-        }
-
-        if (!CatalogSyncState.isReady(applicationContext, providerId)) return Result.success()
-        if (retryCurrentBatch && runAttemptCount < MAX_BATCH_RETRIES) return Result.retry()
-
-        val nextRowId = dao.streamRowId(page.last().key) ?: return Result.retry()
-        CatalogSyncState.markEpisodesCheckpoint(applicationContext, providerId, nextRowId)
-        if (page.size < EpisodeCatalogPreloader.batchSize()) {
-            CatalogSyncState.markEpisodesReady(applicationContext, providerId)
-        } else {
-            EpisodeCatalogPreloader.schedule(applicationContext, providerId, nextRowId)
-        }
-        return Result.success()
-    }
-
-    companion object {
-        private const val MAX_BATCH_RETRIES = 2
-    }
+    override suspend fun doWork(): Result = Result.success()
 }

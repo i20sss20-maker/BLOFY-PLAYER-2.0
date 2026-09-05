@@ -5,6 +5,11 @@ import android.graphics.BitmapFactory
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
+import android.util.AtomicFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import android.util.LruCache
 import android.widget.ImageView
 import okhttp3.OkHttpClient
@@ -84,7 +89,12 @@ object ArtworkLoader {
         coordinatorPool.execute {
             var bitmap: Bitmap? = null
             var resolvedUrl: String? = null
+            // Read ANY available local candidate before starting a network fallback.
             for (url in urls) {
+                bitmap = readPinned(app, url, target) ?: readDisk(app.cacheDir, url, target)
+                if (bitmap != null) { cache.put(cacheKey(url, target), bitmap); break }
+            }
+            for (url in if (bitmap == null) urls else emptyList()) {
                 if (view.tag != requestKey) return@execute
                 val key = cacheKey(url, target)
                 if (isNegative(key)) continue
@@ -111,6 +121,56 @@ object ArtworkLoader {
         }
     }
 
+    class StorageFull : java.io.IOException("مساحة الجهاز غير كافية لحفظ المكتبة كاملة؛ وفر مساحة ثم استكمل الناقص")
+
+    private fun pinnedFile(context: android.content.Context, url: String): File {
+        val id = hash(url)
+        return File(File(File(context.filesDir, "blofy_library_art"), id.take(2)), "$id.jpg")
+    }
+
+    fun isPersisted(context: android.content.Context, url: String): Boolean =
+        pinnedFile(context.applicationContext, url).let { it.isFile && it.length() > 0L }
+
+    private fun readPinned(context: android.content.Context, url: String, target: Target): Bitmap? {
+        val file = pinnedFile(context, url)
+        if (!file.isFile || file.length() == 0L) return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { file.delete(); return null }
+        return BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply {
+            inPreferredConfig = Bitmap.Config.RGB_565
+            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, target.width, target.height)
+        }).also { if (it == null) file.delete() }
+    }
+
+    /** Await download AND an atomic durable write. Pinned library artwork is never LRU-evicted. */
+    suspend fun persist(context: android.content.Context, rawUrl: String): Boolean = withContext(Dispatchers.IO) {
+        val app = context.applicationContext
+        val url = normalizeUrl(rawUrl) ?: return@withContext false
+        val target = target(app)
+        currentCoroutineContext().ensureActive()
+        if (isPersisted(app, url)) return@withContext true
+        if (app.filesDir.usableSpace < 64L * 1024L * 1024L) throw StorageFull()
+        val bitmap = cache.get(cacheKey(url, target))?.takeUnless { it.isRecycled }
+            ?: readDisk(app.cacheDir, url, target)
+            ?: execute(url, target)
+            ?: return@withContext false
+        currentCoroutineContext().ensureActive()
+        val file = pinnedFile(app, url)
+        check(file.parentFile?.isDirectory == true || file.parentFile?.mkdirs() == true) { "Unable to create artwork directory" }
+        val atomic = AtomicFile(file)
+        val output = atomic.startWrite()
+        try {
+            check(bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality(target), output)) { "Unable to encode artwork" }
+            atomic.finishWrite(output)
+        } catch (error: Throwable) {
+            atomic.failWrite(output)
+            throw error
+        }
+        failedUntil.remove(cacheKey(url, target))
+        isPersisted(app, url)
+    }
+
     fun cancel(view: ImageView) {
         view.animate().cancel()
         view.tag = null
@@ -121,7 +181,7 @@ object ArtworkLoader {
         val target = target(app)
         urls.mapNotNull(::normalizeUrl).distinct().take(prefetchLimit(app)).forEach { url ->
             val key = cacheKey(url, target)
-            if (cache.get(key) != null || diskFile(app.cacheDir, url, target).isFile || isNegative(key)) return@forEach
+            if (cache.get(key) != null || isPersisted(app, url) || diskFile(app.cacheDir, url, target).isFile || isNegative(key)) return@forEach
             backgroundPool.execute {
                 val bmp = sharedDownload(url, Priority.PREFETCH, target).getOrNull()
                 if (bmp != null && !bmp.isRecycled) {

@@ -28,12 +28,27 @@ class PortalManualRefreshRegressionTest {
         when (method.name) {
             "allProviders" -> flowOf(rows.values.toList())
             "upsertProvider" -> { val provider = args!![0] as ProviderEntity; rows[provider.id] = provider; Unit }
+            "hasCatalog" -> rows.containsKey(args!![0] as String)
+            "deactivateProvider" -> {
+                val id = args!![0] as String
+                rows[id]?.let { rows[id] = it.copy(enabled = false) }
+                Unit
+            }
             "toString" -> "ManualRefreshFakeDao"
             else -> error("Unexpected database method: ${method.name}")
         }
     } as BlofyDao
 
-    @Before fun setup() { rows.clear(); server = MockWebServer(); server.start() }
+    @Before fun setup() {
+        rows.clear()
+        RuntimeEnvironment.getApplication()
+            .getSharedPreferences("blofy_portal_reconciliation_v1", 0)
+            .edit()
+            .clear()
+            .commit()
+        server = MockWebServer()
+        server.start()
+    }
     @After fun cleanup() { server.shutdown() }
 
     private fun provider(id: String, name: String = "My playlist") = ProviderEntity(

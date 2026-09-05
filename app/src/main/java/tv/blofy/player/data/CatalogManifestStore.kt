@@ -28,7 +28,7 @@ object CatalogManifestStore {
         return runCatching { gson.fromJson(raw, Manifest::class.java) }.getOrNull()
     }
 
-    suspend fun rebuild(context: Context, dao: BlofyDao, provider: ProviderEntity) {
+    suspend fun rebuild(context: Context, dao: BlofyDao, provider: ProviderEntity, completionVerified: Boolean = false) {
         val db = BlofyDatabase.get(context.applicationContext).openHelper.readableDatabase
         val episodeCount = db.query("SELECT COUNT(*) FROM episodes WHERE providerId = ?", arrayOf(provider.id)).use { cursor ->
             if (cursor.moveToFirst()) cursor.getInt(0) else 0
@@ -41,9 +41,9 @@ object CatalogManifestStore {
             seriesCount = dao.catalogCountAll(provider.id, "series"),
             episodeCount = episodeCount,
             metadataCount = ProviderMetadataCache.count(context, provider.id),
-            fullyReady = CatalogSyncState.isFullyReady(context, provider.id)
+            fullyReady = completionVerified || CatalogSyncState.isFullyReady(context, provider.id)
         )
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(provider.id, gson.toJson(manifest)).apply()
+        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(provider.id, gson.toJson(manifest)).commit()) { "Unable to persist catalog manifest" }
     }
 
     fun clear(context: Context, providerId: String) {

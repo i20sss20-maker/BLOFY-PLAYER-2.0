@@ -4,6 +4,11 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.Gravity
+import android.widget.Button
+import android.view.View
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import tv.blofy.player.data.preparation.FullCatalogPreparer
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -33,6 +38,9 @@ import tv.blofy.player.ui.home.HomeActivity
 import java.util.UUID
 
 class CatalogLoadingActivity : AppCompatActivity() {
+    private lateinit var retryButton: Button
+    private var loadJob: Job? = null
+    private var displayedPercent = 0
     private lateinit var percent: TextView
     private lateinit var stage: TextView
     private lateinit var progress: ProgressBar
@@ -48,24 +56,37 @@ class CatalogLoadingActivity : AppCompatActivity() {
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         if (providerId.isBlank()) { fail("تعذر تحديد قائمة التشغيل"); return }
         val forceRefresh = intent.getBooleanExtra(EXTRA_FORCE_REFRESH, false)
-        lifecycleScope.launch {
-            val dao = BlofyDatabase.get(applicationContext).dao()
-            val hasCachedCatalog = withContext(Dispatchers.IO) { dao.hasCatalog(providerId) }
-            val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
-            val fullyReady = CatalogSyncState.isFullyReady(applicationContext, providerId)
-            if (!forceRefresh && fullyReady && hasCachedCatalog) {
-                openHome()
-                return@launch
-            }
-            if (!forceRefresh && catalogReady && hasCachedCatalog) {
-                CatalogSyncState.markReady(applicationContext, providerId)
-                awaitFullLocalCache(providerId)
-                openHome()
-                return@launch
-            }
-            CatalogSyncState.markPending(applicationContext, providerId)
-            sync(providerId)
+        retryButton.setOnClickListener { startLoading(providerId, forceRefresh = false) }
+        startLoading(providerId, forceRefresh)
+    }
+
+    private fun startLoading(providerId: String, forceRefresh: Boolean) {
+        if (loadJob?.isActive == true) return
+        retryButton.visibility = View.GONE
+        stage.setTextColor(BlofyTvDesign.TextPrimary)
+        loadJob = lifecycleScope.launch {
+            try {
+                val dao = BlofyDatabase.get(applicationContext).dao()
+                val hasCachedCatalog = withContext(Dispatchers.IO) { dao.hasCatalog(providerId) }
+                val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
+                if (!forceRefresh && CatalogSyncState.isFullyReady(applicationContext, providerId) && hasCachedCatalog) {
+                    openHome()
+                } else if (!forceRefresh && catalogReady && hasCachedCatalog) {
+                    awaitFullLocalCache(providerId)
+                    openHome()
+                } else {
+                    CatalogSyncState.markPending(applicationContext, providerId)
+                    sync(providerId)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { fail(preparationMessage(error)) }
         }
+    }
+
+    private fun preparationMessage(error: Throwable): String = when (error) {
+        is FullCatalogPreparer.Incomplete -> error.message.orEmpty()
+        is tv.blofy.player.ui.catalog.ArtworkLoader.StorageFull -> error.message.orEmpty()
+        else -> "تعذر إكمال التخزين • أعد المحاولة لاستكمال الناقص دون مسح المحفوظ"
     }
 
     private fun buildUi() {
@@ -154,6 +175,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
         steps.addView(contentStep, stepParams())
         steps.addView(prepareStep, stepParams())
         steps.addView(readyStep, stepParams())
+        retryButton = Button(this).apply {
+            text = "↻ استكمال الناقص"
+            isAllCaps = false
+            visibility = View.GONE
+            BlofyTvDesign.installTvFocus(this, u(16).toFloat(), 1.02f, true) {}
+        }
+        panel.addView(retryButton, LinearLayout.LayoutParams(u(320), u(54)))
         panel.addView(steps, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(60)))
         root.addView(panel, LinearLayout.LayoutParams(u(980), LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
@@ -189,7 +217,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             }
             check(result.freshItemCount > 0) { "لم يرجع السيرفر محتوى صالح" }
             check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الباقة" }
-            render(96, if (firstLoad) "جاري إنهاء المكتبة..." else "جاري حفظ التحديث بأمان...")
+            render(30, if (firstLoad) "جاري إنهاء المكتبة..." else "جاري حفظ التحديث بأمان...")
             withContext(Dispatchers.IO) {
                 if (firstLoad) dao.saveAndActivateProvider(syncProvider.copy(enabled = true, updatedAt = System.currentTimeMillis()))
                 else dao.promoteStagedCatalog(syncProvider.id, target.copy(enabled = true, updatedAt = System.currentTimeMillis()))
@@ -198,14 +226,14 @@ class CatalogLoadingActivity : AppCompatActivity() {
             if (!firstLoad) {
                 withContext(Dispatchers.IO) { ProviderMetadataCache.clearProvider(applicationContext, providerId) }
             }
-            CatalogSyncState.markReady(applicationContext, providerId)
+            CatalogSyncState.markCatalogCommitted(applicationContext, providerId)
             awaitFullLocalCache(providerId)
             render(100, "المكتبة كاملة وجاهزة")
             delay(120)
             openHome()
         } catch (cancelled: CancellationException) {
             if (!catalogCommitted) {
-                withContext(Dispatchers.IO) {
+                withContext(NonCancellable + Dispatchers.IO) {
                     if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
                 }
                 if (!firstLoad) CatalogSyncState.markReady(applicationContext, providerId)
@@ -213,8 +241,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             throw cancelled
         } catch (error: Throwable) {
             if (catalogCommitted) {
-                CatalogSyncState.markReady(applicationContext, providerId)
-                fail("تعذر إكمال التخزين المحلي • افتح القائمة مرة أخرى وسيتم استكمال الناقص")
+                fail(preparationMessage(error))
                 return
             }
             withContext(Dispatchers.IO) {
@@ -222,10 +249,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
             }
             if (!firstLoad) {
                 CatalogSyncState.markReady(applicationContext, providerId)
-                render(100, "تعذر تحديث النسخة الجديدة • تم فتح مكتبتك المحفوظة")
+                render(30, "تعذر تحديث النسخة الجديدة • تم الاحتفاظ بالمكتبة السابقة")
                 stage.setTextColor(BlofyTvDesign.Mint)
                 Toast.makeText(this, "تم الاحتفاظ بالنسخة المحفوظة وفتحها بأمان", Toast.LENGTH_SHORT).show()
-                delay(350)
+                if (!CatalogSyncState.isFullyReady(applicationContext, providerId)) awaitFullLocalCache(providerId)
                 openHome()
             } else {
                 fail("تعذر تجهيز المكتبة: ${error.message ?: "خطأ غير معروف"}")
@@ -234,22 +261,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private suspend fun awaitFullLocalCache(providerId: String) {
-        render(96, "جاري حفظ تفاصيل الأفلام والمسلسلات والحلقات...")
-        var pulse = 0
-        while (!CatalogSyncState.isFullyReady(applicationContext, providerId)) {
-            val metadataReady = CatalogSyncState.isMetadataReady(applicationContext, providerId)
-            val episodesReady = CatalogSyncState.areEpisodesReady(applicationContext, providerId)
-            val label = when {
-                !metadataReady && !episodesReady -> "حفظ التفاصيل والحلقات محليًا"
-                !metadataReady -> "حفظ تفاصيل وصور المحتوى من السيرفر"
-                !episodesReady -> "حفظ جميع المواسم والحلقات"
-                else -> "إنهاء المكتبة المحلية"
-            }
-            render(96 + (pulse % 3), label)
-            pulse += 1
-            delay(850L)
+        FullCatalogPreparer.prepare(applicationContext, providerId) { update ->
+            withContext(Dispatchers.Main.immediate) { render(update.percent, update.label) }
         }
-        render(99, "تم حفظ المكتبة محليًا")
     }
 
     private fun renderProgress(p: PlaylistSyncProgress) {
@@ -259,20 +273,21 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.MOVIES -> "جاري تحميل الأفلام"
             PlaylistSyncStage.SERIES -> "جاري تحميل المسلسلات"
         }
-        render(p.percent.coerceAtMost(95), label)
+        render((p.percent.coerceIn(0, 95) * 30 / 95), label)
     }
 
     private fun render(value: Int, label: String) {
-        val safe = value.coerceIn(0, 100)
+        val safe = maxOf(displayedPercent, value.coerceIn(0, 100))
+        displayedPercent = safe
         progress.progress = safe
         percent.text = "$safe%"
         stage.text = label
         serverStep.setTextColor(if (safe >= 5) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        contentStep.setTextColor(if (safe >= 15) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        prepareStep.setTextColor(if (safe >= 90) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        contentStep.setTextColor(if (safe >= 10) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        prepareStep.setTextColor(if (safe >= 30) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
         readyStep.setTextColor(if (safe >= 100) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
-        serverStep.text = if (safe >= 15) "✓  الاتصال بالخادم" else "●  الاتصال بالخادم"
-        contentStep.text = if (safe >= 90) "✓  جلب المحتوى" else "○  جلب المحتوى"
+        serverStep.text = if (safe >= 10) "✓  الاتصال بالخادم" else "●  الاتصال بالخادم"
+        contentStep.text = if (safe >= 30) "✓  جلب المحتوى" else "○  جلب المحتوى"
         prepareStep.text = if (safe >= 100) "✓  تحضير المكتبة" else "○  تحضير المكتبة"
         readyStep.text = if (safe >= 100) "✓  جاهز" else "○  جاهز"
     }
@@ -285,6 +300,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private fun fail(message: String) {
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Error)
+        retryButton.visibility = View.VISIBLE
+        retryButton.post { if (!isFinishing) retryButton.requestFocus() }
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 

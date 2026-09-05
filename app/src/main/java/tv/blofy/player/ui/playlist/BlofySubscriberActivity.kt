@@ -28,6 +28,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.BlofySubscriberClient
 import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -121,6 +122,13 @@ class BlofySubscriberActivity : AppCompatActivity() {
             }
         }
 
+        panel.addView(label("اسم القائمة (اختياري)"))
+        val playlistName = field("اسم القائمة (اختياري)")
+        panel.addView(playlistName, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 66)))
+        val editingId = intent.getStringExtra(PlaylistActivity.EXTRA_PROVIDER_ID)
+        if (editingId != null) lifecycleScope.launch {
+            BlofyDatabase.get(applicationContext).dao().provider(editingId)?.let { playlistName.setText(it.name) }
+        }
         panel.addView(label("اسم المستخدم"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val username = field("أدخل اسم المستخدم")
         panel.addView(username, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 66)))
@@ -152,6 +160,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                 password.requestFocus()
                 return
             }
+            val selectedName = playlistName.text.toString().trim().ifBlank { "BLOFY Playlist" }
             val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
             if (endpoint.isBlank()) {
                 status.text = "خدمة BLOFY غير مهيأة"
@@ -168,11 +177,13 @@ class BlofySubscriberActivity : AppCompatActivity() {
                     val prepared = withContext(Dispatchers.IO) {
                         val session = BlofySubscriberClient.createSession(applicationContext, endpoint, user, pass)
                         val dao = BlofyDatabase.get(applicationContext).dao()
-                        val providerId = UUID.nameUUIDFromBytes("blofy-subscriber".toByteArray()).toString()
-                        val existing = dao.provider(providerId)
+                        val remoteId = session.providerId.ifBlank { UUID.nameUUIDFromBytes("blofy-subscriber|$endpoint|$user".toByteArray()).toString() }
+                        val existing = editingId?.let { dao.provider(it) } ?: dao.provider(remoteId)
+                        val providerId = existing?.id ?: remoteId
+                        PortalSyncBook.bind(applicationContext, providerId, remoteId)
                         val next = ProviderEntity(
                             providerId,
-                            session.providerName.ifBlank { "مشتركين BLOFY" },
+                            selectedName,
                             session.baseUrl,
                             session.username,
                             session.password,

@@ -180,7 +180,8 @@ class ProviderManagerActivity : AppCompatActivity() {
         }
     }
 
-    private fun render(items: List<ProviderEntity>) {
+    private fun render(allItems: List<ProviderEntity>) {
+        val items = tv.blofy.player.core.identity.PortalSyncBook.visible(this, allItems)
         focusButtons.keys.filter { it !in setOf("add", "subscriber", "website_refresh") }.toList().forEach { focusButtons.remove(it) }
         list.removeAllViews()
         if (items.isEmpty()) {
@@ -261,7 +262,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                 dao.activateProvider(provider.id)
             }
             val cached = withContext(Dispatchers.IO) {
-                CatalogSyncState.isReady(applicationContext, provider.id) && dao.hasStreamsForProvider(provider.id)
+                CatalogSyncState.isFullyReady(applicationContext, provider.id) && dao.hasStreamsForProvider(provider.id)
             }
             if (cached) {
                 startActivity(Intent(this@ProviderManagerActivity, HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
@@ -273,7 +274,7 @@ class ProviderManagerActivity : AppCompatActivity() {
 
     private fun edit(provider: ProviderEntity) {
         if (isBlofySubscriber(provider)) {
-            startActivity(Intent(this, BlofySubscriberActivity::class.java))
+            startActivity(Intent(this, BlofySubscriberActivity::class.java).putExtra(PlaylistActivity.EXTRA_PROVIDER_ID, provider.id))
             return
         }
         startActivity(Intent(this, PlaylistActivity::class.java).apply {
@@ -291,24 +292,21 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun refresh(provider: ProviderEntity) {
-        status.text = "جاري مزامنة ${provider.name}..."
-        lifecycleScope.launch {
-            runCatching {
-                PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(provider)
-            }.onSuccess { status.text = "تمت مزامنة ${provider.name}" }
-                .onFailure { status.text = "فشلت المزامنة • حاول مرة أخرى" }
-        }
+        startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
+            putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
+        })
     }
 
     private fun remove(provider: ProviderEntity) {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            dao.deleteProvider(provider.id)
+            val synced = PortalPlaylistClient.removeProvider(applicationContext, BuildConfig.ACTIVATION_BASE_URL, provider, dao)
             if (provider.enabled) {
-                val next = dao.allProviders().first().firstOrNull()
+                val next = tv.blofy.player.core.identity.PortalSyncBook.visible(applicationContext, dao.allProviders().first()).firstOrNull()
                 if (next != null) dao.activateProvider(next.id)
             }
-            status.text = "تم حذف ${provider.name}"
+            status.text = if (synced) "تم حذف القائمة من الجهاز والموقع" else "تم إخفاء القائمة • سيُستكمل حذفها من الموقع عند الاتصال"
         }
     }
 

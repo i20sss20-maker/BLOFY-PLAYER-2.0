@@ -121,6 +121,13 @@ const removed = await request(`/api/v1/portal/playlists/${encodeURIComponent(pla
   body: identity
 });
 assert.equal(removed.response.status, 200);
-assert.deepEqual(removed.json, { deleted: true });
+assert.equal(removed.json?.deleted, true);
+assert.ok(Array.isArray(removed.json?.deletedIds));
+assert.ok(removed.json.deletedIds.includes(playlistId));
+
+// A subsequent pull must not resurrect the remotely deleted playlist.
+const afterDelete = await request('/api/v1/portal/playlists/list', { body: identity });
+assert.equal(afterDelete.response.status, 200);
+assert.ok(!afterDelete.json?.items?.some((item) => item.id === playlistId));
 
 console.log('BLOFY portal -> activation -> Android playlist sync E2E contract passed');
