@@ -1,0 +1,6 @@
+<resources>
+    <string name="mobile_section_movies">Movies</string>
+    <string name="mobile_section_series">Series</string>
+    <string name="mobile_section_live">Live TV</string>
+    <string name="mobile_archive_suffix">  •  Archive</string>
+</resources>
