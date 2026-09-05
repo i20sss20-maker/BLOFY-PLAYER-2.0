@@ -59,6 +59,7 @@ class SystemStatusActivity : AppCompatActivity() {
                 val live = provider?.let { dao.catalogCountAll(it.id, "live") } ?: 0
                 val movies = provider?.let { dao.catalogCountAll(it.id, "movie") } ?: 0
                 val series = provider?.let { dao.catalogCountAll(it.id, "series") } ?: 0
+                val activation = dao.activation()
                 Snapshot(
                     providerName = provider?.name,
                     providerType = provider?.providerType,
@@ -68,7 +69,11 @@ class SystemStatusActivity : AppCompatActivity() {
                     movies = movies,
                     series = series,
                     storage = LocalStorageManager.stats(applicationContext),
-                    activation = dao.activation()?.status ?: "غير معروف"
+                    activation = when {
+                        activation == null -> "غير معروف"
+                        activation.activated -> "مفعّل"
+                        else -> "غير مفعّل"
+                    }
                 )
             }
             if (!isFinishing && !isDestroyed) render(snapshot)
