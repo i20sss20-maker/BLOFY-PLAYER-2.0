@@ -28,6 +28,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.BlofySubscriberClient
 import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -179,7 +180,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                         val remoteId = session.providerId.ifBlank { UUID.nameUUIDFromBytes("blofy-subscriber|$endpoint|$user".toByteArray()).toString() }
                         val existing = editingId?.let { dao.provider(it) } ?: dao.provider(remoteId)
                         val providerId = existing?.id ?: remoteId
-                        tv.blofy.player.core.identity.PortalSyncBook.bind(applicationContext, providerId, remoteId)
+                        PortalSyncBook.bind(applicationContext, providerId, remoteId)
                         val next = ProviderEntity(
                             providerId,
                             selectedName,
