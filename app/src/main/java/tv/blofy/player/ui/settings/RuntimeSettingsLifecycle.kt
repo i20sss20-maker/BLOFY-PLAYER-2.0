@@ -5,8 +5,10 @@ import android.app.AlertDialog
 import android.app.Application
 import android.os.Bundle
 import android.util.TypedValue
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import tv.blofy.player.R
 import tv.blofy.player.core.playback.BlofyPlaybackSession
@@ -17,6 +19,7 @@ import java.util.WeakHashMap
  * Applies presentation/interaction preferences around the existing player session.
  * It deliberately does not replace the playback engine, URL resolver or fallback routing.
  */
+@OptIn(markerClass = [UnstableApi::class])
 class RuntimeSettingsLifecycle : Application.ActivityLifecycleCallbacks {
     private val listeners = WeakHashMap<PlayerActivity, Player.Listener>()
 
