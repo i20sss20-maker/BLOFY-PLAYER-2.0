@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
@@ -40,6 +41,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var storageCard: Button
     private lateinit var refreshCard: Button
     private val prefs by lazy { getSharedPreferences(PREFS, MODE_PRIVATE) }
+    private val isRtl: Boolean get() = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+    private val uiDirection: Int get() = if (isRtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,13 +63,13 @@ class SettingsActivity : AppCompatActivity() {
     private fun buildPage() {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = uiDirection
             background = AppCompatResources.getDrawable(this@SettingsActivity, R.drawable.blofy_home_background)
             overScrollMode = View.OVER_SCROLL_NEVER
         }
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = uiDirection
             setPadding(dp(46), dp(30), dp(46), dp(34))
             clipChildren = false
             clipToPadding = false
@@ -75,27 +78,27 @@ class SettingsActivity : AppCompatActivity() {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = uiDirection
         }
         val titleBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            layoutDirection = uiDirection
         }
         titleBox.addView(TextView(this).apply {
-            text = "الإعدادات"
+            text = getString(R.string.settings_title)
             BlofyTvDesign.applyTitle(this)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.END
         })
         titleBox.addView(TextView(this).apply {
-            text = "خيارات واضحة للمشاهدة والقوائم والتخزين"
+            text = getString(R.string.settings_subtitle)
             BlofyTvDesign.applyCaption(this)
             textSize = 14f
-            gravity = Gravity.RIGHT
+            gravity = Gravity.END
             setPadding(0, dp(6), 0, 0)
         })
         header.addView(titleBox, LinearLayout.LayoutParams(0, dp(80), 1f))
-        val back = settingButton("↩  رجوع", true) { finish() }.apply { id = View.generateViewId() }
+        val back = settingButton("↩  ${getString(R.string.back)}", true) { finish() }.apply { id = View.generateViewId() }
         header.addView(back, LinearLayout.LayoutParams(dp(156), dp(54)))
         page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(88)))
 
@@ -103,7 +106,7 @@ class SettingsActivity : AppCompatActivity() {
             textSize = 13.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(10), dp(16), dp(10))
             background = BlofyTvDesign.badge(dp(14).toFloat())
         }
@@ -112,33 +115,51 @@ class SettingsActivity : AppCompatActivity() {
 
         grid = GridLayout(this).apply {
             columnCount = if (isTv()) 3 else 2
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = uiDirection
             alignmentMode = GridLayout.ALIGN_BOUNDS
             useDefaultMargins = false
             clipChildren = false
             clipToPadding = false
         }
 
-        addCard(cycleSetting("▣  حجم الصورة", KEY_ASPECT, arrayOf("fit", "zoom", "fill"), arrayOf("ملاءمة", "تكبير", "ملء الشاشة")))
-        addCard(cycleSetting("♫  مخرج الصوت", KEY_AUDIO_OUTPUT, arrayOf("auto", "stereo"), arrayOf("تلقائي", "ستيريو 2.0")))
-        addCard(cycleSetting("CC  لغة الترجمة", KEY_SUBTITLE_LANGUAGE, arrayOf("ar", "auto", "off"), arrayOf("العربية أولًا", "تلقائي", "إيقاف")))
-        addCard(cycleSetting("A  حجم الترجمة", KEY_SUBTITLE_SIZE, arrayOf("small", "medium", "large"), arrayOf("صغير", "متوسط", "كبير")))
-        addCard(cycleSetting("◉  معاينة البث", KEY_AUTOPLAY_LIVE, arrayOf("on", "off"), arrayOf("تلقائي", "يدوي")))
-        addCard(cycleSetting("◷  مواصلة المشاهدة", KEY_RESUME_PROMPT, arrayOf("on", "off"), arrayOf("اسألني", "تشغيل مباشر")))
-        addCard(cycleSetting("▶  الحلقة التالية", KEY_AUTO_NEXT, arrayOf("ask", "on", "off"), arrayOf("اسألني", "تلقائي", "إيقاف")))
-        addCard(cycleSetting("✦  حركة الواجهة", KEY_MOTION, arrayOf("smooth", "reduced"), arrayOf("سلسة", "خفيفة")))
-        addCard(actionCard("🌐  لغة التطبيق", currentLanguageLabel()) { chooseLanguage() })
-        addCard(actionCard("▤  قوائم التشغيل", "الرجوع لشاشة الدخول واختيار قائمة ثم اتصال") {
+        addCard(cycleSetting(getString(R.string.setting_aspect), KEY_ASPECT,
+            arrayOf("fit", "zoom", "fill"),
+            arrayOf(getString(R.string.setting_aspect_fit), getString(R.string.setting_aspect_zoom), getString(R.string.setting_aspect_fill))))
+        addCard(cycleSetting(getString(R.string.setting_audio_output), KEY_AUDIO_OUTPUT,
+            arrayOf("auto", "stereo"),
+            arrayOf(getString(R.string.setting_audio_auto), getString(R.string.setting_audio_stereo))))
+        addCard(cycleSetting(getString(R.string.setting_subtitle_language), KEY_SUBTITLE_LANGUAGE,
+            arrayOf("ar", "auto", "off"),
+            arrayOf(getString(R.string.setting_subtitle_ar_first), getString(R.string.setting_auto), getString(R.string.setting_off))))
+        addCard(cycleSetting(getString(R.string.setting_subtitle_size), KEY_SUBTITLE_SIZE,
+            arrayOf("small", "medium", "large"),
+            arrayOf(getString(R.string.setting_small), getString(R.string.setting_medium), getString(R.string.setting_large))))
+        addCard(cycleSetting(getString(R.string.setting_live_preview), KEY_AUTOPLAY_LIVE,
+            arrayOf("on", "off"),
+            arrayOf(getString(R.string.setting_auto), getString(R.string.setting_manual))))
+        addCard(cycleSetting(getString(R.string.setting_resume), KEY_RESUME_PROMPT,
+            arrayOf("on", "off"),
+            arrayOf(getString(R.string.setting_ask_me), getString(R.string.setting_play_directly))))
+        addCard(cycleSetting(getString(R.string.setting_next_episode), KEY_AUTO_NEXT,
+            arrayOf("ask", "on", "off"),
+            arrayOf(getString(R.string.setting_ask_me), getString(R.string.setting_auto), getString(R.string.setting_off))))
+        addCard(cycleSetting(getString(R.string.setting_motion), KEY_MOTION,
+            arrayOf("smooth", "reduced"),
+            arrayOf(getString(R.string.setting_smooth), getString(R.string.setting_reduced))))
+        addCard(actionCard(getString(R.string.setting_app_language), currentLanguageLabel()) { chooseLanguage() })
+        addCard(actionCard(getString(R.string.setting_playlists), getString(R.string.setting_playlists_subtitle)) {
             startActivity(Intent(this, LoginActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             })
         })
-        refreshCard = actionCard("↻  تحديث المحتوى", syncSubtitle()) { refreshLibrary() }
+        refreshCard = actionCard(getString(R.string.setting_refresh_content), syncSubtitle()) { refreshLibrary() }
         addCard(refreshCard)
-        storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
+        storageCard = actionCard(getString(R.string.setting_storage_local), getString(R.string.setting_storage_calculating)) { showStorageManager() }
         addCard(storageCard)
-        addCard(actionCard("✓  حالة النظام", "معلومات النسخة والجهاز") { startActivity(Intent(this, SystemStatusActivity::class.java)) })
-        addCard(actionCard("⟲  استعادة الإعدادات", "العودة للوضع الافتراضي") { restoreDefaults() })
+        addCard(actionCard(getString(R.string.setting_system_status), getString(R.string.setting_system_status_subtitle)) {
+            startActivity(Intent(this, SystemStatusActivity::class.java))
+        })
+        addCard(actionCard(getString(R.string.setting_restore), getString(R.string.setting_restore_subtitle)) { restoreDefaults() })
 
         linkFocus(back)
         page.addView(grid, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -160,13 +181,14 @@ class SettingsActivity : AppCompatActivity() {
             val next = (currentIndex() + 1) % values.size
             prefs.edit().putString(key, values[next]).apply()
             button.text = "$title\n${labels[next]}"
-            status.text = "✓  تم حفظ الإعداد"
+            status.text = getString(R.string.setting_saved)
         }
         button.text = "$title\n${labels[currentIndex()]}"
         return button
     }
 
-    private fun actionCard(title: String, subtitle: String, action: () -> Unit): Button = settingButton("$title\n$subtitle", false, action)
+    private fun actionCard(title: String, subtitle: String, action: () -> Unit): Button =
+        settingButton("$title\n$subtitle", false, action)
 
     private fun settingButton(label: String, compact: Boolean, action: () -> Unit): Button = Button(this).apply {
         text = label
@@ -201,20 +223,30 @@ class SettingsActivity : AppCompatActivity() {
             val col = i % columns
             item.nextFocusUpId = if (i - columns >= 0) grid.getChildAt(i - columns).id else back.id
             item.nextFocusDownId = if (i + columns < count) grid.getChildAt(i + columns).id else item.id
-            item.nextFocusLeftId = if (col + 1 < columns && i + 1 < count) grid.getChildAt(i + 1).id else item.id
-            item.nextFocusRightId = if (col > 0) grid.getChildAt(i - 1).id else item.id
+            val visualLeft = if (col + 1 < columns && i + 1 < count) grid.getChildAt(i + 1).id else item.id
+            val visualRight = if (col > 0) grid.getChildAt(i - 1).id else item.id
+            if (isRtl) {
+                item.nextFocusLeftId = visualLeft
+                item.nextFocusRightId = visualRight
+            } else {
+                item.nextFocusLeftId = visualRight
+                item.nextFocusRightId = visualLeft
+            }
         }
     }
 
     private fun restoreDefaults() {
         prefs.edit().clear().apply()
-        status.text = "✓  تمت استعادة إعدادات المشاهدة الافتراضية"
+        status.text = getString(R.string.setting_restored)
         buildPage()
     }
 
     private fun refreshLibrary() {
-        val active = provider ?: run { status.text = "لا توجد قائمة تشغيل نشطة"; return }
-        status.text = "جاري فتح التحديث الآمن... البيانات الحالية ستبقى متاحة حتى يكتمل"
+        val active = provider ?: run {
+            status.text = getString(R.string.setting_no_active_playlist)
+            return
+        }
+        status.text = getString(R.string.setting_refresh_opening)
         startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
             putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
             putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
@@ -224,24 +256,27 @@ class SettingsActivity : AppCompatActivity() {
     private fun updateSyncStatus() {
         val active = provider
         status.text = if (active == null) {
-            "الإعدادات جاهزة • جاري قراءة حالة المكتبة"
+            getString(R.string.setting_status_reading)
         } else {
             val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
-            if (last > 0L) "✓  البيانات محفوظة محليًا • آخر تحديث ${formatSyncTime(last)}"
-            else "✓  البيانات محفوظة محليًا وتفتح بدون إعادة تحميل"
+            if (last > 0L) getString(R.string.setting_status_saved_at, formatSyncTime(last))
+            else getString(R.string.setting_status_saved)
         }
-        if (::refreshCard.isInitialized) refreshCard.text = "↻  تحديث المحتوى\n${syncSubtitle()}"
+        if (::refreshCard.isInitialized) refreshCard.text = "${getString(R.string.setting_refresh_content)}\n${syncSubtitle()}"
     }
 
     private fun syncSubtitle(): String {
-        val active = provider ?: return "يدوي عند الحاجة فقط"
+        val active = provider ?: return getString(R.string.setting_manual_only)
         val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
-        return if (last > 0L) "آخر تحديث ${formatSyncTime(last)}" else "يدوي عند الحاجة فقط"
+        return if (last > 0L) getString(R.string.setting_last_refresh, formatSyncTime(last))
+        else getString(R.string.setting_manual_only)
     }
 
     private fun formatSyncTime(value: Long): String {
-        val sameDay = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(value)) == SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-        return SimpleDateFormat(if (sameDay) "HH:mm" else "dd/MM HH:mm", Locale("ar")).format(Date(value))
+        val locale = Locale.getDefault()
+        val sameDay = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(value)) ==
+            SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+        return SimpleDateFormat(if (sameDay) "HH:mm" else "dd/MM HH:mm", locale).format(Date(value))
     }
 
     private fun updateStorageCard() {
@@ -249,7 +284,8 @@ class SettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val stats = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext) }
             if (!isFinishing && ::storageCard.isInitialized) {
-                storageCard.text = "💾  التخزين المحلي\n${LocalStorageManager.format(applicationContext, stats.totalBytes)} مستخدم • إدارة وتنظيف"
+                storageCard.text = "${getString(R.string.setting_storage_local)}\n" +
+                    getString(R.string.setting_storage_used, LocalStorageManager.format(applicationContext, stats.totalBytes))
             }
         }
     }
@@ -261,41 +297,36 @@ class SettingsActivity : AppCompatActivity() {
             val temporary = LocalStorageManager.format(applicationContext, stats.temporaryBytes)
             val total = LocalStorageManager.format(applicationContext, stats.totalBytes)
             AlertDialog.Builder(this@SettingsActivity)
-                .setTitle("التخزين المحلي")
-                .setMessage(
-                    "المستخدم حاليًا: $total\n\n" +
-                        "• الكتالوج والحلقات والبيانات المحفوظة: $database\n" +
-                        "• الصور والملفات المؤقتة: $temporary\n\n" +
-                        "التنظيف الآمن لا يحذف التفعيل أو القوائم أو المفضلة أو الاستئناف."
-                )
-                .setPositiveButton("تنظيف آمن") { _, _ -> confirmSafeCleanup() }
-                .setNegativeButton("إغلاق", null)
+                .setTitle(getString(R.string.storage_title))
+                .setMessage(getString(R.string.storage_message, total, database, temporary))
+                .setPositiveButton(getString(R.string.storage_safe_clean)) { _, _ -> confirmSafeCleanup() }
+                .setNegativeButton(getString(R.string.close), null)
                 .show()
         }
     }
 
     private fun confirmSafeCleanup() {
         AlertDialog.Builder(this)
-            .setTitle("تنظيف التخزين")
-            .setMessage("سيتم حذف الصور والملفات المؤقتة وبيانات دليل البرامج المؤقتة فقط. بيانات العميل وقوائم التشغيل ستبقى محفوظة.")
-            .setPositiveButton("تنظيف") { _, _ -> cleanSafeStorage() }
-            .setNegativeButton("إلغاء", null)
+            .setTitle(getString(R.string.storage_cleanup_title))
+            .setMessage(getString(R.string.storage_cleanup_message))
+            .setPositiveButton(getString(R.string.clean)) { _, _ -> cleanSafeStorage() }
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
     private fun cleanSafeStorage() {
-        status.text = "جاري تنظيف التخزين المحلي..."
+        status.text = getString(R.string.storage_cleaning)
         lifecycleScope.launch {
             val before = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext).totalBytes }
             runCatching { withContext(Dispatchers.IO) { LocalStorageManager.cleanSafely(applicationContext) } }
                 .onSuccess {
                     val after = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext).totalBytes }
                     val freed = (before - after).coerceAtLeast(0L)
-                    status.text = "✓  تم تنظيف ${LocalStorageManager.format(applicationContext, freed)} بدون حذف بياناتك"
+                    status.text = getString(R.string.storage_cleaned, LocalStorageManager.format(applicationContext, freed))
                     updateStorageCard()
                 }
                 .onFailure {
-                    status.text = "تعذر تنظيف بعض الملفات — بياناتك لم تتأثر"
+                    status.text = getString(R.string.storage_clean_failed)
                     updateStorageCard()
                 }
         }
@@ -303,20 +334,25 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun chooseLanguage() {
         val labels = LANGUAGES.map { it.first }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("لغة التطبيق").setItems(labels) { dialog, which ->
-            val (label, tag) = LANGUAGES[which]
-            prefs.edit().putString(KEY_LANGUAGE, label).putString(KEY_LANGUAGE_TAG, tag).apply()
-            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
-            dialog.dismiss()
-        }.show()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.language_app))
+            .setItems(labels) { dialog, which ->
+                val (label, tag) = LANGUAGES[which]
+                prefs.edit().putString(KEY_LANGUAGE, label).putString(KEY_LANGUAGE_TAG, tag).apply()
+                AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+                dialog.dismiss()
+            }
+            .show()
     }
 
     private fun currentLanguageLabel(): String {
-        val tag = prefs.getString(KEY_LANGUAGE_TAG, "ar") ?: "ar"
-        return LANGUAGES.firstOrNull { it.second == tag }?.first ?: "العربية"
+        val selected = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+            .substringBefore(',')
+            .ifBlank { prefs.getString(KEY_LANGUAGE_TAG, "en") ?: "en" }
+        return LANGUAGES.firstOrNull { it.second.equals(selected, ignoreCase = true) }?.first ?: "English"
     }
 
-    private fun isTv() = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+    private fun isTv() = DeviceClass.isTv(this)
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     companion object {
@@ -332,7 +368,7 @@ class SettingsActivity : AppCompatActivity() {
         private const val KEY_LANGUAGE = "app_language"
         private const val KEY_LANGUAGE_TAG = "app_language_tag"
         private val LANGUAGES = listOf(
-            "العربية" to "ar", "English" to "en", "Français" to "fr", "Español" to "es",
+            "English" to "en", "العربية" to "ar", "Français" to "fr", "Español" to "es",
             "Deutsch" to "de", "Türkçe" to "tr", "Português" to "pt", "Italiano" to "it"
         )
     }
