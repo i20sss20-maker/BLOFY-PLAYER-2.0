@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="home_preparing_library">Preparing your library</string>
     <string name="home_preparing_subtitle">Organizing your content…</string>
     <string name="home_continue_watching">Continue watching</string>
