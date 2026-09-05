@@ -1,0 +1,18 @@
+<resources>
+    <string name="person_server_identity">Name and image from server data</string>
+    <string name="person_server_only_note">Only cast information sent by the server is shown. If the server does not provide a photo or additional details, BLOFY will not use an external source.</string>
+    <string name="for_you_title">For you</string>
+    <string name="for_you_subtitle">Built only from your viewing inside BLOFY</string>
+    <string name="for_you_add_playlist">Add a playlist first</string>
+    <string name="for_you_current_preference">Current preference: %1$s • changes automatically with your usage</string>
+    <string name="for_you_continue">Continue watching</string>
+    <string name="for_you_recommended">You may like</string>
+    <string name="for_you_recent">Recently watched</string>
+    <string name="quick_menu_title">Quick shortcuts</string>
+    <string name="quick_search_subtitle">Search channels, movies, series and cast</string>
+    <string name="quick_continue_subtitle">Return directly to your last position</string>
+    <string name="quick_favorites_subtitle">All your picks in one place</string>
+    <string name="quick_recent_subtitle">Return to your most recent live channel</string>
+    <string name="quick_collections_subtitle">Top rated, 4K and Arabic picks</string>
+    <string name="quick_settings_subtitle">Player, refresh and system</string>
+</resources>
