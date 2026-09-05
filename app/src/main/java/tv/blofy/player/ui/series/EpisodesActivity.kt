@@ -49,53 +49,76 @@ class EpisodesActivity : AppCompatActivity() {
     private var syncInProgress = false
     private var loadState = EpisodeLoadState.LOADING
     private val watchProgress = mutableMapOf<String, Int>()
+    private lateinit var deviceKind: DeviceClass.Kind
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        deviceKind = DeviceClass.detect(this)
         providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         seriesId = intent.getStringExtra(EXTRA_SERIES_ID).orEmpty()
         val seriesName = intent.getStringExtra(EXTRA_SERIES_NAME).orEmpty()
         val seriesArt = intent.getStringExtra(EXTRA_SERIES_ART)
         if (providerId.isBlank() || seriesId.isBlank()) { finish(); return }
 
+        val compact = deviceKind == DeviceClass.Kind.PHONE
+        val tablet = deviceKind == DeviceClass.Kind.TABLET
+        val uiDirection = resources.configuration.layoutDirection
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(30), dp(22), dp(30), dp(24))
+            layoutDirection = uiDirection
+            setPadding(
+                dp(if (compact) 14 else if (tablet) 22 else 30),
+                dp(if (compact) 14 else 22),
+                dp(if (compact) 14 else if (tablet) 22 else 30),
+                dp(if (compact) 16 else 24)
+            )
             background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
             text = "BLOFY SERIES"
-            textSize = 12f
+            textSize = if (compact) 10.5f else 12f
             letterSpacing = .11f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleBright)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = seriesName.ifBlank { "الحلقات" }
-            textSize = 31f
+            text = seriesName.ifBlank { getString(R.string.episodes) }
+            textSize = when (deviceKind) {
+                DeviceClass.Kind.TV -> 31f
+                DeviceClass.Kind.TABLET -> 28f
+                DeviceClass.Kind.PHONE -> 23f
+            }
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             includeFontPadding = false
+            maxLines = 2
             setPadding(0, dp(3), 0, dp(4))
         })
         status = TextView(this).apply {
-            text = "جاري تجهيز الحلقات..."
-            textSize = 13.5f
+            text = getString(R.string.episodes_preparing)
+            textSize = if (compact) 12f else 13.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT
-            setPadding(0, 0, 0, dp(12))
+            gravity = Gravity.START
+            setPadding(0, 0, 0, dp(if (compact) 8 else 12))
         }
         root.addView(status)
-        retryButton = actionButton("↻  إعادة تحميل الحلقات") { lifecycleScope.launch { syncEpisodes(currentProvider()) } }.apply { visibility = View.GONE }
-        root.addView(retryButton, LinearLayout.LayoutParams(dp(250), dp(58)).apply { bottomMargin = dp(10); gravity = Gravity.RIGHT })
+        retryButton = actionButton(getString(R.string.episodes_retry)) {
+            lifecycleScope.launch { syncEpisodes(currentProvider()) }
+        }.apply { visibility = View.GONE }
+        root.addView(retryButton, LinearLayout.LayoutParams(
+            if (compact) LinearLayout.LayoutParams.MATCH_PARENT else dp(250),
+            dp(if (compact) 50 else 58)
+        ).apply {
+            bottomMargin = dp(10)
+            gravity = Gravity.START
+        })
 
         val body = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            layoutDirection = if (compact) uiDirection else View.LAYOUT_DIRECTION_LTR
             clipChildren = false
             clipToPadding = false
         }
@@ -103,7 +126,7 @@ class EpisodesActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(this@EpisodesActivity)
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(9), dp(9), dp(9), dp(9))
+            setPadding(dp(if (compact) 6 else 9), dp(6), dp(if (compact) 6 else 9), dp(6))
             background = panelBackground(true)
             clipChildren = false
             clipToPadding = false
@@ -112,13 +135,19 @@ class EpisodesActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(this@EpisodesActivity)
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(9), dp(9), dp(9), dp(9))
+            setPadding(dp(if (compact) 6 else 9), dp(6), dp(if (compact) 6 else 9), dp(6))
             background = panelBackground(false)
             clipChildren = false
             clipToPadding = false
         }
-        body.addView(seasonList, LinearLayout.LayoutParams(dp(245), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(22) })
-        body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        if (compact) {
+            body.addView(seasonList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(116)).apply { bottomMargin = dp(8) })
+            body.addView(episodeList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        } else {
+            val seasonWidth = if (tablet) 200 else 245
+            body.addView(seasonList, LinearLayout.LayoutParams(dp(seasonWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(if (tablet) 14 else 22) })
+            body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        }
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
@@ -131,7 +160,7 @@ class EpisodesActivity : AppCompatActivity() {
                 onFocus = ::rememberEpisode
             )
             seasonAdapter = FocusTextAdapter(
-                label = { season -> "الموسم $season" },
+                label = { season -> getString(R.string.episodes_season, season) },
                 onClick = ::selectSeason,
                 onFocus = ::selectSeason,
                 itemKey = { it.toString() }
@@ -143,13 +172,14 @@ class EpisodesActivity : AppCompatActivity() {
             val cached = dao.episodes(providerId, seriesId).first()
             launch { dao.episodes(providerId, seriesId).collect { renderEpisodes(it) } }
             if (cached.isEmpty()) {
-                loadState = if (tv.blofy.player.data.CatalogSyncState.isFullyReady(applicationContext, providerId))
-                    EpisodeLoadState.EMPTY_PROVIDER_RESPONSE else EpisodeLoadState.ERROR
-                retryButton.visibility = View.VISIBLE
+                // User-selected series outranks the bulk background queue. Fetch it immediately.
+                // The Room collector above renders episodes as soon as they are committed.
+                loadState = EpisodeLoadState.LOADING
                 updateStatus()
+                syncEpisodes(provider)
             } else {
                 loadState = EpisodeLoadState.LOADED
-                status.text = "يتم عرض الحلقات المحفوظة فورًا"
+                status.text = getString(R.string.episodes_cached)
             }
         }
     }
@@ -192,7 +222,7 @@ class EpisodesActivity : AppCompatActivity() {
     }
 
     private suspend fun currentProvider(): ProviderEntity = BlofyDatabase.get(applicationContext).dao().provider(providerId)
-        ?: throw IllegalStateException("قائمة التشغيل غير موجودة")
+        ?: throw IllegalStateException(getString(R.string.catalog_provider_not_found))
 
     private suspend fun syncEpisodes(provider: ProviderEntity) {
         if (syncInProgress) return
@@ -208,7 +238,13 @@ class EpisodesActivity : AppCompatActivity() {
         result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
         syncInProgress = false
         loadState = result.fold(
-            onSuccess = { when { it.episodeCount > 0 -> EpisodeLoadState.LOADED; it.payloadPresent -> EpisodeLoadState.EMPTY_PROVIDER_RESPONSE; else -> EpisodeLoadState.INVALID_PROVIDER_RESPONSE } },
+            onSuccess = {
+                when {
+                    it.episodeCount > 0 -> EpisodeLoadState.LOADED
+                    it.payloadPresent -> EpisodeLoadState.EMPTY_PROVIDER_RESPONSE
+                    else -> EpisodeLoadState.INVALID_PROVIDER_RESPONSE
+                }
+            },
             onFailure = { EpisodeLoadState.ERROR }
         )
         refreshWatchProgress()
@@ -224,7 +260,9 @@ class EpisodesActivity : AppCompatActivity() {
             val seasons = allEpisodes.map { it.season }.distinct().sorted()
             seasonAdapter.submit(seasons)
             val rememberedSeason = FocusMemory.restore(this@EpisodesActivity, seasonMemoryKey())?.toIntOrNull()
-            if (selectedSeason == null || selectedSeason !in seasons) selectedSeason = rememberedSeason?.takeIf { it in seasons } ?: seasons.firstOrNull()
+            if (selectedSeason == null || selectedSeason !in seasons) {
+                selectedSeason = rememberedSeason?.takeIf { it in seasons } ?: seasons.firstOrNull()
+            }
             refreshEpisodes(!restoredOnce)
             restoredOnce = true
             retryButton.visibility = if (allEpisodes.isEmpty() && loadState.canRetry) View.VISIBLE else View.GONE
@@ -256,15 +294,19 @@ class EpisodesActivity : AppCompatActivity() {
     private fun updateStatus() {
         if (allEpisodes.isNotEmpty()) {
             val seasons = allEpisodes.map { it.season }.distinct().size
-            status.text = if (syncInProgress) "جاري تحديث الحلقات بالخلفية  •  ${allEpisodes.size} حلقة محفوظة" else "$seasons موسم  •  ${allEpisodes.size} حلقة  •  جاهزة من التخزين المحلي"
+            status.text = if (syncInProgress) {
+                getString(R.string.episodes_updating, allEpisodes.size)
+            } else {
+                getString(R.string.episodes_ready, seasons, allEpisodes.size)
+            }
             return
         }
         status.text = when (loadState) {
-            EpisodeLoadState.LOADING -> "جاري تحميل الحلقات لأول مرة..."
-            EpisodeLoadState.LOADED -> "جاري تجهيز الحلقات..."
-            EpisodeLoadState.EMPTY_PROVIDER_RESPONSE -> "السيرفر لم يرسل حلقات لهذا المسلسل • حاول مرة أخرى"
-            EpisodeLoadState.INVALID_PROVIDER_RESPONSE -> "رد السيرفر غير مكتمل • أعد تحميل الحلقات"
-            EpisodeLoadState.ERROR -> "تعذر تحميل الحلقات • تحقق من الاتصال ثم أعد المحاولة"
+            EpisodeLoadState.LOADING -> getString(R.string.episodes_loading_first)
+            EpisodeLoadState.LOADED -> getString(R.string.episodes_preparing)
+            EpisodeLoadState.EMPTY_PROVIDER_RESPONSE -> getString(R.string.episodes_empty_response)
+            EpisodeLoadState.INVALID_PROVIDER_RESPONSE -> getString(R.string.episodes_invalid_response)
+            EpisodeLoadState.ERROR -> getString(R.string.episodes_load_error)
         }
     }
 
@@ -296,13 +338,16 @@ class EpisodesActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val resume = BlofyDatabase.get(applicationContext).dao().watchState(episode.key)?.positionMs ?: 0L
             val url = ContentUrlResolver.episode(provider, episode)
-            if (resume > 15_000L) AlertDialog.Builder(this@EpisodesActivity)
-                .setTitle("الحلقة ${episode.episode} • ${episode.title}")
-                .setMessage("لديك مشاهدة سابقة. هل تريد الاستئناف أو البدء من البداية؟")
-                .setPositiveButton("استئناف") { _, _ -> launchEpisode(provider, episode, url, resume) }
-                .setNegativeButton("من البداية") { _, _ -> launchEpisode(provider, episode, url, 0L) }
-                .show()
-            else launchEpisode(provider, episode, url, 0L)
+            if (resume > 15_000L) {
+                AlertDialog.Builder(this@EpisodesActivity)
+                    .setTitle(getString(R.string.episodes_current_title, episode.episode, episode.title))
+                    .setMessage(getString(R.string.episodes_resume_message))
+                    .setPositiveButton(getString(R.string.episodes_resume)) { _, _ -> launchEpisode(provider, episode, url, resume) }
+                    .setNegativeButton(getString(R.string.episodes_start_over)) { _, _ -> launchEpisode(provider, episode, url, 0L) }
+                    .show()
+            } else {
+                launchEpisode(provider, episode, url, 0L)
+            }
         }
     }
 
@@ -328,26 +373,32 @@ class EpisodesActivity : AppCompatActivity() {
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
         isAllCaps = false
-        textSize = 14.5f
+        textSize = if (deviceKind == DeviceClass.Kind.PHONE) 13f else 14.5f
         typeface = BlofyTvDesign.BodyTypeface
         isFocusable = true
+        isFocusableInTouchMode = deviceKind == DeviceClass.Kind.TV
         setTextColor(Color.WHITE)
         background = buttonBackground(false)
         setOnFocusChangeListener { view, focused ->
             view.background = buttonBackground(focused)
-            view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(85).start()
+            if (deviceKind == DeviceClass.Kind.TV) {
+                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f)
+                    .translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(85).start()
+            }
         }
         setOnClickListener { action() }
     }
 
-    private fun panelBackground(emphasis: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+    private fun panelBackground(emphasis: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
         if (emphasis) intArrayOf(0xFF2B203B.toInt(), 0xFF17111F.toInt()) else intArrayOf(0xFF241932.toInt(), 0xFF120D19.toInt())
     ).apply {
-        cornerRadius = dp(22).toFloat()
+        cornerRadius = dp(if (deviceKind == DeviceClass.Kind.PHONE) 15 else 22).toFloat()
         setStroke(dp(1), if (emphasis) 0xFF5D4674.toInt() else 0xFF49375E.toInt())
     }
 
-    private fun buttonBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+    private fun buttonBackground(focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) intArrayOf(0xFFA653FF.toInt(), 0xFF7130D2.toInt()) else intArrayOf(0xFF30213F.toInt(), 0xFF1A1325.toInt())
     ).apply {
         cornerRadius = dp(16).toFloat()
