@@ -2,24 +2,35 @@ package tv.blofy.player.ui.common
 
 import android.app.Activity
 import android.content.Context
-import android.content.res.Configuration
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.LinearSnapHelper
 import androidx.recyclerview.widget.RecyclerView
+import tv.blofy.player.core.device.DeviceClass
 import kotlin.math.roundToInt
 
-/** Shared TV ergonomics: adaptive sizing, deterministic focus and lightweight snapping. */
+/** Shared ergonomics: adaptive sizing, deterministic focus and lightweight snapping. */
 object TvUiTuning {
     fun scale(context: Context): Float {
-        val widthDp = context.resources.configuration.screenWidthDp
-        val tv = context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
-        if (!tv) return 1f
-        return when {
-            widthDp >= 1800 -> 1.10f
-            widthDp >= 1200 -> 1.04f
-            widthDp <= 960 -> 0.94f
-            else -> 1f
+        val configuration = context.resources.configuration
+        val widthDp = configuration.screenWidthDp.takeIf { it > 0 } ?: configuration.smallestScreenWidthDp
+        return when (DeviceClass.detect(context)) {
+            DeviceClass.Kind.TV -> when {
+                widthDp >= 1800 -> 1.10f
+                widthDp >= 1200 -> 1.04f
+                widthDp in 1..960 -> 0.94f
+                else -> 1f
+            }
+            DeviceClass.Kind.TABLET -> when {
+                widthDp >= 1000 -> 1.04f
+                widthDp in 1..700 -> 0.96f
+                else -> 1f
+            }
+            DeviceClass.Kind.PHONE -> when {
+                widthDp in 1..360 -> 0.88f
+                widthDp in 361..480 -> 0.94f
+                else -> 1f
+            }
         }
     }
 
@@ -42,6 +53,9 @@ object TvUiTuning {
         )
         recycler.addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
             override fun onChildViewAttachedToWindow(view: View) {
+                // TV/box navigation needs focus-in-touch-mode because many vendor firmwares report
+                // a pointer device even when the primary input is a DPAD remote. On touch devices
+                // this remains harmless: click/tap handling is unchanged.
                 view.isFocusableInTouchMode = true
                 view.addOnLayoutChangeListener { child, _, _, _, _, _, _, _, _ ->
                     if (child.hasFocus()) keepVisible(recycler, child, edge)
