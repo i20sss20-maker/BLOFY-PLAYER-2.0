@@ -5,6 +5,8 @@ import android.app.Application
 import android.app.Dialog
 import android.content.DialogInterface
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -36,7 +38,6 @@ class RootExitConfirmationLifecycle : Application.ActivityLifecycleCallbacks {
                 override fun handleOnBackPressed() {
                     val fragments = activity.supportFragmentManager
                     if (activity.isFinishing || activity.isDestroyed || fragments.isStateSaved) return
-                    // showNow closes the rapid-Back race; DialogFragment also survives recreation.
                     if (fragments.findFragmentByTag(DIALOG_TAG) == null) {
                         RootExitConfirmationDialog().showNow(fragments, DIALOG_TAG)
                     }
@@ -52,7 +53,6 @@ class RootExitConfirmationDialog : DialogFragment() {
             .setTitle("الخروج من BLOFY")
             .setMessage("هل تريد الخروج من التطبيق؟")
             .setPositiveButton("نعم") { _, _ ->
-                // Close this task's screens, not the account. Never clear playlists or credentials.
                 activity?.finishAffinity()
             }
             .setNegativeButton("لا", null)
@@ -66,6 +66,12 @@ class RootExitConfirmationDialog : DialogFragment() {
         alert.window?.setBackgroundDrawable(BlofyTvDesign.elevatedSurface(24f * density))
         val no = alert.getButton(DialogInterface.BUTTON_NEGATIVE)
         val yes = alert.getButton(DialogInterface.BUTTON_POSITIVE)
+
+        // AlertDialog buttons can have View.NO_ID on some Android TV builds. Explicit IDs are
+        // required for nextFocus* to work reliably with a physical remote.
+        if (no.id == View.NO_ID) no.id = View.generateViewId()
+        if (yes.id == View.NO_ID) yes.id = View.generateViewId()
+
         listOf(no, yes).forEach { button ->
             button.isAllCaps = false
             button.isFocusable = true
@@ -74,10 +80,27 @@ class RootExitConfirmationDialog : DialogFragment() {
             button.setTextColor(BlofyTvDesign.TextPrimary)
             BlofyTvDesign.installTvFocus(button, 14f * density, 1.03f, button === no) {}
         }
+
         no.nextFocusLeftId = yes.id
         no.nextFocusRightId = yes.id
         yes.nextFocusLeftId = no.id
         yes.nextFocusRightId = no.id
+
+        // Some receiver firmwares ignore AlertDialog nextFocus links. Handle horizontal DPAD as a
+        // second deterministic path so both choices are always reachable.
+        no.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+                yes.requestFocus()
+                true
+            } else false
+        }
+        yes.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+                no.requestFocus()
+                true
+            } else false
+        }
+
         // Safe default: a repeated OK must not accidentally close the application.
         no.post { if (dialog?.isShowing == true) no.requestFocus() }
     }
