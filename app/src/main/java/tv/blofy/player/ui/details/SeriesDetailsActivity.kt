@@ -67,7 +67,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
 
         val posterCard = LinearLayout(this).apply {
             gravity = Gravity.CENTER
-            setPadding(dp(6), dp(6), dp(6), dp(6), )
+            setPadding(dp(6), dp(6), dp(6), dp(6))
             background = cardBackground()
             elevation = dp(8).toFloat()
         }
