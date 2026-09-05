@@ -37,7 +37,7 @@ jobs:
           yes | "$sdkmanager" --licenses >/dev/null || true
           "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
           test -d "$ANDROID_HOME/platforms/android-36"
-      - name: Optimize TV home local feed
+      - name: Use persistent bounded TV home snapshot
         shell: bash
         run: |
           set -euo pipefail
@@ -47,13 +47,19 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           s = p.read_text(encoding='utf-8')
+          import_anchor = 'import tv.blofy.player.data.local.BlofyDatabase\n'
+          if 'import tv.blofy.player.data.HomeSnapshotStore\n' not in s:
+              if import_anchor not in s:
+                  raise SystemExit('HomeActivity import anchor not found')
+              s = s.replace(import_anchor, 'import tv.blofy.player.data.HomeSnapshotStore\n' + import_anchor, 1)
           old = 'val all = dao.allStreamsForProvider(provider.id).filter { it.kind == "movie" || it.kind == "series" }'
-          new = 'val all = dao.latestHomeStreams(provider.id, 320)'
+          new = '''val snapshot = HomeSnapshotStore.read(applicationContext, provider.id)\n                val all = snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }\n                    ?: dao.latestHomeStreams(provider.id, 320)'''
           if old not in s:
               raise SystemExit('HomeActivity bounded-feed target not found')
           p.write_text(s.replace(old, new, 1), encoding='utf-8')
           PY
-          grep -Fq 'val all = dao.latestHomeStreams(provider.id, 320)' "$file"
+          grep -Fq 'HomeSnapshotStore.read(applicationContext, provider.id)' "$file"
+          grep -Fq 'dao.latestHomeStreams(provider.id, 320)' "$file"
       - name: Test lint and assemble
         shell: bash
         run: |
@@ -81,6 +87,7 @@ jobs:
             echo "run=$GITHUB_RUN_NUMBER"
             echo "ffmpeg=false"
             echo "activation=https://blofy-player-2-0.vercel.app"
+            echo "home_snapshot=true"
             echo "home_bounded_cache=true"
             echo "metadata=provider_only"
           } > app/build/outputs/apk/debug/build-info.txt
