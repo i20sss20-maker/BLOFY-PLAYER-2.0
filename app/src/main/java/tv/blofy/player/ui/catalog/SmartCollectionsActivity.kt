@@ -95,7 +95,7 @@ class SmartCollectionsActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() } ?: run { finish(); return@launch }
             val items = withContext(Dispatchers.IO) {
-                val all = dao.allStreamsForProvider(provider.id).filter { it.kind == "movie" || it.kind == "series" }
+                val all = dao.latestHomeStreams(provider.id, 1600)
                 select(mode, all)
             }
             adapter.replace(items)
