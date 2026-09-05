@@ -4,6 +4,8 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,19 +38,17 @@ import java.util.concurrent.ConcurrentHashMap
  * Entry preparation is deliberately bounded. Huge Xtream libraries can contain 200k+ items;
  * blocking the user until every detail/episode/image request completes makes first launch unusable.
  *
- * The loading screen waits for a durable base catalog + a small priority warm-up + home/search.
+ * The loading screen waits only for a durable base catalog + local home/search/manifest.
  * Remaining metadata, episodes and artwork continue from local storage in a background scope.
  */
 object FullCatalogPreparer {
     private val locks = ConcurrentHashMap<String, Mutex>()
-    private val backgroundJobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+    private data class BackgroundTask(val epoch: Long, val job: Job)
+    private val backgroundJobs = ConcurrentHashMap<String, BackgroundTask>()
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val gson = Gson()
 
-    private const val ENTRY_DETAIL_PER_KIND = 48
-    private const val ENTRY_ARTWORK_LIMIT = 240
-    private const val ENTRY_CONCURRENCY = 6
-    private const val BACKGROUND_CONCURRENCY = 6
+    private const val BACKGROUND_CONCURRENCY = 3
 
     data class Update(val percent: Int, val label: String)
     class Incomplete(val missingDetails: Long, val missingImages: Long) : Exception(
@@ -65,8 +65,6 @@ object FullCatalogPreparer {
                 val provider = checkNotNull(dao.provider(providerId)) { "Playlist was not found" }
                 check(CatalogSyncState.isReady(app, providerId)) { "Catalog has not finished saving" }
                 val expectedEpoch = CatalogSyncState.lastUpdatedAt(app, providerId)
-                val generation = PreparationJournal.hash("${provider.baseUrl}|${provider.username}|${provider.password}|$expectedEpoch")
-
                 suspend fun ensureCurrentSource() {
                     val current = dao.provider(providerId)
                     check(
@@ -76,84 +74,23 @@ object FullCatalogPreparer {
                     ) { "Playlist source changed while preparing; continue from the playlist screen" }
                 }
 
-                PreparationJournal(app).use { journal ->
-                    journal.begin(providerId, generation)
+                EntryPreparationPipeline.run(
+                    home = { HomeSnapshotStore.rebuild(app, dao, provider) },
+                    search = {
+                        dao.rebuildSearchIndex(providerId)
+                        check(app.getSharedPreferences("blofy_search_index", Context.MODE_PRIVATE).edit()
+                            .putBoolean("v9_ready_$providerId", true).commit()) { "Unable to persist search readiness" }
+                    },
+                    commit = {
+                        ensureCurrentSource()
+                        CatalogManifestStore.rebuild(app, dao, provider, entryVerified = true)
+                        CatalogSyncState.markEntryReady(app, providerId, expectedEpoch)
+                    },
+                    progress = { percent -> progress(Update(percent, "Preparing local library")) }
+                )
+                // No HTTP/image/detail request belongs to this gate. openHome resumes enrichment
+                // separately; a failed or offline image server cannot hold the entry screen open.
 
-                    suspend fun pages(kind: String, limit: Int? = null, block: suspend (List<StreamEntity>) -> Unit) {
-                        var after = 0L
-                        var emitted = 0
-                        while (true) {
-                            currentCoroutineContext().ensureActive()
-                            ensureCurrentSource()
-                            val wanted = if (limit == null) 36 else minOf(36, limit - emitted)
-                            if (wanted <= 0) break
-                            val page = dao.catalogPageAfterAll(providerId, kind, after, wanted)
-                            if (page.isEmpty()) break
-                            block(page)
-                            emitted += page.size
-                            val next = checkNotNull(dao.streamRowId(page.last().key))
-                            check(next > after) { "Unable to continue catalog index" }
-                            after = next
-                            if (limit != null && emitted >= limit) break
-                        }
-                    }
-
-                    progress(Update(32, "Preparing priority content for fast entry…"))
-                    if (!provider.providerType.equals("m3u", true)) {
-                        for (kind in listOf("movie", "series")) {
-                            pages(kind, ENTRY_DETAIL_PER_KIND) { page ->
-                                coroutineScope {
-                                    page.chunked(ENTRY_CONCURRENCY).forEach { group ->
-                                        group.map { stream -> async {
-                                            warmOne(app, db, provider, stream)
-                                        } }.awaitAll()
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Entry does not download hundreds of thousands of posters. Persist a bounded
-                    // visible set; the rest is filled progressively in the background and on demand.
-                    progress(Update(55, "Saving essential library artwork…"))
-                    var entryImages = 0
-                    outer@ for (kind in listOf("movie", "series", "live")) {
-                        pages(kind, 120) { page ->
-                            if (entryImages >= ENTRY_ARTWORK_LIMIT) return@pages
-                            val urls = page.flatMap { stream ->
-                                val metadata = ProviderMetadataCache.read(app, stream.key)
-                                listOf(stream.icon, stream.backdrop, metadata?.posterUrl, metadata?.backdropUrl)
-                            }.filterNotNull().map(String::trim).filter { it.isNotBlank() && it != "null" }.distinct()
-                            for (raw in urls) {
-                                if (entryImages >= ENTRY_ARTWORK_LIMIT) break
-                                val url = resolve(provider, raw)
-                                runCatching { ArtworkLoader.persist(app, url) }
-                                entryImages++
-                            }
-                        }
-                        if (entryImages >= ENTRY_ARTWORK_LIMIT) break@outer
-                    }
-
-                    progress(Update(82, "Preparing Home from local storage…"))
-                    HomeSnapshotStore.rebuild(app, dao, provider)
-                    progress(Update(90, "Preparing local search…"))
-                    dao.rebuildSearchIndex(providerId)
-                    app.getSharedPreferences("blofy_search_index", Context.MODE_PRIVATE).edit()
-                        .putBoolean("v9_ready_$providerId", true).commit()
-
-                    // These flags mean the entry barrier is ready. Deep completion is tracked
-                    // independently and resumes on every app launch without blocking navigation.
-                    CatalogSyncState.markMetadataReady(app, providerId)
-                    CatalogSyncState.markEpisodesReady(app, providerId)
-                    progress(Update(96, "Verifying library readiness…"))
-                    CatalogManifestStore.rebuild(app, dao, provider, completionVerified = true)
-                    ensureCurrentSource()
-                    CatalogSyncState.markFullyReady(app, providerId, expectedEpoch)
-                    check(CatalogSyncState.isFullyReady(app, providerId))
-                    progress(Update(100, "Library ready • extra details continue in the background"))
-                }
-
-                startBackground(app, providerId, expectedEpoch)
             }
         }
 
@@ -168,66 +105,111 @@ object FullCatalogPreparer {
         startBackground(app, providerId, expectedEpoch)
     }
 
+    @Synchronized
     private fun startBackground(app: Context, providerId: String, expectedEpoch: Long) {
-        if (backgroundJobs[providerId]?.isActive == true) return
-        backgroundJobs[providerId] = backgroundScope.launch {
+        val old = backgroundJobs[providerId]
+        if (old?.epoch == expectedEpoch && old.job.isActive) return
+        old?.job?.cancel()
+        val job = backgroundScope.launch(start = CoroutineStart.LAZY) {
             try {
-                runCatching { enrichAll(app, providerId, expectedEpoch) }
+                old?.job?.join()
+                enrichAll(app, providerId, expectedEpoch)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Saved units remain durable. Retry on the next explicit resume, not a busy loop.
             } finally {
-                backgroundJobs.remove(providerId)
+                val finished = currentCoroutineContext()[Job]
+                synchronized(this@FullCatalogPreparer) {
+                    if (backgroundJobs[providerId]?.job === finished) backgroundJobs.remove(providerId)
+                }
             }
         }
+        backgroundJobs[providerId] = BackgroundTask(expectedEpoch, job)
+        job.start()
     }
 
     private suspend fun enrichAll(app: Context, providerId: String, expectedEpoch: Long) {
         val db = BlofyDatabase.get(app)
         val dao = db.dao()
         val provider = dao.provider(providerId) ?: return
-        if (!CatalogSyncState.isReady(app, providerId) || CatalogSyncState.lastUpdatedAt(app, providerId) != expectedEpoch) return
-
-        for (kind in listOf("series", "movie")) {
-            var after = 0L
-            while (true) {
-                currentCoroutineContext().ensureActive()
-                if (CatalogSyncState.lastUpdatedAt(app, providerId) != expectedEpoch) return
-                val page = dao.catalogPageAfterAll(providerId, kind, after, 42)
-                if (page.isEmpty()) break
-                page.chunked(BACKGROUND_CONCURRENCY).forEach { group ->
-                    coroutineScope {
-                        group.map { stream -> async { warmOne(app, db, provider, stream) } }.awaitAll()
-                    }
-                }
-                for (stream in page) {
-                    listOf(
-                        stream.icon,
-                        stream.backdrop,
-                        ProviderMetadataCache.read(app, stream.key)?.posterUrl,
-                        ProviderMetadataCache.read(app, stream.key)?.backdropUrl
-                    )
-                        .filterNotNull().map(String::trim).filter { it.isNotBlank() && it != "null" }.distinct()
-                        .forEach { raw -> runCatching { ArtworkLoader.persist(app, resolve(provider, raw)) } }
-                }
-                val next = dao.streamRowId(page.last().key) ?: return
-                if (next <= after) return
-                after = next
+        suspend fun ensureSource() {
+            currentCoroutineContext().ensureActive()
+            val current = dao.provider(providerId)
+            check(CatalogSyncState.isReady(app, providerId) && CatalogSyncState.lastUpdatedAt(app, providerId) == expectedEpoch &&
+                current?.baseUrl == provider.baseUrl && current.username == provider.username && current.password == provider.password) {
+                "Catalog source changed"
             }
+        }
+        ensureSource()
+        val generation = PreparationJournal.hash("${provider.baseUrl}|${provider.username}|${provider.password}|$expectedEpoch")
+        PreparationJournal(app).use { journal ->
+            journal.begin(providerId, generation)
+            var allDetailsSaved = true
+            var allEpisodesSaved = true
+            var allImagesSaved = true
+            for (kind in listOf("series", "movie", "live")) {
+                var after = 0L
+                while (true) {
+                    ensureSource()
+                    val page = dao.catalogPageAfterAll(providerId, kind, after, 42)
+                    if (page.isEmpty()) break
+                    if (kind != "live" && !provider.providerType.equals("m3u", true)) {
+                        for (group in page.chunked(BACKGROUND_CONCURRENCY)) {
+                            val results = coroutineScope {
+                                group.map { stream -> async {
+                                    ensureSource()
+                                    journal.enqueue(providerId, "detail", stream.key)
+                                    if (journal.done(providerId, "detail", stream.key)) true else {
+                                        val saved = warmOne(app, db, provider, stream, ::ensureSource)
+                                        if (saved) { ensureSource(); journal.complete(providerId, "detail", stream.key) }
+                                        saved
+                                    }
+                                } }.awaitAll()
+                            }
+                            if (results.any { !it }) {
+                                allDetailsSaved = false
+                                if (kind == "series") allEpisodesSaved = false
+                            }
+                        }
+                    }
+                    for (stream in page) {
+                        ensureSource()
+                        val metadata = ProviderMetadataCache.read(app, stream.key)
+                        for (raw in listOf(stream.icon, stream.backdrop, metadata?.posterUrl, metadata?.backdropUrl)
+                            .filterNotNull().map(String::trim).filter { it.isNotBlank() && it != "null" }.distinct()) {
+                            try { if (!ArtworkLoader.persist(app, resolve(provider, raw))) allImagesSaved = false }
+                            catch (cancelled: CancellationException) { throw cancelled }
+                            catch (full: ArtworkLoader.StorageFull) { throw full }
+                            catch (_: Exception) { allImagesSaved = false /* Retry on the next pass. */ }
+                        }
+                    }
+                    val next = dao.streamRowId(page.last().key) ?: return
+                    if (next <= after) return
+                    after = next
+                }
+            }
+            ensureSource()
+            if (allDetailsSaved) CatalogSyncState.markMetadataReady(app, providerId)
+            if (allEpisodesSaved) CatalogSyncState.markEpisodesReady(app, providerId)
+            CatalogManifestStore.rebuild(app, dao, provider,
+                completionVerified = allDetailsSaved && allEpisodesSaved && allImagesSaved)
         }
     }
 
-    private suspend fun warmOne(app: Context, db: BlofyDatabase, provider: ProviderEntity, stream: StreamEntity) {
-        if (provider.providerType.equals("m3u", true)) return
+    private suspend fun warmOne(
+        app: Context, db: BlofyDatabase, provider: ProviderEntity, stream: StreamEntity,
+        ensureSource: suspend () -> Unit,
+    ): Boolean {
         val cached = ProviderMetadataCache.read(app, stream.key)
-        val needsEpisodes = stream.kind == "series"
-        val episodesAlreadySaved = if (needsEpisodes) {
-            db.dao().episodeSnapshot(provider.id, stream.remoteId).isNotEmpty()
-        } else true
-        if (cached != null && (!needsEpisodes || episodesAlreadySaved)) return
-
-        retryNetwork {
+        val episodesAlreadySaved = stream.kind != "series" || db.dao().episodeSnapshot(provider.id, stream.remoteId).isNotEmpty()
+        if (cached != null && episodesAlreadySaved) return true
+        return retryNetwork {
             val response = fetch(provider, stream)
             val metadata = XtreamMetadataFallback.parseResponse(
                 provider, stream, responseMap(response), if (stream.kind == "series") "tv" else "movie"
             )
+            ensureSource()
             if (stream.kind == "series") {
                 val parsed = SeriesEpisodeParser.parse(provider.id, stream.remoteId, response)
                 check(parsed.payloadPresent) { "Invalid series response" }
@@ -237,14 +219,13 @@ object FullCatalogPreparer {
                     "Invalid movie response"
                 }
             }
+            ensureSource()
             ProviderMetadataCache.write(app, provider.id, stream.key, metadata)
             if (metadata != null) db.openHelper.writableDatabase.execSQL(
                 "UPDATE streams SET icon=COALESCE(?,icon),backdrop=COALESCE(?,backdrop),plot=COALESCE(?,plot),genre=COALESCE(?,genre),releaseDate=COALESCE(?,releaseDate),rating=COALESCE(?,rating),duration=COALESCE(?,duration) WHERE `key`=?",
-                arrayOf(
-                    metadata.posterUrl, metadata.backdropUrl, metadata.overview,
+                arrayOf(metadata.posterUrl, metadata.backdropUrl, metadata.overview,
                     metadata.genres.takeIf { it.isNotEmpty() }?.joinToString(", "), metadata.releaseDate,
-                    metadata.rating?.toString(), metadata.runtimeMinutes?.toString(), stream.key
-                )
+                    metadata.rating?.toString(), metadata.runtimeMinutes?.toString(), stream.key)
             )
         }
     }

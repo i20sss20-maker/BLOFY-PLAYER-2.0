@@ -18,11 +18,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import tv.blofy.player.data.preparation.CatalogLoadAttempt
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
@@ -73,29 +73,29 @@ class CatalogLoadingActivity : AppCompatActivity() {
         if (loadJob?.isActive == true) return
         retryButton.visibility = View.GONE
         stage.setTextColor(BlofyTvDesign.TextPrimary)
+        displayedPercent = 0 // A retry is a new attempt; monotonicity holds within each attempt.
         render(1, getString(R.string.catalog_preflight))
         loadJob = lifecycleScope.launch {
-            try {
-                val dao = BlofyDatabase.get(applicationContext).dao()
+            var preflight = true
+            CatalogLoadAttempt.run(
+                onTimeout = { fail(getString(if (preflight) R.string.catalog_preflight_timeout else R.string.catalog_prepare_failed)) },
+                onFailure = { fail(preparationMessage(it)) }
+            ) {
                 val hasCachedCatalog = withTimeout(20_000L) {
-                    withContext(Dispatchers.IO) { dao.hasCatalog(providerId) }
+                    withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().hasCatalog(providerId) }
                 }
+                preflight = false
                 val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
-                if (!forceRefresh && CatalogSyncState.isFullyReady(applicationContext, providerId) && hasCachedCatalog) {
+                if (!forceRefresh && CatalogSyncState.isEntryReady(applicationContext, providerId) && hasCachedCatalog) {
                     openHome(providerId)
                 } else if (!forceRefresh && catalogReady && hasCachedCatalog) {
                     awaitEntryReadyCache(providerId)
                     openHome(providerId)
                 } else {
-                    CatalogSyncState.markPending(applicationContext, providerId)
+                    // A manual refresh stages a replacement. Keep the old entry state until commit.
+                    if (!hasCachedCatalog) CatalogSyncState.markPending(applicationContext, providerId)
                     sync(providerId)
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: TimeoutCancellationException) {
-                fail(getString(R.string.catalog_preflight_timeout))
-            } catch (error: Exception) {
-                fail(preparationMessage(error))
             }
         }
     }
@@ -330,7 +330,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 render(30, getString(R.string.catalog_refresh_kept))
                 stage.setTextColor(BlofyTvDesign.Mint)
                 Toast.makeText(this, getString(R.string.catalog_kept_opening), Toast.LENGTH_SHORT).show()
-                if (!CatalogSyncState.isFullyReady(applicationContext, providerId)) awaitEntryReadyCache(providerId)
+                if (!CatalogSyncState.isEntryReady(applicationContext, providerId)) awaitEntryReadyCache(providerId)
                 openHome(providerId)
             } else {
                 fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
@@ -382,9 +382,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private fun openHome(providerId: String) {
         // Fully-ready libraries bypass preparation on later launches. Restart the durable
         // background enrichment pass here so a force-close/reboot never loses progress.
-        FullCatalogPreparer.resumeBackground(applicationContext, providerId)
         startActivity(Intent(this, HomeActivity::class.java))
         finish()
+        FullCatalogPreparer.resumeBackground(applicationContext, providerId)
     }
 
     private fun fail(message: String) {

@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import tv.blofy.player.core.text.ArabicSearchNormalizer
 
@@ -225,10 +226,18 @@ interface BlofyDao {
     @Transaction
     suspend fun rebuildSearchIndex(providerId: String) {
         clearSearchIndex(providerId)
-        allStreamsForProvider(providerId)
-            .map(::searchRow)
-            .chunked(SEARCH_INSERT_BATCH_SIZE)
-            .forEach { if (it.isNotEmpty()) insertSearchRows(it) }
+        for (kind in listOf("live", "movie", "series")) {
+            var after = 0L
+            while (true) {
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                val page = catalogPageAfterAll(providerId, kind, after, SEARCH_INSERT_BATCH_SIZE)
+                if (page.isEmpty()) break
+                insertSearchRows(page.map(::searchRow))
+                val next = checkNotNull(streamRowId(page.last().key))
+                check(next > after) { "Search index cursor did not advance" }
+                after = next
+            }
+        }
     }
 
     @Transaction
