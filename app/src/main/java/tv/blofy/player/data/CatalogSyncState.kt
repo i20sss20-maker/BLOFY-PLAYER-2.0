@@ -14,32 +14,20 @@ object CatalogSyncState {
     private const val METADATA_KIND_PREFIX = "metadata_kind:"
 
     fun isReady(context: Context, providerId: String): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(READY_PREFIX + providerId, false)
-
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(READY_PREFIX + providerId, false)
     fun isMetadataReady(context: Context, providerId: String): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(METADATA_READY_PREFIX + providerId, false)
-
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(METADATA_READY_PREFIX + providerId, false)
     fun areEpisodesReady(context: Context, providerId: String): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(EPISODES_READY_PREFIX + providerId, false)
-
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(EPISODES_READY_PREFIX + providerId, false)
     fun isFullyReady(context: Context, providerId: String): Boolean =
         isReady(context, providerId) && isMetadataReady(context, providerId) && areEpisodesReady(context, providerId)
-
     fun lastUpdatedAt(context: Context, providerId: String): Long =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getLong(UPDATED_PREFIX + providerId, 0L)
-
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(UPDATED_PREFIX + providerId, 0L)
     fun lastSyncedAt(context: Context, providerId: String): Long = lastUpdatedAt(context, providerId)
-
     fun metadataCheckpoint(context: Context, providerId: String): Long =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(METADATA_CHECKPOINT_PREFIX + providerId, 0L)
-
     fun episodesCheckpoint(context: Context, providerId: String): Long =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(EPISODES_CHECKPOINT_PREFIX + providerId, 0L)
-
     fun metadataKind(context: Context, providerId: String): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(METADATA_KIND_PREFIX + providerId, "movie")
             ?.let { if (it == "series") "series" else "movie" } ?: "movie"
@@ -49,72 +37,59 @@ object CatalogSyncState {
             .putString(METADATA_KIND_PREFIX + providerId, if (kind == "series") "series" else "movie")
             .putLong(METADATA_CHECKPOINT_PREFIX + providerId, rowId.coerceAtLeast(0L)).apply()
     }
-
     fun markEpisodesCheckpoint(context: Context, providerId: String, rowId: Long) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putLong(EPISODES_CHECKPOINT_PREFIX + providerId, rowId.coerceAtLeast(0L)).apply()
     }
-
     fun markPending(context: Context, providerId: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(READY_PREFIX + providerId, false)
             .putBoolean(METADATA_READY_PREFIX + providerId, false)
             .putBoolean(EPISODES_READY_PREFIX + providerId, false)
             .putLong(METADATA_CHECKPOINT_PREFIX + providerId, 0L)
             .putLong(EPISODES_CHECKPOINT_PREFIX + providerId, 0L)
-            .putString(METADATA_KIND_PREFIX + providerId, "movie")
-            .apply()
+            .putString(METADATA_KIND_PREFIX + providerId, "movie").apply()
+        HomeSnapshotStore.clear(context.applicationContext, providerId)
+        CatalogManifestStore.clear(context.applicationContext, providerId)
     }
-
     fun markReady(context: Context, providerId: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(READY_PREFIX + providerId, true)
             .putBoolean(METADATA_READY_PREFIX + providerId, false)
             .putBoolean(EPISODES_READY_PREFIX + providerId, false)
-            .putLong(UPDATED_PREFIX + providerId, System.currentTimeMillis())
-            .apply()
+            .putLong(UPDATED_PREFIX + providerId, System.currentTimeMillis()).apply()
         EpisodeCatalogPreloader.schedule(context.applicationContext, providerId, replace = true)
         MetadataCatalogPreloader.schedule(context.applicationContext, providerId, replace = true)
     }
-
     fun markMetadataReady(context: Context, providerId: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putBoolean(METADATA_READY_PREFIX + providerId, true)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(METADATA_READY_PREFIX + providerId, true)
             .putLong(METADATA_CHECKPOINT_PREFIX + providerId, 0L)
             .putString(METADATA_KIND_PREFIX + providerId, "movie").apply()
+        CatalogPostSyncFinalizer.maybeFinalize(context, providerId)
     }
-
     fun markEpisodesReady(context: Context, providerId: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putBoolean(EPISODES_READY_PREFIX + providerId, true)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(EPISODES_READY_PREFIX + providerId, true)
             .putLong(EPISODES_CHECKPOINT_PREFIX + providerId, 0L).apply()
+        CatalogPostSyncFinalizer.maybeFinalize(context, providerId)
     }
-
     fun resumeEnrichment(context: Context, providerId: String) {
         val app = context.applicationContext
         if (!isReady(app, providerId)) return
-        if (!areEpisodesReady(app, providerId)) {
-            EpisodeCatalogPreloader.schedule(app, providerId, episodesCheckpoint(app, providerId), replace = false)
-        }
-        if (!isMetadataReady(app, providerId)) {
-            MetadataCatalogPreloader.schedule(
-                app, providerId, metadataKind(app, providerId), metadataCheckpoint(app, providerId), replace = false
-            )
-        }
+        if (!areEpisodesReady(app, providerId)) EpisodeCatalogPreloader.schedule(app, providerId, episodesCheckpoint(app, providerId), replace = false)
+        if (!isMetadataReady(app, providerId)) MetadataCatalogPreloader.schedule(
+            app, providerId, metadataKind(app, providerId), metadataCheckpoint(app, providerId), replace = false
+        )
+        CatalogPostSyncFinalizer.maybeFinalize(app, providerId)
     }
-
     fun clear(context: Context, providerId: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .remove(READY_PREFIX + providerId)
-            .remove(METADATA_READY_PREFIX + providerId)
-            .remove(EPISODES_READY_PREFIX + providerId)
-            .remove(UPDATED_PREFIX + providerId)
-            .remove(METADATA_CHECKPOINT_PREFIX + providerId)
-            .remove(EPISODES_CHECKPOINT_PREFIX + providerId)
-            .remove(METADATA_KIND_PREFIX + providerId)
-            .apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove(READY_PREFIX + providerId).remove(METADATA_READY_PREFIX + providerId)
+            .remove(EPISODES_READY_PREFIX + providerId).remove(UPDATED_PREFIX + providerId)
+            .remove(METADATA_CHECKPOINT_PREFIX + providerId).remove(EPISODES_CHECKPOINT_PREFIX + providerId)
+            .remove(METADATA_KIND_PREFIX + providerId).apply()
+        HomeSnapshotStore.clear(context.applicationContext, providerId)
+        CatalogManifestStore.clear(context.applicationContext, providerId)
     }
 }
