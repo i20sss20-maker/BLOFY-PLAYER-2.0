@@ -33,6 +33,7 @@ import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
+import tv.blofy.player.ui.settings.RuntimeSettings
 
 class EpisodesActivity : AppCompatActivity() {
     private lateinit var episodeAdapter: EpisodeCardAdapter
@@ -339,12 +340,16 @@ class EpisodesActivity : AppCompatActivity() {
             val resume = BlofyDatabase.get(applicationContext).dao().watchState(episode.key)?.positionMs ?: 0L
             val url = ContentUrlResolver.episode(provider, episode)
             if (resume > 15_000L) {
-                AlertDialog.Builder(this@EpisodesActivity)
-                    .setTitle(getString(R.string.episodes_current_title, episode.episode, episode.title))
-                    .setMessage(getString(R.string.episodes_resume_message))
-                    .setPositiveButton(getString(R.string.episodes_resume)) { _, _ -> launchEpisode(provider, episode, url, resume) }
-                    .setNegativeButton(getString(R.string.episodes_start_over)) { _, _ -> launchEpisode(provider, episode, url, 0L) }
-                    .show()
+                if (RuntimeSettings.askBeforeResume(this@EpisodesActivity)) {
+                    AlertDialog.Builder(this@EpisodesActivity)
+                        .setTitle(getString(R.string.episodes_current_title, episode.episode, episode.title))
+                        .setMessage(getString(R.string.episodes_resume_message))
+                        .setPositiveButton(getString(R.string.episodes_resume)) { _, _ -> launchEpisode(provider, episode, url, resume) }
+                        .setNegativeButton(getString(R.string.episodes_start_over)) { _, _ -> launchEpisode(provider, episode, url, 0L) }
+                        .show()
+                } else {
+                    launchEpisode(provider, episode, url, resume)
+                }
             } else {
                 launchEpisode(provider, episode, url, 0L)
             }

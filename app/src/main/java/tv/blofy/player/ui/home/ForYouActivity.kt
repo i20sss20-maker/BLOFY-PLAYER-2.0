@@ -25,28 +25,29 @@ import tv.blofy.player.ui.details.SeriesDetailsActivity
 class ForYouActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val uiDirection = resources.configuration.layoutDirection
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = uiDirection
             setPadding(dp(38), dp(28), dp(38), dp(28))
             background = AppCompatResources.getDrawable(this@ForYouActivity, R.drawable.blofy_home_background)
         }
         val title = TextView(this).apply {
-            text = "مختار لك"
+            text = getString(R.string.for_you_title)
             textSize = 31f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.END
         }
         val subtitle = TextView(this).apply {
-            text = "نرتبها من مشاهداتك داخل BLOFY فقط"
+            text = getString(R.string.for_you_subtitle)
             textSize = 13f
             setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.END
             setPadding(0, dp(4), 0, dp(14))
         }
         val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
-        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; layoutDirection = uiDirection }
         scroll.addView(body)
         root.addView(title)
         root.addView(subtitle)
@@ -57,14 +58,14 @@ class ForYouActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
             if (provider == null) {
-                body.addView(message("أضف قائمة تشغيل أولاً"))
+                body.addView(message(getString(R.string.for_you_add_playlist)))
                 return@launch
             }
             val snapshot = withContext(Dispatchers.IO) { SmartHomeEngine.build(dao, provider.id) }
-            subtitle.text = "تفضيلك الحالي: ${kindLabel(snapshot.preferredKind)} • يتغير تلقائيًا حسب استخدامك"
-            addSection(body, "أكمل المشاهدة", snapshot.continueItems, provider.id)
-            addSection(body, "قد يناسبك", snapshot.recommended, provider.id)
-            addSection(body, "شاهدتها مؤخرًا", snapshot.recentItems, provider.id)
+            subtitle.text = getString(R.string.for_you_current_preference, kindLabel(snapshot.preferredKind))
+            addSection(body, getString(R.string.for_you_continue), snapshot.continueItems, provider.id)
+            addSection(body, getString(R.string.for_you_recommended), snapshot.recommended, provider.id)
+            addSection(body, getString(R.string.for_you_recent), snapshot.recentItems, provider.id)
             body.post { firstFocusable(body)?.requestFocus() }
         }
     }
@@ -76,7 +77,7 @@ class ForYouActivity : AppCompatActivity() {
             textSize = 19f
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.END
             setPadding(0, dp(14), 0, dp(8))
         })
         items.take(24).forEach { item ->
@@ -89,7 +90,7 @@ class ForYouActivity : AppCompatActivity() {
                 textSize = 15f
                 typeface = BlofyTvDesign.MediumTypeface
                 setTextColor(BlofyTvDesign.TextSecondary)
-                gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+                gravity = Gravity.CENTER_VERTICAL or Gravity.END
                 setPadding(dp(18), 0, dp(18), 0)
                 isFocusable = true
                 isFocusableInTouchMode = true
@@ -124,6 +125,10 @@ class ForYouActivity : AppCompatActivity() {
         return null
     }
 
-    private fun kindLabel(kind: String) = when (kind) { "series" -> "المسلسلات"; "live" -> "البث المباشر"; else -> "الأفلام" }
+    private fun kindLabel(kind: String) = when (kind) {
+        "series" -> getString(R.string.home_series)
+        "live" -> getString(R.string.home_live)
+        else -> getString(R.string.home_movies)
+    }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 }

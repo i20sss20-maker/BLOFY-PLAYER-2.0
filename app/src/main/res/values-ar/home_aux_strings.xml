@@ -1,0 +1,18 @@
+<resources>
+    <string name="person_server_identity">الاسم والصورة من بيانات السيرفر</string>
+    <string name="person_server_only_note">تُعرض بيانات الممثل التي يرسلها السيرفر فقط. إذا لم يرسل السيرفر صورة أو معلومات إضافية فلن يستخدم BLOFY مصدرًا خارجيًا.</string>
+    <string name="for_you_title">مختار لك</string>
+    <string name="for_you_subtitle">نرتبها من مشاهداتك داخل BLOFY فقط</string>
+    <string name="for_you_add_playlist">أضف قائمة تشغيل أولاً</string>
+    <string name="for_you_current_preference">تفضيلك الحالي: %1$s • يتغير تلقائيًا حسب استخدامك</string>
+    <string name="for_you_continue">أكمل المشاهدة</string>
+    <string name="for_you_recommended">قد يناسبك</string>
+    <string name="for_you_recent">شاهدتها مؤخرًا</string>
+    <string name="quick_menu_title">اختصارات سريعة</string>
+    <string name="quick_search_subtitle">ابحث في القنوات والأفلام والمسلسلات والممثلين</string>
+    <string name="quick_continue_subtitle">ارجع مباشرة لآخر نقطة</string>
+    <string name="quick_favorites_subtitle">كل اختياراتك في مكان واحد</string>
+    <string name="quick_recent_subtitle">ارجع لآخر بث شاهدته</string>
+    <string name="quick_collections_subtitle">الأعلى تقييمًا و4K وعربي</string>
+    <string name="quick_settings_subtitle">المشغل والتحديث والنظام</string>
+</resources>

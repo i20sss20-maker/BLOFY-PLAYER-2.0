@@ -40,7 +40,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var grid: GridLayout
     private lateinit var storageCard: Button
     private lateinit var refreshCard: Button
-    private val prefs by lazy { getSharedPreferences(PREFS, MODE_PRIVATE) }
+    private val prefs by lazy { getSharedPreferences(RuntimeSettings.PREFS, MODE_PRIVATE) }
     private val isRtl: Boolean get() = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
     private val uiDirection: Int get() = if (isRtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
 
@@ -122,28 +122,28 @@ class SettingsActivity : AppCompatActivity() {
             clipToPadding = false
         }
 
-        addCard(cycleSetting(getString(R.string.setting_aspect), KEY_ASPECT,
+        addCard(cycleSetting(getString(R.string.setting_aspect), RuntimeSettings.KEY_ASPECT,
             arrayOf("fit", "zoom", "fill"),
             arrayOf(getString(R.string.setting_aspect_fit), getString(R.string.setting_aspect_zoom), getString(R.string.setting_aspect_fill))))
-        addCard(cycleSetting(getString(R.string.setting_audio_output), KEY_AUDIO_OUTPUT,
+        addCard(cycleSetting(getString(R.string.setting_audio_output), RuntimeSettings.KEY_AUDIO_OUTPUT,
             arrayOf("auto", "stereo"),
             arrayOf(getString(R.string.setting_audio_auto), getString(R.string.setting_audio_stereo))))
-        addCard(cycleSetting(getString(R.string.setting_subtitle_language), KEY_SUBTITLE_LANGUAGE,
+        addCard(cycleSetting(getString(R.string.setting_subtitle_language), RuntimeSettings.KEY_SUBTITLE_LANGUAGE,
             arrayOf("ar", "auto", "off"),
             arrayOf(getString(R.string.setting_subtitle_ar_first), getString(R.string.setting_auto), getString(R.string.setting_off))))
-        addCard(cycleSetting(getString(R.string.setting_subtitle_size), KEY_SUBTITLE_SIZE,
+        addCard(cycleSetting(getString(R.string.setting_subtitle_size), RuntimeSettings.KEY_SUBTITLE_SIZE,
             arrayOf("small", "medium", "large"),
             arrayOf(getString(R.string.setting_small), getString(R.string.setting_medium), getString(R.string.setting_large))))
-        addCard(cycleSetting(getString(R.string.setting_live_preview), KEY_AUTOPLAY_LIVE,
+        addCard(cycleSetting(getString(R.string.setting_live_preview), RuntimeSettings.KEY_AUTOPLAY_LIVE,
             arrayOf("on", "off"),
             arrayOf(getString(R.string.setting_auto), getString(R.string.setting_manual))))
-        addCard(cycleSetting(getString(R.string.setting_resume), KEY_RESUME_PROMPT,
+        addCard(cycleSetting(getString(R.string.setting_resume), RuntimeSettings.KEY_RESUME_PROMPT,
             arrayOf("on", "off"),
             arrayOf(getString(R.string.setting_ask_me), getString(R.string.setting_play_directly))))
-        addCard(cycleSetting(getString(R.string.setting_next_episode), KEY_AUTO_NEXT,
+        addCard(cycleSetting(getString(R.string.setting_next_episode), RuntimeSettings.KEY_AUTO_NEXT,
             arrayOf("ask", "on", "off"),
             arrayOf(getString(R.string.setting_ask_me), getString(R.string.setting_auto), getString(R.string.setting_off))))
-        addCard(cycleSetting(getString(R.string.setting_motion), KEY_MOTION,
+        addCard(cycleSetting(getString(R.string.setting_motion), RuntimeSettings.KEY_MOTION,
             arrayOf("smooth", "reduced"),
             arrayOf(getString(R.string.setting_smooth), getString(R.string.setting_reduced))))
         addCard(actionCard(getString(R.string.setting_app_language), currentLanguageLabel()) { chooseLanguage() })
@@ -294,11 +294,13 @@ class SettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val stats = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext) }
             val database = LocalStorageManager.format(applicationContext, stats.databaseBytes)
+            val artwork = LocalStorageManager.format(applicationContext, stats.artworkBytes)
+            val persistent = LocalStorageManager.format(applicationContext, stats.otherPersistentBytes)
             val temporary = LocalStorageManager.format(applicationContext, stats.temporaryBytes)
             val total = LocalStorageManager.format(applicationContext, stats.totalBytes)
             AlertDialog.Builder(this@SettingsActivity)
                 .setTitle(getString(R.string.storage_title))
-                .setMessage(getString(R.string.storage_message, total, database, temporary))
+                .setMessage(getString(R.string.storage_message_detailed, total, database, artwork, persistent, temporary))
                 .setPositiveButton(getString(R.string.storage_safe_clean)) { _, _ -> confirmSafeCleanup() }
                 .setNegativeButton(getString(R.string.close), null)
                 .show()
@@ -356,15 +358,6 @@ class SettingsActivity : AppCompatActivity() {
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     companion object {
-        const val PREFS = "blofy_player_settings"
-        const val KEY_MOTION = "motion_mode"
-        private const val KEY_AUDIO_OUTPUT = "audio_output"
-        private const val KEY_SUBTITLE_LANGUAGE = "subtitle_language"
-        private const val KEY_SUBTITLE_SIZE = "subtitle_size"
-        private const val KEY_ASPECT = "aspect_mode"
-        private const val KEY_AUTOPLAY_LIVE = "autoplay_live"
-        private const val KEY_RESUME_PROMPT = "resume_prompt"
-        private const val KEY_AUTO_NEXT = "auto_next_episode"
         private const val KEY_LANGUAGE = "app_language"
         private const val KEY_LANGUAGE_TAG = "app_language_tag"
         private val LANGUAGES = listOf(

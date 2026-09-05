@@ -48,6 +48,7 @@ import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.player.PlayerActivity
+import tv.blofy.player.ui.settings.RuntimeSettings
 
 @OptIn(markerClass = [UnstableApi::class])
 class ContentBrowserActivity : AppCompatActivity() {
@@ -81,7 +82,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND) ?: KIND_LIVE }
     private val deviceKind by lazy { DeviceClass.detect(this) }
     private val phoneMode get() = deviceKind == DeviceClass.Kind.PHONE
-    private val previewEnabled get() = kind == KIND_LIVE && !phoneMode
+    private val previewEnabled get() = kind == KIND_LIVE && !phoneMode && RuntimeSettings.autoplayLive(this)
     private val statePrefs by lazy { getSharedPreferences("blofy_browser_state", MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -215,8 +216,6 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // The Activity receives keys from focused channel/category children. A listener on the
-        // RecyclerView container alone does not reliably see those keys on TV receivers.
         if (!phoneMode && ::categoryList.isInitialized && ::streamList.isInitialized &&
             TwoPaneFocusGuard.handle(event, categoryList, streamList,
                 ::focusCurrentCategory, ::focusFirstChannel)) return true

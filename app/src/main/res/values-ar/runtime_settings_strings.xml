@@ -1,0 +1,7 @@
+<resources>
+    <string name="next_episode_title">الحلقة التالية</string>
+    <string name="next_episode_message">هل تريد تشغيل الحلقة التالية؟</string>
+    <string name="next_episode_play">تشغيل</string>
+    <string name="next_episode_not_now">ليس الآن</string>
+    <string name="storage_message_detailed">المستخدم حاليًا: %1$s\n\n• الكتالوج وقواعد البيانات: %2$s\n• صور المكتبة المثبتة: %3$s\n• بيانات التطبيق المحفوظة: %4$s\n• الملفات المؤقتة القابلة للتنظيف: %5$s\n\nالتنظيف الآمن يحذف الملفات المؤقتة وبيانات دليل البرامج المؤقتة فقط، ويحتفظ بالتفعيل والقوائم والمفضلة والتقدم والصور المثبتة.</string>
+</resources>

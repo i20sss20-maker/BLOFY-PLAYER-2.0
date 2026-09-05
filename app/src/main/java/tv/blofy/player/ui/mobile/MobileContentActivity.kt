@@ -15,6 +15,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -27,6 +29,7 @@ import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catchup.CatchupActivity
+import tv.blofy.player.ui.catalog.PosterStreamAdapter
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -35,11 +38,14 @@ import tv.blofy.player.ui.player.PlayerActivity
 class MobileContentActivity : AppCompatActivity() {
     private lateinit var provider: ProviderEntity
     private lateinit var categorySpinner: Spinner
-    private lateinit var list: ListView
+    private var liveList: ListView? = null
+    private var posterGrid: RecyclerView? = null
+    private var posterAdapter: PosterStreamAdapter? = null
     private var categories: List<CategoryEntity> = emptyList()
     private var streams: List<StreamEntity> = emptyList()
     private var streamJob: Job? = null
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND) ?: KIND_LIVE }
+    private val isPosterKind get() = kind == KIND_MOVIE || kind == KIND_SERIES
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,7 +63,11 @@ class MobileContentActivity : AppCompatActivity() {
             gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
+            text = getString(when (kind) {
+                KIND_MOVIE -> R.string.movies
+                KIND_SERIES -> R.string.series
+                else -> R.string.live_tv
+            })
             textSize = 25f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -65,14 +75,40 @@ class MobileContentActivity : AppCompatActivity() {
             setPadding(dp(4), dp(3), 0, dp(12))
         })
         categorySpinner = Spinner(this).apply { background = fieldBackground() }
-        list = ListView(this).apply {
-            dividerHeight = dp(6)
-            divider = null
-            setBackgroundColor(Color.TRANSPARENT)
-            selector = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
-        }
         root.addView(categorySpinner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)))
-        root.addView(list, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(10) })
+
+        if (isPosterKind) {
+            val widthDp = resources.configuration.screenWidthDp.takeIf { it > 0 } ?: 360
+            val columns = when {
+                widthDp >= 900 -> 5
+                widthDp >= 700 -> 4
+                widthDp >= 520 -> 3
+                else -> 2
+            }
+            posterAdapter = PosterStreamAdapter(::openStream)
+            posterGrid = RecyclerView(this).apply {
+                layoutManager = GridLayoutManager(this@MobileContentActivity, columns)
+                adapter = posterAdapter
+                itemAnimator = null
+                clipToPadding = false
+                clipChildren = false
+                setPadding(0, dp(10), 0, dp(18))
+                setItemViewCacheSize(16)
+                recycledViewPool.setMaxRecycledViews(0, 24)
+            }.also { root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)) }
+        } else {
+            liveList = ListView(this).apply {
+                dividerHeight = dp(6)
+                divider = null
+                setBackgroundColor(Color.TRANSPARENT)
+                selector = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+                setOnItemClickListener { _, _, position, _ -> streams.getOrNull(position)?.let(::openStream) }
+                setOnItemLongClickListener { _, _, position, _ ->
+                    val stream = streams.getOrNull(position) ?: return@setOnItemLongClickListener false
+                    if (stream.archiveEnabled) { openCatchup(stream); true } else false
+                }
+            }.also { root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(10) }) }
+        }
         setContentView(root)
 
         lifecycleScope.launch {
@@ -85,12 +121,9 @@ class MobileContentActivity : AppCompatActivity() {
             }
         }
 
-        categorySpinner.setOnItemSelectedListener(SimpleItemSelectedListener { position -> categories.getOrNull(position)?.let { loadStreams(it.remoteId) } })
-        list.setOnItemClickListener { _, _, position, _ -> streams.getOrNull(position)?.let(::openStream) }
-        list.setOnItemLongClickListener { _, _, position, _ ->
-            val stream = streams.getOrNull(position) ?: return@setOnItemLongClickListener false
-            if (kind == KIND_LIVE && stream.archiveEnabled) { openCatchup(stream); true } else false
-        }
+        categorySpinner.setOnItemSelectedListener(SimpleItemSelectedListener { position ->
+            categories.getOrNull(position)?.let { loadStreams(it.remoteId) }
+        })
     }
 
     private fun loadStreams(categoryId: String?) {
@@ -99,7 +132,13 @@ class MobileContentActivity : AppCompatActivity() {
         streamJob = lifecycleScope.launch {
             BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, categoryId).collect { items ->
                 streams = items
-                list.adapter = PremiumTextAdapter(items.map { it.name + if (kind == KIND_LIVE && it.archiveEnabled) "  •  أرشيف" else "" })
+                if (isPosterKind) {
+                    posterAdapter?.replace(items)
+                } else {
+                    liveList?.adapter = PremiumTextAdapter(items.map {
+                        it.name + if (it.archiveEnabled) getString(R.string.mobile_archive_suffix) else ""
+                    })
+                }
             }
         }
     }
@@ -121,24 +160,40 @@ class MobileContentActivity : AppCompatActivity() {
 
     private fun openStream(stream: StreamEntity) {
         when (kind) {
-            KIND_MOVIE -> startActivity(Intent(this, MovieDetailsActivity::class.java).apply { putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, stream.key) })
-            KIND_SERIES -> startActivity(Intent(this, SeriesDetailsActivity::class.java).apply { putExtra(SeriesDetailsActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(SeriesDetailsActivity.EXTRA_CONTENT_KEY, stream.key) })
+            KIND_MOVIE -> startActivity(Intent(this, MovieDetailsActivity::class.java).apply {
+                putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
+                putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
+            })
+            KIND_SERIES -> startActivity(Intent(this, SeriesDetailsActivity::class.java).apply {
+                putExtra(SeriesDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
+                putExtra(SeriesDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
+            })
             else -> {
                 val profile = ProviderProfile(provider.id, if (provider.liveFormat.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
                 startActivity(Intent(this, PlayerActivity::class.java).apply {
-                    putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.live(provider, profile, stream)); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
-                    putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(PlayerActivity.EXTRA_KIND, "live"); putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
-                    putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType); putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
-                    putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine); putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream)); putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
-                    putExtra(PlayerActivity.EXTRA_CATEGORY_ID, stream.categoryId); putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
+                    putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.live(provider, profile, stream))
+                    putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
+                    putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
+                    putExtra(PlayerActivity.EXTRA_KIND, "live")
+                    putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
+                    putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+                    putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+                    putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+                    putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
+                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream))
+                    putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
+                    putExtra(PlayerActivity.EXTRA_CATEGORY_ID, stream.categoryId)
+                    putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
                 })
             }
         }
     }
 
     private fun openCatchup(stream: StreamEntity) {
-        startActivity(Intent(this, CatchupActivity::class.java).apply { putExtra(CatchupActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(CatchupActivity.EXTRA_CONTENT_KEY, stream.key) })
+        startActivity(Intent(this, CatchupActivity::class.java).apply {
+            putExtra(CatchupActivity.EXTRA_PROVIDER_ID, provider.id)
+            putExtra(CatchupActivity.EXTRA_CONTENT_KEY, stream.key)
+        })
     }
 
     private fun fieldBackground() = GradientDrawable().apply {

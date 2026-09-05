@@ -13,7 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 
-internal class PosterStreamAdapter(
+class PosterStreamAdapter(
     private val onClick: (StreamEntity) -> Unit,
     private val onFocus: (StreamEntity) -> Unit = {}
 ) : RecyclerView.Adapter<PosterStreamAdapter.Holder>() {
@@ -138,7 +138,7 @@ internal class PosterStreamAdapter(
 
     override fun getItemCount(): Int = items.size
 
-    internal class Holder(itemView: View, val image: ImageView, val title: TextView, val meta: TextView, val rating: TextView) : RecyclerView.ViewHolder(itemView)
+    class Holder(itemView: View, val image: ImageView, val title: TextView, val meta: TextView, val rating: TextView) : RecyclerView.ViewHolder(itemView)
 
     private fun card(focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
