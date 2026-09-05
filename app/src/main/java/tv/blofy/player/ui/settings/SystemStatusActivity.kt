@@ -19,6 +19,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.data.CatalogManifestStore
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
@@ -59,15 +60,19 @@ class SystemStatusActivity : AppCompatActivity() {
                 val live = provider?.let { dao.catalogCountAll(it.id, "live") } ?: 0
                 val movies = provider?.let { dao.catalogCountAll(it.id, "movie") } ?: 0
                 val series = provider?.let { dao.catalogCountAll(it.id, "series") } ?: 0
+                val manifest = provider?.let { CatalogManifestStore.read(applicationContext, it.id) }
                 val activation = dao.activation()
                 Snapshot(
                     providerName = provider?.name,
                     providerType = provider?.providerType,
                     ready = provider?.let { CatalogSyncState.isReady(applicationContext, it.id) } == true,
+                    fullyReady = manifest?.fullyReady == true,
                     updatedAt = provider?.let { CatalogSyncState.lastUpdatedAt(applicationContext, it.id) } ?: 0L,
                     live = live,
                     movies = movies,
                     series = series,
+                    episodes = manifest?.episodeCount ?: 0,
+                    metadata = manifest?.metadataCount ?: 0,
                     storage = LocalStorageManager.stats(applicationContext),
                     activation = when {
                         activation == null -> "غير معروف"
@@ -101,8 +106,10 @@ class SystemStatusActivity : AppCompatActivity() {
                 "القنوات" to status.live.toString(),
                 "الأفلام" to status.movies.toString(),
                 "المسلسلات" to status.series.toString(),
-                "الإجمالي" to total.toString(),
-                "الكاش" to if (status.ready) "جاهز" else "يحتاج مزامنة",
+                "الحلقات المحفوظة" to status.episodes.toString(),
+                "تفاصيل المحتوى" to status.metadata.toString(),
+                "الإجمالي الأساسي" to total.toString(),
+                "الكاش الكامل" to if (status.fullyReady) "مكتمل 100٪" else if (status.ready) "جاري إكمال التفاصيل" else "يحتاج مزامنة",
                 "آخر تحديث" to formatTime(status.updatedAt)
             )
         })
@@ -182,7 +189,8 @@ class SystemStatusActivity : AppCompatActivity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private data class Snapshot(
-        val providerName: String?, val providerType: String?, val ready: Boolean, val updatedAt: Long,
-        val live: Int, val movies: Int, val series: Int, val storage: LocalStorageManager.StorageStats, val activation: String
+        val providerName: String?, val providerType: String?, val ready: Boolean, val fullyReady: Boolean, val updatedAt: Long,
+        val live: Int, val movies: Int, val series: Int, val episodes: Int, val metadata: Int,
+        val storage: LocalStorageManager.StorageStats, val activation: String
     )
 }
