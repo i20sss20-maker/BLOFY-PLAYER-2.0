@@ -4,11 +4,9 @@ import android.content.Context
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.flow.first
@@ -17,6 +15,7 @@ import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import java.util.concurrent.TimeUnit
 
+/** Explicit/manual catalog refresh only. Opening or resuming the app never schedules this worker. */
 class CatalogRefreshWorker(
     appContext: Context,
     params: WorkerParameters
@@ -37,10 +36,10 @@ class CatalogRefreshWorker(
             }
             if (sync.freshItemCount > 0 && sync.failedSectionCount == 0) {
                 CatalogSyncState.markReady(applicationContext, provider.id)
-                val warm = dao.latestHomeStreams(provider.id, 28)
+                val warm = dao.latestHomeStreams(provider.id, 40)
                 if (warm.isNotEmpty()) ArtworkLoader.warmPrefetch(
                     applicationContext,
-                    warm.map { it.icon ?: it.backdrop }
+                    warm.map { it.backdrop ?: it.icon }
                 )
                 Result.success()
             } else if (sync.failedSectionCount > 0) {
@@ -55,23 +54,16 @@ class CatalogRefreshWorker(
 
     companion object {
         private const val KEY_PROVIDER_ID = "provider_id"
-        private const val PERIODIC_NAME = "blofy-catalog-periodic"
+        private const val LEGACY_PERIODIC_NAME = "blofy-catalog-periodic"
         private const val NOW_NAME_PREFIX = "blofy-catalog-now:"
 
         private val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<CatalogRefreshWorker>(6, TimeUnit.HOURS)
-                .setConstraints(constraints)
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-                .build()
-            WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
-                PERIODIC_NAME,
-                ExistingPeriodicWorkPolicy.UPDATE,
-                request
-            )
+        /** Remove periodic work registered by older builds so upgrades become truly cache-first. */
+        fun cancelLegacyAutomatic(context: Context) {
+            WorkManager.getInstance(context.applicationContext).cancelUniqueWork(LEGACY_PERIODIC_NAME)
         }
 
         fun enqueueNow(context: Context, providerId: String) {
