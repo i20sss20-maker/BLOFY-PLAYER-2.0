@@ -19,6 +19,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -40,6 +41,8 @@ class MovieDetailsActivity : AppCompatActivity() {
             return
         }
 
+        val uiDirection = resources.configuration.layoutDirection
+        val contentGravity = Gravity.END
         val root = FrameLayout(this).apply { setBackgroundColor(0xFF090711.toInt()) }
         val backdrop = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
@@ -55,7 +58,7 @@ class MovieDetailsActivity : AppCompatActivity() {
 
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = uiDirection
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(48), dp(24), dp(48), dp(24))
         }
@@ -86,12 +89,12 @@ class MovieDetailsActivity : AppCompatActivity() {
             }
             posterCard.addView(poster, LinearLayout.LayoutParams(dp(242), dp(360)))
             ArtworkLoader.loadPriority(poster, listOf(metadata?.posterUrl, stream.icon, stream.backdrop))
-            body.addView(posterCard, LinearLayout.LayoutParams(dp(254), dp(372)).apply { marginStart = dp(34) })
+            body.addView(posterCard, LinearLayout.LayoutParams(dp(254), dp(372)).apply { marginEnd = dp(34) })
 
             val info = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
-                gravity = Gravity.TOP or Gravity.END
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                gravity = Gravity.TOP or contentGravity
+                layoutDirection = uiDirection
                 setPadding(dp(12), dp(8), dp(12), dp(32))
             }
             val scroll = ScrollView(this@MovieDetailsActivity).apply {
@@ -109,7 +112,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 letterSpacing = .12f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleBright)
-                gravity = Gravity.END
+                gravity = contentGravity
             })
 
             val title = metadata?.title?.takeIf(String::isNotBlank) ?: stream.name
@@ -120,7 +123,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                     contentDescription = title
                 }
                 info.addView(logo, LinearLayout.LayoutParams(dp(390), dp(86)).apply {
-                    gravity = Gravity.END
+                    gravity = contentGravity
                     topMargin = dp(4)
                 })
                 ArtworkLoader.load(logo, logoUrl)
@@ -130,7 +133,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 textSize = if (metadata?.logoUrl.isNullOrBlank()) 36f else 19f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
-                gravity = Gravity.END
+                gravity = contentGravity
                 maxLines = 2
                 includeFontPadding = false
                 alpha = if (metadata?.logoUrl.isNullOrBlank()) 1f else .9f
@@ -138,9 +141,9 @@ class MovieDetailsActivity : AppCompatActivity() {
 
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = buildList {
-                    add("فيلم")
+                    add(getString(R.string.details_movie_type))
                     (metadata?.releaseDate?.take(4) ?: stream.year)?.takeIf(String::isNotBlank)?.let(::add)
-                    metadata?.runtimeMinutes?.takeIf { it > 0 }?.let { add("$it دقيقة") }
+                    metadata?.runtimeMinutes?.takeIf { it > 0 }?.let { add(getString(R.string.details_minutes, it)) }
                         ?: stream.duration?.takeIf(String::isNotBlank)?.let(::add)
                     metadata?.rating?.let { add("★ %.1f/10".format(java.util.Locale.US, it)) }
                         ?: stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
@@ -154,27 +157,27 @@ class MovieDetailsActivity : AppCompatActivity() {
                 textSize = 13.5f
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(0xFFE8D8FA.toInt())
-                gravity = Gravity.END
+                gravity = contentGravity
                 setPadding(0, dp(7), 0, dp(10))
             })
 
             info.addView(TextView(this@MovieDetailsActivity).apply {
-                text = "القصة"
+                text = getString(R.string.details_story)
                 textSize = 13f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleSoft)
-                gravity = Gravity.END
+                gravity = contentGravity
                 setPadding(0, 0, 0, dp(3))
             })
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = metadata?.overview?.takeIf(String::isNotBlank)
                     ?: stream.plot?.takeIf(String::isNotBlank)
-                    ?: "لا يتوفر وصف لهذا الفيلم من السيرفر حاليًا."
+                    ?: getString(R.string.details_movie_no_description)
                 textSize = 15f
                 typeface = BlofyTvDesign.BodyTypeface
                 maxLines = 7
                 setTextColor(BlofyTvDesign.TextSecondary)
-                gravity = Gravity.END
+                gravity = contentGravity
                 setLineSpacing(0f, 1.16f)
                 setPadding(0, 0, 0, dp(9))
             })
@@ -185,7 +188,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                     textSize = 11.5f
                     typeface = BlofyTvDesign.MediumTypeface
                     setTextColor(BlofyTvDesign.TextMuted)
-                    gravity = Gravity.END
+                    gravity = contentGravity
                     maxLines = 2
                     setPadding(0, 0, 0, dp(8))
                 })
@@ -194,39 +197,39 @@ class MovieDetailsActivity : AppCompatActivity() {
             val resumeMs = watch?.positionMs ?: 0L
             val durationMs = watch?.durationMs ?: 0L
             if (resumeMs > 30_000L && durationMs > 0L) {
-                val progress = ((resumeMs * 100L) / durationMs).coerceIn(1, 99)
+                val progress = ((resumeMs * 100L) / durationMs).coerceIn(1, 99).toInt()
                 info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = "متابعة المشاهدة   •   $progress%"
+                    text = getString(R.string.details_continue_watching, progress)
                     textSize = 12.5f
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.Mint)
-                    gravity = Gravity.END
+                    gravity = contentGravity
                     setPadding(0, 0, 0, dp(7))
                 })
             }
 
             val actions = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
-                gravity = Gravity.END
+                layoutDirection = uiDirection
+                gravity = contentGravity
             }
-            val play = actionButton(if (resumeMs > 30_000L) "▶  استئناف" else "▶  شاهد الآن", true) {
+            val play = actionButton(getString(if (resumeMs > 30_000L) R.string.details_resume else R.string.details_watch_now), true) {
                 openPlayer(provider, stream, url, resumeMs)
             }
-            actions.addView(play, LinearLayout.LayoutParams(dp(182), dp(56)).apply { marginStart = dp(8) })
+            actions.addView(play, LinearLayout.LayoutParams(dp(182), dp(56)).apply { marginEnd = dp(8) })
             if (resumeMs > 30_000L) {
-                actions.addView(actionButton("↺  من البداية") { openPlayer(provider, stream, url, 0L) },
-                    LinearLayout.LayoutParams(dp(150), dp(56)).apply { marginStart = dp(8) })
+                actions.addView(actionButton(getString(R.string.details_start_over)) { openPlayer(provider, stream, url, 0L) },
+                    LinearLayout.LayoutParams(dp(150), dp(56)).apply { marginEnd = dp(8) })
             }
             metadata?.trailerUrl?.takeIf(String::isNotBlank)?.let { trailerUrl ->
-                actions.addView(actionButton("▷  الإعلان") { openExternal(trailerUrl) },
-                    LinearLayout.LayoutParams(dp(142), dp(56)).apply { marginStart = dp(8) })
+                actions.addView(actionButton(getString(R.string.details_trailer)) { openExternal(trailerUrl) },
+                    LinearLayout.LayoutParams(dp(142), dp(56)).apply { marginEnd = dp(8) })
             }
-            favoriteButton = actionButton(if (stream.favorite) "★  المفضلة" else "☆  المفضلة") {
+            favoriteButton = actionButton(getString(if (stream.favorite) R.string.details_favorite_on else R.string.details_favorite_off)) {
                 lifecycleScope.launch {
                     val current = dao.stream(contentKey) ?: return@launch
                     dao.setFavorite(contentKey, !current.favorite)
-                    favoriteButton.text = if (!current.favorite) "★  المفضلة" else "☆  المفضلة"
+                    favoriteButton.text = getString(if (!current.favorite) R.string.details_favorite_on else R.string.details_favorite_off)
                 }
             }
             actions.addView(favoriteButton, LinearLayout.LayoutParams(dp(150), dp(56)))
@@ -234,21 +237,21 @@ class MovieDetailsActivity : AppCompatActivity() {
 
             if (!metadata?.cast.isNullOrEmpty()) {
                 info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = "طاقم التمثيل"
+                    text = getString(R.string.details_cast)
                     textSize = 16f
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(Color.WHITE)
-                    gravity = Gravity.END
+                    gravity = contentGravity
                     setPadding(0, dp(14), 0, dp(5))
                 })
                 info.addView(CastStrip.build(this@MovieDetailsActivity, metadata?.cast.orEmpty()), LinearLayout.LayoutParams(-1, dp(184)))
             } else {
                 info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = "بيانات طاقم التمثيل غير متوفرة من السيرفر"
+                    text = getString(R.string.details_cast_unavailable)
                     textSize = 12f
                     typeface = BlofyTvDesign.BodyTypeface
                     setTextColor(BlofyTvDesign.TextMuted)
-                    gravity = Gravity.END
+                    gravity = contentGravity
                     setPadding(0, dp(12), 0, dp(4))
                 })
             }
@@ -277,7 +280,7 @@ class MovieDetailsActivity : AppCompatActivity() {
         runCatching {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { addCategory(Intent.CATEGORY_BROWSABLE) })
         }.onFailure {
-            Toast.makeText(this, "تعذر فتح الإعلان على هذا الجهاز", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.details_trailer_open_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
