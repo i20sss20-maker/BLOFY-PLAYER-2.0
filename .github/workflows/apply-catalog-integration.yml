@@ -1,0 +1,45 @@
+name: Apply catalog integration
+
+on:
+  push:
+    branches: [fix/catalog-preparation-recovery]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/catalog-preparation-recovery
+          fetch-depth: 0
+      - name: Reassemble and verify integration patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/blofy-full-integration.patch.gz.b64 \
+              .github/blofy-full-integration.patch.gz.b64.part2 \
+              .github/blofy-full-integration.patch.gz.b64.part3 > /tmp/integration.b64
+          test "$(wc -c < /tmp/integration.b64)" -eq 29772
+          echo '723fcfb0f1a8657af246d69db9cf2e46a6182d11ac33266dc6946e7e2652952b  /tmp/integration.b64' | sha256sum -c -
+          base64 -d /tmp/integration.b64 | gzip -dc > /tmp/integration.patch
+          echo 'b37c852f702f517643c9cefaaef05efd6ea0313de031a03dfdad9d61649db781  /tmp/integration.patch' | sha256sum -c -
+          git apply --check /tmp/integration.patch
+      - name: Apply full catalog, focus and playlist reconciliation integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply /tmp/integration.patch
+          rm -f .github/blofy-full-integration.patch.gz.b64 \
+                .github/blofy-full-integration.patch.gz.b64.part2 \
+                .github/blofy-full-integration.patch.gz.b64.part3 \
+                .github/workflows/apply-catalog-integration.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix(app): integrate complete catalog preparation, TV focus and playlist reconciliation'
+          git push origin HEAD:fix/catalog-preparation-recovery
