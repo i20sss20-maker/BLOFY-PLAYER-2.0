@@ -7,18 +7,16 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import tv.blofy.player.core.commercial.CommercialRuntime
 import tv.blofy.player.core.playback.SmartZappingInvalidator
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.catalog.ArtworkLoader
 
 /**
- * Startup-safe maintenance. Search-index repair and lightweight warm-up may always run after first
- * frame; network catalog refresh remains controlled by the commercial background-sync flag.
+ * Startup-safe local maintenance only. Opening BLOFY must never trigger a provider catalog refresh.
+ * Network refresh is reserved for the explicit refresh flow or a changed/new playlist.
  */
 object BackgroundCatalogEngine {
-    private const val REFRESH_AFTER_MS = 6 * 60 * 60_000L
-    private const val WARM_ART_LIMIT = 28
+    private const val WARM_ART_LIMIT = 40
     private const val STARTUP_GRACE_MS = 1_500L
     private const val INDEX_PREFS = "blofy_search_index"
     private const val INDEX_V9_PREFIX = "v9_ready_"
@@ -27,9 +25,6 @@ object BackgroundCatalogEngine {
 
     fun kick(context: Context) {
         val app = context.applicationContext
-        val backgroundSyncEnabled = CommercialRuntime.feature(app, CommercialRuntime.FEATURE_BACKGROUND_SYNC)
-        if (backgroundSyncEnabled) CatalogRefreshWorker.schedule(app)
-
         scope.launch {
             delay(STARTUP_GRACE_MS)
             val database = BlofyDatabase.get(app)
@@ -52,12 +47,19 @@ object BackgroundCatalogEngine {
 
             val warm = runCatching { dao.latestHomeStreams(provider.id, WARM_ART_LIMIT) }
                 .getOrDefault(emptyList())
-            if (warm.isNotEmpty()) ArtworkLoader.warmPrefetch(app, warm.map { it.icon ?: it.backdrop })
+            if (warm.isNotEmpty()) {
+                ArtworkLoader.warmPrefetch(app, warm.map { it.backdrop ?: it.icon })
+            }
 
-            if (!backgroundSyncEnabled || !dao.hasCatalog(provider.id)) return@launch
-            val last = CatalogSyncState.lastUpdatedAt(app, provider.id)
-            if (last <= 0L || System.currentTimeMillis() - last >= REFRESH_AFTER_MS) {
-                CatalogRefreshWorker.enqueueNow(app, provider.id)
+            // If a previous preload was interrupted, resume missing local cache only. This does not
+            // refresh the catalog and existing cached rows are skipped.
+            if (CatalogSyncState.isReady(app, provider.id)) {
+                if (!CatalogSyncState.areEpisodesReady(app, provider.id)) {
+                    EpisodeCatalogPreloader.schedule(app, provider.id, replace = false)
+                }
+                if (!CatalogSyncState.isMetadataReady(app, provider.id)) {
+                    MetadataCatalogPreloader.schedule(app, provider.id, replace = false)
+                }
             }
         }
     }
