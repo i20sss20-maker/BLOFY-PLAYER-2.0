@@ -25,6 +25,10 @@ object BackgroundCatalogEngine {
 
     fun kick(context: Context) {
         val app = context.applicationContext
+        // Older RC builds may already have registered a 6-hour WorkManager refresh. Cancel it once
+        // on startup so an upgraded install also obeys the new explicit-refresh-only contract.
+        CatalogRefreshWorker.cancelLegacyAutomatic(app)
+
         scope.launch {
             delay(STARTUP_GRACE_MS)
             val database = BlofyDatabase.get(app)
@@ -51,8 +55,8 @@ object BackgroundCatalogEngine {
                 ArtworkLoader.warmPrefetch(app, warm.map { it.backdrop ?: it.icon })
             }
 
-            // If a previous preload was interrupted, resume missing local cache only. This does not
-            // refresh the catalog and existing cached rows are skipped.
+            // Resume an interrupted one-time preload. Existing cached rows are skipped and the
+            // provider's core catalog is never downloaded again here.
             if (CatalogSyncState.isReady(app, provider.id)) {
                 if (!CatalogSyncState.areEpisodesReady(app, provider.id)) {
                     EpisodeCatalogPreloader.schedule(app, provider.id, replace = false)
