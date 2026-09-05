@@ -16,6 +16,7 @@ import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.preparation.CatalogEnrichmentLifecycle
 import tv.blofy.player.data.ResumeStateWriter
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
 import tv.blofy.player.ui.login.LoginPortalRefreshLifecycle
 import tv.blofy.player.ui.settings.RuntimeSettingsLifecycle
@@ -57,6 +58,7 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(LoginPortalRefreshLifecycle())
         registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
+        registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
 
         // Absolutely no Room open, migration, catalog repair, artwork preload or network wait is
         // allowed from Application startup. Catalog maintenance is started only after a screen has
