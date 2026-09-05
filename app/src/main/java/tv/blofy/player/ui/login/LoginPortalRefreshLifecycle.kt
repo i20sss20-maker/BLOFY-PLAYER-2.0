@@ -68,7 +68,9 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
                                 )
                             }
                             Toast.makeText(activity, activity.getString(R.string.refresh_site_success), Toast.LENGTH_SHORT).show()
-                            activity.refreshPortalPlaylistsFromLocal()
+                            // Keep current stable renderer until the in-place refresh callback is
+                            // integrated into LoginActivity itself in a dedicated UI pass.
+                            activity.recreate()
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
