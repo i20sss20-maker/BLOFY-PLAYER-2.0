@@ -13,12 +13,17 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
@@ -34,6 +39,8 @@ class ProviderManagerActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
     private lateinit var status: TextView
     private lateinit var addButton: Button
+    private lateinit var websiteRefreshButton: Button
+    private var refreshingFromWebsite = false
     private val focusButtons = linkedMapOf<String, Button>()
     private val isTv by lazy { DeviceClass.isTv(this) }
 
@@ -48,11 +55,24 @@ class ProviderManagerActivity : AppCompatActivity() {
             clipToPadding = false
         }
 
-        root.addView(TextView(this).apply {
+        val header = LinearLayout(this).apply {
+            orientation = if (isTv) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER_VERTICAL
+            clipChildren = false
+        }
+        val title = TextView(this).apply {
             text = "قوائم BLOFY"
             BlofyTvDesign.applyTitle(this)
             gravity = Gravity.RIGHT
+        }
+        header.addView(title, if (isTv) LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            else LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        websiteRefreshButton = actionButton("website_refresh", "↻  تحديث من الموقع") { refreshFromWebsite() }
+        header.addView(websiteRefreshButton, LinearLayout.LayoutParams(if (isTv) dp(250) else LinearLayout.LayoutParams.MATCH_PARENT, dp(56)).apply {
+            if (isTv) marginStart = dp(16) else topMargin = dp(10)
         })
+        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(TextView(this).apply {
             text = "اتصل مباشرة بالقائمة المحفوظة أو عدّل بياناتها"
             textSize = 16f
@@ -118,8 +138,50 @@ class ProviderManagerActivity : AppCompatActivity() {
         }
     }
 
+    private fun refreshFromWebsite() {
+        if (refreshingFromWebsite) return
+        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+        if (endpoint.isBlank()) {
+            status.text = "خدمة تحديث القوائم غير مهيأة"
+            return
+        }
+        refreshingFromWebsite = true
+        focusButtons.values.forEach { it.isEnabled = false }
+        websiteRefreshButton.text = "جاري التحديث..."
+        status.text = "جاري جلب القوائم وبياناتها من الموقع..."
+        lifecycleScope.launch {
+            try {
+                val result = withTimeout(20_000L) {
+                    withContext(Dispatchers.IO) {
+                        val dao = BlofyDatabase.get(applicationContext).dao()
+                        val synced = PortalPlaylistClient.sync(applicationContext, endpoint, dao, PortalPlaylistClient.SyncMode.PULL_ONLY)
+                        // Renaming/activation changes must not force a catalog download. Only
+                        // new sources or changed credentials are prepared on the next Connect.
+                        synced.changedProviderIds.forEach { CatalogSyncState.markPending(applicationContext, it) }
+                        synced.activeProvider?.let { dao.saveAndActivateProvider(it) }
+                        synced
+                    }
+                }
+                status.text = "تم التحديث من الموقع • ${result.remoteCount} قائمة"
+            } catch (_: TimeoutCancellationException) {
+                status.text = "انتهت مهلة التحديث • قوائمك محفوظة، حاول مرة أخرى"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status.text = "تعذر التحديث من الموقع • تحقق من الاتصال أو ربط الجهاز"
+            } finally {
+                refreshingFromWebsite = false
+                if (!isFinishing && !isDestroyed) {
+                    websiteRefreshButton.text = "↻  تحديث من الموقع"
+                    focusButtons.values.forEach { it.isEnabled = true }
+                    if (isTv && hasWindowFocus()) websiteRefreshButton.requestFocus()
+                }
+            }
+        }
+    }
+
     private fun render(items: List<ProviderEntity>) {
-        focusButtons.keys.filter { it !in setOf("add", "subscriber") }.toList().forEach { focusButtons.remove(it) }
+        focusButtons.keys.filter { it !in setOf("add", "subscriber", "website_refresh") }.toList().forEach { focusButtons.remove(it) }
         list.removeAllViews()
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
@@ -181,13 +243,13 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun restoreFocus() {
-        if (!isTv) return
+        if (!isTv || refreshingFromWebsite) return
         val key = FocusMemory.restore(this, SCREEN_KEY)
         val target = key?.let(focusButtons::get)
             ?: focusButtons.entries.firstOrNull { it.key.endsWith(":connect") }?.value
             ?: focusButtons["subscriber"]
             ?: addButton
-        target.post { if (!isFinishing) target.requestFocus() }
+        target.post { if (!isFinishing && !refreshingFromWebsite) target.requestFocus() }
     }
 
     private fun connect(provider: ProviderEntity) {
@@ -251,16 +313,18 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun actionButton(key: String, label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
+        id = View.generateViewId()
         text = label
         isAllCaps = false
         textSize = 14f
         typeface = BlofyTvDesign.BodyTypeface
         setTextColor(Color.WHITE)
         stateListAnimator = null
+        isEnabled = !refreshingFromWebsite
         BlofyTvDesign.installTvFocus(this, dp(17).toFloat(), 1.04f, primary) {
             if (isTv) FocusMemory.save(this@ProviderManagerActivity, SCREEN_KEY, key)
         }
-        setOnClickListener { action() }
+        setOnClickListener { if (!refreshingFromWebsite) action() }
         focusButtons[key] = this
     }
 

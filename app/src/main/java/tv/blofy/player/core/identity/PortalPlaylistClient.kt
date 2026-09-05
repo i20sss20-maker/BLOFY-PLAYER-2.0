@@ -4,6 +4,8 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -18,6 +20,8 @@ import tv.blofy.player.core.url.PlaylistUrlPolicy
 import java.util.concurrent.TimeUnit
 
 object PortalPlaylistClient {
+    enum class SyncMode { MERGE_AND_UPLOAD, PULL_ONLY }
+
     data class SyncResult(
         val activeProvider: ProviderEntity?,
         val providers: List<ProviderEntity>,
@@ -25,6 +29,7 @@ object PortalPlaylistClient {
         val remoteCount: Int
     )
 
+    private val syncMutex = Mutex()
     private val client = OkHttpClient.Builder()
         .callTimeout(12, TimeUnit.SECONDS)
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -33,7 +38,16 @@ object PortalPlaylistClient {
         .build()
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 
-    suspend fun sync(context: Context, baseUrl: String, dao: BlofyDao): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun sync(
+        context: Context,
+        baseUrl: String,
+        dao: BlofyDao,
+        mode: SyncMode = SyncMode.MERGE_AND_UPLOAD
+    ): SyncResult = syncMutex.withLock {
+        syncInternal(context, baseUrl, dao, mode)
+    }
+
+    private suspend fun syncInternal(context: Context, baseUrl: String, dao: BlofyDao, mode: SyncMode): SyncResult = withContext(Dispatchers.IO) {
         val endpoint = baseUrl.trim().trimEnd('/')
         if (endpoint.isBlank()) {
             val local = dao.allProviders().first()
@@ -81,22 +95,26 @@ object PortalPlaylistClient {
         }
 
         val remoteIds = remote.mapTo(hashSetOf()) { it.id }
-        local.filterNot { it.id in remoteIds }.forEach { provider ->
-            try {
-                push(
-                    endpoint,
-                    auth,
-                    provider.copy(enabled = provider.enabled && remoteActive == null)
-                )
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                // Upload is best-effort. The local playlist remains valid and MUST stay visible.
+        // The explicit "refresh from website" action is read-only remotely. It must never
+        // recreate site-deleted rows by uploading every unmatched local record.
+        if (mode == SyncMode.MERGE_AND_UPLOAD) {
+            local.filterNot { it.id in remoteIds }.forEach { provider ->
+                try {
+                    push(
+                        endpoint,
+                        auth,
+                        provider.copy(enabled = provider.enabled && remoteActive == null)
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Upload is best-effort. The local playlist remains valid and MUST stay visible.
+                }
             }
         }
 
-        // Merge both sources instead of returning portal rows only. Local credentials are durable
-        // and must never vanish just because the portal has not received them yet.
+        // Keep local-only rows until a separate, verified identity/deletion reconciliation.
+        // Never infer duplicates or permission to delete solely from a matching display name.
         val mergedById = linkedMapOf<String, ProviderEntity>()
         local.forEach { mergedById[it.id] = it }
         remoteProviders.forEach { remoteProvider ->
