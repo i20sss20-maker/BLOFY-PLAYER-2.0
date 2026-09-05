@@ -2,6 +2,8 @@ package tv.blofy.player
 
 import android.app.Application
 import android.content.Context
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +37,13 @@ class BlofyApp : Application() {
     override fun onCreate() {
         super.onCreate()
         current = this
+
+        // BLOFY's product language is English. Preserve an explicit user choice, but a fresh
+        // install must not inherit Arabic merely because the Android TV system locale is Arabic.
+        if (AppCompatDelegate.getApplicationLocales().isEmpty) {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
+        }
+
         CrashRecovery.install(this)
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
