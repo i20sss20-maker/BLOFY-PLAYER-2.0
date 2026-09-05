@@ -33,6 +33,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.home.HomeActivity
+import tv.blofy.player.ui.login.CatalogLoadingActivity
 import java.util.UUID
 
 class PlaylistActivity : AppCompatActivity() {
@@ -139,7 +140,7 @@ class PlaylistActivity : AppCompatActivity() {
                     next
                 }
                 setResult(RESULT_OK); status.text = if (connectAfter) "تم الحفظ • جاري الدخول" else "تم الحفظ"
-                if (connectAfter) { startActivity(Intent(this@PlaylistActivity, tv.blofy.player.ui.login.CatalogLoadingActivity::class.java).putExtra("provider_id", provider.id)); finish() } else finish()
+                if (connectAfter) { startActivity(Intent(this@PlaylistActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)); finish() } else finish()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { status.text = "تعذر تجهيز القائمة • ${error.message ?: "خطأ اتصال"}"; busy = false }
         }
