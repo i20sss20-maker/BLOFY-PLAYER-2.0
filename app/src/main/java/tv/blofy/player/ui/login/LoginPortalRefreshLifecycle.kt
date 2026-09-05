@@ -18,6 +18,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 
 /** Adds an explicit pull-only website refresh button to the root login screen. */
@@ -50,6 +51,7 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
             }
             setOnClickListener {
                 if (!isEnabled) return@setOnClickListener
+                val keepFocus = hasFocus()
                 activity.lifecycleScope.launch {
                     isEnabled = false
                     text = activity.getString(R.string.refreshing_from_website)
@@ -59,7 +61,7 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
                         if (endpoint.isBlank()) {
                             Toast.makeText(activity, activity.getString(R.string.refresh_site_missing), Toast.LENGTH_SHORT).show()
                         } else {
-                            withContext(Dispatchers.IO) {
+                            val sync = withContext(Dispatchers.IO) {
                                 PortalPlaylistClient.sync(
                                     activity.applicationContext,
                                     endpoint,
@@ -67,10 +69,12 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
                                     PortalPlaylistClient.SyncMode.PULL_ONLY
                                 )
                             }
-                            Toast.makeText(activity, activity.getString(R.string.refresh_site_success), Toast.LENGTH_SHORT).show()
-                            // Keep current stable renderer until the in-place refresh callback is
-                            // integrated into LoginActivity itself in a dedicated UI pass.
-                            activity.recreate()
+                            val rendered = renderPortalPlaylists(activity, sync.providers)
+                            if (rendered) {
+                                Toast.makeText(activity, activity.getString(R.string.refresh_site_success), Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(activity, activity.getString(R.string.refresh_site_failed), Toast.LENGTH_SHORT).show()
+                            }
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -79,6 +83,7 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
                     } finally {
                         isEnabled = true
                         text = activity.getString(R.string.refresh_from_website)
+                        if (keepFocus && kind == DeviceClass.Kind.TV) post { requestFocus() }
                     }
                 }
             }
@@ -96,6 +101,18 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
         }
         content.addView(button, params)
     }
+
+    /**
+     * LoginActivity already owns the playlist-card renderer. Reuse it after a pull-only sync so
+     * the user stays on the same screen and current activation/session state is not restarted.
+     * Reflection keeps this lifecycle helper UI-only and avoids widening LoginActivity's API.
+     */
+    private fun renderPortalPlaylists(activity: LoginActivity, providers: List<ProviderEntity>): Boolean = runCatching {
+        val method = LoginActivity::class.java.getDeclaredMethod("renderPortalPlaylists", List::class.java)
+        method.isAccessible = true
+        method.invoke(activity, providers)
+        true
+    }.getOrDefault(false)
 
     override fun onActivityStarted(activity: Activity) = Unit
     override fun onActivityResumed(activity: Activity) = Unit
