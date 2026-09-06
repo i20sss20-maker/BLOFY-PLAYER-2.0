@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -45,7 +46,7 @@ class CloudSyncActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
         })
         root.addView(TextView(this).apply {
-            text = "Backup and restore your profile experience"
+            text = "Backup, sync and move your profile experience safely"
             textSize = 14f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -70,10 +71,12 @@ class CloudSyncActivity : AppCompatActivity() {
 
         root.addView(actionButton("Sync now") { runSync() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
         root.addView(actionButton("Back up this profile") { backup() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
-        root.addView(actionButton("Restore from BLOFY Cloud") { confirmRestore() }, LinearLayout.LayoutParams(-1, dp(54)))
+        root.addView(actionButton("Restore from BLOFY Cloud") { confirmRestore() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
+        root.addView(actionButton("Generate Pair & Restore code") { createPairCode() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
+        root.addView(actionButton("Restore from another device") { askPairCode() }, LinearLayout.LayoutParams(-1, dp(54)))
 
         root.addView(TextView(this).apply {
-            text = "BLOFY Cloud saves Watchlist, hidden categories and Home layout only. Playlist credentials and playback URLs are never included in this backup."
+            text = "Pair codes are one-time and expire after 10 minutes. BLOFY Cloud transfers only Watchlist, hidden categories and Home layout. Playlist credentials and playback URLs are never included."
             textSize = 12f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -117,16 +120,65 @@ class CloudSyncActivity : AppCompatActivity() {
         }
     }
 
+    private fun createPairCode() = runOperation("Creating one-time Pair code…") {
+        val pair = ProfileCloudSync.createPairCodeActive(applicationContext)
+            ?: return@runOperation "Unable to create Pair code for this profile"
+        withContext(Dispatchers.Main) {
+            AlertDialog.Builder(this@CloudSyncActivity)
+                .setTitle("Pair & Restore")
+                .setMessage("Enter this code on the new device:\n\n${pair.code}\n\nExpires in ${pair.ttlMinutes} minutes. The code works once only.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+        "Pair code ${pair.code} ready • expires ${formatTime(pair.expiresAt)}"
+    }
+
+    private fun askPairCode() {
+        val field = EditText(this).apply {
+            hint = "8-character Pair code"
+            isSingleLine = true
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Restore from another device")
+            .setMessage("Generate a Pair code on your old device, then enter it here. This profile's local cloud data will be replaced.")
+            .setView(field)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Restore") { _, _ -> restorePair(field.text?.toString().orEmpty()) }
+            .show()
+    }
+
+    private fun restorePair(code: String) {
+        val clean = code.trim().uppercase()
+        if (!Regex("^[A-HJ-NP-Z2-9]{8}$").matches(clean)) {
+            renderState("Pair code must be 8 valid characters")
+            return
+        }
+        runOperation("Restoring from paired device…") {
+            val result = ProfileCloudSync.restorePairActive(applicationContext, clean)
+            result?.let { "Pair restore complete • revision ${it.revision}" }
+                ?: "Pair restore unavailable for this profile"
+        }
+    }
+
     private fun runOperation(message: String, block: suspend () -> String) {
         if (busy) return
         busy = true
         status.text = message
         lifecycleScope.launch {
             val text = runCatching { withContext(Dispatchers.IO) { block() } }
-                .getOrElse { "Cloud operation failed • ${it.message ?: "network error"}" }
+                .getOrElse { errorText(it.message ?: "network error") }
             busy = false
             renderState(text)
         }
+    }
+
+    private fun errorText(code: String): String = when (code) {
+        "pair_code_expired_or_used" -> "Pair code expired or was already used"
+        "same_device_pair" -> "Pair code must be used on a different device"
+        "unauthorized_device" -> "Device activation could not be verified"
+        "cloud_snapshot_missing" -> "Back up the old profile first, then create a Pair code"
+        else -> "Cloud operation failed • $code"
     }
 
     private fun renderState(message: String) {
