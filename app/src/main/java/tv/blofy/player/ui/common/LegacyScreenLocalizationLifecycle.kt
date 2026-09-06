@@ -2,11 +2,13 @@ package tv.blofy.player.ui.common
 
 import android.app.Activity
 import android.app.Application
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.TextView
+import androidx.core.os.ConfigurationCompat
 import tv.blofy.player.R
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.home.HomeActivity
@@ -124,8 +126,12 @@ class LegacyScreenLocalizationLifecycle : Application.ActivityLifecycleCallbacks
         if (replacement != null && replacement != raw) view.text = replacement
     }
 
-    private fun isArabic(activity: Activity): Boolean =
-        activity.resources.configuration.locales[0]?.language.equals("ar", ignoreCase = true)
+    private fun isArabic(activity: Activity): Boolean = isArabic(activity.resources.configuration)
+
+    // Configuration.locales requires API 24; the app also supports API 23 devices.
+    // Read the activity's app locale, not the process default or a secondary language.
+    internal fun isArabic(configuration: Configuration): Boolean =
+        ConfigurationCompat.getLocales(configuration)[0]?.language.equals("ar", ignoreCase = true)
 
     private fun loginEnglish(raw: String): String? {
         val exact = when (raw) {
