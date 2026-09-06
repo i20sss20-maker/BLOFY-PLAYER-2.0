@@ -15,6 +15,7 @@ import tv.blofy.player.ui.catalog.SmartCollectionsActivity
 import tv.blofy.player.ui.guide.LiveGuideActivity
 import tv.blofy.player.ui.home.ForYouActivity
 import tv.blofy.player.ui.library.LibraryActivity
+import tv.blofy.player.ui.library.ProfileWatchlistActivity
 import tv.blofy.player.ui.library.RecentChannelsActivity
 import tv.blofy.player.ui.profile.ProfilesActivity
 import tv.blofy.player.ui.search.SearchActivity
@@ -61,6 +62,7 @@ class QuickMenuActivity : AppCompatActivity() {
         addAction(panel, "▤", "دليل القنوات", "الآن، التالي وتشغيل مباشر", Intent(this, LiveGuideActivity::class.java))
         addAction(panel, "⌕", "البحث الشامل", "قنوات، أفلام، مسلسلات وممثلين", Intent(this, SearchActivity::class.java))
         addAction(panel, "▶", "متابعة المشاهدة", "ارجع لآخر نقطة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE))
+        addAction(panel, "＋", "قائمتي", "Watchlist خاصة بالملف الحالي", Intent(this, ProfileWatchlistActivity::class.java))
         addAction(panel, "★", "المفضلة", "اختياراتك المحفوظة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addAction(panel, "◉", "آخر القنوات", "ارجع للبث بسرعة", Intent(this, RecentChannelsActivity::class.java))
         addAction(panel, "◆", "BLOFY Collections", "الأعلى تقييمًا، 4K، عربي والجديد", Intent(this, SmartCollectionsActivity::class.java))
