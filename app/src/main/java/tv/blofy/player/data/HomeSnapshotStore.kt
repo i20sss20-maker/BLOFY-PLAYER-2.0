@@ -9,7 +9,11 @@ import tv.blofy.player.data.local.StreamEntity
 /** Stable, provider-local Home selection. Stores keys only; media stays in Room/disk cache. */
 object HomeSnapshotStore {
     private const val PREFS = "blofy_home_snapshot_v1"
-    private const val MAX_CANDIDATES = 1200
+
+    // Entry preparation must stay cheap on 1–2 GB Android boxes. Home consumes at most ~180
+    // unique keys across its rows, so reading/sorting 1,200 full entities only delayed first entry
+    // on very large libraries without improving the visible result.
+    private const val MAX_CANDIDATES = 420
     private val gson = Gson()
 
     data class Snapshot(
