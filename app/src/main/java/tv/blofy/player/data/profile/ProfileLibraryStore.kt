@@ -2,6 +2,7 @@ package tv.blofy.player.data.profile
 
 import android.content.Context
 import org.json.JSONArray
+import tv.blofy.player.core.profile.ProfileStore
 
 /** Per-profile UX state. Content keys are provider-local and safe to recreate after sync. */
 object ProfileLibraryStore {
@@ -9,14 +10,14 @@ object ProfileLibraryStore {
     private const val MAX_WATCHLIST = 500
     private const val MAX_HIDDEN_CATEGORIES = 500
 
-    fun watchlist(context: Context, profileId: String = BlofyProfileStore.storageNamespace(context)): Set<String> =
+    fun watchlist(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Set<String> =
         readSet(context, key(profileId, "watchlist"))
 
     fun setWatchlisted(
         context: Context,
         contentKey: String,
         enabled: Boolean,
-        profileId: String = BlofyProfileStore.storageNamespace(context),
+        profileId: String = ProfileStore.storageNamespace(context),
     ): Boolean {
         if (contentKey.isBlank()) return false
         val next = LinkedHashSet(watchlist(context, profileId))
@@ -28,14 +29,14 @@ object ProfileLibraryStore {
         return writeSet(context, key(profileId, "watchlist"), next)
     }
 
-    fun hiddenCategories(context: Context, profileId: String = BlofyProfileStore.storageNamespace(context)): Set<String> =
+    fun hiddenCategories(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Set<String> =
         readSet(context, key(profileId, "hidden_categories"))
 
     fun setCategoryHidden(
         context: Context,
         categoryKey: String,
         hidden: Boolean,
-        profileId: String = BlofyProfileStore.storageNamespace(context),
+        profileId: String = ProfileStore.storageNamespace(context),
     ): Boolean {
         if (categoryKey.isBlank()) return false
         val next = LinkedHashSet(hiddenCategories(context, profileId))
@@ -46,7 +47,7 @@ object ProfileLibraryStore {
         return writeSet(context, key(profileId, "hidden_categories"), next)
     }
 
-    fun homeRows(context: Context, profileId: String = BlofyProfileStore.storageNamespace(context)): List<String> {
+    fun homeRows(context: Context, profileId: String = ProfileStore.storageNamespace(context)): List<String> {
         val saved = readList(context, key(profileId, "home_rows"))
         return saved.ifEmpty { DEFAULT_HOME_ROWS }
     }
@@ -54,7 +55,7 @@ object ProfileLibraryStore {
     fun saveHomeRows(
         context: Context,
         rows: List<String>,
-        profileId: String = BlofyProfileStore.storageNamespace(context),
+        profileId: String = ProfileStore.storageNamespace(context),
     ): Boolean {
         val clean = rows.asSequence().map(String::trim).filter(String::isNotBlank).distinct().take(20).toList()
         return writeList(context, key(profileId, "home_rows"), clean)
