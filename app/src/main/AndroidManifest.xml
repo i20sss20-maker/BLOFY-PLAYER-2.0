@@ -10,6 +10,7 @@
         <activity android:name=".ui.subscription.SubscriptionActivity" android:exported="false" />
         <activity android:name=".ui.guide.LiveGuideActivity" android:exported="false" />
         <activity android:name=".ui.quick.QuickMenuActivity" android:exported="false" />
+        <activity android:name=".ui.profile.CloudSyncActivity" android:exported="false" />
         <activity android:name=".ui.profile.HomePersonalizationActivity" android:exported="false" />
         <activity android:name=".ui.profile.ProfilesActivity" android:exported="false" />
         <activity android:name=".ui.home.ForYouActivity" android:exported="false" />
