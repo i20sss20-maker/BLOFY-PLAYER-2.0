@@ -1,7 +1,9 @@
 package tv.blofy.player.ui.subscription
 
 import android.app.AlertDialog
+import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -30,6 +32,7 @@ class SubscriptionActivity : AppCompatActivity() {
     private lateinit var content: LinearLayout
     private lateinit var status: TextView
     private var loading = false
+    private var firstResume = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,6 +74,15 @@ class SubscriptionActivity : AppCompatActivity() {
         load()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (firstResume) {
+            firstResume = false
+            return
+        }
+        if (::status.isInitialized && !loading) load()
+    }
+
     private fun load() {
         if (loading) return
         val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
@@ -101,6 +113,7 @@ class SubscriptionActivity : AppCompatActivity() {
             buildString {
                 append("Active • ${current.planName ?: current.planKey ?: "BLOFY"}")
                 current.expiresAt?.let { append(" • until ${formatDate(it)}") }
+                if (current.maxDevices != null) append(" • ${current.maxDevices} device${if (current.maxDevices == 1) "" else "s"}")
             }
         } else "No active paid plan • choose a plan below"
 
@@ -170,10 +183,10 @@ class SubscriptionActivity : AppCompatActivity() {
                         "Total: ${SubscriptionClient.formatMoney(quote.amountMinor, quote.currency)}\n" +
                             "Devices: ${quote.maxDevices}\n" +
                             (quote.couponCode?.let { "Coupon: $it\n" } ?: "") +
-                            "\nCreating the order does not activate the plan until payment is verified."
+                            "\nThe device activates only after BLOFY receives a verified payment confirmation."
                     )
                     .setNegativeButton("Back", null)
-                    .setPositiveButton("Create order") { _, _ -> createOrder(plan, quote.couponCode) }
+                    .setPositiveButton("Continue to payment") { _, _ -> createOrder(plan, quote.couponCode) }
                     .show()
                 status.text = "Price ready"
             } catch (error: Throwable) {
@@ -191,18 +204,46 @@ class SubscriptionActivity : AppCompatActivity() {
                     SubscriptionClient.createOrder(applicationContext, endpoint, plan.key, coupon)
                 }
                 status.text = "Order ${order.orderId.take(8)}… created • awaiting payment"
-                AlertDialog.Builder(this@SubscriptionActivity)
-                    .setTitle("Order created")
-                    .setMessage(
-                        "Order: ${order.orderId}\n" +
-                            "Amount: ${SubscriptionClient.formatMoney(order.amountMinor, order.currency)}\n\n" +
-                            "Payment checkout will open here when the payment provider is connected. Your device will activate automatically only after a verified payment event."
-                    )
-                    .setPositiveButton("OK", null)
-                    .show()
+
+                val checkout = runCatching {
+                    withContext(Dispatchers.IO) {
+                        SubscriptionClient.checkoutUrl(applicationContext, endpoint, order.orderId)
+                    }
+                }.getOrNull()
+
+                if (!checkout.isNullOrBlank()) {
+                    AlertDialog.Builder(this@SubscriptionActivity)
+                        .setTitle("Secure payment")
+                        .setMessage(
+                            "Order: ${order.orderId}\n" +
+                                "Amount: ${SubscriptionClient.formatMoney(order.amountMinor, order.currency)}\n\n" +
+                                "Continue to the secure payment page. BLOFY will activate this device automatically after the signed payment confirmation is verified."
+                        )
+                        .setNegativeButton("Later", null)
+                        .setPositiveButton("Pay now") { _, _ -> openCheckout(checkout) }
+                        .show()
+                } else {
+                    AlertDialog.Builder(this@SubscriptionActivity)
+                        .setTitle("Order created")
+                        .setMessage(
+                            "Order: ${order.orderId}\n" +
+                                "Amount: ${SubscriptionClient.formatMoney(order.amountMinor, order.currency)}\n\n" +
+                                "The payment provider is not connected yet. The order remains pending and cannot activate the device without a verified payment event."
+                        )
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
             } catch (error: Throwable) {
                 status.text = "Unable to create order • ${error.message ?: "error"}"
             }
+        }
+    }
+
+    private fun openCheckout(url: String) {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { addCategory(Intent.CATEGORY_BROWSABLE) })
+        }.onFailure {
+            status.text = "Could not open secure payment page"
         }
     }
 
