@@ -14,9 +14,10 @@ import tv.blofy.player.core.profile.KidsContentGuard
 import tv.blofy.player.core.remote.QuickMenuInterceptor
 import tv.blofy.player.core.update.AppUpdateLifecycle
 import tv.blofy.player.data.ContentRepository
-import tv.blofy.player.data.preparation.CatalogEnrichmentLifecycle
 import tv.blofy.player.data.ResumeStateWriter
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.preparation.CatalogEnrichmentLifecycle
+import tv.blofy.player.data.preparation.StorageMaintenanceLifecycle
 import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
 import tv.blofy.player.ui.login.LoginPortalRefreshLifecycle
@@ -69,6 +70,7 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(ProfileCloudLifecycle())
         registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
         registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())
+        registerActivityLifecycleCallbacks(StorageMaintenanceLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
         registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
 
