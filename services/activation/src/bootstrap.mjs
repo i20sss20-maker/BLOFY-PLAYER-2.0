@@ -7,4 +7,5 @@ import './payment-order-maintenance.mjs';
 import './subscription-expiry-maintenance.mjs';
 import './commercial-readiness-hook.mjs';
 import './profile-cloud-hook.mjs';
+import './zid-commerce-hook.mjs';
 await import('./server.mjs');
