@@ -22,9 +22,8 @@ class KidsContentGuard : Application.ActivityLifecycleCallbacks {
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
         if (!ProfileStore.isKids(activity.applicationContext)) return
 
-        val providerId = activity.intent?.getStringExtra("provider_id").orEmpty()
         val contentKey = activity.intent?.getStringExtra("content_key").orEmpty()
-        if (providerId.isBlank() || contentKey.isBlank()) return
+        if (contentKey.isBlank()) return
 
         scope.launch {
             val blocked = runCatching {
@@ -33,7 +32,7 @@ class KidsContentGuard : Application.ActivityLifecycleCallbacks {
                     title = stream.name,
                     genre = stream.genre,
                     plot = stream.plot,
-                )
+                ) || stream.locked
             }.getOrDefault(false)
 
             if (blocked) withContext(Dispatchers.Main) {
@@ -55,17 +54,23 @@ class KidsContentGuard : Application.ActivityLifecycleCallbacks {
 
 object KidsPolicy {
     private val blockedTerms = listOf(
-        "adult", "adults only", "18+", "+18", "xxx", "porn", "erotic", "erotica",
-        "sex", "sexual", "nude", "nudity", "uncensored", "playboy",
-        "للكبار", "للبالغين", "بالغين", "اباح", "إباح", "جنسي", "جنسية", "عري"
+        "adult", "adults only", "18+", "+18", "18 plus", "r18", "r18+", "nc-17", "nc17", "tv-ma",
+        "xxx", "porn", "erotic", "erotica", "sex", "sexual", "nude", "nudity", "uncensored", "playboy",
+        "للكبار", "للبالغين", "بالغين", "18 سنة", "+18", "اباح", "إباح", "جنسي", "جنسية", "عري"
     )
 
+    // Keep this intentionally explicit. Kids Mode must hide clearly marked adult content without
+    // guessing from ordinary drama/action words and accidentally removing normal catalog items.
     fun isBlocked(title: String?, genre: String?, plot: String?): Boolean {
         val haystack = listOf(title, genre, plot)
             .filterNotNull()
             .joinToString(" ")
             .lowercase()
+            .replace('_', ' ')
         if (haystack.isBlank()) return false
-        return blockedTerms.any { haystack.contains(it.lowercase()) }
+        return blockedTerms.any { term ->
+            val normalized = term.lowercase()
+            haystack.contains(normalized)
+        }
     }
 }
