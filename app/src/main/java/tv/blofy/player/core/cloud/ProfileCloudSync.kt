@@ -66,7 +66,6 @@ object ProfileCloudSync {
         val profile = ProfileStore.active(context)
         if (profile.guest) return@withLock null
 
-        // Pairing must always represent the latest local state.
         val remote = ProfileCloudClient.get(context, endpoint, profile.id)
         val payload = ProfileLibraryStore.snapshotJson(context, profile.id)
         when (val saved = ProfileCloudClient.put(context, endpoint, profile.id, remote.revision, payload)) {
@@ -186,10 +185,33 @@ object ProfileCloudSync {
         val remoteRows = remote.optJSONArray("homeRows").strings(20).filter { it in ProfileLibraryStore.ALL_HOME_ROWS }
         val rows = (if (localRows.isNotEmpty()) localRows else remoteRows).distinct()
 
+        // Settings are explicit user intent. Start with the remote snapshot, then let the
+        // currently edited device win key-by-key. The service independently sanitizes this map.
+        val settings = JSONObject()
+        copySettings(remote.optJSONObject("settings"), settings)
+        copySettings(local.optJSONObject("settings"), settings)
+
         return JSONObject().apply {
             put("watchlist", JSONArray(mergedWatch))
             put("hiddenCategories", JSONArray(mergedHidden))
             put("homeRows", JSONArray(rows))
+            put("settings", settings)
+        }
+    }
+
+    private fun copySettings(source: JSONObject?, target: JSONObject) {
+        if (source == null) return
+        val keys = source.keys()
+        var count = target.length()
+        while (keys.hasNext() && count < 80) {
+            val key = keys.next()
+            if (!Regex("[A-Za-z0-9._-]{1,64}").matches(key)) continue
+            when (val value = source.opt(key)) {
+                is String -> target.put(key, value.take(256))
+                is Boolean, is Int, is Long, is Double -> target.put(key, value)
+                else -> continue
+            }
+            count++
         }
     }
 
@@ -206,7 +228,8 @@ object ProfileCloudSync {
     private fun isEffectivelyEmpty(payload: JSONObject): Boolean =
         payload.optJSONArray("watchlist").strings(1).isEmpty() &&
             payload.optJSONArray("hiddenCategories").strings(1).isEmpty() &&
-            payload.optJSONArray("homeRows").strings(20) == ProfileLibraryStore.DEFAULT_HOME_ROWS
+            payload.optJSONArray("homeRows").strings(20) == ProfileLibraryStore.DEFAULT_HOME_ROWS &&
+            (payload.optJSONObject("settings")?.length() ?: 0) == 0
 
     private fun fingerprint(payload: JSONObject): String = MessageDigest.getInstance("SHA-256")
         .digest(payload.toString().toByteArray(Charsets.UTF_8))
