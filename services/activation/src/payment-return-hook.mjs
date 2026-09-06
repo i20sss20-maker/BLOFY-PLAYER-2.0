@@ -58,11 +58,54 @@ function page(res, status, title, message, state = 'info') {
 async function loadOrder(orderId) {
   if (!pool || !/^[0-9a-f-]{36}$/i.test(orderId)) return null;
   const result = await pool.query(
-    `SELECT id,device_id,plan_key,status,amount_minor,currency,created_at,paid_at
+    `SELECT id,device_id,plan_key,status,amount_minor,currency,created_at,paid_at,coupon_code
      FROM subscription_orders WHERE id=$1 LIMIT 1`,
     [orderId]
   );
   return result.rows[0] || null;
+}
+
+/**
+ * A signed cancel return is authoritative only for an order that is still pending. Cancel it and
+ * release the coupon reservation in one transaction so abandoned checkouts cannot consume a
+ * limited promotion indefinitely. Paid/refunded/failed orders are never rewritten here.
+ */
+async function cancelPendingOrder(order) {
+  if (!pool || !order || order.status !== 'pending') return false;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cancelled = await client.query(
+      `UPDATE subscription_orders SET status='cancelled',updated_at=NOW()
+       WHERE id=$1 AND status='pending'
+       RETURNING coupon_code`,
+      [order.id]
+    );
+    if (!cancelled.rows[0]) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    const couponCode = cancelled.rows[0].coupon_code || null;
+    if (couponCode) {
+      const redemption = await client.query(
+        'DELETE FROM coupon_redemptions WHERE order_id=$1 AND code=$2 RETURNING id',
+        [order.id, couponCode]
+      );
+      if (redemption.rows[0]) {
+        await client.query(
+          'UPDATE coupons SET redemption_count=GREATEST(0,redemption_count-1),updated_at=NOW() WHERE code=$1',
+          [couponCode]
+        );
+      }
+    }
+    await client.query('COMMIT');
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function handleReturn(req, res, requestUrl, cancelled = false) {
@@ -78,7 +121,14 @@ async function handleReturn(req, res, requestUrl, cancelled = false) {
   }
 
   if (cancelled) {
-    return page(res, 200, 'Payment cancelled', 'No payment was confirmed. You can return to the app and try again.', 'info');
+    if (order.status === 'paid') {
+      return page(res, 200, 'Subscription activated', 'Payment was already confirmed and your BLOFY subscription is active.', 'success');
+    }
+    if (order.status === 'refunded') {
+      return page(res, 200, 'Payment refunded', 'This order has already been refunded and is no longer active.', 'error');
+    }
+    if (order.status === 'pending') await cancelPendingOrder(order);
+    return page(res, 200, 'Payment cancelled', 'No payment was confirmed. The pending order was closed and you can safely try again.', 'info');
   }
   if (order.status === 'paid') {
     return page(res, 200, 'Subscription activated', 'Payment was confirmed and your BLOFY subscription is active.', 'success');
