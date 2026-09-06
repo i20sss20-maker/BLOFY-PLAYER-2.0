@@ -9,6 +9,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -18,6 +19,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import tv.blofy.player.R
 import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.core.security.ParentalGate
+import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.common.BlofyTvDesign
 
 class ProfilesActivity : AppCompatActivity() {
@@ -47,7 +49,7 @@ class ProfilesActivity : AppCompatActivity() {
             gravity = Gravity.RIGHT
         })
         root.addView(TextView(this).apply {
-            text = "الملف الحالي: ${active.name}"
+            text = "الملف الحالي: ${active.name}  •  ${ProfileStore.all(this@ProfilesActivity).size}/8"
             textSize = 13f
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.RIGHT
@@ -64,7 +66,8 @@ class ProfilesActivity : AppCompatActivity() {
                 background = cardBg(profile.id == active.id, false)
                 addView(TextView(this@ProfilesActivity).apply {
                     val lock = if (profile.pinHash != null) "  🔒" else ""
-                    text = (if (profile.kids) "🧒  ${profile.name}" else "👤  ${profile.name}") + lock
+                    val icon = when { profile.kids -> "🧒"; profile.guest -> "◌"; else -> "👤" }
+                    text = "$icon  ${profile.name}$lock"
                     textSize = 19f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.WHITE)
@@ -72,6 +75,7 @@ class ProfilesActivity : AppCompatActivity() {
                 })
                 addView(TextView(this@ProfilesActivity).apply {
                     text = when {
+                        profile.guest -> "ملف ضيف • تفضيلات مستقلة"
                         profile.kids && profile.pinHash != null -> "وضع أطفال • محمي برمز PIN"
                         profile.kids -> "وضع أطفال • يمكن إضافة PIN خاص للملف"
                         else -> "المشاهدة والمفضلة والإعدادات الرئيسية"
@@ -90,6 +94,11 @@ class ProfilesActivity : AppCompatActivity() {
             root.addView(card, LinearLayout.LayoutParams(-1, dp(92)).apply { bottomMargin = dp(9) })
             if (index == 0) card.post { card.requestFocus() }
         }
+
+        val profileManagement = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
+        profileManagement.addView(actionButton("＋ إضافة ملف") { showCreateProfile() }, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginStart = dp(8) })
+        profileManagement.addView(actionButton("حذف الملف الحالي") { deleteActiveProfile() }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        root.addView(profileManagement, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(8) })
 
         root.addView(TextView(this).apply {
             text = "حماية الملف الحالي"
@@ -155,6 +164,50 @@ class ProfilesActivity : AppCompatActivity() {
             ParentalGate.clearPin(this); Toast.makeText(this, "تم إلغاء PIN المحتوى", Toast.LENGTH_SHORT).show(); render()
         }, LinearLayout.LayoutParams(0, dp(54), 1f))
         root.addView(parentalActions)
+    }
+
+    private fun showCreateProfile() {
+        val name = EditText(this).apply {
+            hint = "اسم الملف"
+            isSingleLine = true
+            setPadding(dp(18), dp(6), dp(18), dp(6))
+        }
+        val kids = CheckBox(this).apply { text = "وضع أطفال" }
+        val guest = CheckBox(this).apply { text = "ملف ضيف" }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(4), dp(18), 0)
+            addView(name, LinearLayout.LayoutParams(-1, dp(58)))
+            addView(kids)
+            addView(guest)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("إضافة ملف شخصي")
+            .setView(box)
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("إضافة") { _, _ ->
+                runCatching { ProfileStore.create(this, name.text?.toString().orEmpty(), kids.isChecked, guest.isChecked) }
+                    .onSuccess { render() }
+                    .onFailure { Toast.makeText(this, it.message ?: "تعذر إنشاء الملف", Toast.LENGTH_SHORT).show() }
+            }.show()
+    }
+
+    private fun deleteActiveProfile() {
+        val active = ProfileStore.active(this)
+        if (ProfileStore.all(this).size <= 1) {
+            Toast.makeText(this, "لا يمكن حذف آخر ملف", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("حذف ${active.name}؟")
+            .setMessage("سيتم حذف إعدادات Watchlist وترتيب الواجهة الخاصة بهذا الملف فقط.")
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("حذف") { _, _ ->
+                if (ProfileStore.delete(this, active.id)) {
+                    ProfileLibraryStore.clearProfile(this, active.id)
+                    render()
+                }
+            }.show()
     }
 
     private fun selectProfile(profile: ProfileStore.Profile) {
