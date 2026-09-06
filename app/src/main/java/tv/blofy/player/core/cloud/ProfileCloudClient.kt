@@ -19,6 +19,17 @@ object ProfileCloudClient {
         val updatedAt: Long?,
     )
 
+    data class PairCode(
+        val code: String,
+        val expiresAt: Long,
+        val ttlMinutes: Int,
+    )
+
+    data class PairRestore(
+        val revision: Long,
+        val payload: JSONObject,
+    )
+
     sealed class SaveResult {
         data class Saved(val revision: Long, val payload: JSONObject) : SaveResult()
         data class Conflict(val revision: Long) : SaveResult()
@@ -59,9 +70,7 @@ object ProfileCloudClient {
         expectedRevision: Long,
         payload: JSONObject,
     ): SaveResult {
-        val body = JSONObject().apply {
-            put("deviceId", DeviceIdentity.deviceId(context))
-            put("activationCode", DeviceIdentity.activationCode(context))
+        val body = authenticatedBody(context).apply {
             put("profileId", profileId)
             put("expectedRevision", expectedRevision)
             put("payload", payload)
@@ -83,6 +92,49 @@ object ProfileCloudClient {
                 payload = root.optJSONObject("payload") ?: payload,
             )
         }
+    }
+
+    suspend fun createPairCode(context: Context, baseUrl: String, profileId: String): PairCode {
+        val body = authenticatedBody(context).apply { put("profileId", profileId) }
+        val request = Request.Builder()
+            .url(endpoint(baseUrl) + "/pair/create")
+            .post(body.toString().toRequestBody(json))
+            .build()
+        client.newCall(request).awaitResponse().use { response ->
+            val raw = response.body?.string().orEmpty()
+            check(response.code == 201) { errorName(raw, "cloud_pair_create_http_${response.code}") }
+            val root = JSONObject(raw)
+            return PairCode(
+                code = root.getString("pairCode"),
+                expiresAt = root.optLong("expiresAt"),
+                ttlMinutes = root.optInt("ttlMinutes", 10),
+            )
+        }
+    }
+
+    suspend fun restorePairCode(context: Context, baseUrl: String, profileId: String, pairCode: String): PairRestore {
+        val body = authenticatedBody(context).apply {
+            put("profileId", profileId)
+            put("pairCode", pairCode.trim().uppercase())
+        }
+        val request = Request.Builder()
+            .url(endpoint(baseUrl) + "/pair/restore")
+            .post(body.toString().toRequestBody(json))
+            .build()
+        client.newCall(request).awaitResponse().use { response ->
+            val raw = response.body?.string().orEmpty()
+            check(response.isSuccessful) { errorName(raw, "cloud_pair_restore_http_${response.code}") }
+            val root = JSONObject(raw)
+            return PairRestore(
+                revision = root.optLong("revision", 1L),
+                payload = root.optJSONObject("payload") ?: JSONObject(),
+            )
+        }
+    }
+
+    private fun authenticatedBody(context: Context) = JSONObject().apply {
+        put("deviceId", DeviceIdentity.deviceId(context))
+        put("activationCode", DeviceIdentity.activationCode(context))
     }
 
     private fun endpoint(baseUrl: String): String = baseUrl.trim().trimEnd('/') + "/api/v1/cloud/profile"
