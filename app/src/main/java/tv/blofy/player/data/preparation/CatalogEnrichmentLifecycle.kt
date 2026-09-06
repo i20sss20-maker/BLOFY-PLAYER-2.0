@@ -2,6 +2,7 @@ package tv.blofy.player.data.preparation
 
 import android.app.Activity
 import android.app.Application
+import android.content.Context
 import android.os.Bundle
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -32,7 +33,16 @@ class CatalogEnrichmentLifecycle : Application.ActivityLifecycleCallbacks {
             delay(if (DeviceClass.isLowMemory(app)) 4_000L else 1_200L)
             if (activity.isFinishing || !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@launch
 
-            withContext(Dispatchers.IO) { LocalStorageManager.trimTemporaryIfNeeded(app) }
+            withContext(Dispatchers.IO) {
+                val prefs = app.getSharedPreferences(STORAGE_PREFS, Context.MODE_PRIVATE)
+                val now = System.currentTimeMillis()
+                val lastTrim = prefs.getLong(KEY_LAST_TRIM_AT, 0L)
+                val urgent = !LocalStorageManager.hasHealthyFreeSpace(app)
+                if (urgent || now - lastTrim >= STORAGE_TRIM_INTERVAL_MS) {
+                    runCatching { LocalStorageManager.trimTemporaryIfNeeded(app) }
+                    prefs.edit().putLong(KEY_LAST_TRIM_AT, now).apply()
+                }
+            }
             if (!LocalStorageManager.hasHealthyFreeSpace(app)) return@launch
 
             if (!activity.isFinishing && activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -40,10 +50,17 @@ class CatalogEnrichmentLifecycle : Application.ActivityLifecycleCallbacks {
             }
         }
     }
+
     override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
     override fun onActivityStarted(activity: Activity) = Unit
     override fun onActivityPaused(activity: Activity) = Unit
     override fun onActivityStopped(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
     override fun onActivityDestroyed(activity: Activity) = Unit
+
+    companion object {
+        private const val STORAGE_PREFS = "blofy_storage_maintenance_v1"
+        private const val KEY_LAST_TRIM_AT = "last_trim_at"
+        private const val STORAGE_TRIM_INTERVAL_MS = 6L * 60L * 60L * 1000L
+    }
 }
