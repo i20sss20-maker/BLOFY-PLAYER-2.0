@@ -17,6 +17,7 @@ import tv.blofy.player.ui.home.ForYouActivity
 import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.library.ProfileWatchlistActivity
 import tv.blofy.player.ui.library.RecentChannelsActivity
+import tv.blofy.player.ui.profile.CloudSyncActivity
 import tv.blofy.player.ui.profile.ProfilesActivity
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.CommercialSettingsActivity
@@ -66,6 +67,7 @@ class QuickMenuActivity : AppCompatActivity() {
         addAction(panel, "★", "المفضلة", "اختياراتك المحفوظة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addAction(panel, "◉", "آخر القنوات", "ارجع للبث بسرعة", Intent(this, RecentChannelsActivity::class.java))
         addAction(panel, "◆", "BLOFY Collections", "الأعلى تقييمًا، 4K، عربي والجديد", Intent(this, SmartCollectionsActivity::class.java))
+        addAction(panel, "☁", "BLOFY Cloud", "نسخ احتياطي ومزامنة واستعادة", Intent(this, CloudSyncActivity::class.java))
         addAction(panel, "👤", "الملفات والحماية", "الرئيسي، أطفال وPIN", Intent(this, ProfilesActivity::class.java))
         addAction(panel, "◈", "الأداء والاستقرار", "Safe Mode، الصور وFeature Flags", Intent(this, CommercialSettingsActivity::class.java))
         addAction(panel, "⚙", "الإعدادات", "المشغل، المحتوى والتطبيق", Intent(this, SettingsActivity::class.java))
