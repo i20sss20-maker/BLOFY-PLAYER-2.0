@@ -1,5 +1,6 @@
 package tv.blofy.player.core.device
 
+import android.app.ActivityManager
 import android.app.UiModeManager
 import android.content.Context
 import android.content.pm.PackageManager
@@ -7,6 +8,7 @@ import android.content.res.Configuration
 
 object DeviceClass {
     enum class Kind { TV, TABLET, PHONE }
+    enum class MemoryTier { LOW, NORMAL }
 
     fun detect(context: Context): Kind {
         val configuration = context.resources.configuration
@@ -33,5 +35,12 @@ object DeviceClass {
         return if (smallestScreenWidthDp >= 600) Kind.TABLET else Kind.PHONE
     }
 
+    /** Android's low-RAM signal is more reliable than guessing from brand/model names. */
+    fun memoryTier(context: Context): MemoryTier {
+        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        return if (manager?.isLowRamDevice == true) MemoryTier.LOW else MemoryTier.NORMAL
+    }
+
+    fun isLowMemory(context: Context): Boolean = memoryTier(context) == MemoryTier.LOW
     fun isTv(context: Context): Boolean = detect(context) == Kind.TV
 }
