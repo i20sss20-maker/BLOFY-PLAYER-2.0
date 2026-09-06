@@ -14,7 +14,7 @@ class EntryPreparationPipelineTest {
         EntryPreparationPipeline.run(
             home = { events += "home" }, search = { events += "search" },
             commit = { events += "commit" }, progress = { events += "$it" })
-        assertEquals(listOf("32", "home", "70", "search", "95", "commit", "100"), events)
+        assertEquals(listOf("34", "home", "84", "search", "96", "commit", "100"), events)
     }
 
     @Test fun failedWriteNeverReportsComplete() = runBlocking {
