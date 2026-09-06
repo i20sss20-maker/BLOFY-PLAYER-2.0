@@ -8,4 +8,5 @@ import './subscription-expiry-maintenance.mjs';
 import './commercial-readiness-hook.mjs';
 import './profile-cloud-hook.mjs';
 import './zid-commerce-hook.mjs';
+import './admin-session-hook.mjs';
 await import('./server.mjs');
