@@ -8,6 +8,7 @@ const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const PLAYLIST_ENCRYPTION_KEY = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
 const PAYMENT_CHECKOUT_URL = String(process.env.BLOFY_PAYMENT_CHECKOUT_URL || '').trim();
 const PAYMENT_CHECKOUT_SECRET = String(process.env.BLOFY_PAYMENT_CHECKOUT_SECRET || process.env.BLOFY_PAYMENT_WEBHOOK_SECRET || '').trim();
+const PUBLIC_BASE_URL = String(process.env.BLOFY_PUBLIC_BASE_URL || '').trim();
 const PATH = '/api/v1/subscriptions/checkout';
 const CHECKOUT_TTL_MS = 15 * 60 * 1000;
 
@@ -47,6 +48,20 @@ function checkoutBase() {
   try {
     const url = new URL(PAYMENT_CHECKOUT_URL);
     if (url.protocol !== 'https:') return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+function publicBase() {
+  if (!PUBLIC_BASE_URL) return null;
+  try {
+    const url = new URL(PUBLIC_BASE_URL);
+    if (url.protocol !== 'https:') return null;
+    url.pathname = '/';
+    url.search = '';
+    url.hash = '';
     return url;
   } catch {
     return null;
@@ -159,6 +174,19 @@ async function checkout(req, res) {
   url.searchParams.set('currency', String(order.currency).toUpperCase());
   url.searchParams.set('expires_at', String(expiresAtMs));
   url.searchParams.set('state', signature);
+
+  const publicUrl = publicBase();
+  if (publicUrl) {
+    const returnUrl = new URL('/payment/return', publicUrl);
+    const cancelUrl = new URL('/payment/cancel', publicUrl);
+    for (const callback of [returnUrl, cancelUrl]) {
+      callback.searchParams.set('order_id', order.id);
+      callback.searchParams.set('expires_at', String(expiresAtMs));
+      callback.searchParams.set('state', signature);
+    }
+    url.searchParams.set('return_url', returnUrl.toString());
+    url.searchParams.set('cancel_url', cancelUrl.toString());
+  }
 
   return sendJson(res, 200, {
     orderId: order.id,
