@@ -30,11 +30,29 @@ object CatalogManifestStore {
         return runCatching { gson.fromJson(raw, Manifest::class.java) }.getOrNull()
     }
 
-    suspend fun rebuild(context: Context, dao: BlofyDao, provider: ProviderEntity, completionVerified: Boolean = false, entryVerified: Boolean = false) {
-        val db = BlofyDatabase.get(context.applicationContext).openHelper.readableDatabase
-        val episodeCount = db.query("SELECT COUNT(*) FROM episodes WHERE providerId = ?", arrayOf(provider.id)).use { cursor ->
-            if (cursor.moveToFirst()) cursor.getInt(0) else 0
-        }
+    suspend fun rebuild(
+        context: Context,
+        dao: BlofyDao,
+        provider: ProviderEntity,
+        completionVerified: Boolean = false,
+        entryVerified: Boolean = false,
+    ) {
+        val previous = read(context, provider.id)
+        val deepAuditRequired = completionVerified || !entryVerified
+
+        // Entry readiness must not wait on counting a potentially huge episode table or opening the
+        // separate metadata database. Background enrichment performs the full audit later.
+        val episodeCount = if (deepAuditRequired) {
+            val db = BlofyDatabase.get(context.applicationContext).openHelper.readableDatabase
+            db.query("SELECT COUNT(*) FROM episodes WHERE providerId = ?", arrayOf(provider.id)).use { cursor ->
+                if (cursor.moveToFirst()) cursor.getInt(0) else 0
+            }
+        } else previous?.episodeCount ?: 0
+
+        val metadataCount = if (deepAuditRequired) {
+            ProviderMetadataCache.count(context, provider.id)
+        } else previous?.metadataCount ?: 0
+
         val manifest = Manifest(
             providerId = provider.id,
             generatedAt = System.currentTimeMillis(),
@@ -42,7 +60,7 @@ object CatalogManifestStore {
             movieCount = dao.catalogCountAll(provider.id, "movie"),
             seriesCount = dao.catalogCountAll(provider.id, "series"),
             episodeCount = episodeCount,
-            metadataCount = ProviderMetadataCache.count(context, provider.id),
+            metadataCount = metadataCount,
             fullyReady = completionVerified,
             entryReady = entryVerified || CatalogSyncState.isEntryReady(context, provider.id),
             catalogEpoch = CatalogSyncState.lastUpdatedAt(context, provider.id)
