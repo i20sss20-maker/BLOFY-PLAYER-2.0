@@ -17,10 +17,19 @@ test('subscription status accepts POST and reads credentials from JSON body', ()
   );
 });
 
-test('new Android client contract never requires credentials in a status URL', () => {
+test('POST subscription-status path never sources credentials directly from URL', () => {
+  const start = source.indexOf('async function subscriptionStatus');
+  const end = source.indexOf('async function reconcileDeviceEntitlement', start);
+  assert.ok(start >= 0 && end > start, 'subscriptionStatus handler must remain discoverable');
+  const block = source.slice(start, end);
   assert.doesNotMatch(
-    source,
-    /requestUrl\.searchParams\.get\('activationCode'\).*req\.method === 'POST'/s,
-    'POST credential handling must not source activationCode from the URL',
+    block,
+    /requestUrl\.searchParams\.get\('activationCode'\)/,
+    'subscriptionStatus must not read activationCode directly from the URL',
+  );
+  assert.match(
+    block,
+    /req\.method === 'POST' \? auth\.activationCode : auth\.get\('activationCode'\)/,
+    'POST activationCode must come from the parsed request body',
   );
 });
