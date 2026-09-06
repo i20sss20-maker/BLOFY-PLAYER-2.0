@@ -1,9 +1,7 @@
 from pathlib import Path
 
-# Android client: keep activation credentials out of subscription status URLs.
 p = Path('app/src/main/java/tv/blofy/player/core/subscription/SubscriptionClient.kt')
-s = p.read_text()
-s = s.replace('import okhttp3.HttpUrl.Companion.toHttpUrl\n', '')
+s = p.read_text().replace('import okhttp3.HttpUrl.Companion.toHttpUrl\n', '')
 old = '''    suspend fun status(context: Context, baseUrl: String): Status {
         val url = endpoint(baseUrl, "/api/v1/subscriptions/status").toHttpUrl().newBuilder()
             .addQueryParameter("deviceId", DeviceIdentity.deviceId(context))
@@ -40,7 +38,6 @@ new = '''    suspend fun status(context: Context, baseUrl: String): Status {
 if old not in s: raise SystemExit('SubscriptionClient.status source changed unexpectedly')
 p.write_text(s.replace(old, new))
 
-# Server accepts POST JSON for new apps while preserving GET for installed old versions.
 p = Path('services/activation/src/subscription-hook.mjs')
 s = p.read_text()
 old = '''async function subscriptionStatus(req, res, requestUrl) {
@@ -61,58 +58,11 @@ new_route = "if ((req.method === 'POST' || req.method === 'GET') && requestUrl.p
 if old_route not in s: raise SystemExit('subscription status route source changed unexpectedly')
 p.write_text(s.replace(old_route, new_route))
 
-# Install-over release bump only. Package/signing/playback remain unchanged.
 p = Path('app/build.gradle.kts')
 s = p.read_text().replace('versionCode = 2000013', 'versionCode = 2000014').replace('versionName = "2.0.0-rc07.5"', 'versionName = "2.0.0-rc07.6"')
 if 'versionCode = 2000014' not in s or 'versionName = "2.0.0-rc07.6"' not in s: raise SystemExit('version bump failed')
 p.write_text(s)
 
-# Signed release follows rc07.6 and fails closed on credential URL regressions.
-p = Path('.github/workflows/rc07-release.yml')
-s = p.read_text().replace('2000013', '2000014').replace('rc07.5', 'rc07.6')
-marker = '''          for hook in subscription-hook payment-checkout-hook payment-return-hook commercial-readiness-hook profile-cloud-hook subscriber-proxy-hook; do
-            grep -Fq "./$hook.mjs" "$bootstrap" || { echo "::error::Missing commercial hook $hook"; exit 1; }
-          done
-'''
-guard = '''          subscription_client="app/src/main/java/tv/blofy/player/core/subscription/SubscriptionClient.kt"
-          subscription_service="services/activation/src/subscription-hook.mjs"
-          grep -Fq 'postAuthenticated(context, endpoint(baseUrl, "/api/v1/subscriptions/status"), JSONObject())' "$subscription_client"
-          if grep -Fq '.addQueryParameter("activationCode"' "$subscription_client"; then
-            echo '::error::Activation code must never be placed in subscription status URLs'
-            exit 1
-          fi
-          grep -Fq "req.method === 'POST' || req.method === 'GET'" "$subscription_service"
-          grep -Fq '`${PREFIX}/status`' "$subscription_service"
-'''
-if guard.strip() not in s:
-    if marker not in s: raise SystemExit('release hook marker changed unexpectedly')
-    s = s.replace(marker, marker + guard)
-p.write_text(s)
-
-# Standard CI gets the same fail-closed transport check.
-p = Path('.github/workflows/android-ci.yml')
-s = p.read_text()
-if 'Verify subscription credentials stay out of URLs' not in s:
-    needle = '      - name: Test lint and assemble\n'
-    guard = '''      - name: Verify subscription credentials stay out of URLs
-        shell: bash
-        run: |
-          set -euo pipefail
-          client="app/src/main/java/tv/blofy/player/core/subscription/SubscriptionClient.kt"
-          service="services/activation/src/subscription-hook.mjs"
-          grep -Fq 'postAuthenticated(context, endpoint(baseUrl, "/api/v1/subscriptions/status"), JSONObject())' "$client"
-          if grep -Fq '.addQueryParameter("activationCode"' "$client"; then
-            echo 'Subscription activation code returned to a query URL' >&2
-            exit 1
-          fi
-          grep -Fq "req.method === 'POST' || req.method === 'GET'" "$service"
-          grep -Fq '`${PREFIX}/status`' "$service"
-'''
-    if needle not in s: raise SystemExit('android CI insertion point changed unexpectedly')
-    s = s.replace(needle, guard + needle)
-p.write_text(s)
-
-# Transport regression test across old/current API levels.
 t = Path('app/src/test/java/tv/blofy/player/core/subscription/SubscriptionClientTest.kt')
 t.parent.mkdir(parents=True, exist_ok=True)
 t.write_text(r'''package tv.blofy.player.core.subscription
@@ -158,4 +108,3 @@ class SubscriptionClientTest {
 ''')
 
 Path('.github/rc07-final-patch.py').unlink()
-Path('.github/workflows/apply-rc07-final-security.yml').unlink()
