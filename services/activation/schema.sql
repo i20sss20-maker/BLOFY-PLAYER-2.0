@@ -66,3 +66,92 @@ CREATE TABLE IF NOT EXISTS device_playlists (
 
 CREATE INDEX IF NOT EXISTS idx_device_playlists_device ON device_playlists(device_id, updated_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_device_playlists_one_active ON device_playlists(device_id) WHERE active = TRUE;
+
+-- Commercial subscription layer. Payment providers plug into this ledger; app/device
+-- activation remains provider-agnostic and is only granted after a verified paid order.
+CREATE TABLE IF NOT EXISTS subscription_plans (
+  plan_key TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  duration_days INTEGER CHECK (duration_days IS NULL OR duration_days > 0),
+  max_devices INTEGER NOT NULL DEFAULT 1 CHECK (max_devices > 0 AND max_devices <= 50),
+  price_minor BIGINT NOT NULL CHECK (price_minor >= 0),
+  currency TEXT NOT NULL DEFAULT 'SAR',
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS subscription_orders (
+  id UUID PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  plan_key TEXT NOT NULL REFERENCES subscription_plans(plan_key),
+  status TEXT NOT NULL CHECK (status IN ('pending','paid','failed','cancelled','refunded')),
+  amount_minor BIGINT NOT NULL CHECK (amount_minor >= 0),
+  currency TEXT NOT NULL,
+  payment_provider TEXT,
+  provider_reference TEXT,
+  coupon_code TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  paid_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscription_orders_device ON subscription_orders(device_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_subscription_orders_status ON subscription_orders(status, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_orders_provider_ref
+  ON subscription_orders(payment_provider, provider_reference)
+  WHERE payment_provider IS NOT NULL AND provider_reference IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS device_subscriptions (
+  id UUID PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  plan_key TEXT NOT NULL REFERENCES subscription_plans(plan_key),
+  order_id UUID REFERENCES subscription_orders(id) ON DELETE SET NULL,
+  starts_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ,
+  status TEXT NOT NULL CHECK (status IN ('active','expired','cancelled','refunded')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_subscriptions_device ON device_subscriptions(device_id, starts_at DESC);
+CREATE INDEX IF NOT EXISTS idx_device_subscriptions_active ON device_subscriptions(device_id, status, expires_at DESC);
+
+CREATE TABLE IF NOT EXISTS payment_events (
+  id BIGSERIAL PRIMARY KEY,
+  payment_provider TEXT NOT NULL,
+  provider_event_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  processing_status TEXT NOT NULL CHECK (processing_status IN ('received','applied','ignored','failed')),
+  error_code TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  processed_at TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_events_provider_event
+  ON payment_events(payment_provider, provider_event_id);
+
+CREATE TABLE IF NOT EXISTS coupons (
+  code TEXT PRIMARY KEY,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  discount_type TEXT NOT NULL CHECK (discount_type IN ('percent','fixed')),
+  discount_value BIGINT NOT NULL CHECK (discount_value > 0),
+  currency TEXT,
+  max_redemptions INTEGER CHECK (max_redemptions IS NULL OR max_redemptions > 0),
+  redemption_count INTEGER NOT NULL DEFAULT 0,
+  starts_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS coupon_redemptions (
+  id BIGSERIAL PRIMARY KEY,
+  code TEXT NOT NULL REFERENCES coupons(code),
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  order_id UUID NOT NULL REFERENCES subscription_orders(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(code, order_id)
+);
