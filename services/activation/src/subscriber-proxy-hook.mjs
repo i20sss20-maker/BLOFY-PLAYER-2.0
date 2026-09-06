@@ -167,12 +167,21 @@ async function fetchUpstream(url, req) {
     const value = req.headers[name];
     if (value) headers[name] = value;
   }
-  return fetch(url, {
-    method: 'GET',
-    headers,
-    redirect: 'follow',
-    signal: AbortSignal.timeout(30_000)
-  });
+
+  // The timeout protects only the upstream connection/response headers. Keeping the abort signal
+  // alive for 30 seconds aborts long-running live/VOD bodies even after playback has started.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    return await fetch(url, {
+      method: 'GET',
+      headers,
+      redirect: 'follow',
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function pipeUpstream(req, res, url, token) {
