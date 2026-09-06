@@ -54,6 +54,10 @@ object CatalogSyncState {
     }
     @Synchronized
     fun markPending(context: Context, providerId: String) {
+        // A working catalog is the last-known-good snapshot. Website/provider changes are staged
+        // beside it and must never revoke local entry before the replacement commits. This keeps
+        // exit/re-entry instant even when the network is down or a refresh later proves incomplete.
+        if (isReady(context, providerId)) return
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(ENTRY_EPOCH_PREFIX + providerId)
             .putBoolean(VERIFIED_PREFIX + providerId, false)
