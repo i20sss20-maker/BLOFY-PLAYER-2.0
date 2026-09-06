@@ -33,6 +33,12 @@ class CatalogRefreshWorker(
 
         if (!dao.hasCatalog(provider.id)) return Result.success()
 
+        val previousCounts = CatalogRefreshIntegrityPolicy.Counts(
+            live = dao.catalogCountAll(provider.id, "live"),
+            movies = dao.catalogCountAll(provider.id, "movie"),
+            series = dao.catalogCountAll(provider.id, "series")
+        )
+
         // A full provider refresh temporarily needs room for the staged replacement + SQLite WAL.
         // If storage is critically low, keep the known-good catalog and retry later instead of
         // risking a half-written refresh on small Android boxes.
@@ -52,6 +58,18 @@ class CatalogRefreshWorker(
             if (sync.freshItemCount <= 0 || sync.failedSectionCount > 0) {
                 dao.discardStagedCatalog(staged.id)
                 return if (sync.failedSectionCount > 0) Result.retry() else Result.success()
+            }
+
+            val candidateCounts = CatalogRefreshIntegrityPolicy.Counts(
+                live = dao.catalogCountAll(staged.id, "live"),
+                movies = dao.catalogCountAll(staged.id, "movie"),
+                series = dao.catalogCountAll(staged.id, "series")
+            )
+            if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
+                // A valid-looking HTTP/JSON response can still be truncated or temporarily empty.
+                // Never let that destroy a working local library; leave the previous snapshot live.
+                dao.discardStagedCatalog(staged.id)
+                return Result.retry()
             }
 
             // Promotion is one Room transaction. Until it succeeds the previous provider remains
