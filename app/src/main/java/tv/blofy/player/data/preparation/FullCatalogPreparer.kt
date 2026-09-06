@@ -14,6 +14,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -21,6 +22,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogManifestStore
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.HomeSnapshotStore
@@ -47,8 +49,6 @@ object FullCatalogPreparer {
     private val backgroundJobs = ConcurrentHashMap<String, BackgroundTask>()
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val gson = Gson()
-
-    private const val BACKGROUND_CONCURRENCY = 3
 
     data class Update(val percent: Int, val label: String)
     class Incomplete(val missingDetails: Long, val missingImages: Long) : Exception(
@@ -90,16 +90,9 @@ object FullCatalogPreparer {
                     },
                     progress = { percent -> progress(Update(percent, "Preparing local library")) }
                 )
-                // No HTTP/image/detail request belongs to this gate. openHome resumes enrichment
-                // separately; a failed or offline image server cannot hold the entry screen open.
-
             }
         }
 
-    /**
-     * A fully-ready library opens immediately on later launches, so preparation is not entered again.
-     * Restart background enrichment explicitly to continue from durable metadata/episode/artwork files.
-     */
     fun resumeBackground(context: Context, providerId: String) {
         val app = context.applicationContext
         val expectedEpoch = CatalogSyncState.lastUpdatedAt(app, providerId)
@@ -135,6 +128,9 @@ object FullCatalogPreparer {
         val db = BlofyDatabase.get(app)
         val dao = db.dao()
         val provider = dao.provider(providerId) ?: return
+        val lowMemory = DeviceClass.isLowMemory(app)
+        val pageSize = if (lowMemory) 20 else 42
+        val concurrency = if (lowMemory) 1 else 3
         suspend fun ensureSource() {
             currentCoroutineContext().ensureActive()
             val current = dao.provider(providerId)
@@ -154,10 +150,10 @@ object FullCatalogPreparer {
                 var after = 0L
                 while (true) {
                     ensureSource()
-                    val page = dao.catalogPageAfterAll(providerId, kind, after, 42)
+                    val page = dao.catalogPageAfterAll(providerId, kind, after, pageSize)
                     if (page.isEmpty()) break
                     if (kind != "live" && !provider.providerType.equals("m3u", true)) {
-                        for (group in page.chunked(BACKGROUND_CONCURRENCY)) {
+                        for (group in page.chunked(concurrency)) {
                             val results = coroutineScope {
                                 group.map { stream -> async {
                                     ensureSource()
@@ -178,17 +174,21 @@ object FullCatalogPreparer {
                     for (stream in page) {
                         ensureSource()
                         val metadata = ProviderMetadataCache.read(app, stream.key)
-                        for (raw in listOf(stream.icon, stream.backdrop, metadata?.posterUrl, metadata?.backdropUrl)
-                            .filterNotNull().map(String::trim).filter { it.isNotBlank() && it != "null" }.distinct()) {
+                        val artwork = listOf(stream.icon, stream.backdrop, metadata?.posterUrl, metadata?.backdropUrl)
+                            .filterNotNull().map(String::trim).filter { it.isNotBlank() && it != "null" }.distinct()
+                            .let { if (lowMemory) it.take(2) else it }
+                        for (raw in artwork) {
                             try { if (!ArtworkLoader.persist(app, resolve(provider, raw))) allImagesSaved = false }
                             catch (cancelled: CancellationException) { throw cancelled }
                             catch (full: ArtworkLoader.StorageFull) { throw full }
-                            catch (_: Exception) { allImagesSaved = false /* Retry on the next pass. */ }
+                            catch (_: Exception) { allImagesSaved = false }
                         }
                     }
                     val next = dao.streamRowId(page.last().key) ?: return
                     if (next <= after) return
                     after = next
+                    // Yield between pages on low-RAM boxes so UI, GC and remote input stay responsive.
+                    if (lowMemory) delay(25L)
                 }
             }
             ensureSource()
