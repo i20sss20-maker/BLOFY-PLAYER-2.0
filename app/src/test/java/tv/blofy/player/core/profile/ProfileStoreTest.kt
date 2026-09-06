@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [23, 28, 35], application = Application::class)
 class ProfileStoreTest {
-    private val app get() = RuntimeEnvironment.getApplication<Application>()
+    private val app get() = RuntimeEnvironment.getApplication()
 
     @Before fun reset() {
         app.getSharedPreferences("blofy_profiles", Context.MODE_PRIVATE).edit().clear().commit()

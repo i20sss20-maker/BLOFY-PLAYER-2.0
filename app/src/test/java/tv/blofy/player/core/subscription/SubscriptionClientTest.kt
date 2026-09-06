@@ -21,7 +21,7 @@ import tv.blofy.player.core.identity.DeviceIdentity
 @Config(sdk = [23, 28, 35], application = Application::class)
 class SubscriptionClientTest {
     private lateinit var server: MockWebServer
-    private val app get() = RuntimeEnvironment.getApplication<Application>()
+    private val app get() = RuntimeEnvironment.getApplication()
 
     @Before fun setup() { server = MockWebServer().also { it.start() } }
     @After fun cleanup() { server.shutdown() }
