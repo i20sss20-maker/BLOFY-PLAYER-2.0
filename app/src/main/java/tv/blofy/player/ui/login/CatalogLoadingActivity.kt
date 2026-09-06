@@ -26,6 +26,7 @@ import tv.blofy.player.data.preparation.CatalogLoadAttempt
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -275,6 +276,23 @@ class CatalogLoadingActivity : AppCompatActivity() {
         val firstLoad = withTimeout(20_000L) {
             withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
         }
+
+        // A staged refresh temporarily duplicates catalog rows. Clean disposable cache first and
+        // refuse the refresh if there is not enough disk headroom; the existing catalog stays safe.
+        if (!firstLoad) {
+            val storageReady = withContext(Dispatchers.IO) {
+                LocalStorageManager.prepareForCatalogRefresh(applicationContext)
+            }
+            if (!storageReady) {
+                CatalogSyncState.markReady(applicationContext, providerId)
+                render(30, getString(R.string.catalog_refresh_kept))
+                stage.setTextColor(BlofyTvDesign.Mint)
+                Toast.makeText(this, getString(R.string.storage_cleanup_message), Toast.LENGTH_LONG).show()
+                openHome(providerId)
+                return
+            }
+        }
+
         val syncProvider: ProviderEntity = if (firstLoad) {
             target.copy(enabled = true, updatedAt = System.currentTimeMillis())
         } else {
