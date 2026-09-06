@@ -7,6 +7,7 @@ const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const PLAYLIST_ENCRYPTION_KEY = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
 const PAYMENT_CHECKOUT_URL = String(process.env.BLOFY_PAYMENT_CHECKOUT_URL || '').trim();
 const PATH = '/api/v1/subscriptions/checkout';
+const CHECKOUT_TTL_MS = 15 * 60 * 1000;
 
 const pool = DATABASE_URL ? new Pool({
   connectionString: DATABASE_URL,
@@ -73,7 +74,7 @@ async function checkout(req, res) {
   if (!/^[0-9a-f-]{36}$/i.test(orderId)) return sendJson(res, 400, { error: 'invalid_order' });
 
   const result = await pool.query(
-    `SELECT id,device_id,plan_key,status,amount_minor,currency
+    `SELECT id,device_id,plan_key,status,amount_minor,currency,created_at
      FROM subscription_orders WHERE id=$1 AND device_id=$2 LIMIT 1`,
     [orderId, deviceId]
   );
@@ -81,6 +82,17 @@ async function checkout(req, res) {
   if (!order) return sendJson(res, 404, { error: 'order_not_found' });
   if (order.status === 'paid') return sendJson(res, 409, { error: 'order_already_paid' });
   if (order.status !== 'pending') return sendJson(res, 409, { error: 'order_not_payable' });
+
+  const createdAt = new Date(order.created_at).getTime();
+  const remainingMs = Number.isFinite(createdAt) ? (createdAt + CHECKOUT_TTL_MS - Date.now()) : 0;
+  if (remainingMs <= 0) {
+    await pool.query(
+      `UPDATE subscription_orders SET status='cancelled',updated_at=NOW()
+       WHERE id=$1 AND device_id=$2 AND status='pending'`,
+      [orderId, deviceId]
+    ).catch(() => {});
+    return sendJson(res, 410, { error: 'order_expired' });
+  }
 
   const url = new URL(base.toString());
   url.searchParams.set('order_id', order.id);
@@ -92,7 +104,7 @@ async function checkout(req, res) {
   return sendJson(res, 200, {
     orderId: order.id,
     checkoutUrl: url.toString(),
-    expiresInSeconds: 900
+    expiresInSeconds: Math.max(1, Math.min(900, Math.floor(remainingMs / 1000)))
   });
 }
 
