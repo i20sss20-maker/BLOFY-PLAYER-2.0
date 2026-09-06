@@ -11,11 +11,13 @@ object ProfileLibraryStore {
         val watchlist: List<String>,
         val hiddenCategories: List<String>,
         val homeRows: List<String>,
+        val settings: Map<String, Any>,
     )
 
     private const val PREFS = "blofy_profile_library_v1"
     private const val MAX_WATCHLIST = 500
     private const val MAX_HIDDEN_CATEGORIES = 500
+    private const val MAX_SETTINGS = 80
 
     fun watchlist(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Set<String> =
         readSet(context, key(profileId, "watchlist"))
@@ -108,10 +110,60 @@ object ProfileLibraryStore {
     fun resetHomeRows(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(key(profileId, "home_rows")).commit()
 
+    /** Small profile-owned preferences that are safe to sync (never credentials/playback URLs). */
+    fun settings(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Map<String, Any> {
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key(profileId, "settings"), null)
+            ?: return emptyMap()
+        return runCatching {
+            val json = JSONObject(raw)
+            buildMap {
+                val keys = json.keys()
+                while (keys.hasNext() && size < MAX_SETTINGS) {
+                    val name = keys.next()
+                    if (!SETTING_KEY.matches(name)) continue
+                    when (val value = json.opt(name)) {
+                        is String -> put(name, value.take(256))
+                        is Boolean -> put(name, value)
+                        is Int -> put(name, value)
+                        is Long -> put(name, value)
+                        is Double -> put(name, value)
+                    }
+                }
+            }
+        }.getOrDefault(emptyMap())
+    }
+
+    fun setSetting(
+        context: Context,
+        name: String,
+        value: Any?,
+        profileId: String = ProfileStore.storageNamespace(context),
+    ): Boolean {
+        if (!SETTING_KEY.matches(name)) return false
+        val next = LinkedHashMap(settings(context, profileId))
+        if (value == null) next.remove(name) else when (value) {
+            is String -> next[name] = value.take(256)
+            is Boolean, is Int, is Long, is Double -> next[name] = value
+            else -> return false
+        }
+        val json = JSONObject()
+        next.entries.take(MAX_SETTINGS).forEach { (k, v) -> json.put(k, v) }
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(key(profileId, "settings"), json.toString()).commit()
+    }
+
+    fun booleanSetting(
+        context: Context,
+        name: String,
+        default: Boolean,
+        profileId: String = ProfileStore.storageNamespace(context),
+    ): Boolean = settings(context, profileId)[name] as? Boolean ?: default
+
     fun snapshot(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Snapshot = Snapshot(
         watchlist = watchlist(context, profileId).toList().takeLast(MAX_WATCHLIST),
         hiddenCategories = hiddenCategories(context, profileId).toList().take(MAX_HIDDEN_CATEGORIES),
         homeRows = homeRows(context, profileId).filter { it in ALL_HOME_ROWS }.distinct().take(20),
+        settings = settings(context, profileId),
     )
 
     fun snapshotJson(context: Context, profileId: String = ProfileStore.storageNamespace(context)): JSONObject {
@@ -120,6 +172,7 @@ object ProfileLibraryStore {
             put("watchlist", JSONArray(value.watchlist))
             put("hiddenCategories", JSONArray(value.hiddenCategories))
             put("homeRows", JSONArray(value.homeRows))
+            put("settings", JSONObject(value.settings))
         }
     }
 
@@ -130,10 +183,12 @@ object ProfileLibraryStore {
         val rowValues = payload.optJSONArray("homeRows").asStringList(20)
             .filter { it in ALL_HOME_ROWS }
             .distinct()
+        val settingsJson = sanitizeSettings(payload.optJSONObject("settings"))
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val editor = prefs.edit()
             .putString(key(profileId, "watchlist"), JSONArray(watchlistValues).toString())
             .putString(key(profileId, "hidden_categories"), JSONArray(hiddenValues).toString())
+            .putString(key(profileId, "settings"), settingsJson.toString())
         if (rowValues.isEmpty()) editor.remove(key(profileId, "home_rows"))
         else editor.putString(key(profileId, "home_rows"), JSONArray(rowValues).toString())
         return editor.commit()
@@ -141,8 +196,29 @@ object ProfileLibraryStore {
 
     fun clearProfile(context: Context, profileId: String) {
         val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-        listOf("watchlist", "hidden_categories", "home_rows").forEach { editor.remove(key(profileId, it)) }
+        listOf("watchlist", "hidden_categories", "home_rows", "settings").forEach { editor.remove(key(profileId, it)) }
         editor.apply()
+    }
+
+    private fun sanitizeSettings(source: JSONObject?): JSONObject {
+        val result = JSONObject()
+        if (source == null) return result
+        val keys = source.keys()
+        var count = 0
+        while (keys.hasNext() && count < MAX_SETTINGS) {
+            val name = keys.next()
+            if (!SETTING_KEY.matches(name)) continue
+            when (val value = source.opt(name)) {
+                is String -> result.put(name, value.take(256))
+                is Boolean -> result.put(name, value)
+                is Int -> result.put(name, value)
+                is Long -> result.put(name, value)
+                is Double -> result.put(name, value)
+                else -> continue
+            }
+            count++
+        }
+        return result
     }
 
     private fun key(profileId: String, suffix: String) = "$profileId:$suffix"
@@ -188,4 +264,5 @@ object ProfileLibraryStore {
     )
 
     val DEFAULT_HOME_ROWS = ALL_HOME_ROWS
+    private val SETTING_KEY = Regex("[A-Za-z0-9._-]{1,64}")
 }
