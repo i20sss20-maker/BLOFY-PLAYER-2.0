@@ -88,10 +88,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 preflight = false
                 val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
                 if (!forceRefresh && CatalogSyncState.isEntryReady(applicationContext, providerId) && hasCachedCatalog) {
-                    openHome(providerId)
+                    openHome()
                 } else if (!forceRefresh && catalogReady && hasCachedCatalog) {
                     awaitEntryReadyCache(providerId)
-                    openHome(providerId)
+                    openHome()
                 } else {
                     // A manual refresh stages a replacement. Keep the old entry state until commit.
                     if (!hasCachedCatalog) CatalogSyncState.markPending(applicationContext, providerId)
@@ -288,7 +288,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 render(30, getString(R.string.catalog_refresh_kept))
                 stage.setTextColor(BlofyTvDesign.Mint)
                 Toast.makeText(this, getString(R.string.storage_cleanup_message), Toast.LENGTH_LONG).show()
-                openHome(providerId)
+                openHome()
                 return
             }
         }
@@ -326,7 +326,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             awaitEntryReadyCache(providerId)
             render(100, getString(R.string.catalog_complete))
             delay(120L)
-            openHome(providerId)
+            openHome()
         } catch (cancelled: CancellationException) {
             if (!catalogCommitted) {
                 withContext(NonCancellable + Dispatchers.IO) {
@@ -349,7 +349,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 stage.setTextColor(BlofyTvDesign.Mint)
                 Toast.makeText(this, getString(R.string.catalog_kept_opening), Toast.LENGTH_SHORT).show()
                 if (!CatalogSyncState.isEntryReady(applicationContext, providerId)) awaitEntryReadyCache(providerId)
-                openHome(providerId)
+                openHome()
             } else {
                 fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
             }
@@ -397,12 +397,11 @@ class CatalogLoadingActivity : AppCompatActivity() {
         readyStep.text = "${if (safe >= 100) "✓" else "○"}  ${getString(R.string.catalog_step_ready)}"
     }
 
-    private fun openHome(providerId: String) {
-        // Fully-ready libraries bypass preparation on later launches. Restart the durable
-        // background enrichment pass here so a force-close/reboot never loses progress.
+    private fun openHome() {
+        // CatalogEnrichmentLifecycle resumes durable enrichment after Home is interactive and
+        // storage is healthy. Starting it here would bypass its low-memory quiet period.
         startActivity(Intent(this, HomeActivity::class.java))
         finish()
-        FullCatalogPreparer.resumeBackground(applicationContext, providerId)
     }
 
     private fun fail(message: String) {

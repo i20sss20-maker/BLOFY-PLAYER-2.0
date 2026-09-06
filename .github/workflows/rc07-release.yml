@@ -13,8 +13,8 @@ concurrency:
 env:
   PRODUCTION_ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
-  EXPECTED_VERSION_CODE: "2000011"
-  EXPECTED_VERSION_NAME: 2.0.0-rc07.3
+  EXPECTED_VERSION_CODE: "2000012"
+  EXPECTED_VERSION_NAME: 2.0.0-rc07.4
   EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
   MEDIA3_VERSION: "1.6.1"
   FFMPEG_VERSION: n6.0
@@ -51,8 +51,8 @@ jobs:
           for value in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
           done
-          grep -Fq 'versionCode = 2000011' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.3"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000012' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.4"' app/build.gradle.kts
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
       - name: Install Android native and signing toolchain
         shell: bash
@@ -101,13 +101,23 @@ jobs:
           tools/build_media3_ffmpeg.sh
           aar="build/ffmpeg-native/media3-decoder-ffmpeg-$MEDIA3_VERSION.aar"
           test -s "$aar" && sha256sum --check "$aar.sha256"
-      - name: Verify bounded TV home snapshot
+      - name: Verify bounded and deferred catalog entry
         shell: bash
         run: |
           set -euo pipefail
           file="app/src/main/java/tv/blofy/player/ui/home/HomeActivity.kt"
           grep -Fq 'HomeSnapshotStore.read(applicationContext, provider.id)' "$file"
-          ! grep -Fq 'dao.allStreamsForProvider(provider.id).filter { it.kind == "movie" || it.kind == "series" }' "$file"
+          if grep -Fq 'dao.allStreamsForProvider(provider.id).filter { it.kind == "movie" || it.kind == "series" }' "$file"; then
+            echo '::error::Home must use a bounded local snapshot, not materialize the entire catalog'
+            exit 1
+          fi
+          # Only the registered lifecycle may start enrichment after Home's quiet period and
+          # storage checks. Explicit failures are required: negated grep bypasses bash errexit.
+          if grep -Fq 'FullCatalogPreparer.resumeBackground' app/src/main/java/tv/blofy/player/ui/login/CatalogLoadingActivity.kt; then
+            echo '::error::The loading screen must not bypass deferred catalog enrichment'
+            exit 1
+          fi
+          grep -Fq 'registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())' app/src/main/java/tv/blofy/player/BlofyApp.kt
       - name: Run tests lint and build signed release
         shell: bash
         env:
@@ -124,20 +134,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          cp app/build/outputs/apk/release/app-release.apk release/BLOFY-PLAYER-2.0-rc07.3.apk
-          cp app/build/outputs/bundle/release/app-release.aab release/BLOFY-PLAYER-2.0-rc07.3.aab
-          tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"; apk="release/BLOFY-PLAYER-2.0-rc07.3.apk"
+          cp app/build/outputs/apk/release/app-release.apk release/BLOFY-PLAYER-2.0-rc07.4.apk
+          cp app/build/outputs/bundle/release/app-release.aab release/BLOFY-PLAYER-2.0-rc07.4.aab
+          tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"; apk="release/BLOFY-PLAYER-2.0-rc07.4.apk"
           "$tools/aapt" dump badging "$apk" | tee release/apk-badging.txt
           grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$EXPECTED_VERSION_CODE' versionName='$EXPECTED_VERSION_NAME'" release/apk-badging.txt
           "$tools/zipalign" -c -P 16 -v 4 "$apk"
           "$tools/apksigner" verify --verbose --print-certs "$apk" | tee release/apk-signature.txt
           actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"; [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
-          jarsigner -verify -certs release/BLOFY-PLAYER-2.0-rc07.3.aab | tee release/aab-signature.txt
+          jarsigner -verify -certs release/BLOFY-PLAYER-2.0-rc07.4.aab | tee release/aab-signature.txt
           unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"; for abi in arm64-v8a armeabi-v7a x86 x86_64; do grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/apk-files.txt"; done
-          (cd release && sha256sum BLOFY-PLAYER-2.0-rc07.3.apk BLOFY-PLAYER-2.0-rc07.3.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
+          (cd release && sha256sum BLOFY-PLAYER-2.0-rc07.4.apk BLOFY-PLAYER-2.0-rc07.4.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc07.3-signed-${{ github.sha }}
+          name: BLOFY-PLAYER-2.0-rc07.4-signed-${{ github.sha }}
           path: release/
           if-no-files-found: error
           retention-days: 30
