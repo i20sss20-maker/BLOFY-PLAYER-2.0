@@ -130,6 +130,35 @@ function proxyBase(req, token) {
   return `${requestOrigin(req)}${XTREAM_PREFIX}/raw/${encodeURIComponent(token)}`;
 }
 
+function targetSignature(token, encodedTarget) {
+  return crypto.createHmac('sha256', encryptionKey).update(`${token}\n${encodedTarget}`).digest('base64url');
+}
+
+function proxyTargetUrl(req, token, target) {
+  const parsed = new URL(target);
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('invalid_proxy_target');
+  parsed.username = '';
+  parsed.password = '';
+  const encoded = Buffer.from(parsed.toString(), 'utf8').toString('base64url');
+  const signature = targetSignature(token, encoded);
+  return `${requestOrigin(req)}${XTREAM_PREFIX}/url/${encodeURIComponent(token)}/${encoded}/${signature}`;
+}
+
+function verifiedTarget(token, encoded, signature) {
+  try {
+    if (!encoded || encoded.length > 8192 || !signature) return null;
+    const expected = Buffer.from(targetSignature(token, encoded));
+    const supplied = Buffer.from(String(signature));
+    if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) return null;
+    const target = Buffer.from(encoded, 'base64url').toString('utf8');
+    const parsed = new URL(target);
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function replacePrivateOriginStream(req, token) {
   const needle = subscriberHost;
   const replacement = proxyBase(req, token);
@@ -147,6 +176,32 @@ function replacePrivateOriginStream(req, token) {
       callback(null, tail.split(needle).join(replacement));
     }
   });
+}
+
+function rewriteHlsManifest(req, token, text, effectiveUrl) {
+  const rewriteUri = (value) => {
+    try {
+      const absolute = new URL(value, effectiveUrl).toString();
+      return proxyTargetUrl(req, token, absolute);
+    } catch {
+      return value;
+    }
+  };
+
+  return text.split(/\r?\n/).map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return line;
+    if (trimmed.startsWith('#')) {
+      return line.replace(/URI=("([^"]+)"|'([^']+)'|([^,\s]+))/gi, (whole, _quoted, doubleValue, singleValue, bareValue) => {
+        const value = doubleValue || singleValue || bareValue || '';
+        const rewritten = rewriteUri(value);
+        if (doubleValue !== undefined) return `URI="${rewritten}"`;
+        if (singleValue !== undefined) return `URI='${rewritten}'`;
+        return `URI=${rewritten}`;
+      });
+    }
+    return rewriteUri(trimmed);
+  }).join('\n');
 }
 
 function copyUpstreamHeaders(upstream, res, { textual = false } = {}) {
@@ -168,8 +223,6 @@ async function fetchUpstream(url, req) {
     if (value) headers[name] = value;
   }
 
-  // The timeout protects only the upstream connection/response headers. Keeping the abort signal
-  // alive for 30 seconds aborts long-running live/VOD bodies even after playback has started.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
@@ -186,8 +239,9 @@ async function fetchUpstream(url, req) {
 
 async function pipeUpstream(req, res, url, token) {
   const upstream = await fetchUpstream(url, req);
+  const effectiveUrl = upstream.url || url;
   const type = String(upstream.headers.get('content-type') || '').toLowerCase();
-  const isHls = type.includes('mpegurl') || url.toLowerCase().includes('.m3u8');
+  const isHls = type.includes('mpegurl') || effectiveUrl.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('.m3u8');
   const isTextual = isHls || type.includes('json') || type.startsWith('text/');
 
   if (!upstream.body) {
@@ -197,17 +251,7 @@ async function pipeUpstream(req, res, url, token) {
 
   if (isHls) {
     const text = await upstream.text();
-    const rewritten = text.split(/\r?\n/).map((line) => {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) return line.split(subscriberHost).join(proxyBase(req, token));
-      try {
-        const absolute = new URL(trimmed, url);
-        if (absolute.href.startsWith(subscriberHost)) {
-          return `${proxyBase(req, token)}${absolute.pathname}${absolute.search}`;
-        }
-      } catch {}
-      return line.split(subscriberHost).join(proxyBase(req, token));
-    }).join('\n');
+    const rewritten = rewriteHlsManifest(req, token, text, effectiveUrl);
     const headers = {};
     for (const [key, value] of upstream.headers.entries()) {
       const lower = key.toLowerCase();
@@ -303,6 +347,18 @@ async function proxyStream(req, res, requestUrl) {
   return true;
 }
 
+async function proxySignedUrl(req, res, requestUrl) {
+  const match = requestUrl.pathname.match(new RegExp(`^${XTREAM_PREFIX}/url/([^/]+)/([^/]+)/([^/]+)$`));
+  if (!match) return false;
+  const token = decodeURIComponent(match[1]);
+  const session = openSession(token);
+  if (!session) return sendJson(res, 401, { error: 'subscriber_session_expired' });
+  const target = verifiedTarget(token, match[2], match[3]);
+  if (!target) return sendJson(res, 403, { error: 'invalid_proxy_target' });
+  await pipeUpstream(req, res, target, token);
+  return true;
+}
+
 async function proxyRaw(req, res, requestUrl) {
   const match = requestUrl.pathname.match(new RegExp(`^${XTREAM_PREFIX}/raw/([^/]+)(/.*)?$`));
   if (!match) return false;
@@ -330,6 +386,10 @@ async function handleSubscriberRequest(req, res) {
   }
   if (req.method === 'GET' && requestUrl.pathname === `${XTREAM_PREFIX}/player_api.php`) {
     await proxyPlayerApi(req, res, requestUrl);
+    return true;
+  }
+  if (req.method === 'GET' && requestUrl.pathname.startsWith(`${XTREAM_PREFIX}/url/`)) {
+    await proxySignedUrl(req, res, requestUrl);
     return true;
   }
   if (req.method === 'GET' && requestUrl.pathname.startsWith(`${XTREAM_PREFIX}/raw/`)) {
