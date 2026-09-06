@@ -11,8 +11,9 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.flow.first
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.data.remote.XtreamClient
-import tv.blofy.player.ui.catalog.ArtworkLoader
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /** Explicit/manual catalog refresh only. Opening or resuming the app never schedules this worker. */
@@ -21,7 +22,8 @@ class CatalogRefreshWorker(
     params: WorkerParameters
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
-        val dao = BlofyDatabase.get(applicationContext).dao()
+        val app = applicationContext
+        val dao = BlofyDatabase.get(app).dao()
         val providerId = inputData.getString(KEY_PROVIDER_ID)
         val provider = if (providerId.isNullOrBlank()) {
             dao.providers().first().firstOrNull()
@@ -30,24 +32,45 @@ class CatalogRefreshWorker(
         } ?: return Result.success()
 
         if (!dao.hasCatalog(provider.id)) return Result.success()
+
+        // A full provider refresh temporarily needs room for the staged replacement + SQLite WAL.
+        // If storage is critically low, keep the known-good catalog and retry later instead of
+        // risking a half-written refresh on small Android boxes.
+        LocalStorageManager.trimTemporaryIfNeeded(app)
+        if (!LocalStorageManager.hasHealthyFreeSpace(app)) return Result.retry()
+
+        val staged = provider.copy(
+            id = UUID.randomUUID().toString(),
+            enabled = false,
+            updatedAt = System.currentTimeMillis()
+        )
+        var promoted = false
         return try {
             val sync = PlaylistSyncPolicy.run {
-                PlaylistManager(XtreamClient.api, dao).syncAll(provider)
+                PlaylistManager(XtreamClient.api, dao).syncAll(staged)
             }
-            if (sync.freshItemCount > 0 && sync.failedSectionCount == 0) {
-                CatalogSyncState.markReady(applicationContext, provider.id)
-                val warm = dao.latestHomeStreams(provider.id, 40)
-                if (warm.isNotEmpty()) ArtworkLoader.warmPrefetch(
-                    applicationContext,
-                    warm.map { it.backdrop ?: it.icon }
-                )
-                Result.success()
-            } else if (sync.failedSectionCount > 0) {
-                Result.retry()
-            } else {
-                Result.success()
+            if (sync.freshItemCount <= 0 || sync.failedSectionCount > 0) {
+                dao.discardStagedCatalog(staged.id)
+                return if (sync.failedSectionCount > 0) Result.retry() else Result.success()
             }
+
+            // Promotion is one Room transaction. Until it succeeds the previous provider remains
+            // active and fully usable; this also avoids preserving flags by loading the old giant
+            // catalog into PlaylistManager memory during the network parse.
+            val refreshedProvider = provider.copy(enabled = true, updatedAt = staged.updatedAt)
+            dao.promoteStagedCatalog(staged.id, refreshedProvider)
+            promoted = true
+
+            ProviderMetadataCache.clearProvider(app, provider.id)
+            HomeSnapshotStore.clear(app, provider.id)
+            CatalogSyncState.markCatalogCommitted(app, provider.id)
+
+            // Keep the worker fast: only the small local entry snapshot/manifest is rebuilt here.
+            // Deep metadata, episodes and artwork resume later through the normal Home lifecycle.
+            tv.blofy.player.data.preparation.FullCatalogPreparer.prepare(app, provider.id) { }
+            Result.success()
         } catch (_: Throwable) {
+            if (!promoted) runCatching { dao.discardStagedCatalog(staged.id) }
             Result.retry()
         }
     }
