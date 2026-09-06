@@ -34,8 +34,11 @@ class LocalEntryIntegrationTest {
         server = MockWebServer().also { it.start() }
         provider = ProviderEntity(UUID.randomUUID().toString(), "Library", server.url("/").toString(), "u", "p")
         db.dao().upsertProvider(provider)
-        db.dao().upsertStreams(listOf(
-            stream("movie", 1), stream("series", 1), stream("live", 1)))
+        // Use the same transactional catalog path as a real sync. replaceCatalog maintains FTS
+        // incrementally, so the entry gate never has to rebuild a 200k+ item search index.
+        listOf("movie", "series", "live").forEach { kind ->
+            db.dao().replaceCatalog(provider.id, kind, emptyList(), listOf(stream(kind, 1)))
+        }
         CatalogSyncState.markCatalogCommitted(app, provider.id)
     }
 
@@ -70,7 +73,7 @@ class LocalEntryIntegrationTest {
     }
 
     @Test fun localSearchContainsEveryPageAndEveryKind() = runBlocking(Dispatchers.IO) {
-        db.dao().upsertStreams((2..1405).map { stream("movie", it) })
+        db.dao().replaceCatalog(provider.id, "movie", emptyList(), (1..1405).map { stream("movie", it) })
         prepare()
         val count = db.openHelper.readableDatabase.query(
             "SELECT COUNT(*) FROM streams_fts WHERE providerId=?", arrayOf(provider.id)
