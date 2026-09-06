@@ -3,6 +3,7 @@ package tv.blofy.player.data.profile
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import tv.blofy.player.core.cloud.ProfileCloudAutoSync
 import tv.blofy.player.core.profile.ProfileStore
 
 /** Per-profile UX state. Content keys are provider-local and safe to recreate after sync. */
@@ -38,7 +39,7 @@ object ProfileLibraryStore {
             next.add(contentKey)
             while (next.size > MAX_WATCHLIST) next.remove(next.first())
         } else next.remove(contentKey)
-        return writeSet(context, key(profileId, "watchlist"), next)
+        return writeAndSync(context, profileId) { writeSet(context, key(profileId, "watchlist"), next) }
     }
 
     fun hiddenCategories(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Set<String> =
@@ -56,7 +57,7 @@ object ProfileLibraryStore {
             next.add(categoryKey)
             while (next.size > MAX_HIDDEN_CATEGORIES) next.remove(next.first())
         } else next.remove(categoryKey)
-        return writeSet(context, key(profileId, "hidden_categories"), next)
+        return writeAndSync(context, profileId) { writeSet(context, key(profileId, "hidden_categories"), next) }
     }
 
     fun homeRows(context: Context, profileId: String = ProfileStore.storageNamespace(context)): List<String> {
@@ -75,7 +76,7 @@ object ProfileLibraryStore {
             .distinct()
             .take(20)
             .toList()
-        return writeList(context, key(profileId, "home_rows"), clean)
+        return writeAndSync(context, profileId) { writeList(context, key(profileId, "home_rows"), clean) }
     }
 
     fun setHomeRowEnabled(
@@ -108,7 +109,9 @@ object ProfileLibraryStore {
     }
 
     fun resetHomeRows(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(key(profileId, "home_rows")).commit()
+        writeAndSync(context, profileId) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(key(profileId, "home_rows")).commit()
+        }
 
     /** Small profile-owned preferences that are safe to sync (never credentials/playback URLs). */
     fun settings(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Map<String, Any> {
@@ -148,8 +151,10 @@ object ProfileLibraryStore {
         }
         val json = JSONObject()
         next.entries.take(MAX_SETTINGS).forEach { (k, v) -> json.put(k, v) }
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(key(profileId, "settings"), json.toString()).commit()
+        return writeAndSync(context, profileId) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(key(profileId, "settings"), json.toString()).commit()
+        }
     }
 
     fun booleanSetting(
@@ -195,9 +200,16 @@ object ProfileLibraryStore {
     }
 
     fun clearProfile(context: Context, profileId: String) {
+        ProfileCloudAutoSync.cancel(profileId)
         val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
         listOf("watchlist", "hidden_categories", "home_rows", "settings").forEach { editor.remove(key(profileId, it)) }
         editor.apply()
+    }
+
+    private fun writeAndSync(context: Context, profileId: String, write: () -> Boolean): Boolean {
+        val saved = write()
+        if (saved) ProfileCloudAutoSync.schedule(context, profileId)
+        return saved
     }
 
     private fun sanitizeSettings(source: JSONObject?): JSONObject {
