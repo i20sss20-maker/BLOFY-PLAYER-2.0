@@ -21,6 +21,7 @@ import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
 import tv.blofy.player.ui.login.LoginPortalRefreshLifecycle
 import tv.blofy.player.ui.profile.ProfileSwitcherLifecycle
 import tv.blofy.player.ui.settings.RuntimeSettingsLifecycle
+import tv.blofy.player.ui.subscription.SubscriptionEntryLifecycle
 
 class BlofyApp : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -58,6 +59,7 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
         registerActivityLifecycleCallbacks(LoginPortalRefreshLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
+        registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
         registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
         registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
