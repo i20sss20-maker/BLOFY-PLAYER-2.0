@@ -21,7 +21,9 @@ class CatalogSearchLifecycle : Application.ActivityLifecycleCallbacks {
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
         val kind = when (activity) {
             is ContentBrowserActivity -> activity.intent.getStringExtra(ContentBrowserActivity.EXTRA_KIND)
+                ?.ifBlank { SearchActivity.KIND_LIVE } ?: SearchActivity.KIND_LIVE
             is PosterCatalogActivity -> activity.intent.getStringExtra(PosterCatalogActivity.EXTRA_KIND)
+                ?.ifBlank { SearchActivity.KIND_MOVIE } ?: SearchActivity.KIND_MOVIE
             else -> null
         }?.lowercase()?.takeIf { it in SUPPORTED_KINDS } ?: return
         install(activity, kind)
