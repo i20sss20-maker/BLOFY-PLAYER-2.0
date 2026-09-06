@@ -38,6 +38,42 @@ class ContentRepository(private val dao: BlofyDao) {
         return dao.searchStreams(providerId, trimmed, 80)
     }
 
+    /**
+     * Fast local search scoped to one catalog kind. Use the FTS index first so a single character
+     * can return prefix matches without loading the whole catalog into memory. A bounded SQL
+     * fallback fills a section when the FTS index is still being rebuilt after an upgrade/refresh.
+     */
+    suspend fun searchKind(
+        providerId: String,
+        kind: String,
+        query: String,
+        limit: Int = 120
+    ): List<StreamEntity> {
+        val trimmed = query.trim()
+        if (trimmed.isBlank() || kind !in SEARCH_KINDS || limit <= 0) return emptyList()
+
+        val fts = ArabicSearchNormalizer.ftsQuery(trimmed)
+        val indexed = if (fts.isNotBlank()) {
+            runCatching {
+                dao.searchStreamsFts(providerId, fts, (limit * 4).coerceIn(limit, 600))
+                    .asSequence()
+                    .filter { it.kind == kind }
+                    .distinctBy { it.key }
+                    .take(limit)
+                    .toList()
+            }.getOrDefault(emptyList())
+        } else emptyList()
+
+        // When FTS already supplied a healthy page, avoid the slower LIKE scan entirely.
+        if (indexed.size >= minOf(limit, 24)) return indexed
+
+        val fallback = dao.searchCatalog(providerId, kind, trimmed, limit)
+        return (indexed.asSequence() + fallback.asSequence())
+            .distinctBy { it.key }
+            .take(limit)
+            .toList()
+    }
+
     suspend fun setFavorite(contentKey: String, favorite: Boolean) = dao.setFavorite(contentKey, favorite)
 
     suspend fun setLocked(contentKey: String, locked: Boolean) = dao.setLocked(contentKey, locked)
@@ -53,5 +89,9 @@ class ContentRepository(private val dao: BlofyDao) {
                 completed = durationMs > 0L && positionMs >= durationMs - 30_000L
             )
         )
+    }
+
+    private companion object {
+        val SEARCH_KINDS = setOf("live", "series", "movie")
     }
 }
