@@ -35,10 +35,18 @@ object DeviceClass {
         return if (smallestScreenWidthDp >= 600) Kind.TABLET else Kind.PHONE
     }
 
-    /** Android's low-RAM signal is more reliable than guessing from brand/model names. */
+    /**
+     * Prefer Android's low-RAM classification, but also protect inexpensive boxes whose firmware
+     * incorrectly reports NORMAL despite exposing a very small heap to the app. The fallback is
+     * deliberately based on the process heap rather than brand/model names so unknown devices are
+     * handled automatically.
+     */
     fun memoryTier(context: Context): MemoryTier {
         val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        return if (manager?.isLowRamDevice == true) MemoryTier.LOW else MemoryTier.NORMAL
+        val androidLowRam = manager?.isLowRamDevice == true
+        val heapLimitMb = Runtime.getRuntime().maxMemory() / (1024L * 1024L)
+        val constrainedHeap = heapLimitMb in 1..256
+        return if (androidLowRam || constrainedHeap) MemoryTier.LOW else MemoryTier.NORMAL
     }
 
     fun isLowMemory(context: Context): Boolean = memoryTier(context) == MemoryTier.LOW
