@@ -2,10 +2,17 @@ package tv.blofy.player.data.profile
 
 import android.content.Context
 import org.json.JSONArray
+import org.json.JSONObject
 import tv.blofy.player.core.profile.ProfileStore
 
 /** Per-profile UX state. Content keys are provider-local and safe to recreate after sync. */
 object ProfileLibraryStore {
+    data class Snapshot(
+        val watchlist: List<String>,
+        val hiddenCategories: List<String>,
+        val homeRows: List<String>,
+    )
+
     private const val PREFS = "blofy_profile_library_v1"
     private const val MAX_WATCHLIST = 500
     private const val MAX_HIDDEN_CATEGORIES = 500
@@ -101,6 +108,37 @@ object ProfileLibraryStore {
     fun resetHomeRows(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(key(profileId, "home_rows")).commit()
 
+    fun snapshot(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Snapshot = Snapshot(
+        watchlist = watchlist(context, profileId).toList().takeLast(MAX_WATCHLIST),
+        hiddenCategories = hiddenCategories(context, profileId).toList().take(MAX_HIDDEN_CATEGORIES),
+        homeRows = homeRows(context, profileId).filter { it in ALL_HOME_ROWS }.distinct().take(20),
+    )
+
+    fun snapshotJson(context: Context, profileId: String = ProfileStore.storageNamespace(context)): JSONObject {
+        val value = snapshot(context, profileId)
+        return JSONObject().apply {
+            put("watchlist", JSONArray(value.watchlist))
+            put("hiddenCategories", JSONArray(value.hiddenCategories))
+            put("homeRows", JSONArray(value.homeRows))
+        }
+    }
+
+    fun restoreSnapshot(context: Context, profileId: String, payload: JSONObject): Boolean {
+        if (profileId.isBlank()) return false
+        val watchlistValues = payload.optJSONArray("watchlist").asStringList(MAX_WATCHLIST)
+        val hiddenValues = payload.optJSONArray("hiddenCategories").asStringList(MAX_HIDDEN_CATEGORIES)
+        val rowValues = payload.optJSONArray("homeRows").asStringList(20)
+            .filter { it in ALL_HOME_ROWS }
+            .distinct()
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+            .putString(key(profileId, "watchlist"), JSONArray(watchlistValues).toString())
+            .putString(key(profileId, "hidden_categories"), JSONArray(hiddenValues).toString())
+        if (rowValues.isEmpty()) editor.remove(key(profileId, "home_rows"))
+        else editor.putString(key(profileId, "home_rows"), JSONArray(rowValues).toString())
+        return editor.commit()
+    }
+
     fun clearProfile(context: Context, profileId: String) {
         val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
         listOf("watchlist", "hidden_categories", "home_rows").forEach { editor.remove(key(profileId, it)) }
@@ -127,6 +165,16 @@ object ProfileLibraryStore {
         val array = JSONArray()
         values.forEach(array::put)
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(key, array.toString()).commit()
+    }
+
+    private fun JSONArray?.asStringList(limit: Int): List<String> {
+        if (this == null) return emptyList()
+        return buildList {
+            for (i in 0 until length()) {
+                optString(i).trim().takeIf(String::isNotBlank)?.let(::add)
+                if (size >= limit) break
+            }
+        }.distinct()
     }
 
     val ALL_HOME_ROWS = listOf(
