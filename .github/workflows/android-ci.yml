@@ -48,6 +48,40 @@ jobs:
             echo 'Unbounded Home catalog scan returned to source' >&2
             exit 1
           fi
+      - name: Verify large catalog sections stay streaming
+        shell: bash
+        run: |
+          set -euo pipefail
+          file="app/src/main/java/tv/blofy/player/data/PlaylistManager.kt"
+          grep -Fq 'parseStreamingArray(actionUrl(provider, "get_live_streams")' "$file"
+          grep -Fq 'parseStreamingArray(actionUrl(provider, "get_vod_streams")' "$file"
+          grep -Fq 'parseStreamingArray(actionUrl(provider, "get_series")' "$file"
+          if grep -Fq 'api.list(actionUrl(provider, "get_live_streams"))' "$file"; then
+            echo 'Live catalog regressed to full in-memory raw JSON buffering' >&2
+            exit 1
+          fi
+          if grep -Fq 'api.list(actionUrl(provider, "get_series"))' "$file"; then
+            echo 'Series catalog regressed to full in-memory raw JSON buffering' >&2
+            exit 1
+          fi
+      - name: Verify entry gate has no network enrichment
+        shell: bash
+        run: |
+          set -euo pipefail
+          file="app/src/main/java/tv/blofy/player/data/preparation/FullCatalogPreparer.kt"
+          grep -Fq 'EntryPreparationPipeline.run(' "$file"
+          grep -Fq 'HomeSnapshotStore.rebuild(app, dao, provider)' "$file"
+          grep -Fq 'CatalogSyncState.markEntryReady(app, providerId, expectedEpoch)' "$file"
+          # Network detail/artwork work must remain outside the entry pipeline.
+          start=$(grep -n 'EntryPreparationPipeline.run(' "$file" | head -1 | cut -d: -f1)
+          end=$(tail -n +"$start" "$file" | grep -n '^                )' | head -1 | cut -d: -f1)
+          if [ -n "$start" ] && [ -n "$end" ]; then
+            block=$(sed -n "${start},$((start + end - 1))p" "$file")
+            if printf '%s\n' "$block" | grep -Eq 'ArtworkLoader\.persist|XtreamClient\.api\.(jsonResponse|list|streamingResponse)'; then
+              echo 'Network enrichment returned to the first-entry gate' >&2
+              exit 1
+            fi
+          fi
       - name: Test lint and assemble
         shell: bash
         run: |
@@ -81,6 +115,8 @@ jobs:
             echo "activation=https://blofy-player-2-0.vercel.app"
             echo "home_snapshot=true"
             echo "home_bounded_cache=true"
+            echo "catalog_streaming=true"
+            echo "entry_gate_network_free=true"
             echo "metadata=provider_only"
           } > app/build/outputs/apk/debug/build-info.txt
           sha256sum "$APK" | tee app/build/outputs/apk/debug/app-debug.apk.sha256
