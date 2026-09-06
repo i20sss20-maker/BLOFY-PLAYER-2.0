@@ -2,6 +2,7 @@ package tv.blofy.player.ui.login
 
 import android.app.Activity
 import android.app.Application
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -70,10 +71,21 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
                                 )
                             }
                             val rendered = renderPortalPlaylists(activity, sync.providers)
-                            if (rendered) {
-                                Toast.makeText(activity, activity.getString(R.string.refresh_site_success), Toast.LENGTH_SHORT).show()
-                            } else {
+                            if (!rendered) {
                                 Toast.makeText(activity, activity.getString(R.string.refresh_site_failed), Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(activity, activity.getString(R.string.refresh_site_success), Toast.LENGTH_SHORT).show()
+                                // If the website changed credentials/host for the active playlist,
+                                // immediately stage a safe catalog refresh. The old catalog remains
+                                // usable until the staged replacement commits successfully.
+                                val active = sync.activeProvider
+                                if (active != null && active.id in sync.changedProviderIds) {
+                                    activity.startActivity(
+                                        Intent(activity, CatalogLoadingActivity::class.java)
+                                            .putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
+                                            .putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
+                                    )
+                                }
                             }
                         }
                     } catch (cancelled: CancellationException) {
@@ -83,7 +95,7 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
                     } finally {
                         isEnabled = true
                         text = activity.getString(R.string.refresh_from_website)
-                        if (keepFocus && kind == DeviceClass.Kind.TV) post { requestFocus() }
+                        if (keepFocus && kind == DeviceClass.Kind.TV && !activity.isFinishing) post { requestFocus() }
                     }
                 }
             }
@@ -102,11 +114,7 @@ class LoginPortalRefreshLifecycle : Application.ActivityLifecycleCallbacks {
         content.addView(button, params)
     }
 
-    /**
-     * LoginActivity already owns the playlist-card renderer. Reuse it after a pull-only sync so
-     * the user stays on the same screen and current activation/session state is not restarted.
-     * Reflection keeps this lifecycle helper UI-only and avoids widening LoginActivity's API.
-     */
+    /** Reuses LoginActivity's existing playlist renderer after a pull-only sync. */
     private fun renderPortalPlaylists(activity: LoginActivity, providers: List<ProviderEntity>): Boolean = runCatching {
         val method = LoginActivity::class.java.getDeclaredMethod("renderPortalPlaylists", List::class.java)
         method.isAccessible = true
