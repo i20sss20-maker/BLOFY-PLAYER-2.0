@@ -77,6 +77,42 @@ async function authorizedDevice(deviceId, activationCode) {
   return row;
 }
 
+/**
+ * A coupon is reserved when an order is created. If checkout is never completed, release that
+ * reservation atomically so abandoned/expired carts cannot exhaust a limited promotion.
+ */
+async function expirePendingOrder(orderId, deviceId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cancelled = await client.query(
+      `UPDATE subscription_orders SET status='cancelled',updated_at=NOW()
+       WHERE id=$1 AND device_id=$2 AND status='pending'
+       RETURNING coupon_code`,
+      [orderId, deviceId]
+    );
+    const couponCode = cancelled.rows[0]?.coupon_code || null;
+    if (couponCode) {
+      const redemption = await client.query(
+        'DELETE FROM coupon_redemptions WHERE order_id=$1 AND code=$2 RETURNING id',
+        [orderId, couponCode]
+      );
+      if (redemption.rows[0]) {
+        await client.query(
+          `UPDATE coupons SET redemption_count=GREATEST(0,redemption_count-1),updated_at=NOW() WHERE code=$1`,
+          [couponCode]
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function checkout(req, res) {
   const base = checkoutBase();
   if (!pool || !base || !PAYMENT_CHECKOUT_SECRET) {
@@ -110,11 +146,7 @@ async function checkout(req, res) {
   const expiresAtMs = Number.isFinite(createdAt) ? createdAt + CHECKOUT_TTL_MS : 0;
   const remainingMs = expiresAtMs - Date.now();
   if (remainingMs <= 0) {
-    await pool.query(
-      `UPDATE subscription_orders SET status='cancelled',updated_at=NOW()
-       WHERE id=$1 AND device_id=$2 AND status='pending'`,
-      [orderId, deviceId]
-    ).catch(() => {});
+    await expirePendingOrder(orderId, deviceId);
     return sendJson(res, 410, { error: 'order_expired' });
   }
 
