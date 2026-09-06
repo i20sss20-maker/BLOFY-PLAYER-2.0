@@ -13,6 +13,9 @@ object ProfileLibraryStore {
     fun watchlist(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Set<String> =
         readSet(context, key(profileId, "watchlist"))
 
+    fun isWatchlisted(context: Context, contentKey: String, profileId: String = ProfileStore.storageNamespace(context)): Boolean =
+        contentKey.isNotBlank() && watchlist(context, profileId).contains(contentKey)
+
     fun setWatchlisted(
         context: Context,
         contentKey: String,
@@ -57,9 +60,46 @@ object ProfileLibraryStore {
         rows: List<String>,
         profileId: String = ProfileStore.storageNamespace(context),
     ): Boolean {
-        val clean = rows.asSequence().map(String::trim).filter(String::isNotBlank).distinct().take(20).toList()
+        val clean = rows.asSequence()
+            .map(String::trim)
+            .filter { it in ALL_HOME_ROWS }
+            .distinct()
+            .take(20)
+            .toList()
         return writeList(context, key(profileId, "home_rows"), clean)
     }
+
+    fun setHomeRowEnabled(
+        context: Context,
+        row: String,
+        enabled: Boolean,
+        profileId: String = ProfileStore.storageNamespace(context),
+    ): Boolean {
+        if (row !in ALL_HOME_ROWS) return false
+        val next = homeRows(context, profileId).toMutableList()
+        next.remove(row)
+        if (enabled) next.add(row)
+        return saveHomeRows(context, next, profileId)
+    }
+
+    fun moveHomeRow(
+        context: Context,
+        row: String,
+        delta: Int,
+        profileId: String = ProfileStore.storageNamespace(context),
+    ): Boolean {
+        val next = homeRows(context, profileId).toMutableList()
+        val from = next.indexOf(row)
+        if (from < 0) return false
+        val to = (from + delta).coerceIn(0, next.lastIndex)
+        if (from == to) return true
+        next.removeAt(from)
+        next.add(to, row)
+        return saveHomeRows(context, next, profileId)
+    }
+
+    fun resetHomeRows(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(key(profileId, "home_rows")).commit()
 
     fun clearProfile(context: Context, profileId: String) {
         val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -89,7 +129,7 @@ object ProfileLibraryStore {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(key, array.toString()).commit()
     }
 
-    val DEFAULT_HOME_ROWS = listOf(
+    val ALL_HOME_ROWS = listOf(
         "continue_watching",
         "recent_channels",
         "watchlist",
@@ -98,4 +138,6 @@ object ProfileLibraryStore {
         "arabic",
         "uhd",
     )
+
+    val DEFAULT_HOME_ROWS = ALL_HOME_ROWS
 }
