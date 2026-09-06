@@ -111,6 +111,15 @@ object SubscriptionClient {
         )
     }
 
+    suspend fun checkoutUrl(context: Context, baseUrl: String, orderId: String): String {
+        val root = postAuthenticated(context, endpoint(baseUrl, "/api/v1/subscriptions/checkout"), JSONObject().apply {
+            put("orderId", orderId)
+        })
+        return root.getString("checkoutUrl").also {
+            check(it.startsWith("https://", ignoreCase = true)) { "invalid_checkout_url" }
+        }
+    }
+
     suspend fun status(context: Context, baseUrl: String): Status {
         val url = endpoint(baseUrl, "/api/v1/subscriptions/status").toHttpUrl().newBuilder()
             .addQueryParameter("deviceId", DeviceIdentity.deviceId(context))
