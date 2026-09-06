@@ -21,6 +21,7 @@ import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
 import tv.blofy.player.ui.login.LoginPortalRefreshLifecycle
 import tv.blofy.player.ui.profile.ProfileSwitcherLifecycle
+import tv.blofy.player.ui.profile.ProfileUxLifecycle
 import tv.blofy.player.ui.settings.RuntimeSettingsLifecycle
 import tv.blofy.player.ui.subscription.SubscriptionEntryLifecycle
 
@@ -61,6 +62,7 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(LoginPortalRefreshLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
         registerActivityLifecycleCallbacks(KidsContentGuard())
+        registerActivityLifecycleCallbacks(ProfileUxLifecycle())
         registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
         registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
