@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.commercial.CommercialConfigRepository
 import tv.blofy.player.core.commercial.CrashRecovery
+import tv.blofy.player.core.profile.KidsContentGuard
 import tv.blofy.player.core.remote.QuickMenuInterceptor
 import tv.blofy.player.core.update.AppUpdateLifecycle
 import tv.blofy.player.data.ContentRepository
@@ -59,6 +60,7 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
         registerActivityLifecycleCallbacks(LoginPortalRefreshLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
+        registerActivityLifecycleCallbacks(KidsContentGuard())
         registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
         registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
