@@ -60,6 +60,41 @@ object ProfileCloudSync {
         Result("restore", remote.revision, changedLocal = true)
     }
 
+    suspend fun createPairCodeActive(context: Context): ProfileCloudClient.PairCode? = mutex.withLock {
+        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+        if (endpoint.isBlank()) return@withLock null
+        val profile = ProfileStore.active(context)
+        if (profile.guest) return@withLock null
+
+        // Pairing must always represent the latest local state.
+        val remote = ProfileCloudClient.get(context, endpoint, profile.id)
+        val payload = ProfileLibraryStore.snapshotJson(context, profile.id)
+        when (val saved = ProfileCloudClient.put(context, endpoint, profile.id, remote.revision, payload)) {
+            is ProfileCloudClient.SaveResult.Saved -> remember(context, profile.id, saved.revision, fingerprint(saved.payload))
+            is ProfileCloudClient.SaveResult.Conflict -> {
+                val newest = ProfileCloudClient.get(context, endpoint, profile.id)
+                val merged = merge(newest.payload, payload)
+                val retried = ProfileCloudClient.put(context, endpoint, profile.id, newest.revision, merged)
+                if (retried is ProfileCloudClient.SaveResult.Saved) {
+                    ProfileLibraryStore.restoreSnapshot(context, profile.id, retried.payload)
+                    remember(context, profile.id, retried.revision, fingerprint(retried.payload))
+                } else return@withLock null
+            }
+        }
+        ProfileCloudClient.createPairCode(context, endpoint, profile.id)
+    }
+
+    suspend fun restorePairActive(context: Context, code: String): Result? = mutex.withLock {
+        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+        if (endpoint.isBlank()) return@withLock null
+        val profile = ProfileStore.active(context)
+        if (profile.guest) return@withLock null
+        val restored = ProfileCloudClient.restorePairCode(context, endpoint, profile.id, code)
+        ProfileLibraryStore.restoreSnapshot(context, profile.id, restored.payload)
+        remember(context, profile.id, restored.revision, fingerprint(ProfileLibraryStore.snapshotJson(context, profile.id)))
+        Result("pair_restore", restored.revision, changedLocal = true)
+    }
+
     fun lastSyncAt(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Long =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("$profileId:last_sync", 0L)
 
@@ -147,7 +182,6 @@ object ProfileCloudSync {
         val localHidden = local.optJSONArray("hiddenCategories").strings(500)
         val mergedHidden = LinkedHashSet<String>().apply { addAll(remoteHidden); addAll(localHidden) }.toList().take(500)
 
-        // Home order is explicit user intent, so the currently edited device wins when available.
         val localRows = local.optJSONArray("homeRows").strings(20).filter { it in ProfileLibraryStore.ALL_HOME_ROWS }
         val remoteRows = remote.optJSONArray("homeRows").strings(20).filter { it in ProfileLibraryStore.ALL_HOME_ROWS }
         val rows = (if (localRows.isNotEmpty()) localRows else remoteRows).distinct()
