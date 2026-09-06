@@ -64,6 +64,17 @@ jobs:
             echo 'Series catalog regressed to full in-memory raw JSON buffering' >&2
             exit 1
           fi
+      - name: Verify staged refresh promotes search index in place
+        shell: bash
+        run: |
+          set -euo pipefail
+          file="app/src/main/java/tv/blofy/player/data/local/BlofyDao.kt"
+          grep -Fq 'promoteStagedSearchIndexInPlace(stagedProviderId, targetProvider.id)' "$file"
+          if sed -n '/suspend fun promoteStagedCatalog/,/^    }/p' "$file" | grep -Fq 'rebuildSearchIndex(targetProvider.id)'; then
+            echo 'Large refresh regressed to a full search-index rebuild during promotion' >&2
+            exit 1
+          fi
+
       - name: Verify entry gate has no network enrichment
         shell: bash
         run: |

@@ -123,4 +123,35 @@ class LocalEntryIntegrationTest {
         prepare()
         assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
     }
+    @Test fun stagedRefreshPromotesSearchIndexWithoutFullRebuild() = runBlocking(Dispatchers.IO) {
+        val stagedId = UUID.randomUUID().toString()
+        val stagedProvider = provider.copy(id = stagedId, enabled = false)
+        db.dao().upsertProvider(stagedProvider)
+        val stagedStreams = (1..1605).map { id ->
+            StreamEntity(
+                "$stagedId:movie:$id", stagedId, id.toString(), null, "movie", "Refresh Item $id",
+                icon = null, addedAt = id.toLong()
+            )
+        }
+        db.dao().replaceCatalog(stagedId, "movie", emptyList(), stagedStreams)
+
+        db.dao().promoteStagedCatalog(
+            stagedId,
+            provider.copy(enabled = true, updatedAt = System.currentTimeMillis() + 10_000L)
+        )
+
+        val ftsCount = db.openHelper.readableDatabase.query(
+            "SELECT COUNT(*) FROM streams_fts WHERE providerId=?", arrayOf(provider.id)
+        ).use { it.moveToFirst(); it.getInt(0) }
+        val staleFtsCount = db.openHelper.readableDatabase.query(
+            "SELECT COUNT(*) FROM streams_fts WHERE providerId=?", arrayOf(stagedId)
+        ).use { it.moveToFirst(); it.getInt(0) }
+        val promoted = db.dao().searchStreamsFts(provider.id, "Refresh*", 10)
+
+        assertEquals(1605, ftsCount)
+        assertEquals(0, staleFtsCount)
+        assertTrue(promoted.isNotEmpty())
+        assertTrue(promoted.all { it.providerId == provider.id && it.key.startsWith(provider.id + ":movie:") })
+    }
+
 }

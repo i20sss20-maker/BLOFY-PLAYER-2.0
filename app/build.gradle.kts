@@ -30,8 +30,8 @@ android {
         applicationId = "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2000012
-        versionName = "2.0.0-rc07.4"
+        versionCode = 2000013
+        versionName = "2.0.0-rc07.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
