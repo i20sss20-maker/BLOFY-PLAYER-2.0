@@ -1,7 +1,6 @@
 package tv.blofy.player.core.subscription
 
 import android.content.Context
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -121,23 +120,16 @@ object SubscriptionClient {
     }
 
     suspend fun status(context: Context, baseUrl: String): Status {
-        val url = endpoint(baseUrl, "/api/v1/subscriptions/status").toHttpUrl().newBuilder()
-            .addQueryParameter("deviceId", DeviceIdentity.deviceId(context))
-            .addQueryParameter("activationCode", DeviceIdentity.activationCode(context))
-            .build()
-        val request = Request.Builder().url(url).get().build()
-        client.newCall(request).awaitResponse().use { response ->
-            check(response.isSuccessful) { "subscription_status_http_${response.code}" }
-            val root = JSONObject(response.body?.string().orEmpty())
-            return Status(
-                active = root.optBoolean("active", false),
-                planKey = root.optString("planKey").takeIf(String::isNotBlank),
-                planName = root.optString("planName").takeIf(String::isNotBlank),
-                maxDevices = if (root.has("maxDevices") && !root.isNull("maxDevices")) root.optInt("maxDevices") else null,
-                startsAt = if (root.has("startsAt") && !root.isNull("startsAt")) root.optLong("startsAt") else null,
-                expiresAt = if (root.has("expiresAt") && !root.isNull("expiresAt")) root.optLong("expiresAt") else null,
-            )
-        }
+        // Credentials belong in the encrypted request body, never in a query string that can be logged.
+        val root = postAuthenticated(context, endpoint(baseUrl, "/api/v1/subscriptions/status"), JSONObject())
+        return Status(
+            active = root.optBoolean("active", false),
+            planKey = root.optString("planKey").takeIf(String::isNotBlank),
+            planName = root.optString("planName").takeIf(String::isNotBlank),
+            maxDevices = if (root.has("maxDevices") && !root.isNull("maxDevices")) root.optInt("maxDevices") else null,
+            startsAt = if (root.has("startsAt") && !root.isNull("startsAt")) root.optLong("startsAt") else null,
+            expiresAt = if (root.has("expiresAt") && !root.isNull("expiresAt")) root.optLong("expiresAt") else null,
+        )
     }
 
     private suspend fun postAuthenticated(context: Context, url: String, body: JSONObject, expected: Int = 200): JSONObject {

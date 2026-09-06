@@ -246,8 +246,11 @@ async function orderStatus(req, res, requestUrl) {
 }
 
 async function subscriptionStatus(req, res, requestUrl) {
-  const deviceId = String(requestUrl.searchParams.get('deviceId') || '').trim();
-  const activationCode = String(requestUrl.searchParams.get('activationCode') || '').trim();
+  // New clients keep device credentials out of URLs and reverse-proxy access logs.
+  // GET remains temporarily compatible with already-installed older builds.
+  const auth = req.method === 'POST' ? await readJson(req) : requestUrl.searchParams;
+  const deviceId = String(req.method === 'POST' ? auth.deviceId : auth.get('deviceId') || '').trim();
+  const activationCode = String(req.method === 'POST' ? auth.activationCode : auth.get('activationCode') || '').trim();
   if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
   const result = await pool.query(
     `SELECT ds.plan_key,ds.status,ds.starts_at,ds.expires_at,sp.name,sp.max_devices
@@ -395,7 +398,7 @@ async function handle(req, res) {
   if (req.method === 'POST' && requestUrl.pathname === `${PREFIX}/quote`) { await quoteOrder(req, res); return true; }
   if (req.method === 'POST' && requestUrl.pathname === `${PREFIX}/orders`) { await createOrder(req, res); return true; }
   if (req.method === 'GET' && requestUrl.pathname === `${PREFIX}/orders/status`) { await orderStatus(req, res, requestUrl); return true; }
-  if (req.method === 'GET' && requestUrl.pathname === `${PREFIX}/status`) { await subscriptionStatus(req, res, requestUrl); return true; }
+  if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === `${PREFIX}/status`) { await subscriptionStatus(req, res, requestUrl); return true; }
   if (req.method === 'POST' && requestUrl.pathname === `${PREFIX}/payment/webhook`) { await paymentWebhook(req, res); return true; }
   return false;
 }
