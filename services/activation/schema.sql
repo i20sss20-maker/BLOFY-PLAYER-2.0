@@ -67,6 +67,22 @@ CREATE TABLE IF NOT EXISTS device_playlists (
 CREATE INDEX IF NOT EXISTS idx_device_playlists_device ON device_playlists(device_id, updated_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_device_playlists_one_active ON device_playlists(device_id) WHERE active = TRUE;
 
+-- Profile-owned cloud backup. This deliberately stores only UX state (watchlist,
+-- hidden categories, Home row order and future profile settings), never provider
+-- credentials or playback URLs. Revision enables conflict-safe sync.
+CREATE TABLE IF NOT EXISTS profile_cloud_snapshots (
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL,
+  revision BIGINT NOT NULL DEFAULT 1,
+  payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY(device_id, profile_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_profile_cloud_updated
+  ON profile_cloud_snapshots(device_id, updated_at DESC);
+
 -- Commercial subscription layer. Payment providers plug into this ledger; app/device
 -- activation remains provider-agnostic and is only granted after a verified paid order.
 CREATE TABLE IF NOT EXISTS subscription_plans (
