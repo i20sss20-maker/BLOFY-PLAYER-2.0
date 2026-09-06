@@ -73,27 +73,38 @@ interface BlofyDao {
     @Query("SELECT * FROM streams WHERE `key` = :contentKey LIMIT 1") suspend fun stream(contentKey: String): StreamEntity?
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND remoteId = :remoteId LIMIT 1") suspend fun streamByIdentity(providerId: String, kind: String, remoteId: String): StreamEntity?
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND favorite = 1 ORDER BY name") fun favorites(providerId: String): Flow<List<StreamEntity>>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND name LIKE '%' || :query || '%' ORDER BY name LIMIT :limit") suspend fun searchStreams(providerId: String, query: String, limit: Int = 80): List<StreamEntity>
+    @Query("""
+        SELECT streams.* FROM streams
+        INNER JOIN streams_fts ON streams.`key` = streams_fts.contentKey
+        WHERE streams_fts.providerId = :providerId AND streams_fts MATCH :query
+        ORDER BY streams.name LIMIT :limit
+    """)
+    suspend fun searchStreamsFts(providerId: String, query: String, limit: Int = 100): List<StreamEntity>
     @Query("UPDATE streams SET favorite = :favorite WHERE `key` = :contentKey") suspend fun setFavorite(contentKey: String, favorite: Boolean)
     @Query("UPDATE streams SET favorite = :favorite WHERE providerId = :providerId AND kind = :kind AND remoteId = :remoteId") suspend fun setFavoriteByIdentity(providerId: String, kind: String, remoteId: String, favorite: Boolean)
     @Query("UPDATE streams SET locked = :locked WHERE `key` = :contentKey") suspend fun setLocked(contentKey: String, locked: Boolean)
 
-    @Query("SELECT * FROM episodes WHERE `remoteId`=:remoteId LIMIT 1") suspend fun episodeByRemoteId(providerId: String, remoteId: String): EpisodeEntity?
+    @Query("SELECT * FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId ORDER BY season, episode") fun episodes(providerId: String, seriesId: String): Flow<List<EpisodeEntity>>
+    @Query("SELECT * FROM episodes WHERE `key` = :contentKey LIMIT 1") suspend fun episode(contentKey: String): EpisodeEntity?
+    @Query("SELECT * FROM episodes WHERE providerId = :providerId AND remoteId = :remoteId LIMIT 1") suspend fun episodeByRemoteId(providerId: String, remoteId: String): EpisodeEntity?
+    @Query("SELECT * FROM epg WHERE providerId = :providerId AND streamId = :streamId AND endMs >= :nowMs ORDER BY startMs LIMIT :limit") fun epg(providerId: String, streamId: String, nowMs: Long, limit: Int = 20): Flow<List<EpgEntity>>
+    @Query("SELECT * FROM epg WHERE providerId = :providerId AND streamId = :streamId AND startMs >= :sinceMs AND endMs <= :nowMs ORDER BY startMs DESC LIMIT :limit") suspend fun catchupEpg(providerId: String, streamId: String, sinceMs: Long, nowMs: Long, limit: Int = 300): List<EpgEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveWatchState(state: WatchStateEntity)
-    @Query("SELECT * FROM watch_state WHERE CONTENTKEY = :contentKey LIMIT 1")
-    suspend fun watchState(contentKey: String): WatchStateEntity?
+    @Query("SELECT * FROM watch_state WHERE contentKey = :contentKey LIMIT 1") suspend fun watchState(contentKey: String): WatchStateEntity?
     @Query("SELECT w.* FROM watch_state w INNER JOIN episodes e ON e.`key` = w.contentKey WHERE e.providerId = :providerId AND e.seriesId = :seriesId")
     suspend fun watchStatesForSeries(providerId: String, seriesId: String): List<WatchStateEntity>
 
     @Query("SELECT * FROM watch_state WHERE providerId = :providerId") suspend fun watchStates(providerId: String): List<WatchStateEntity>
-    @Query("SELECT w.* FROM watch_state w INNER JOIN episodes e ON e.`key` = w.contentKey WHERE e.providerId = :providerId AND e.seriesId = :seriesId")
-    suspend fun watchStatesForSeries(providerId: String, seriesId: String): List<WatchStateEntity>
+    @Query("SELECT * FROM watch_state WHERE providerId = :providerId AND completed = 0 AND positionMs > 0 ORDER BY updatedAt DESC LIMIT :limit") fun continueWatching(providerId: String, limit: Int = 30): Flow<List<WatchStateEntity>>
 
     @Query("DELETE FROM categories WHERE providerId = :providerId AND kind = :kind") suspend fun clearCategories(providerId: String, kind: String)
     @Query("DELETE FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun clearStreams(providerId: String, kind: String)
     @Query("DELETE FROM categories WHERE `key` IN (:keys)") suspend fun deleteCategoriesByKeys(keys: List<String>)
     @Query("DELETE FROM streams WHERE `key` IN (:keys)") suspend fun deleteStreamsByKeys(keys: List<String>)
     @Query("DELETE FROM episodes WHERE `key` IN (:keys)") suspend fun deleteEpisodesByKeys(keys: List<String>)
-    @Query("DELETE FROM categories WHERE providerId = :providerId AND kind IN ('episode')") suspend fun clearM3uCategories(providerId: String)
+    @Query("DELETE FROM categories WHERE providerId = :providerId AND kind IN ('live', 'movie', 'series')") suspend fun clearM3uCategories(providerId: String)
     @Query("DELETE FROM streams WHERE providerId = :providerId AND kind IN ('live', 'movie', 'series')") suspend fun clearM3uStreams(providerId: String)
     @Query("DELETE FROM episodes WHERE providerId = :providerId") suspend fun clearProviderEpisodes(providerId: String)
     @Query("DELETE FROM categories WHERE providerId = :providerId") suspend fun clearProviderCategories(providerId: String)
@@ -116,9 +127,8 @@ interface BlofyDao {
         deleteProvider(stagedProviderId)
     }
 
-    @Query("""UPDATE categories SET hidden = COALESCE((SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId LIMIT 1),(SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId || '.0' LIMIT 1),categories.hidden) WHERE providerId = :stagedProviderId""") suspend fun inheritStagedCategoryFlags
-stagedProviderId: String, targetProviderId: String)
-    @Query("""UPDATE streams SET favorite = COALESCE((SELECT old.favorite FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId LIMIT 1),(SELECT old.favorite FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0' LIMIT 1),streams.favorite), locked = COALESCE((SELECT old.locked FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId LIMIT 1),(SELECT old.locked FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0' LIMIT 1),streams.locked) WHERE providerId = :stagedProviderId"") suspend fun inheritStagedStreamFlags(stagedProviderId: String, targetProviderId: String)
+    @Query("""UPDATE categories SET hidden = COALESCE((SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId LIMIT 1),(SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId || '.0' LIMIT 1),categories.hidden) WHERE providerId = :stagedProviderId""") suspend fun inheritStagedCategoryFlags(stagedProviderId: String, targetProviderId: String)
+    @Query("""UPDATE streams SET favorite = COALESCE((SELECT old.favorite FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId LIMIT 1),(SELECT old.favorite FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0' LIMIT 1),streams.favorite), locked = COALESCE((SELECT old.locked FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId LIMIT 1),(SELECT old.locked FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0' LIMIT 1),streams.locked) WHERE providerId = :stagedProviderId""") suspend fun inheritStagedStreamFlags(stagedProviderId: String, targetProviderId: String)
     @Query("""UPDATE categories SET providerId = :targetProviderId, `key` = :targetProviderId || ':' || kind || ':' || remoteId WHERE providerId = :stagedProviderId""") suspend fun promoteStagedCategoriesInPlace(stagedProviderId: String, targetProviderId: String)
     @Query("""UPDATE streams SET providerId = :targetProviderId, `key` = :targetProviderId || ':' || kind || ':' || remoteId WHERE providerId = :stagedProviderId""") suspend fun promoteStagedStreamsInPlace(stagedProviderId: String, targetProviderId: String)
     @Query("""UPDATE episodes SET providerId = :targetProviderId, `key` = :targetProviderId || ':episode:' || remoteId WHERE providerId = :stagedProviderId""") suspend fun promoteStagedEpisodesInPlace(stagedProviderId: String, targetProviderId: String)
@@ -135,7 +145,6 @@ stagedProviderId: String, targetProviderId: String)
         promoteStagedEpisodesInPlace(stagedProviderId, targetProvider.id)
         // The staged sync already built FTS section-by-section while data was arriving. Re-key the
         // staged FTS rows atomically instead of rebuilding the entire 100k–200k item index here.
-        // This removes the long post-download refresh stall without changing search behavior.
         promoteStagedSearchIndexInPlace(stagedProviderId, targetProvider.id)
         clearProviderEpg(stagedProviderId)
         upsertProvider(targetProvider.copy(enabled = true))
