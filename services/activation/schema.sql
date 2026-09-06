@@ -14,8 +14,6 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);
 CREATE INDEX IF NOT EXISTS idx_devices_expires_at ON devices(expires_at);
 
--- Existing installations are upgraded in place; these counters enforce a
--- database-backed lockout across service restarts and multiple instances.
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS auth_failed_attempts INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_auth_failure_at TIMESTAMPTZ;
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS auth_locked_until TIMESTAMPTZ;
@@ -82,6 +80,19 @@ CREATE TABLE IF NOT EXISTS profile_cloud_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_profile_cloud_updated
   ON profile_cloud_snapshots(device_id, updated_at DESC);
+
+-- Pair & Restore uses a short-lived one-time code. Only its SHA-256 hash is stored.
+CREATE TABLE IF NOT EXISTS cloud_pair_codes (
+  code_hash TEXT PRIMARY KEY,
+  source_device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  source_profile_id TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cloud_pair_codes_expiry
+  ON cloud_pair_codes(expires_at) WHERE consumed_at IS NULL;
 
 -- Commercial subscription layer. Payment providers plug into this ledger; app/device
 -- activation remains provider-agnostic and is only granted after a verified paid order.
