@@ -1,5 +1,8 @@
 package tv.blofy.player.data.m3u
 
+import kotlinx.coroutines.runBlocking
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -15,6 +18,50 @@ class M3uPlaylistLoaderTest {
         password = "",
         providerType = "m3u"
     )
+
+    @Test
+    fun acceptsValidPlaylistBodyEvenWhenGatewayUsesHttp884() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setStatus("HTTP/1.1 884 IPTV Gateway").setBody(validPlaylist()))
+        server.start()
+        try {
+            val parsed = M3uPlaylistLoader().load(provider.copy(baseUrl = server.url("/list.m3u").toString()))
+            assertEquals(1, parsed.streams.size)
+            assertEquals("Saudi News", parsed.streams.single().name)
+            assertEquals(1, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun retriesNonPlaylistGatewayResponseWithCompatibilityProfile() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(403).setBody("blocked client profile"))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(validPlaylist()))
+        server.start()
+        try {
+            val parsed = M3uPlaylistLoader().load(provider.copy(baseUrl = server.url("/list.m3u").toString()))
+            assertEquals(1, parsed.streams.size)
+            assertEquals(2, server.requestCount)
+            assertTrue(server.takeRequest().getHeader("User-Agent")!!.startsWith("BLOFY"))
+            assertTrue(server.takeRequest().getHeader("User-Agent")!!.startsWith("VLC/"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun successfulHtmlResponseIsNotAcceptedAsPlaylist() = runBlocking {
+        val server = MockWebServer()
+        repeat(3) { server.enqueue(MockResponse().setResponseCode(200).setBody("<html>login required</html>")) }
+        server.start()
+        try {
+            M3uPlaylistLoader().load(provider.copy(baseUrl = server.url("/list.m3u").toString()))
+        } finally {
+            server.shutdown()
+        }
+    }
 
     @Test
     fun parsesLiveMovieAndSeriesWithoutRewritingDirectUrls() {
@@ -86,4 +133,10 @@ class M3uPlaylistLoaderTest {
         assertEquals(2, parsed.categories.count { it.name == "Featured" })
         assertEquals(setOf("live", "movie"), parsed.categories.filter { it.name == "Featured" }.map { it.kind }.toSet())
     }
+
+    private fun validPlaylist() = """
+        #EXTM3U
+        #EXTINF:-1 tvg-id="news.sa" group-title="News",Saudi News
+        https://cdn.example.com/live/news.m3u8
+    """.trimIndent()
 }
