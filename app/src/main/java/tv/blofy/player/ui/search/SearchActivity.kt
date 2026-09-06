@@ -13,12 +13,15 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -42,6 +45,9 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var results: LinearLayout
     private lateinit var hint: TextView
     private var searchJob: Job? = null
+    private val scopeKind by lazy {
+        intent.getStringExtra(EXTRA_KIND)?.lowercase()?.takeIf { it in SEARCH_ORDER }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,7 +66,12 @@ class SearchActivity : AppCompatActivity() {
             gravity = Gravity.RIGHT
         })
         root.addView(TextView(this).apply {
-            text = "ابحث في كل شيء"
+            text = when (scopeKind) {
+                KIND_LIVE -> "بحث البث المباشر"
+                KIND_SERIES -> "بحث المسلسلات"
+                KIND_MOVIE -> "بحث الأفلام"
+                else -> "ابحث في كل شيء"
+            }
             textSize = 31f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
@@ -68,7 +79,7 @@ class SearchActivity : AppCompatActivity() {
             setPadding(0, dp(3), 0, dp(4))
         })
         hint = TextView(this).apply {
-            text = "القنوات، الأفلام والمسلسلات من بحث واحد"
+            text = emptyHint()
             textSize = 13f
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.RIGHT
@@ -77,7 +88,12 @@ class SearchActivity : AppCompatActivity() {
         root.addView(hint)
 
         input = EditText(this).apply {
-            hint = "اكتب اسم المحتوى"
+            hint = when (scopeKind) {
+                KIND_LIVE -> "اكتب اسم القناة"
+                KIND_SERIES -> "اكتب اسم المسلسل"
+                KIND_MOVIE -> "اكتب اسم الفيلم"
+                else -> "اكتب اسم المحتوى"
+            }
             textSize = 18f
             setTextColor(Color.WHITE)
             setHintTextColor(BlofyTvDesign.TextMuted)
@@ -99,11 +115,11 @@ class SearchActivity : AppCompatActivity() {
                     val q = s?.toString().orEmpty()
                     if (q.isBlank()) {
                         results.removeAllViews()
-                        this@SearchActivity.hint.text = "القنوات، الأفلام والمسلسلات من بحث واحد"
+                        this@SearchActivity.hint.text = emptyHint()
                         return
                     }
                     searchJob = lifecycleScope.launch {
-                        delay(140)
+                        delay(110)
                         runSearch(q, false)
                     }
                 }
@@ -115,9 +131,17 @@ class SearchActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
+            setPadding(0, 0, dp(4), dp(28))
+        }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            clipChildren = false
+            clipToPadding = false
+            isFocusable = false
+            addView(results, ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT))
         }
         root.addView(input, LinearLayout.LayoutParams(-1, dp(64)))
-        root.addView(results, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) })
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) })
         setContentView(root)
         input.requestFocus()
     }
@@ -129,22 +153,72 @@ class SearchActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
             if (provider == null) { showMessage("أضف قائمة تشغيل أولاً"); return@launch }
+            val repository = ContentRepository(dao)
 
-            val items = withContext(Dispatchers.IO) {
-                ContentRepository(dao).search(provider.id, q).distinctBy { it.key }.take(100)
+            val sections = withContext(Dispatchers.IO) {
+                val wantedKinds = scopeKind?.let(::listOf) ?: SEARCH_ORDER
+                coroutineScope {
+                    wantedKinds.map { kind ->
+                        kind to async { repository.searchKind(provider.id, kind, q, SECTION_LIMIT) }
+                    }.map { (kind, deferred) -> kind to deferred.await().distinctBy { it.key } }
+                }
             }
 
             if (input.text?.toString()?.trim() != q) return@launch
             results.removeAllViews()
-            hint.text = "${items.size} نتيجة"
-            if (items.isEmpty()) { showMessage("ما لقينا نتائج مطابقة داخل باقتك"); return@launch }
-            items.forEach { stream ->
-                results.addView(
-                    resultCard(stream) { guardedOpen(provider.id, provider.liveFormat, stream) },
-                    LinearLayout.LayoutParams(-1, dp(84)).apply { bottomMargin = dp(7) }
-                )
+            val total = sections.sumOf { it.second.size }
+            hint.text = if (scopeKind == null) "$total نتيجة • البث ثم المسلسلات ثم الأفلام" else "$total نتيجة"
+            if (total == 0) { showMessage("ما لقينا نتائج مطابقة داخل باقتك"); return@launch }
+
+            var firstFocusable: View? = null
+            sections.forEach { (kind, items) ->
+                val section = resultSection(kind, items, provider.id, provider.liveFormat) { view ->
+                    if (firstFocusable == null) firstFocusable = view
+                }
+                results.addView(section, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(14)
+                })
             }
-            if (moveFocus) results.getChildAt(0)?.requestFocus()
+            if (moveFocus) firstFocusable?.requestFocus()
+        }
+    }
+
+    private fun resultSection(
+        kind: String,
+        items: List<StreamEntity>,
+        providerId: String,
+        liveFormat: String,
+        onFirstFocusable: (View) -> Unit
+    ): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        setPadding(dp(14), dp(12), dp(14), dp(10))
+        background = BlofyTvDesign.glassSurface(dp(18).toFloat())
+
+        addView(TextView(this@SearchActivity).apply {
+            val suffix = if (items.size >= SECTION_LIMIT) "+" else ""
+            text = "${sectionTitle(kind)}   •   ${items.size}$suffix"
+            textSize = 19f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            setPadding(dp(4), 0, dp(4), dp(8))
+        }, LinearLayout.LayoutParams(-1, dp(42)))
+
+        if (items.isEmpty()) {
+            addView(TextView(this@SearchActivity).apply {
+                text = "لا توجد نتائج"
+                textSize = 13f
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = Gravity.RIGHT
+                setPadding(dp(8), dp(6), dp(8), dp(10))
+            })
+        } else {
+            items.forEachIndexed { index, stream ->
+                val card = resultCard(stream) { guardedOpen(providerId, liveFormat, stream) }
+                if (index == 0) onFirstFocusable(card)
+                addView(card, LinearLayout.LayoutParams(-1, dp(84)).apply { bottomMargin = dp(7) })
+            }
         }
     }
 
@@ -206,19 +280,19 @@ class SearchActivity : AppCompatActivity() {
 
     private fun openStream(providerId: String, format: String, stream: StreamEntity) {
         when (stream.kind) {
-            "movie" -> startActivity(Intent(this, MovieDetailsActivity::class.java).apply {
+            KIND_MOVIE -> startActivity(Intent(this, MovieDetailsActivity::class.java).apply {
                 putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, providerId); putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
             })
-            "series" -> startActivity(Intent(this, SeriesDetailsActivity::class.java).apply {
+            KIND_SERIES -> startActivity(Intent(this, SeriesDetailsActivity::class.java).apply {
                 putExtra(SeriesDetailsActivity.EXTRA_PROVIDER_ID, providerId); putExtra(SeriesDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
             })
-            "live" -> lifecycleScope.launch {
+            KIND_LIVE -> lifecycleScope.launch {
                 val dao = BlofyDatabase.get(applicationContext).dao()
                 val provider = withContext(Dispatchers.IO) { dao.provider(providerId) } ?: return@launch
                 val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (format.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
                 startActivity(Intent(this@SearchActivity, PlayerActivity::class.java).apply {
                     putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.live(provider, profile, stream)); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
-                    putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(PlayerActivity.EXTRA_KIND, "live"); putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
+                    putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(PlayerActivity.EXTRA_KIND, KIND_LIVE); putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
                     putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType); putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
                     putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine); putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
                     putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream)); putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId); putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
@@ -227,7 +301,21 @@ class SearchActivity : AppCompatActivity() {
         }
     }
 
-    private fun kindLabel(kind: String) = when (kind) { "live" -> "LIVE"; "movie" -> "MOVIE"; "series" -> "SERIES"; else -> kind.uppercase() }
+    private fun emptyHint() = when (scopeKind) {
+        KIND_LIVE -> "بحث محلي سريع داخل جميع القنوات"
+        KIND_SERIES -> "بحث محلي سريع داخل جميع المسلسلات"
+        KIND_MOVIE -> "بحث محلي سريع داخل جميع الأفلام"
+        else -> "البث المباشر، المسلسلات والأفلام من بحث واحد"
+    }
+
+    private fun sectionTitle(kind: String) = when (kind) {
+        KIND_LIVE -> "البث المباشر"
+        KIND_SERIES -> "المسلسلات"
+        KIND_MOVIE -> "الأفلام"
+        else -> kind
+    }
+
+    private fun kindLabel(kind: String) = when (kind) { KIND_LIVE -> "LIVE"; KIND_MOVIE -> "MOVIE"; KIND_SERIES -> "SERIES"; else -> kind.uppercase() }
 
     private fun searchField(focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
@@ -246,4 +334,13 @@ class SearchActivity : AppCompatActivity() {
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     override fun onDestroy() { searchJob?.cancel(); super.onDestroy() }
+
+    companion object {
+        const val EXTRA_KIND = "kind"
+        const val KIND_LIVE = "live"
+        const val KIND_SERIES = "series"
+        const val KIND_MOVIE = "movie"
+        private val SEARCH_ORDER = listOf(KIND_LIVE, KIND_SERIES, KIND_MOVIE)
+        private const val SECTION_LIMIT = 120
+    }
 }
