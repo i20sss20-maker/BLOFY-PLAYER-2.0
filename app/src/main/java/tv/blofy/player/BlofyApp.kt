@@ -26,6 +26,7 @@ import tv.blofy.player.ui.profile.ProfileCloudLifecycle
 import tv.blofy.player.ui.profile.ProfileHomeLayoutLifecycle
 import tv.blofy.player.ui.profile.ProfileSwitcherLifecycle
 import tv.blofy.player.ui.profile.ProfileUxLifecycle
+import tv.blofy.player.ui.search.CatalogSearchLifecycle
 import tv.blofy.player.ui.settings.RuntimeSettingsLifecycle
 import tv.blofy.player.ui.subscription.SubscriptionEntryLifecycle
 
@@ -69,6 +70,7 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(ProfileUxLifecycle())
         registerActivityLifecycleCallbacks(ProfileHomeLayoutLifecycle())
         registerActivityLifecycleCallbacks(HomeRemoteFocusLifecycle())
+        registerActivityLifecycleCallbacks(CatalogSearchLifecycle())
         registerActivityLifecycleCallbacks(ProfileCloudLifecycle())
         registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
         registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())
