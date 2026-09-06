@@ -2,6 +2,7 @@ package tv.blofy.player.data
 
 import android.content.Context
 import com.google.gson.Gson
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -11,9 +12,9 @@ object HomeSnapshotStore {
     private const val PREFS = "blofy_home_snapshot_v1"
 
     // Entry preparation must stay cheap on 1–2 GB Android boxes. Home consumes at most ~180
-    // unique keys across its rows, so reading/sorting 1,200 full entities only delayed first entry
-    // on very large libraries without improving the visible result.
-    private const val MAX_CANDIDATES = 420
+    // unique keys across its rows, so reading/sorting a very large candidate set only delays entry.
+    private const val NORMAL_MAX_CANDIDATES = 420
+    private const val LOW_MEMORY_MAX_CANDIDATES = 240
     private val gson = Gson()
 
     data class Snapshot(
@@ -36,7 +37,8 @@ object HomeSnapshotStore {
     }
 
     suspend fun rebuild(context: Context, dao: BlofyDao, provider: ProviderEntity) {
-        val all = dao.latestHomeStreams(provider.id, MAX_CANDIDATES)
+        val candidateLimit = if (DeviceClass.isLowMemory(context)) LOW_MEMORY_MAX_CANDIDATES else NORMAL_MAX_CANDIDATES
+        val all = dao.latestHomeStreams(provider.id, candidateLimit)
         fun rating(stream: StreamEntity): Double = stream.rating?.replace(',', '.')?.toDoubleOrNull()?.let { if (it <= 5.0) it * 2.0 else it } ?: 0.0
         fun hasArabic(value: String) = value.any { it in '\u0600'..'\u06FF' }
         val snapshot = Snapshot(
