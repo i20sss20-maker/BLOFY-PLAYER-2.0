@@ -19,9 +19,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Apply scoped patch
+      - name: Apply scoped runtime patch
         run: python3 .github/rc07-final-patch.py
-      - name: Commit final rc07.6 patch
+      - name: Commit final rc07.6 runtime patch
         shell: bash
         run: |
           set -euo pipefail
