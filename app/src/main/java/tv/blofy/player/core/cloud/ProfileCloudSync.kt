@@ -32,6 +32,40 @@ object ProfileCloudSync {
         sync(context.applicationContext, endpoint, profile.id)
     }
 
+    suspend fun backupActive(context: Context): Result? = mutex.withLock {
+        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+        if (endpoint.isBlank()) return@withLock null
+        val profile = ProfileStore.active(context)
+        if (profile.guest) return@withLock null
+        val remote = ProfileCloudClient.get(context, endpoint, profile.id)
+        val payload = ProfileLibraryStore.snapshotJson(context, profile.id)
+        when (val saved = ProfileCloudClient.put(context, endpoint, profile.id, remote.revision, payload)) {
+            is ProfileCloudClient.SaveResult.Saved -> {
+                remember(context, profile.id, saved.revision, fingerprint(saved.payload))
+                Result("backup", saved.revision)
+            }
+            is ProfileCloudClient.SaveResult.Conflict -> Result("deferred", saved.revision)
+        }
+    }
+
+    suspend fun restoreActive(context: Context): Result? = mutex.withLock {
+        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+        if (endpoint.isBlank()) return@withLock null
+        val profile = ProfileStore.active(context)
+        if (profile.guest) return@withLock null
+        val remote = ProfileCloudClient.get(context, endpoint, profile.id)
+        if (!remote.exists) return@withLock Result("no_backup", 0L)
+        ProfileLibraryStore.restoreSnapshot(context, profile.id, remote.payload)
+        remember(context, profile.id, remote.revision, fingerprint(ProfileLibraryStore.snapshotJson(context, profile.id)))
+        Result("restore", remote.revision, changedLocal = true)
+    }
+
+    fun lastSyncAt(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Long =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("$profileId:last_sync", 0L)
+
+    fun knownRevision(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Long =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("$profileId:revision", 0L)
+
     suspend fun sync(context: Context, endpoint: String, profileId: String): Result {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val revisionKey = "$profileId:revision"
@@ -113,7 +147,7 @@ object ProfileCloudSync {
         val localHidden = local.optJSONArray("hiddenCategories").strings(500)
         val mergedHidden = LinkedHashSet<String>().apply { addAll(remoteHidden); addAll(localHidden) }.toList().take(500)
 
-        // Home order is user intent, so the currently edited device wins when it has an explicit order.
+        // Home order is explicit user intent, so the currently edited device wins when available.
         val localRows = local.optJSONArray("homeRows").strings(20).filter { it in ProfileLibraryStore.ALL_HOME_ROWS }
         val remoteRows = remote.optJSONArray("homeRows").strings(20).filter { it in ProfileLibraryStore.ALL_HOME_ROWS }
         val rows = (if (localRows.isNotEmpty()) localRows else remoteRows).distinct()
