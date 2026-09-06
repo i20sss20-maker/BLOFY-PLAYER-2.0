@@ -6,31 +6,91 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import tv.blofy.player.core.network.awaitResponse
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
-import tv.blofy.player.core.network.awaitResponse
 import java.net.URI
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 class M3uPlaylistLoader(
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .callTimeout(35, TimeUnit.SECONDS)
+        .callTimeout(45, TimeUnit.SECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
+        .readTimeout(35, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
+        .retryOnConnectionFailure(true)
         .build()
 ) {
     suspend fun load(provider: ProviderEntity): ParsedM3u = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(provider.baseUrl).header("User-Agent", "BLOFY PLAYER/2.0").build()
         val coroutineContext = currentCoroutineContext()
-        client.newCall(request).awaitResponse().use { response ->
-            if (!response.isSuccessful) error("M3U HTTP ${response.code}")
-            parse(provider, response.body?.string().orEmpty()) { coroutineContext.ensureActive() }
+        var lastStatus: Int? = null
+        var lastBody = ""
+        var lastFailure: Throwable? = null
+
+        requestProfiles(provider.baseUrl).forEachIndexed { index, request ->
+            coroutineContext.ensureActive()
+            try {
+                client.newCall(request).awaitResponse().use { response ->
+                    lastStatus = response.code
+                    val body = response.body?.string().orEmpty().removePrefix("\uFEFF")
+                    lastBody = body
+
+                    // Some IPTV gateways use non-standard HTTP status codes (for example 884)
+                    // while still returning a completely valid M3U body. Content is authoritative.
+                    if (looksLikeM3u(body)) {
+                        return@withContext parse(provider, body) { coroutineContext.ensureActive() }
+                    }
+
+                    if (!shouldRetry(response.code) || index == requestProfiles(provider.baseUrl).lastIndex) {
+                        if (response.isSuccessful) error("M3U response is not a playlist")
+                    }
+                }
+            } catch (failure: Throwable) {
+                coroutineContext.ensureActive()
+                lastFailure = failure
+                if (index == requestProfiles(provider.baseUrl).lastIndex) throw failure
+            }
         }
+
+        if (looksLikeM3u(lastBody)) return@withContext parse(provider, lastBody) { coroutineContext.ensureActive() }
+        val status = lastStatus?.let { " HTTP $it" }.orEmpty()
+        val detail = lastFailure?.message?.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
+        error("M3U$status failed$detail")
+    }
+
+    private fun requestProfiles(url: String): List<Request> = listOf(
+        Request.Builder().url(url)
+            .header("User-Agent", "BLOFY PLAYER/2.0")
+            .header("Accept", "application/x-mpegURL,application/vnd.apple.mpegurl,audio/mpegurl,text/plain,*/*")
+            .header("Accept-Encoding", "identity")
+            .build(),
+        Request.Builder().url(url)
+            .header("User-Agent", "VLC/3.0.21 LibVLC/3.0.21")
+            .header("Accept", "*/*")
+            .header("Accept-Encoding", "identity")
+            .header("Connection", "close")
+            .build(),
+        Request.Builder().url(url)
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 Chrome/120 Safari/537.36")
+            .header("Accept", "*/*")
+            .header("Accept-Encoding", "identity")
+            .build()
+    )
+
+    private fun shouldRetry(code: Int): Boolean = code in setOf(403, 406, 408, 425, 429) || code >= 500
+
+    internal fun looksLikeM3u(text: String): Boolean {
+        val sample = text.trimStart().take(64 * 1024)
+        if (sample.startsWith("#EXTM3U", ignoreCase = true)) return true
+        return sample.contains("#EXTINF", ignoreCase = true) &&
+            sample.lineSequence().any { line ->
+                val value = line.trim()
+                value.startsWith("http://", true) || value.startsWith("https://", true) || value.startsWith("rtsp://", true)
+            }
     }
 
     fun parse(provider: ProviderEntity, text: String): ParsedM3u = parse(provider, text) {}
