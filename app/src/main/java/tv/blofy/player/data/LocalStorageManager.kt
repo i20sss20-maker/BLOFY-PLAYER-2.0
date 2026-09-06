@@ -43,6 +43,26 @@ object LocalStorageManager {
         return app.filesDir.usableSpace >= reserve
     }
 
+    /**
+     * A staged refresh temporarily keeps the currently-working catalog and the incoming catalog at
+     * the same time. Reserve enough disk for that overlap plus SQLite WAL growth before starting.
+     * The check is deliberately conservative on low-memory boxes where storage is often small too.
+     */
+    fun hasCatalogRefreshHeadroom(context: Context): Boolean {
+        val app = context.applicationContext
+        val databaseBytes = sizeOf(app.getDatabasePath("blofy-player-2.db").parentFile)
+        val overlapEstimate = (databaseBytes.coerceAtLeast(48L * 1024L * 1024L) * 7L / 10L)
+            .coerceAtMost(384L * 1024L * 1024L)
+        val systemReserve = if (DeviceClass.isLowMemory(app)) 224L * 1024L * 1024L else 160L * 1024L * 1024L
+        return app.filesDir.usableSpace >= systemReserve + overlapEstimate
+    }
+
+    /** Trim only disposable cache, then decide whether a safe staged refresh can start. */
+    fun prepareForCatalogRefresh(context: Context): Boolean {
+        trimTemporaryIfNeeded(context)
+        return hasCatalogRefreshHeadroom(context)
+    }
+
     /** Keeps pinned artwork, providers, activation, favorites, episodes and watch progress. */
     suspend fun cleanSafely(context: Context) {
         val app = context.applicationContext
