@@ -16,9 +16,13 @@ const pool = DATABASE_URL ? new Pool({
 /**
  * Keeps commercial entitlement state deterministic even when a device stays offline across its
  * expiry boundary. This job never changes blocked devices and never expires lifetime plans.
+ *
+ * It is deliberately bidirectional: a stale device row can be re-activated when a valid paid
+ * subscription exists (for example after a webhook/database retry), so customers are never left
+ * in an expired UI while the commercial ledger already says they are entitled.
  */
 export async function reconcileExpiredSubscriptions() {
-  if (!pool) return { subscriptions: 0, devices: 0 };
+  if (!pool) return { subscriptions: 0, devices: 0, recoveredDevices: 0 };
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -87,10 +91,45 @@ export async function reconcileExpiredSubscriptions() {
       [BATCH_SIZE]
     );
 
+    // Repair the opposite drift as well: if the subscription ledger contains a currently valid
+    // entitlement, the device must be active. Lifetime subscriptions intentionally map to a NULL
+    // device expiry; otherwise the furthest valid subscription expiry is used.
+    const recoveredDevices = await client.query(
+      `WITH entitled AS (
+         SELECT ds.device_id,
+                BOOL_OR(ds.expires_at IS NULL) AS lifetime,
+                MAX(ds.expires_at) FILTER (WHERE ds.expires_at IS NOT NULL) AS max_expires_at
+         FROM device_subscriptions ds
+         WHERE ds.status='active'
+           AND (ds.expires_at IS NULL OR ds.expires_at > NOW())
+         GROUP BY ds.device_id
+       ), candidates AS (
+         SELECT d.device_id,
+                CASE WHEN e.lifetime THEN NULL ELSE e.max_expires_at END AS effective_expires_at
+         FROM devices d
+         JOIN entitled e ON e.device_id=d.device_id
+         WHERE d.status IN ('active','expired')
+           AND (
+             d.status <> 'active'
+             OR d.expires_at IS DISTINCT FROM CASE WHEN e.lifetime THEN NULL ELSE e.max_expires_at END
+           )
+         ORDER BY d.updated_at
+         LIMIT $1
+         FOR UPDATE OF d SKIP LOCKED
+       )
+       UPDATE devices d
+       SET status='active',expires_at=c.effective_expires_at,updated_at=NOW()
+       FROM candidates c
+       WHERE d.device_id=c.device_id
+       RETURNING d.device_id`,
+      [BATCH_SIZE]
+    );
+
     await client.query('COMMIT');
     return {
       subscriptions: expiredSubscriptions.rowCount || 0,
-      devices: expiredDeviceCount + (staleDevices.rowCount || 0)
+      devices: expiredDeviceCount + (staleDevices.rowCount || 0),
+      recoveredDevices: recoveredDevices.rowCount || 0
     };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
