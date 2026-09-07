@@ -75,7 +75,7 @@ class CatalogRefreshWorker(
             // active and fully usable; this also avoids preserving flags by loading the old giant
             // catalog into PlaylistManager memory during the network parse.
             val refreshedProvider = provider.copy(enabled = true, updatedAt = staged.updatedAt)
-            dao.promoteStagedCatalog(staged.id, refreshedProvider)
+            dao.promoteStagedRefresh(staged.id, refreshedProvider)
             promoted = true
 
             // Promotion itself is the durable point of no return. From here on, never turn a local

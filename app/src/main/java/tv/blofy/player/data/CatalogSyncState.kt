@@ -1,6 +1,12 @@
 package tv.blofy.player.data
 
 import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import tv.blofy.player.core.identity.PortalSyncBook
+import tv.blofy.player.data.local.BlofyDao
+import tv.blofy.player.data.metadata.ProviderMetadataCache
 
 /** Stores catalog readiness and the last successful refresh time per provider. */
 object CatalogSyncState {
@@ -17,6 +23,10 @@ object CatalogSyncState {
 
     fun isReady(context: Context, providerId: String): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(READY_PREFIX + providerId, false)
+    /** Interrupted first-import batches are not a saved library that a failed refresh may reopen. */
+    suspend fun discardUncommittedCatalog(context: Context, dao: BlofyDao, providerId: String) {
+        if (!isReady(context, providerId)) dao.clearProviderCatalog(providerId)
+    }
     fun isMetadataReady(context: Context, providerId: String): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(METADATA_READY_PREFIX + providerId, false)
     fun areEpisodesReady(context: Context, providerId: String): Boolean =
@@ -28,10 +38,11 @@ object CatalogSyncState {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(ENTRY_EPOCH_PREFIX + providerId, 0L) == epoch &&
             HomeSnapshotStore.read(context, providerId) != null &&
             CatalogManifestStore.read(context, providerId)?.let { it.entryReady && it.catalogEpoch == epoch } == true &&
-            context.getSharedPreferences("blofy_search_index", Context.MODE_PRIVATE).getBoolean("v9_ready_$providerId", false)
+            CatalogSearchIndex.isReady(context, providerId)
     }
     /** Compatibility name used by existing login paths; deep readiness remains independent. */
-    fun isFullyReady(context: Context, providerId: String): Boolean = isEntryReady(context, providerId)
+    fun isFullyReady(context: Context, providerId: String): Boolean =
+        !PortalSyncBook.hasPendingSource(context, providerId) && isEntryReady(context, providerId)
     fun lastUpdatedAt(context: Context, providerId: String): Long =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(UPDATED_PREFIX + providerId, 0L)
     fun lastSyncedAt(context: Context, providerId: String): Long = lastUpdatedAt(context, providerId)
@@ -86,13 +97,23 @@ object CatalogSyncState {
             .putBoolean(VERIFIED_PREFIX + providerId, false)
             .putLong(UPDATED_PREFIX + providerId, epoch).commit()) { "Unable to persist catalog state" }
     }
+    /** Called only after a different playlist source has been durably promoted under this ID. */
+    suspend fun markSourceReplaced(context: Context, providerId: String) =
+        withContext(NonCancellable + Dispatchers.IO) {
+            // IDs can be reused by unrelated providers. Neither the previous Home selection nor
+            // cached metadata may be carried into the replacement source, even in the same ms.
+            markCatalogCommitted(context, providerId)
+            HomeSnapshotStore.clear(context, providerId)
+            CatalogManifestStore.clear(context, providerId)
+            ProviderMetadataCache.clearProvider(context, providerId)
+        }
     @Synchronized
     fun markEntryReady(context: Context, providerId: String, expectedEpoch: Long) {
         check(expectedEpoch > 0L && lastUpdatedAt(context, providerId) == expectedEpoch) { "Catalog changed during preparation" }
         check(isReady(context, providerId))
         check(HomeSnapshotStore.read(context, providerId) != null)
         check(CatalogManifestStore.read(context, providerId)?.let { it.entryReady && it.catalogEpoch == expectedEpoch } == true)
-        check(context.getSharedPreferences("blofy_search_index", Context.MODE_PRIVATE).getBoolean("v9_ready_$providerId", false))
+        check(CatalogSearchIndex.isReady(context, providerId))
         check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putLong(ENTRY_EPOCH_PREFIX + providerId, expectedEpoch).commit()) { "Unable to persist entry readiness" }
     }
@@ -109,8 +130,6 @@ object CatalogSyncState {
             .putBoolean(EPISODES_READY_PREFIX + providerId, true)
             .putLong(EPISODES_CHECKPOINT_PREFIX + providerId, 0L).apply()
     }
-    /** Legacy entry point; FullCatalogPreparer owns explicit enrichment scheduling. */
-    fun resumeEnrichment(context: Context, providerId: String) = Unit
     fun clear(context: Context, providerId: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(ENTRY_EPOCH_PREFIX + providerId).remove(VERIFIED_PREFIX + providerId).remove(READY_PREFIX + providerId).remove(METADATA_READY_PREFIX + providerId)

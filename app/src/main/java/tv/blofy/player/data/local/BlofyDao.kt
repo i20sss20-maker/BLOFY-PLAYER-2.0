@@ -9,11 +9,13 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import tv.blofy.player.core.text.ArabicSearchNormalizer
+import tv.blofy.player.data.CatalogRefreshIntegrityPolicy
 
 @Dao
 interface BlofyDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertProviderStored(provider: ProviderEntity)
-    suspend fun upsertProvider(provider: ProviderEntity) = upsertProviderStored(ProviderSecretCodec.seal(provider))
+    @Transaction suspend fun upsertProvider(provider: ProviderEntity) =
+        upsertProviderStored(ProviderSecretCodec.sealForUpdate(provider, providerStored(provider.id)))
 
     @Query("SELECT * FROM providers WHERE enabled = 1 ORDER BY updatedAt DESC") fun providersStored(): Flow<List<ProviderEntity>>
     fun providers(): Flow<List<ProviderEntity>> = providersStored().map { rows -> rows.map(ProviderSecretCodec::open) }
@@ -65,22 +67,18 @@ interface BlofyDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEpisodes(items: List<EpisodeEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEpg(items: List<EpgEntity>)
     @Insert suspend fun insertSearchRows(items: List<StreamSearchFtsEntity>)
+    @Query("SELECT EXISTS(SELECT 1 FROM streams_fts WHERE providerId = :providerId LIMIT 1)")
+    suspend fun hasSearchIndex(providerId: String): Boolean
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertActivation(state: ActivationEntity)
     @Query("SELECT * FROM activation LIMIT 1") suspend fun activation(): ActivationEntity?
     @Query("DELETE FROM activation") suspend fun clearActivation()
     @Transaction suspend fun replaceActivation(state: ActivationEntity) { clearActivation(); upsertActivation(state) }
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, name") fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind ORDER BY name") fun streamsAll(providerId: String, kind: String): Flow<List<StreamEntity>>
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId ORDER BY name") fun streamsInCategory(providerId: String, kind: String, categoryId: String): Flow<List<StreamEntity>>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY name") fun streams(providerId: String, kind: String, categoryId: String?): Flow<List<StreamEntity>>
 
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun catalogCountAll(providerId: String, kind: String): Int
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId") suspend fun catalogCountInCategory(providerId: String, kind: String, categoryId: String): Int
-
-    // Legacy OFFSET queries remain available for compatibility, but large TV catalogs use keyset paging below.
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind ORDER BY rowid LIMIT :limit OFFSET :offset") suspend fun catalogPageAll(providerId: String, kind: String, limit: Int, offset: Int): List<StreamEntity>
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId ORDER BY rowid LIMIT :limit OFFSET :offset") suspend fun catalogPageInCategory(providerId: String, kind: String, categoryId: String, limit: Int, offset: Int): List<StreamEntity>
 
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
     suspend fun catalogPageAfterAll(providerId: String, kind: String, afterRowId: Long, limit: Int): List<StreamEntity>
@@ -105,6 +103,13 @@ interface BlofyDao {
         ORDER BY streams.name LIMIT :limit
     """)
     suspend fun searchStreamsFts(providerId: String, query: String, limit: Int = 100): List<StreamEntity>
+    @Query("""
+        SELECT streams.* FROM streams
+        INNER JOIN streams_fts ON streams.`key` = streams_fts.contentKey
+        WHERE streams_fts.providerId = :providerId AND streams_fts.kind = :kind AND streams_fts MATCH :query
+        ORDER BY streams.name LIMIT :limit
+    """)
+    suspend fun searchStreamsFtsByKind(providerId: String, kind: String, query: String, limit: Int): List<StreamEntity>
     @Query("UPDATE streams SET favorite = :favorite WHERE `key` = :contentKey") suspend fun setFavorite(contentKey: String, favorite: Boolean)
     @Query("UPDATE streams SET favorite = :favorite WHERE providerId = :providerId AND kind = :kind AND remoteId = :remoteId") suspend fun setFavoriteByIdentity(providerId: String, kind: String, remoteId: String, favorite: Boolean)
     @Query("UPDATE streams SET locked = :locked WHERE `key` = :contentKey") suspend fun setLocked(contentKey: String, locked: Boolean)
@@ -158,6 +163,23 @@ interface BlofyDao {
     @Query("""UPDATE episodes SET providerId = :targetProviderId, `key` = :targetProviderId || ':episode:' || remoteId WHERE providerId = :stagedProviderId""") suspend fun promoteStagedEpisodesInPlace(stagedProviderId: String, targetProviderId: String)
     @Query("""UPDATE streams_fts SET providerId = :targetProviderId, contentKey = :targetProviderId || substr(contentKey, length(:stagedProviderId) + 1) WHERE providerId = :stagedProviderId""")
     suspend fun promoteStagedSearchIndexInPlace(stagedProviderId: String, targetProviderId: String)
+
+    /** Same-source refreshes must validate the durable candidate before replacing known-good rows. */
+    @Transaction
+    suspend fun promoteStagedRefresh(stagedProviderId: String, targetProvider: ProviderEntity) {
+        val previous = CatalogRefreshIntegrityPolicy.Counts(
+            live = catalogCountAll(targetProvider.id, "live"),
+            movies = catalogCountAll(targetProvider.id, "movie"),
+            series = catalogCountAll(targetProvider.id, "series")
+        )
+        val candidate = CatalogRefreshIntegrityPolicy.Counts(
+            live = catalogCountAll(stagedProviderId, "live"),
+            movies = catalogCountAll(stagedProviderId, "movie"),
+            series = catalogCountAll(stagedProviderId, "series")
+        )
+        check(CatalogRefreshIntegrityPolicy.accepts(previous, candidate)) { "Incomplete catalog refresh" }
+        promoteStagedCatalog(stagedProviderId, targetProvider)
+    }
 
     @Transaction
     suspend fun promoteStagedCatalog(stagedProviderId: String, targetProvider: ProviderEntity) {

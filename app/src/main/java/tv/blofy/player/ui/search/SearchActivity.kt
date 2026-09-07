@@ -20,10 +20,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,7 +43,7 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var input: EditText
     private lateinit var results: LinearLayout
     private lateinit var hint: TextView
-    private var searchJob: Job? = null
+    private val searchRunner by lazy { CatalogSearchRunner(lifecycleScope, ::runSearch) }
     private val scopeKind by lazy {
         intent.getStringExtra(EXTRA_KIND)?.lowercase()?.takeIf { it in SEARCH_ORDER }
     }
@@ -105,23 +103,18 @@ class SearchActivity : AppCompatActivity() {
             isFocusable = true
             setOnFocusChangeListener { _, focused -> background = searchField(focused) }
             setOnEditorActionListener { _, _, _ ->
-                searchJob?.cancel()
-                runSearch(text?.toString().orEmpty(), true)
+                searchRunner.submit(text?.toString().orEmpty(), true)
                 true
             }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    searchJob?.cancel()
                     val q = s?.toString().orEmpty()
+                    searchRunner.submit(q, false)
                     if (q.isBlank()) {
                         results.removeAllViews()
                         this@SearchActivity.hint.text = emptyHint()
                         return
-                    }
-                    searchJob = lifecycleScope.launch {
-                        delay(110)
-                        runSearch(q, false)
                     }
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
@@ -147,41 +140,39 @@ class SearchActivity : AppCompatActivity() {
         input.requestFocus()
     }
 
-    private fun runSearch(query: String, moveFocus: Boolean) {
+    private suspend fun runSearch(query: String, moveFocus: Boolean) {
         val q = query.trim()
         if (q.isEmpty()) { results.removeAllViews(); return }
-        lifecycleScope.launch {
-            val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
-            if (provider == null) { showMessage("أضف قائمة تشغيل أولاً"); return@launch }
-            val repository = ContentRepository(dao)
+        val dao = BlofyDatabase.get(applicationContext).dao()
+        val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
+        if (provider == null) { showMessage("أضف قائمة تشغيل أولاً"); return }
+        val repository = ContentRepository(dao)
 
-            val sections = withContext(Dispatchers.IO) {
-                val wantedKinds = scopeKind?.let(::listOf) ?: SEARCH_ORDER
-                coroutineScope {
-                    wantedKinds.map { kind ->
-                        kind to async { repository.searchKind(provider.id, kind, q, SECTION_LIMIT) }
-                    }.map { (kind, deferred) -> kind to deferred.await().distinctBy { it.key } }
-                }
+        val sections = withContext(Dispatchers.IO) {
+            val wantedKinds = scopeKind?.let(::listOf) ?: SEARCH_ORDER
+            coroutineScope {
+                wantedKinds.map { kind ->
+                    kind to async { repository.searchKind(provider.id, kind, q, SECTION_LIMIT) }
+                }.map { (kind, deferred) -> kind to deferred.await().distinctBy { it.key } }
             }
-
-            if (input.text?.toString()?.trim() != q) return@launch
-            results.removeAllViews()
-            val total = sections.sumOf { it.second.size }
-            hint.text = if (scopeKind == null) "$total نتيجة • البث ثم المسلسلات ثم الأفلام" else "$total نتيجة"
-            if (total == 0) { showMessage("ما لقينا نتائج مطابقة داخل باقتك"); return@launch }
-
-            var firstFocusable: View? = null
-            sections.forEach { (kind, items) ->
-                val section = resultSection(kind, items, provider.id, provider.liveFormat) { view ->
-                    if (firstFocusable == null) firstFocusable = view
-                }
-                results.addView(section, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    bottomMargin = dp(14)
-                })
-            }
-            if (moveFocus) firstFocusable?.requestFocus()
         }
+
+        if (input.text?.toString()?.trim() != q) return
+        results.removeAllViews()
+        val total = sections.sumOf { it.second.size }
+        hint.text = if (scopeKind == null) "$total نتيجة • البث ثم المسلسلات ثم الأفلام" else "$total نتيجة"
+        if (total == 0) { showMessage("ما لقينا نتائج مطابقة داخل باقتك"); return }
+
+        var firstFocusable: View? = null
+        sections.forEach { (kind, items) ->
+            val section = resultSection(kind, items, provider.id, provider.liveFormat) { view ->
+                if (firstFocusable == null) firstFocusable = view
+            }
+            results.addView(section, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(14)
+            })
+        }
+        if (moveFocus) firstFocusable?.requestFocus()
     }
 
     private fun resultSection(
@@ -334,7 +325,7 @@ class SearchActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-    override fun onDestroy() { searchJob?.cancel(); super.onDestroy() }
+    override fun onDestroy() { searchRunner.cancel(); super.onDestroy() }
 
     companion object {
         const val EXTRA_KIND = "kind"

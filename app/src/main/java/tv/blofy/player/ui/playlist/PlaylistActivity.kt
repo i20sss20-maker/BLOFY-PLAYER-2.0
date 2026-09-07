@@ -132,7 +132,10 @@ class PlaylistActivity : AppCompatActivity() {
                         try {
                             val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(staging) }
                             check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }; check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
-                            dao.promoteStagedCatalog(staging.id, next); promoted = true
+                            withContext(NonCancellable) {
+                                dao.promoteStagedCatalog(staging.id, next); promoted = true
+                                CatalogSyncState.markSourceReplaced(applicationContext, id)
+                            }
                         } finally { if (!promoted) withContext(NonCancellable) { dao.discardStagedCatalog(staging.id) } }
                     } else { dao.upsertProvider(next); dao.disableAllProviders(); dao.activateProvider(id) }
                     CatalogSyncState.markReady(applicationContext, id)

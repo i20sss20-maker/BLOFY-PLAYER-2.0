@@ -22,6 +22,21 @@ ALTER TABLE devices ADD COLUMN IF NOT EXISTS activation_rotated_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_devices_auth_locked_until ON devices(auth_locked_until)
   WHERE auth_locked_until IS NOT NULL;
 
+-- Customer records initialize with the shared schema, after their devices parent table.
+-- Startup waits for this schema before accepting requests through any HTTP hook.
+CREATE TABLE IF NOT EXISTS device_customers (
+  device_id TEXT PRIMARY KEY REFERENCES devices(device_id) ON DELETE CASCADE,
+  customer_name TEXT,
+  customer_email TEXT,
+  customer_phone TEXT,
+  source TEXT NOT NULL DEFAULT 'zid',
+  last_order_reference TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_device_customers_email ON device_customers(customer_email);
+CREATE INDEX IF NOT EXISTS idx_device_customers_phone ON device_customers(customer_phone);
+
 CREATE TABLE IF NOT EXISTS playback_diagnostics (
   id BIGSERIAL PRIMARY KEY,
   device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,

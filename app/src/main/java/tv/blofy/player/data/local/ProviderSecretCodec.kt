@@ -37,6 +37,7 @@ internal object ProviderSecretCodec {
     private val cipher = ProviderSecretCipher(keys::get)
 
     fun seal(provider: ProviderEntity): ProviderEntity = cipher.seal(provider)
+    fun sealForUpdate(provider: ProviderEntity, stored: ProviderEntity?): ProviderEntity = cipher.sealForUpdate(provider, stored)
     fun open(provider: ProviderEntity): ProviderEntity = cipher.open(provider)
     fun needsSealing(provider: ProviderEntity): Boolean = cipher.needsSealing(provider)
     fun isSealed(value: String): Boolean = value.startsWith(PROVIDER_SECRET_PREFIX)
@@ -61,6 +62,22 @@ internal class ProviderSecretKeyAccess(
 internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
     fun needsSealing(provider: ProviderEntity): Boolean =
         needsSealing(provider.baseUrl) || needsSealing(provider.username) || needsSealing(provider.password)
+
+    fun sealForUpdate(provider: ProviderEntity, stored: ProviderEntity?): ProviderEntity {
+        if (stored == null) return seal(provider)
+        // Failed reads expose empty values to prevent ciphertext reaching a provider. A later
+        // selection/metadata save must not write that projection back over the recoverable secret,
+        // even if Keystore has recovered between the read and this write. Xtream fields cannot be
+        // explicitly cleared in the editor; a deliberate change to M3U may clear its credentials.
+        fun keepCiphertext(value: String, previous: String): String =
+            if (value.isEmpty() && isSealed(previous)) previous else value
+        val sameType = provider.providerType == stored.providerType
+        return seal(provider.copy(
+            baseUrl = keepCiphertext(provider.baseUrl, stored.baseUrl),
+            username = if (sameType) keepCiphertext(provider.username, stored.username) else provider.username,
+            password = if (sameType) keepCiphertext(provider.password, stored.password) else provider.password,
+        ))
+    }
 
     fun seal(provider: ProviderEntity): ProviderEntity {
         if (!needsSealing(provider)) return provider

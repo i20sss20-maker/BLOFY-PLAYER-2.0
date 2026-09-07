@@ -50,8 +50,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: services/activation/package.json
-      - run: npm install
+          cache-dependency-path: services/activation/package-lock.json
+      - run: npm ci
       - name: Record resolved activation dependencies
         uses: actions/upload-artifact@v4
         with:

@@ -3,6 +3,7 @@ package tv.blofy.player.core.identity
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -15,6 +16,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDao
+import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.core.network.awaitResponse
 import tv.blofy.player.core.url.PlaylistUrlPolicy
@@ -51,7 +53,7 @@ object PortalPlaylistClient {
     private suspend fun syncInternal(context: Context, baseUrl: String, dao: BlofyDao, mode: SyncMode): SyncResult = withContext(Dispatchers.IO) {
         val endpoint = baseUrl.trim().trimEnd('/')
         if (endpoint.isBlank()) {
-            val local = dao.allProviders().first()
+            val local = PortalSyncBook.visible(context, dao.allProviders().first())
             return@withContext SyncResult(local.firstOrNull { it.enabled }, local, emptySet(), 0)
         }
 
@@ -97,20 +99,28 @@ object PortalPlaylistClient {
                 enabled = item.active,
                 updatedAt = item.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
             )
-            remoteProviders += next
-            val contentChanged = existing == null ||
-                existing.baseUrl != next.baseUrl || existing.username != next.username ||
-                existing.password != next.password || existing.providerType != next.providerType
+            val contentChanged = existing == null || !sameSource(existing, next)
             if (contentChanged) {
                 changed += next.id
                 CatalogSyncState.markPending(context, next.id)
             }
 
-            // Persist portal playlists locally immediately. This makes the device cache the source
-            // of truth for rendering and guarantees a transient portal/network failure never makes
-            // a previously visible playlist disappear from the login screen.
-            dao.upsertProvider(next.copy(enabled = if (item.active) true else existing?.enabled ?: false))
-            if (item.active) remoteActive = next
+            val visible = if (contentChanged && existing != null &&
+                CatalogSyncState.isReady(context, existing.id) && dao.hasCatalog(existing.id)) {
+                // Keep credentials paired with their verified catalog. The replacement uses the
+                // same Room/Keystore protection but stays hidden until a staged import succeeds.
+                val pendingId = PortalSyncBook.pendingSourceId(next.id)
+                PortalSyncBook.hide(context, setOf(pendingId))
+                dao.upsertProvider(next.copy(id = pendingId, enabled = false))
+                PortalSyncBook.markPendingSource(context, next.id)
+                existing.copy(name = next.name, enabled = next.enabled, updatedAt = next.updatedAt)
+            } else {
+                discardPendingSource(context, dao, next.id)
+                next
+            }
+            remoteProviders += visible
+            dao.upsertProvider(visible.copy(enabled = if (item.active) true else existing?.enabled ?: false))
+            if (item.active) remoteActive = visible
         }
 
         val remoteIds = remote.mapTo(hashSetOf()) { it.id }
@@ -121,7 +131,7 @@ object PortalPlaylistClient {
         val siteDeleted = local.filter { PortalSyncBook.isKnown(context, it.id) &&
             PortalSyncBook.remoteId(context, it.id) !in remoteAllIds }
         PortalSyncBook.hide(context, siteDeleted.map { it.id }.toSet())
-        siteDeleted.forEach { dao.deactivateProvider(it.id) }
+        siteDeleted.forEach { dao.deactivateProvider(it.id); discardPendingSource(context, dao, it.id) }
         if (mode == SyncMode.MERGE_AND_UPLOAD) {
             PortalSyncBook.visible(context, local).filterNot { PortalSyncBook.isKnown(context, it.id) || it.id in remoteIds }.forEach { provider ->
                 try {
@@ -153,18 +163,36 @@ object PortalPlaylistClient {
         SyncResult(activeCandidate, merged, changed, remote.size)
     }
 
-    suspend fun selectProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao) = withContext(Dispatchers.IO) {
-        val selected = provider.copy(enabled = true, updatedAt = System.currentTimeMillis())
-        // Local activation is authoritative for responsiveness. Portal sync is best-effort and
-        // cannot block or undo a user's playlist selection.
-        dao.saveAndActivateProvider(selected)
-        runCatching { pushProvider(context, baseUrl, selected) }
-        selected
+    suspend fun selectProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao): ProviderEntity = syncMutex.withLock {
+        withContext(Dispatchers.IO) {
+            // A refresh that was already in flight finishes before this explicit selection.
+            val selected = (dao.provider(provider.id) ?: provider).copy(enabled = true, updatedAt = System.currentTimeMillis())
+            dao.saveAndActivateProvider(selected)
+            try {
+                // Selecting a cached source must not upload its old credentials over a pending
+                // source change that the user just made on the website.
+                val remoteSelection = (pendingSource(context, dao, selected.id) ?: selected)
+                    .copy(enabled = true, updatedAt = selected.updatedAt)
+                pushProviderInternal(context, baseUrl, remoteSelection)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Local selection is durable; upload remains best effort. */ }
+            selected
+        }
     }
 
-    suspend fun pushProvider(context: Context, baseUrl: String, provider: ProviderEntity) = withContext(Dispatchers.IO) {
+    suspend fun pushProvider(context: Context, baseUrl: String, provider: ProviderEntity) = syncMutex.withLock {
+        withContext(Dispatchers.IO) {
+            if (baseUrl.isBlank()) return@withContext
+            pushProviderInternal(context, baseUrl, provider)
+            // This entry is used after an explicit locally validated source edit. Its successful
+            // upload supersedes an older website candidate, which must no longer be applied.
+            discardPendingSource(context, BlofyDatabase.get(context).dao(), provider.id)
+        }
+    }
+
+    private suspend fun pushProviderInternal(context: Context, baseUrl: String, provider: ProviderEntity) {
         val endpoint = baseUrl.trim().trimEnd('/')
-        if (endpoint.isBlank()) return@withContext
+        if (endpoint.isBlank()) return
         require(PlaylistUrlPolicy.isValid(provider.baseUrl)) { "Valid HTTP or HTTPS playlist URL required" }
         val auth = JSONObject().apply {
             put("deviceId", DeviceIdentity.deviceId(context))
@@ -174,13 +202,44 @@ object PortalPlaylistClient {
         PortalSyncBook.bind(context, provider.id, remoteId)
     }
 
+    suspend fun pendingSource(context: Context, dao: BlofyDao, providerId: String): ProviderEntity? {
+        if (!PortalSyncBook.hasPendingSource(context, providerId)) return null
+        return dao.provider(PortalSyncBook.pendingSourceId(providerId))?.copy(id = providerId)
+    }
+
+    suspend fun commitPendingSource(
+        context: Context,
+        dao: BlofyDao,
+        expectedSource: ProviderEntity,
+        commit: suspend () -> Unit,
+    ) = syncMutex.withLock {
+        val latest = pendingSource(context, dao, expectedSource.id)
+        check(latest != null && sameSource(latest, expectedSource)) { "Website source changed during preparation" }
+        withContext(NonCancellable + Dispatchers.IO) {
+            commit()
+            discardPendingSource(context, dao, expectedSource.id)
+        }
+    }
+
+    private suspend fun discardPendingSource(context: Context, dao: BlofyDao, providerId: String) {
+        if (!PortalSyncBook.hasPendingSource(context, providerId)) return
+        // Clear the entry gate first. A process death or cleanup failure may leave only a hidden
+        // disposable row, never a pending flag pointing at a missing replacement source.
+        PortalSyncBook.clearPendingSource(context, providerId)
+        dao.deleteProvider(PortalSyncBook.pendingSourceId(providerId))
+    }
+
+    private fun sameSource(first: ProviderEntity, second: ProviderEntity): Boolean =
+        first.baseUrl == second.baseUrl && first.username == second.username &&
+            first.password == second.password && first.providerType == second.providerType
+
     suspend fun removeProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao): Boolean = syncMutex.withLock {
         withContext(Dispatchers.IO) {
             val remoteId = PortalSyncBook.remoteId(context, provider.id)
             val ids = dao.allProviders().first().filter { it.id == provider.id ||
                 PortalSyncBook.remoteId(context, it.id) == remoteId }.map { it.id }.toSet()
             PortalSyncBook.queueDelete(context, remoteId, ids)
-            ids.forEach { dao.deactivateProvider(it) }
+            ids.forEach { dao.deactivateProvider(it); discardPendingSource(context, dao, it) }
             val endpoint = baseUrl.trim().trimEnd('/')
             if (endpoint.isBlank()) return@withContext false
             val auth = JSONObject().apply {

@@ -3,22 +3,22 @@ package tv.blofy.player.ui.profile
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import kotlinx.coroutines.CoroutineScope
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.core.profile.KidsPolicy
@@ -30,7 +30,7 @@ import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.home.HomeActivity
-import tv.blofy.player.ui.home.HomeRowReconciler
+import tv.blofy.player.ui.home.HomeRowOrder
 import java.util.WeakHashMap
 
 /**
@@ -40,37 +40,59 @@ import java.util.WeakHashMap
  * still render normally if its internal layout changes in a later release.
  */
 class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private data class WatchlistState(val profileId: String, val name: String, val items: List<StreamEntity>)
     private val watchlistStates = WeakHashMap<View, WatchlistState>()
+    private data class Signature(val profileId: String, val name: String, val kids: Boolean,
+        val rows: List<String>, val watchlist: List<String>, val children: List<View>)
+    private data class Binding(val observer: ViewTreeObserver, val listener: ViewTreeObserver.OnGlobalLayoutListener,
+        val preferences: List<SharedPreferences>, val preferenceListener: SharedPreferences.OnSharedPreferenceChangeListener,
+        var signature: Signature? = null, var job: Job? = null)
+    private val bindings = WeakHashMap<Activity, Binding>()
 
     override fun onActivityResumed(activity: Activity) {
         if (activity !is HomeActivity) return
-        // Home data is loaded asynchronously. Retry a few times, then leave the stock Home alone.
-        repeat(5) { attempt ->
-            activity.window.decorView.postDelayed({ apply(activity) }, 350L + attempt * 350L)
+        onActivityPaused(activity)
+        val observer = activity.window.decorView.viewTreeObserver
+        val listener = ViewTreeObserver.OnGlobalLayoutListener { apply(activity) }
+        val preferences = listOf("blofy_profiles", "blofy_profile_library_v1").map {
+            activity.getSharedPreferences(it, Activity.MODE_PRIVATE)
         }
+        val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            bindings[activity]?.signature = null
+            apply(activity)
+        }
+        bindings[activity] = Binding(observer, listener, preferences, preferenceListener)
+        preferences.forEach { it.registerOnSharedPreferenceChangeListener(preferenceListener) }
+        observer.addOnGlobalLayoutListener(listener)
+        apply(activity)
     }
 
     private fun apply(activity: HomeActivity) {
+        val binding = bindings[activity] ?: return
         if (activity.isFinishing || activity.isDestroyed) return
         val feed = homeFeed(activity) ?: return
         if (feed.childCount < 2) return
-
-        val profileId = ProfileStore.storageNamespace(activity)
+        val profile = ProfileStore.active(activity)
+        val profileId = profile.id
+        val children = (0 until feed.childCount).map(feed::getChildAt)
+        binding.signature?.let { previous ->
+            if (previous.profileId == profileId && previous.name == profile.name && previous.kids == profile.kids &&
+                previous.children == children) return
+        }
         val wantedRows = ProfileLibraryStore.homeRows(activity, profileId)
-        val kids = ProfileStore.isKids(activity)
-
-        scope.launch {
-            val watchlist = loadWatchlist(activity, profileId, kids)
-            withContext(Dispatchers.Main) {
-                if (activity.isFinishing || activity.isDestroyed) return@withContext
-                // A slow query from the previous profile must not rewrite the current profile's Home.
-                if (ProfileStore.storageNamespace(activity) != profileId) return@withContext
-                val currentFeed = homeFeed(activity) ?: return@withContext
-                installWatchlistShelf(activity, currentFeed, wantedRows, watchlist)
-                applyExistingRows(currentFeed, wantedRows)
-            }
+        val signature = Signature(profileId, profile.name, profile.kids, wantedRows,
+            ProfileLibraryStore.watchlist(activity, profileId).toList(), children)
+        if (binding.signature == signature) return
+        binding.signature = signature
+        binding.job?.cancel()
+        binding.job = activity.lifecycleScope.launch {
+            val watchlist = withContext(Dispatchers.IO) { loadWatchlist(activity, profileId, profile.kids) }
+            if (bindings[activity] !== binding || activity.isFinishing || activity.isDestroyed) return@launch
+            if (ProfileStore.storageNamespace(activity) != profileId) return@launch
+            val currentFeed = homeFeed(activity) ?: return@launch
+            installWatchlistShelf(activity, currentFeed, wantedRows, watchlist)
+            applyExistingRows(currentFeed, wantedRows)
+            binding.signature = signature.copy(children = (0 until currentFeed.childCount).map(currentFeed::getChildAt))
         }
     }
 
@@ -84,31 +106,7 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
     }
 
     private fun applyExistingRows(feed: LinearLayout, wantedRows: List<String>) {
-        val groups = mutableMapOf<String, List<View>>()
-        var index = 1 // child 0 is the hero and must never move.
-        while (index < feed.childCount) {
-            val child = feed.getChildAt(index)
-            val title = sectionTitle(child)
-            val rowKey = titleToRowKey(title)
-            if (rowKey != null) {
-                val block = mutableListOf<View>(child)
-                if (index + 1 < feed.childCount && sectionTitle(feed.getChildAt(index + 1)) == null) {
-                    block += feed.getChildAt(index + 1)
-                }
-                groups[rowKey] = block
-                index += block.size
-            } else index++
-        }
-
-        // Compare the complete intended order before detaching anything. The lifecycle retries
-        // while Home loads; a retry with the same rows must not reset focus or horizontal scroll.
-        val managed = groups.values.flatten().toSet()
-        val desired = (0 until feed.childCount).map(feed::getChildAt).filterNot { it in managed }.toMutableList()
-        val quickIndex = desired.indexOfFirst { sectionTitle(it) == "اختصارات سريعة" }
-            .takeIf { it >= 0 } ?: desired.size
-        val ordered = wantedRows.distinct().flatMap { groups[it].orEmpty() }
-        desired.addAll(quickIndex, ordered)
-        HomeRowReconciler.apply(feed, desired)
+        HomeRowOrder.apply(feed, wantedRows)
     }
 
     private fun installWatchlistShelf(
@@ -130,6 +128,7 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
 
         val title = LinearLayout(activity).apply {
             tag = TAG_WATCHLIST_TITLE
+            HomeRowOrder.mark(this, "watchlist")
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.RIGHT
@@ -151,6 +150,7 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
 
         val scroll = HorizontalScrollView(activity).apply {
             tag = TAG_WATCHLIST_ROW
+            HomeRowOrder.mark(this, "watchlist")
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             clipChildren = false
@@ -173,18 +173,9 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
         }
         scroll.addView(row, FrameLayout.LayoutParams(-2, -1))
 
-        val managedPosition = wantedRows.indexOf("watchlist")
-        val beforeRows = wantedRows.take(managedPosition).count { it != "watchlist" }
-        var insertAt = 1
-        var seen = 0
-        while (insertAt < feed.childCount && seen < beforeRows) {
-            val key = titleToRowKey(sectionTitle(feed.getChildAt(insertAt)))
-            if (key != null) seen++
-            insertAt++
-            if (insertAt < feed.childCount && sectionTitle(feed.getChildAt(insertAt)) == null) insertAt++
-        }
-        feed.addView(title, insertAt.coerceAtMost(feed.childCount))
-        feed.addView(scroll, (insertAt + 1).coerceAtMost(feed.childCount), LinearLayout.LayoutParams(-1, dp(activity, 246)))
+        // The stable row reconciler places the complete shelf before quick shortcuts.
+        feed.addView(title)
+        feed.addView(scroll, LinearLayout.LayoutParams(-1, dp(activity, 246)))
         watchlistStates[scroll] = state
         // Preserve the same title if its card was replaced; never select a removed title by index.
         focusedTag?.let { scroll.findViewWithTag<View>(it)?.requestFocus() }
@@ -250,32 +241,21 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
         field.get(activity) as? LinearLayout
     }.getOrNull()
 
-    private fun sectionTitle(view: View): String? {
-        if (view.tag == TAG_WATCHLIST_TITLE) return "قائمتي"
-        if (view !is ViewGroup || view.childCount == 0) return null
-        val first = view.getChildAt(0) as? TextView ?: return null
-        return first.text?.toString()?.trim()?.takeIf(String::isNotBlank)
-    }
-
-    private fun titleToRowKey(title: String?): String? = when (title) {
-        "قائمتي" -> "watchlist"
-        "تابع المشاهدة" -> "continue_watching"
-        "شاهدت مؤخرًا" -> "recent_channels"
-        "أضيف حديثًا" -> "latest"
-        "الأعلى تقييمًا" -> "top_rated"
-        "مختارات عربية" -> "arabic"
-        "4K • UHD" -> "uhd"
-        else -> null
-    }
-
     private fun dp(activity: Activity, value: Int) = (value * activity.resources.displayMetrics.density).toInt()
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
     override fun onActivityStarted(activity: Activity) = Unit
-    override fun onActivityPaused(activity: Activity) = Unit
+    override fun onActivityPaused(activity: Activity) {
+        val binding = bindings.remove(activity) ?: return
+        binding.job?.cancel()
+        binding.preferences.forEach { it.unregisterOnSharedPreferenceChangeListener(binding.preferenceListener) }
+        if (binding.observer.isAlive) binding.observer.removeOnGlobalLayoutListener(binding.listener)
+        val current = activity.window.decorView.viewTreeObserver
+        if (current.isAlive && current !== binding.observer) current.removeOnGlobalLayoutListener(binding.listener)
+    }
     override fun onActivityStopped(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
-    override fun onActivityDestroyed(activity: Activity) = Unit
+    override fun onActivityDestroyed(activity: Activity) { onActivityPaused(activity) }
 
     companion object {
         private const val TAG_WATCHLIST_TITLE = "blofy_profile_home_watchlist_title"

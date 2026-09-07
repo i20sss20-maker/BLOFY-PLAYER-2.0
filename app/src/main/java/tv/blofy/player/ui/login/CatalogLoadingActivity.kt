@@ -25,6 +25,8 @@ import kotlinx.coroutines.withTimeout
 import tv.blofy.player.data.preparation.CatalogLoadAttempt
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.PlaylistManager
@@ -87,9 +89,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 }
                 preflight = false
                 val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
-                if (!forceRefresh && CatalogSyncState.isEntryReady(applicationContext, providerId) && hasCachedCatalog) {
+                val sourceChanged = PortalSyncBook.hasPendingSource(applicationContext, providerId)
+                if (!forceRefresh && !sourceChanged && CatalogSyncState.isEntryReady(applicationContext, providerId) && hasCachedCatalog) {
                     openHome()
-                } else if (!forceRefresh && catalogReady && hasCachedCatalog) {
+                } else if (!forceRefresh && !sourceChanged && catalogReady && hasCachedCatalog) {
                     awaitEntryReadyCache(providerId)
                     openHome()
                 } else {
@@ -270,11 +273,23 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private suspend fun sync(providerId: String) {
         val dao = BlofyDatabase.get(applicationContext).dao()
+        val sourceChanged = PortalSyncBook.hasPendingSource(applicationContext, providerId)
         val target = withTimeout(20_000L) {
-            withContext(Dispatchers.IO) { dao.provider(providerId) }
+            withContext(Dispatchers.IO) {
+                if (sourceChanged) {
+                    checkNotNull(PortalPlaylistClient.pendingSource(applicationContext, dao, providerId)) {
+                        "Pending playlist source is unavailable"
+                    }
+                } else dao.provider(providerId)
+            }
         } ?: return fail(getString(R.string.catalog_provider_not_found))
         val firstLoad = withTimeout(20_000L) {
-            withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
+            withContext(Dispatchers.IO) {
+                // Process death can leave streamed Room batches before the first durable commit.
+                // They must retry as an initial import, never become the fallback saved library.
+                CatalogSyncState.discardUncommittedCatalog(applicationContext, dao, providerId)
+                !dao.hasStreamsForProvider(providerId)
+            }
         }
 
         // A staged refresh temporarily duplicates catalog rows. Clean disposable cache first and
@@ -311,18 +326,32 @@ class CatalogLoadingActivity : AppCompatActivity() {
             check(result.freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
             check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
             render(30, getString(if (firstLoad) R.string.catalog_finishing else R.string.catalog_saving_refresh))
-            withContext(Dispatchers.IO) {
-                if (firstLoad) {
-                    dao.saveAndActivateProvider(syncProvider.copy(enabled = true, updatedAt = System.currentTimeMillis()))
-                } else {
-                    dao.promoteStagedCatalog(syncProvider.id, target.copy(enabled = true, updatedAt = System.currentTimeMillis()))
+            withContext(NonCancellable + Dispatchers.IO) {
+                suspend fun commitCatalog() {
+                    val saved = target.copy(enabled = true, updatedAt = System.currentTimeMillis())
+                    if (firstLoad) {
+                        dao.saveAndActivateProvider(saved)
+                    } else if (sourceChanged) {
+                        // An explicitly changed provider can legitimately have a smaller catalog.
+                        dao.promoteStagedCatalog(syncProvider.id, saved)
+                    } else {
+                        dao.promoteStagedRefresh(syncProvider.id, saved)
+                    }
+                    catalogCommitted = true
+                    if (sourceChanged) {
+                        CatalogSyncState.markSourceReplaced(applicationContext, providerId)
+                    } else {
+                        if (!firstLoad) ProviderMetadataCache.clearProvider(applicationContext, providerId)
+                        CatalogSyncState.markCatalogCommitted(applicationContext, providerId)
+                    }
                 }
+
+                if (sourceChanged) {
+                    // Serialize validation/promotion with portal updates. A newer pending source
+                    // must not be silently replaced by the response from an older in-flight load.
+                    PortalPlaylistClient.commitPendingSource(applicationContext, dao, target) { commitCatalog() }
+                } else commitCatalog()
             }
-            catalogCommitted = true
-            if (!firstLoad) {
-                withContext(Dispatchers.IO) { ProviderMetadataCache.clearProvider(applicationContext, providerId) }
-            }
-            CatalogSyncState.markCatalogCommitted(applicationContext, providerId)
             awaitEntryReadyCache(providerId)
             render(100, getString(R.string.catalog_complete))
             delay(120L)

@@ -6,8 +6,7 @@ import org.json.JSONObject
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
-import javax.crypto.SecretKeyFactory
-import javax.crypto.spec.PBEKeySpec
+import tv.blofy.player.core.security.PinKeyDerivation
 
 /**
  * Local BLOFY profiles. The catalog/playback engines stay shared; profile-owned UX state is
@@ -38,6 +37,7 @@ object ProfileStore {
         Profile("kids", "أطفال", true, null)
     )
 
+    @Synchronized
     fun all(context: Context): List<Profile> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val raw = prefs.getString(KEY_PROFILES, null)
@@ -115,7 +115,8 @@ object ProfileStore {
     fun setPin(context: Context, id: String, pin: String?) {
         val current = all(context)
         if (current.none { it.id == id }) return
-        val pinHash = pin?.takeIf { it.length in 4..8 && it.all(Char::isDigit) }?.let(::strongHash)
+        if (pin != null && (pin.length !in 4..8 || !pin.all(Char::isDigit))) return
+        val pinHash = pin?.let(::strongHash)
         saveAll(context, current.map { if (it.id == id) it.copy(pinHash = pinHash) else it })
     }
 
@@ -161,14 +162,8 @@ object ProfileStore {
         MessageDigest.isEqual(expected, derive(value, salt, iterations))
     }.getOrDefault(false)
 
-    private fun derive(value: String, salt: ByteArray, iterations: Int): ByteArray {
-        val spec = PBEKeySpec(value.toCharArray(), salt, iterations, PIN_BITS)
-        return try {
-            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
-        } finally {
-            spec.clearPassword()
-        }
-    }
+    private fun derive(value: String, salt: ByteArray, iterations: Int): ByteArray =
+        PinKeyDerivation.derive(value, salt, iterations)
 
     private fun legacyHash(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8))

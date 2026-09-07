@@ -21,6 +21,8 @@ assert.equal(process.env.PGSSLMODE, 'disable', 'Use the isolated CI PostgreSQL s
 assert.ok(!databaseUrl.search, 'Database URL query overrides are not allowed');
 const webhookSecret = String(process.env.BLOFY_PAYMENT_WEBHOOK_SECRET || '');
 assert.ok(webhookSecret.length >= 24, 'Configure the test webhook secret before starting the service');
+const adminToken = String(process.env.BLOFY_ADMIN_TOKEN || '');
+assert.ok(adminToken.length >= 24, 'Configure the isolated service admin token');
 
 const pool = new pg.Pool({ connectionString: databaseUrl.href, ssl: false });
 const suffix = crypto.randomBytes(6).toString('hex').toUpperCase();
@@ -116,6 +118,14 @@ async function couponCount(code, orderId) {
 }
 
 try {
+  // A healthy fresh database must also have the commerce schema: its customer
+  // table references devices and used to race the base schema during startup.
+  const users = expectStatus(await request('/api/v1/admin/users?limit=1', {
+    method: 'GET', headers: { authorization: `Bearer ${adminToken}` }
+  }), 200);
+  assert.ok(Array.isArray(users.items));
+  assert.ok((await pool.query("SELECT to_regclass('device_customers') AS table_name")).rows[0].table_name);
+
   const month = await plan(30);
   const year = await plan(365);
   const lifetime = await plan(null);
@@ -142,6 +152,10 @@ try {
     const lifetimeDevice = await deviceRow(readyDevice);
     assert.equal(lifetimeDevice.status, 'active');
     assert.equal(lifetimeDevice.expires_at, null, 'A dated order/refund must preserve lifetime entitlement');
+    const status = expectStatus(await request('/api/v1/subscriptions/status', { body: readyDevice }), 200);
+    assert.equal(status.active, true);
+    assert.equal(status.expiresAt, null);
+    assert.equal(status.planKey, lifetime, 'Subscription status must return the surviving lifetime entitlement');
   }
 
   // Wrong PIN attempts share one durable failure budget across hook endpoints.
@@ -235,8 +249,10 @@ try {
   const renewalOrders = [await order(renewalDevice, month), await order(renewalDevice, year)];
   const blocker = await pool.connect();
   let deliveries = [];
+  let barrierOpen = false;
   try {
     await blocker.query('BEGIN');
+    barrierOpen = true;
     const blockerPid = (await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
     await blocker.query('SELECT device_id FROM devices WHERE device_id=$1 FOR UPDATE', [renewalDevice.deviceId]);
     deliveries = renewalOrders.map((item) => deliver(payment(item, 'paid')));
@@ -257,9 +273,10 @@ try {
     }
     assert.ok(waiters >= 2, 'Both payment transactions must overlap at the device lock');
     await blocker.query('COMMIT');
+    barrierOpen = false;
     for (const result of await Promise.all(deliveries)) expectStatus(result, 200);
   } finally {
-    await blocker.query('ROLLBACK').catch(() => {});
+    if (barrierOpen) await blocker.query('ROLLBACK').catch(() => {});
     blocker.release();
     await Promise.allSettled(deliveries);
   }

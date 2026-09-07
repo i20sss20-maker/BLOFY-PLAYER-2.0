@@ -112,27 +112,7 @@ function customerData(payload) {
   };
 }
 
-async function ensureCommerceSchema() {
-  if (!pool) return;
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS device_customers (
-      device_id TEXT PRIMARY KEY REFERENCES devices(device_id) ON DELETE CASCADE,
-      customer_name TEXT,
-      customer_email TEXT,
-      customer_phone TEXT,
-      source TEXT NOT NULL DEFAULT 'zid',
-      last_order_reference TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_device_customers_email ON device_customers(customer_email);
-    CREATE INDEX IF NOT EXISTS idx_device_customers_phone ON device_customers(customer_phone);
-  `);
-}
-const schemaReady = ensureCommerceSchema().catch((error) => console.error('Zid commerce schema init failed', error?.message || error));
-
 async function grantPaidZidOrder(payload) {
-  await schemaReady;
   const event = String(payload.event || payload.type || payload.event_name || '').toLowerCase();
   const paymentStatus = String(firstByKey(payload, new Set(['payment_status','paymentstatus','status'])) || '').toLowerCase();
   const isPaid = event.includes('payment_status') ? paymentStatus === 'paid' : (event.includes('paid') || paymentStatus === 'paid');
@@ -232,7 +212,6 @@ async function readiness(_req, res) {
 }
 
 async function renewValidate(req, res) {
-  await schemaReady;
   const body = await readJson(req);
   const deviceId = String(body.deviceId || '').trim();
   const activationCode = String(body.activationCode || '').trim();
@@ -250,7 +229,6 @@ async function renewValidate(req, res) {
 
 async function adminUsers(req, res, requestUrl) {
   if (!adminAuthorized(req)) return json(res, 401, { error: 'unauthorized' });
-  await schemaReady;
   const q = String(requestUrl.searchParams.get('q') || '').trim();
   const limit = Math.min(200, Math.max(1, Number(requestUrl.searchParams.get('limit') || 100)));
   const params = [];

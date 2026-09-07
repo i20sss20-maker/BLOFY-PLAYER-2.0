@@ -96,8 +96,8 @@ class ProfilesActivity : AppCompatActivity() {
         }
 
         val profileManagement = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
-        profileManagement.addView(actionButton("＋ إضافة ملف") { showCreateProfile() }, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginStart = dp(8) })
-        profileManagement.addView(actionButton("حذف الملف الحالي") { deleteActiveProfile() }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        profileManagement.addView(actionButton("＋ إضافة ملف") { requireManagementAccess { showCreateProfile() } }, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginStart = dp(8) })
+        profileManagement.addView(actionButton("حذف الملف الحالي") { requireManagementAccess { deleteActiveProfile() } }, LinearLayout.LayoutParams(0, dp(54), 1f))
         root.addView(profileManagement, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(8) })
 
         root.addView(TextView(this).apply {
@@ -123,15 +123,19 @@ class ProfilesActivity : AppCompatActivity() {
         profileActions.addView(actionButton("حفظ PIN للملف") {
             val value = profilePin.text?.toString().orEmpty()
             if (value.length in 4..8 && value.all(Char::isDigit)) {
-                ProfileStore.setPin(this, active.id, value)
-                Toast.makeText(this, "تم حفظ PIN لملف ${active.name}", Toast.LENGTH_SHORT).show()
-                render()
+                requireManagementAccess {
+                    ProfileStore.setPin(this, active.id, value)
+                    Toast.makeText(this, "تم حفظ PIN لملف ${active.name}", Toast.LENGTH_SHORT).show()
+                    render()
+                }
             } else Toast.makeText(this, "اكتب من 4 إلى 8 أرقام", Toast.LENGTH_SHORT).show()
         }, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginStart = dp(8) })
         profileActions.addView(actionButton("إلغاء PIN للملف") {
-            ProfileStore.setPin(this, active.id, null)
-            Toast.makeText(this, "تم إلغاء PIN للملف", Toast.LENGTH_SHORT).show()
-            render()
+            requireManagementAccess {
+                ProfileStore.setPin(this, active.id, null)
+                Toast.makeText(this, "تم إلغاء PIN للملف", Toast.LENGTH_SHORT).show()
+                render()
+            }
         }, LinearLayout.LayoutParams(0, dp(54), 1f))
         root.addView(profileActions)
 
@@ -156,12 +160,19 @@ class ProfilesActivity : AppCompatActivity() {
 
         val parentalActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
         parentalActions.addView(actionButton("حفظ PIN للمحتوى") {
-            if (ParentalGate.setPin(this, parentalPin.text?.toString().orEmpty())) {
-                Toast.makeText(this, "تم حفظ PIN المحتوى", Toast.LENGTH_SHORT).show(); render()
+            val value = parentalPin.text?.toString().orEmpty()
+            if (value.trim().length in 4..8 && value.trim().all(Char::isDigit)) {
+                requireManagementAccess {
+                    if (ParentalGate.setPin(this, value)) {
+                        Toast.makeText(this, "تم حفظ PIN المحتوى", Toast.LENGTH_SHORT).show(); render()
+                    }
+                }
             } else Toast.makeText(this, "اكتب من 4 إلى 8 أرقام", Toast.LENGTH_SHORT).show()
         }, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginStart = dp(8) })
         parentalActions.addView(actionButton("إلغاء PIN المحتوى") {
-            ParentalGate.clearPin(this); Toast.makeText(this, "تم إلغاء PIN المحتوى", Toast.LENGTH_SHORT).show(); render()
+            requireManagementAccess {
+                ParentalGate.clearPin(this); Toast.makeText(this, "تم إلغاء PIN المحتوى", Toast.LENGTH_SHORT).show(); render()
+            }
         }, LinearLayout.LayoutParams(0, dp(54), 1f))
         root.addView(parentalActions)
     }
@@ -211,11 +222,39 @@ class ProfilesActivity : AppCompatActivity() {
     }
 
     private fun selectProfile(profile: ProfileStore.Profile) {
-        if (profile.id == ProfileStore.active(this).id) return
-        if (profile.pinHash == null) {
+        val active = ProfileStore.active(this)
+        if (profile.id == active.id) return
+        if (profile.pinHash != null) {
+            requireProfilePin(listOf(profile)) { activate(profile) }
+        } else if (active.kids && !profile.kids &&
+            (ParentalGate.hasPin(this) || ProfileStore.all(this).any { !it.kids && it.pinHash != null })) {
+            requireManagementAccess { activate(profile) }
+        } else {
             activate(profile)
+        }
+    }
+
+    /** Management must never be a way to erase a PIN or leave Kids without adult authorization. */
+    private fun requireManagementAccess(onGranted: () -> Unit) {
+        val active = ProfileStore.active(this)
+        val grantIfStillCurrent = {
+            if (!isFinishing && !isDestroyed && ProfileStore.active(this).id == active.id) onGranted()
+        }
+        if (ParentalGate.hasPin(this)) {
+            ParentalGate.requirePin(this, grantIfStillCurrent)
             return
         }
+        val protectedProfiles = if (active.kids) {
+            ProfileStore.all(this).filter { !it.kids && it.pinHash != null }
+        } else listOf(active).filter { it.pinHash != null }
+        when {
+            protectedProfiles.isNotEmpty() -> requireProfilePin(protectedProfiles, grantIfStillCurrent)
+            active.kids -> Toast.makeText(this, "اختر ملف بالغ لإدارة الحماية والملفات", Toast.LENGTH_SHORT).show()
+            else -> grantIfStillCurrent()
+        }
+    }
+
+    private fun requireProfilePin(profiles: List<ProfileStore.Profile>, onGranted: () -> Unit) {
         val input = EditText(this).apply {
             hint = "PIN"
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
@@ -223,12 +262,15 @@ class ProfilesActivity : AppCompatActivity() {
             setPadding(dp(18), dp(6), dp(18), dp(6))
         }
         AlertDialog.Builder(this)
-            .setTitle("فتح ملف ${profile.name}")
+            .setTitle(if (profiles.size == 1) "فتح ملف ${profiles.first().name}" else "رمز حماية ملف بالغ")
             .setMessage("أدخل رمز PIN الخاص بهذا الملف")
             .setView(input)
             .setNegativeButton("إلغاء", null)
             .setPositiveButton("فتح") { _, _ ->
-                if (ProfileStore.verifyPin(profile, input.text?.toString().orEmpty())) activate(profile)
+                val candidates = ProfileStore.all(this).filter { current ->
+                    current.pinHash != null && profiles.any { it.id == current.id }
+                }
+                if (candidates.any { ProfileStore.verifyPin(it, input.text?.toString().orEmpty()) }) onGranted()
                 else Toast.makeText(this, "PIN غير صحيح", Toast.LENGTH_SHORT).show()
             }
             .show()

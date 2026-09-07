@@ -1,0 +1,4 @@
+<resources>
+    <item name="blofy_home_row_key" type="id" />
+    <item name="blofy_kids_hidden_state" type="id" />
+</resources>
