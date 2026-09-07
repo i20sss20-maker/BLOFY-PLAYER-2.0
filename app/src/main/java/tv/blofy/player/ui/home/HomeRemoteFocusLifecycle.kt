@@ -2,6 +2,7 @@ package tv.blofy.player.ui.home
 
 import android.app.Activity
 import android.app.Application
+import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -15,15 +16,22 @@ import kotlin.math.roundToInt
  * nextFocusUpId/nextFocusDownId links for vertical movement instead of running unpredictable
  * FocusFinder searches across the sidebar and dynamic shelves on every remote press.
  *
- * Dynamic hero/artwork/text updates can trigger many global-layout callbacks even when focusable
- * geometry did not change. Rewriting the graph on every callback made real remotes feel jumpy.
- * We therefore rebuild only when the set/position/size of focusable views actually changes.
+ * Only views that are substantially visible on screen participate. The sidebar/content boundary is
+ * derived from real focus geometry instead of a fixed percentage of screen width. A fixed 28%
+ * boundary was wide enough to misclassify poster cards as sidebar items on common TV layouts,
+ * causing UP/DOWN jumps that looked random on the remote.
  */
 class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
     private data class Binding(
         val root: View,
         val listener: ViewTreeObserver.OnGlobalLayoutListener,
         var geometrySignature: Long = Long.MIN_VALUE,
+    )
+
+    private data class VisibleView(
+        val view: View,
+        val centerX: Int,
+        val centerY: Int,
     )
 
     private val bindings = WeakHashMap<Activity, Binding>()
@@ -50,54 +58,48 @@ class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
         collectFocusable(root, focusables)
         if (focusables.isEmpty()) return
 
-        focusables.forEach { view ->
-            if (view.id == View.NO_ID) view.id = View.generateViewId()
-        }
+        focusables.forEach { view -> if (view.id == View.NO_ID) view.id = View.generateViewId() }
 
-        val visible = focusables.filter { it.isShown && it.isEnabled && it.isFocusable && it.width > 0 && it.height > 0 }
+        val visible = focusables.mapNotNull(::visibleGeometry)
         if (visible.isEmpty()) return
 
         val screenWidth = root.width.takeIf { it > 0 } ?: activity.resources.displayMetrics.widthPixels
-        val sidebarBoundary = (screenWidth * 0.28f).roundToInt()
-        val rowSlack = (activity.resources.displayMetrics.density * 54f).roundToInt()
-        val nodes = visible.mapNotNull { nodeFor(it, sidebarBoundary) }
-        if (nodes.isEmpty()) return
+        val density = activity.resources.displayMetrics.density
+        val sidebarBoundary = deriveSidebarBoundary(visible, screenWidth, density)
+        val rowSlack = (density * 54f).roundToInt()
+        val nodes = visible.map { item ->
+            HomeRemoteFocusPolicy.Node(
+                id = System.identityHashCode(item.view),
+                centerX = item.centerX,
+                centerY = item.centerY,
+                region = if (item.centerX < sidebarBoundary) REGION_SIDEBAR else REGION_CONTENT,
+            )
+        }
 
         val signature = geometrySignature(nodes, visible)
         if (signature == binding.geometrySignature) return
         binding.geometrySignature = signature
 
-        val byNodeId = visible.associateBy { System.identityHashCode(it) }
+        val byNodeId = visible.associateBy { System.identityHashCode(it.view) }
         val nodeById = nodes.associateBy { it.id }
 
-        visible.forEach { current ->
+        visible.forEach { currentGeometry ->
+            val current = currentGeometry.view
             val currentNode = nodeById[System.identityHashCode(current)] ?: return@forEach
-            val upNodeId = HomeRemoteFocusPolicy.vertical(
-                current = currentNode,
-                candidates = nodes,
-                down = false,
-                rowSlackPx = rowSlack,
-            )
-            val downNodeId = HomeRemoteFocusPolicy.vertical(
-                current = currentNode,
-                candidates = nodes,
-                down = true,
-                rowSlackPx = rowSlack,
-            )
-            val up = upNodeId?.let(byNodeId::get)
-            val down = downNodeId?.let(byNodeId::get)
+            val upNodeId = HomeRemoteFocusPolicy.vertical(currentNode, nodes, down = false, rowSlackPx = rowSlack)
+            val downNodeId = HomeRemoteFocusPolicy.vertical(currentNode, nodes, down = true, rowSlackPx = rowSlack)
+            val up = upNodeId?.let(byNodeId::get)?.view
+            val down = downNodeId?.let(byNodeId::get)?.view
 
-            // Explicit self-links keep focus inside the current region at an edge instead of letting
-            // Android jump sideways into the sidebar or into an unrelated header control.
             current.nextFocusUpId = up?.id ?: current.id
             current.nextFocusDownId = down?.id ?: current.id
         }
     }
 
-    private fun geometrySignature(nodes: List<HomeRemoteFocusPolicy.Node>, views: List<View>): Long {
+    private fun geometrySignature(nodes: List<HomeRemoteFocusPolicy.Node>, visible: List<VisibleView>): Long {
         var value = 1125899906842597L
         nodes.forEachIndexed { index, node ->
-            val view = views[index]
+            val view = visible[index].view
             value = value * 31L + node.id
             value = value * 31L + node.centerX
             value = value * 31L + node.centerY
@@ -108,25 +110,43 @@ class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
         return value
     }
 
+    private fun deriveSidebarBoundary(visible: List<VisibleView>, screenWidth: Int, density: Float): Int {
+        val xs = visible.map { it.centerX }.distinct().sorted()
+        if (xs.size < 2) return (screenWidth * 0.20f).roundToInt()
+
+        val maxLeft = (screenWidth * 0.42f).roundToInt()
+        val minimumGap = (72f * density).roundToInt().coerceAtLeast(48)
+        var bestGap = 0
+        var bestBoundary: Int? = null
+        for (index in 0 until xs.lastIndex) {
+            val left = xs[index]
+            val right = xs[index + 1]
+            if (left > maxLeft) break
+            val gap = right - left
+            if (gap >= minimumGap && gap > bestGap) {
+                bestGap = gap
+                bestBoundary = left + gap / 2
+            }
+        }
+        return bestBoundary ?: (screenWidth * 0.20f).roundToInt()
+    }
+
+    private fun visibleGeometry(view: View): VisibleView? {
+        if (!view.isShown || !view.isEnabled || !view.isFocusable || view.width <= 0 || view.height <= 0) return null
+        val rect = Rect()
+        if (!view.getGlobalVisibleRect(rect) || rect.width() <= 0 || rect.height() <= 0) return null
+
+        val visibleArea = rect.width().toLong() * rect.height().toLong()
+        val fullArea = view.width.toLong() * view.height.toLong()
+        if (fullArea > 0L && visibleArea * 4L < fullArea) return null
+        return VisibleView(view, rect.centerX(), rect.centerY())
+    }
+
     private fun collectFocusable(view: View, out: MutableList<View>) {
         if (view.isShown && view.isEnabled && view.isFocusable) out += view
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) collectFocusable(view.getChildAt(i), out)
         }
-    }
-
-    private fun nodeFor(view: View, sidebarBoundary: Int): HomeRemoteFocusPolicy.Node? {
-        if (!view.isShown || !view.isEnabled || !view.isFocusable || view.width <= 0 || view.height <= 0) return null
-        val location = IntArray(2)
-        view.getLocationOnScreen(location)
-        val centerX = location[0] + view.width / 2
-        val centerY = location[1] + view.height / 2
-        return HomeRemoteFocusPolicy.Node(
-            id = System.identityHashCode(view),
-            centerX = centerX,
-            centerY = centerY,
-            region = if (centerX < sidebarBoundary) REGION_SIDEBAR else REGION_CONTENT,
-        )
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
