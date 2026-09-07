@@ -49,15 +49,19 @@ class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
         val sidebarBoundary = (screenWidth * 0.28f).roundToInt()
         val rowSlack = (activity.resources.displayMetrics.density * 54f).roundToInt()
 
-        focusables.forEach { view ->
+        // Keep the focusable view list from the latest layout pass. A rapid D-pad press must not
+        // recursively walk the complete Home view tree on every key event. Coordinates are still
+        // refreshed below, so scrolling/dynamic shelves remain accurate without the expensive scan.
+        val cachedFocusables = focusables.toList()
+
+        cachedFocusables.forEach { view ->
             view.setOnKeyListener { current, keyCode, event ->
                 if (event.action != KeyEvent.ACTION_DOWN || keyCode !in setOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN)) {
                     return@setOnKeyListener false
                 }
 
-                val refreshed = mutableListOf<View>()
-                collectFocusable(root, refreshed)
-                val nodes = refreshed.mapNotNull { candidate -> nodeFor(candidate, sidebarBoundary) }
+                val visible = cachedFocusables.filter { it.isShown && it.isEnabled && it.isFocusable }
+                val nodes = visible.mapNotNull { candidate -> nodeFor(candidate, sidebarBoundary) }
                 val currentNode = nodeFor(current, sidebarBoundary) ?: return@setOnKeyListener true
                 val targetId = HomeRemoteFocusPolicy.vertical(
                     current = currentNode,
@@ -66,7 +70,7 @@ class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
                     rowSlackPx = rowSlack,
                 ) ?: return@setOnKeyListener true
 
-                val target = refreshed.firstOrNull { System.identityHashCode(it) == targetId } ?: return@setOnKeyListener true
+                val target = visible.firstOrNull { System.identityHashCode(it) == targetId } ?: return@setOnKeyListener true
                 if (target.requestFocus()) {
                     target.requestRectangleOnScreen(Rect(0, 0, target.width, target.height), false)
                 }
