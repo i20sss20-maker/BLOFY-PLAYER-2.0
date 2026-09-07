@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.home.HomeActivity
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -30,6 +31,10 @@ class StorageMaintenanceLifecycle : Application.ActivityLifecycleCallbacks {
         val app = activity.applicationContext
         scope.launch {
             try {
+                // Upgrade old plaintext provider rows only after Home is already usable. The DAO
+                // transparently decrypts sealed rows for runtime use, so playback/catalog code stays
+                // untouched while credentials become AES-GCM protected at rest.
+                runCatching { BlofyDatabase.get(app).dao().hardenProviderSecrets() }
                 trimPosterCache(app.cacheDir, if (DeviceClass.isLowMemory(app)) LOW_RAM_POSTER_CACHE_BYTES else NORMAL_POSTER_CACHE_BYTES)
                 deleteStaleTemps(app.cacheDir, now)
             } finally {
@@ -79,9 +84,12 @@ class StorageMaintenanceLifecycle : Application.ActivityLifecycleCallbacks {
 
     companion object {
         private const val RUN_INTERVAL_MS = 6L * 60L * 60L * 1000L
-        private const val NORMAL_POSTER_CACHE_BYTES = 220L * 1024L * 1024L
+        private const val NORMAL_RAM_POSTER_CACHE_BYTES = 220L * 1024L * 1024L
         private const val LOW_RAM_POSTER_CACHE_BYTES = 96L * 1024L * 1024L
         private const val STALE_TEMP_AGE_MS = 24L * 60L * 60L * 1000L
         private const val MAX_SCAN_ENTRIES = 2_500
+
+        // Keep the old symbol name for source compatibility with existing tests/callers.
+        private const val NORMAL_POSTER_CACHE_BYTES = NORMAL_RAM_POSTER_CACHE_BYTES
     }
 }
