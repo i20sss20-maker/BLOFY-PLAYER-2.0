@@ -18,7 +18,7 @@ object BlofyTvDesign {
  fun installTvFocus(v:View,radius:Float=CardRadius.toFloat(),scale:Float=1.025f,primary:Boolean=false,onFocused:(()->Unit)?=null){
   installTvFocusInternal(v,radius,scale,primary){ focused -> if(focused) onFocused?.invoke() }
  }
- fun installTvFocus(v:View,radius:Float=CardRadius.toFloat(),scale:Float=1.025f,primary:Boolean=false,onFocusChanged:(Boolean)->Unit){
+ fun installTvFocusState(v:View,radius:Float=CardRadius.toFloat(),scale:Float=1.025f,primary:Boolean=false,onFocusChanged:(Boolean)->Unit){
   installTvFocusInternal(v,radius,scale,primary,onFocusChanged)
  }
  private fun installTvFocusInternal(v:View,radius:Float,scale:Float,primary:Boolean,onFocusChanged:((Boolean)->Unit)?){
