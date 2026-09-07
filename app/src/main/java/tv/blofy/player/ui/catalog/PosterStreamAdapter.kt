@@ -15,7 +15,7 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 
 class PosterStreamAdapter(
     private val onClick: (StreamEntity) -> Unit,
-    private val onFocus: (StreamEntity) -> Unit = {}
+    private val onFocus: (StreamEntity, Int) -> Unit = { _, _ -> }
 ) : RecyclerView.Adapter<PosterStreamAdapter.Holder>() {
     private val items = ArrayList<StreamEntity>(256)
 
@@ -98,10 +98,6 @@ class PosterStreamAdapter(
         holder.rating.visibility = if (holder.rating.text.isNotBlank()) View.VISIBLE else View.GONE
         renderFocus(holder, holder.itemView.hasFocus())
         ArtworkLoader.load(holder.image, item.icon ?: item.backdrop)
-        if (position % 8 == 0) {
-            val next = (position + 1 until minOf(items.size, position + 11)).map { index -> items[index].icon ?: items[index].backdrop }
-            ArtworkLoader.prefetch(holder.itemView.context, next)
-        }
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
             view.animate().cancel()
@@ -109,7 +105,10 @@ class PosterStreamAdapter(
             view.scaleY = 1f
             view.translationZ = if (focused) 3f else 0f
             renderFocus(holder, focused)
-            if (focused) onFocus(item)
+            if (focused) {
+                val currentPosition = holder.bindingAdapterPosition
+                if (currentPosition != RecyclerView.NO_POSITION) onFocus(item, currentPosition)
+            }
         }
     }
 
