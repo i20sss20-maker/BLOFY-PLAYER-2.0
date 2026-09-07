@@ -7,12 +7,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
+import tv.blofy.player.core.text.ArabicSearchNormalizer
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.EpgEntity
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.local.StreamSearchFtsEntity
 import tv.blofy.player.data.m3u.M3uPlaylistLoader
 import tv.blofy.player.data.remote.XtreamApi
 import tv.blofy.player.data.remote.XtreamIdentifier
@@ -92,10 +94,6 @@ class PlaylistManager(
         return streams.size
     }
 
-    /**
-     * Live and Series can be as large as VOD on reseller servers. Parse their arrays directly from
-     * the response stream so we never hold both a huge List<Map<...>> and the converted entities.
-     */
     suspend fun syncLive(
         provider: ProviderEntity,
         onProgress: suspend (Int) -> Unit = {}
@@ -105,7 +103,6 @@ class PlaylistManager(
         val previousCount = dao.catalogCountAll(provider.id, "live")
         val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "live"))
         val coroutineContext = currentCoroutineContext()
-
         val categoryRows = categories.mapIndexedNotNull { index, row ->
             if (index % 256 == 0) coroutineContext.ensureActive()
             val id = row.id("category_id") ?: return@mapIndexedNotNull null
@@ -118,49 +115,43 @@ class PlaylistManager(
                 orderIndex = index
             )
         }
-
-        val parsed = parseStreamingArray(actionUrl(provider, "get_live_streams"), 18, 30, onProgress) { row ->
-            val id = row.id("stream_id") ?: return@parseStreamingArray null
-            val archive = row.string("tv_archive").let { it == "1" || it.equals("true", true) }
-            previousFlags.applyTo(
-                StreamEntity(
-                    key = "${provider.id}:live:$id",
-                    providerId = provider.id,
-                    remoteId = id,
-                    categoryId = row.id("category_id"),
-                    kind = "live",
-                    name = row.string("name") ?: "Channel $id",
-                    icon = row.string("stream_icon"),
-                    directSource = row.string("direct_source"),
-                    epgChannelId = row.string("epg_channel_id"),
-                    streamType = row.string("stream_type"),
-                    archiveEnabled = archive,
-                    archiveDurationDays = row.string("tv_archive_duration")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
-                    favorite = false,
-                    locked = false
+        val direct = prepareDirectSectionIfEmpty(provider.id, "live", previousCount, categoryRows)
+        val parsed = try {
+            parseStreamingArray(
+                actionUrl(provider, "get_live_streams"), 18, 30, onProgress,
+                retainItems = !direct,
+                onBatch = directBatchSink(direct)
+            ) { row ->
+                val id = row.id("stream_id") ?: return@parseStreamingArray null
+                val archive = row.string("tv_archive").let { it == "1" || it.equals("true", true) }
+                previousFlags.applyTo(
+                    StreamEntity(
+                        key = "${provider.id}:live:$id",
+                        providerId = provider.id,
+                        remoteId = id,
+                        categoryId = row.id("category_id"),
+                        kind = "live",
+                        name = row.string("name") ?: "Channel $id",
+                        icon = row.string("stream_icon"),
+                        directSource = row.string("direct_source"),
+                        epgChannelId = row.string("epg_channel_id"),
+                        streamType = row.string("stream_type"),
+                        archiveEnabled = archive,
+                        archiveDurationDays = row.string("tv_archive_duration")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+                        favorite = false,
+                        locked = false
+                    )
                 )
-            )
+            }
+        } catch (failure: Throwable) {
+            if (direct) clearDirectSection(provider.id, "live")
+            throw failure
         }
-
-        if (CatalogReplacementPolicy.shouldReplace(
-                previousStreamCount = previousCount,
-                sourceCategoryCount = categories.size,
-                parsedCategoryCount = categoryRows.size,
-                sourceStreamCount = parsed.sourceCount,
-                parsedStreamCount = parsed.items.size
-            )
-        ) {
-            dao.replaceCatalog(provider.id, "live", categoryRows, parsed.items)
-        }
+        finishSection(provider.id, "live", previousCount, categories.size, categoryRows, parsed, direct)
         onProgress(30)
-        return parsed.items.size
+        return parsed.itemCount
     }
 
-    /**
-     * VOD is intentionally parsed as a streaming JSON array. Large providers can return tens of
-     * thousands of movies and buffering `List<Map<...>>` plus the converted entity list at the
-     * same time creates a very large memory spike on Android TV devices.
-     */
     suspend fun syncVod(
         provider: ProviderEntity,
         onProgress: suspend (Int) -> Unit = {}
@@ -175,23 +166,20 @@ class PlaylistManager(
             val id = row.id("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:movie:$id", provider.id, id, "movie", row.string("category_name") ?: "Movies", index)
         }
-
-        val parsed = parseStreamingArray(actionUrl(provider, "get_vod_streams"), 60, 88, onProgress) { row ->
-            vodEntity(provider, row)?.let(previousFlags::applyTo)
+        val direct = prepareDirectSectionIfEmpty(provider.id, "movie", previousCount, categoryRows)
+        val parsed = try {
+            parseStreamingArray(
+                actionUrl(provider, "get_vod_streams"), 60, 88, onProgress,
+                retainItems = !direct,
+                onBatch = directBatchSink(direct)
+            ) { row -> vodEntity(provider, row)?.let(previousFlags::applyTo) }
+        } catch (failure: Throwable) {
+            if (direct) clearDirectSection(provider.id, "movie")
+            throw failure
         }
         onProgress(88)
-
-        if (CatalogReplacementPolicy.shouldReplace(
-                previousStreamCount = previousCount,
-                sourceCategoryCount = categories.size,
-                parsedCategoryCount = categoryRows.size,
-                sourceStreamCount = parsed.sourceCount,
-                parsedStreamCount = parsed.items.size
-            )
-        ) {
-            dao.replaceCatalog(provider.id, "movie", categoryRows, parsed.items)
-        }
-        return parsed.items.size
+        finishSection(provider.id, "movie", previousCount, categories.size, categoryRows, parsed, direct)
+        return parsed.itemCount
     }
 
     private fun vodEntity(provider: ProviderEntity, row: Map<String, Any?>): StreamEntity? {
@@ -237,63 +225,128 @@ class PlaylistManager(
             val id = row.id("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:series:$id", provider.id, id, "series", row.string("category_name") ?: "Series", index)
         }
-
-        val parsed = parseStreamingArray(actionUrl(provider, "get_series"), 88, 95, onProgress) { row ->
-            val id = row.id("series_id") ?: return@parseStreamingArray null
-            val backdrop = when (val raw = row["backdrop_path"]) {
-                is List<*> -> raw.firstOrNull()?.toString()
-                else -> raw?.toString()
-            }
-            previousFlags.applyTo(
-                StreamEntity(
-                    key = "${provider.id}:series:$id",
-                    providerId = provider.id,
-                    remoteId = id,
-                    categoryId = row.id("category_id"),
-                    kind = "series",
-                    name = row.string("name") ?: "Series $id",
-                    icon = row.string("cover") ?: row.string("stream_icon"),
-                    addedAt = row.string("last_modified")?.toLongOrNull() ?: row.string("added")?.toLongOrNull(),
-                    plot = row.string("plot") ?: row.string("description"),
-                    genre = row.string("genre"),
-                    releaseDate = row.string("releaseDate") ?: row.string("release_date"),
-                    year = row.string("year"),
-                    rating = row.string("rating") ?: row.string("rating_5based"),
-                    duration = row.string("episode_run_time") ?: row.string("duration"),
-                    backdrop = backdrop?.takeIf { it.isNotBlank() && it != "null" },
-                    favorite = false,
-                    locked = false
+        val direct = prepareDirectSectionIfEmpty(provider.id, "series", previousCount, categoryRows)
+        val parsed = try {
+            parseStreamingArray(
+                actionUrl(provider, "get_series"), 88, 95, onProgress,
+                retainItems = !direct,
+                onBatch = directBatchSink(direct)
+            ) { row ->
+                val id = row.id("series_id") ?: return@parseStreamingArray null
+                val backdrop = when (val raw = row["backdrop_path"]) {
+                    is List<*> -> raw.firstOrNull()?.toString()
+                    else -> raw?.toString()
+                }
+                previousFlags.applyTo(
+                    StreamEntity(
+                        key = "${provider.id}:series:$id",
+                        providerId = provider.id,
+                        remoteId = id,
+                        categoryId = row.id("category_id"),
+                        kind = "series",
+                        name = row.string("name") ?: "Series $id",
+                        icon = row.string("cover") ?: row.string("stream_icon"),
+                        addedAt = row.string("last_modified")?.toLongOrNull() ?: row.string("added")?.toLongOrNull(),
+                        plot = row.string("plot") ?: row.string("description"),
+                        genre = row.string("genre"),
+                        releaseDate = row.string("releaseDate") ?: row.string("release_date"),
+                        year = row.string("year"),
+                        rating = row.string("rating") ?: row.string("rating_5based"),
+                        duration = row.string("episode_run_time") ?: row.string("duration"),
+                        backdrop = backdrop?.takeIf { it.isNotBlank() && it != "null" },
+                        favorite = false,
+                        locked = false
+                    )
                 )
-            )
+            }
+        } catch (failure: Throwable) {
+            if (direct) clearDirectSection(provider.id, "series")
+            throw failure
         }
-
-        if (CatalogReplacementPolicy.shouldReplace(
-                previousStreamCount = previousCount,
-                sourceCategoryCount = categories.size,
-                parsedCategoryCount = categoryRows.size,
-                sourceStreamCount = parsed.sourceCount,
-                parsedStreamCount = parsed.items.size
-            )
-        ) {
-            dao.replaceCatalog(provider.id, "series", categoryRows, parsed.items)
-        }
+        finishSection(provider.id, "series", previousCount, categories.size, categoryRows, parsed, direct)
         onProgress(95)
-        return parsed.items.size
+        return parsed.itemCount
     }
 
-    private data class StreamingParseResult<T>(val sourceCount: Int, val items: List<T>)
+    private suspend fun prepareDirectSectionIfEmpty(
+        providerId: String,
+        kind: String,
+        previousCount: Int,
+        categories: List<CategoryEntity>
+    ): Boolean {
+        if (previousCount != 0 || dao.categorySnapshot(providerId, kind).isNotEmpty()) return false
+        // Fresh staged providers have no known-good rows. Store categories once, then stream rows
+        // directly to Room instead of retaining a catalog-sized ArrayList in memory.
+        dao.clearCategories(providerId, kind)
+        dao.clearStreams(providerId, kind)
+        dao.clearSearchIndex(providerId, kind)
+        categories.asSequence().chunked(DIRECT_CATEGORY_BATCH).forEach { batch ->
+            if (batch.isNotEmpty()) dao.upsertCategories(batch)
+        }
+        return true
+    }
 
-    /** Bounded parser shared by Live/VOD/Series. Only the converted entity list stays in memory. */
+    private fun directBatchSink(enabled: Boolean): suspend (List<StreamEntity>) -> Unit = { batch ->
+        if (enabled && batch.isNotEmpty()) {
+            dao.upsertStreams(batch)
+            dao.insertSearchRows(batch.map(::searchRow))
+        }
+    }
+
+    private suspend fun clearDirectSection(providerId: String, kind: String) {
+        dao.clearSearchIndex(providerId, kind)
+        dao.clearStreams(providerId, kind)
+        dao.clearCategories(providerId, kind)
+    }
+
+    private suspend fun finishSection(
+        providerId: String,
+        kind: String,
+        previousCount: Int,
+        sourceCategoryCount: Int,
+        categoryRows: List<CategoryEntity>,
+        parsed: StreamingParseResult<StreamEntity>,
+        direct: Boolean
+    ) {
+        val accepted = CatalogReplacementPolicy.shouldReplace(
+            previousStreamCount = previousCount,
+            sourceCategoryCount = sourceCategoryCount,
+            parsedCategoryCount = categoryRows.size,
+            sourceStreamCount = parsed.sourceCount,
+            parsedStreamCount = parsed.itemCount
+        )
+        if (!accepted) {
+            if (direct) clearDirectSection(providerId, kind)
+            return
+        }
+        if (!direct) dao.replaceCatalog(providerId, kind, categoryRows, parsed.items)
+    }
+
+    private data class StreamingParseResult<T>(
+        val sourceCount: Int,
+        val itemCount: Int,
+        val items: List<T>
+    )
+
+    /**
+     * Streaming parser used by Live/VOD/Series. On a fresh staged section converted rows are flushed
+     * directly to Room in bounded batches, so neither the raw JSON nor a second 100k+ entity list is
+     * retained. Existing catalogs still retain the incoming list because diff replacement needs it.
+     */
     private suspend fun <T> parseStreamingArray(
         url: String,
         progressStart: Int,
         progressEnd: Int,
         onProgress: suspend (Int) -> Unit,
+        retainItems: Boolean = true,
+        onBatch: suspend (List<T>) -> Unit = {},
         map: (Map<String, Any?>) -> T?,
     ): StreamingParseResult<T> {
         val coroutineContext = currentCoroutineContext()
-        val items = ArrayList<T>(4096)
+        val items = if (retainItems) ArrayList<T>(4096) else null
+        val batch = ArrayList<T>(DIRECT_STREAM_BATCH)
         var sourceCount = 0
+        var itemCount = 0
         val body = api.streamingResponse(url)
         val declaredBytes = body.contentLength()
         body.use { responseBody ->
@@ -306,7 +359,18 @@ class PlaylistManager(
                     if (sourceCount % 128 == 0) coroutineContext.ensureActive()
                     val row: Map<String, Any?> = gson.fromJson(reader, mapType)
                     sourceCount += 1
-                    map(row)?.let(items::add)
+                    val converted = map(row)
+                    if (converted != null) {
+                        itemCount += 1
+                        items?.add(converted)
+                        if (!retainItems) {
+                            batch += converted
+                            if (batch.size >= DIRECT_STREAM_BATCH) {
+                                onBatch(batch.toList())
+                                batch.clear()
+                            }
+                        }
+                    }
                     if (sourceCount % 256 == 0) {
                         val span = (progressEnd - progressStart).coerceAtLeast(1)
                         val fraction = if (declaredBytes > 0L) {
@@ -320,7 +384,8 @@ class PlaylistManager(
                 reader.endArray()
             }
         }
-        return StreamingParseResult(sourceCount, items)
+        if (!retainItems && batch.isNotEmpty()) onBatch(batch.toList())
+        return StreamingParseResult(sourceCount, itemCount, items ?: emptyList())
     }
 
     suspend fun syncSeriesEpisodes(provider: ProviderEntity, seriesId: String): SeriesEpisodeSyncResult {
@@ -328,21 +393,11 @@ class PlaylistManager(
             val cached = dao.episodes(provider.id, seriesId).first()
             return SeriesEpisodeSyncResult(cached.size, payloadPresent = true, cacheUpdated = false)
         }
-
         val requestSeriesId = SeriesEpisodeParser.normalizeSeriesIdForRequest(seriesId)
-        val response = api.jsonResponse(
-            actionUrl(provider, "get_series_info", mapOf("series_id" to requestSeriesId))
-        )
+        val response = api.jsonResponse(actionUrl(provider, "get_series_info", mapOf("series_id" to requestSeriesId)))
         val parsed = SeriesEpisodeParser.parse(provider.id, seriesId, response)
-
-        if (parsed.episodes.isNotEmpty()) {
-            dao.replaceEpisodes(provider.id, seriesId, parsed.episodes)
-        }
-        return SeriesEpisodeSyncResult(
-            episodeCount = parsed.episodes.size,
-            payloadPresent = parsed.payloadPresent,
-            cacheUpdated = parsed.episodes.isNotEmpty()
-        )
+        if (parsed.episodes.isNotEmpty()) dao.replaceEpisodes(provider.id, seriesId, parsed.episodes)
+        return SeriesEpisodeSyncResult(parsed.episodes.size, parsed.payloadPresent, parsed.episodes.isNotEmpty())
     }
 
     suspend fun syncShortEpg(provider: ProviderEntity, streamId: String, limit: Int = 20) {
@@ -385,29 +440,40 @@ class PlaylistManager(
         return "$base/player_api.php?username=${enc(provider.username)}&password=${enc(provider.password)}&action=${enc(action)}$tail"
     }
 
+    private fun searchRow(stream: StreamEntity) = StreamSearchFtsEntity(
+        contentKey = stream.key,
+        providerId = stream.providerId,
+        kind = stream.kind,
+        searchable = ArabicSearchNormalizer.searchable(
+            stream.name, stream.genre, stream.year, stream.plot, stream.releaseDate, stream.streamType
+        )
+    )
+
     private fun enc(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8.name())
     private fun Map<String, Any?>.id(key: String): String? = XtreamIdentifier.normalize(this[key])
     private fun Map<String, Any?>.string(key: String): String? = this[key]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
     private fun Map<*, *>.stringAny(key: String): String? = this[key]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
-    private fun Map<*, *>.intAny(key: String): Int? = stringAny(key)?.toIntOrNull()
     private fun Map<*, *>.longAny(key: String): Long? = stringAny(key)?.toLongOrNull()
 
     private fun decodeBase64OrRaw(value: String): String {
         if (value.isBlank()) return value
         return runCatching { String(android.util.Base64.decode(value, android.util.Base64.DEFAULT), Charsets.UTF_8).trim() }.getOrDefault(value)
     }
+
+    private companion object {
+        const val DIRECT_STREAM_BATCH = 700
+        const val DIRECT_CATEGORY_BATCH = 500
+    }
 }
 
 private class CountingInputStream(input: InputStream) : FilterInputStream(input) {
     var bytesRead: Long = 0L
         private set
-
     override fun read(): Int {
         val value = super.read()
         if (value >= 0) bytesRead += 1
         return value
     }
-
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         val count = super.read(buffer, offset, length)
         if (count > 0) bytesRead += count.toLong()
@@ -415,40 +481,31 @@ private class CountingInputStream(input: InputStream) : FilterInputStream(input)
     }
 }
 
-/** Carries favorite/lock state across catalog refreshes and legacy identifier repair. */
 internal class PreviousStreamFlags(previous: List<StreamEntity>) {
     private data class Flags(val favorite: Boolean = false, val locked: Boolean = false) {
         fun merge(other: Flags) = Flags(favorite || other.favorite, locked || other.locked)
     }
-
     private val byAlias = buildMap<String, Flags> {
         previous.forEach { stream ->
             val flags = Flags(stream.favorite, stream.locked)
             aliases(stream).forEach { alias -> put(alias, get(alias)?.merge(flags) ?: flags) }
         }
     }
-
     fun applyTo(stream: StreamEntity): StreamEntity {
         if (byAlias.isEmpty()) return stream
-        val flags = aliases(stream)
-            .mapNotNull(byAlias::get)
+        val flags = aliases(stream).mapNotNull(byAlias::get)
             .fold(Flags(stream.favorite, stream.locked)) { combined, item -> combined.merge(item) }
         return stream.copy(favorite = flags.favorite, locked = flags.locked)
     }
-
     fun applyTo(streams: List<StreamEntity>): List<StreamEntity> = streams.map(::applyTo)
-
     private fun aliases(stream: StreamEntity): Set<String> = buildSet {
         add("key:${stream.key}")
         add("id:${stream.kind}:${legacyCompatibleId(stream.remoteId)}")
-        stream.key.substringAfterLast(':', missingDelimiterValue = "")
-            .takeIf { it.isNotBlank() }
+        stream.key.substringAfterLast(':', missingDelimiterValue = "").takeIf { it.isNotBlank() }
             ?.let { add("id:${stream.kind}:${legacyCompatibleId(it)}") }
     }
-
     companion object {
         private val LEGACY_DECIMAL_INTEGER = Regex("[+-]?\\d+\\.0+")
-
         internal fun legacyCompatibleId(value: String): String {
             val trimmed = value.trim()
             return if (LEGACY_DECIMAL_INTEGER.matches(trimmed)) trimmed.substringBefore('.') else trimmed
@@ -456,7 +513,6 @@ internal class PreviousStreamFlags(previous: List<StreamEntity>) {
     }
 }
 
-/** Rejects destructive replacement when a provider response is empty or could not be parsed. */
 internal object CatalogReplacementPolicy {
     fun shouldReplace(
         previousStreamCount: Int,
@@ -472,7 +528,6 @@ internal object CatalogReplacementPolicy {
     }
 }
 
-/** Lets an unavailable Xtream section fall back to its cache without blocking other sections. */
 internal data class XtreamSectionResult(val successCount: Int, val failureCount: Int)
 
 internal suspend fun runXtreamSections(sections: List<suspend () -> Unit>): XtreamSectionResult {
