@@ -1,6 +1,7 @@
 package tv.blofy.player
 
 import android.app.Application
+import android.content.ComponentCallbacks2
 import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
@@ -18,6 +19,7 @@ import tv.blofy.player.data.ResumeStateWriter
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.preparation.CatalogEnrichmentLifecycle
 import tv.blofy.player.data.preparation.StorageMaintenanceLifecycle
+import tv.blofy.player.ui.catalog.CatalogPageMemory
 import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
 import tv.blofy.player.ui.home.HomeRemoteFocusLifecycle
@@ -85,6 +87,20 @@ class BlofyApp : Application() {
             // Last-known-good config means an unavailable server never disables the app.
             runCatching { CommercialConfigRepository.refresh(this@BlofyApp) }
         }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        when {
+            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> CatalogPageMemory.clear()
+            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> CatalogPageMemory.trimForMemoryPressure()
+            level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> CatalogPageMemory.trimForMemoryPressure()
+        }
+    }
+
+    override fun onLowMemory() {
+        CatalogPageMemory.clear()
+        super.onLowMemory()
     }
 
     companion object {
