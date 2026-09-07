@@ -81,8 +81,10 @@ function pairHash(code) {
 }
 
 async function getSnapshot(req, res, requestUrl) {
-  const deviceId = String(requestUrl.searchParams.get('deviceId') || '').trim();
-  const activationCode = String(requestUrl.searchParams.get('activationCode') || '').trim();
+  // New clients authenticate through headers so activation codes never appear in access logs or URLs.
+  // Query-string credentials remain as a temporary fallback for older installed builds.
+  const deviceId = String(req.headers['x-blofy-device-id'] || requestUrl.searchParams.get('deviceId') || '').trim();
+  const activationCode = String(req.headers['x-blofy-activation-code'] || requestUrl.searchParams.get('activationCode') || '').trim();
   const profileId = String(requestUrl.searchParams.get('profileId') || '').trim();
   if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
   if (!validProfileId(profileId)) return sendJson(res, 400, { error: 'invalid_profile' });
