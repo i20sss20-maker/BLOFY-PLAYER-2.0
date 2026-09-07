@@ -46,6 +46,10 @@ function available() {
   return Boolean(subscriberHost && encryptionKey && activationCredentials && pool);
 }
 
+function normalizedUpstreamStatus(status) {
+  return Number(status) === 884 ? 200 : status;
+}
+
 function sendJson(res, status, body, headers = {}) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
@@ -192,7 +196,7 @@ function rewriteHlsManifest(req, token, text, effectiveUrl) {
     const trimmed = line.trim();
     if (!trimmed) return line;
     if (trimmed.startsWith('#')) {
-      return line.replace(/URI=("([^"]+)"|'([^']+)'|([^,\s]+))/gi, (whole, _quoted, doubleValue, singleValue, bareValue) => {
+      return line.replace(/URI=("([^"]+)"|'([^']+)'|([^,\s]+))/gi, (_whole, _quoted, doubleValue, singleValue, bareValue) => {
         const value = doubleValue || singleValue || bareValue || '';
         const rewritten = rewriteUri(value);
         if (doubleValue !== undefined) return `URI="${rewritten}"`;
@@ -213,7 +217,8 @@ function copyUpstreamHeaders(upstream, res, { textual = false } = {}) {
     headers[lower] = value;
   }
   headers['cache-control'] = 'no-store';
-  res.writeHead(upstream.status, headers);
+  if (upstream.status === 884) headers['x-blofy-upstream-status'] = '884';
+  res.writeHead(normalizedUpstreamStatus(upstream.status), headers);
 }
 
 async function fetchUpstream(url, req) {
@@ -222,9 +227,12 @@ async function fetchUpstream(url, req) {
     const value = req.headers[name];
     if (value) headers[name] = value;
   }
+  if (!headers['user-agent']) headers['user-agent'] = 'BLOFY PLAYER/2.0';
+  if (!headers.accept) headers.accept = '*/*';
+  headers['accept-encoding'] = 'identity';
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
+  const timer = setTimeout(() => controller.abort(), 45_000);
   try {
     return await fetch(url, {
       method: 'GET',
@@ -259,7 +267,8 @@ async function pipeUpstream(req, res, url, token) {
     }
     headers['content-length'] = Buffer.byteLength(rewritten);
     headers['cache-control'] = 'no-store';
-    res.writeHead(upstream.status, headers);
+    if (upstream.status === 884) headers['x-blofy-upstream-status'] = '884';
+    res.writeHead(normalizedUpstreamStatus(upstream.status), headers);
     return res.end(rewritten);
   }
 
@@ -267,6 +276,33 @@ async function pipeUpstream(req, res, url, token) {
   const readable = Readable.fromWeb(upstream.body);
   if (isTextual) readable.pipe(replacePrivateOriginStream(req, token)).pipe(res);
   else readable.pipe(res);
+}
+
+async function fetchSubscriberAuth(authUrl) {
+  const profiles = [
+    { 'user-agent': 'BLOFY PLAYER/2.0', accept: 'application/json,text/plain,*/*', 'accept-encoding': 'identity' },
+    { 'user-agent': 'VLC/3.0.21 LibVLC/3.0.21', accept: '*/*', 'accept-encoding': 'identity' },
+    { 'user-agent': 'Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 Chrome/120 Safari/537.36', accept: '*/*', 'accept-encoding': 'identity' }
+  ];
+  let lastStatus = 0;
+  for (const headers of profiles) {
+    let upstream;
+    try {
+      upstream = await fetch(authUrl, { headers, redirect: 'follow', signal: AbortSignal.timeout(15_000) });
+    } catch {
+      continue;
+    }
+    lastStatus = upstream.status;
+    if (!(upstream.ok || upstream.status === 884)) continue;
+    try {
+      const text = await upstream.text();
+      const payload = JSON.parse(text);
+      if (payload && typeof payload === 'object') return { payload, status: upstream.status };
+    } catch {
+      // Try the next compatibility profile.
+    }
+  }
+  return { payload: null, status: lastStatus };
 }
 
 async function createSubscriberSession(req, res) {
@@ -286,26 +322,16 @@ async function createSubscriberSession(req, res) {
   const authUrl = new URL(`${subscriberHost}/player_api.php`);
   authUrl.searchParams.set('username', username);
   authUrl.searchParams.set('password', password);
-  let upstream;
-  try {
-    upstream = await fetch(authUrl, { redirect: 'follow', signal: AbortSignal.timeout(12_000) });
-  } catch {
-    return sendJson(res, 502, { error: 'subscriber_upstream_unavailable' });
-  }
-  if (!upstream.ok) return sendJson(res, 401, { error: 'subscriber_login_failed' });
-  let authPayload;
-  try { authPayload = await upstream.json(); } catch { return sendJson(res, 401, { error: 'subscriber_login_failed' }); }
+  const auth = await fetchSubscriberAuth(authUrl);
+  if (!auth.payload) return sendJson(res, 401, { error: 'subscriber_login_failed', upstreamStatus: auth.status || undefined });
+  const authPayload = auth.payload;
   const authFlag = authPayload?.user_info?.auth;
   if (!(authFlag === 1 || authFlag === '1' || authPayload?.user_info?.status === 'Active')) {
     return sendJson(res, 401, { error: 'subscriber_login_failed' });
   }
 
-  const token = sealSession({
-    u: username,
-    p: password,
-    d: deviceId,
-    exp: Date.now() + Math.max(60 * 60 * 1000, Math.min(SESSION_TTL_MS, 90 * 24 * 60 * 60 * 1000))
-  });
+  const expiresAt = Date.now() + Math.max(60 * 60 * 1000, Math.min(SESSION_TTL_MS, 90 * 24 * 60 * 60 * 1000));
+  const token = sealSession({ u: username, p: password, d: deviceId, exp: expiresAt });
   const source = { providerType: 'xtream', baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`, username: token, password: 'blofy' };
   const identity = playlistIdentity(source, deviceId, PLAYLIST_ENCRYPTION_KEY);
   const saved = await pool.query('SELECT * FROM device_playlists WHERE device_id=$1', [deviceId]);
@@ -317,7 +343,7 @@ async function createSubscriberSession(req, res) {
     baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`,
     username: token,
     password: 'blofy',
-    expiresAt: Date.now() + Math.max(60 * 60 * 1000, Math.min(SESSION_TTL_MS, 90 * 24 * 60 * 60 * 1000))
+    expiresAt
   });
 }
 
