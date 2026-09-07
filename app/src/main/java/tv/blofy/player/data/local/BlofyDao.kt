@@ -30,6 +30,7 @@ interface BlofyDao {
     @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind") suspend fun categorySnapshot(providerId: String, kind: String): List<CategoryEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId") suspend fun allStreamsForProvider(providerId: String): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun streamSnapshot(providerId: String, kind: String): List<StreamEntity>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (favorite = 1 OR locked = 1)") suspend fun persistedStreamFlags(providerId: String, kind: String): List<StreamEntity>
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId") suspend fun streamCountForProvider(providerId: String): Int
     @Query("SELECT EXISTS(SELECT 1 FROM streams WHERE providerId = :providerId LIMIT 1)") suspend fun hasStreamsForProvider(providerId: String): Boolean
     suspend fun hasCatalog(providerId: String): Boolean = hasStreamsForProvider(providerId)
