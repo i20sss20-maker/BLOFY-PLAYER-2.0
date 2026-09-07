@@ -8,11 +8,12 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import java.net.URI
 
-/** Exact URL first. M3U keeps its supplied URL; Xtream uses exact type-specific builders. */
+/** Exact URL first. M3U keeps its supplied path/query while clearly-internal hosts are repaired. */
 object ContentUrlResolver {
     fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String {
         if (provider.providerType.equals("m3u", true)) {
-            return stream.directSource.validHttpUrl() ?: error("Missing M3U live URL")
+            return ProviderHostResolver.resolve(provider.baseUrl, stream.directSource).validHttpUrl()
+                ?: error("Missing M3U live URL")
         }
         return XtreamUrlBuilder.live(
             provider.baseUrl,
@@ -25,7 +26,8 @@ object ContentUrlResolver {
 
     fun movie(provider: ProviderEntity, stream: StreamEntity): String {
         if (provider.providerType.equals("m3u", true)) {
-            return stream.directSource.validHttpUrl() ?: error("Missing M3U movie URL")
+            return ProviderHostResolver.resolve(provider.baseUrl, stream.directSource).validHttpUrl()
+                ?: error("Missing M3U movie URL")
         }
         return XtreamUrlBuilder.movie(
             provider.baseUrl,
@@ -38,7 +40,8 @@ object ContentUrlResolver {
 
     fun episode(provider: ProviderEntity, episode: EpisodeEntity): String {
         if (provider.providerType.equals("m3u", true)) {
-            return episode.directSource.validHttpUrl() ?: error("Missing M3U episode URL")
+            return ProviderHostResolver.resolve(provider.baseUrl, episode.directSource).validHttpUrl()
+                ?: error("Missing M3U episode URL")
         }
         return XtreamUrlBuilder.episode(
             provider.baseUrl,
@@ -49,6 +52,13 @@ object ContentUrlResolver {
         )
     }
 
+    fun directFallback(provider: ProviderEntity, stream: StreamEntity): String? =
+        ProviderHostResolver.resolve(provider.baseUrl, stream.directSource).validHttpUrl()
+
+    fun directFallback(provider: ProviderEntity, episode: EpisodeEntity): String? =
+        ProviderHostResolver.resolve(provider.baseUrl, episode.directSource).validHttpUrl()
+
+    /** Legacy callers without provider context retain the original direct source unchanged. */
     fun directFallback(stream: StreamEntity): String? = stream.directSource.validHttpUrl()
     fun directFallback(episode: EpisodeEntity): String? = episode.directSource.validHttpUrl()
 
