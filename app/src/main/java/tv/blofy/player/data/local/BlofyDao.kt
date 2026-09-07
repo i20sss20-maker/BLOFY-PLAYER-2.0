@@ -158,6 +158,9 @@ interface BlofyDao {
      * Applies only changed rows and deletions. Xtream still returns a full section, but unchanged
      * rows are no longer deleted/reinserted, which keeps large libraries responsive and preserves
      * stable rowids used by keyset paging.
+     *
+     * Fresh staged catalogs take the direct path: there is nothing to diff, so avoid building huge
+     * old/incoming maps and write the already parsed rows in bounded batches.
      */
     @Transaction
     suspend fun replaceCatalog(
@@ -166,7 +169,19 @@ interface BlofyDao {
         categories: List<CategoryEntity>,
         streams: List<StreamEntity>
     ) {
-        val oldCategories = categorySnapshot(providerId, kind).associateBy { it.key }
+        val oldCategoriesList = categorySnapshot(providerId, kind)
+        val existingStreamCount = catalogCountAll(providerId, kind)
+
+        if (existingStreamCount == 0 && oldCategoriesList.isEmpty()) {
+            categories.chunked(CATALOG_INSERT_BATCH_SIZE)
+                .forEach { if (it.isNotEmpty()) upsertCategories(it) }
+            streams.chunked(CATALOG_INSERT_BATCH_SIZE)
+                .forEach { if (it.isNotEmpty()) upsertStreams(it) }
+            rebuildSearchIndex(providerId, kind, streams)
+            return
+        }
+
+        val oldCategories = oldCategoriesList.associateBy { it.key }
         val oldStreams = streamSnapshot(providerId, kind).associateBy { it.key }
         val incomingCategoryKeys = categories.asSequence().map { it.key }.toHashSet()
         val incomingStreamKeys = streams.asSequence().map { it.key }.toHashSet()
