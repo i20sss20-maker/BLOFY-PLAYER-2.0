@@ -64,6 +64,42 @@ class M3uPlaylistLoaderTest {
     }
 
     @Test
+    fun streamingLoaderFlushesLargePlaylistInBoundedBatches() = runBlocking {
+        val itemCount = 2_500
+        val body = buildString {
+            appendLine("#EXTM3U")
+            repeat(itemCount) { index ->
+                appendLine("#EXTINF:-1 group-title=\"News\",Channel $index")
+                appendLine("https://cdn.example.com/live/$index.ts")
+            }
+        }
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200).setBody(body))
+        server.start()
+        try {
+            var received = 0
+            var maxBatch = 0
+            var episodeCount = 0
+            val summary = M3uPlaylistLoader().loadStreaming(
+                provider.copy(baseUrl = server.url("/large.m3u").toString()),
+                onStreamBatch = { batch ->
+                    received += batch.size
+                    maxBatch = maxOf(maxBatch, batch.size)
+                },
+                onEpisodeBatch = { batch -> episodeCount += batch.size },
+            )
+            assertEquals(itemCount, received)
+            assertEquals(itemCount, summary.streamCount)
+            assertEquals(0, episodeCount)
+            assertEquals(0, summary.episodeCount)
+            assertTrue("stream batches must stay bounded", maxBatch in 1..700)
+            assertEquals(1, summary.categories.size)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun parsesLiveMovieAndSeriesWithoutRewritingDirectUrls() {
         val text = """
             #EXTM3U
