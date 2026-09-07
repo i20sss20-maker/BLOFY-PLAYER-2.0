@@ -1,24 +1,36 @@
 package tv.blofy.player.core.playback
 
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.net.InetAddress
 import java.util.Locale
 
 /**
- * Rewrites only clearly local/private hosts in provider-supplied playback URLs.
+ * Repairs provider-supplied playback URLs without guessing that every alternate public CDN is bad.
  *
- * Some Xtream/M3U panels publish direct_source/media URLs containing an internal DNS name
- * or RFC1918 address. The public provider URL entered by the user is already reachable, so for
- * those clearly-internal cases BLOFY keeps the source scheme/port/path/query and replaces only
- * the host with the public provider host. Public CDN/alternate hosts are never rewritten.
+ * Primary resolution rewrites only clearly local/private hosts. If playback later fails, callers can
+ * request [providerOriginFallback] which keeps the media path/query but replaces the complete origin
+ * (scheme + host + port) with the reachable provider origin. This also covers hidden hosts that look
+ * like normal public DNS names, e.g. a provider-side CDN alias that is not reachable by the client.
  */
 object ProviderHostResolver {
     fun resolve(providerBaseUrl: String, sourceUrl: String?): String? {
-        val source = sourceUrl?.trim()?.takeIf { it.isNotBlank() }?.toHttpUrlOrNull() ?: return sourceUrl
-        val provider = providerBaseUrl.trim().toHttpUrlOrNull() ?: return sourceUrl
-        if (!isClearlyInternal(source.host)) return sourceUrl
-        if (isClearlyInternal(provider.host)) return sourceUrl
-        return source.newBuilder().host(provider.host).build().toString()
+        val source = sourceUrl.parseHttpUrl() ?: return sourceUrl
+        val provider = providerBaseUrl.parseHttpUrl() ?: return sourceUrl
+        if (!isClearlyInternal(source.host) || isClearlyInternal(provider.host)) return sourceUrl
+        return source.withOrigin(provider).toString()
+    }
+
+    /**
+     * Builds a safe second route for an arbitrary direct_source using the provider's complete
+     * externally reachable origin. The original path/query/fragment are preserved exactly.
+     * Returns null when both URLs already use the same origin or either URL is invalid.
+     */
+    fun providerOriginFallback(providerBaseUrl: String, sourceUrl: String?): String? {
+        val source = sourceUrl.parseHttpUrl() ?: return null
+        val provider = providerBaseUrl.parseHttpUrl() ?: return null
+        if (isClearlyInternal(provider.host) || source.sameOrigin(provider)) return null
+        return source.withOrigin(provider).toString()
     }
 
     internal fun isClearlyInternal(host: String): Boolean {
@@ -40,6 +52,21 @@ object ProviderHostResolver {
         // Single-label DNS names are normally resolvable only inside the provider network.
         return !normalized.contains('.')
     }
+
+    private fun String?.parseHttpUrl(): HttpUrl? = this
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.toHttpUrlOrNull()
+        ?.takeIf { it.scheme.equals("http", true) || it.scheme.equals("https", true) }
+
+    private fun HttpUrl.withOrigin(provider: HttpUrl): HttpUrl = newBuilder()
+        .scheme(provider.scheme)
+        .host(provider.host)
+        .port(provider.port)
+        .build()
+
+    private fun HttpUrl.sameOrigin(other: HttpUrl): Boolean =
+        scheme.equals(other.scheme, true) && host.equals(other.host, true) && port == other.port
 
     private fun parseIpv4(host: String): IntArray? {
         val parts = host.split('.')

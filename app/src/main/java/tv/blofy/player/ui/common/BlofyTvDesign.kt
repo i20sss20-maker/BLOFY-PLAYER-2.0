@@ -16,6 +16,12 @@ object BlofyTvDesign {
  fun secondaryButton(radius:Float=ButtonRadius.toFloat(),focused:Boolean=false)=glassSurface(radius,focused);fun badge(radius:Float=BadgeRadius.toFloat())=GradientDrawable().apply{cornerRadius=radius;setColor(0xCC251B31.toInt());setStroke(1,0xFF604A75.toInt())}
  fun applyTitle(t:TextView)=t.apply{textSize=TitleSp;typeface=DisplayTypeface;setTextColor(TextPrimary);includeFontPadding=false};fun applyHeroTitle(t:TextView)=t.apply{textSize=HeroTitleSp;typeface=DisplayTypeface;setTextColor(TextPrimary);includeFontPadding=false;letterSpacing=-.01f};fun applyHeading(t:TextView)=t.apply{textSize=HeadingSp;typeface=HeadingTypeface;setTextColor(TextPrimary);includeFontPadding=false};fun applyBody(t:TextView)=t.apply{textSize=BodySp;typeface=BodyTypeface;setTextColor(TextSecondary);includeFontPadding=false;setLineSpacing(0f,1.16f)};fun applyLabel(t:TextView)=t.apply{textSize=LabelSp;typeface=LabelTypeface;setTextColor(TextPrimary);includeFontPadding=false};fun applyCaption(t:TextView)=t.apply{textSize=CaptionSp;typeface=MediumTypeface;setTextColor(TextMuted);includeFontPadding=false}
  fun installTvFocus(v:View,radius:Float=CardRadius.toFloat(),scale:Float=1.025f,primary:Boolean=false,onFocused:(()->Unit)?=null){
+  installTvFocusInternal(v,radius,scale,primary){ focused -> if(focused) onFocused?.invoke() }
+ }
+ fun installTvFocusState(v:View,radius:Float=CardRadius.toFloat(),scale:Float=1.025f,primary:Boolean=false,onFocusChanged:(Boolean)->Unit){
+  installTvFocusInternal(v,radius,scale,primary,onFocusChanged)
+ }
+ private fun installTvFocusInternal(v:View,radius:Float,scale:Float,primary:Boolean,onFocusChanged:((Boolean)->Unit)?){
   v.isFocusable=true;v.isFocusableInTouchMode=true
   val normal=if(primary)primaryButton(radius,false)else secondaryButton(radius,false)
   val focused=if(primary)primaryButton(radius,true)else secondaryButton(radius,true)
@@ -24,7 +30,7 @@ object BlofyTvDesign {
    x.animate().cancel();x.background=if(f)focused else normal;(x as? TextView)?.setTextColor(TextPrimary)
    val targetScale=if(f)minOf(scale,1.012f) else 1f
    x.scaleX=targetScale;x.scaleY=targetScale;x.translationZ=if(f)6f else 0f;x.alpha=1f
-   if(f)onFocused?.invoke()
+   onFocusChanged?.invoke(f)
   }
  }
 }

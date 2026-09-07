@@ -15,7 +15,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -29,6 +28,7 @@ import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
+import tv.blofy.player.ui.search.SearchActivity
 
 class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var categoryAdapter: FocusTextAdapter<CategoryEntity>
@@ -36,8 +36,8 @@ class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var categoryList: RecyclerView
     private lateinit var posterGrid: RecyclerView
     private lateinit var countView: TextView
+    private lateinit var searchBar: TextView
     private var pageJob: Job? = null
-    private var categoryFocusJob: Job? = null
     private var providerId = ""
     private var selectedCategoryId: String? = null
     private var displayedCategoryId: String? = null
@@ -66,9 +66,9 @@ class PosterCatalogActivity : AppCompatActivity() {
             DeviceClass.Kind.PHONE -> 8
         }
         val railWidth = when (deviceKind) {
-            DeviceClass.Kind.TV -> 208
-            DeviceClass.Kind.TABLET -> 168
-            DeviceClass.Kind.PHONE -> 108
+            DeviceClass.Kind.TV -> 228
+            DeviceClass.Kind.TABLET -> 180
+            DeviceClass.Kind.PHONE -> 112
         }
         val railGap = when (deviceKind) {
             DeviceClass.Kind.TV -> 16
@@ -77,13 +77,55 @@ class PosterCatalogActivity : AppCompatActivity() {
         }
 
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            setPadding(dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 16), dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 18))
+            setPadding(dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 14), dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 18))
             background = AppCompatResources.getDrawable(this@PosterCatalogActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
         }
+
+        searchBar = TextView(this).apply {
+            text = getString(if (kind == KIND_SERIES) R.string.catalog_search_series else R.string.catalog_search_movies)
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            layoutDirection = resources.configuration.layoutDirection
+            textSize = when (deviceKind) {
+                DeviceClass.Kind.TV -> 17f
+                DeviceClass.Kind.TABLET -> 16f
+                DeviceClass.Kind.PHONE -> 14f
+            }
+            typeface = BlofyTvDesign.MediumTypeface
+            setTextColor(BlofyTvDesign.TextSecondary)
+            setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20), 0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20), 0)
+            background = BlofyTvDesign.glassSurface(dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 18).toFloat())
+            isFocusable = true
+            isFocusableInTouchMode = deviceKind == DeviceClass.Kind.TV
+            isClickable = true
+            elevation = dp(2).toFloat()
+            setOnClickListener {
+                startActivity(Intent(this@PosterCatalogActivity, SearchActivity::class.java)
+                    .putExtra(SearchActivity.EXTRA_KIND, kind))
+            }
+            setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    requestSelectedCategoryFocus()
+                } else false
+            }
+            BlofyTvDesign.installTvFocusState(this, dp(16).toFloat(), 1.01f, false) { focused ->
+                setTextColor(if (focused) BlofyTvDesign.TextPrimary else BlofyTvDesign.TextSecondary)
+            }
+        }
+        root.addView(searchBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 54)).apply {
+            bottomMargin = dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12)
+        })
+
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            clipChildren = false
+            clipToPadding = false
+        }
+
         val rail = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP
@@ -104,10 +146,11 @@ class PosterCatalogActivity : AppCompatActivity() {
             clipToPadding = false
             itemAnimator = null
             setHasFixedSize(true)
-            setItemViewCacheSize(16)
+            setItemViewCacheSize(18)
+            preserveFocusAfterLayout = true
         }
         rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(rail, LinearLayout.LayoutParams(dp(railWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(railGap) })
+        body.addView(rail, LinearLayout.LayoutParams(dp(railWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(railGap) })
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -151,6 +194,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             recycledViewPool.setMaxRecycledViews(0, 32)
             setItemViewCacheSize(14)
             descendantFocusability = 0x40000
+            preserveFocusAfterLayout = true
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     if (dy <= 0 || loadingPage || !hasMore) return
@@ -159,7 +203,8 @@ class PosterCatalogActivity : AppCompatActivity() {
             })
         }
         content.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        body.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
         posterAdapter = PosterStreamAdapter(::openItem) { _, index ->
@@ -168,11 +213,12 @@ class PosterCatalogActivity : AppCompatActivity() {
         posterGrid.adapter = posterAdapter
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
-            onClick = { loadStreams(categoryRemoteId(it), true) },
-            onFocus = { scheduleCategoryLoad(categoryRemoteId(it)) },
+            onClick = { loadStreams(categoryRemoteId(it)) },
+            onFocus = null,
             itemKey = { it.key }
         )
         categoryList.adapter = categoryAdapter
+        TwoPaneFocusGuard.registerTopTarget(root, searchBar)
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -181,7 +227,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             dao.categories(provider.id, kind).collect { categories ->
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
-                if (loadedItems.isEmpty() && pageJob == null) loadStreams(null, true)
+                if (loadedItems.isEmpty() && pageJob == null) loadStreams(null)
                 if (!initialFocusRequested) {
                     initialFocusRequested = true
                     categoryList.post { requestSelectedCategoryFocus() }
@@ -197,19 +243,12 @@ class PosterCatalogActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    private fun scheduleCategoryLoad(id: String?) {
-        if (providerId.isBlank() || selectedCategoryId == id) return
-        categoryFocusJob?.cancel()
-        categoryFocusJob = lifecycleScope.launch {
-            delay(CATEGORY_FOCUS_DEBOUNCE_MS)
-            loadStreams(id, false)
-        }
-    }
-
-    private fun loadStreams(id: String?, immediate: Boolean) {
+    private fun loadStreams(id: String?) {
         if (providerId.isBlank()) return
-        if (immediate) categoryFocusJob?.cancel()
-        if (selectedCategoryId == id && displayedCategoryId == id && loadedItems.isNotEmpty()) return
+        if (selectedCategoryId == id) {
+            if (displayedCategoryId == id && loadedItems.isNotEmpty()) return
+            if (loadingPage) return
+        }
 
         selectedCategoryId = id
         generation++
@@ -230,10 +269,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             return
         }
 
-        // Keep the last complete page visible while the next category is being read from Room.
-        // This avoids a flash of an empty grid and prevents rapid DPAD movement from repeatedly
-        // destroying/recreating poster views. Cross-pane focus stays blocked until the new page lands.
-        countView.text = "..."
+        countView.text = "…"
         loadNextPage(true)
     }
 
@@ -266,7 +302,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 posterAdapter.append(result.first)
             }
             updateCount()
-            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(12).map { it.icon ?: it.backdrop })
+            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(8).map { it.icon ?: it.backdrop })
             loadingPage = false
             saveMemorySnapshot()
         }.also { job ->
@@ -323,7 +359,7 @@ class PosterCatalogActivity : AppCompatActivity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     override fun onPause() { saveMemorySnapshot(); super.onPause() }
-    override fun onDestroy() { categoryFocusJob?.cancel(); pageJob?.cancel(); generation++; super.onDestroy() }
+    override fun onDestroy() { pageJob?.cancel(); generation++; super.onDestroy() }
 
     companion object {
         const val EXTRA_KIND = "kind"
@@ -331,7 +367,6 @@ class PosterCatalogActivity : AppCompatActivity() {
         const val KIND_SERIES = "series"
         private const val PAGE_SIZE = 96
         private const val PREFETCH_THRESHOLD = 28
-        private const val CATEGORY_FOCUS_DEBOUNCE_MS = 180L
         private const val ALL_CATEGORY_ID = "__all__"
     }
 }

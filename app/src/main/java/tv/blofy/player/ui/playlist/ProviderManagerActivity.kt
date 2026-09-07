@@ -26,10 +26,8 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
-import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
-import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
@@ -74,7 +72,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         })
         root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(TextView(this).apply {
-            text = "اتصل مباشرة بالقائمة المحفوظة أو عدّل بياناتها"
+            text = "اتصل مباشرة بالسيرفر المحفوظ أو عدّل بياناته"
             textSize = 16f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
@@ -103,7 +101,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         val subscriberButton = actionButton("subscriber", "+  مشتركين BLOFY", primary = true) {
             startActivity(Intent(this, BlofySubscriberActivity::class.java))
         }
-        addButton = actionButton("add", "+  Xtream / M3U") {
+        addButton = actionButton("add", "+  Xtream") {
             startActivity(Intent(this, PlaylistActivity::class.java).putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true))
         }
         actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(310), dp(64)).apply { marginStart = dp(12) })
@@ -113,7 +111,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         })
 
         root.addView(TextView(this).apply {
-            text = "القوائم المحفوظة"
+            text = "السيرفرات المحفوظة"
             textSize = 20f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             setTextColor(Color.WHITE)
@@ -155,10 +153,8 @@ class ProviderManagerActivity : AppCompatActivity() {
                     withContext(Dispatchers.IO) {
                         val dao = BlofyDatabase.get(applicationContext).dao()
                         val synced = PortalPlaylistClient.sync(applicationContext, endpoint, dao, PortalPlaylistClient.SyncMode.PULL_ONLY)
-                        // Renaming/activation changes must not force a catalog download. Only
-                        // new sources or changed credentials are prepared on the next Connect.
                         synced.changedProviderIds.forEach { CatalogSyncState.markPending(applicationContext, it) }
-                        synced.activeProvider?.let { dao.saveAndActivateProvider(it) }
+                        synced.activeProvider?.takeIf { it.providerType.equals("xtream", true) }?.let { dao.saveAndActivateProvider(it) }
                         synced
                     }
                 }
@@ -182,11 +178,12 @@ class ProviderManagerActivity : AppCompatActivity() {
 
     private fun render(allItems: List<ProviderEntity>) {
         val items = tv.blofy.player.core.identity.PortalSyncBook.visible(this, allItems)
+            .filter { it.providerType.equals("xtream", true) || isBlofySubscriber(it) }
         focusButtons.keys.filter { it !in setOf("add", "subscriber", "website_refresh") }.toList().forEach { focusButtons.remove(it) }
         list.removeAllViews()
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
-                text = "ما عندك قوائم محفوظة حتى الآن\nأضف مشترك BLOFY أو Xtream / M3U"
+                text = "ما عندك سيرفرات محفوظة حتى الآن\nأضف مشترك BLOFY أو Xtream"
                 setTextColor(BlofyTvDesign.TextSecondary)
                 textSize = 18f
                 typeface = BlofyTvDesign.BodyTypeface
@@ -225,7 +222,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                 text = buildString {
                     append(if (provider.enabled) "● القائمة النشطة" else "○ قائمة محفوظة")
                     append("  •  ")
-                    append(if (isBlofySubscriber(provider)) "BLOFY Secure" else provider.providerType.uppercase())
+                    append(if (isBlofySubscriber(provider)) "BLOFY Secure" else "XTREAM")
                 }
                 textSize = 13f
                 typeface = BlofyTvDesign.BodyTypeface
@@ -254,6 +251,10 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun connect(provider: ProviderEntity) {
+        if (!provider.providerType.equals("xtream", true) && !isBlofySubscriber(provider)) {
+            status.text = "هذه القائمة قديمة وغير مدعومة • استخدم Xtream"
+            return
+        }
         status.text = "جاري فتح ${provider.name}..."
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -292,6 +293,10 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun refresh(provider: ProviderEntity) {
+        if (!provider.providerType.equals("xtream", true) && !isBlofySubscriber(provider)) {
+            status.text = "هذه القائمة قديمة وغير مدعومة • استخدم Xtream"
+            return
+        }
         startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
             putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)
             putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
@@ -303,7 +308,8 @@ class ProviderManagerActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val synced = PortalPlaylistClient.removeProvider(applicationContext, BuildConfig.ACTIVATION_BASE_URL, provider, dao)
             if (provider.enabled) {
-                val next = tv.blofy.player.core.identity.PortalSyncBook.visible(applicationContext, dao.allProviders().first()).firstOrNull()
+                val next = tv.blofy.player.core.identity.PortalSyncBook.visible(applicationContext, dao.allProviders().first())
+                    .firstOrNull { it.providerType.equals("xtream", true) || isBlofySubscriber(it) }
                 if (next != null) dao.activateProvider(next.id)
             }
             status.text = if (synced) "تم حذف القائمة من الجهاز والموقع" else "تم إخفاء القائمة • سيُستكمل حذفها من الموقع عند الاتصال"

@@ -74,6 +74,8 @@
     <string name="all_series">All series</string>
     <string name="movie_count">%1$d%2$s movies</string>
     <string name="series_count">%1$d%2$s series</string>
+    <string name="catalog_search_movies">⌕  Search movies</string>
+    <string name="catalog_search_series">⌕  Search series</string>
     <string name="setting_saved">✓ Setting saved</string>
     <string name="setting_aspect">▣ Picture size</string>
     <string name="setting_aspect_fit">Fit</string>

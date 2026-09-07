@@ -53,9 +53,9 @@ class PlaylistActivity : AppCompatActivity() {
         }
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(if (phone) 150 else 170, if (phone) 72 else 76))
         root.addView(TextView(this).apply {
-            text = if (editingProviderId == null) "إضافة قائمة تشغيل" else "تعديل قائمة التشغيل"; textSize = if (phone) 25f else 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            text = if (editingProviderId == null) "إضافة سيرفر" else "تعديل السيرفر"; textSize = if (phone) 25f else 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
         })
-        root.addView(TextView(this).apply { text = "Xtream / M3U"; textSize = if (phone) 13f else 15f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, 5, 0, 16) })
+        root.addView(TextView(this).apply { text = "Xtream Codes"; textSize = if (phone) 13f else 15f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, 5, 0, 16) })
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
@@ -69,10 +69,10 @@ class PlaylistActivity : AppCompatActivity() {
             setOnFocusChangeListener { view, focused -> if (tv) view.background = fieldBackground(focused) }
             if (passwordField) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
-        val name = field("اسم القائمة (اختياري)")
-        val url = field("رابط السيرفر أو رابط M3U")
-        val username = field("اسم المستخدم — اتركه فارغًا لـ M3U")
-        val password = field("كلمة المرور — اتركها فارغة لـ M3U", true)
+        val name = field("اسم السيرفر (اختياري)")
+        val url = field("رابط السيرفر")
+        val username = field("اسم المستخدم")
+        val password = field("كلمة المرور", true)
         listOf(name, url).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 9 }) }
 
         val transportNotice = TextView(this).apply { text = "يفضل HTTPS • HTTP متاح عند الحاجة"; textSize = if (phone) 12f else 13f; setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.RIGHT; setPadding(8,8,8,1) }
@@ -93,24 +93,25 @@ class PlaylistActivity : AppCompatActivity() {
         var busy = false
         suspend fun persist(connectAfter: Boolean) {
             val baseUrl = url.text.toString().trim(); val user = username.text.toString().trim(); val pass = password.text.toString()
-            val isM3u = user.isBlank() && pass.isBlank(); val partialXtream = user.isBlank() xor pass.isBlank()
             val validation = PlaylistUrlPolicy.validate(baseUrl)
-            if (validation == PlaylistUrlPolicy.Result.EMPTY) { status.text = "أدخل رابط القائمة"; return }
+            if (validation == PlaylistUrlPolicy.Result.EMPTY) { status.text = "أدخل رابط السيرفر"; return }
             if (validation == PlaylistUrlPolicy.Result.INVALID) { status.text = "الرابط غير صحيح"; return }
             if (validation == PlaylistUrlPolicy.Result.USER_INFO_NOT_ALLOWED) { status.text = "استخدم حقول اسم المستخدم وكلمة المرور"; return }
             if (validation == PlaylistUrlPolicy.Result.UNSAFE_HOST) { status.text = "عنوان السيرفر غير مسموح"; return }
-            if (partialXtream) { status.text = "أدخل اسم المستخدم وكلمة المرور معًا"; return }
+            if (user.isBlank() || pass.isBlank()) { status.text = "أدخل اسم المستخدم وكلمة المرور"; return }
             if (validation == PlaylistUrlPolicy.Result.HTTP_CLEAR_TEXT && confirmedHttpUrl != baseUrl) {
                 AlertDialog.Builder(this@PlaylistActivity).setTitle("اتصال HTTP غير مشفر").setMessage("هل تريد المتابعة بهذا الرابط؟")
                     .setNegativeButton("رجوع", null).setPositiveButton("متابعة") { _, _ -> confirmedHttpUrl = baseUrl; lifecycleScope.launch { persist(connectAfter) } }.show(); return
             }
             if (busy) return
-            busy = true; status.text = if (isM3u) "جاري تجهيز M3U..." else "جاري تجهيز Xtream..."
+            busy = true; status.text = "جاري تجهيز Xtream..."
             try {
                 val provider = withContext(Dispatchers.IO) {
-                    val dao = BlofyDatabase.get(applicationContext).dao(); val existing = editingProviderId?.let { dao.provider(it) }; val type = if (isM3u) "m3u" else "xtream"
-                    val id = existing?.id ?: UUID.nameUUIDFromBytes("$type|$baseUrl|$user".toByteArray()).toString()
-                    val next = ProviderEntity(id, name.text.toString().trim().ifBlank { if (isM3u) "BLOFY M3U" else "BLOFY Server" }, if (isM3u) baseUrl else baseUrl.trimEnd('/'), user, pass, type,
+                    val dao = BlofyDatabase.get(applicationContext).dao(); val existing = editingProviderId?.let { dao.provider(it) }
+                    val type = "xtream"
+                    val normalizedBaseUrl = baseUrl.trimEnd('/')
+                    val id = existing?.id ?: UUID.nameUUIDFromBytes("$type|$normalizedBaseUrl|$user".toByteArray()).toString()
+                    val next = ProviderEntity(id, name.text.toString().trim().ifBlank { "BLOFY Server" }, normalizedBaseUrl, user, pass, type,
                         existing?.liveFormat ?: "ts", existing?.preferredTransport ?: "cronet", existing?.preferredEngine ?: "media3", existing?.allowCrossProtocolRedirects ?: true, true, System.currentTimeMillis())
                     val hasCatalog = dao.hasCatalog(id)
                     val cacheReady = hasCatalog && CatalogSyncState.isReady(applicationContext, id)
@@ -145,7 +146,7 @@ class PlaylistActivity : AppCompatActivity() {
                 setResult(RESULT_OK); status.text = if (connectAfter) "تم الحفظ • جاري الدخول" else "تم الحفظ"
                 if (connectAfter) { startActivity(Intent(this@PlaylistActivity, CatalogLoadingActivity::class.java).putExtra("provider_id", provider.id)); finish() } else finish()
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { status.text = "تعذر تجهيز القائمة • ${error.message ?: "خطأ اتصال"}"; busy = false }
+            catch (error: Exception) { status.text = "تعذر تجهيز السيرفر • ${error.message ?: "خطأ اتصال"}"; busy = false }
         }
 
         fun action(label: String, primary: Boolean, connectAfter: Boolean) = Button(this).apply {
@@ -162,7 +163,8 @@ class PlaylistActivity : AppCompatActivity() {
 
         if (editingProviderId != null) lifecycleScope.launch {
             val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: return@launch
-            name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password); status.text = "${provider.providerType.uppercase()} • ${provider.name}"
+            name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password)
+            status.text = if (provider.providerType.equals("xtream", true)) "XTREAM • ${provider.name}" else "هذه القائمة قديمة وغير مدعومة • أدخل بيانات Xtream"
         }
     }
 

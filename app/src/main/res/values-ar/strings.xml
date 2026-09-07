@@ -74,6 +74,8 @@
     <string name="all_series">كل المسلسلات</string>
     <string name="movie_count">%1$d%2$s فيلم</string>
     <string name="series_count">%1$d%2$s مسلسل</string>
+    <string name="catalog_search_movies">⌕  ابحث في الأفلام</string>
+    <string name="catalog_search_series">⌕  ابحث في المسلسلات</string>
     <string name="setting_saved">✓ تم حفظ الإعداد</string>
     <string name="setting_aspect">▣ حجم الصورة</string>
     <string name="setting_aspect_fit">ملاءمة</string>
