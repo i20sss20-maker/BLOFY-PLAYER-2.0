@@ -11,7 +11,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.flow.first
 import tv.blofy.player.data.local.BlofyDatabase
-import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.data.remote.XtreamClient
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -79,17 +78,23 @@ class CatalogRefreshWorker(
             dao.promoteStagedCatalog(staged.id, refreshedProvider)
             promoted = true
 
-            ProviderMetadataCache.clearProvider(app, provider.id)
-            HomeSnapshotStore.clear(app, provider.id)
-            CatalogSyncState.markCatalogCommitted(app, provider.id)
-
-            // Keep the worker fast: only the small local entry snapshot/manifest is rebuilt here.
-            // Deep metadata, episodes and artwork resume later through the normal Home lifecycle.
-            tv.blofy.player.data.preparation.FullCatalogPreparer.prepare(app, provider.id) { }
+            // Promotion itself is the durable point of no return. From here on, never turn a local
+            // Home/manifest preparation problem into another full network download. The new catalog
+            // is already complete and active; entry preparation is recoverable on the next launch.
+            runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
+            runCatching {
+                tv.blofy.player.data.preparation.FullCatalogPreparer.prepare(app, provider.id) { }
+            }
             Result.success()
         } catch (_: Throwable) {
-            if (!promoted) runCatching { dao.discardStagedCatalog(staged.id) }
-            Result.retry()
+            if (!promoted) {
+                runCatching { dao.discardStagedCatalog(staged.id) }
+                Result.retry()
+            } else {
+                // A post-promotion failure must not redownload the provider. The promoted catalog
+                // stays active and the normal cache-first entry path can rebuild local snapshots.
+                Result.success()
+            }
         }
     }
 
