@@ -71,13 +71,17 @@ class PlaylistManager(
 
     private suspend fun syncM3u(provider: ProviderEntity): Int {
         val parsed = m3uLoader.load(provider)
-        val previous = listOf("live", "movie", "series").flatMap { kind ->
-            dao.streams(provider.id, kind, null).first()
+        val kinds = listOf("live", "movie", "series")
+        var previousCount = 0
+        val previousFlags = ArrayList<StreamEntity>()
+        for (kind in kinds) {
+            previousCount += dao.catalogCountAll(provider.id, kind)
+            previousFlags += dao.persistedStreamFlags(provider.id, kind)
         }
-        val streams = PreviousStreamFlags(previous).applyTo(parsed.streams)
+        val streams = PreviousStreamFlags(previousFlags).applyTo(parsed.streams)
 
         if (!CatalogReplacementPolicy.shouldReplace(
-                previousStreamCount = previous.size,
+                previousStreamCount = previousCount,
                 sourceCategoryCount = parsed.categories.size,
                 parsedCategoryCount = parsed.categories.size,
                 sourceStreamCount = parsed.streams.size,
@@ -98,8 +102,8 @@ class PlaylistManager(
     ): Int {
         if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_live_categories"))
-        val previous = dao.streams(provider.id, "live", null).first()
-        val previousFlags = PreviousStreamFlags(previous)
+        val previousCount = dao.catalogCountAll(provider.id, "live")
+        val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "live"))
         val coroutineContext = currentCoroutineContext()
 
         val categoryRows = categories.mapIndexedNotNull { index, row ->
@@ -139,7 +143,7 @@ class PlaylistManager(
         }
 
         if (CatalogReplacementPolicy.shouldReplace(
-                previousStreamCount = previous.size,
+                previousStreamCount = previousCount,
                 sourceCategoryCount = categories.size,
                 parsedCategoryCount = categoryRows.size,
                 sourceStreamCount = parsed.sourceCount,
@@ -163,9 +167,8 @@ class PlaylistManager(
     ): Int {
         if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
-        val (previousCount, previousFlags) = dao.streams(provider.id, "movie", null).first().let { previous ->
-            previous.size to PreviousStreamFlags(previous.filter { it.favorite || it.locked })
-        }
+        val previousCount = dao.catalogCountAll(provider.id, "movie")
+        val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "movie"))
         val coroutineContext = currentCoroutineContext()
         val categoryRows = categories.mapIndexedNotNull { index, row ->
             if (index % 256 == 0) coroutineContext.ensureActive()
@@ -226,8 +229,8 @@ class PlaylistManager(
     ): Int {
         if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_series_categories"))
-        val previous = dao.streams(provider.id, "series", null).first()
-        val previousFlags = PreviousStreamFlags(previous)
+        val previousCount = dao.catalogCountAll(provider.id, "series")
+        val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "series"))
         val coroutineContext = currentCoroutineContext()
         val categoryRows = categories.mapIndexedNotNull { index, row ->
             if (index % 256 == 0) coroutineContext.ensureActive()
@@ -265,7 +268,7 @@ class PlaylistManager(
         }
 
         if (CatalogReplacementPolicy.shouldReplace(
-                previousStreamCount = previous.size,
+                previousStreamCount = previousCount,
                 sourceCategoryCount = categories.size,
                 parsedCategoryCount = categoryRows.size,
                 sourceStreamCount = parsed.sourceCount,
