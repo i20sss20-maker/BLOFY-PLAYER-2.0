@@ -4,7 +4,10 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.util.UUID
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 
 /**
  * Local BLOFY profiles. The catalog/playback engines stay shared; profile-owned UX state is
@@ -24,6 +27,11 @@ object ProfileStore {
     private const val KEY_ACTIVE = "active_profile"
     private const val KEY_PROFILES = "profiles_v2"
     private const val MAX_PROFILES = 8
+    private const val PIN_SCHEME = "v2"
+    private const val PIN_ITERATIONS = 120_000
+    private const val PIN_BITS = 256
+    private const val PIN_SALT_BYTES = 16
+    private val secureRandom = SecureRandom()
 
     private val legacyDefaults = listOf(
         Profile("main", "الرئيسي", false, null),
@@ -107,11 +115,17 @@ object ProfileStore {
     fun setPin(context: Context, id: String, pin: String?) {
         val current = all(context)
         if (current.none { it.id == id }) return
-        val pinHash = pin?.takeIf { it.length in 4..8 && it.all(Char::isDigit) }?.let(::hash)
+        val pinHash = pin?.takeIf { it.length in 4..8 && it.all(Char::isDigit) }?.let(::strongHash)
         saveAll(context, current.map { if (it.id == id) it.copy(pinHash = pinHash) else it })
     }
 
-    fun verifyPin(profile: Profile, pin: String): Boolean = profile.pinHash == null || profile.pinHash == hash(pin)
+    fun verifyPin(profile: Profile, pin: String): Boolean {
+        val stored = profile.pinHash ?: return true
+        if (stored.startsWith("$PIN_SCHEME$")) return verifyStrongHash(stored, pin)
+        // Upgrade compatibility for profiles created by older builds. The next PIN change stores v2.
+        return constantTimeHexEquals(stored, legacyHash(pin))
+    }
+
     fun isKids(context: Context): Boolean = active(context).kids
     fun storageNamespace(context: Context): String = active(context).id
 
@@ -131,7 +145,47 @@ object ProfileStore {
             .putString(KEY_PROFILES, array.toString()).commit()) { "Unable to persist profiles" }
     }
 
-    private fun hash(value: String): String = MessageDigest.getInstance("SHA-256")
+    private fun strongHash(value: String): String {
+        val salt = ByteArray(PIN_SALT_BYTES).also(secureRandom::nextBytes)
+        val derived = derive(value, salt, PIN_ITERATIONS)
+        return "$PIN_SCHEME$$PIN_ITERATIONS$${salt.toHex()}$${derived.toHex()}"
+    }
+
+    private fun verifyStrongHash(stored: String, value: String): Boolean = runCatching {
+        val parts = stored.split('$')
+        if (parts.size != 4 || parts[0] != PIN_SCHEME) return false
+        val iterations = parts[1].toIntOrNull()?.takeIf { it in 50_000..500_000 } ?: return false
+        val salt = parts[2].hexToBytes() ?: return false
+        val expected = parts[3].hexToBytes() ?: return false
+        if (salt.size !in 12..32 || expected.size != PIN_BITS / 8) return false
+        MessageDigest.isEqual(expected, derive(value, salt, iterations))
+    }.getOrDefault(false)
+
+    private fun derive(value: String, salt: ByteArray, iterations: Int): ByteArray {
+        val spec = PBEKeySpec(value.toCharArray(), salt, iterations, PIN_BITS)
+        return try {
+            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+        } finally {
+            spec.clearPassword()
+        }
+    }
+
+    private fun legacyHash(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
+        .toHex()
+
+    private fun constantTimeHexEquals(left: String, right: String): Boolean {
+        val a = left.hexToBytes() ?: return false
+        val b = right.hexToBytes() ?: return false
+        return MessageDigest.isEqual(a, b)
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+    private fun String.hexToBytes(): ByteArray? {
+        if (length % 2 != 0 || !matches(Regex("[0-9a-fA-F]+"))) return null
+        return runCatching {
+            ByteArray(length / 2) { index -> substring(index * 2, index * 2 + 2).toInt(16).toByte() }
+        }.getOrNull()
+    }
 }
