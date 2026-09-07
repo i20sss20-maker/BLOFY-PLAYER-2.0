@@ -74,4 +74,19 @@ class ProfileLibraryStoreTest {
         assertEquals(true, snapshot.settings["enabled"])
         assertFalse(snapshot.settings.containsKey("unsafe key"))
     }
+
+    @Test fun networkRestoreReappliesSettingsRemovalsAndHomeOrderEdits() {
+        ProfileLibraryStore.setSetting(app, "removeMe", true, "race")
+        val before = ProfileLibraryStore.snapshotJson(app, "race")
+        val remote = JSONObject(before.toString()).apply {
+            put("settings", JSONObject().put("removeMe", true).put("remote", 42))
+        }
+        ProfileLibraryStore.setSetting(app, "removeMe", null, "race")
+        ProfileLibraryStore.setSetting(app, "newLocal", true, "race")
+        val rows = ProfileLibraryStore.ALL_HOME_ROWS.reversed()
+        ProfileLibraryStore.saveHomeRows(app, rows, "race")
+        assertTrue(ProfileLibraryStore.restoreSnapshotPreservingEdits(app, "race", before, remote))
+        assertEquals(mapOf("remote" to 42, "newLocal" to true), ProfileLibraryStore.settings(app, "race"))
+        assertEquals(rows, ProfileLibraryStore.homeRows(app, "race"))
+    }
 }

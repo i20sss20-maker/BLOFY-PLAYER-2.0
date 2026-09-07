@@ -29,7 +29,7 @@ object ProfileCloudSync {
         if (endpoint.isBlank()) return@withLock null
         val profile = ProfileStore.active(context)
         if (profile.guest) return@withLock null
-        sync(context.applicationContext, endpoint, profile.id)
+        syncLocked(context.applicationContext, endpoint, profile.id)
     }
 
     suspend fun backupActive(context: Context): Result? = mutex.withLock {
@@ -53,11 +53,12 @@ object ProfileCloudSync {
         if (endpoint.isBlank()) return@withLock null
         val profile = ProfileStore.active(context)
         if (profile.guest) return@withLock null
+        val expectedLocal = ProfileLibraryStore.snapshotJson(context, profile.id)
         val remote = ProfileCloudClient.get(context, endpoint, profile.id)
         if (!remote.exists) return@withLock Result("no_backup", 0L)
-        ProfileLibraryStore.restoreSnapshot(context, profile.id, remote.payload)
-        remember(context, profile.id, remote.revision, fingerprint(ProfileLibraryStore.snapshotJson(context, profile.id)))
-        Result("restore", remote.revision, changedLocal = true)
+        val applied = ProfileLibraryStore.restoreSnapshotPreservingEdits(context, profile.id, expectedLocal, remote.payload)
+        if (applied) remember(context, profile.id, remote.revision, fingerprint(remote.payload))
+        Result(if (applied) "restore" else "deferred", remote.revision, changedLocal = applied)
     }
 
     suspend fun createPairCodeActive(context: Context): ProfileCloudClient.PairCode? = mutex.withLock {
@@ -75,7 +76,7 @@ object ProfileCloudSync {
                 val merged = merge(newest.payload, payload)
                 val retried = ProfileCloudClient.put(context, endpoint, profile.id, newest.revision, merged)
                 if (retried is ProfileCloudClient.SaveResult.Saved) {
-                    ProfileLibraryStore.restoreSnapshot(context, profile.id, retried.payload)
+                    if (!ProfileLibraryStore.restoreSnapshotPreservingEdits(context, profile.id, payload, retried.payload)) return@withLock null
                     remember(context, profile.id, retried.revision, fingerprint(retried.payload))
                 } else return@withLock null
             }
@@ -88,10 +89,11 @@ object ProfileCloudSync {
         if (endpoint.isBlank()) return@withLock null
         val profile = ProfileStore.active(context)
         if (profile.guest) return@withLock null
+        val expectedLocal = ProfileLibraryStore.snapshotJson(context, profile.id)
         val restored = ProfileCloudClient.restorePairCode(context, endpoint, profile.id, code)
-        ProfileLibraryStore.restoreSnapshot(context, profile.id, restored.payload)
-        remember(context, profile.id, restored.revision, fingerprint(ProfileLibraryStore.snapshotJson(context, profile.id)))
-        Result("pair_restore", restored.revision, changedLocal = true)
+        val applied = ProfileLibraryStore.restoreSnapshotPreservingEdits(context, profile.id, expectedLocal, restored.payload)
+        if (applied) remember(context, profile.id, restored.revision, fingerprint(restored.payload))
+        Result(if (applied) "pair_restore" else "deferred", restored.revision, changedLocal = applied)
     }
 
     fun lastSyncAt(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Long =
@@ -100,15 +102,19 @@ object ProfileCloudSync {
     fun knownRevision(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Long =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("$profileId:revision", 0L)
 
-    suspend fun sync(context: Context, endpoint: String, profileId: String): Result {
+    suspend fun sync(context: Context, endpoint: String, profileId: String): Result = mutex.withLock {
+        syncLocked(context, endpoint, profileId)
+    }
+
+    private suspend fun syncLocked(context: Context, endpoint: String, profileId: String): Result {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val revisionKey = "$profileId:revision"
         val fingerprintKey = "$profileId:fingerprint"
         val knownRevision = prefs.getLong(revisionKey, 0L)
         val lastFingerprint = prefs.getString(fingerprintKey, null)
 
-        var localPayload = ProfileLibraryStore.snapshotJson(context, profileId)
-        var localFingerprint = fingerprint(localPayload)
+        val localPayload = ProfileLibraryStore.snapshotJson(context, profileId)
+        val localFingerprint = fingerprint(localPayload)
         var remote = ProfileCloudClient.get(context, endpoint, profileId)
 
         if (!remote.exists) {
@@ -124,23 +130,21 @@ object ProfileCloudSync {
         val remoteAdvanced = remote.revision > knownRevision
 
         if (remoteAdvanced && (localUnchangedSinceSync || isEffectivelyEmpty(localPayload))) {
-            ProfileLibraryStore.restoreSnapshot(context, profileId, remote.payload)
-            localPayload = ProfileLibraryStore.snapshotJson(context, profileId)
-            localFingerprint = fingerprint(localPayload)
-            remember(context, profileId, remote.revision, localFingerprint)
-            return Result("restored", remote.revision, changedLocal = true)
+            val applied = ProfileLibraryStore.restoreSnapshotPreservingEdits(context, profileId, localPayload, remote.payload)
+            if (applied) remember(context, profileId, remote.revision, fingerprint(remote.payload))
+            return Result(if (applied) "restored" else "deferred", remote.revision, changedLocal = applied)
         }
 
         if (remoteAdvanced && !localUnchangedSinceSync) {
             val merged = merge(remote.payload, localPayload)
-            return saveWithOneRetry(context, endpoint, profileId, remote.revision, merged, changedLocal = true)
+            return saveWithOneRetry(context, endpoint, profileId, remote.revision, merged, localPayload, changedLocal = true)
         }
 
         if (knownRevision == remote.revision && lastFingerprint == localFingerprint) {
             return Result("unchanged", remote.revision)
         }
 
-        return saveWithOneRetry(context, endpoint, profileId, remote.revision, localPayload, changedLocal = false)
+        return saveWithOneRetry(context, endpoint, profileId, remote.revision, localPayload, localPayload, changedLocal = false)
     }
 
     private suspend fun saveWithOneRetry(
@@ -149,22 +153,23 @@ object ProfileCloudSync {
         profileId: String,
         expectedRevision: Long,
         payload: JSONObject,
+        expectedLocal: JSONObject,
         changedLocal: Boolean,
     ): Result {
         return when (val first = ProfileCloudClient.put(context, endpoint, profileId, expectedRevision, payload)) {
             is ProfileCloudClient.SaveResult.Saved -> {
-                ProfileLibraryStore.restoreSnapshot(context, profileId, first.payload)
-                remember(context, profileId, first.revision, fingerprint(first.payload))
-                Result("uploaded", first.revision, changedLocal)
+                val applied = ProfileLibraryStore.restoreSnapshotPreservingEdits(context, profileId, expectedLocal, first.payload)
+                if (applied) remember(context, profileId, first.revision, fingerprint(first.payload))
+                Result(if (applied) "uploaded" else "deferred", first.revision, changedLocal && applied)
             }
             is ProfileCloudClient.SaveResult.Conflict -> {
                 val newest = ProfileCloudClient.get(context, endpoint, profileId)
                 val merged = merge(newest.payload, payload)
                 when (val second = ProfileCloudClient.put(context, endpoint, profileId, newest.revision, merged)) {
                     is ProfileCloudClient.SaveResult.Saved -> {
-                        ProfileLibraryStore.restoreSnapshot(context, profileId, second.payload)
-                        remember(context, profileId, second.revision, fingerprint(second.payload))
-                        Result("merged", second.revision, changedLocal = true)
+                        val applied = ProfileLibraryStore.restoreSnapshotPreservingEdits(context, profileId, expectedLocal, second.payload)
+                        if (applied) remember(context, profileId, second.revision, fingerprint(second.payload))
+                        Result(if (applied) "merged" else "deferred", second.revision, changedLocal = applied)
                     }
                     is ProfileCloudClient.SaveResult.Conflict -> Result("deferred", second.revision)
                 }

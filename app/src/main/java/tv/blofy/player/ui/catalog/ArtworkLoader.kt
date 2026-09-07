@@ -1,5 +1,6 @@
 package tv.blofy.player.ui.catalog
 
+import android.content.ComponentCallbacks2
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.GradientDrawable
@@ -30,6 +31,7 @@ object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
     private const val MAX_DISK_BYTES = 260L * 1024L * 1024L
     private const val NEGATIVE_CACHE_MS = 5 * 60_000L
+    private const val MAX_FAILED_URLS = 2_048
 
     private enum class Priority(val weight: Int) { VISIBLE(0), PREFETCH(1) }
     private data class Target(val width: Int, val height: Int, val diskBucket: Int)
@@ -52,7 +54,8 @@ object ArtworkLoader {
     private val networkPool = ThreadPoolExecutor(workerCount, workerCount, 30L, TimeUnit.SECONDS, taskQueue).apply { allowCoreThreadTimeOut(false) }
     private val trimCounter = AtomicInteger(0)
     private val inFlight = ConcurrentHashMap<String, FutureTask<Bitmap?>>()
-    private val failedUntil = ConcurrentHashMap<String, Long>()
+    // Broken artwork can have a different URL for every catalog row. Bound those entries too.
+    private val failedUntil = LruCache<String, Long>(MAX_FAILED_URLS)
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(3, TimeUnit.SECONDS)
@@ -65,6 +68,22 @@ object ArtworkLoader {
 
     private val cache = object : LruCache<String, Bitmap>(memoryCacheKb()) {
         override fun sizeOf(key: String, value: Bitmap) = (value.byteCount / 1024).coerceAtLeast(1)
+    }
+
+    fun trimMemory(level: Int) {
+        when {
+            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> clearMemory()
+            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> {
+                cache.trimToSize(cache.size() / 2)
+                failedUntil.trimToSize(failedUntil.size() / 2)
+            }
+        }
+    }
+
+    fun clearMemory() {
+        // Views may still display these bitmaps: release cache references, never recycle them.
+        cache.evictAll()
+        failedUntil.evictAll()
     }
 
     fun load(view: ImageView, rawUrl: String?) = load(view, listOf(rawUrl))
@@ -211,7 +230,7 @@ object ArtworkLoader {
 
         val future = FutureTask<Bitmap?> {
             val result = downloadWithRetry(url, target)
-            if (result == null) failedUntil[key] = System.currentTimeMillis() + NEGATIVE_CACHE_MS else failedUntil.remove(key)
+            if (result == null) failedUntil.put(key, System.currentTimeMillis() + NEGATIVE_CACHE_MS) else failedUntil.remove(key)
             result
         }
         val existing = inFlight.putIfAbsent(key, future)
@@ -294,13 +313,13 @@ object ArtworkLoader {
         }
     }
 
-    private fun isNegative(key: String): Boolean {
-        val until = failedUntil[key] ?: return false
+    private fun isNegative(key: String): Boolean = synchronized(failedUntil) {
+        val until = failedUntil.get(key) ?: return@synchronized false
         if (until <= System.currentTimeMillis()) {
-            failedUntil.remove(key, until)
-            return false
+            failedUntil.remove(key)
+            return@synchronized false
         }
-        return true
+        true
     }
 
     private fun target(context: android.content.Context): Target = when (CommercialRuntime.imageMode(context)) {

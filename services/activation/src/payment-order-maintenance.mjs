@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { releaseCouponReservations } from './payment-coupon-reservations.mjs';
 
 const { Pool } = pg;
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -30,8 +31,11 @@ export async function cleanupStalePaymentOrders() {
     const stale = await client.query(
       `SELECT id
        FROM subscription_orders
-       WHERE status='pending'
-         AND created_at < NOW() - ($1::bigint * INTERVAL '1 millisecond')
+       WHERE (status='pending'
+         AND created_at < NOW() - ($1::bigint * INTERVAL '1 millisecond'))
+         OR (status IN ('failed','cancelled') AND EXISTS (
+           SELECT 1 FROM coupon_redemptions cr WHERE cr.order_id=subscription_orders.id
+         ))
        ORDER BY created_at
        FOR UPDATE SKIP LOCKED
        LIMIT $2`,
@@ -50,25 +54,7 @@ export async function cleanupStalePaymentOrders() {
       [ids]
     );
 
-    const released = await client.query(
-      `DELETE FROM coupon_redemptions
-       WHERE order_id = ANY($1::uuid[])
-       RETURNING code`,
-      [ids]
-    );
-    const counts = new Map();
-    for (const row of released.rows) {
-      const code = String(row.code || '').trim();
-      if (code) counts.set(code, (counts.get(code) || 0) + 1);
-    }
-    for (const [code, count] of counts) {
-      await client.query(
-        `UPDATE coupons
-         SET redemption_count=GREATEST(0,redemption_count-$2),updated_at=NOW()
-         WHERE code=$1`,
-        [code, count]
-      );
-    }
+    await releaseCouponReservations(client, ids);
 
     await client.query('COMMIT');
     return ids.length;

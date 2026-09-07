@@ -2,6 +2,7 @@
 .kotlin/
 .ffmpeg-build/
 **/build/
+node_modules/
 release/
 
 local.properties

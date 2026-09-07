@@ -18,8 +18,6 @@ import tv.blofy.player.ui.catalog.ArtworkLoader
 object BackgroundCatalogEngine {
     private const val WARM_ART_LIMIT = 40
     private const val STARTUP_GRACE_MS = 1_500L
-    private const val INDEX_PREFS = "blofy_search_index"
-    private const val INDEX_V9_PREFIX = "v9_ready_"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -37,23 +35,14 @@ object BackgroundCatalogEngine {
             }
 
             val provider = dao.providers().first().firstOrNull() ?: return@launch
-            val prefs = app.getSharedPreferences(INDEX_PREFS, Context.MODE_PRIVATE)
-            val indexKey = INDEX_V9_PREFIX + provider.id
-            if (!prefs.getBoolean(indexKey, false) && dao.hasCatalog(provider.id)) {
-                val rebuilt = runCatching {
-                    dao.rebuildSearchIndex(provider.id)
-                    true
-                }.getOrDefault(false)
-                if (rebuilt) prefs.edit().putBoolean(indexKey, true).apply()
+            if (dao.hasCatalog(provider.id)) runCatching {
+                CatalogSearchIndex.ensureReady(app, dao, provider.id)
             }
 
             val warm = runCatching { dao.latestHomeStreams(provider.id, WARM_ART_LIMIT) }
                 .getOrDefault(emptyList())
             if (warm.isNotEmpty()) ArtworkLoader.warmPrefetch(app, warm.map { it.backdrop ?: it.icon })
 
-            // Resume only missing enrichment from its persisted checkpoint. The core catalog is
-            // never downloaded on startup and already-cached rows are reused.
-            CatalogSyncState.resumeEnrichment(app, provider.id)
         }
     }
 }

@@ -55,9 +55,8 @@ class ContentRepository(private val dao: BlofyDao) {
         val fts = ArabicSearchNormalizer.ftsQuery(trimmed)
         val indexed = if (fts.isNotBlank()) {
             runCatching {
-                dao.searchStreamsFts(providerId, fts, (limit * 4).coerceIn(limit, 600))
+                dao.searchStreamsFtsByKind(providerId, kind, fts, limit)
                     .asSequence()
-                    .filter { it.kind == kind }
                     .distinctBy { it.key }
                     .take(limit)
                     .toList()

@@ -7,11 +7,8 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.TextView
-import tv.blofy.player.core.profile.KidsPolicy
 import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -25,11 +22,16 @@ import tv.blofy.player.ui.home.HomeActivity
  * - Applies a conservative visual Kids Mode pass on Home so clearly adult-labelled cards are not shown.
  */
 class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
+    private val homeFilters = java.util.WeakHashMap<Activity, KidsHomeFilter>()
     override fun onActivityResumed(activity: Activity) {
         when (activity) {
             is MovieDetailsActivity, is SeriesDetailsActivity -> installWatchlistAction(activity)
-            is HomeActivity -> if (ProfileStore.isKids(activity.applicationContext)) {
-                activity.window.decorView.post { filterKidsHome(activity.window.decorView) }
+            is HomeActivity -> {
+                homeFilters.remove(activity)?.detach()
+                val appContext = activity.applicationContext
+                homeFilters[activity] = KidsHomeFilter(activity.window.decorView) {
+                    ProfileStore.isKids(appContext)
+                }.also { it.attach() }
             }
         }
     }
@@ -78,35 +80,6 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
         })
     }
 
-    private fun filterKidsHome(root: View) {
-        if (root !is ViewGroup) return
-        for (index in 0 until root.childCount) {
-            val child = root.getChildAt(index)
-            if (child is ViewGroup) {
-                if (child.isFocusable && child.visibility == View.VISIBLE) {
-                    val label = visibleText(child)
-                    if (label.isNotBlank() && KidsPolicy.isBlocked(label, null, null)) {
-                        child.visibility = View.GONE
-                        child.isFocusable = false
-                        continue
-                    }
-                }
-                filterKidsHome(child)
-            }
-        }
-    }
-
-    private fun visibleText(root: View): String {
-        if (root is TextView) return root.text?.toString().orEmpty()
-        if (root !is ViewGroup) return ""
-        val parts = ArrayList<String>(4)
-        for (index in 0 until root.childCount) {
-            val value = visibleText(root.getChildAt(index)).trim()
-            if (value.isNotBlank()) parts += value
-        }
-        return parts.joinToString(" ").take(600)
-    }
-
     private fun buttonBackground(activity: Activity, saved: Boolean, focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
@@ -123,10 +96,10 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
     override fun onActivityStarted(activity: Activity) = Unit
-    override fun onActivityPaused(activity: Activity) = Unit
+    override fun onActivityPaused(activity: Activity) { homeFilters.remove(activity)?.detach() }
     override fun onActivityStopped(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
-    override fun onActivityDestroyed(activity: Activity) = Unit
+    override fun onActivityDestroyed(activity: Activity) { onActivityPaused(activity) }
 
     companion object { private const val WATCHLIST_TAG = "blofy_profile_watchlist_action" }
 }

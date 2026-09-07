@@ -1,7 +1,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import pg from 'pg';
-import { createActivationCredentialCodec } from './auth-protection.mjs';
+import { createActivationCredentialCodec, createDeviceAuthenticator, sendDeviceAuthRateLimit } from './auth-protection.mjs';
 
 const { Pool } = pg;
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -13,6 +13,7 @@ const ZID_PRODUCT_PLAN_MAP_RAW = String(process.env.BLOFY_ZID_PRODUCT_PLAN_MAP |
 const ZID_PLAN_URLS_RAW = String(process.env.BLOFY_ZID_PLAN_URLS || '{}').trim();
 const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false } }) : null;
 const activationCredentials = /^[a-fA-F0-9]{64}$/.test(PLAYLIST_ENCRYPTION_KEY) ? createActivationCredentialCodec(PLAYLIST_ENCRYPTION_KEY) : null;
+const authorizedDevice = createDeviceAuthenticator({ pool, activationCredentials });
 
 function safeMap(raw) { try { const v = JSON.parse(raw); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; } }
 const ZID_PRODUCT_PLAN_MAP = safeMap(ZID_PRODUCT_PLAN_MAP_RAW);
@@ -111,27 +112,7 @@ function customerData(payload) {
   };
 }
 
-async function ensureCommerceSchema() {
-  if (!pool) return;
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS device_customers (
-      device_id TEXT PRIMARY KEY REFERENCES devices(device_id) ON DELETE CASCADE,
-      customer_name TEXT,
-      customer_email TEXT,
-      customer_phone TEXT,
-      source TEXT NOT NULL DEFAULT 'zid',
-      last_order_reference TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_device_customers_email ON device_customers(customer_email);
-    CREATE INDEX IF NOT EXISTS idx_device_customers_phone ON device_customers(customer_phone);
-  `);
-}
-const schemaReady = ensureCommerceSchema().catch((error) => console.error('Zid commerce schema init failed', error?.message || error));
-
 async function grantPaidZidOrder(payload) {
-  await schemaReady;
   const event = String(payload.event || payload.type || payload.event_name || '').toLowerCase();
   const paymentStatus = String(firstByKey(payload, new Set(['payment_status','paymentstatus','status'])) || '').toLowerCase();
   const isPaid = event.includes('payment_status') ? paymentStatus === 'paid' : (event.includes('paid') || paymentStatus === 'paid');
@@ -162,18 +143,22 @@ async function grantPaidZidOrder(payload) {
     if (!plan) throw new Error('plan_not_found');
 
     const existing = await client.query("SELECT id FROM subscription_orders WHERE payment_provider='zid' AND provider_reference=$1 LIMIT 1", [providerReference]);
-    const orderId = existing.rows[0]?.id || crypto.randomUUID();
-    if (!existing.rows[0]) {
-      await client.query(
-        `INSERT INTO subscription_orders(id,device_id,plan_key,status,amount_minor,currency,payment_provider,provider_reference,paid_at)
-         VALUES($1,$2,$3,'paid',$4,$5,'zid',$6,NOW())`,
-        [orderId, deviceId, plan.plan_key, Number(plan.price_minor), plan.currency, providerReference]
-      );
+    if (existing.rows[0]) {
+      // One store order grants once, even when multiple paid notifications have different event IDs.
+      await client.query("UPDATE payment_events SET processing_status='ignored',processed_at=NOW() WHERE payment_provider='zid' AND provider_event_id=$1", [eventId]);
+      await client.query('COMMIT');
+      return { duplicate: true };
     }
+    const orderId = crypto.randomUUID();
+    await client.query(
+      `INSERT INTO subscription_orders(id,device_id,plan_key,status,amount_minor,currency,payment_provider,provider_reference,paid_at)
+       VALUES($1,$2,$3,'paid',$4,$5,'zid',$6,NOW())`,
+      [orderId, deviceId, plan.plan_key, Number(plan.price_minor), plan.currency, providerReference]
+    );
 
     const current = await client.query(
       `SELECT expires_at FROM device_subscriptions WHERE device_id=$1 AND status='active' AND (expires_at IS NULL OR expires_at>NOW())
-       ORDER BY expires_at DESC NULLS FIRST LIMIT 1 FOR UPDATE`, [deviceId]
+       ORDER BY expires_at DESC NULLS FIRST LIMIT 1`, [deviceId]
     );
     const now = Date.now();
     const currentExpiry = current.rows[0]?.expires_at ? new Date(current.rows[0].expires_at).getTime() : 0;
@@ -184,7 +169,8 @@ async function grantPaidZidOrder(payload) {
        VALUES($1,$2,$3,$4,$5,$6,'active') ON CONFLICT DO NOTHING`,
       [crypto.randomUUID(), deviceId, plan.plan_key, orderId, new Date(startsAtMs), expiresAt]
     );
-    await client.query("UPDATE devices SET status='active',expires_at=$2,updated_at=NOW() WHERE device_id=$1 AND status!='blocked'", [deviceId, expiresAt]);
+    const effectiveExpiry = current.rows[0] && current.rows[0].expires_at == null ? null : expiresAt;
+    await client.query("UPDATE devices SET status='active',expires_at=$2,updated_at=NOW() WHERE device_id=$1 AND status!='blocked'", [deviceId, effectiveExpiry]);
 
     const customer = customerData(payload);
     await client.query(
@@ -199,7 +185,7 @@ async function grantPaidZidOrder(payload) {
     );
     await client.query("UPDATE payment_events SET processing_status='applied',processed_at=NOW() WHERE payment_provider='zid' AND provider_event_id=$1", [eventId]);
     await client.query('COMMIT');
-    return { applied: true, deviceId, planKey, expiresAt: expiresAt?.getTime() || null };
+    return { applied: true, deviceId, planKey, expiresAt: effectiveExpiry?.getTime() || null };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
@@ -226,14 +212,12 @@ async function readiness(_req, res) {
 }
 
 async function renewValidate(req, res) {
-  await schemaReady;
   const body = await readJson(req);
   const deviceId = String(body.deviceId || '').trim();
   const activationCode = String(body.activationCode || '').trim();
   if (!/^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) || !/^\d{6}$/.test(activationCode) || !activationCredentials) return json(res, 400, { error: 'invalid_device' });
-  const result = await pool.query('SELECT device_id,activation_code,status,expires_at FROM devices WHERE device_id=$1 LIMIT 1', [deviceId]);
-  const row = result.rows[0];
-  if (!row || !activationCredentials.matches(row, activationCode)) return json(res, 403, { error: 'unauthorized_device' });
+  const row = await authorizedDevice(deviceId, activationCode, req);
+  if (!row) return json(res, 403, { error: 'unauthorized_device' });
   const plans = await pool.query('SELECT plan_key,name,duration_days,price_minor,currency FROM subscription_plans WHERE active=TRUE ORDER BY sort_order,name');
   return json(res, 200, {
     deviceId,
@@ -245,7 +229,6 @@ async function renewValidate(req, res) {
 
 async function adminUsers(req, res, requestUrl) {
   if (!adminAuthorized(req)) return json(res, 401, { error: 'unauthorized' });
-  await schemaReady;
   const q = String(requestUrl.searchParams.get('q') || '').trim();
   const limit = Math.min(200, Math.max(1, Number(requestUrl.searchParams.get('limit') || 100)));
   const params = [];
@@ -273,22 +256,19 @@ async function adminGrant(req, res) {
     await client.query('BEGIN');
     const planResult = await client.query('SELECT plan_key,duration_days FROM subscription_plans WHERE plan_key=$1 AND active=TRUE FOR SHARE', [planKey]);
     const plan = planResult.rows[0]; if (!plan) { await client.query('ROLLBACK'); return json(res, 404, { error: 'plan_not_found' }); }
-    const device = await client.query('SELECT expires_at FROM devices WHERE device_id=$1 FOR UPDATE', [deviceId]);
+    const device = await client.query('SELECT expires_at,status FROM devices WHERE device_id=$1 FOR UPDATE', [deviceId]);
     if (!device.rows[0]) { await client.query('ROLLBACK'); return json(res, 404, { error: 'device_not_found' }); }
     const now = Date.now(); const existing = device.rows[0].expires_at ? new Date(device.rows[0].expires_at).getTime() : 0;
     const start = Math.max(now, Number.isFinite(existing) ? existing : 0); const expiresAt = plan.duration_days == null ? null : new Date(start + Number(plan.duration_days) * 86_400_000);
     await client.query(`INSERT INTO device_subscriptions(id,device_id,plan_key,starts_at,expires_at,status) VALUES($1,$2,$3,$4,$5,'active')`, [crypto.randomUUID(), deviceId, plan.plan_key, new Date(start), expiresAt]);
-    await client.query("UPDATE devices SET status='active',expires_at=$2,updated_at=NOW() WHERE device_id=$1 AND status!='blocked'", [deviceId, expiresAt]);
-    await client.query('COMMIT'); return json(res, 200, { ok: true, expiresAt: expiresAt?.getTime() || null });
+    const effectiveExpiry = device.rows[0].status === 'active' && device.rows[0].expires_at == null ? null : expiresAt;
+    await client.query("UPDATE devices SET status='active',expires_at=$2,updated_at=NOW() WHERE device_id=$1 AND status!='blocked'", [deviceId, effectiveExpiry]);
+    await client.query('COMMIT'); return json(res, 200, { ok: true, expiresAt: effectiveExpiry?.getTime() || null });
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; } finally { client.release(); }
 }
 
 function renewPage() {
   return `<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BLOFY Renew</title><style>body{margin:0;background:#0d0813;color:#fff;font-family:system-ui;display:grid;place-items:center;min-height:100vh}.box{width:min(92vw,680px);background:#1b1227;border:1px solid #6d4590;border-radius:24px;padding:28px}input,button,a{box-sizing:border-box;width:100%;padding:14px;border-radius:14px;margin-top:10px;font-size:16px}input{background:#100a18;color:#fff;border:1px solid #4b365e}button,a{background:#7b3ed0;color:#fff;border:0;text-align:center;text-decoration:none;display:block}.plans{display:grid;gap:10px;margin-top:16px}.muted{color:#b9a9c7}</style><div class="box"><h1>تجديد BLOFY PLAYER</h1><p class="muted">أدخل رقم الجهاز ورمز الربط. التجربة تبدأ تلقائيًا لمدة 7 أيام من أول تشغيل.</p><input id="d" placeholder="BLOFY-XXXX-XXXX"><input id="c" placeholder="رمز الربط 6 أرقام" inputmode="numeric"><button onclick="go()">عرض خطط التجديد</button><div id="msg" class="muted"></div><div id="plans" class="plans"></div></div><script>async function go(){const msg=document.getElementById('msg'),plans=document.getElementById('plans');plans.innerHTML='';msg.textContent='جاري التحقق...';const r=await fetch('/api/v1/renew/validate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({deviceId:d.value.trim(),activationCode:c.value.trim()})});const x=await r.json();if(!r.ok){msg.textContent='تعذر التحقق من الجهاز';return}msg.textContent='رقم جهازك: '+x.deviceId+' — انسخه في خانة رقم الجهاز داخل طلب زد.';(x.plans||[]).forEach(p=>{const a=document.createElement('a');a.textContent=p.name+' — '+(p.priceMinor/100).toFixed(2)+' '+p.currency;if(p.zidUrl){a.href=p.zidUrl;a.target='_blank'}else{a.style.opacity='.45';a.textContent+=' (رابط زد غير مضاف)'}plans.appendChild(a)})}</script>`;
-}
-
-function adminPage() {
-  return `<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BLOFY Admin</title><style>body{margin:0;background:#0d0813;color:#fff;font-family:system-ui;padding:18px}input,button{padding:11px;border-radius:10px;border:1px solid #4b365e;background:#181020;color:#fff;margin:4px}button{background:#7440bd}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}td,th{border-bottom:1px solid #352642;padding:9px;text-align:right}.wrap{overflow:auto}</style><h1>BLOFY Admin</h1><input id="t" type="password" placeholder="Admin token"><input id="q" placeholder="بحث: جهاز / اسم / جوال / بريد"><button onclick="load()">بحث</button><div class="wrap"><table><thead><tr><th>الجهاز</th><th>المستخدم</th><th>الجوال</th><th>الحالة</th><th>الخطة</th><th>الانتهاء</th></tr></thead><tbody id="rows"></tbody></table></div><script>async function load(){sessionStorage.setItem('blofy_admin',t.value);const r=await fetch('/api/v1/admin/users?q='+encodeURIComponent(q.value),{headers:{authorization:'Bearer '+t.value}});const x=await r.json();rows.innerHTML=(x.items||[]).map(v=>'<tr><td>'+v.device_id+'</td><td>'+(v.customer_name||'-')+'</td><td>'+(v.customer_phone||'-')+'</td><td>'+v.status+'</td><td>'+(v.plan_key||'-')+'</td><td>'+(v.expires_at?new Date(v.expires_at).toLocaleString('ar-SA'):'-')+'</td></tr>').join('')}</script>`;
 }
 
 const previousCreateServer = http.createServer.bind(http);
@@ -303,8 +283,8 @@ http.createServer = function patchedZidCreateServer(listener) {
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/users') return await adminUsers(req, res, url);
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/grant') return await adminGrant(req, res);
       if (req.method === 'GET' && url.pathname === '/renew') return html(res, renewPage());
-      if (req.method === 'GET' && url.pathname === '/admin') return html(res, adminPage());
     } catch (error) {
+      if (sendDeviceAuthRateLimit(res, error)) return;
       console.error('Zid commerce route failed', error?.message || error);
       if (!res.headersSent) return json(res, 500, { error: 'commerce_error' });
       return res.destroy();

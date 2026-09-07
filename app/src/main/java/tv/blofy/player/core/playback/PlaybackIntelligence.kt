@@ -2,6 +2,8 @@ package tv.blofy.player.core.playback
 
 import android.content.Context
 import android.net.Uri
+import tv.blofy.player.core.provider.ProviderKind
+import tv.blofy.player.core.provider.ProviderProfile
 
 /** Learns successful live URL format per provider without changing the playback engine. */
 object PlaybackIntelligence {
@@ -31,17 +33,19 @@ object PlaybackIntelligence {
 
     fun preferredUrl(
         context: Context,
-        providerId: String,
+        profile: ProviderProfile,
         kind: String,
         originalUrl: String
     ): String {
         if (kind != "live" && kind != "live_preview") return originalUrl
+        // A learned suffix is only valid for Xtream's interchangeable live endpoints. Supplied
+        // M3U URLs may be signed or point at unrelated resources; preserve every original byte.
+        if (profile.providerKind != ProviderKind.XTREAM) return originalUrl
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return when (prefs.getString("$providerId.best_format", null)) {
-            "hls" -> toHls(originalUrl) ?: originalUrl
-            "ts" -> toTs(originalUrl) ?: originalUrl
-            else -> originalUrl
-        }
+        val preferred = prefs.getString("${profile.providerKey}.best_format", null)
+        val original = formatOf(originalUrl)
+        if (preferred !in setOf("hls", "ts") || preferred == original) return originalUrl
+        return ContentUrlResolver.alternateLiveFormat(originalUrl, profile) ?: originalUrl
     }
 
     fun recordSuccess(
@@ -163,16 +167,5 @@ object PlaybackIntelligence {
             path.endsWith(".ts") -> "ts"
             else -> null
         }
-    }
-
-    private fun toHls(url: String): String? = swapExtension(url, ".ts", ".m3u8")
-    private fun toTs(url: String): String? = swapExtension(url, ".m3u8", ".ts")
-
-    private fun swapExtension(url: String, from: String, to: String): String? {
-        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return null
-        val path = uri.path ?: return null
-        if (!path.lowercase().endsWith(from)) return null
-        val nextPath = path.dropLast(from.length) + to
-        return uri.buildUpon().path(nextPath).build().toString()
     }
 }

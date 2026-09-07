@@ -58,4 +58,14 @@ class ProfileStoreTest {
         assertNull(saved.pinHash)
         assertTrue(ProfileStore.verifyPin(saved, "anything"))
     }
+
+    @Test fun invalidPinCannotSilentlyRemoveExistingProtection() {
+        ProfileStore.setPin(app, "main", "1234")
+        val protected = ProfileStore.all(app).first { it.id == "main" }
+        ProfileStore.setPin(app, "main", "12ab")
+        val unchanged = ProfileStore.all(app).first { it.id == "main" }
+        assertEquals(protected.pinHash, unchanged.pinHash)
+        assertFalse(ProfileStore.verifyPin(unchanged, "9999"))
+        assertTrue(ProfileStore.verifyPin(unchanged, "1234"))
+    }
 }

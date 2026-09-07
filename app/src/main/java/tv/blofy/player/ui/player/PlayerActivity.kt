@@ -660,17 +660,18 @@ class PlayerActivity : AppCompatActivity() {
                 return@launch
             }
 
-            if (automatic) markCurrentCompleted()
-            currentContentKey = target.key
-            currentTitle = target.title
-            currentSeason = target.season
-            currentEpisode = target.episode
-            updateTitle("S${target.season} E${target.episode} • ${target.title}")
-            session.play(
-                url = ContentUrlResolver.episode(provider, target),
-                resumeMs = 0L,
-                fallbackUrl = ContentUrlResolver.directFallback(target)
-            )
+            transitionEpisode(automatic, ::saveResume, ::markCurrentCompleted) {
+                currentContentKey = target.key
+                currentTitle = target.title
+                currentSeason = target.season
+                currentEpisode = target.episode
+                updateTitle("S${target.season} E${target.episode} • ${target.title}")
+                session.play(
+                    url = ContentUrlResolver.episode(provider, target),
+                    resumeMs = 0L,
+                    fallbackUrl = ContentUrlResolver.directFallback(target)
+                )
+            }
             autoNextTriggered = false
             showHudBriefly()
         }

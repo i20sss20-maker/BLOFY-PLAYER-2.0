@@ -25,6 +25,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogManifestStore
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogSearchIndex
 import tv.blofy.player.data.HomeSnapshotStore
 import tv.blofy.player.data.SeriesEpisodeParser
 import tv.blofy.player.data.local.BlofyDatabase
@@ -77,11 +78,7 @@ object FullCatalogPreparer {
                 EntryPreparationPipeline.run(
                     home = { HomeSnapshotStore.rebuild(app, dao, provider) },
                     search = {
-                        // The FTS table is already maintained section-by-section by replaceCatalog(),
-                        // and promoteStagedCatalog() rebuilds it after a staged refresh. Rebuilding the
-                        // entire 200k+ catalog here duplicated that work and could pin first entry at 70%.
-                        check(app.getSharedPreferences("blofy_search_index", Context.MODE_PRIVATE).edit()
-                            .putBoolean("v9_ready_$providerId", true).commit()) { "Unable to persist search readiness" }
+                        CatalogSearchIndex.ensureReady(app, dao, providerId)
                     },
                     commit = {
                         ensureCurrentSource()

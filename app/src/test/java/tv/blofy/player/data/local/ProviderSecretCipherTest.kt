@@ -117,6 +117,30 @@ class ProviderSecretCipherTest {
         assertEquals(original, codec.open(sealed))
     }
 
+    @Test fun savingFailedReadAfterKeyRecoversPreservesCredentials() {
+        var available = true
+        val codec = ProviderSecretCipher {
+            if (!available) throw GeneralSecurityException("temporarily unavailable")
+            aesKey
+        }
+        val sealed = codec.seal(original)
+        available = false
+        val projection = codec.open(sealed).copy(name = "Renamed", enabled = false)
+        assertEquals("", projection.baseUrl)
+        available = true
+        val saved = codec.sealForUpdate(projection, sealed)
+        assertEquals(original.copy(name = "Renamed", enabled = false), codec.open(saved))
+    }
+
+    @Test fun explicitCompleteReplacementAndM3uConversionRemainPossible() {
+        val codec = ProviderSecretCipher { aesKey }
+        val stored = codec.seal(original)
+        val replacement = original.copy(baseUrl = "https://new.example.test", username = "new", password = "new-pass")
+        assertEquals(replacement, codec.open(codec.sealForUpdate(replacement, stored)))
+        val m3u = original.copy(providerType = "m3u", baseUrl = "https://example.test/list.m3u", username = "", password = "")
+        assertEquals(m3u, codec.open(codec.sealForUpdate(m3u, stored)))
+    }
+
     @Test fun existingVersionOneEnvelopeRemainsReadable() {
         // Encode the old wire format independently of the production serializer.
         val iv = ByteArray(12) { it.toByte() }

@@ -6,8 +6,6 @@ import android.text.InputType
 import android.widget.EditText
 import java.security.MessageDigest
 import java.security.SecureRandom
-import javax.crypto.SecretKeyFactory
-import javax.crypto.spec.PBEKeySpec
 import kotlin.math.max
 import kotlin.math.min
 
@@ -156,14 +154,8 @@ object ParentalGate {
         MessageDigest.isEqual(expected, derive(value, salt, iterations))
     }.getOrDefault(false)
 
-    private fun derive(value: String, salt: ByteArray, iterations: Int): ByteArray {
-        val spec = PBEKeySpec(value.toCharArray(), salt, iterations, PIN_BITS)
-        return try {
-            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
-        } finally {
-            spec.clearPassword()
-        }
-    }
+    private fun derive(value: String, salt: ByteArray, iterations: Int): ByteArray =
+        PinKeyDerivation.derive(value, salt, iterations)
 
     private fun legacyHash(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(("BLOFY|" + value).toByteArray(Charsets.UTF_8))

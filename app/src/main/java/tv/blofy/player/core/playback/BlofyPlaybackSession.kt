@@ -133,7 +133,7 @@ class BlofyPlaybackSession(
         liveStallRecoveries = 0
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
-        val preferredUrl = PlaybackIntelligence.preferredUrl(appContext, profile.providerKey, contentKind, url)
+        val preferredUrl = PlaybackIntelligence.preferredUrl(appContext, profile, contentKind, url)
         fallbackState.begin(preferredUrl, fallbackUrl)
         firstFrameRecorded = false
         playStartedAtMs = SystemClock.elapsedRealtime()
@@ -217,10 +217,7 @@ class BlofyPlaybackSession(
         playStartedAtMs = SystemClock.elapsedRealtime()
         resetLiveStallTimer(keepPosition = false)
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
-        player.stop()
-        player.setMediaItem(mediaItem(url))
-        player.prepare()
-        player.playWhenReady = true
+        prepareFallbackItem(player, mediaItem(url), contentKind.isLiveContent())
     }
 
     private fun mediaItem(url: String): MediaItem = MediaItem.Builder()
@@ -249,4 +246,15 @@ class BlofyPlaybackSession(
     }
 
     private fun String.isLiveContent(): Boolean = this == "live" || this == "live_preview"
+}
+
+/** Replace only the source, retaining the same VOD timeline position before Player resets it. */
+@OptIn(markerClass = [UnstableApi::class])
+internal fun prepareFallbackItem(player: Player, item: MediaItem, live: Boolean) {
+    val resumeMs = if (live) 0L else player.currentPosition.coerceAtLeast(0L)
+    player.stop()
+    player.setMediaItem(item)
+    player.prepare()
+    if (resumeMs > 0L) player.seekTo(resumeMs)
+    player.playWhenReady = true
 }

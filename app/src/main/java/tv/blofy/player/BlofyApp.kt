@@ -20,6 +20,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.preparation.CatalogEnrichmentLifecycle
 import tv.blofy.player.data.preparation.StorageMaintenanceLifecycle
 import tv.blofy.player.ui.catalog.CatalogPageMemory
+import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
 import tv.blofy.player.ui.login.LoginPortalRefreshLifecycle
@@ -89,6 +90,7 @@ class BlofyApp : Application() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
+        ArtworkLoader.trimMemory(level)
         when {
             level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> CatalogPageMemory.clear()
             level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> CatalogPageMemory.trimForMemoryPressure()
@@ -98,6 +100,7 @@ class BlofyApp : Application() {
 
     override fun onLowMemory() {
         CatalogPageMemory.clear()
+        ArtworkLoader.clearMemory()
         super.onLowMemory()
     }
 

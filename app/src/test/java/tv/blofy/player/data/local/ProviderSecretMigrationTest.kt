@@ -58,4 +58,14 @@ class ProviderSecretMigrationTest {
         assertEquals(provider, dao.provider(provider.id))
         assertTrue(dao.hasCatalog(provider.id))
     }
+
+    @Test fun selectingUnavailableEncryptedProviderNeverErasesSavedCredentials(): Unit = runBlocking(Dispatchers.IO) {
+        val dao = db.dao()
+        val stored = provider.copy(baseUrl = "BLOFYENC1:host", username = "BLOFYENC1:user", password = "BLOFYENC1:pass")
+        dao.upsertProviderStored(stored)
+        val projection = checkNotNull(dao.provider(provider.id))
+        assertEquals("", projection.baseUrl)
+        dao.saveAndActivateProvider(projection.copy(name = "Renamed", updatedAt = 999L))
+        assertEquals(stored.copy(name = "Renamed", enabled = true, updatedAt = 999L), dao.providerStored(provider.id))
+    }
 }

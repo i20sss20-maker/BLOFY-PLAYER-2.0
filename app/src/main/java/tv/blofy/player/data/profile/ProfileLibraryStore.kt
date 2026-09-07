@@ -26,6 +26,7 @@ object ProfileLibraryStore {
     fun isWatchlisted(context: Context, contentKey: String, profileId: String = ProfileStore.storageNamespace(context)): Boolean =
         contentKey.isNotBlank() && watchlist(context, profileId).contains(contentKey)
 
+    @Synchronized
     fun setWatchlisted(
         context: Context,
         contentKey: String,
@@ -45,6 +46,7 @@ object ProfileLibraryStore {
     fun hiddenCategories(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Set<String> =
         readSet(context, key(profileId, "hidden_categories"))
 
+    @Synchronized
     fun setCategoryHidden(
         context: Context,
         categoryKey: String,
@@ -65,6 +67,7 @@ object ProfileLibraryStore {
         return saved.ifEmpty { DEFAULT_HOME_ROWS }
     }
 
+    @Synchronized
     fun saveHomeRows(
         context: Context,
         rows: List<String>,
@@ -79,6 +82,7 @@ object ProfileLibraryStore {
         return writeAndSync(context, profileId) { writeList(context, key(profileId, "home_rows"), clean) }
     }
 
+    @Synchronized
     fun setHomeRowEnabled(
         context: Context,
         row: String,
@@ -92,6 +96,7 @@ object ProfileLibraryStore {
         return saveHomeRows(context, next, profileId)
     }
 
+    @Synchronized
     fun moveHomeRow(
         context: Context,
         row: String,
@@ -108,6 +113,7 @@ object ProfileLibraryStore {
         return saveHomeRows(context, next, profileId)
     }
 
+    @Synchronized
     fun resetHomeRows(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Boolean =
         writeAndSync(context, profileId) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(key(profileId, "home_rows")).commit()
@@ -136,6 +142,7 @@ object ProfileLibraryStore {
         }.getOrDefault(emptyMap())
     }
 
+    @Synchronized
     fun setSetting(
         context: Context,
         name: String,
@@ -164,6 +171,7 @@ object ProfileLibraryStore {
         profileId: String = ProfileStore.storageNamespace(context),
     ): Boolean = settings(context, profileId)[name] as? Boolean ?: default
 
+    @Synchronized
     fun snapshot(context: Context, profileId: String = ProfileStore.storageNamespace(context)): Snapshot = Snapshot(
         watchlist = watchlist(context, profileId).toList().takeLast(MAX_WATCHLIST),
         hiddenCategories = hiddenCategories(context, profileId).toList().take(MAX_HIDDEN_CATEGORIES),
@@ -171,6 +179,7 @@ object ProfileLibraryStore {
         settings = settings(context, profileId),
     )
 
+    @Synchronized
     fun snapshotJson(context: Context, profileId: String = ProfileStore.storageNamespace(context)): JSONObject {
         val value = snapshot(context, profileId)
         return JSONObject().apply {
@@ -181,6 +190,21 @@ object ProfileLibraryStore {
         }
     }
 
+    /** Atomically preserve user edits made while a network snapshot was in flight. */
+    @Synchronized
+    fun restoreSnapshotPreservingEdits(
+        context: Context,
+        profileId: String,
+        expected: JSONObject,
+        payload: JSONObject,
+    ): Boolean {
+        val current = snapshotJson(context, profileId)
+        val next = if (current.toString() == expected.toString()) payload
+            else ProfileSnapshotEdits.rebase(expected, current, payload)
+        return restoreSnapshot(context, profileId, next)
+    }
+
+    @Synchronized
     fun restoreSnapshot(context: Context, profileId: String, payload: JSONObject): Boolean {
         if (profileId.isBlank()) return false
         val watchlistValues = payload.optJSONArray("watchlist").asStringList(MAX_WATCHLIST)
@@ -199,6 +223,7 @@ object ProfileLibraryStore {
         return editor.commit()
     }
 
+    @Synchronized
     fun clearProfile(context: Context, profileId: String) {
         ProfileCloudAutoSync.cancel(profileId)
         val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()

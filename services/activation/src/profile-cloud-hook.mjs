@@ -1,7 +1,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import pg from 'pg';
-import { createActivationCredentialCodec, isAuthLocked } from './auth-protection.mjs';
+import { createActivationCredentialCodec, createDeviceAuthenticator, sendDeviceAuthRateLimit } from './auth-protection.mjs';
 
 const { Pool } = pg;
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -37,24 +37,11 @@ async function readJson(req) {
   return body ? JSON.parse(body) : {};
 }
 
-function validIdentity(deviceId, activationCode) {
-  return /^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) && /^\d{6}$/.test(activationCode);
-}
-
 function validProfileId(value) {
   return /^[A-Za-z0-9._:-]{1,96}$/.test(String(value || ''));
 }
 
-async function authorizedDevice(deviceId, activationCode) {
-  if (!pool || !activationCredentials || !validIdentity(deviceId, activationCode)) return null;
-  const result = await pool.query(
-    'SELECT device_id,activation_code,status,expires_at,auth_locked_until FROM devices WHERE device_id=$1 LIMIT 1',
-    [deviceId]
-  );
-  const row = result.rows[0];
-  if (!row || isAuthLocked(row) || !activationCredentials.matches(row, activationCode)) return null;
-  return row;
-}
+const authorizedDevice = createDeviceAuthenticator({ pool, activationCredentials });
 
 function sanitizePayload(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid_payload');
@@ -86,7 +73,7 @@ async function getSnapshot(req, res, requestUrl) {
   const deviceId = String(req.headers['x-blofy-device-id'] || requestUrl.searchParams.get('deviceId') || '').trim();
   const activationCode = String(req.headers['x-blofy-activation-code'] || requestUrl.searchParams.get('activationCode') || '').trim();
   const profileId = String(requestUrl.searchParams.get('profileId') || '').trim();
-  if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return sendJson(res, 403, { error: 'unauthorized_device' });
   if (!validProfileId(profileId)) return sendJson(res, 400, { error: 'invalid_profile' });
   const result = await pool.query(
     `SELECT revision,payload_json,updated_at FROM profile_cloud_snapshots
@@ -108,7 +95,7 @@ async function putSnapshot(req, res) {
   const activationCode = String(body.activationCode || '').trim();
   const profileId = String(body.profileId || '').trim();
   const expectedRevision = body.expectedRevision == null ? null : Number(body.expectedRevision);
-  if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return sendJson(res, 403, { error: 'unauthorized_device' });
   if (!validProfileId(profileId)) return sendJson(res, 400, { error: 'invalid_profile' });
   if (expectedRevision != null && (!Number.isInteger(expectedRevision) || expectedRevision < 0)) {
     return sendJson(res, 400, { error: 'invalid_revision' });
@@ -117,6 +104,8 @@ async function putSnapshot(req, res) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // The parent row exists even before the first snapshot, so initial writers serialize too.
+    await client.query('SELECT device_id FROM devices WHERE device_id=$1 FOR UPDATE', [deviceId]);
     const currentResult = await client.query(
       `SELECT revision FROM profile_cloud_snapshots WHERE device_id=$1 AND profile_id=$2 FOR UPDATE`,
       [deviceId, profileId]
@@ -150,7 +139,7 @@ async function createPair(req, res) {
   const deviceId = String(body.deviceId || '').trim();
   const activationCode = String(body.activationCode || '').trim();
   const profileId = String(body.profileId || '').trim();
-  if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return sendJson(res, 403, { error: 'unauthorized_device' });
   if (!validProfileId(profileId)) return sendJson(res, 400, { error: 'invalid_profile' });
 
   const snapshot = await pool.query(
@@ -186,13 +175,14 @@ async function restorePair(req, res) {
   const activationCode = String(body.activationCode || '').trim();
   const profileId = String(body.profileId || '').trim();
   const code = String(body.pairCode || '').trim().toUpperCase();
-  if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return sendJson(res, 403, { error: 'unauthorized_device' });
   if (!validProfileId(profileId)) return sendJson(res, 400, { error: 'invalid_profile' });
   if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) return sendJson(res, 400, { error: 'invalid_pair_code' });
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT device_id FROM devices WHERE device_id=$1 FOR UPDATE', [deviceId]);
     const pairResult = await client.query(
       `SELECT source_device_id,source_profile_id FROM cloud_pair_codes
        WHERE code_hash=$1 AND consumed_at IS NULL AND expires_at>NOW() FOR UPDATE`, [pairHash(code)]
@@ -254,6 +244,7 @@ http.createServer = function patchedProfileCloudServer(listener) {
     try {
       if (String(req.url || '').startsWith(PREFIX) && await handle(req, res)) return;
     } catch (error) {
+      if (sendDeviceAuthRateLimit(res, error)) return;
       const code = error?.message === 'payload_too_large' ? 413 : 500;
       const name = error?.message === 'invalid_payload' ? 'invalid_payload' :
         error?.message === 'payload_too_large' ? 'payload_too_large' :

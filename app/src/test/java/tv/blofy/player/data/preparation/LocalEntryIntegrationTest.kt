@@ -14,12 +14,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogManifestStore
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.HomeSnapshotStore
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.metadata.ProviderMetadataCache
 import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
@@ -118,7 +120,7 @@ class LocalEntryIntegrationTest {
     @Test fun missingSearchReadyFlagPreventsFalseReadiness() = runBlocking(Dispatchers.IO) {
         prepare()
         app.getSharedPreferences("blofy_search_index", Context.MODE_PRIVATE).edit()
-            .remove("v9_ready_${provider.id}").commit()
+            .remove("v10_ready_${provider.id}").commit()
         assertFalse(CatalogSyncState.isEntryReady(app, provider.id))
         prepare()
         assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
@@ -152,6 +154,49 @@ class LocalEntryIntegrationTest {
         assertEquals(0, staleFtsCount)
         assertTrue(promoted.isNotEmpty())
         assertTrue(promoted.all { it.providerId == provider.id && it.key.startsWith(provider.id + ":movie:") })
+    }
+
+    @Test fun changedSourceInvalidatesTheOldEntryGenerationAndMetadata(): Unit = runBlocking(Dispatchers.IO) {
+        prepare()
+        val oldEpoch = CatalogSyncState.lastUpdatedAt(app, provider.id)
+        ProviderMetadataCache.write(app, provider.id, stream("movie", 1).key, null)
+        assertTrue(ProviderMetadataCache.contains(app, stream("movie", 1).key))
+        val stagedId = UUID.randomUUID().toString()
+        db.dao().replaceCatalog(stagedId, "movie", emptyList(), listOf(
+            StreamEntity("$stagedId:movie:new", stagedId, "new", null, "movie", "Replacement")
+        ))
+        // Keep the timestamp unchanged deliberately: two commits in one millisecond must still
+        // discard the old Home keys when the user changes the playlist source.
+        db.dao().promoteStagedCatalog(stagedId, provider.copy(baseUrl = server.url("/replacement").toString()))
+        CatalogSyncState.markSourceReplaced(app, provider.id)
+
+        assertTrue(CatalogSyncState.lastUpdatedAt(app, provider.id) > oldEpoch)
+        assertFalse(CatalogSyncState.isEntryReady(app, provider.id))
+        assertNull(HomeSnapshotStore.read(app, provider.id))
+        assertNull(CatalogManifestStore.read(app, provider.id))
+        assertEquals(0, ProviderMetadataCache.count(app, provider.id))
+        prepare()
+        assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertEquals(listOf("${provider.id}:movie:new"), HomeSnapshotStore.read(app, provider.id)?.candidateKeys)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test fun pendingWebsiteSourceRequiresConnectButPreservesSafeCachedFallback(): Unit = runBlocking(Dispatchers.IO) {
+        prepare()
+        assertTrue(CatalogSyncState.isFullyReady(app, provider.id))
+        PortalSyncBook.markPendingSource(app, provider.id)
+        try {
+            assertFalse(CatalogSyncState.isFullyReady(app, provider.id))
+            assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+            // A failed replacement can still reopen the known-good Home; preparation must not
+            // loop or invalidate that saved library merely because the pending source remains.
+            prepare()
+            assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+            assertFalse(CatalogSyncState.isFullyReady(app, provider.id))
+            assertEquals(0, server.requestCount)
+        } finally {
+            PortalSyncBook.clearPendingSource(app, provider.id)
+        }
     }
 
 }

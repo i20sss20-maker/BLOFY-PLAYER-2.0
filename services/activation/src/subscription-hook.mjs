@@ -1,7 +1,8 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import pg from 'pg';
-import { createActivationCredentialCodec, isAuthLocked } from './auth-protection.mjs';
+import { releaseCouponReservations, restorePaidCouponReservation } from './payment-coupon-reservations.mjs';
+import { createActivationCredentialCodec, createDeviceAuthenticator, sendDeviceAuthRateLimit } from './auth-protection.mjs';
 
 const { Pool } = pg;
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -40,20 +41,7 @@ async function readJson(req) {
   return body ? JSON.parse(body) : {};
 }
 
-function validIdentity(deviceId, activationCode) {
-  return /^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) && /^\d{6}$/.test(activationCode);
-}
-
-async function authorizedDevice(deviceId, activationCode) {
-  if (!pool || !activationCredentials || !validIdentity(deviceId, activationCode)) return null;
-  const result = await pool.query(
-    'SELECT device_id,activation_code,status,expires_at,auth_locked_until FROM devices WHERE device_id=$1 LIMIT 1',
-    [deviceId]
-  );
-  const row = result.rows[0];
-  if (!row || isAuthLocked(row) || !activationCredentials.matches(row, activationCode)) return null;
-  return row;
-}
+const authorizedDevice = createDeviceAuthenticator({ pool, activationCredentials });
 
 function timingSafeHexEqual(left, right) {
   const a = Buffer.from(String(left || '').toLowerCase());
@@ -97,7 +85,7 @@ async function quoteOrder(req, res) {
   const activationCode = String(body.activationCode || '').trim();
   const planKey = String(body.planKey || '').trim();
   const couponCode = String(body.couponCode || '').trim().toUpperCase();
-  if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return sendJson(res, 403, { error: 'unauthorized_device' });
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(planKey)) return sendJson(res, 400, { error: 'invalid_plan' });
 
   const client = await pool.connect();
@@ -159,7 +147,7 @@ async function createOrder(req, res) {
   const activationCode = String(body.activationCode || '').trim();
   const planKey = String(body.planKey || '').trim();
   const couponCode = String(body.couponCode || '').trim().toUpperCase();
-  if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return sendJson(res, 403, { error: 'unauthorized_device' });
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(planKey)) return sendJson(res, 400, { error: 'invalid_plan' });
 
   const client = await pool.connect();
@@ -225,7 +213,7 @@ async function orderStatus(req, res, requestUrl) {
   const deviceId = String(requestUrl.searchParams.get('deviceId') || '').trim();
   const activationCode = String(requestUrl.searchParams.get('activationCode') || '').trim();
   const orderId = String(requestUrl.searchParams.get('orderId') || '').trim();
-  if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return sendJson(res, 403, { error: 'unauthorized_device' });
   if (!validUuid(orderId)) return sendJson(res, 400, { error: 'invalid_order' });
   const result = await pool.query(
     `SELECT id,plan_key,status,amount_minor,currency,coupon_code,created_at,paid_at
@@ -251,11 +239,19 @@ async function subscriptionStatus(req, res, requestUrl) {
   const auth = req.method === 'POST' ? await readJson(req) : requestUrl.searchParams;
   const deviceId = String(req.method === 'POST' ? auth.deviceId : auth.get('deviceId') || '').trim();
   const activationCode = String(req.method === 'POST' ? auth.activationCode : auth.get('activationCode') || '').trim();
-  if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return sendJson(res, 403, { error: 'unauthorized_device' });
   const result = await pool.query(
-    `SELECT ds.plan_key,ds.status,ds.starts_at,ds.expires_at,sp.name,sp.max_devices
-     FROM device_subscriptions ds JOIN subscription_plans sp ON sp.plan_key=ds.plan_key
-     WHERE ds.device_id=$1 ORDER BY ds.starts_at DESC LIMIT 1`, [deviceId]
+    `WITH subscriptions AS (
+       SELECT ds.*,
+              (ds.status='active' AND (ds.expires_at IS NULL OR ds.expires_at>NOW())) AS entitled
+       FROM device_subscriptions ds WHERE ds.device_id=$1
+     )
+     SELECT ds.plan_key,ds.status,ds.starts_at,ds.expires_at,sp.name,sp.max_devices
+     FROM subscriptions ds JOIN subscription_plans sp ON sp.plan_key=ds.plan_key
+     ORDER BY ds.entitled DESC,
+              CASE WHEN ds.entitled THEN ds.expires_at IS NULL ELSE FALSE END DESC,
+              CASE WHEN ds.entitled THEN ds.expires_at ELSE NULL END DESC NULLS LAST,
+              ds.starts_at DESC LIMIT 1`, [deviceId]
   );
   const row = result.rows[0];
   if (!row) return sendJson(res, 200, { active: false });
@@ -281,7 +277,7 @@ async function reconcileDeviceEntitlement(client, deviceId) {
   const active = result.rows[0];
   if (active) {
     await client.query(
-      `UPDATE devices SET status='active',expires_at=$2,updated_at=NOW() WHERE device_id=$1`,
+      `UPDATE devices SET status='active',expires_at=$2,updated_at=NOW() WHERE device_id=$1 AND status!='blocked'`,
       [deviceId, active.expires_at || null]
     );
   } else {
@@ -313,25 +309,50 @@ async function applyPaymentEvent(client, payload) {
   const orderResult = await client.query(
     `SELECT so.*,sp.duration_days FROM subscription_orders so
      JOIN subscription_plans sp ON sp.plan_key=so.plan_key
-     WHERE so.id=$1 FOR UPDATE`, [orderId]
+     WHERE so.id=$1 FOR UPDATE OF so`, [orderId]
   );
   const order = orderResult.rows[0];
   if (!order) throw new Error('order_not_found');
 
+  // Expiry maintenance locks subscription rows before their device. Refunds
+  // update existing rows, so take those locks in the same order.
+  if (type === 'refunded') {
+    await client.query('SELECT id FROM device_subscriptions WHERE order_id=$1 FOR UPDATE', [orderId]);
+  }
+
+  // Different orders/plans can be paid concurrently for the same device. Lock
+  // the common device before reading entitlement, including when no subscription
+  // exists yet, so both paid durations are retained. Zid uses this same lock.
+  if (type === 'paid' || type === 'refunded') {
+    await client.query('SELECT device_id FROM devices WHERE device_id=$1 FOR UPDATE', [order.device_id]);
+  }
+
   if (type === 'paid') {
     const paidAmount = Number(payload.amountMinor);
     const currency = String(payload.currency || '').trim().toUpperCase();
-    if (!Number.isFinite(paidAmount) || Math.round(paidAmount) !== Number(order.amount_minor)) throw new Error('payment_amount_mismatch');
+    if (!Number.isSafeInteger(paidAmount) || paidAmount !== Number(order.amount_minor)) throw new Error('payment_amount_mismatch');
     if (currency !== String(order.currency).toUpperCase()) throw new Error('payment_currency_mismatch');
+
+    // Event IDs only deduplicate identical deliveries. A provider may replay the
+    // original success under a new ID after refund; refund must remain terminal.
+    if (order.status === 'refunded') {
+      await client.query(
+        `UPDATE payment_events SET processing_status='ignored',error_code='order_already_refunded',processed_at=NOW() WHERE id=$1`,
+        [inserted.rows[0].id]
+      );
+      return { duplicate: false, ignored: true, orderId, type };
+    }
 
     if (order.status !== 'paid') {
       await client.query(
         `UPDATE subscription_orders SET status='paid',payment_provider=$2,provider_reference=$3,paid_at=NOW(),updated_at=NOW()
          WHERE id=$1`, [orderId, provider, providerReference]
       );
+      await restorePaidCouponReservation(client, order);
       const currentResult = await client.query(
         `SELECT expires_at FROM device_subscriptions
-         WHERE device_id=$1 AND status='active' ORDER BY starts_at DESC LIMIT 1 FOR UPDATE`, [order.device_id]
+         WHERE device_id=$1 AND status='active' AND (expires_at IS NULL OR expires_at>NOW())
+         ORDER BY expires_at DESC NULLS FIRST, starts_at DESC LIMIT 1`, [order.device_id]
       );
       const current = currentResult.rows[0];
       const now = new Date();
@@ -356,6 +377,9 @@ async function applyPaymentEvent(client, payload) {
     const nextStatus = type === 'cancelled' ? 'cancelled' : 'failed';
     if (order.status === 'pending') {
       await client.query(`UPDATE subscription_orders SET status=$2,updated_at=NOW() WHERE id=$1`, [orderId, nextStatus]);
+    }
+    if (['pending', 'failed', 'cancelled'].includes(order.status)) {
+      await releaseCouponReservations(client, [orderId]);
     }
   }
 
@@ -409,7 +433,8 @@ http.createServer = function patchedCreateServer(listener) {
   return originalCreateServer(async (req, res) => {
     try {
       if (String(req.url || '').startsWith(PREFIX) && await handle(req, res)) return;
-    } catch {
+    } catch (error) {
+      if (sendDeviceAuthRateLimit(res, error)) return;
       if (!res.headersSent) sendJson(res, 500, { error: 'subscription_service_error' });
       else res.destroy();
       return;

@@ -2,6 +2,7 @@ package tv.blofy.player.core.identity
 
 import android.content.Context
 import tv.blofy.player.data.local.ProviderEntity
+import java.util.UUID
 
 /** Keeps remote identity/confirmed aliases and pending deletes without rewriting cached content keys. */
 object PortalSyncBook {
@@ -15,6 +16,17 @@ object PortalSyncBook {
     fun remoteId(context: Context, localId: String): String = prefs(context).getString("remote:$localId", null) ?: localId
     fun isKnown(context: Context, localId: String): Boolean = prefs(context).contains("remote:$localId")
     fun pending(context: Context): Set<String> = prefs(context).getStringSet("pending_deletes", emptySet()).orEmpty().toSet()
+    fun pendingSourceId(localId: String): String = UUID.nameUUIDFromBytes("BLOFY-PORTAL-SOURCE|$localId".toByteArray(Charsets.UTF_8)).toString()
+    fun hasPendingSource(context: Context, localId: String): Boolean = prefs(context).getBoolean("source_pending:$localId", false)
+    @Synchronized
+    fun markPendingSource(context: Context, localId: String) {
+        check(prefs(context).edit().putBoolean("source_pending:$localId", true)
+            .putStringSet("hidden", hidden(context) + pendingSourceId(localId)).commit())
+    }
+    @Synchronized
+    fun clearPendingSource(context: Context, localId: String) {
+        check(prefs(context).edit().remove("source_pending:$localId").commit())
+    }
     @Synchronized
     fun bind(context: Context, localId: String, remoteId: String, aliases: Set<String> = emptySet()) {
         val editor = prefs(context).edit().putString("remote:$localId", remoteId)

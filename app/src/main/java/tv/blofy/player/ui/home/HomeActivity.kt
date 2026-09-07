@@ -75,23 +75,21 @@ class HomeActivity : AppCompatActivity() {
     private var heroCandidates: List<StreamEntity> = emptyList()
     private var heroIndex = 0
 
-    private val clockTask = object : Runnable {
-        override fun run() {
+    private var homeResumed = false
+    private val refreshScheduler = HomeRefreshScheduler(
+        uiHandler, 30_000L, HERO_ROTATION_MS,
+        refreshClock = {
             clockLabel?.text = SimpleDateFormat("EEE  d MMM   •   h:mm a", Locale("ar", "SA")).format(Date())
-            uiHandler.postDelayed(this, 30_000L)
-        }
-    }
-    private val heroTask = object : Runnable {
-        override fun run() {
+        },
+        rotateHero = {
             if (heroCandidates.size > 1 && !isFinishing) {
                 heroIndex = (heroIndex + 1) % heroCandidates.size
                 heroItem = heroCandidates[heroIndex]
                 renderHero(heroCandidates[heroIndex])
                 renderHeroDots()
             }
-            uiHandler.postDelayed(this, HERO_ROTATION_MS)
-        }
-    }
+        },
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,7 +99,7 @@ class HomeActivity : AppCompatActivity() {
         setContentView(FrameLayout(this).apply { background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background) })
         lifecycleScope.launch {
             val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull() }
-            if (provider != null && !CatalogSyncState.isFullyReady(applicationContext, provider.id)) {
+            if (provider != null && !CatalogSyncState.isEntryReady(applicationContext, provider.id)) {
                 startActivity(Intent(this@HomeActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
                 finish()
                 return@launch
@@ -125,11 +123,19 @@ class HomeActivity : AppCompatActivity() {
         if (deviceKind == DeviceClass.Kind.TV) {
             renderSkeleton()
             loadHomeExperience()
-            uiHandler.post(clockTask)
+            if (homeResumed) refreshScheduler.start()
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        homeResumed = true
+        if (homeFeed != null && deviceKind == DeviceClass.Kind.TV) refreshScheduler.start()
+    }
+
     override fun onPause() {
+        homeResumed = false
+        refreshScheduler.stop()
         homeFocusController?.resetPress()
         super.onPause()
     }
@@ -137,6 +143,7 @@ class HomeActivity : AppCompatActivity() {
     override fun onDestroy() {
         homeFocusController?.dispose()
         homeFocusController = null
+        refreshScheduler.stop()
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -223,8 +230,7 @@ class HomeActivity : AppCompatActivity() {
             heroItem?.let(::renderHero)
             renderHeroDots()
             renderHomeFeed(data)
-            uiHandler.removeCallbacks(heroTask)
-            uiHandler.postDelayed(heroTask, HERO_ROTATION_MS)
+            refreshScheduler.restartHero()
             restoreDynamicFocus()
         }
     }
@@ -311,12 +317,12 @@ class HomeActivity : AppCompatActivity() {
         addPromotionBanner(feed)
 
         if (data.arabic.isNotEmpty()) addShelf(feed, "مختارات عربية", "محتوى عربي في واجهة واحدة", "arabic", data.providerId, data.arabic)
-        else feed.addView(compactEmpty("مختارات عربية", "ما لقينا محتوى عربي مصنف في هذه القائمة حاليًا."))
+        else feed.addView(compactEmpty("مختارات عربية", "ما لقينا محتوى عربي مصنف في هذه القائمة حاليًا.").also { HomeRowOrder.mark(it, "arabic") })
 
         if (data.ultraHd.isNotEmpty()) addShelf(feed, "4K • UHD", "للمحتوى عالي الجودة", "4k", data.providerId, data.ultraHd)
-        else feed.addView(compactEmpty("4K • UHD", "ما فيه عناصر 4K/HDR واضحة في أسماء المحتوى حاليًا."))
+        else feed.addView(compactEmpty("4K • UHD", "ما فيه عناصر 4K/HDR واضحة في أسماء المحتوى حاليًا.").also { HomeRowOrder.mark(it, "uhd") })
 
-        feed.addView(sectionTitle("اختصارات سريعة", "وصل لأقسامك بضغطة واحدة"))
+        feed.addView(sectionTitle("اختصارات سريعة", "وصل لأقسامك بضغطة واحدة").also { HomeRowOrder.mark(it, HomeRowOrder.QUICK_SHORTCUTS) })
         val quick = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -345,8 +351,10 @@ class HomeActivity : AppCompatActivity() {
         items: List<StreamEntity>,
         states: Map<String, WatchStateEntity> = emptyMap()
     ) {
-        parent.addView(sectionTitle(title, subtitle))
+        val rowKey = HomeRowOrder.shelfKey(prefix)
+        parent.addView(sectionTitle(title, subtitle).also { HomeRowOrder.mark(it, rowKey) })
         val scroll = HorizontalScrollView(this).apply {
+            HomeRowOrder.mark(this, rowKey)
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             clipChildren = false
