@@ -25,6 +25,59 @@ class M3uPlaylistLoader(
         .retryOnConnectionFailure(true)
         .build()
 ) {
+    data class StreamingSummary(
+        val categories: List<CategoryEntity>,
+        val streamCount: Int,
+        val episodeCount: Int,
+    )
+
+    /**
+     * Bounded-memory network path for large M3U providers. The response is consumed line-by-line
+     * and converted rows are flushed in small batches. Only category identities and seen series
+     * identities stay in memory, so a 100k+ playlist never exists as one giant String/list.
+     */
+    suspend fun loadStreaming(
+        provider: ProviderEntity,
+        onStreamBatch: suspend (List<StreamEntity>) -> Unit,
+        onEpisodeBatch: suspend (List<EpisodeEntity>) -> Unit,
+    ): StreamingSummary = withContext(Dispatchers.IO) {
+        val coroutineContext = currentCoroutineContext()
+        val profiles = requestProfiles(provider.baseUrl)
+        var lastStatus: Int? = null
+        var lastFailure: Throwable? = null
+
+        profiles.forEachIndexed { index, request ->
+            coroutineContext.ensureActive()
+            try {
+                client.newCall(request).awaitResponse().use { response ->
+                    lastStatus = response.code
+                    val body = response.body
+                    if (body != null && (response.isSuccessful || response.code == 884)) {
+                        val parsed = parseStreamingBody(
+                            provider = provider,
+                            lines = body.byteStream().bufferedReader(Charsets.UTF_8).lineSequence(),
+                            cancellationCheck = { coroutineContext.ensureActive() },
+                            onStreamBatch = onStreamBatch,
+                            onEpisodeBatch = onEpisodeBatch,
+                        )
+                        if (parsed != null) return@withContext parsed
+                    }
+                    if (!shouldRetry(response.code) && index == profiles.lastIndex && response.isSuccessful) {
+                        error("M3U response is not a playlist")
+                    }
+                }
+            } catch (failure: Throwable) {
+                coroutineContext.ensureActive()
+                lastFailure = failure
+                if (index == profiles.lastIndex) throw failure
+            }
+        }
+
+        val status = lastStatus?.let { " HTTP $it" }.orEmpty()
+        val detail = lastFailure?.message?.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
+        error("M3U$status failed$detail")
+    }
+
     suspend fun load(provider: ProviderEntity): ParsedM3u = withContext(Dispatchers.IO) {
         val coroutineContext = currentCoroutineContext()
         val profiles = requestProfiles(provider.baseUrl)
@@ -65,6 +118,137 @@ class M3uPlaylistLoader(
         error("M3U$status failed$detail")
     }
 
+    private suspend fun parseStreamingBody(
+        provider: ProviderEntity,
+        lines: Sequence<String>,
+        cancellationCheck: () -> Unit,
+        onStreamBatch: suspend (List<StreamEntity>) -> Unit,
+        onEpisodeBatch: suspend (List<EpisodeEntity>) -> Unit,
+    ): StreamingSummary? {
+        val categories = linkedMapOf<String, CategoryEntity>()
+        val seriesSeen = mutableSetOf<String>()
+        val streamBatch = ArrayList<StreamEntity>(STREAM_BATCH_SIZE)
+        val episodeBatch = ArrayList<EpisodeEntity>(EPISODE_BATCH_SIZE)
+        var pending: Metadata? = null
+        var validated = false
+        var lineIndex = 0
+        var streamCount = 0
+        var episodeCount = 0
+
+        suspend fun flushStreams() {
+            if (streamBatch.isEmpty()) return
+            onStreamBatch(streamBatch.toList())
+            streamBatch.clear()
+        }
+
+        suspend fun flushEpisodes() {
+            if (episodeBatch.isEmpty()) return
+            onEpisodeBatch(episodeBatch.toList())
+            episodeBatch.clear()
+        }
+
+        fun addCategory(kind: String, category: String): String {
+            val categoryId = stableId("$kind-category|$category")
+            val mapKey = "$kind:$categoryId"
+            if (!categories.containsKey(mapKey)) {
+                categories[mapKey] = CategoryEntity(
+                    key = "${provider.id}:$kind:$categoryId",
+                    providerId = provider.id,
+                    remoteId = categoryId,
+                    kind = kind,
+                    name = category,
+                    orderIndex = categories.size,
+                )
+            }
+            return categoryId
+        }
+
+        suspend fun emit(meta: Metadata, url: String) {
+            val series = SERIES_PATTERN.find(meta.name)
+            if (series != null) {
+                val seriesName = series.groupValues[1].trim(' ', '-', '.', '_')
+                val season = series.groupValues[2].toIntOrNull() ?: 0
+                val episodeNo = series.groupValues[3].toIntOrNull() ?: 0
+                val seriesId = stableId("series|${seriesName.lowercase()}")
+                val category = meta.group.ifBlank { "Series" }
+                val categoryId = addCategory("series", category)
+                if (seriesSeen.add(seriesId)) {
+                    streamBatch += StreamEntity(
+                        key = "${provider.id}:series:$seriesId",
+                        providerId = provider.id,
+                        remoteId = seriesId,
+                        categoryId = categoryId,
+                        kind = "series",
+                        name = seriesName,
+                        icon = meta.logo,
+                        streamType = "m3u-series",
+                    )
+                    streamCount += 1
+                    if (streamBatch.size >= STREAM_BATCH_SIZE) flushStreams()
+                }
+                val episodeId = stableId(url)
+                episodeBatch += EpisodeEntity(
+                    key = "${provider.id}:episode:$episodeId",
+                    providerId = provider.id,
+                    seriesId = seriesId,
+                    remoteId = episodeId,
+                    season = season,
+                    episode = episodeNo,
+                    title = meta.name,
+                    extension = extension(url) ?: "mp4",
+                    directSource = url,
+                )
+                episodeCount += 1
+                if (episodeBatch.size >= EPISODE_BATCH_SIZE) flushEpisodes()
+                return
+            }
+
+            val entry = Entry(meta, url)
+            val kind = if (looksLikeMovie(entry)) "movie" else "live"
+            val category = meta.group.ifBlank { if (kind == "movie") "Movies" else "Live" }
+            val categoryId = addCategory(kind, category)
+            val streamId = stableId(url)
+            streamBatch += StreamEntity(
+                key = "${provider.id}:$kind:$streamId",
+                providerId = provider.id,
+                remoteId = streamId,
+                categoryId = categoryId,
+                kind = kind,
+                name = meta.name.ifBlank { "BLOFY" },
+                icon = meta.logo,
+                extension = extension(url),
+                directSource = url,
+                epgChannelId = meta.tvgId,
+                streamType = "m3u",
+            )
+            streamCount += 1
+            if (streamBatch.size >= STREAM_BATCH_SIZE) flushStreams()
+        }
+
+        for (raw in lines) {
+            if (lineIndex++ % 256 == 0) cancellationCheck()
+            val line = raw.removePrefix("\uFEFF").trim()
+            when {
+                line.startsWith("#EXTM3U", true) -> validated = true
+                line.startsWith("#EXTINF", true) -> pending = parseMetadata(line)
+                line.isNotBlank() && !line.startsWith("#") -> {
+                    val meta = pending
+                    if (meta != null) {
+                        // A valid EXTINF followed by a URL is enough for headerless M3U files.
+                        if (isSupportedMediaUrl(line)) validated = true
+                        if (validated) emit(meta, line)
+                    }
+                    pending = null
+                }
+            }
+        }
+
+        if (!validated) return null
+        flushStreams()
+        flushEpisodes()
+        return StreamingSummary(categories.values.toList(), streamCount, episodeCount)
+    }
+
     private fun requestProfiles(url: String): List<Request> = listOf(
         Request.Builder().url(url)
             .header("User-Agent", "BLOFY PLAYER/2.0")
@@ -90,11 +274,11 @@ class M3uPlaylistLoader(
         val sample = text.trimStart().take(64 * 1024)
         if (sample.startsWith("#EXTM3U", ignoreCase = true)) return true
         return sample.contains("#EXTINF", ignoreCase = true) &&
-            sample.lineSequence().any { line ->
-                val value = line.trim()
-                value.startsWith("http://", true) || value.startsWith("https://", true) || value.startsWith("rtsp://", true)
-            }
+            sample.lineSequence().any { line -> isSupportedMediaUrl(line.trim()) }
     }
+
+    private fun isSupportedMediaUrl(value: String): Boolean =
+        value.startsWith("http://", true) || value.startsWith("https://", true) || value.startsWith("rtsp://", true)
 
     fun parse(provider: ProviderEntity, text: String): ParsedM3u = parse(provider, text) {}
 
@@ -186,5 +370,9 @@ class M3uPlaylistLoader(
     private data class Entry(val meta: Metadata, val url: String)
     private data class Metadata(val name: String, val group: String = "", val logo: String? = null, val tvgId: String? = null)
 
-    companion object { private val SERIES_PATTERN = Regex("(?i)^(.+?)[ ._\\-]+S(\\d{1,2})E(\\d{1,3})(?:[ ._\\-]+.*)?$") }
+    companion object {
+        private const val STREAM_BATCH_SIZE = 700
+        private const val EPISODE_BATCH_SIZE = 700
+        private val SERIES_PATTERN = Regex("(?i)^(.+?)[ ._\\-]+S(\\d{1,2})E(\\d{1,3})(?:[ ._\\-]+.*)?$")
+    }
 }
