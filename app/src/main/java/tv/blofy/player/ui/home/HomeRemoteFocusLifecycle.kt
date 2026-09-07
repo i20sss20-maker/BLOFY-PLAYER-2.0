@@ -14,11 +14,16 @@ import kotlin.math.roundToInt
  * HomeActivity remains the only owner of LEFT/RIGHT dispatch; Android follows explicit
  * nextFocusUpId/nextFocusDownId links for vertical movement instead of running unpredictable
  * FocusFinder searches across the sidebar and dynamic shelves on every remote press.
+ *
+ * Dynamic hero/artwork/text updates can trigger many global-layout callbacks even when focusable
+ * geometry did not change. Rewriting the graph on every callback made real remotes feel jumpy.
+ * We therefore rebuild only when the set/position/size of focusable views actually changes.
  */
 class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
     private data class Binding(
         val root: View,
         val listener: ViewTreeObserver.OnGlobalLayoutListener,
+        var geometrySignature: Long = Long.MIN_VALUE,
     )
 
     private val bindings = WeakHashMap<Activity, Binding>()
@@ -40,6 +45,7 @@ class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
     }
 
     private fun rebuildFocusGraph(activity: HomeActivity, root: View) {
+        val binding = bindings[activity] ?: return
         val focusables = mutableListOf<View>()
         collectFocusable(root, focusables)
         if (focusables.isEmpty()) return
@@ -55,10 +61,17 @@ class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
         val sidebarBoundary = (screenWidth * 0.28f).roundToInt()
         val rowSlack = (activity.resources.displayMetrics.density * 54f).roundToInt()
         val nodes = visible.mapNotNull { nodeFor(it, sidebarBoundary) }
+        if (nodes.isEmpty()) return
+
+        val signature = geometrySignature(nodes, visible)
+        if (signature == binding.geometrySignature) return
+        binding.geometrySignature = signature
+
         val byNodeId = visible.associateBy { System.identityHashCode(it) }
+        val nodeById = nodes.associateBy { it.id }
 
         visible.forEach { current ->
-            val currentNode = nodeFor(current, sidebarBoundary) ?: return@forEach
+            val currentNode = nodeById[System.identityHashCode(current)] ?: return@forEach
             val upNodeId = HomeRemoteFocusPolicy.vertical(
                 current = currentNode,
                 candidates = nodes,
@@ -79,6 +92,20 @@ class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
             current.nextFocusUpId = up?.id ?: current.id
             current.nextFocusDownId = down?.id ?: current.id
         }
+    }
+
+    private fun geometrySignature(nodes: List<HomeRemoteFocusPolicy.Node>, views: List<View>): Long {
+        var value = 1125899906842597L
+        nodes.forEachIndexed { index, node ->
+            val view = views[index]
+            value = value * 31L + node.id
+            value = value * 31L + node.centerX
+            value = value * 31L + node.centerY
+            value = value * 31L + node.region
+            value = value * 31L + view.width
+            value = value * 31L + view.height
+        }
+        return value
     }
 
     private fun collectFocusable(view: View, out: MutableList<View>) {
