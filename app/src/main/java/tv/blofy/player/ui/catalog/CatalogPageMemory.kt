@@ -12,17 +12,21 @@ internal object CatalogPageMemory {
         val savedAt: Long = System.currentTimeMillis()
     )
 
-    private const val MAX_ITEMS_PER_SNAPSHOT = 3000
-    private const val MAX_SNAPSHOTS = 4
     private const val MAX_AGE_MS = 10 * 60_000L
-    private val entries = object : LinkedHashMap<String, Snapshot>(MAX_SNAPSHOTS, .75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Snapshot>?): Boolean = size > MAX_SNAPSHOTS
-    }
+    private val lowMemoryDevice: Boolean
+        get() = Runtime.getRuntime().maxMemory() <= 256L * 1024L * 1024L
+    private val maxItemsPerSnapshot: Int
+        get() = if (lowMemoryDevice) 900 else 1800
+    private val maxSnapshots: Int
+        get() = if (lowMemoryDevice) 2 else 4
+
+    private val entries = object : LinkedHashMap<String, Snapshot>(4, .75f, true) {}
 
     @Synchronized
     fun put(key: String, items: List<StreamEntity>, total: Int, lastRowId: Long, focusedKey: String?) {
-        if (items.isEmpty() || items.size > MAX_ITEMS_PER_SNAPSHOT) return
+        if (items.isEmpty() || items.size > maxItemsPerSnapshot) return
         entries[key] = Snapshot(items.toList(), total, lastRowId, focusedKey)
+        trimToLimit()
     }
 
     @Synchronized
@@ -35,5 +39,24 @@ internal object CatalogPageMemory {
         return value
     }
 
-    @Synchronized fun remove(key: String) { entries.remove(key) }
+    @Synchronized
+    fun remove(key: String) { entries.remove(key) }
+
+    @Synchronized
+    fun clear() { entries.clear() }
+
+    @Synchronized
+    fun trimForMemoryPressure() {
+        if (entries.size <= 1) return
+        val newest = entries.entries.lastOrNull()?.let { it.key to it.value }
+        entries.clear()
+        newest?.let { entries[it.first] = it.second }
+    }
+
+    private fun trimToLimit() {
+        while (entries.size > maxSnapshots) {
+            val eldest = entries.entries.firstOrNull()?.key ?: break
+            entries.remove(eldest)
+        }
+    }
 }
