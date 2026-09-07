@@ -1,5 +1,6 @@
 package tv.blofy.player.core.playback
 
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.ProviderKind
 import tv.blofy.player.core.url.XtreamUrlBuilder
@@ -58,9 +59,13 @@ object ContentUrlResolver {
     fun directFallback(provider: ProviderEntity, episode: EpisodeEntity): String? =
         ProviderHostResolver.resolve(provider.baseUrl, episode.directSource).validHttpUrl()
 
-    /** Legacy callers without provider context retain the original direct source unchanged. */
-    fun directFallback(stream: StreamEntity): String? = stream.directSource.validHttpUrl()
-    fun directFallback(episode: EpisodeEntity): String? = episode.directSource.validHttpUrl()
+    /**
+     * Legacy callers may not have provider context. Never hand a clearly-internal direct_source to
+     * the player as a fallback: the primary Xtream URL remains the safe public-provider path, while
+     * M3U primary URLs are already repaired by the provider-aware resolver above.
+     */
+    fun directFallback(stream: StreamEntity): String? = stream.directSource.safeContextFreeFallback()
+    fun directFallback(episode: EpisodeEntity): String? = episode.directSource.safeContextFreeFallback()
 
     /**
      * Xtream installations do not all accept the same live output suffix. If the
@@ -91,6 +96,12 @@ object ContentUrlResolver {
         val liveIndex = segments.indexOfLast { it.equals("live", ignoreCase = true) }
         return liveIndex >= 0 && segments.size == liveIndex + 4 &&
             segments.subList(liveIndex + 1, segments.size).all { it.isNotBlank() }
+    }
+
+    private fun String?.safeContextFreeFallback(): String? {
+        val value = validHttpUrl() ?: return null
+        val host = value.toHttpUrlOrNull()?.host ?: return null
+        return value.takeUnless { ProviderHostResolver.isClearlyInternal(host) }
     }
 
     private fun String?.validHttpUrl(): String? = this?.takeIf {
