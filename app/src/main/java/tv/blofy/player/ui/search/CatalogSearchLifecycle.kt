@@ -13,13 +13,12 @@ import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.ui.browser.ContentBrowserActivity
-import tv.blofy.player.ui.catalog.PosterCatalogActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 
 /**
- * Adds one consistent local-search entry point to Live, Movies and Series without changing their
- * paging or playback code. Installation happens after setContentView() so the button survives.
+ * Adds the floating search entry point only to Live. Movies and Series own a full-width search bar
+ * inside PosterCatalogActivity so DPAD navigation stays part of the page hierarchy.
  */
 class CatalogSearchLifecycle : Application.ActivityLifecycleCallbacks {
     override fun onActivityResumed(activity: Activity) {
@@ -30,10 +29,8 @@ class CatalogSearchLifecycle : Application.ActivityLifecycleCallbacks {
     private fun kindFor(activity: Activity): String? = when (activity) {
         is ContentBrowserActivity -> activity.intent.getStringExtra(ContentBrowserActivity.EXTRA_KIND)
             ?.ifBlank { SearchActivity.KIND_LIVE } ?: SearchActivity.KIND_LIVE
-        is PosterCatalogActivity -> activity.intent.getStringExtra(PosterCatalogActivity.EXTRA_KIND)
-            ?.ifBlank { SearchActivity.KIND_MOVIE } ?: SearchActivity.KIND_MOVIE
         else -> null
-    }?.lowercase()?.takeIf { it in SUPPORTED_KINDS }
+    }?.lowercase()?.takeIf { it == SearchActivity.KIND_LIVE }
 
     private fun install(activity: Activity, kind: String) {
         val content = activity.findViewById<FrameLayout>(android.R.id.content) ?: return
@@ -119,10 +116,5 @@ class CatalogSearchLifecycle : Application.ActivityLifecycleCallbacks {
 
     companion object {
         private const val TAG = "blofy_catalog_search"
-        private val SUPPORTED_KINDS = setOf(
-            SearchActivity.KIND_LIVE,
-            SearchActivity.KIND_SERIES,
-            SearchActivity.KIND_MOVIE
-        )
     }
 }
