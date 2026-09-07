@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import tv.blofy.player.core.network.awaitResponse
@@ -133,8 +134,8 @@ class M3uPlaylistLoader(
                         return@withContext parse(provider, body) { coroutineContext.ensureActive() }
                     }
 
-                    // 884 is also commonly a compatibility/profile rejection. Try VLC and Android
-                    // TV profiles before giving up; malformed 884 bodies are never accepted.
+                    // 884 is also commonly a compatibility/profile rejection. Try compatible
+                    // request headers and safe get.php output variants before giving up.
                     if (!shouldRetry(response.code) && index == profiles.lastIndex && response.isSuccessful) {
                         error("M3U response is not a playlist")
                     }
@@ -287,24 +288,57 @@ class M3uPlaylistLoader(
         return StreamingSummary(categories.values.toList(), streamCount, episodeCount)
     }
 
-    private fun requestProfiles(url: String): List<Request> = listOf(
-        Request.Builder().url(url)
+    private fun requestProfiles(url: String): List<Request> {
+        val compatible = compatiblePlaylistUrls(url)
+        val original = compatible.first()
+        val requests = mutableListOf<Request>()
+
+        requests += Request.Builder().url(original)
             .header("User-Agent", "BLOFY PLAYER/2.0")
             .header("Accept", "application/x-mpegURL,application/vnd.apple.mpegurl,audio/mpegurl,text/plain,*/*")
             .header("Accept-Encoding", "identity")
-            .build(),
-        Request.Builder().url(url)
+            .build()
+        requests += Request.Builder().url(original)
             .header("User-Agent", "VLC/3.0.21 LibVLC/3.0.21")
             .header("Accept", "*/*")
             .header("Accept-Encoding", "identity")
             .header("Connection", "close")
-            .build(),
-        Request.Builder().url(url)
+            .build()
+        requests += Request.Builder().url(original)
             .header("User-Agent", "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 Chrome/120 Safari/537.36")
             .header("Accept", "*/*")
             .header("Accept-Encoding", "identity")
             .build()
-    )
+
+        // Only a genuine Xtream get.php URL with username/password gets alternate output forms.
+        // Arbitrary M3U URLs are never rewritten or decorated with invented credentials.
+        compatible.drop(1).forEachIndexed { index, candidate ->
+            requests += Request.Builder().url(candidate)
+                .header("User-Agent", if (index == 0) "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 Chrome/120 Safari/537.36" else "VLC/3.0.21 LibVLC/3.0.21")
+                .header("Accept", "*/*")
+                .header("Accept-Encoding", "identity")
+                .header("Connection", "close")
+                .build()
+        }
+        return requests
+    }
+
+    internal fun compatiblePlaylistUrls(url: String): List<String> {
+        val parsed = url.toHttpUrlOrNull() ?: return listOf(url)
+        if (!parsed.encodedPath.endsWith("/get.php", ignoreCase = true)) return listOf(url)
+        if (parsed.queryParameter("username").isNullOrBlank() || parsed.queryParameter("password").isNullOrBlank()) {
+            return listOf(url)
+        }
+        val ts = parsed.newBuilder()
+            .setQueryParameter("type", "m3u_plus")
+            .setQueryParameter("output", "ts")
+            .build().toString()
+        val hls = parsed.newBuilder()
+            .setQueryParameter("type", "m3u_plus")
+            .setQueryParameter("output", "m3u8")
+            .build().toString()
+        return listOf(url, ts, hls).distinct()
+    }
 
     private fun shouldRetry(code: Int): Boolean = code == 884 || code in setOf(403, 406, 408, 425, 429) || code >= 500
 
