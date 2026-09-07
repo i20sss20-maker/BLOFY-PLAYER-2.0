@@ -9,7 +9,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import java.net.URI
 
-/** Xtream-only playback URL policy for rc07.12. */
+/** Xtream-only playback URL policy for rc07.13. */
 object ContentUrlResolver {
     fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String =
         XtreamUrlBuilder.live(
@@ -39,9 +39,13 @@ object ContentUrlResolver {
         )
 
     /**
-     * direct_source is secondary to the canonical Xtream URL. When its host differs from the
-     * provider (including public-looking hidden hosts), use the provider's full origin with the
-     * direct media path. Clearly internal direct sources are repaired the same way.
+     * direct_source is secondary to the canonical Xtream URL.
+     *
+     * Important: a public-looking alternate host can be the provider's real playback/CDN route.
+     * Do not rewrite it merely because its origin differs from the login/panel origin. This is the
+     * common "hidden host" case. Only clearly local/private hosts are repaired to the provider
+     * origin. This keeps aliases such as cf.tstor8k.xyz usable while still repairing LAN/internal
+     * direct_source values.
      */
     fun directFallback(provider: ProviderEntity, stream: StreamEntity): String? =
         providerAwareFallback(provider.baseUrl, stream.directSource)
@@ -76,8 +80,10 @@ object ContentUrlResolver {
 
     private fun providerAwareFallback(providerBaseUrl: String, directSource: String?): String? {
         val value = directSource.validHttpUrl() ?: return null
-        return ProviderHostResolver.providerOriginFallback(providerBaseUrl, value)
-            ?: ProviderHostResolver.resolve(providerBaseUrl, value).validHttpUrl()
+        // resolve() preserves normal/public alternate DNS hosts exactly as supplied by Xtream and
+        // rewrites only clearly internal/private hosts. rc07.12 did the opposite ordering here:
+        // providerOriginFallback() ran first and destroyed valid hidden/CDN origins.
+        return ProviderHostResolver.resolve(providerBaseUrl, value).validHttpUrl()
     }
 
     private fun String.isXtreamLiveUrl(): Boolean {
