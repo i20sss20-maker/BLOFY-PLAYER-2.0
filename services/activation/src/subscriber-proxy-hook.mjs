@@ -10,6 +10,11 @@ const SUBSCRIBER_HOST_RAW = String(process.env.BLOFY_SUBSCRIBER_HOST || '').trim
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const PLAYLIST_ENCRYPTION_KEY = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
 const SESSION_TTL_MS = Number(process.env.BLOFY_SUBSCRIBER_SESSION_TTL_MS || 30 * 24 * 60 * 60 * 1000);
+const SESSION_DEVICE_CHECK_RAW = Number(process.env.BLOFY_SUBSCRIBER_DEVICE_CHECK_MS || 30_000);
+const SESSION_DEVICE_CHECK_MS = Number.isFinite(SESSION_DEVICE_CHECK_RAW)
+  ? Math.max(5_000, Math.min(SESSION_DEVICE_CHECK_RAW, 300_000))
+  : 30_000;
+const MAX_SESSION_ACCESS_CACHE = 10_000;
 const MAX_LOGIN_USERNAME = 256;
 const MAX_LOGIN_PASSWORD = 512;
 const SUBSCRIBER_PREFIX = '/api/v1/subscribers';
@@ -26,6 +31,7 @@ const pool = DATABASE_URL
       ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false }
     })
   : null;
+const sessionAccessCache = new Map();
 
 function normalizeSubscriberHost(value) {
   if (!value) return null;
@@ -74,6 +80,10 @@ function validIdentity(deviceId, activationCode) {
   return /^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) && /^\d{6}$/.test(activationCode);
 }
 
+function validSessionDeviceId(deviceId) {
+  return /^BLOFY-[A-Z0-9-]{4,32}$/i.test(String(deviceId || ''));
+}
+
 function normalizeDeviceStatus(row) {
   const expiresAt = row?.expires_at ? new Date(row.expires_at).getTime() : null;
   if ((row?.status === 'trial' || row?.status === 'active') && expiresAt && expiresAt <= Date.now()) return 'expired';
@@ -89,6 +99,36 @@ async function authorizedDevice(deviceId, activationCode) {
   const row = result.rows[0];
   if (!row || isAuthLocked(row) || !activationCredentials.matches(row, activationCode)) return false;
   return ['trial', 'active'].includes(normalizeDeviceStatus(row));
+}
+
+function pruneSessionAccessCache(nowMs) {
+  if (sessionAccessCache.size < MAX_SESSION_ACCESS_CACHE) return;
+  for (const [deviceId, entry] of sessionAccessCache) {
+    if (!entry || entry.until <= nowMs) sessionAccessCache.delete(deviceId);
+  }
+  while (sessionAccessCache.size >= MAX_SESSION_ACCESS_CACHE) {
+    sessionAccessCache.delete(sessionAccessCache.keys().next().value);
+  }
+}
+
+async function sessionDeviceAllowed(deviceId) {
+  if (!pool || !validSessionDeviceId(deviceId)) return false;
+  const now = Date.now();
+  const cached = sessionAccessCache.get(deviceId);
+  if (cached && cached.until > now) return cached.allowed;
+
+  const result = await pool.query(
+    'SELECT status,expires_at,auth_locked_until FROM devices WHERE device_id=$1 LIMIT 1',
+    [deviceId]
+  );
+  const row = result.rows[0];
+  const allowed = Boolean(row && !isAuthLocked(row) && ['trial', 'active'].includes(normalizeDeviceStatus(row)));
+  pruneSessionAccessCache(now);
+  sessionAccessCache.set(deviceId, {
+    allowed,
+    until: now + (allowed ? SESSION_DEVICE_CHECK_MS : Math.min(SESSION_DEVICE_CHECK_MS, 5_000))
+  });
+  return allowed;
 }
 
 function sealSession(payload) {
@@ -111,12 +151,21 @@ function openSession(token) {
     decipher.setAuthTag(tag);
     const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
     const payload = JSON.parse(plaintext);
-    if (!payload || typeof payload.u !== 'string' || typeof payload.p !== 'string') return null;
+    if (!payload || typeof payload.u !== 'string' || typeof payload.p !== 'string' || !validSessionDeviceId(payload.d)) return null;
     if (!Number.isFinite(payload.exp) || payload.exp <= Date.now()) return null;
     return payload;
   } catch {
     return null;
   }
+}
+
+async function requireSession(token) {
+  const session = openSession(token);
+  if (!session) return { session: null, status: 401, error: 'subscriber_session_expired' };
+  if (!await sessionDeviceAllowed(session.d)) {
+    return { session: null, status: 403, error: 'subscriber_device_inactive' };
+  }
+  return { session, status: 200, error: null };
 }
 
 function requestOrigin(req) {
@@ -332,6 +381,7 @@ async function createSubscriberSession(req, res) {
 
   const expiresAt = Date.now() + Math.max(60 * 60 * 1000, Math.min(SESSION_TTL_MS, 90 * 24 * 60 * 60 * 1000));
   const token = sealSession({ u: username, p: password, d: deviceId, exp: expiresAt });
+  sessionAccessCache.set(deviceId, { allowed: true, until: Date.now() + SESSION_DEVICE_CHECK_MS });
   const source = { providerType: 'xtream', baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`, username: token, password: 'blofy' };
   const identity = playlistIdentity(source, deviceId, PLAYLIST_ENCRYPTION_KEY);
   const saved = await pool.query('SELECT * FROM device_playlists WHERE device_id=$1', [deviceId]);
@@ -349,8 +399,9 @@ async function createSubscriberSession(req, res) {
 
 async function proxyPlayerApi(req, res, requestUrl) {
   const token = requestUrl.searchParams.get('username') || '';
-  const session = openSession(token);
-  if (!session) return sendJson(res, 401, { error: 'subscriber_session_expired' });
+  const checked = await requireSession(token);
+  if (!checked.session) return sendJson(res, checked.status, { error: checked.error });
+  const session = checked.session;
   const upstream = new URL(`${subscriberHost}/player_api.php`);
   upstream.searchParams.set('username', session.u);
   upstream.searchParams.set('password', session.p);
@@ -366,8 +417,9 @@ async function proxyStream(req, res, requestUrl) {
   if (!match) return false;
   const [, kind, encodedToken, tail] = match;
   const token = decodeURIComponent(encodedToken);
-  const session = openSession(token);
-  if (!session) return sendJson(res, 401, { error: 'subscriber_session_expired' });
+  const checked = await requireSession(token);
+  if (!checked.session) return sendJson(res, checked.status, { error: checked.error });
+  const session = checked.session;
   const target = `${subscriberHost}/${kind}/${encodeURIComponent(session.u)}/${encodeURIComponent(session.p)}/${tail}${requestUrl.search}`;
   await pipeUpstream(req, res, target, token);
   return true;
@@ -377,8 +429,8 @@ async function proxySignedUrl(req, res, requestUrl) {
   const match = requestUrl.pathname.match(new RegExp(`^${XTREAM_PREFIX}/url/([^/]+)/([^/]+)/([^/]+)$`));
   if (!match) return false;
   const token = decodeURIComponent(match[1]);
-  const session = openSession(token);
-  if (!session) return sendJson(res, 401, { error: 'subscriber_session_expired' });
+  const checked = await requireSession(token);
+  if (!checked.session) return sendJson(res, checked.status, { error: checked.error });
   const target = verifiedTarget(token, match[2], match[3]);
   if (!target) return sendJson(res, 403, { error: 'invalid_proxy_target' });
   await pipeUpstream(req, res, target, token);
@@ -389,8 +441,8 @@ async function proxyRaw(req, res, requestUrl) {
   const match = requestUrl.pathname.match(new RegExp(`^${XTREAM_PREFIX}/raw/([^/]+)(/.*)?$`));
   if (!match) return false;
   const token = decodeURIComponent(match[1]);
-  const session = openSession(token);
-  if (!session) return sendJson(res, 401, { error: 'subscriber_session_expired' });
+  const checked = await requireSession(token);
+  if (!checked.session) return sendJson(res, checked.status, { error: checked.error });
   const path = match[2] || '/';
   await pipeUpstream(req, res, upstreamUrl(path, requestUrl.search), token);
   return true;
@@ -403,7 +455,8 @@ async function handleSubscriberRequest(req, res) {
       ok: available(),
       hostConfigured: Boolean(subscriberHost),
       encryptionReady: Boolean(encryptionKey && activationCredentials),
-      databaseReady: Boolean(pool)
+      databaseReady: Boolean(pool),
+      deviceRecheckMs: SESSION_DEVICE_CHECK_MS
     });
   }
   if (req.method === 'POST' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/session`) {
