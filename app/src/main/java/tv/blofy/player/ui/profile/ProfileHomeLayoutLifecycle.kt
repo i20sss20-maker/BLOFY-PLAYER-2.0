@@ -30,6 +30,8 @@ import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.home.HomeActivity
+import tv.blofy.player.ui.home.HomeRowReconciler
+import java.util.WeakHashMap
 
 /**
  * Applies profile-owned Home composition without modifying playback/catalog engines.
@@ -39,6 +41,8 @@ import tv.blofy.player.ui.home.HomeActivity
  */
 class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private data class WatchlistState(val profileId: String, val name: String, val items: List<StreamEntity>)
+    private val watchlistStates = WeakHashMap<View, WatchlistState>()
 
     override fun onActivityResumed(activity: Activity) {
         if (activity !is HomeActivity) return
@@ -61,9 +65,11 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
             val watchlist = loadWatchlist(activity, profileId, kids)
             withContext(Dispatchers.Main) {
                 if (activity.isFinishing || activity.isDestroyed) return@withContext
+                // A slow query from the previous profile must not rewrite the current profile's Home.
+                if (ProfileStore.storageNamespace(activity) != profileId) return@withContext
                 val currentFeed = homeFeed(activity) ?: return@withContext
-                applyExistingRows(currentFeed, wantedRows)
                 installWatchlistShelf(activity, currentFeed, wantedRows, watchlist)
+                applyExistingRows(currentFeed, wantedRows)
             }
         }
     }
@@ -94,18 +100,15 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
             } else index++
         }
 
-        // Remove only profile-managed shelves. Promotional/featured/quick sections stay untouched.
-        groups.values.flatten().forEach { view -> if (view.parent === feed) feed.removeView(view) }
-
-        val quickIndex = (0 until feed.childCount).firstOrNull { sectionTitle(feed.getChildAt(it)) == "اختصارات سريعة" }
-            ?: feed.childCount
-        var insertAt = quickIndex
-        wantedRows.filter { it != "watchlist" }.forEach { key ->
-            groups[key]?.forEach { view ->
-                feed.addView(view, insertAt.coerceAtMost(feed.childCount))
-                insertAt++
-            }
-        }
+        // Compare the complete intended order before detaching anything. The lifecycle retries
+        // while Home loads; a retry with the same rows must not reset focus or horizontal scroll.
+        val managed = groups.values.flatten().toSet()
+        val desired = (0 until feed.childCount).map(feed::getChildAt).filterNot { it in managed }.toMutableList()
+        val quickIndex = desired.indexOfFirst { sectionTitle(it) == "اختصارات سريعة" }
+            .takeIf { it >= 0 } ?: desired.size
+        val ordered = wantedRows.distinct().flatMap { groups[it].orEmpty() }
+        desired.addAll(quickIndex, ordered)
+        HomeRowReconciler.apply(feed, desired)
     }
 
     private fun installWatchlistShelf(
@@ -116,8 +119,13 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
     ) {
         val oldTitle = feed.findViewWithTag<View>(TAG_WATCHLIST_TITLE)
         val oldRow = feed.findViewWithTag<View>(TAG_WATCHLIST_ROW)
+        val profile = ProfileStore.active(activity)
+        val state = WatchlistState(profile.id, profile.name, items.toList())
+        if ("watchlist" in wantedRows && items.isNotEmpty() && oldTitle != null && oldRow != null &&
+            watchlistStates[oldRow] == state) return
+        val focusedTag = oldRow?.findFocus()?.tag as? String
         if (oldTitle != null) feed.removeView(oldTitle)
-        if (oldRow != null) feed.removeView(oldRow)
+        if (oldRow != null) { watchlistStates.remove(oldRow); feed.removeView(oldRow) }
         if ("watchlist" !in wantedRows || items.isEmpty()) return
 
         val title = LinearLayout(activity).apply {
@@ -177,9 +185,13 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
         }
         feed.addView(title, insertAt.coerceAtMost(feed.childCount))
         feed.addView(scroll, (insertAt + 1).coerceAtMost(feed.childCount), LinearLayout.LayoutParams(-1, dp(activity, 246)))
+        watchlistStates[scroll] = state
+        // Preserve the same title if its card was replaced; never select a removed title by index.
+        focusedTag?.let { scroll.findViewWithTag<View>(it)?.requestFocus() }
     }
 
     private fun card(activity: HomeActivity, item: StreamEntity) = FrameLayout(activity).apply {
+        tag = "blofy_profile_watchlist_item:${item.key}"
         isFocusable = true
         isFocusableInTouchMode = true
         isClickable = true
@@ -246,6 +258,7 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
     }
 
     private fun titleToRowKey(title: String?): String? = when (title) {
+        "قائمتي" -> "watchlist"
         "تابع المشاهدة" -> "continue_watching"
         "شاهدت مؤخرًا" -> "recent_channels"
         "أضيف حديثًا" -> "latest"

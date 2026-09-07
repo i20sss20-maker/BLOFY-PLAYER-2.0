@@ -55,6 +55,7 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var deviceKind: DeviceClass.Kind
     private var firstAction: View? = null
     private val actionViews = linkedMapOf<String, View>()
+    private var homeFocusController: HomeFocusController? = null
 
     private var heroItem: StreamEntity? = null
     private var heroProviderId: String? = null
@@ -111,6 +112,14 @@ class HomeActivity : AppCompatActivity() {
 
     private fun showReadyHome() {
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildTvHome() else buildCompactHome())
+        if (deviceKind == DeviceClass.Kind.TV) {
+            homeFocusController?.dispose()
+            homeFocusController = HomeFocusController(
+                findViewById(android.R.id.content),
+                checkNotNull(actionViews["side_live"]?.parent as? android.view.ViewGroup),
+                checkNotNull(homeFeed),
+            ) { actionViews }
+        }
         restoreFocus()
         warmCatalogArtwork()
         if (deviceKind == DeviceClass.Kind.TV) {
@@ -120,63 +129,22 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
+    override fun onPause() {
+        homeFocusController?.resetPress()
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        homeFocusController?.dispose()
+        homeFocusController = null
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (deviceKind == DeviceClass.Kind.TV && event.action == KeyEvent.ACTION_DOWN) {
-            val key = actionViews.entries.firstOrNull { it.value === currentFocus }?.key
-            if (key != null && event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && key.startsWith("side_")) {
-                val target = when (key) {
-                    "side_live" -> "hero_watch"
-                    "side_movies" -> firstKey("poster_latest_") ?: "hero_movies"
-                    "side_series" -> firstKey("poster_series_") ?: "series_story"
-                    "side_collections" -> firstKey("poster_top_") ?: "collections"
-                    "side_favorites" -> firstKey("poster_continue_") ?: "favorite_story"
-                    "side_search" -> "search_story"
-                    "side_settings" -> "search_story"
-                    else -> null
-                }
-                if (target != null && actionViews[target]?.requestFocus() == true) return true
-            }
-            if (key != null && event.keyCode in setOf(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT) && !key.startsWith("side_")) {
-                val row = HomeFocusPolicy.row(key)
-                val siblings = if (row == null) listOf(key) else actionViews.keys.filter { HomeFocusPolicy.row(it) == row }
-                val move = HomeFocusPolicy.horizontal(siblings.indexOf(key), siblings.size,
-                    left = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT, rtl = true)
-                when (move) {
-                    is HomeFocusPolicy.Move.Item -> {
-                        val next = actionViews[siblings[move.index]]
-                        if (next != null) {
-                            next.requestFocus()
-                            next.requestRectangleOnScreen(android.graphics.Rect(0, 0, next.width, next.height), false)
-                        }
-                        return true
-                    }
-                    HomeFocusPolicy.Move.Stay -> return true
-                    HomeFocusPolicy.Move.Sidebar -> Unit
-                }
-                val target = when {
-                    key.startsWith("poster_series_") -> "side_series"
-                    key.startsWith("poster_continue_") || key.startsWith("poster_recent_") -> "side_favorites"
-                    key.startsWith("poster_") || key.startsWith("top10_") -> "side_movies"
-                    key in setOf("hero_watch", "live_story", "recent") -> "side_live"
-                    key in setOf("hero_movies", "movie_story") -> "side_movies"
-                    key == "series_story" -> "side_series"
-                    key == "collections" -> "side_collections"
-                    key == "favorite_story" -> "side_favorites"
-                    key == "search_story" -> "side_search"
-                    else -> "side_live"
-                }
-                if (actionViews[target]?.requestFocus() == true) return true
-            }
-        }
+        if (homeFocusController?.handle(event) == true) return true
         return super.dispatchKeyEvent(event)
     }
-
-    private fun firstKey(prefix: String): String? = actionViews.keys.firstOrNull { it.startsWith(prefix) }
 
     private fun warmCatalogArtwork() {
         lifecycleScope.launch {
