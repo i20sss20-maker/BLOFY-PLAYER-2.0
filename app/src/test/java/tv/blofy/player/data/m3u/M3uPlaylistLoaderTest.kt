@@ -52,7 +52,7 @@ class M3uPlaylistLoaderTest {
     }
 
     @Test(expected = IllegalStateException::class)
-    fun successfulHtmlResponseIsNotAcceptedAsPlaylist() = runBlocking {
+    fun successfulHtmlResponseIsNotAcceptedAsPlaylist(): Unit = runBlocking {
         val server = MockWebServer()
         repeat(3) { server.enqueue(MockResponse().setResponseCode(200).setBody("<html>login required</html>")) }
         server.start()
