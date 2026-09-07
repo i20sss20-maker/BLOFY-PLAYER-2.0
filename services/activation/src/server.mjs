@@ -595,6 +595,7 @@ async function adminProviderProfileUpdate(req, res, providerKey) {
 }
 
 const server = http.createServer(async (req, res) => {
+  if (res.writableEnded || res.destroyed) return;
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
@@ -622,6 +623,8 @@ const server = http.createServer(async (req, res) => {
     return json(res, 404, { error: 'not_found' });
   } catch (error) {
     console.error('request failed:', safeErrorSummary(error));
+    if (res.writableEnded || res.destroyed) return;
+    if (res.headersSent) { res.destroy(); return; }
     if (error instanceof RateLimitError) {
       return json(
         res,

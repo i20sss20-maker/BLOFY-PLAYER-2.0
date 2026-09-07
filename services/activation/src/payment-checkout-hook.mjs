@@ -1,7 +1,7 @@
 import http from 'node:http';
 import pg from 'pg';
 import crypto from 'node:crypto';
-import { createActivationCredentialCodec, isAuthLocked } from './auth-protection.mjs';
+import { createActivationCredentialCodec, createDeviceAuthenticator, sendDeviceAuthRateLimit } from './auth-protection.mjs';
 
 const { Pool } = pg;
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -37,10 +37,6 @@ async function readJson(req) {
     if (raw.length > 16_384) throw new Error('payload_too_large');
   }
   return raw ? JSON.parse(raw) : {};
-}
-
-function validIdentity(deviceId, activationCode) {
-  return /^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) && /^\d{6}$/.test(activationCode);
 }
 
 function checkoutBase() {
@@ -81,16 +77,7 @@ function signCheckout(order, expiresAtMs) {
   return crypto.createHmac('sha256', PAYMENT_CHECKOUT_SECRET).update(payload, 'utf8').digest('hex');
 }
 
-async function authorizedDevice(deviceId, activationCode) {
-  if (!pool || !activationCredentials || !validIdentity(deviceId, activationCode)) return null;
-  const result = await pool.query(
-    'SELECT device_id,activation_code,status,expires_at,auth_locked_until FROM devices WHERE device_id=$1 LIMIT 1',
-    [deviceId]
-  );
-  const row = result.rows[0];
-  if (!row || isAuthLocked(row) || !activationCredentials.matches(row, activationCode)) return null;
-  return row;
-}
+const authorizedDevice = createDeviceAuthenticator({ pool, activationCredentials });
 
 /**
  * A coupon is reserved when an order is created. If checkout is never completed, release that
@@ -138,7 +125,7 @@ async function checkout(req, res) {
   const deviceId = String(body.deviceId || '').trim();
   const activationCode = String(body.activationCode || '').trim();
   const orderId = String(body.orderId || '').trim();
-  if (!await authorizedDevice(deviceId, activationCode)) return sendJson(res, 403, { error: 'unauthorized_device' });
+  if (!await authorizedDevice(deviceId, activationCode, req)) return sendJson(res, 403, { error: 'unauthorized_device' });
   if (!/^[0-9a-f-]{36}$/i.test(orderId)) return sendJson(res, 400, { error: 'invalid_order' });
 
   const result = await pool.query(
@@ -203,7 +190,8 @@ http.createServer = function patchedCheckoutCreateServer(listener) {
     try { pathname = new URL(req.url || '/', 'http://localhost').pathname; } catch (_) {}
     if (req.method === 'POST' && pathname === PATH) {
       try { return await checkout(req, res); }
-      catch {
+      catch (error) {
+        if (sendDeviceAuthRateLimit(res, error)) return;
         if (!res.headersSent) return sendJson(res, 500, { error: 'payment_checkout_error' });
         res.destroy();
         return;
