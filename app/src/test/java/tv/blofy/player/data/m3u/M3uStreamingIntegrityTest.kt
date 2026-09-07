@@ -83,7 +83,11 @@ class M3uStreamingIntegrityTest {
             val failure = runCatching { M3uPlaylistLoader().loadStreaming(provider(server),
                 onStreamBatch = { throw storageFailure }, onEpisodeBatch = {}, onAttemptReset = { resets++ },
             ) }.exceptionOrNull()
-            assertSame(storageFailure, failure)
+            // withContext can copy the exception for coroutine debug stacktrace recovery.
+            // Preserve the original-cause assertion rather than depending on wrapper identity.
+            assertTrue(failure is IOException)
+            assertEquals(storageFailure.message, failure?.message)
+            assertTrue(generateSequence(failure) { it.cause }.take(8).any { it === storageFailure })
             assertEquals(0, resets)
             assertEquals(1, server.requestCount)
         } finally { server.shutdown() }
