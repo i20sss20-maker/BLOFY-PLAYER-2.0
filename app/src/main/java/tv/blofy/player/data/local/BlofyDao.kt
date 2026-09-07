@@ -7,14 +7,34 @@ import androidx.room.Query
 import androidx.room.Transaction
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import tv.blofy.player.core.text.ArabicSearchNormalizer
 
 @Dao
 interface BlofyDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertProvider(provider: ProviderEntity)
-    @Query("SELECT * FROM providers WHERE enabled = 1 ORDER BY updatedAt DESC") fun providers(): Flow<List<ProviderEntity>>
-    @Query("SELECT * FROM providers ORDER BY updatedAt DESC") fun allProviders(): Flow<List<ProviderEntity>>
-    @Query("SELECT * FROM providers WHERE id = :providerId LIMIT 1") suspend fun provider(providerId: String): ProviderEntity?
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertProviderStored(provider: ProviderEntity)
+    suspend fun upsertProvider(provider: ProviderEntity) = upsertProviderStored(ProviderSecretCodec.seal(provider))
+
+    @Query("SELECT * FROM providers WHERE enabled = 1 ORDER BY updatedAt DESC") fun providersStored(): Flow<List<ProviderEntity>>
+    fun providers(): Flow<List<ProviderEntity>> = providersStored().map { rows -> rows.map(ProviderSecretCodec::open) }
+
+    @Query("SELECT * FROM providers ORDER BY updatedAt DESC") fun allProvidersStored(): Flow<List<ProviderEntity>>
+    fun allProviders(): Flow<List<ProviderEntity>> = allProvidersStored().map { rows -> rows.map(ProviderSecretCodec::open) }
+
+    @Query("SELECT * FROM providers WHERE id = :providerId LIMIT 1") suspend fun providerStored(providerId: String): ProviderEntity?
+    suspend fun provider(providerId: String): ProviderEntity? = providerStored(providerId)?.let(ProviderSecretCodec::open)
+
+    @Query("SELECT * FROM providers ORDER BY updatedAt DESC") suspend fun providerSnapshotStored(): List<ProviderEntity>
+
+    /** Encrypt legacy plaintext provider rows after Home is already interactive. */
+    @Transaction suspend fun hardenProviderSecrets() {
+        providerSnapshotStored().forEach { stored ->
+            if (ProviderSecretCodec.needsSealing(stored)) {
+                upsertProviderStored(ProviderSecretCodec.seal(ProviderSecretCodec.open(stored)))
+            }
+        }
+    }
+
     @Query("UPDATE providers SET enabled = 0 WHERE id = :providerId") suspend fun deactivateProvider(providerId: String)
     @Query("UPDATE providers SET enabled = 0") suspend fun disableAllProviders()
     @Query("UPDATE providers SET enabled = 1, updatedAt = :updatedAt WHERE id = :providerId") suspend fun activateProvider(providerId: String, updatedAt: Long = System.currentTimeMillis())
