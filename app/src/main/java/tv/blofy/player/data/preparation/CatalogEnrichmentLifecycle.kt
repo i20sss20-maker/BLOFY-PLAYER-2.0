@@ -28,7 +28,7 @@ class CatalogEnrichmentLifecycle : Application.ActivityLifecycleCallbacks {
                     ?.takeIf { CatalogSyncState.isEntryReady(app, it.id) }
             } ?: return@launch
 
-            // Let Home and remote focus become interactive before optional metadata/image work.
+            // Let Home and remote focus become interactive before optional local-cache/enrichment work.
             // Low-memory boxes receive a longer quiet period to avoid a visible post-login stall.
             delay(if (DeviceClass.isLowMemory(app)) 4_000L else 1_200L)
             if (activity.isFinishing || !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@launch
@@ -46,7 +46,15 @@ class CatalogEnrichmentLifecycle : Application.ActivityLifecycleCallbacks {
             if (!LocalStorageManager.hasHealthyFreeSpace(app)) return@launch
 
             if (!activity.isFinishing && activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                FullCatalogPreparer.resumeBackground(app, provider.id)
+                // Process death may happen after the durable Room catalog commit but before Home/
+                // manifest readiness markers are written. Rebuild those accelerators quietly after
+                // entry; failure here must never evict or hide the working local library.
+                if (!CatalogSyncState.isEntryCachesReady(app, provider.id)) {
+                    runCatching { FullCatalogPreparer.prepare(app, provider.id) { } }
+                }
+                if (!activity.isFinishing && activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    FullCatalogPreparer.resumeBackground(app, provider.id)
+                }
             }
         }
     }
