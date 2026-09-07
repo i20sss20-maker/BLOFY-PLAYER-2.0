@@ -6,6 +6,7 @@ import './payment-return-hook.mjs';
 import './payment-order-maintenance.mjs';
 import './subscription-expiry-maintenance.mjs';
 import './commercial-readiness-hook.mjs';
+import './profile-cloud-auth-header-hook.mjs';
 import './profile-cloud-hook.mjs';
 import './zid-commerce-hook.mjs';
 import './admin-session-hook.mjs';
