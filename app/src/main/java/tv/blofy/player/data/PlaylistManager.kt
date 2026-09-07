@@ -72,14 +72,63 @@ class PlaylistManager(
     }
 
     private suspend fun syncM3u(provider: ProviderEntity): Int {
-        val parsed = m3uLoader.load(provider)
         val kinds = listOf("live", "movie", "series")
         var previousCount = 0
-        val previousFlags = ArrayList<StreamEntity>()
+        var hasExistingCategories = false
         for (kind in kinds) {
             previousCount += dao.catalogCountAll(provider.id, kind)
-            previousFlags += dao.persistedStreamFlags(provider.id, kind)
+            if (!hasExistingCategories && dao.categorySnapshot(provider.id, kind).isNotEmpty()) {
+                hasExistingCategories = true
+            }
         }
+
+        // Fresh providers and staged refresh providers have no known-good rows under their own ID.
+        // Stream them directly into Room so a huge M3U never becomes one giant String/List in RAM.
+        if (previousCount == 0 && !hasExistingCategories) {
+            dao.clearProviderCatalog(provider.id)
+            return try {
+                val summary = m3uLoader.loadStreaming(
+                    provider = provider,
+                    onStreamBatch = { batch ->
+                        if (batch.isNotEmpty()) dao.upsertStreams(batch)
+                    },
+                    onEpisodeBatch = { batch ->
+                        if (batch.isNotEmpty()) dao.upsertEpisodes(batch)
+                    },
+                )
+                summary.categories.asSequence().chunked(DIRECT_CATEGORY_BATCH).forEach { batch ->
+                    if (batch.isNotEmpty()) dao.upsertCategories(batch)
+                }
+
+                var storedCount = 0
+                for (kind in kinds) storedCount += dao.catalogCountAll(provider.id, kind)
+                val accepted = CatalogReplacementPolicy.shouldReplace(
+                    previousStreamCount = 0,
+                    sourceCategoryCount = summary.categories.size,
+                    parsedCategoryCount = summary.categories.size,
+                    sourceStreamCount = summary.streamCount,
+                    parsedStreamCount = storedCount,
+                )
+                if (!accepted || storedCount <= 0) {
+                    dao.clearProviderCatalog(provider.id)
+                    return 0
+                }
+
+                // Build search from bounded Room pages after the durable catalog is present. This
+                // avoids retaining a second 100k+ FTS list while network data is still arriving.
+                dao.rebuildSearchIndex(provider.id)
+                storedCount
+            } catch (failure: Throwable) {
+                runCatching { dao.clearProviderCatalog(provider.id) }
+                throw failure
+            }
+        }
+
+        // Compatibility path for an in-place M3U sync. Normal refreshes are staged by
+        // CatalogRefreshWorker, so large production refreshes use the bounded path above.
+        val parsed = m3uLoader.load(provider)
+        val previousFlags = ArrayList<StreamEntity>()
+        for (kind in kinds) previousFlags += dao.persistedStreamFlags(provider.id, kind)
         val streams = PreviousStreamFlags(previousFlags).applyTo(parsed.streams)
 
         if (!CatalogReplacementPolicy.shouldReplace(
