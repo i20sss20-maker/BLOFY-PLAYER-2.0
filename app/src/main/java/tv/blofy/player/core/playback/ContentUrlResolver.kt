@@ -9,68 +9,53 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import java.net.URI
 
-/** Exact URL first. M3U keeps its supplied path/query while clearly-internal hosts are repaired. */
+/** Xtream-only playback URL policy for rc07.12. */
 object ContentUrlResolver {
-    fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String {
-        if (provider.providerType.equals("m3u", true)) {
-            return ProviderHostResolver.resolve(provider.baseUrl, stream.directSource).validHttpUrl()
-                ?: error("Missing M3U live URL")
-        }
-        return XtreamUrlBuilder.live(
+    fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String =
+        XtreamUrlBuilder.live(
             provider.baseUrl,
             provider.username,
             provider.password,
             stream.remoteId,
             profile.liveFormat
         )
-    }
 
-    fun movie(provider: ProviderEntity, stream: StreamEntity): String {
-        if (provider.providerType.equals("m3u", true)) {
-            return ProviderHostResolver.resolve(provider.baseUrl, stream.directSource).validHttpUrl()
-                ?: error("Missing M3U movie URL")
-        }
-        return XtreamUrlBuilder.movie(
+    fun movie(provider: ProviderEntity, stream: StreamEntity): String =
+        XtreamUrlBuilder.movie(
             provider.baseUrl,
             provider.username,
             provider.password,
             stream.remoteId,
             stream.extension ?: "mp4"
         )
-    }
 
-    fun episode(provider: ProviderEntity, episode: EpisodeEntity): String {
-        if (provider.providerType.equals("m3u", true)) {
-            return ProviderHostResolver.resolve(provider.baseUrl, episode.directSource).validHttpUrl()
-                ?: error("Missing M3U episode URL")
-        }
-        return XtreamUrlBuilder.episode(
+    fun episode(provider: ProviderEntity, episode: EpisodeEntity): String =
+        XtreamUrlBuilder.episode(
             provider.baseUrl,
             provider.username,
             provider.password,
             episode.remoteId,
             episode.extension
         )
-    }
-
-    fun directFallback(provider: ProviderEntity, stream: StreamEntity): String? =
-        ProviderHostResolver.resolve(provider.baseUrl, stream.directSource).validHttpUrl()
-
-    fun directFallback(provider: ProviderEntity, episode: EpisodeEntity): String? =
-        ProviderHostResolver.resolve(provider.baseUrl, episode.directSource).validHttpUrl()
 
     /**
-     * Legacy callers may not have provider context. Never hand a clearly-internal direct_source to
-     * the player as a fallback: the primary Xtream URL remains the safe public-provider path, while
-     * M3U primary URLs are already repaired by the provider-aware resolver above.
+     * direct_source is secondary to the canonical Xtream URL. When its host differs from the
+     * provider (including public-looking hidden hosts), use the provider's full origin with the
+     * direct media path. Clearly internal direct sources are repaired the same way.
      */
+    fun directFallback(provider: ProviderEntity, stream: StreamEntity): String? =
+        providerAwareFallback(provider.baseUrl, stream.directSource)
+
+    fun directFallback(provider: ProviderEntity, episode: EpisodeEntity): String? =
+        providerAwareFallback(provider.baseUrl, episode.directSource)
+
+    /** Legacy context-free callers never receive a clearly-internal URL. */
     fun directFallback(stream: StreamEntity): String? = stream.directSource.safeContextFreeFallback()
     fun directFallback(episode: EpisodeEntity): String? = episode.directSource.safeContextFreeFallback()
 
     /**
-     * Xtream installations do not all accept the same live output suffix. If the
-     * configured TS/HLS endpoint fails, try the other standard endpoint inside
-     * BLOFY before reporting a terminal playback failure.
+     * Xtream installations do not all accept the same live output suffix. If the configured
+     * TS/HLS endpoint fails, try the other standard endpoint inside BLOFY before terminal error.
      */
     fun alternateLiveFormat(url: String, profile: ProviderProfile): String? {
         if (profile.providerKind != ProviderKind.XTREAM) return null
@@ -87,6 +72,12 @@ object ContentUrlResolver {
             else -> return null
         }
         return alternatePath + suffix
+    }
+
+    private fun providerAwareFallback(providerBaseUrl: String, directSource: String?): String? {
+        val value = directSource.validHttpUrl() ?: return null
+        return ProviderHostResolver.providerOriginFallback(providerBaseUrl, value)
+            ?: ProviderHostResolver.resolve(providerBaseUrl, value).validHttpUrl()
     }
 
     private fun String.isXtreamLiveUrl(): Boolean {
