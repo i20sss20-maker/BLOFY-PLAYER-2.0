@@ -48,9 +48,26 @@ object TwoPaneFocusGuard {
         val columns = grid?.spanCount ?: 1
         val rtl = owner.layoutDirection == View.LAYOUT_DIRECTION_RTL
 
+        // Search/top controls are reachable only by an explicit UP from the first visual row.
+        // DOWN can never escape a list/grid and jump back to the search bar.
         if (direction == View.FOCUS_UP && position < columns) {
             val top = topTargets[owner]?.get()
             if (top != null && top.isShown && top.isFocusable && top.requestFocus()) return true
+            return true
+        }
+
+        // Vertical movement is computed by adapter position instead of Android geometry search.
+        // This prevents a long/virtualized RecyclerView from choosing the top search field while
+        // the user is repeatedly pressing DOWN.
+        if (direction == View.FOCUS_DOWN) {
+            val next = position + columns
+            if (next < count) focusItem(owner, next)
+            return true
+        }
+        if (direction == View.FOCUS_UP) {
+            val next = position - columns
+            if (next >= 0) focusItem(owner, next)
+            return true
         }
 
         // Product choice: entering content starts at the first item; no previous poster bookmark.
