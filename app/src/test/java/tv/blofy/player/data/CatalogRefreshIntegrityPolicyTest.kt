@@ -26,6 +26,27 @@ class CatalogRefreshIntegrityPolicyTest {
         ))
     }
 
+    @Test fun rejectsLargeButStillIncompleteHugeSection() {
+        assertFalse(CatalogRefreshIntegrityPolicy.accepts(
+            CatalogRefreshIntegrityPolicy.Counts(live = 5_000, movies = 100_000, series = 20_000),
+            CatalogRefreshIntegrityPolicy.Counts(live = 5_000, movies = 60_000, series = 20_000)
+        ))
+    }
+
+    @Test fun acceptsReasonableHugeCatalogChange() {
+        assertTrue(CatalogRefreshIntegrityPolicy.accepts(
+            CatalogRefreshIntegrityPolicy.Counts(live = 5_000, movies = 100_000, series = 20_000),
+            CatalogRefreshIntegrityPolicy.Counts(live = 4_500, movies = 90_000, series = 18_000)
+        ))
+    }
+
+    @Test fun keepsModerateCatalogPolicyFlexible() {
+        assertTrue(CatalogRefreshIntegrityPolicy.accepts(
+            CatalogRefreshIntegrityPolicy.Counts(live = 200, movies = 500, series = 120),
+            CatalogRefreshIntegrityPolicy.Counts(live = 120, movies = 260, series = 70)
+        ))
+    }
+
     @Test fun allowsProviderThatLegitimatelyHasNoSectionInBaseline() {
         assertTrue(CatalogRefreshIntegrityPolicy.accepts(
             CatalogRefreshIntegrityPolicy.Counts(live = 500, movies = 0, series = 0),
