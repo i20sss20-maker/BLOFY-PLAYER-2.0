@@ -160,7 +160,9 @@ interface BlofyDao {
      * stable rowids used by keyset paging.
      *
      * Fresh staged catalogs take the direct path: there is nothing to diff, so avoid building huge
-     * old/incoming maps and write the already parsed rows in bounded batches.
+     * old/incoming maps and write the already parsed rows in bounded batches. Search rows are
+     * generated alongside each stream batch so a 100k+ catalog never needs a second full pass or
+     * a second catalog-sized allocation just to become searchable.
      */
     @Transaction
     suspend fun replaceCatalog(
@@ -173,11 +175,15 @@ interface BlofyDao {
         val existingStreamCount = catalogCountAll(providerId, kind)
 
         if (existingStreamCount == 0 && oldCategoriesList.isEmpty()) {
-            categories.chunked(CATALOG_INSERT_BATCH_SIZE)
-                .forEach { if (it.isNotEmpty()) upsertCategories(it) }
-            streams.chunked(CATALOG_INSERT_BATCH_SIZE)
-                .forEach { if (it.isNotEmpty()) upsertStreams(it) }
-            rebuildSearchIndex(providerId, kind, streams)
+            categories.asSequence().chunked(CATALOG_INSERT_BATCH_SIZE)
+                .forEach { batch -> if (batch.isNotEmpty()) upsertCategories(batch) }
+            clearSearchIndex(providerId, kind)
+            streams.asSequence().chunked(SEARCH_INSERT_BATCH_SIZE).forEach { batch ->
+                if (batch.isNotEmpty()) {
+                    upsertStreams(batch)
+                    insertSearchRows(batch.map(::searchRow))
+                }
+            }
             return
         }
 
@@ -193,10 +199,10 @@ interface BlofyDao {
             .chunked(SQLITE_BIND_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) deleteStreamsByKeys(it) }
 
-        categories.filter { oldCategories[it.key] != it }
+        categories.asSequence().filter { oldCategories[it.key] != it }
             .chunked(CATALOG_INSERT_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) upsertCategories(it) }
-        streams.filter { oldStreams[it.key] != it }
+        streams.asSequence().filter { oldStreams[it.key] != it }
             .chunked(CATALOG_INSERT_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) upsertStreams(it) }
 
@@ -223,7 +229,7 @@ interface BlofyDao {
         old.keys.filterNot(incoming::containsKey)
             .chunked(SQLITE_BIND_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) deleteEpisodesByKeys(it) }
-        episodes.filter { old[it.key] != it }
+        episodes.asSequence().filter { old[it.key] != it }
             .chunked(CATALOG_INSERT_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) upsertEpisodes(it) }
     }
@@ -237,7 +243,7 @@ interface BlofyDao {
         old.keys.filterNot(incoming::containsKey)
             .chunked(SQLITE_BIND_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) deleteEpisodesByKeys(it) }
-        episodes.filter { old[it.key] != it }
+        episodes.asSequence().filter { old[it.key] != it }
             .chunked(CATALOG_INSERT_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) upsertEpisodes(it) }
     }
@@ -262,7 +268,7 @@ interface BlofyDao {
     @Transaction
     suspend fun rebuildSearchIndex(providerId: String, kind: String, streams: List<StreamEntity>) {
         clearSearchIndex(providerId, kind)
-        streams.map(::searchRow)
+        streams.asSequence().map(::searchRow)
             .chunked(SEARCH_INSERT_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) insertSearchRows(it) }
     }
