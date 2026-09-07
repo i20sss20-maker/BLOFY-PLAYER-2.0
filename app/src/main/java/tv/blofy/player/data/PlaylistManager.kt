@@ -4,20 +4,15 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.first
 import tv.blofy.player.core.text.ArabicSearchNormalizer
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.EpgEntity
-import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.StreamSearchFtsEntity
-import tv.blofy.player.data.m3u.M3uPlaylistLoader
 import tv.blofy.player.data.remote.XtreamApi
 import tv.blofy.player.data.remote.XtreamIdentifier
 import java.io.FilterInputStream
@@ -31,19 +26,18 @@ data class PlaylistSyncResult(
     val failedSectionCount: Int = 0
 )
 
+/** Xtream-only catalog synchronization for BLOFY rc07.12+. */
 class PlaylistManager(
     private val api: XtreamApi,
-    private val dao: BlofyDao,
-    private val m3uLoader: M3uPlaylistLoader = M3uPlaylistLoader()
+    private val dao: BlofyDao
 ) {
     suspend fun syncAll(
         provider: ProviderEntity,
         onProgress: suspend (PlaylistSyncProgress) -> Unit = {}
     ): PlaylistSyncResult {
-        if (provider.providerType.equals("m3u", true)) {
-            onProgress(PlaylistSyncProgress(PlaylistSyncStage.M3U, 1, 1))
-            return PlaylistSyncResult(syncM3u(provider))
-        }
+        require(provider.providerType.equals("xtream", true)) { "Xtream provider required" }
+        require(provider.username.isNotBlank() && provider.password.isNotBlank()) { "Xtream credentials required" }
+
         var freshItemCount = 0
         val sectionResult = runXtreamSections(
             listOf(
@@ -67,92 +61,13 @@ class PlaylistManager(
                 }
             )
         )
-        return PlaylistSyncResult(
-            freshItemCount = freshItemCount,
-            failedSectionCount = sectionResult.failureCount
-        )
-    }
-
-    private suspend fun syncM3u(provider: ProviderEntity): Int {
-        val kinds = listOf("live", "movie", "series")
-        var previousCount = 0
-        var hasExistingCategories = false
-        for (kind in kinds) {
-            previousCount += dao.catalogCountAll(provider.id, kind)
-            if (!hasExistingCategories && dao.categorySnapshot(provider.id, kind).isNotEmpty()) {
-                hasExistingCategories = true
-            }
-        }
-
-        // Fresh providers and staged refresh providers have no known-good rows under their own ID.
-        // Stream them directly into Room so a huge M3U never becomes one giant String/List in RAM.
-        if (previousCount == 0 && !hasExistingCategories) {
-            dao.clearProviderCatalog(provider.id)
-            return try {
-                val summary = m3uLoader.loadStreaming(
-                    provider = provider,
-                    onStreamBatch = { batch ->
-                        if (batch.isNotEmpty()) dao.upsertStreams(batch)
-                    },
-                    onEpisodeBatch = { batch ->
-                        if (batch.isNotEmpty()) dao.upsertEpisodes(batch)
-                    },
-                    onAttemptReset = { dao.clearProviderCatalog(provider.id) },
-                )
-                summary.categories.asSequence().chunked(DIRECT_CATEGORY_BATCH).forEach { batch ->
-                    if (batch.isNotEmpty()) dao.upsertCategories(batch)
-                }
-
-                var storedCount = 0
-                for (kind in kinds) storedCount += dao.catalogCountAll(provider.id, kind)
-                val accepted = CatalogReplacementPolicy.shouldReplace(
-                    previousStreamCount = 0,
-                    sourceCategoryCount = summary.categories.size,
-                    parsedCategoryCount = summary.categories.size,
-                    sourceStreamCount = summary.streamCount,
-                    parsedStreamCount = storedCount,
-                )
-                if (!accepted || storedCount <= 0) {
-                    dao.clearProviderCatalog(provider.id)
-                    return 0
-                }
-
-                // Build search from bounded Room pages after the durable catalog is present. This
-                // avoids retaining a second 100k+ FTS list while network data is still arriving.
-                dao.rebuildSearchIndex(provider.id)
-                storedCount
-            } catch (failure: Throwable) {
-                withContext(NonCancellable) {
-                    runCatching { dao.clearProviderCatalog(provider.id) }
-                }
-                throw failure
-            }
-        }
-
-        // Compatibility path for an in-place M3U sync. Normal refreshes are staged by
-        // CatalogRefreshWorker, so large production refreshes use the bounded path above.
-        val parsed = m3uLoader.load(provider)
-        val previousFlags = ArrayList<StreamEntity>()
-        for (kind in kinds) previousFlags += dao.persistedStreamFlags(provider.id, kind)
-        val streams = PreviousStreamFlags(previousFlags).applyTo(parsed.streams)
-
-        if (!CatalogReplacementPolicy.shouldReplace(
-                previousStreamCount = previousCount,
-                sourceCategoryCount = parsed.categories.size,
-                parsedCategoryCount = parsed.categories.size,
-                sourceStreamCount = parsed.streams.size,
-                parsedStreamCount = streams.size
-            )
-        ) return 0
-        dao.replaceM3uCatalog(provider.id, parsed.categories, streams, parsed.episodes)
-        return streams.size
+        return PlaylistSyncResult(freshItemCount, sectionResult.failureCount)
     }
 
     suspend fun syncLive(
         provider: ProviderEntity,
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
-        if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_live_categories"))
         val previousCount = dao.catalogCountAll(provider.id, "live")
         val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "live"))
@@ -210,7 +125,6 @@ class PlaylistManager(
         provider: ProviderEntity,
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
-        if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
         val previousCount = dao.catalogCountAll(provider.id, "movie")
         val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "movie"))
@@ -269,7 +183,6 @@ class PlaylistManager(
         provider: ProviderEntity,
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
-        if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_series_categories"))
         val previousCount = dao.catalogCountAll(provider.id, "series")
         val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "series"))
@@ -329,8 +242,6 @@ class PlaylistManager(
         categories: List<CategoryEntity>
     ): Boolean {
         if (previousCount != 0 || dao.categorySnapshot(providerId, kind).isNotEmpty()) return false
-        // Fresh staged providers have no known-good rows. Store categories once, then stream rows
-        // directly to Room instead of retaining a catalog-sized ArrayList in memory.
         dao.clearCategories(providerId, kind)
         dao.clearStreams(providerId, kind)
         dao.clearSearchIndex(providerId, kind)
@@ -382,11 +293,6 @@ class PlaylistManager(
         val items: List<T>
     )
 
-    /**
-     * Streaming parser used by Live/VOD/Series. On a fresh staged section converted rows are flushed
-     * directly to Room in bounded batches, so neither the raw JSON nor a second 100k+ entity list is
-     * retained. Existing catalogs still retain the incoming list because diff replacement needs it.
-     */
     private suspend fun <T> parseStreamingArray(
         url: String,
         progressStart: Int,
@@ -443,10 +349,6 @@ class PlaylistManager(
     }
 
     suspend fun syncSeriesEpisodes(provider: ProviderEntity, seriesId: String): SeriesEpisodeSyncResult {
-        if (provider.providerType.equals("m3u", true)) {
-            val cached = dao.episodes(provider.id, seriesId).first()
-            return SeriesEpisodeSyncResult(cached.size, payloadPresent = true, cacheUpdated = false)
-        }
         val requestSeriesId = SeriesEpisodeParser.normalizeSeriesIdForRequest(seriesId)
         val response = api.jsonResponse(actionUrl(provider, "get_series_info", mapOf("series_id" to requestSeriesId)))
         val parsed = SeriesEpisodeParser.parse(provider.id, seriesId, response)
@@ -455,7 +357,6 @@ class PlaylistManager(
     }
 
     suspend fun syncShortEpg(provider: ProviderEntity, streamId: String, limit: Int = 20) {
-        if (provider.providerType.equals("m3u", true)) return
         val response = api.objectResponse(actionUrl(provider, "get_short_epg", mapOf("stream_id" to streamId, "limit" to limit.toString())))
         val items = parseEpg(provider.id, streamId, response["epg_listings"] as? List<*> ?: emptyList<Any?>())
         dao.clearEpg(provider.id, streamId)
@@ -463,7 +364,6 @@ class PlaylistManager(
     }
 
     suspend fun syncCatchupEpg(provider: ProviderEntity, streamId: String) {
-        if (provider.providerType.equals("m3u", true)) return
         val response = api.objectResponse(actionUrl(provider, "get_simple_data_table", mapOf("stream_id" to streamId)))
         val rows = response["epg_listings"] as? List<*> ?: emptyList<Any?>()
         val items = parseEpg(provider.id, streamId, rows)
@@ -523,11 +423,13 @@ class PlaylistManager(
 private class CountingInputStream(input: InputStream) : FilterInputStream(input) {
     var bytesRead: Long = 0L
         private set
+
     override fun read(): Int {
         val value = super.read()
         if (value >= 0) bytesRead += 1
         return value
     }
+
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         val count = super.read(buffer, offset, length)
         if (count > 0) bytesRead += count.toLong()
@@ -539,25 +441,30 @@ internal class PreviousStreamFlags(previous: List<StreamEntity>) {
     private data class Flags(val favorite: Boolean = false, val locked: Boolean = false) {
         fun merge(other: Flags) = Flags(favorite || other.favorite, locked || other.locked)
     }
+
     private val byAlias = buildMap<String, Flags> {
         previous.forEach { stream ->
             val flags = Flags(stream.favorite, stream.locked)
             aliases(stream).forEach { alias -> put(alias, get(alias)?.merge(flags) ?: flags) }
         }
     }
+
     fun applyTo(stream: StreamEntity): StreamEntity {
         if (byAlias.isEmpty()) return stream
         val flags = aliases(stream).mapNotNull(byAlias::get)
             .fold(Flags(stream.favorite, stream.locked)) { combined, item -> combined.merge(item) }
         return stream.copy(favorite = flags.favorite, locked = flags.locked)
     }
+
     fun applyTo(streams: List<StreamEntity>): List<StreamEntity> = streams.map(::applyTo)
+
     private fun aliases(stream: StreamEntity): Set<String> = buildSet {
         add("key:${stream.key}")
         add("id:${stream.kind}:${legacyCompatibleId(stream.remoteId)}")
         stream.key.substringAfterLast(':', missingDelimiterValue = "").takeIf { it.isNotBlank() }
             ?.let { add("id:${stream.kind}:${legacyCompatibleId(it)}") }
     }
+
     companion object {
         private val LEGACY_DECIMAL_INTEGER = Regex("[+-]?\\d+\\.0+")
         internal fun legacyCompatibleId(value: String): String {
