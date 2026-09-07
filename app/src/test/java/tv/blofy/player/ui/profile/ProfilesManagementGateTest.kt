@@ -2,6 +2,7 @@ package tv.blofy.player.ui.profile
 
 import android.app.AlertDialog
 import android.app.Application
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -15,6 +16,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
@@ -41,22 +43,35 @@ class ProfilesManagementGateTest {
         controller = null
     }
 
-    private fun open() { controller = Robolectric.buildActivity(ProfilesActivity::class.java).setup() }
+    private fun open() {
+        controller = Robolectric.buildActivity(ProfilesActivity::class.java).setup()
+        idleMain()
+    }
+    private fun idleMain() { shadowOf(Looper.getMainLooper()).idle() }
+    private fun clickAndIdle(view: View) {
+        view.performClick()
+        // Platform dialogs deliver OnShow and standard button callbacks through Handler messages.
+        // PAUSED mode must dispatch them before the next user action or state assertion.
+        idleMain()
+    }
     private fun views(root: View): List<View> = listOf(root) +
         if (root is ViewGroup) (0 until root.childCount).flatMap { views(root.getChildAt(it)) } else emptyList()
     private fun tapButton(label: String) {
-        views(activity.window.decorView).filterIsInstance<Button>().single { it.text.toString() == label }.performClick()
+        clickAndIdle(views(activity.window.decorView).filterIsInstance<Button>().single { it.text.toString() == label })
     }
-    private fun dialog(): AlertDialog = checkNotNull(ShadowAlertDialog.getLatestAlertDialog()).also { assertTrue(it.isShowing) }
+    private fun dialog(): AlertDialog {
+        idleMain()
+        return checkNotNull(ShadowAlertDialog.getLatestAlertDialog()).also { assertTrue(it.isShowing) }
+    }
     private fun answerPin(pin: String) {
         val prompt = dialog()
         views(prompt.window!!.decorView).filterIsInstance<EditText>().single().setText(pin)
-        prompt.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        clickAndIdle(prompt.getButton(AlertDialog.BUTTON_POSITIVE))
     }
     private fun tapProfile(name: String) {
         val title = views(activity.window.decorView).filterIsInstance<TextView>()
             .single { it.text.toString().startsWith("👤  $name") }
-        (title.parent as View).performClick()
+        clickAndIdle(title.parent as View)
     }
 
     @Test fun contentPinCannotBeClearedWithoutItsCurrentPin() {
@@ -141,7 +156,7 @@ class ProfilesManagementGateTest {
         tapButton("＋ إضافة ملف")
         val prompt = dialog()
         views(prompt.window!!.decorView).filterIsInstance<EditText>().single().setText("New adult")
-        prompt.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        clickAndIdle(prompt.getButton(AlertDialog.BUTTON_POSITIVE))
         assertTrue(ProfileStore.all(context).any { it.name == "New adult" && !it.kids })
     }
 

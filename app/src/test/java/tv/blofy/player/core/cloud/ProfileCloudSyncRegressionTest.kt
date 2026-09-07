@@ -40,7 +40,7 @@ class ProfileCloudSyncRegressionTest {
 
     @After fun cleanup() { server.shutdown() }
 
-    @Test fun inFlightUploadPreservesLocalRemovalAndUnrelatedRemoteAddition() = runBlocking(Dispatchers.IO) {
+    @Test fun inFlightUploadPreservesLocalRemovalAndUnrelatedRemoteAddition(): Unit = runBlocking(Dispatchers.IO) {
         ProfileLibraryStore.setWatchlisted(app, "old", true, profileId)
         val incoming = ProfileLibraryStore.snapshotJson(app, profileId).apply {
             put("watchlist", JSONArray(listOf("old", "remote")))
@@ -68,7 +68,7 @@ class ProfileCloudSyncRegressionTest {
         assertEquals(2L, ProfileCloudSync.knownRevision(app, profileId))
     }
 
-    @Test fun inFlightDownloadPreservesNewSettingAndRemoteItems() = runBlocking(Dispatchers.IO) {
+    @Test fun inFlightDownloadPreservesNewSettingAndRemoteItems(): Unit = runBlocking(Dispatchers.IO) {
         val getStarted = CountDownLatch(1)
         val allowGet = CountDownLatch(1)
         val incoming = ProfileLibraryStore.snapshotJson(app, profileId).apply {
@@ -92,7 +92,7 @@ class ProfileCloudSyncRegressionTest {
         assertEquals(mapOf("remoteSetting" to true, "localSetting" to true), ProfileLibraryStore.settings(app, profileId))
     }
 
-    @Test fun publicAutomaticSyncEntrySerializesConcurrentRequests() = runBlocking(Dispatchers.IO) {
+    @Test fun publicAutomaticSyncEntrySerializesConcurrentRequests(): Unit = runBlocking(Dispatchers.IO) {
         val firstStarted = CountDownLatch(1)
         val allowFirst = CountDownLatch(1)
         val snapshot = ProfileLibraryStore.snapshotJson(app, profileId)
