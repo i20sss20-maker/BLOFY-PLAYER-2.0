@@ -36,7 +36,12 @@ internal object ProviderSecretCodec {
         password = open(provider.password),
     )
 
+    fun needsSealing(provider: ProviderEntity): Boolean =
+        needsSealing(provider.baseUrl) || needsSealing(provider.username) || needsSealing(provider.password)
+
     fun isSealed(value: String): Boolean = value.startsWith(PREFIX)
+
+    private fun needsSealing(value: String): Boolean = value.isNotEmpty() && !isSealed(value)
 
     private fun seal(value: String): String {
         if (value.isEmpty() || isSealed(value)) return value
