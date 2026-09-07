@@ -2,9 +2,10 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { groupPlaylists, playlistIdentity, playlistUuid } from './playlist-identity.mjs';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { createLiteralByteReplace } from './literal-byte-replace.mjs';
 import pg from 'pg';
-import { createActivationCredentialCodec, isAuthLocked } from './auth-protection.mjs';
+import { createActivationCredentialCodec, createDeviceAuthenticator, isAuthLocked, sendDeviceAuthRateLimit } from './auth-protection.mjs';
 
 const { Pool } = pg;
 const SUBSCRIBER_HOST_RAW = String(process.env.BLOFY_SUBSCRIBER_HOST || '').trim();
@@ -26,6 +27,9 @@ const encryptionKey = /^[a-fA-F0-9]{64}$/.test(PLAYLIST_ENCRYPTION_KEY)
   ? Buffer.from(PLAYLIST_ENCRYPTION_KEY, 'hex')
   : null;
 const activationCredentials = encryptionKey ? createActivationCredentialCodec(PLAYLIST_ENCRYPTION_KEY) : null;
+const targetEncryptionKey = encryptionKey
+  ? crypto.createHmac('sha256', encryptionKey).update('blofy-subscriber-proxy-target:v2').digest()
+  : null;
 const pool = DATABASE_URL
   ? new Pool({
       connectionString: DATABASE_URL,
@@ -33,6 +37,7 @@ const pool = DATABASE_URL
     })
   : null;
 const sessionAccessCache = new Map();
+const authenticateDevice = createDeviceAuthenticator({ pool, activationCredentials });
 
 function normalizeSubscriberHost(value) {
   if (!value) return null;
@@ -77,9 +82,6 @@ async function readJson(req) {
   return body ? JSON.parse(body) : {};
 }
 
-function validIdentity(deviceId, activationCode) {
-  return /^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) && /^\d{6}$/.test(activationCode);
-}
 
 function validSessionDeviceId(deviceId) {
   return /^BLOFY-[A-Z0-9-]{4,32}$/i.test(String(deviceId || ''));
@@ -91,15 +93,10 @@ function normalizeDeviceStatus(row) {
   return row?.status;
 }
 
-async function authorizedDevice(deviceId, activationCode) {
-  if (!available() || !validIdentity(deviceId, activationCode)) return false;
-  const result = await pool.query(
-    'SELECT device_id,activation_code,status,expires_at,auth_locked_until FROM devices WHERE device_id=$1 LIMIT 1',
-    [deviceId]
-  );
-  const row = result.rows[0];
-  if (!row || isAuthLocked(row) || !activationCredentials.matches(row, activationCode)) return false;
-  return ['trial', 'active'].includes(normalizeDeviceStatus(row));
+async function authorizedDevice(deviceId, activationCode, req) {
+  if (!available()) return false;
+  const row = await authenticateDevice(deviceId, activationCode, req);
+  return Boolean(row && ['trial', 'active'].includes(normalizeDeviceStatus(row)));
 }
 
 function pruneSessionAccessCache(nowMs) {
@@ -193,18 +190,37 @@ function proxyTargetUrl(req, token, target) {
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('invalid_proxy_target');
   parsed.username = '';
   parsed.password = '';
-  const encoded = Buffer.from(parsed.toString(), 'utf8').toString('base64url');
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', targetEncryptionKey, iv);
+  cipher.setAAD(Buffer.from(`v2\n${token}`, 'utf8'));
+  const ciphertext = Buffer.concat([cipher.update(parsed.toString(), 'utf8'), cipher.final()]);
+  const encoded = `v2.${Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64url')}`;
   const signature = targetSignature(token, encoded);
   return `${requestOrigin(req)}${XTREAM_PREFIX}/url/${encodeURIComponent(token)}/${encoded}/${signature}`;
 }
 
 function verifiedTarget(token, encoded, signature) {
   try {
-    if (!encoded || encoded.length > 8192 || !signature) return null;
+    if (!encoded || encoded.length > (encoded.startsWith('v2.') ? 8256 : 8192) || !signature) return null;
     const expected = Buffer.from(targetSignature(token, encoded));
     const supplied = Buffer.from(String(signature));
     if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) return null;
-    const target = Buffer.from(encoded, 'base64url').toString('utf8');
+    let target;
+    if (encoded.startsWith('v2.')) {
+      // A failed v2 envelope is never interpreted as a legacy plaintext target.
+      if (!/^[A-Za-z0-9_-]+$/.test(encoded.slice(3))) return null;
+      const packed = Buffer.from(encoded.slice(3), 'base64url');
+      if (packed.length < 29) return null;
+      const decipher = crypto.createDecipheriv('aes-256-gcm', targetEncryptionKey, packed.subarray(0, 12));
+      decipher.setAAD(Buffer.from(`v2\n${token}`, 'utf8'));
+      decipher.setAuthTag(packed.subarray(12, 28));
+      target = Buffer.concat([decipher.update(packed.subarray(28)), decipher.final()]).toString('utf8');
+    } else {
+      // Read-only compatibility for manifests already issued to still-valid sessions.
+      // All new manifests use v2 encryption; the signature above is required in both formats.
+      if (!/^[A-Za-z0-9_-]+$/.test(encoded)) return null;
+      target = Buffer.from(encoded, 'base64url').toString('utf8');
+    }
     const parsed = new URL(target);
     if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) return null;
     return parsed.toString();
@@ -256,7 +272,7 @@ function copyUpstreamHeaders(upstream, res, { textual = false } = {}) {
   res.writeHead(normalizedUpstreamStatus(upstream.status), headers);
 }
 
-async function fetchUpstream(url, req) {
+async function fetchUpstream(url, req, controller) {
   const headers = {};
   for (const name of ['range', 'accept', 'accept-language', 'user-agent', 'if-none-match', 'if-modified-since']) {
     const value = req.headers[name];
@@ -266,7 +282,6 @@ async function fetchUpstream(url, req) {
   if (!headers.accept) headers.accept = '*/*';
   headers['accept-encoding'] = 'identity';
 
-  const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 45_000);
   try {
     return await fetch(url, {
@@ -281,36 +296,50 @@ async function fetchUpstream(url, req) {
 }
 
 async function pipeUpstream(req, res, url, token) {
-  const upstream = await fetchUpstream(url, req);
-  const effectiveUrl = upstream.url || url;
-  const type = String(upstream.headers.get('content-type') || '').toLowerCase();
-  const isHls = type.includes('mpegurl') || effectiveUrl.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('.m3u8');
-  const isTextual = isHls || type.includes('json') || type.startsWith('text/');
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const onResponseClose = () => { if (!res.writableFinished) abort(); };
+  req.once('aborted', abort);
+  res.once('close', onResponseClose);
+  if (req.aborted || res.destroyed) abort();
+  try {
+    const upstream = await fetchUpstream(url, req, controller);
+    const effectiveUrl = upstream.url || url;
+    const type = String(upstream.headers.get('content-type') || '').toLowerCase();
+    const isHls = type.includes('mpegurl') || effectiveUrl.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('.m3u8');
+    const isTextual = isHls || type.includes('json') || type.startsWith('text/');
 
-  if (!upstream.body) {
-    copyUpstreamHeaders(upstream, res, { textual: isTextual });
-    return res.end();
-  }
-
-  if (isHls) {
-    const text = await upstream.text();
-    const rewritten = rewriteHlsManifest(req, token, text, effectiveUrl);
-    const headers = {};
-    for (const [key, value] of upstream.headers.entries()) {
-      const lower = key.toLowerCase();
-      if (!['content-length', 'content-encoding', 'connection', 'transfer-encoding', 'location'].includes(lower)) headers[lower] = value;
+    if (!upstream.body) {
+      copyUpstreamHeaders(upstream, res, { textual: isTextual });
+      return res.end();
     }
-    headers['content-length'] = Buffer.byteLength(rewritten);
-    headers['cache-control'] = 'no-store';
-    if (upstream.status === 884) headers['x-blofy-upstream-status'] = '884';
-    res.writeHead(normalizedUpstreamStatus(upstream.status), headers);
-    return res.end(rewritten);
-  }
 
-  copyUpstreamHeaders(upstream, res, { textual: isTextual });
-  const readable = Readable.fromWeb(upstream.body);
-  if (isTextual) readable.pipe(replacePrivateOriginStream(req, token)).pipe(res);
-  else readable.pipe(res);
+    if (isHls) {
+      const text = await upstream.text();
+      const rewritten = rewriteHlsManifest(req, token, text, effectiveUrl);
+      const headers = {};
+      for (const [key, value] of upstream.headers.entries()) {
+        const lower = key.toLowerCase();
+        if (!['content-length', 'content-encoding', 'connection', 'transfer-encoding', 'location'].includes(lower)) headers[lower] = value;
+      }
+      headers['content-length'] = Buffer.byteLength(rewritten);
+      headers['cache-control'] = 'no-store';
+      if (upstream.status === 884) headers['x-blofy-upstream-status'] = '884';
+      res.writeHead(normalizedUpstreamStatus(upstream.status), headers);
+      return res.end(rewritten);
+    }
+
+    copyUpstreamHeaders(upstream, res, { textual: isTextual });
+    const readable = Readable.fromWeb(upstream.body);
+    if (isTextual) await pipeline(readable, replacePrivateOriginStream(req, token), res, { signal: controller.signal });
+    else await pipeline(readable, res, { signal: controller.signal });
+  } catch (error) {
+    abort();
+    throw error;
+  } finally {
+    req.off('aborted', abort);
+    res.off('close', onResponseClose);
+  }
 }
 
 async function fetchSubscriberAuth(authUrl) {
@@ -350,7 +379,7 @@ async function createSubscriberSession(req, res) {
   if (!username || !password || username.length > MAX_LOGIN_USERNAME || password.length > MAX_LOGIN_PASSWORD) {
     return sendJson(res, 400, { error: 'invalid_subscriber_credentials' });
   }
-  if (!await authorizedDevice(deviceId, activationCode)) {
+  if (!await authorizedDevice(deviceId, activationCode, req)) {
     return sendJson(res, 403, { error: 'unauthorized_device' });
   }
 
@@ -404,7 +433,7 @@ async function proxyStream(req, res, requestUrl) {
   const [, kind, encodedToken, tail] = match;
   const token = decodeURIComponent(encodedToken);
   const checked = await requireSession(token);
-  if (!checked.session) return sendJson(res, checked.status, { error: checked.error });
+  if (!checked.session) { sendJson(res, checked.status, { error: checked.error }); return true; }
   const session = checked.session;
   const target = `${subscriberHost}/${kind}/${encodeURIComponent(session.u)}/${encodeURIComponent(session.p)}/${tail}${requestUrl.search}`;
   await pipeUpstream(req, res, target, token);
@@ -416,9 +445,9 @@ async function proxySignedUrl(req, res, requestUrl) {
   if (!match) return false;
   const token = decodeURIComponent(match[1]);
   const checked = await requireSession(token);
-  if (!checked.session) return sendJson(res, checked.status, { error: checked.error });
+  if (!checked.session) { sendJson(res, checked.status, { error: checked.error }); return true; }
   const target = verifiedTarget(token, match[2], match[3]);
-  if (!target) return sendJson(res, 403, { error: 'invalid_proxy_target' });
+  if (!target) { sendJson(res, 403, { error: 'invalid_proxy_target' }); return true; }
   await pipeUpstream(req, res, target, token);
   return true;
 }
@@ -428,7 +457,7 @@ async function proxyRaw(req, res, requestUrl) {
   if (!match) return false;
   const token = decodeURIComponent(match[1]);
   const checked = await requireSession(token);
-  if (!checked.session) return sendJson(res, checked.status, { error: checked.error });
+  if (!checked.session) { sendJson(res, checked.status, { error: checked.error }); return true; }
   const path = match[2] || '/';
   await pipeUpstream(req, res, upstreamUrl(path, requestUrl.search), token);
   return true;
@@ -437,13 +466,14 @@ async function proxyRaw(req, res, requestUrl) {
 async function handleSubscriberRequest(req, res) {
   const requestUrl = new URL(req.url || '/', 'http://localhost');
   if (req.method === 'GET' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/health`) {
-    return sendJson(res, available() ? 200 : 503, {
+    sendJson(res, available() ? 200 : 503, {
       ok: available(),
       hostConfigured: Boolean(subscriberHost),
       encryptionReady: Boolean(encryptionKey && activationCredentials),
       databaseReady: Boolean(pool),
       deviceRecheckMs: SESSION_DEVICE_CHECK_MS
     });
+    return true;
   }
   if (req.method === 'POST' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/session`) {
     await createSubscriberSession(req, res);
@@ -454,12 +484,10 @@ async function handleSubscriberRequest(req, res) {
     return true;
   }
   if (req.method === 'GET' && requestUrl.pathname.startsWith(`${XTREAM_PREFIX}/url/`)) {
-    await proxySignedUrl(req, res, requestUrl);
-    return true;
+    return proxySignedUrl(req, res, requestUrl);
   }
   if (req.method === 'GET' && requestUrl.pathname.startsWith(`${XTREAM_PREFIX}/raw/`)) {
-    await proxyRaw(req, res, requestUrl);
-    return true;
+    return proxyRaw(req, res, requestUrl);
   }
   if (req.method === 'GET' && requestUrl.pathname.startsWith(`${XTREAM_PREFIX}/`)) {
     const handled = await proxyStream(req, res, requestUrl);
@@ -474,7 +502,9 @@ http.createServer = function patchedCreateServer(listener) {
   return originalCreateServer(async (req, res) => {
     try {
       if (String(req.url || '').startsWith(SUBSCRIBER_PREFIX) && await handleSubscriberRequest(req, res)) return;
-    } catch {
+    } catch (error) {
+      if (res.destroyed || res.writableEnded) return;
+      if (sendDeviceAuthRateLimit(res, error)) return;
       if (!res.headersSent) sendJson(res, 500, { error: 'subscriber_proxy_error' });
       else res.destroy();
       return;

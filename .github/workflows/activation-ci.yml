@@ -41,6 +41,8 @@ jobs:
       BLOFY_TRIAL_DAYS: 7
       BLOFY_PLAYLIST_ENCRYPTION_KEY: 3f13b9368c3ae0dbcc7b4e7fbc28ba1247136ed4ad967f8a91a7db0911c7d4a2
       BLOFY_PAYMENT_WEBHOOK_SECRET: ci-commercial-webhook-secret-not-production
+      BLOFY_SUBSCRIBER_HOST: http://127.0.0.1:8091
+      BLOFY_SUBSCRIBER_DEVICE_CHECK_MS: 5000
       BLOFY_RELEASE_COMMIT_SHA: ${{ github.sha }}
       PORT: 8080
       BLOFY_SMOKE_BASE_URL: http://127.0.0.1:8080
@@ -87,6 +89,10 @@ jobs:
         env:
           BLOFY_E2E_BASE_URL: http://127.0.0.1:8080
         run: node test/commercial-regressions.e2e.mjs
+      - name: Subscriber proxy HTTP and PostgreSQL regressions
+        env:
+          BLOFY_E2E_BASE_URL: http://127.0.0.1:8080
+        run: node test/subscriber-proxy.e2e.mjs
       - name: Verify active expiry and reactivation lifecycle
         run: |
           curl --fail --silent -H 'content-type: application/json' \

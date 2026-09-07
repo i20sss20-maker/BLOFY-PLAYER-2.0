@@ -26,6 +26,7 @@ export async function loadHooks(names, { env = {}, pool, dependencies = {} } = {
   });
   return {
     contexts,
+    listener,
     async request(url, { method = 'GET', body, headers = {} } = {}) {
       const req = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]);
       Object.assign(req, { url, method, headers, socket: { remoteAddress: '127.0.0.1' } });

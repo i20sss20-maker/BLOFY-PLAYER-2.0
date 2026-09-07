@@ -14,6 +14,8 @@ The current owner request is a comprehensive code audit, minimal bug fixes and v
 
 Do not modify Media3, FFmpeg, fallback behavior, playback engines/routes or the current theme without an explicit owner request. Audit findings in those areas must be reported separately. A general cleanup request does not waive this restriction.
 
+On 2026-09-07, after reviewing the documented findings, the owner explicitly approved fixing these specific exceptions: Hidden Host target confidentiality, upstream stream error handling and shared subscriber PIN protection; fallback resume position, resume saving before manual episode transitions, original M3U URL preservation and Catch-up credential escaping. This authorization does not include changing Media3, FFmpeg, engine selection or the current theme. Keep the scoped fixes and regression tests in audit PR #36 until release gates are satisfied.
+
 Preserve production signing identity, stored playlists, device identity and upgrade data. Keep large catalog imports streaming into Room, and preserve the known-good catalog when refresh is incomplete. Catalog navigation and search use local data; opening or returning to a catalog must not trigger a provider refresh.
 
 ## Verification and delivery
