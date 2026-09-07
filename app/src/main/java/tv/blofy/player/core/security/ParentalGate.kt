@@ -5,11 +5,14 @@ import android.content.Context
 import android.text.InputType
 import android.widget.EditText
 import java.security.MessageDigest
+import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Local parental PIN gate with lightweight brute-force protection.
+ * Local parental PIN gate with brute-force protection and versioned PBKDF2 storage.
  * No PIN configured = content opens normally. Playback/catalog engines are untouched.
  */
 object ParentalGate {
@@ -18,6 +21,11 @@ object ParentalGate {
     private const val KEY_FAILED = "failed_attempts"
     private const val KEY_LOCKED_UNTIL = "locked_until"
     private const val MAX_ATTEMPTS = 5
+    private const val PIN_SCHEME = "v2"
+    private const val PIN_ITERATIONS = 120_000
+    private const val PIN_BITS = 256
+    private const val PIN_SALT_BYTES = 16
+    private val secureRandom = SecureRandom()
 
     fun hasPin(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_HASH, null).isNullOrBlank().not()
@@ -26,7 +34,7 @@ object ParentalGate {
         val clean = pin.trim()
         if (clean.length !in 4..8 || clean.any { !it.isDigit() }) return false
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY_HASH, hash(clean))
+            .putString(KEY_HASH, strongHash(clean))
             .remove(KEY_FAILED)
             .remove(KEY_LOCKED_UNTIL)
             .apply()
@@ -52,14 +60,24 @@ object ParentalGate {
         val now = System.currentTimeMillis()
         if (lockRemainingMs(context, now) > 0L) return false
 
-        if (saved == hash(pin.trim())) {
-            prefs.edit().remove(KEY_FAILED).remove(KEY_LOCKED_UNTIL).apply()
+        val clean = pin.trim()
+        val matches = if (saved.startsWith("$PIN_SCHEME$")) {
+            verifyStrongHash(saved, clean)
+        } else {
+            // Old builds stored a single SHA-256 digest. Accept it once, then transparently migrate
+            // the PIN to a salted PBKDF2 record so existing users are not locked out by an update.
+            MessageDigest.isEqual(saved.hexToBytes() ?: ByteArray(0), legacyHash(clean).hexToBytes() ?: ByteArray(1))
+        }
+
+        if (matches) {
+            val editor = prefs.edit().remove(KEY_FAILED).remove(KEY_LOCKED_UNTIL)
+            if (!saved.startsWith("$PIN_SCHEME$")) editor.putString(KEY_HASH, strongHash(clean))
+            editor.apply()
             return true
         }
 
         val failures = prefs.getInt(KEY_FAILED, 0) + 1
         if (failures >= MAX_ATTEMPTS) {
-            // Escalate gently for repeated lockouts while keeping TV usability reasonable.
             val extraRounds = ((failures - MAX_ATTEMPTS) / MAX_ATTEMPTS).coerceAtLeast(0)
             val lockMs = min(5 * 60_000L, 30_000L shl extraRounds.coerceAtMost(3))
             prefs.edit()
@@ -122,7 +140,41 @@ object ParentalGate {
         dialog.show()
     }
 
-    private fun hash(value: String): String = MessageDigest.getInstance("SHA-256")
+    private fun strongHash(value: String): String {
+        val salt = ByteArray(PIN_SALT_BYTES).also(secureRandom::nextBytes)
+        val derived = derive(value, salt, PIN_ITERATIONS)
+        return "$PIN_SCHEME$$PIN_ITERATIONS$${salt.toHex()}$${derived.toHex()}"
+    }
+
+    private fun verifyStrongHash(stored: String, value: String): Boolean = runCatching {
+        val parts = stored.split('$')
+        if (parts.size != 4 || parts[0] != PIN_SCHEME) return false
+        val iterations = parts[1].toIntOrNull()?.takeIf { it in 50_000..500_000 } ?: return false
+        val salt = parts[2].hexToBytes() ?: return false
+        val expected = parts[3].hexToBytes() ?: return false
+        if (salt.size !in 12..32 || expected.size != PIN_BITS / 8) return false
+        MessageDigest.isEqual(expected, derive(value, salt, iterations))
+    }.getOrDefault(false)
+
+    private fun derive(value: String, salt: ByteArray, iterations: Int): ByteArray {
+        val spec = PBEKeySpec(value.toCharArray(), salt, iterations, PIN_BITS)
+        return try {
+            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+        } finally {
+            spec.clearPassword()
+        }
+    }
+
+    private fun legacyHash(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(("BLOFY|" + value).toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
+        .toHex()
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+    private fun String.hexToBytes(): ByteArray? {
+        if (length % 2 != 0 || !matches(Regex("[0-9a-fA-F]+"))) return null
+        return runCatching {
+            ByteArray(length / 2) { index -> substring(index * 2, index * 2 + 2).toInt(16).toByte() }
+        }.getOrNull()
+    }
 }
