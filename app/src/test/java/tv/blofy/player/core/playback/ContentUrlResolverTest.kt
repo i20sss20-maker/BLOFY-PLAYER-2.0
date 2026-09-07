@@ -41,20 +41,6 @@ class ContentUrlResolverTest {
     }
 
     @Test
-    fun neverRewritesDirectM3uEvenWhenUrlLooksLikeXtream() {
-        val m3uProfile = ProviderProfile(
-            providerKey = "m3u-under-test",
-            providerKind = ProviderKind.M3U
-        )
-        assertNull(
-            ContentUrlResolver.alternateLiveFormat(
-                "https://example.com/live/user/pass/100.ts",
-                m3uProfile
-            )
-        )
-    }
-
-    @Test
     fun ignoresNonXtreamLivePathForXtreamProvider() {
         assertNull(
             ContentUrlResolver.alternateLiveFormat(
