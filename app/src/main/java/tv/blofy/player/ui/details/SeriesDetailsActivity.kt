@@ -309,7 +309,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
             putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
             putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode))
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(provider, episode))
             putExtra(PlayerActivity.EXTRA_RESUME_MS, resume)
             putExtra(PlayerActivity.EXTRA_TITLE, episode.title)
             putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
