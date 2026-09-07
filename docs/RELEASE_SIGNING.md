@@ -21,7 +21,9 @@ Run **BLOFY RC07 Signed Release** (`.github/workflows/rc07-release.yml`) from `r
 
 The workflow fails closed unless the production endpoint, database, playlist encryption, FFmpeg bundle, four Android ABIs, 16 KB APK alignment, APK/AAB signatures, and certificate fingerprint all verify. Its output is an Actions artifact; it does not publish to Google Play.
 
-The accepted device-test baseline is `2.0.0-rc07.9` / `2000017`. Before delivering another APK, increment both version fields and the corresponding workflow expectations/artifact names, pass Android and activation CI plus the signed release, and test installation over the existing production-signed APK without clearing data. Audit PR builds are not new approved device releases.
+The historical accepted device-test baseline is `2.0.0-rc07.9` / `2000017`, commit `72434a500946286b84e9c779fb44e02d6052144c`. The owner has authorized integration of audit PR #36 and preparation of `2.0.0-rc07.10` / `2000018` for device testing. Both Android version fields and the workflow expectations/artifact names now identify this candidate; its signed release has not yet been verified.
+
+Before delivering the candidate, pass Android and activation CI plus the existing signed release checks. Preserve the pinned signing certificate and verify installation over rc07.9 without clearing data during device acceptance. Audit PR builds alone are not approved device releases, and the commercial release still requires real-device approval.
 
 ## Google Play
 
