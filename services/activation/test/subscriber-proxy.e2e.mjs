@@ -92,9 +92,10 @@ const upstream = http.createServer((req, res) => {
 
 async function call(path, { body, method = body === undefined ? 'GET' : 'POST', headers = {}, ...options } = {}) {
   return fetch(new URL(path, service), {
-    method, redirect: 'error', signal: AbortSignal.timeout(10000),
+    method, redirect: 'error',
     headers: { 'content-type': 'application/json', 'x-forwarded-for': '192.0.2.73', ...headers },
-    body: body === undefined ? undefined : JSON.stringify(body), ...options
+    body: body === undefined ? undefined : JSON.stringify(body), ...options,
+    signal: AbortSignal.any([AbortSignal.timeout(10000), ...(options.signal ? [options.signal] : [])])
   });
 }
 async function json(path, options, status = 200) {
@@ -174,7 +175,8 @@ try {
   const broken = await call(`/api/v1/subscribers/xtream/live/${token}/blofy/broken.ts`);
   assert.equal(broken.status, 200);
   breakStream();
-  await assert.rejects(() => broken.arrayBuffer());
+  await assert.rejects(() => broken.arrayBuffer(), (error) =>
+    !['TimeoutError', 'AbortError'].includes(error.name));
   assert.equal((await json('/health')).ok, true);
   const controller = new AbortController();
   const slow = await call(`/api/v1/subscribers/xtream/live/${token}/blofy/slow.ts`, { signal: controller.signal });
