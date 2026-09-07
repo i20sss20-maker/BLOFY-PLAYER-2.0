@@ -17,9 +17,9 @@ import java.util.concurrent.TimeUnit
 
 class M3uPlaylistLoader(
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .callTimeout(45, TimeUnit.SECONDS)
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(35, TimeUnit.SECONDS)
+        .callTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .retryOnConnectionFailure(true)
@@ -27,11 +27,12 @@ class M3uPlaylistLoader(
 ) {
     suspend fun load(provider: ProviderEntity): ParsedM3u = withContext(Dispatchers.IO) {
         val coroutineContext = currentCoroutineContext()
+        val profiles = requestProfiles(provider.baseUrl)
         var lastStatus: Int? = null
         var lastBody = ""
         var lastFailure: Throwable? = null
 
-        requestProfiles(provider.baseUrl).forEachIndexed { index, request ->
+        profiles.forEachIndexed { index, request ->
             coroutineContext.ensureActive()
             try {
                 client.newCall(request).awaitResponse().use { response ->
@@ -39,20 +40,22 @@ class M3uPlaylistLoader(
                     val body = response.body?.string().orEmpty().removePrefix("\uFEFF")
                     lastBody = body
 
-                    // Some IPTV gateways use non-standard HTTP status codes (for example 884)
-                    // while still returning a completely valid M3U body. Content is authoritative.
+                    // IPTV gateways can answer with non-standard statuses such as 884 while the
+                    // payload itself is a valid playlist. Content is authoritative, never the code.
                     if (looksLikeM3u(body)) {
                         return@withContext parse(provider, body) { coroutineContext.ensureActive() }
                     }
 
-                    if (!shouldRetry(response.code) || index == requestProfiles(provider.baseUrl).lastIndex) {
-                        if (response.isSuccessful) error("M3U response is not a playlist")
+                    // 884 is also commonly a compatibility/profile rejection. Try VLC and Android
+                    // TV profiles before giving up; malformed 884 bodies are never accepted.
+                    if (!shouldRetry(response.code) && index == profiles.lastIndex && response.isSuccessful) {
+                        error("M3U response is not a playlist")
                     }
                 }
             } catch (failure: Throwable) {
                 coroutineContext.ensureActive()
                 lastFailure = failure
-                if (index == requestProfiles(provider.baseUrl).lastIndex) throw failure
+                if (index == profiles.lastIndex) throw failure
             }
         }
 
@@ -81,7 +84,7 @@ class M3uPlaylistLoader(
             .build()
     )
 
-    private fun shouldRetry(code: Int): Boolean = code in setOf(403, 406, 408, 425, 429) || code >= 500
+    private fun shouldRetry(code: Int): Boolean = code == 884 || code in setOf(403, 406, 408, 425, 429) || code >= 500
 
     internal fun looksLikeM3u(text: String): Boolean {
         val sample = text.trimStart().take(64 * 1024)
