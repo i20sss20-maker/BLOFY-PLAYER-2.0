@@ -44,12 +44,17 @@ object ProfileCloudClient {
         .build()
 
     suspend fun get(context: Context, baseUrl: String, profileId: String): RemoteSnapshot {
+        val deviceId = DeviceIdentity.deviceId(context)
+        val activationCode = DeviceIdentity.activationCode(context)
         val url = endpoint(baseUrl).toHttpUrl().newBuilder()
-            .addQueryParameter("deviceId", DeviceIdentity.deviceId(context))
-            .addQueryParameter("activationCode", DeviceIdentity.activationCode(context))
             .addQueryParameter("profileId", profileId)
             .build()
-        val request = Request.Builder().url(url).get().build()
+        val request = Request.Builder()
+            .url(url)
+            .header("X-BLOFY-Device-ID", deviceId)
+            .header("X-BLOFY-Activation-Code", activationCode)
+            .get()
+            .build()
         client.newCall(request).awaitResponse().use { response ->
             val raw = response.body?.string().orEmpty()
             check(response.isSuccessful) { errorName(raw, "cloud_get_http_${response.code}") }
