@@ -23,13 +23,11 @@ enum class PlayerPreference { MEDIA3, VLC }
 
 enum class ProviderKind {
     XTREAM,
-    M3U,
     UNKNOWN;
 
     companion object {
         fun from(value: String?): ProviderKind = when (value?.trim()?.lowercase()) {
             "xtream" -> XTREAM
-            "m3u" -> M3U
             else -> UNKNOWN
         }
     }
