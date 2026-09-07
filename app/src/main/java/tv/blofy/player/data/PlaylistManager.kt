@@ -4,6 +4,8 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
@@ -95,6 +97,7 @@ class PlaylistManager(
                     onEpisodeBatch = { batch ->
                         if (batch.isNotEmpty()) dao.upsertEpisodes(batch)
                     },
+                    onAttemptReset = { dao.clearProviderCatalog(provider.id) },
                 )
                 summary.categories.asSequence().chunked(DIRECT_CATEGORY_BATCH).forEach { batch ->
                     if (batch.isNotEmpty()) dao.upsertCategories(batch)
@@ -119,7 +122,9 @@ class PlaylistManager(
                 dao.rebuildSearchIndex(provider.id)
                 storedCount
             } catch (failure: Throwable) {
-                runCatching { dao.clearProviderCatalog(provider.id) }
+                withContext(NonCancellable) {
+                    runCatching { dao.clearProviderCatalog(provider.id) }
+                }
                 throw failure
             }
         }

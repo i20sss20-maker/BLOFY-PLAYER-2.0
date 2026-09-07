@@ -1,5 +1,9 @@
 package tv.blofy.player.data.m3u
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -11,13 +15,14 @@ import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import java.io.IOException
 import java.net.URI
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 class M3uPlaylistLoader(
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .callTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(30, TimeUnit.MINUTES)
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
         .followRedirects(true)
@@ -40,25 +45,48 @@ class M3uPlaylistLoader(
         provider: ProviderEntity,
         onStreamBatch: suspend (List<StreamEntity>) -> Unit,
         onEpisodeBatch: suspend (List<EpisodeEntity>) -> Unit,
+        // Only disposable staging sinks may opt into retrying after rows have been emitted.
+        // The reset must discard all prior attempt rows before another response is consumed.
+        onAttemptReset: (suspend () -> Unit)? = null,
     ): StreamingSummary = withContext(Dispatchers.IO) {
-        val coroutineContext = currentCoroutineContext()
+        val context = currentCoroutineContext()
         val profiles = requestProfiles(provider.baseUrl)
         var lastStatus: Int? = null
-        var lastFailure: Throwable? = null
+        var lastFailure: Exception? = null
+        var outputStarted = false
 
         profiles.forEachIndexed { index, request ->
-            coroutineContext.ensureActive()
+            context.ensureActive()
+            if (outputStarted) {
+                checkNotNull(onAttemptReset) { "Cannot retry a non-resettable M3U sink" }.invoke()
+                outputStarted = false
+            }
+            var sinkFailed = false
+            val call = client.newCall(request)
+            // awaitResponse covers cancellation up to headers. Continue owning the socket while
+            // readLine() is blocked on a large/slow body, and release this child on every exit.
+            val cancellationWatcher = launch(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
+                try { awaitCancellation() } finally { call.cancel() }
+            }
             try {
-                client.newCall(request).awaitResponse().use { response ->
+                call.awaitResponse().use { response ->
                     lastStatus = response.code
                     val body = response.body
                     if (body != null && (response.isSuccessful || response.code == 884)) {
                         val parsed = parseStreamingBody(
                             provider = provider,
                             lines = body.byteStream().bufferedReader(Charsets.UTF_8).lineSequence(),
-                            cancellationCheck = { coroutineContext.ensureActive() },
-                            onStreamBatch = onStreamBatch,
-                            onEpisodeBatch = onEpisodeBatch,
+                            cancellationCheck = { context.ensureActive() },
+                            onStreamBatch = { batch ->
+                                outputStarted = true
+                                try { onStreamBatch(batch) }
+                                catch (failure: Throwable) { sinkFailed = true; throw failure }
+                            },
+                            onEpisodeBatch = { batch ->
+                                outputStarted = true
+                                try { onEpisodeBatch(batch) }
+                                catch (failure: Throwable) { sinkFailed = true; throw failure }
+                            },
                         )
                         if (parsed != null) return@withContext parsed
                     }
@@ -66,10 +94,16 @@ class M3uPlaylistLoader(
                         error("M3U response is not a playlist")
                     }
                 }
-            } catch (failure: Throwable) {
-                coroutineContext.ensureActive()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                context.ensureActive()
+                // Database/storage failures are not network-profile rejections. Never turn a
+                // failed write (or a non-resettable consumer) into repeated partial imports.
+                if (sinkFailed || (outputStarted && onAttemptReset == null) || index == profiles.lastIndex) throw failure
                 lastFailure = failure
-                if (index == profiles.lastIndex) throw failure
+            } finally {
+                cancellationWatcher.cancel()
             }
         }
 
@@ -233,10 +267,12 @@ class M3uPlaylistLoader(
                 line.startsWith("#EXTINF", true) -> pending = parseMetadata(line)
                 line.isNotBlank() && !line.startsWith("#") -> {
                     val meta = pending
-                    if (meta != null) {
-                        // A valid EXTINF followed by a URL is enough for headerless M3U files.
-                        if (isSupportedMediaUrl(line)) validated = true
-                        if (validated) emit(meta, line)
+                    if (isSupportedMediaUrl(line)) {
+                        // Preserve both headerless EXTINF lists and simple header + URL lists.
+                        if (meta != null) validated = true
+                        if (validated) emit(meta ?: Metadata(name = line), line)
+                    } else if (validated || meta != null) {
+                        throw IOException("M3U response contains an invalid media entry")
                     }
                     pending = null
                 }
@@ -244,6 +280,8 @@ class M3uPlaylistLoader(
         }
 
         if (!validated) return null
+        if (pending != null) throw IOException("M3U response ended before a media URL")
+        cancellationCheck()
         flushStreams()
         flushEpisodes()
         return StreamingSummary(categories.values.toList(), streamCount, episodeCount)

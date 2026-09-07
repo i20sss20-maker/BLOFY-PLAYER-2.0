@@ -1,7 +1,8 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { groupPlaylists, playlistIdentity, playlistUuid } from './playlist-identity.mjs';
-import { Readable, Transform } from 'node:stream';
+import { Readable } from 'node:stream';
+import { createLiteralByteReplace } from './literal-byte-replace.mjs';
 import pg from 'pg';
 import { createActivationCredentialCodec, isAuthLocked } from './auth-protection.mjs';
 
@@ -213,22 +214,7 @@ function verifiedTarget(token, encoded, signature) {
 }
 
 function replacePrivateOriginStream(req, token) {
-  const needle = subscriberHost;
-  const replacement = proxyBase(req, token);
-  let tail = '';
-  const keep = Math.max(0, needle.length - 1);
-  return new Transform({
-    transform(chunk, _encoding, callback) {
-      const text = tail + chunk.toString('utf8');
-      const safeEnd = Math.max(0, text.length - keep);
-      const emit = text.slice(0, safeEnd).split(needle).join(replacement);
-      tail = text.slice(safeEnd);
-      callback(null, emit);
-    },
-    flush(callback) {
-      callback(null, tail.split(needle).join(replacement));
-    }
-  });
+  return createLiteralByteReplace(subscriberHost, proxyBase(req, token));
 }
 
 function rewriteHlsManifest(req, token, text, effectiveUrl) {
