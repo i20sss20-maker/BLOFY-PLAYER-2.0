@@ -75,21 +75,78 @@ object TwoPaneFocusGuard {
         return next.takeIf { it in 0 until count && it / columns == index / columns }
     }
 
-    /** Explicit cross-pane request, invalidated if the user moves before an off-screen row binds. */
+    /**
+     * Explicit cross-pane request. When the target row is off-screen, keep a short-lived attach
+     * listener instead of relying on one posted lookup. Slow TV boxes can bind the requested row
+     * several frames after scrollToPosition(); the old one-shot lookup could therefore consume a
+     * DPAD press without ever moving focus.
+     *
+     * The request is invalidated as soon as the user moves focus elsewhere, the adapter changes,
+     * or the stable id at the requested position changes.
+     */
     fun focusItem(list: RecyclerView, position: Int): Boolean {
         val adapter = list.adapter ?: return false
         if (position !in 0 until adapter.itemCount) return false
         val existing = list.findViewHolderForAdapterPosition(position)?.itemView
         if (existing != null) return existing.requestFocus()
+
         val origin = list.rootView.findFocus()
         val itemId = if (adapter.hasStableIds()) adapter.getItemId(position) else null
+        var listener: RecyclerView.OnChildAttachStateChangeListener? = null
+
+        fun stillValid(): Boolean {
+            if (!list.isAttachedToWindow || list.adapter !== adapter) return false
+            if (list.rootView.findFocus() !== origin) return false
+            if (position !in 0 until adapter.itemCount) return false
+            if (itemId != null && adapter.getItemId(position) != itemId) return false
+            return true
+        }
+
+        fun tryFocusTarget(): Boolean {
+            if (!stillValid()) return false
+            val target = list.findViewHolderForAdapterPosition(position)?.itemView ?: return false
+            return target.requestFocus().also { focused ->
+                if (focused) target.requestRectangleOnScreen(
+                    Rect(0, 0, target.width, target.height),
+                    true
+                )
+            }
+        }
+
+        listener = object : RecyclerView.OnChildAttachStateChangeListener {
+            override fun onChildViewAttachedToWindow(view: View) {
+                if (!stillValid()) {
+                    listener?.let(list::removeOnChildAttachStateChangeListener)
+                    listener = null
+                    return
+                }
+                val holder = list.getChildViewHolder(view)
+                if (holder.bindingAdapterPosition != position) return
+                if (tryFocusTarget()) {
+                    listener?.let(list::removeOnChildAttachStateChangeListener)
+                    listener = null
+                }
+            }
+
+            override fun onChildViewDetachedFromWindow(view: View) = Unit
+        }
+        list.addOnChildAttachStateChangeListener(listener!!)
         list.scrollToPosition(position)
         list.post {
-            if (!list.isAttachedToWindow || list.adapter !== adapter ||
-                list.rootView.findFocus() !== origin || position !in 0 until adapter.itemCount) return@post
-            if (itemId != null && adapter.getItemId(position) != itemId) return@post
-            list.findViewHolderForAdapterPosition(position)?.itemView?.requestFocus()
+            if (tryFocusTarget()) {
+                listener?.let(list::removeOnChildAttachStateChangeListener)
+                listener = null
+            } else if (!stillValid()) {
+                listener?.let(list::removeOnChildAttachStateChangeListener)
+                listener = null
+            }
         }
+        // Safety cleanup: never keep a stale listener around if this RecyclerView does not attach
+        // the row because the screen is paused/destroyed or its layout is replaced.
+        list.postDelayed({
+            listener?.let(list::removeOnChildAttachStateChangeListener)
+            listener = null
+        }, FOCUS_REQUEST_TIMEOUT_MS)
         return true
     }
 
@@ -101,4 +158,6 @@ object TwoPaneFocusGuard {
         }
         return false
     }
+
+    private const val FOCUS_REQUEST_TIMEOUT_MS = 700L
 }
