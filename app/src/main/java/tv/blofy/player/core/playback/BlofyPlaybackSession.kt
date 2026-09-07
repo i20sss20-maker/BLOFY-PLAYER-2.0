@@ -36,6 +36,7 @@ class BlofyPlaybackSession(
     private var liveStallStartedAtMs = 0L
     private var lastLiveStallRecoveryAtMs = 0L
     private var liveStallRecoveries = 0
+    private var seekRecoveryGeneration = 0
     private val fallbackState = PlaybackFallbackState()
     private val retryHandler = Handler(context.mainLooper)
     private val appContext = context.applicationContext
@@ -63,10 +64,27 @@ class BlofyPlaybackSession(
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_BUFFERING) metric?.let { metric = PlaybackDiagnostics.buffering(it) }
-                    if (playbackState == Player.STATE_READY) resetLiveStallTimer(keepPosition = true)
+                    if (playbackState == Player.STATE_READY) {
+                        resetLiveStallTimer(keepPosition = true)
+                        // A seek that reached READY is healthy; invalidate its delayed recovery.
+                        if (!contentKind.isLiveContent()) seekRecoveryGeneration++
+                    }
+                }
+
+                override fun onPositionDiscontinuity(
+                    oldPosition: Player.PositionInfo,
+                    newPosition: Player.PositionInfo,
+                    reason: Int
+                ) {
+                    if (reason == Player.DISCONTINUITY_REASON_SEEK && !contentKind.isLiveContent()) {
+                        scheduleSeekRecovery(newPosition.positionMs.coerceAtLeast(0L))
+                    }
                 }
 
                 override fun onRenderedFirstFrame() {
+                    // A completed render proves this source recovered. A later seek/error deserves
+                    // its own bounded retry instead of inheriting a startup retry forever.
+                    automaticRetries = 0
                     if (!firstFrameRecorded) {
                         metric?.let {
                             val updated = PlaybackDiagnostics.firstFrame(it)
@@ -128,6 +146,7 @@ class BlofyPlaybackSession(
 
     fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null) {
         retryHandler.removeCallbacksAndMessages(null)
+        seekRecoveryGeneration++
         automaticRetries = 0
         alternateLiveFormatAttempted = false
         liveStallRecoveries = 0
@@ -156,6 +175,21 @@ class BlofyPlaybackSession(
         player.prepare()
         if (!contentKind.isLiveContent() && position > 0L) player.seekTo(position)
         player.playWhenReady = true
+    }
+
+    private fun scheduleSeekRecovery(targetMs: Long) {
+        val generation = ++seekRecoveryGeneration
+        retryHandler.postDelayed({
+            if (generation != seekRecoveryGeneration || contentKind.isLiveContent()) return@postDelayed
+            if (player.currentMediaItem == null || !player.playWhenReady) return@postDelayed
+            if (player.playbackState == Player.STATE_BUFFERING) {
+                // Keep the same MediaItem/engine and retry at the current seek position. This is
+                // intentionally not a fallback/engine switch: many IPTV VOD servers need a fresh
+                // HTTP range request after an otherwise valid seek.
+                automaticRetries = 0
+                retrySameUrl()
+            }
+        }, SEEK_STALL_RECOVERY_MS)
     }
 
     private fun checkLiveStall() {
@@ -232,12 +266,14 @@ class BlofyPlaybackSession(
     fun isStarted(): Boolean = player.playbackState == Player.STATE_READY && player.playWhenReady
 
     fun release() {
+        seekRecoveryGeneration++
         retryHandler.removeCallbacksAndMessages(null)
         player.release()
     }
 
     private companion object {
         const val MAX_AUTOMATIC_RETRIES = 1
+        const val SEEK_STALL_RECOVERY_MS = 8_000L
         const val LIVE_STALL_WATCHDOG_INTERVAL_MS = 4_000L
         const val LIVE_STALL_RECOVERY_THRESHOLD_MS = 12_000L
         const val LIVE_STALL_RECOVERY_COOLDOWN_MS = 60_000L
