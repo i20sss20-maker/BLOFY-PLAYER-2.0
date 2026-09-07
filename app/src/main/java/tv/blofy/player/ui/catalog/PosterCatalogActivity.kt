@@ -40,6 +40,7 @@ class PosterCatalogActivity : AppCompatActivity() {
     private var categoryFocusJob: Job? = null
     private var providerId = ""
     private var selectedCategoryId: String? = null
+    private var displayedCategoryId: String? = null
     private var categoryRows: List<CategoryEntity> = emptyList()
     private var initialFocusRequested = false
     private val loadedItems = ArrayList<StreamEntity>(128)
@@ -161,8 +162,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         root.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         setContentView(root)
 
-        posterAdapter = PosterStreamAdapter(::openItem) { item ->
-            val index = loadedItems.indexOfFirst { it.key == item.key }
+        posterAdapter = PosterStreamAdapter(::openItem) { _, index ->
             if (index >= loadedItems.size - PREFETCH_THRESHOLD) loadNextPage()
         }
         posterGrid.adapter = posterAdapter
@@ -201,7 +201,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         if (providerId.isBlank() || selectedCategoryId == id) return
         categoryFocusJob?.cancel()
         categoryFocusJob = lifecycleScope.launch {
-            delay(45)
+            delay(CATEGORY_FOCUS_DEBOUNCE_MS)
             loadStreams(id, false)
         }
     }
@@ -209,24 +209,30 @@ class PosterCatalogActivity : AppCompatActivity() {
     private fun loadStreams(id: String?, immediate: Boolean) {
         if (providerId.isBlank()) return
         if (immediate) categoryFocusJob?.cancel()
-        if (selectedCategoryId == id && loadedItems.isNotEmpty()) return
+        if (selectedCategoryId == id && displayedCategoryId == id && loadedItems.isNotEmpty()) return
+
         selectedCategoryId = id
         generation++
         pageJob?.cancel()
-        loadedItems.clear()
         hasMore = true
         lastRowId = 0L
         loadingPage = false
-        val cached = CatalogPageMemory.get(memoryKey())
+
+        val cached = CatalogPageMemory.get(memoryKey(id))
         if (cached != null && cached.items.isNotEmpty()) {
+            loadedItems.clear()
             loadedItems.addAll(cached.items)
+            displayedCategoryId = id
             lastRowId = cached.lastRowId
             hasMore = cached.items.size >= PAGE_SIZE
             posterAdapter.replace(cached.items)
             updateCount()
             return
         }
-        posterAdapter.replace(emptyList())
+
+        // Keep the last complete page visible while the next category is being read from Room.
+        // This avoids a flash of an empty grid and prevents rapid DPAD movement from repeatedly
+        // destroying/recreating poster views. Cross-pane focus stays blocked until the new page lands.
         countView.text = "..."
         loadNextPage(true)
     }
@@ -234,32 +240,33 @@ class PosterCatalogActivity : AppCompatActivity() {
     private fun loadNextPage(reset: Boolean = false) {
         if (providerId.isBlank() || loadingPage || (!reset && !hasMore)) return
         val requestGeneration = generation
+        val requestCategoryId = selectedCategoryId
         val cursor = if (reset) 0L else lastRowId
         loadingPage = true
         pageJob = lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val categoryId = selectedCategoryId
             val result = withContext(Dispatchers.IO) {
-                val page = if (categoryId == null) {
+                val page = if (requestCategoryId == null) {
                     dao.catalogPageAfterAll(providerId, kind, cursor, PAGE_SIZE)
                 } else {
-                    dao.catalogPageAfterInCategory(providerId, kind, categoryId, cursor, PAGE_SIZE)
+                    dao.catalogPageAfterInCategory(providerId, kind, requestCategoryId, cursor, PAGE_SIZE)
                 }
                 page to (page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor)
             }
-            if (requestGeneration != generation) return@launch
+            if (requestGeneration != generation || requestCategoryId != selectedCategoryId) return@launch
             lastRowId = result.second
             hasMore = result.first.size >= PAGE_SIZE
             if (reset) {
                 loadedItems.clear()
                 loadedItems.addAll(result.first)
+                displayedCategoryId = requestCategoryId
                 posterAdapter.replace(result.first)
             } else {
                 loadedItems.addAll(result.first)
                 posterAdapter.append(result.first)
             }
             updateCount()
-            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(18).map { it.icon ?: it.backdrop })
+            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(12).map { it.icon ?: it.backdrop })
             loadingPage = false
             saveMemorySnapshot()
         }.also { job ->
@@ -277,14 +284,17 @@ class PosterCatalogActivity : AppCompatActivity() {
     }
 
     private fun saveMemorySnapshot() {
-        if (providerId.isNotBlank() && loadedItems.isNotEmpty()) {
-            CatalogPageMemory.put(memoryKey(), loadedItems, if (hasMore) Int.MAX_VALUE else loadedItems.size, lastRowId, null)
-        }
+        if (providerId.isBlank() || loadedItems.isEmpty()) return
+        if (displayedCategoryId != selectedCategoryId) return
+        CatalogPageMemory.put(memoryKey(displayedCategoryId), loadedItems, if (hasMore) Int.MAX_VALUE else loadedItems.size, lastRowId, null)
     }
 
-    private fun memoryKey() = "$providerId:$kind:${selectedCategoryId ?: ALL_CATEGORY_ID}"
+    private fun memoryKey(categoryId: String? = selectedCategoryId) = "$providerId:$kind:${categoryId ?: ALL_CATEGORY_ID}"
 
-    private fun requestPosterFocus(): Boolean = TwoPaneFocusGuard.focusItem(posterGrid, 0)
+    private fun requestPosterFocus(): Boolean {
+        if (displayedCategoryId != selectedCategoryId || (loadingPage && lastRowId == 0L)) return false
+        return TwoPaneFocusGuard.focusItem(posterGrid, 0)
+    }
 
     private fun requestSelectedCategoryFocus(): Boolean {
         if (categoryAdapter.itemCount == 0) return false
@@ -293,6 +303,7 @@ class PosterCatalogActivity : AppCompatActivity() {
     }
 
     private fun openItem(stream: StreamEntity) {
+        if (displayedCategoryId != selectedCategoryId) return
         startActivity(Intent(this, if (kind == KIND_SERIES) SeriesDetailsActivity::class.java else MovieDetailsActivity::class.java).apply {
             putExtra("provider_id", providerId)
             putExtra("content_key", stream.key)
@@ -307,6 +318,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         getString(if (kind == KIND_SERIES) R.string.all_series else R.string.all_movies),
         -1
     )
+
     private fun categoryRemoteId(category: CategoryEntity) = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
@@ -319,6 +331,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         const val KIND_SERIES = "series"
         private const val PAGE_SIZE = 96
         private const val PREFETCH_THRESHOLD = 28
+        private const val CATEGORY_FOCUS_DEBOUNCE_MS = 180L
         private const val ALL_CATEGORY_ID = "__all__"
     }
 }
