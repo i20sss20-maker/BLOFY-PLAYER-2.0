@@ -66,6 +66,7 @@ class LocalEntryIntegrationTest {
         assertEquals(100, progress.last())
         assertEquals(progress.sorted(), progress)
         assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryCachesReady(app, provider.id))
         assertFalse(CatalogSyncState.isMetadataReady(app, provider.id))
         assertFalse(CatalogSyncState.areEpisodesReady(app, provider.id))
         val manifest = checkNotNull(CatalogManifestStore.read(app, provider.id))
@@ -84,47 +85,59 @@ class LocalEntryIntegrationTest {
         assertEquals(0, server.requestCount)
     }
 
-    @Test fun readinessSurvivesRereadButNotAChangedCatalogGeneration() = runBlocking(Dispatchers.IO) {
+    @Test fun durableEntrySurvivesChangedCatalogGenerationWhileDerivedCachesRefresh() = runBlocking(Dispatchers.IO) {
         prepare()
         assertTrue(CatalogSyncState.isFullyReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryCachesReady(app, provider.id))
         val previousEpoch = CatalogSyncState.lastUpdatedAt(app, provider.id)
         CatalogSyncState.markCatalogCommitted(app, provider.id)
         assertTrue(CatalogSyncState.lastUpdatedAt(app, provider.id) > previousEpoch)
-        assertFalse(CatalogSyncState.isEntryReady(app, provider.id))
+        // The committed Room catalog remains safe to enter immediately; only derived entry caches
+        // belong to the previous generation and must be rebuilt.
+        assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertFalse(CatalogSyncState.isEntryCachesReady(app, provider.id))
         val stale = runCatching { CatalogSyncState.markEntryReady(app, provider.id, previousEpoch) }
         assertTrue(stale.isFailure)
         prepare()
         assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryCachesReady(app, provider.id))
         assertEquals(0, server.requestCount)
     }
 
     @Test fun legacyFullFlagsDoNotTriggerRemoteWarmupOnUpgrade() = runBlocking(Dispatchers.IO) {
         app.getSharedPreferences("blofy_catalog_sync_state", Context.MODE_PRIVATE).edit()
             .putBoolean("verified_v2:${provider.id}", true).commit()
-        assertFalse(CatalogSyncState.isEntryReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertFalse(CatalogSyncState.isEntryCachesReady(app, provider.id))
         prepare()
         assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryCachesReady(app, provider.id))
         assertEquals(0, server.requestCount)
     }
 
-    @Test fun missingLocalSnapshotInvalidatesOnlyEntryNotSavedCatalog() = runBlocking(Dispatchers.IO) {
+    @Test fun missingLocalSnapshotInvalidatesOnlyDerivedCachesNotSavedCatalog() = runBlocking(Dispatchers.IO) {
         prepare()
         HomeSnapshotStore.clear(app, provider.id)
-        assertFalse(CatalogSyncState.isEntryReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertFalse(CatalogSyncState.isEntryCachesReady(app, provider.id))
         assertTrue(CatalogSyncState.isReady(app, provider.id))
         assertTrue(db.dao().hasCatalog(provider.id))
         prepare()
         assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryCachesReady(app, provider.id))
     }
 
-    @Test fun missingSearchReadyFlagPreventsFalseReadiness() = runBlocking(Dispatchers.IO) {
+    @Test fun missingSearchReadyFlagInvalidatesOnlyDerivedCaches() = runBlocking(Dispatchers.IO) {
         prepare()
         app.getSharedPreferences("blofy_search_index", Context.MODE_PRIVATE).edit()
             .remove("v10_ready_${provider.id}").commit()
-        assertFalse(CatalogSyncState.isEntryReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertFalse(CatalogSyncState.isEntryCachesReady(app, provider.id))
         prepare()
         assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryCachesReady(app, provider.id))
     }
+
     @Test fun stagedRefreshPromotesSearchIndexWithoutFullRebuild() = runBlocking(Dispatchers.IO) {
         val stagedId = UUID.randomUUID().toString()
         val stagedProvider = provider.copy(id = stagedId, enabled = false)
@@ -156,7 +169,7 @@ class LocalEntryIntegrationTest {
         assertTrue(promoted.all { it.providerId == provider.id && it.key.startsWith(provider.id + ":movie:") })
     }
 
-    @Test fun changedSourceInvalidatesTheOldEntryGenerationAndMetadata(): Unit = runBlocking(Dispatchers.IO) {
+    @Test fun changedSourceKeepsNewDurableCatalogButInvalidatesOldDerivedCachesAndMetadata(): Unit = runBlocking(Dispatchers.IO) {
         prepare()
         val oldEpoch = CatalogSyncState.lastUpdatedAt(app, provider.id)
         ProviderMetadataCache.write(app, provider.id, stream("movie", 1).key, null)
@@ -171,12 +184,14 @@ class LocalEntryIntegrationTest {
         CatalogSyncState.markSourceReplaced(app, provider.id)
 
         assertTrue(CatalogSyncState.lastUpdatedAt(app, provider.id) > oldEpoch)
-        assertFalse(CatalogSyncState.isEntryReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertFalse(CatalogSyncState.isEntryCachesReady(app, provider.id))
         assertNull(HomeSnapshotStore.read(app, provider.id))
         assertNull(CatalogManifestStore.read(app, provider.id))
         assertEquals(0, ProviderMetadataCache.count(app, provider.id))
         prepare()
         assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+        assertTrue(CatalogSyncState.isEntryCachesReady(app, provider.id))
         assertEquals(listOf("${provider.id}:movie:new"), HomeSnapshotStore.read(app, provider.id)?.candidateKeys)
         assertEquals(0, server.requestCount)
     }
