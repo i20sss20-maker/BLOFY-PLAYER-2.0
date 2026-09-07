@@ -30,7 +30,10 @@ interface BlofyDao {
     @Transaction suspend fun hardenProviderSecrets() {
         providerSnapshotStored().forEach { stored ->
             if (ProviderSecretCodec.needsSealing(stored)) {
-                upsertProviderStored(ProviderSecretCodec.seal(ProviderSecretCodec.open(stored)))
+                // Seal only plaintext fields. Decrypting first could erase an existing encrypted
+                // field if Keystore is temporarily unavailable on a partially migrated row.
+                val hardened = ProviderSecretCodec.seal(stored)
+                if (hardened != stored) upsertProviderStored(hardened)
             }
         }
     }
