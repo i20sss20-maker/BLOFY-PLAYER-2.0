@@ -2,10 +2,7 @@ package tv.blofy.player.ui.home
 
 import android.app.Activity
 import android.app.Application
-import android.graphics.Rect
 import android.os.Bundle
-import android.os.SystemClock
-import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
@@ -13,9 +10,10 @@ import java.util.WeakHashMap
 import kotlin.math.roundToInt
 
 /**
- * Stabilizes UP/DOWN D-pad navigation on the TV Home screen without touching playback code.
- * HomeActivity keeps ownership of LEFT/RIGHT; this layer only prevents Android's default focus
- * search from jumping unpredictably between the sidebar and content shelves.
+ * Builds a stable UP/DOWN focus graph for the TV Home screen without intercepting key events.
+ * HomeActivity remains the only owner of LEFT/RIGHT dispatch; Android follows explicit
+ * nextFocusUpId/nextFocusDownId links for vertical movement instead of running unpredictable
+ * FocusFinder searches across the sidebar and dynamic shelves on every remote press.
  */
 class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
     private data class Binding(
@@ -23,75 +21,63 @@ class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
         val listener: ViewTreeObserver.OnGlobalLayoutListener,
     )
 
-    private data class NavigationState(
-        var lastMoveAtMs: Long = 0L,
-        var lastFocusedId: Int = 0,
-    )
-
     private val bindings = WeakHashMap<Activity, Binding>()
-    private val navigationStates = WeakHashMap<Activity, NavigationState>()
 
     override fun onActivityResumed(activity: Activity) {
         if (activity !is HomeActivity || bindings.containsKey(activity)) return
         val root = activity.window.decorView ?: return
-        navigationStates[activity] = NavigationState()
-        val listener = ViewTreeObserver.OnGlobalLayoutListener { bindFocusableChildren(activity, root) }
+        val listener = ViewTreeObserver.OnGlobalLayoutListener { rebuildFocusGraph(activity, root) }
         bindings[activity] = Binding(root, listener)
         root.viewTreeObserver.addOnGlobalLayoutListener(listener)
-        root.post { bindFocusableChildren(activity, root) }
+        root.post { rebuildFocusGraph(activity, root) }
     }
 
     override fun onActivityPaused(activity: Activity) {
         val binding = bindings.remove(activity)
-        navigationStates.remove(activity)
         if (binding != null && binding.root.viewTreeObserver.isAlive) {
             binding.root.viewTreeObserver.removeOnGlobalLayoutListener(binding.listener)
         }
     }
 
-    private fun bindFocusableChildren(activity: HomeActivity, root: View) {
+    private fun rebuildFocusGraph(activity: HomeActivity, root: View) {
         val focusables = mutableListOf<View>()
         collectFocusable(root, focusables)
         if (focusables.isEmpty()) return
 
+        focusables.forEach { view ->
+            if (view.id == View.NO_ID) view.id = View.generateViewId()
+        }
+
+        val visible = focusables.filter { it.isShown && it.isEnabled && it.isFocusable && it.width > 0 && it.height > 0 }
+        if (visible.isEmpty()) return
+
         val screenWidth = root.width.takeIf { it > 0 } ?: activity.resources.displayMetrics.widthPixels
         val sidebarBoundary = (screenWidth * 0.28f).roundToInt()
         val rowSlack = (activity.resources.displayMetrics.density * 54f).roundToInt()
-        val cachedFocusables = focusables.toList()
-        val state = navigationStates.getOrPut(activity) { NavigationState() }
+        val nodes = visible.mapNotNull { nodeFor(it, sidebarBoundary) }
+        val byNodeId = visible.associateBy { System.identityHashCode(it) }
 
-        cachedFocusables.forEach { view ->
-            view.setOnKeyListener { current, keyCode, event ->
-                if (event.action != KeyEvent.ACTION_DOWN || keyCode !in setOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN)) {
-                    return@setOnKeyListener false
-                }
+        visible.forEach { current ->
+            val currentNode = nodeFor(current, sidebarBoundary) ?: return@forEach
+            val upNodeId = HomeRemoteFocusPolicy.vertical(
+                current = currentNode,
+                candidates = nodes,
+                down = false,
+                rowSlackPx = rowSlack,
+            )
+            val downNodeId = HomeRemoteFocusPolicy.vertical(
+                current = currentNode,
+                candidates = nodes,
+                down = true,
+                rowSlackPx = rowSlack,
+            )
+            val up = upNodeId?.let(byNodeId::get)
+            val down = downNodeId?.let(byNodeId::get)
 
-                // Cheap TV remotes often emit several repeats for one physical press. Treat presses
-                // that arrive inside the same focus-animation frame as one move, otherwise focus can
-                // skip an entire shelf and feel uncontrollable.
-                val now = SystemClock.uptimeMillis()
-                if (event.repeatCount > 0 && now - state.lastMoveAtMs < REPEAT_GUARD_MS) {
-                    return@setOnKeyListener true
-                }
-
-                val visible = cachedFocusables.filter { it.isShown && it.isEnabled && it.isFocusable && it.width > 0 && it.height > 0 }
-                val nodes = visible.mapNotNull { candidate -> nodeFor(candidate, sidebarBoundary) }
-                val currentNode = nodeFor(current, sidebarBoundary) ?: return@setOnKeyListener true
-                val targetId = HomeRemoteFocusPolicy.vertical(
-                    current = currentNode,
-                    candidates = nodes,
-                    down = keyCode == KeyEvent.KEYCODE_DPAD_DOWN,
-                    rowSlackPx = rowSlack,
-                ) ?: return@setOnKeyListener true
-
-                val target = visible.firstOrNull { System.identityHashCode(it) == targetId } ?: return@setOnKeyListener true
-                if (target.requestFocus()) {
-                    state.lastMoveAtMs = now
-                    state.lastFocusedId = targetId
-                    target.requestRectangleOnScreen(Rect(0, 0, target.width, target.height), false)
-                }
-                true
-            }
+            // Explicit self-links keep focus inside the current region at an edge instead of letting
+            // Android jump sideways into the sidebar or into an unrelated header control.
+            current.nextFocusUpId = up?.id ?: current.id
+            current.nextFocusDownId = down?.id ?: current.id
         }
     }
 
@@ -125,6 +111,5 @@ class HomeRemoteFocusLifecycle : Application.ActivityLifecycleCallbacks {
     private companion object {
         const val REGION_SIDEBAR = 0
         const val REGION_CONTENT = 1
-        const val REPEAT_GUARD_MS = 110L
     }
 }
