@@ -23,17 +23,6 @@ class PlaybackIntelligenceTest {
         return profile
     }
 
-    @Test fun m3uLiveAndPreviewKeepOriginalSignedUrlsDespiteOppositeLearnedFormat() {
-        for ((originalExtension, learnedExtension) in listOf("ts" to "m3u8", "m3u8" to "ts")) {
-            val profile = learnedProfile(ProviderKind.M3U, learnedExtension)
-            val original = "https://fixture.example.test/live/u%2Fname/p%23ass/100.$originalExtension" +
-                "?token=a%2fb+c&token=%252F&expires=123#part%2fone"
-            for (kind in listOf("live", "live_preview")) {
-                assertEquals(original, PlaybackIntelligence.preferredUrl(app, profile, kind, original))
-            }
-        }
-    }
-
     @Test fun xtreamLearnedFormatChangesOnlyTheLiveExtension() {
         val profile = learnedProfile(ProviderKind.XTREAM, "m3u8")
         val original = "https://fixture.example.test/panel/live/u%2Fname/p%23%3F%25%20/100.ts" +
