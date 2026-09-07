@@ -111,7 +111,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                     requestSelectedCategoryFocus()
                 } else false
             }
-            BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.01f, false) { focused ->
+            BlofyTvDesign.installTvFocusState(this, dp(16).toFloat(), 1.01f, false) { focused ->
                 setTextColor(if (focused) BlofyTvDesign.TextPrimary else BlofyTvDesign.TextSecondary)
             }
         }
