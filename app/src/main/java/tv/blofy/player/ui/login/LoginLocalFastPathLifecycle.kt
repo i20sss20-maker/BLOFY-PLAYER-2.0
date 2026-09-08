@@ -9,13 +9,13 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
@@ -25,9 +25,9 @@ import tv.blofy.player.ui.home.HomeActivity
 /**
  * Keeps the login screen local-first.
  *
- * LoginActivity may refresh activation/portal data from the network, but a saved provider with a
- * durable catalog must never wait for those calls before it can be opened. This lifecycle installs
- * an entry fast path without changing playback or catalog import code.
+ * A saved provider with a durable catalog never waits for activation/portal network calls before it
+ * can be opened. Background catalog work is scheduled only when a newer website source is actually
+ * pending; merely reopening BLOFY must not start a huge sync that competes with Home/DPAD/Room.
  */
 class LoginLocalFastPathLifecycle : Application.ActivityLifecycleCallbacks {
     private val jobs = mutableMapOf<Activity, Job>()
@@ -119,15 +119,20 @@ class LoginLocalFastPathLifecycle : Application.ActivityLifecycleCallbacks {
     }
 
     private suspend fun openLocalProvider(activity: LoginActivity, provider: ProviderEntity) {
-        val dao = BlofyDatabase.get(activity.applicationContext).dao()
+        val app = activity.applicationContext
+        val dao = BlofyDatabase.get(app).dao()
         withTimeoutOrNull(LOCAL_WRITE_TIMEOUT_MS) {
             withContext(Dispatchers.IO) { dao.saveAndActivateProvider(provider) }
         }
-        if (CatalogSyncState.isReady(activity.applicationContext, provider.id).not()) {
-            CatalogSyncState.markReady(activity.applicationContext, provider.id)
+        if (!CatalogSyncState.isReady(app, provider.id)) {
+            CatalogSyncState.markReady(app, provider.id)
         }
-        // A staged source update is maintenance, never an entry gate.
-        CatalogRefreshWorker.enqueueNow(activity.applicationContext, provider.id)
+        // Do not run a full refresh on every launch. That was competing with Home reads, artwork and
+        // remote focus on large providers. Only a genuinely staged website/source replacement gets
+        // an immediate background refresh; normal periodic refresh remains owned by its scheduler.
+        if (PortalSyncBook.hasPendingSource(app, provider.id)) {
+            CatalogRefreshWorker.enqueueNow(app, provider.id)
+        }
         if (activity.isFinishing) return
         activity.startActivity(Intent(activity, HomeActivity::class.java))
         activity.finish()
