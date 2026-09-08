@@ -9,10 +9,10 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import java.net.URI
 
-/** Xtream-only playback URL policy for rc07.13. */
+/** Xtream-only playback URL policy for rc07.14. */
 object ContentUrlResolver {
     fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String =
-        XtreamUrlBuilder.live(
+        directFallback(provider, stream) ?: XtreamUrlBuilder.live(
             provider.baseUrl,
             provider.username,
             provider.password,
@@ -21,7 +21,7 @@ object ContentUrlResolver {
         )
 
     fun movie(provider: ProviderEntity, stream: StreamEntity): String =
-        XtreamUrlBuilder.movie(
+        directFallback(provider, stream) ?: XtreamUrlBuilder.movie(
             provider.baseUrl,
             provider.username,
             provider.password,
@@ -30,7 +30,7 @@ object ContentUrlResolver {
         )
 
     fun episode(provider: ProviderEntity, episode: EpisodeEntity): String =
-        XtreamUrlBuilder.episode(
+        directFallback(provider, episode) ?: XtreamUrlBuilder.episode(
             provider.baseUrl,
             provider.username,
             provider.password,
@@ -39,13 +39,9 @@ object ContentUrlResolver {
         )
 
     /**
-     * direct_source is secondary to the canonical Xtream URL.
-     *
-     * Important: a public-looking alternate host can be the provider's real playback/CDN route.
-     * Do not rewrite it merely because its origin differs from the login/panel origin. This is the
-     * common "hidden host" case. Only clearly local/private hosts are repaired to the provider
-     * origin. This keeps aliases such as cf.tstor8k.xyz usable while still repairing LAN/internal
-     * direct_source values.
+     * Prefer Xtream's provider-supplied direct_source when available. Public alternate hosts are
+     * frequently the real playback/CDN route (the hidden-host case). Only clearly local/private
+     * origins are repaired to the provider origin.
      */
     fun directFallback(provider: ProviderEntity, stream: StreamEntity): String? =
         providerAwareFallback(provider.baseUrl, stream.directSource)
@@ -53,7 +49,7 @@ object ContentUrlResolver {
     fun directFallback(provider: ProviderEntity, episode: EpisodeEntity): String? =
         providerAwareFallback(provider.baseUrl, episode.directSource)
 
-    /** Legacy context-free callers never receive a clearly-internal URL. */
+    /** Legacy context-free callers keep public direct_source values and reject internal hosts. */
     fun directFallback(stream: StreamEntity): String? = stream.directSource.safeContextFreeFallback()
     fun directFallback(episode: EpisodeEntity): String? = episode.directSource.safeContextFreeFallback()
 
@@ -80,9 +76,6 @@ object ContentUrlResolver {
 
     private fun providerAwareFallback(providerBaseUrl: String, directSource: String?): String? {
         val value = directSource.validHttpUrl() ?: return null
-        // resolve() preserves normal/public alternate DNS hosts exactly as supplied by Xtream and
-        // rewrites only clearly internal/private hosts. rc07.12 did the opposite ordering here:
-        // providerOriginFallback() ran first and destroyed valid hidden/CDN origins.
         return ProviderHostResolver.resolve(providerBaseUrl, value).validHttpUrl()
     }
 
