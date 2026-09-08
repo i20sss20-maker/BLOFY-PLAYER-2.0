@@ -126,7 +126,10 @@ jobs:
           ! grep -Fq 'LoginLocalFastPathLifecycle' "$app"
           ! grep -Fq 'LoginPortalRefreshLifecycle' "$app"
           grep -Fq 'FirstImportCheckpoint.discardIncompleteSections' app/src/main/java/tv/blofy/player/ui/login/CatalogLoadingActivity.kt
-          grep -Fq 'ContentUrlResolver.liveFallback' app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt
+          browser="app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt"
+          grep -Fq 'ContentUrlResolver.liveRoute' "$browser"
+          grep -Fq 'previewSession?.play(url = route.primaryUrl, fallbackUrl = route.fallbackUrl)' "$browser"
+          grep -Fq 'launchPlayer(stream, route.primaryUrl, route.fallbackUrl)' "$browser"
 
           dao="app/src/main/java/tv/blofy/player/data/local/BlofyDao.kt"
           grep -Fq 'promoteStagedSearchIndexInPlace(stagedProviderId, targetProvider.id)' "$dao"
