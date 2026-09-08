@@ -44,7 +44,7 @@ class LoginLocalEntryRegressionTest {
     private lateinit var db: BlofyDatabase
     private lateinit var server: MockWebServer
     private var controller: ActivityController<LoginActivity>? = null
-    private val app get() = RuntimeEnvironment.getApplication<Application>()
+    private val app get() = RuntimeEnvironment.getApplication()
     private val activity get() = checkNotNull(controller).get()
     private val provider = ProviderEntity("saved-a", "Saved A", "https://example.test", "viewer", "secret")
     private val singletonField = BlofyDatabase::class.java.getDeclaredField("instance").apply { isAccessible = true }
