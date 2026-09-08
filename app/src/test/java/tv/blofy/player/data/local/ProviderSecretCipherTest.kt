@@ -161,6 +161,41 @@ class ProviderSecretCipherTest {
         assertEquals(0, creates.get())
     }
 
+    @Test fun navigationReadsReuseSuccessfulDecryptButKeepCurrentMetadataAndCredentials() {
+        val calls = AtomicInteger()
+        val writer = ProviderSecretCipher { aesKey }
+        val stored = writer.seal(original)
+        val reader = ProviderSecretCipher { calls.incrementAndGet(); aesKey }
+        repeat(100) { index ->
+            assertEquals(original.copy(name = "Name $index", enabled = index % 2 == 0),
+                reader.open(stored.copy(name = "Name $index", enabled = index % 2 == 0)))
+        }
+        assertEquals("Repeated navigation must not call hardware Keystore again", 1, calls.get())
+        val replacement = original.copy(password = "replacement")
+        assertEquals(replacement, reader.open(writer.seal(replacement)))
+        assertEquals(2, calls.get())
+    }
+
+    @Test fun decryptedProviderCacheIsBoundedAndFailedReadsAreNotRemembered() {
+        val writer = ProviderSecretCipher { aesKey }
+        val stored = (0..16).map { writer.seal(original.copy(username = "user$it")) }
+        val calls = AtomicInteger()
+        var available = true
+        val reader = ProviderSecretCipher {
+            calls.incrementAndGet()
+            if (!available) throw GeneralSecurityException("Temporary failure")
+            aesKey
+        }
+        stored.forEach { reader.open(it) }
+        reader.open(stored.first())
+        assertEquals("The oldest of 17 entries should be evicted", 18, calls.get())
+        val newStored = writer.seal(original.copy(password = "changed"))
+        available = false
+        assertEquals("", reader.open(newStored).password)
+        available = true
+        assertEquals("changed", reader.open(newStored).password)
+    }
+
     @Test fun simultaneousFirstWritesCreateExactlyOneKey() {
         var stored: SecretKey? = null
         val creates = AtomicInteger()

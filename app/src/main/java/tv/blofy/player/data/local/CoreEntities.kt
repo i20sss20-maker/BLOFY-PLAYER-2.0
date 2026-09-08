@@ -47,7 +47,15 @@ data class CategoryEntity(
         Index(value = ["providerId", "kind", "categoryId", "name"]),
         Index(value = ["providerId", "kind", "name"]),
         Index(value = ["providerId", "name"]),
-        Index(value = ["providerId", "kind", "addedAt"])
+        Index(value = ["providerId", "kind", "addedAt"]),
+        // SQLite appends rowid to these indexes, matching catalog cursor order exactly.
+        Index(value = ["providerId", "kind"]),
+        Index(value = ["providerId", "kind", "categoryId"]),
+        Index(
+            name = "index_streams_home_page",
+            value = ["providerId", "kind", "addedAt", "name", "key"],
+            orders = [Index.Order.ASC, Index.Order.ASC, Index.Order.DESC, Index.Order.ASC, Index.Order.ASC]
+        )
     ]
 )
 data class StreamEntity(

@@ -6,7 +6,9 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import tv.blofy.player.core.text.ArabicSearchNormalizer
 import tv.blofy.player.data.CatalogRefreshIntegrityPolicy
@@ -18,10 +20,15 @@ interface BlofyDao {
         upsertProviderStored(ProviderSecretCodec.sealForUpdate(provider, providerStored(provider.id)))
 
     @Query("SELECT * FROM providers WHERE enabled = 1 ORDER BY updatedAt DESC") fun providersStored(): Flow<List<ProviderEntity>>
-    fun providers(): Flow<List<ProviderEntity>> = providersStored().map { rows -> rows.map(ProviderSecretCodec::open) }
+    fun providers(): Flow<List<ProviderEntity>> = providersStored()
+        .map { rows -> rows.map(ProviderSecretCodec::open) }.flowOn(Dispatchers.IO)
 
     @Query("SELECT * FROM providers ORDER BY updatedAt DESC") fun allProvidersStored(): Flow<List<ProviderEntity>>
-    fun allProviders(): Flow<List<ProviderEntity>> = allProvidersStored().map { rows -> rows.map(ProviderSecretCodec::open) }
+    fun allProviders(): Flow<List<ProviderEntity>> = allProvidersStored()
+        .map { rows -> rows.map(ProviderSecretCodec::open) }.flowOn(Dispatchers.IO)
+
+    @Query("SELECT id FROM providers WHERE enabled = 1 ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun activeProviderId(): String?
 
     @Query("SELECT * FROM providers WHERE id = :providerId LIMIT 1") suspend fun providerStored(providerId: String): ProviderEntity?
     suspend fun provider(providerId: String): ProviderEntity? = providerStored(providerId)?.let(ProviderSecretCodec::open)
@@ -123,16 +130,41 @@ interface BlofyDao {
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun catalogCountAll(providerId: String, kind: String): Int
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId") suspend fun catalogCountInCategory(providerId: String, kind: String, categoryId: String): Int
 
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
+    @Query("SELECT * FROM streams INDEXED BY index_streams_providerId_kind WHERE providerId = :providerId AND kind = :kind AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
     suspend fun catalogPageAfterAll(providerId: String, kind: String, afterRowId: Long, limit: Int): List<StreamEntity>
 
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
+    @Query("SELECT * FROM streams INDEXED BY index_streams_providerId_kind_categoryId WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
     suspend fun catalogPageAfterInCategory(providerId: String, kind: String, categoryId: String, afterRowId: Long, limit: Int): List<StreamEntity>
 
     @Query("SELECT rowid FROM streams WHERE `key` = :contentKey LIMIT 1")
     suspend fun streamRowId(contentKey: String): Long?
 
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind IN ('movie','series') ORDER BY COALESCE(addedAt, 0) DESC, name LIMIT :limit") suspend fun latestHomeStreams(providerId: String, limit: Int = 14): List<StreamEntity>
+    // Each covering-index seek reads at most `limit` keys. Merge only those four small sets,
+    // then load the selected rows. Keep the existing NULL-as-zero date and name ordering.
+    @Query("""
+        WITH candidates AS (
+            SELECT * FROM (SELECT `key`, name, addedAt FROM streams INDEXED BY index_streams_home_page
+                WHERE providerId = :providerId AND kind = 'movie' AND addedAt IS NOT NULL
+                ORDER BY addedAt DESC, name, `key` LIMIT :limit)
+            UNION ALL
+            SELECT * FROM (SELECT `key`, name, addedAt FROM streams INDEXED BY index_streams_home_page
+                WHERE providerId = :providerId AND kind = 'series' AND addedAt IS NOT NULL
+                ORDER BY addedAt DESC, name, `key` LIMIT :limit)
+            UNION ALL
+            SELECT * FROM (SELECT `key`, name, addedAt FROM streams INDEXED BY index_streams_home_page
+                WHERE providerId = :providerId AND kind = 'movie' AND addedAt IS NULL
+                ORDER BY name, `key` LIMIT :limit)
+            UNION ALL
+            SELECT * FROM (SELECT `key`, name, addedAt FROM streams INDEXED BY index_streams_home_page
+                WHERE providerId = :providerId AND kind = 'series' AND addedAt IS NULL
+                ORDER BY name, `key` LIMIT :limit)
+        )
+        SELECT streams.* FROM streams INNER JOIN (
+            SELECT `key` FROM candidates ORDER BY COALESCE(addedAt, 0) DESC, name, `key` LIMIT :limit
+        ) AS selected ON streams.`key` = selected.`key`
+        ORDER BY COALESCE(streams.addedAt, 0) DESC, streams.name, streams.`key`
+    """)
+    suspend fun latestHomeStreams(providerId: String, limit: Int = 14): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (name LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' OR year LIKE '%' || :query || '%') ORDER BY name LIMIT :limit") suspend fun searchCatalog(providerId: String, kind: String, query: String, limit: Int = 300): List<StreamEntity>
 
     @Query("SELECT * FROM streams WHERE `key` = :contentKey LIMIT 1") suspend fun stream(contentKey: String): StreamEntity?

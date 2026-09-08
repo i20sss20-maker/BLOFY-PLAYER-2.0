@@ -123,6 +123,8 @@ jobs:
             echo 'Immediate Home profile cloud sync returned' >&2
             exit 1
           fi
+      - name: Verify actual catalog queries on 200k rows
+        run: python3 tools/check_catalog_queries.py
       - name: Test lint and assemble
         shell: bash
         run: |

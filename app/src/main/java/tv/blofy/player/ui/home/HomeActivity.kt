@@ -105,7 +105,7 @@ class HomeActivity : AppCompatActivity() {
         // A direct intent must not bypass the same readiness check as the login screen.
         setContentView(FrameLayout(this).apply { background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background) })
         lifecycleScope.launch {
-            val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull() }
+            val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().providersStored().first().firstOrNull() }
             if (provider != null && !CatalogSyncState.isEntryReady(applicationContext, provider.id)) {
                 startActivity(Intent(this@HomeActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
                 finish()
@@ -172,7 +172,7 @@ class HomeActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val urls = withContext(Dispatchers.IO) {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val provider = dao.providers().first().firstOrNull() ?: return@withContext emptyList<String?>()
+                val provider = dao.providersStored().first().firstOrNull() ?: return@withContext emptyList<String?>()
                 dao.latestHomeStreams(provider.id, 36).map { it.backdrop ?: it.icon }
             }
             if (urls.isNotEmpty()) ArtworkLoader.warmPrefetch(this@HomeActivity, urls)
@@ -198,7 +198,8 @@ class HomeActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val data = withContext(Dispatchers.IO) {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val provider = dao.providers().first().firstOrNull() ?: return@withContext null
+                // Home uses identity/name only; displaying local rows must not wait for Keystore.
+                val provider = dao.providersStored().first().firstOrNull() ?: return@withContext null
                 val latest = dao.latestHomeStreams(provider.id, 100)
                 if (latest.isEmpty()) return@withContext null
                 val snapshot = HomeSnapshotStore.read(applicationContext, provider.id)

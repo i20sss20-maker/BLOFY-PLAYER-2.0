@@ -60,6 +60,15 @@ internal class ProviderSecretKeyAccess(
 
 /** Injectable key access lets regression tests exercise real AES-GCM without a hardware Keystore. */
 internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
+    private data class Fields(val baseUrl: String, val username: String, val password: String) {
+        fun applyTo(provider: ProviderEntity) = provider.copy(baseUrl = baseUrl, username = username, password = password)
+    }
+    // Cache successful reads by exact ciphertext, never by provider ID. Hardware Keystore can be
+    // slow on TVs; category/navigation reads must not repeat three AES operations per emission.
+    // Failed reads remain retryable and changed credentials cannot reuse an older plaintext row.
+    private val opened = object : LinkedHashMap<Fields, Fields>(16, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Fields, Fields>?) = size > 16
+    }
     fun needsSealing(provider: ProviderEntity): Boolean =
         needsSealing(provider.baseUrl) || needsSealing(provider.username) || needsSealing(provider.password)
 
@@ -102,13 +111,17 @@ internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
     fun open(provider: ProviderEntity): ProviderEntity {
         val fields = listOf(provider.baseUrl, provider.username, provider.password)
         if (fields.none(::isSealed)) return provider
+        val stored = Fields(provider.baseUrl, provider.username, provider.password)
+        synchronized(opened) { opened[stored] }?.let { return it.applyTo(provider) }
         return try {
             val secretKey = key(false)
-            provider.copy(
+            val result = provider.copy(
                 baseUrl = openValue(provider.baseUrl, secretKey),
                 username = openValue(provider.username, secretKey),
                 password = openValue(provider.password, secretKey),
             )
+            synchronized(opened) { opened[stored] = Fields(result.baseUrl, result.username, result.password) }
+            result
         } catch (_: Exception) {
             // This is only the returned API projection; the stored row is never mutated.
             // Do not send ciphertext or partially decrypted credentials to a provider.

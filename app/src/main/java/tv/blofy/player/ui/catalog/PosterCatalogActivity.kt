@@ -15,7 +15,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
@@ -222,9 +221,8 @@ class PosterCatalogActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
-            providerId = provider.id
-            dao.categories(provider.id, kind).collect { categories ->
+            providerId = dao.activeProviderId() ?: run { finish(); return@launch }
+            dao.categories(providerId, kind).collect { categories ->
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
                 if (loadedItems.isEmpty() && pageJob == null) loadStreams(null)
