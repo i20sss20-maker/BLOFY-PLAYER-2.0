@@ -10,6 +10,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.flow.first
+import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.remote.XtreamClient
 import java.util.UUID
@@ -32,6 +34,13 @@ class CatalogRefreshWorker(
 
         if (!dao.hasCatalog(provider.id)) return Result.success()
 
+        // A website host/credential change is staged beside the known-good provider. Refresh the
+        // pending source in the worker while Home keeps using the old local catalog.
+        val sourceChanged = PortalSyncBook.hasPendingSource(app, provider.id)
+        val refreshSource = if (sourceChanged) {
+            PortalPlaylistClient.pendingSource(app, dao, provider.id) ?: return Result.retry()
+        } else provider
+
         val previousCounts = CatalogRefreshIntegrityPolicy.Counts(
             live = dao.catalogCountAll(provider.id, "live"),
             movies = dao.catalogCountAll(provider.id, "movie"),
@@ -44,7 +53,7 @@ class CatalogRefreshWorker(
         LocalStorageManager.trimTemporaryIfNeeded(app)
         if (!LocalStorageManager.hasHealthyFreeSpace(app)) return Result.retry()
 
-        val staged = provider.copy(
+        val staged = refreshSource.copy(
             id = UUID.randomUUID().toString(),
             enabled = false,
             updatedAt = System.currentTimeMillis()
@@ -59,29 +68,37 @@ class CatalogRefreshWorker(
                 return if (sync.failedSectionCount > 0) Result.retry() else Result.success()
             }
 
-            val candidateCounts = CatalogRefreshIntegrityPolicy.Counts(
-                live = dao.catalogCountAll(staged.id, "live"),
-                movies = dao.catalogCountAll(staged.id, "movie"),
-                series = dao.catalogCountAll(staged.id, "series")
-            )
-            if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
-                // A valid-looking HTTP/JSON response can still be truncated or temporarily empty.
-                // Never let that destroy a working local library; leave the previous snapshot live.
-                dao.discardStagedCatalog(staged.id)
-                return Result.retry()
+            if (!sourceChanged) {
+                val candidateCounts = CatalogRefreshIntegrityPolicy.Counts(
+                    live = dao.catalogCountAll(staged.id, "live"),
+                    movies = dao.catalogCountAll(staged.id, "movie"),
+                    series = dao.catalogCountAll(staged.id, "series")
+                )
+                if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
+                    // A valid-looking HTTP/JSON response can still be truncated or temporarily empty.
+                    // Never let that destroy a working local library; leave the previous snapshot live.
+                    dao.discardStagedCatalog(staged.id)
+                    return Result.retry()
+                }
             }
 
-            // Promotion is one Room transaction. Until it succeeds the previous provider remains
-            // active and fully usable; this also avoids preserving flags by loading the old giant
-            // catalog into PlaylistManager memory during the network parse.
-            val refreshedProvider = provider.copy(enabled = true, updatedAt = staged.updatedAt)
-            dao.promoteStagedRefresh(staged.id, refreshedProvider)
+            val refreshedProvider = refreshSource.copy(enabled = true, updatedAt = staged.updatedAt)
+            if (sourceChanged) {
+                // Serialize promotion with portal edits. If the website changes again while this
+                // worker is downloading, the stale candidate is rejected and the old catalog stays live.
+                PortalPlaylistClient.commitPendingSource(app, dao, refreshSource) {
+                    dao.promoteStagedCatalog(staged.id, refreshedProvider)
+                    CatalogSyncState.markSourceReplaced(app, provider.id)
+                }
+            } else {
+                dao.promoteStagedRefresh(staged.id, refreshedProvider)
+                CatalogSyncState.markCatalogCommitted(app, provider.id)
+            }
             promoted = true
 
             // Promotion itself is the durable point of no return. From here on, never turn a local
             // Home/manifest preparation problem into another full network download. The new catalog
             // is already complete and active; entry preparation is recoverable on the next launch.
-            runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
             runCatching {
                 tv.blofy.player.data.preparation.FullCatalogPreparer.prepare(app, provider.id) { }
             }
