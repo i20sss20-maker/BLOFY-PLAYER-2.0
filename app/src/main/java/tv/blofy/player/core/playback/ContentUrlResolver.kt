@@ -12,31 +12,26 @@ import java.net.URI
 /** Xtream-only playback URL policy for rc07.14. */
 object ContentUrlResolver {
     fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String =
-        directFallback(provider, stream) ?: XtreamUrlBuilder.live(
-            provider.baseUrl,
-            provider.username,
-            provider.password,
-            stream.remoteId,
-            profile.liveFormat
-        )
+        directFallback(provider, stream) ?: canonicalLive(provider, profile, stream)
 
     fun movie(provider: ProviderEntity, stream: StreamEntity): String =
-        directFallback(provider, stream) ?: XtreamUrlBuilder.movie(
-            provider.baseUrl,
-            provider.username,
-            provider.password,
-            stream.remoteId,
-            stream.extension ?: "mp4"
-        )
+        directFallback(provider, stream) ?: canonicalMovie(provider, stream)
 
     fun episode(provider: ProviderEntity, episode: EpisodeEntity): String =
-        directFallback(provider, episode) ?: XtreamUrlBuilder.episode(
-            provider.baseUrl,
-            provider.username,
-            provider.password,
-            episode.remoteId,
-            episode.extension
-        )
+        directFallback(provider, episode) ?: canonicalEpisode(provider, episode)
+
+    /**
+     * When direct_source is the primary route, retain the canonical panel route as a distinct
+     * configured fallback. If direct_source is absent, the canonical route is already primary.
+     */
+    fun liveFallback(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String? =
+        canonicalLive(provider, profile, stream).takeIf { directFallback(provider, stream) != null }
+
+    fun movieFallback(provider: ProviderEntity, stream: StreamEntity): String? =
+        canonicalMovie(provider, stream).takeIf { directFallback(provider, stream) != null }
+
+    fun episodeFallback(provider: ProviderEntity, episode: EpisodeEntity): String? =
+        canonicalEpisode(provider, episode).takeIf { directFallback(provider, episode) != null }
 
     /**
      * Prefer Xtream's provider-supplied direct_source when available. Public alternate hosts are
@@ -73,6 +68,33 @@ object ContentUrlResolver {
         }
         return alternatePath + suffix
     }
+
+    private fun canonicalLive(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String =
+        XtreamUrlBuilder.live(
+            provider.baseUrl,
+            provider.username,
+            provider.password,
+            stream.remoteId,
+            profile.liveFormat
+        )
+
+    private fun canonicalMovie(provider: ProviderEntity, stream: StreamEntity): String =
+        XtreamUrlBuilder.movie(
+            provider.baseUrl,
+            provider.username,
+            provider.password,
+            stream.remoteId,
+            stream.extension ?: "mp4"
+        )
+
+    private fun canonicalEpisode(provider: ProviderEntity, episode: EpisodeEntity): String =
+        XtreamUrlBuilder.episode(
+            provider.baseUrl,
+            provider.username,
+            provider.password,
+            episode.remoteId,
+            episode.extension
+        )
 
     private fun providerAwareFallback(providerBaseUrl: String, directSource: String?): String? {
         val value = directSource.validHttpUrl() ?: return null
