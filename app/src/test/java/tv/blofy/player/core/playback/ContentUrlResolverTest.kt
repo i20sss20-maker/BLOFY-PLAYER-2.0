@@ -2,6 +2,7 @@ package tv.blofy.player.core.playback
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import tv.blofy.player.core.provider.ProviderKind
@@ -34,14 +35,45 @@ class ContentUrlResolverTest {
             directSource = "http://cf.tstor8k.xyz/live/user/pass/100.ts"
         )
 
-        assertEquals(
-            "http://cf.tstor8k.xyz/live/user/pass/100.ts",
-            ContentUrlResolver.live(provider, xtreamProfile, stream)
-        )
+        val primary = ContentUrlResolver.live(provider, xtreamProfile, stream)
+        assertEquals("http://cf.tstor8k.xyz/live/user/pass/100.ts", primary)
         assertEquals(
             "http://panel.example.com/live/user/pass/100.ts",
             ContentUrlResolver.liveFallback(provider, xtreamProfile, stream)
         )
+
+        // Several older screens still call the context-free compatibility overload after resolving
+        // the primary URL. It must never hand the player the same hidden-host URL twice.
+        val legacyFallback = ContentUrlResolver.directFallback(stream)
+        assertEquals("http://panel.example.com/live/user/pass/100.ts", legacyFallback)
+        assertNotEquals(primary, legacyFallback)
+    }
+
+    @Test
+    fun movieProviderAwareCompatibilityFallbackIsCanonicalAndDistinct() {
+        val provider = ProviderEntity(
+            id = "movie-provider",
+            name = "provider",
+            baseUrl = "https://panel.example.com",
+            username = "user",
+            password = "pass"
+        )
+        val stream = StreamEntity(
+            key = "movie-provider:movie:77",
+            providerId = "movie-provider",
+            remoteId = "77",
+            categoryId = null,
+            kind = "movie",
+            name = "movie",
+            extension = "mkv",
+            directSource = "https://cdn.example.net/movie/user/pass/77.mkv"
+        )
+
+        val primary = ContentUrlResolver.movie(provider, stream)
+        val fallback = ContentUrlResolver.directFallback(provider, stream)
+        assertEquals("https://cdn.example.net/movie/user/pass/77.mkv", primary)
+        assertEquals("https://panel.example.com/movie/user/pass/77.mkv", fallback)
+        assertNotEquals(primary, fallback)
     }
 
     @Test
@@ -66,6 +98,7 @@ class ContentUrlResolverTest {
             ContentUrlResolver.live(provider, xtreamProfile, stream)
         )
         assertNull(ContentUrlResolver.liveFallback(provider, xtreamProfile, stream))
+        assertNull(ContentUrlResolver.directFallback(stream))
     }
 
     @Test
