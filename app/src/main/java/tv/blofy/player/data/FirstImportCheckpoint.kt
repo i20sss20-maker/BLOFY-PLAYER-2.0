@@ -62,30 +62,49 @@ object FirstImportCheckpoint {
     }
 
     /**
-     * Remove only sections that were never committed to the checkpoint. A legacy interrupted
-     * import has rows but no checkpoint, so all three sections are cleared once and starts clean.
+     * Revalidate checkpointed work against durable Room rows before trusting it. A checkpoint is a
+     * resume optimisation, never an authority over the database. If rows disappeared after a crash,
+     * storage cleanup or an interrupted transaction, that section is downgraded and downloaded again.
+     *
+     * An empty Xtream section can legitimately complete, but if the process dies before the final
+     * catalog commit we deliberately fetch that empty section again. This conservative choice avoids
+     * mistaking lost rows for a valid empty section and only affects interrupted first imports.
      */
     suspend fun discardIncompleteSections(
         context: Context,
         dao: BlofyDao,
         provider: ProviderEntity,
     ): State {
-        val checkpoint = state(context, provider)
-        sections.filterNot(checkpoint::isCompleted).forEach { kind ->
-            dao.clearSearchIndex(provider.id, kind)
-            dao.clearStreams(provider.id, kind)
-            dao.clearCategories(provider.id, kind)
-            if (kind == "series") dao.clearProviderEpisodes(provider.id)
+        val stored = state(context, provider)
+        val verified = linkedSetOf<String>()
+        for (kind in sections) {
+            if (stored.isCompleted(kind) && dao.catalogCountAll(provider.id, kind) > 0) {
+                verified += kind
+            } else {
+                clearSection(dao, provider.id, kind)
+                if (stored.isCompleted(kind)) clearCompletedFlag(context, provider.id, kind)
+            }
         }
-        return checkpoint
+        return stored.copy(completed = verified)
+    }
+
+    private suspend fun clearSection(dao: BlofyDao, providerId: String, kind: String) {
+        dao.clearSearchIndex(providerId, kind)
+        dao.clearStreams(providerId, kind)
+        dao.clearCategories(providerId, kind)
+        if (kind == "series") dao.clearProviderEpisodes(providerId)
+    }
+
+    private fun clearCompletedFlag(context: Context, providerId: String, kind: String) {
+        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove(doneKey(providerId, kind)).commit()) { "Unable to invalidate first-import checkpoint" }
     }
 
     private fun doneKey(providerId: String, kind: String) = "$DONE_PREFIX$providerId:$kind"
 
     private fun fingerprint(provider: ProviderEntity): String {
-        // The digest is persisted, never the raw credentials. Password must be part of the source
-        // identity: panels commonly keep the same host/username while rotating the password, and a
-        // checkpoint from the old account must never cause sections from that account to be reused.
+        // Password participates in the digest so reused usernames on the same panel never inherit
+        // another account's partial import. Only the SHA-256 fingerprint is persisted.
         val value = buildString {
             append(provider.providerType.lowercase())
             append('|')
