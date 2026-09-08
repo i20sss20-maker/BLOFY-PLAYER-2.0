@@ -45,13 +45,29 @@ object PortalPlaylistClient {
         .build()
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 
+    @Volatile private var lastSyncAt = 0L
+    @Volatile private var lastSyncKey = ""
+    @Volatile private var lastSyncResult: SyncResult? = null
+
     suspend fun sync(
         context: Context,
         baseUrl: String,
         dao: BlofyDao,
         mode: SyncMode = SyncMode.MERGE_AND_UPLOAD
     ): SyncResult = syncMutex.withLock {
-        syncInternal(context, baseUrl, dao, mode)
+        // LoginActivity can receive onCreate + onResume back-to-back. Treat those as one portal
+        // transaction instead of serializing two identical network/Room merges behind the mutex.
+        val key = "${baseUrl.trim().trimEnd('/')}|${mode.name}|${DeviceIdentity.deviceId(context)}"
+        val now = System.currentTimeMillis()
+        val cached = lastSyncResult
+        if (cached != null && key == lastSyncKey && now - lastSyncAt <= STARTUP_SYNC_DEDUPE_MS) {
+            return@withLock cached
+        }
+        syncInternal(context, baseUrl, dao, mode).also { result ->
+            lastSyncKey = key
+            lastSyncAt = System.currentTimeMillis()
+            lastSyncResult = result
+        }
     }
 
     private suspend fun syncInternal(context: Context, baseUrl: String, dao: BlofyDao, mode: SyncMode): SyncResult = withContext(Dispatchers.IO) {
@@ -105,9 +121,6 @@ object PortalPlaylistClient {
             )
             val contentChanged = existing == null || !sameSource(existing, next)
             if (contentChanged) {
-                // New/uncommitted sources still require the normal foreground preparation path.
-                // Only a genuinely committed local catalog may keep opening while a website source
-                // replacement is staged in the background.
                 if (!existingReadyCatalog) changed += next.id
                 CatalogSyncState.markPending(context, next.id)
             }
@@ -125,8 +138,6 @@ object PortalPlaylistClient {
             remoteProviders += visible
             dao.upsertProvider(visible.copy(enabled = if (item.active) true else existing?.enabled ?: false))
             if (contentChanged && existingReadyCatalog) {
-                // WorkManager is available in production, but pure JVM/Robolectric callers may not
-                // initialize it. A scheduling failure must not corrupt or block the known-good list.
                 runCatching { CatalogRefreshWorker.enqueueNow(context.applicationContext, next.id) }
             }
             if (item.active) remoteActive = visible
@@ -174,16 +185,11 @@ object PortalPlaylistClient {
                 providerType = "xtream",
                 updatedAt = System.currentTimeMillis()
             )
-            // Local selection is the user-visible transaction. Never make entering a saved list wait
-            // for a portal POST; mirror the selection after the caller has already returned.
             dao.saveAndActivateProvider(selected)
             val app = context.applicationContext
             backgroundScope.launch {
                 syncMutex.withLock {
                     runCatching {
-                        // Keep using the same DAO snapshot that staged the website source. Reopening
-                        // a different database here can lose the pending credentials in tests and in
-                        // multi-process/recovery edge cases, causing old credentials to be uploaded.
                         val remoteSelection = (pendingSource(app, dao, selected.id) ?: selected)
                             .copy(enabled = true, providerType = "xtream", updatedAt = selected.updatedAt)
                         pushProviderInternal(app, baseUrl, remoteSelection)
@@ -345,4 +351,6 @@ object PortalPlaylistClient {
         val active: Boolean,
         val updatedAt: Long
     )
+
+    private const val STARTUP_SYNC_DEDUPE_MS = 3_000L
 }
