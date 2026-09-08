@@ -30,6 +30,11 @@ class FocusTextAdapter<T : Any>(
     init { setHasStableIds(itemKey != null) }
 
     fun submit(newItems: List<T>) {
+        // Room/Flow may re-emit an identical category list while another catalog table changes.
+        // Do not feed that identical list back through AsyncListDiffer: even a no-op diff can cause
+        // a TV RecyclerView layout/focus pass and make a long category list jump to the top.
+        if (sameVisibleList(newItems)) return
+
         val owned = attached?.hasFocus() == true
         val previousKey = focusedKey
         val previousPosition = focusedPosition
@@ -42,6 +47,17 @@ class FocusTextAdapter<T : Any>(
             if (focusedPosition < 0) focusedPosition = RecyclerView.NO_POSITION
             restorePending = owned && attached?.hasFocus() == true && focusedPosition != RecyclerView.NO_POSITION
             if (restorePending) attached?.post { restoreFocusedView() }
+        }
+    }
+
+    private fun sameVisibleList(newItems: List<T>): Boolean {
+        if (items.size != newItems.size) return false
+        val key = itemKey
+        return items.indices.all { index ->
+            val old = items[index]
+            val new = newItems[index]
+            if (key != null) key(old) == key(new) && label(old) == label(new)
+            else label(old) == label(new)
         }
     }
 
