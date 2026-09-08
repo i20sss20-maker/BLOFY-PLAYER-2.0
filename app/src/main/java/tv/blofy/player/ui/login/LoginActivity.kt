@@ -24,6 +24,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeoutOrNull
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
@@ -32,10 +34,11 @@ import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationPortalUrl
 import tv.blofy.player.core.identity.ActivationRemoteClient
 import tv.blofy.player.core.identity.PortalPlaylistClient
-import tv.blofy.player.core.provider.RemoteProviderProfileClient
+import tv.blofy.player.core.identity.LoginFollowUp
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.DatabaseStartup
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.home.HomeActivity
@@ -53,13 +56,20 @@ class LoginActivity : AppCompatActivity() {
     private var playlistRow: LinearLayout? = null
     private var connectJob: Job? = null
     private var playlistJob: Job? = null
+    private val identityRefreshMutex = Mutex()
+    private var renderedQrUrl: String? = null
+    private var renderedPlaylists: List<ProviderEntity>? = null
+    private var openingScreen = false
+    // Injectable without Intent extras: tests can use a stalled local HTTP server, while
+    // production always starts with the signed build's configured endpoint.
+    internal var activationEndpoint: String = BuildConfig.ACTIVATION_BASE_URL.trim()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         deviceKind = DeviceClass.detect(this)
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildTvLogin() else buildPhoneLogin())
         if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
-        lifecycleScope.launch { refreshIdentityAndProvider() }
+        DatabaseStartup.start(applicationContext)
     }
 
     private fun buildTvLogin(): LinearLayout {
@@ -210,7 +220,7 @@ class LoginActivity : AppCompatActivity() {
             setPadding(dp(12), 0, dp(12), 0)
         }
         activation.addView(status, LinearLayout.LayoutParams(-1, dp(39)).apply { topMargin = dp(8) })
-        refreshCodeButton = actionButton("↻  تحديث حالة التفعيل") { lifecycleScope.launch { refreshIdentityAndProvider() } }
+        refreshCodeButton = actionButton("↻  تحديث حالة التفعيل") { lifecycleScope.launch { refreshIdentityAndProvider(remoteCheck = true) } }
         activation.addView(refreshCodeButton, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(8) })
 
         val playlistsPanel = LinearLayout(this).apply {
@@ -310,7 +320,7 @@ class LoginActivity : AppCompatActivity() {
         status.background = statusBackground(); root.addView(status, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
         addPlaylist = primaryActionButton("إضافة / إدارة القوائم") { startActivity(Intent(this, PlaylistActivity::class.java)) }
         connectButton = actionButton("دخول") { startOrCancelConnect() }
-        refreshCodeButton = actionButton("تحديث") { lifecycleScope.launch { refreshIdentityAndProvider() } }
+        refreshCodeButton = actionButton("تحديث") { lifecycleScope.launch { refreshIdentityAndProvider(remoteCheck = true) } }
         root.addView(addPlaylist, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(12) })
         root.addView(connectButton, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(10) })
         return root
@@ -390,75 +400,106 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun startOrCancelConnect() {
+        if (openingScreen || playlistJob?.isActive == true) return
         if (connectJob?.isActive == true) { connectJob?.cancel(); status.text = "تم إلغاء الاتصال"; return }
         connectJob = lifecycleScope.launch {
             connectButton.text = "إلغاء"
-            try { connectFlow() } catch (_: CancellationException) { }
+            try { connectFlow() }
+            catch (_: CancellationException) { }
+            catch (_: Exception) { status.text = "تعذر فتح القائمة المحفوظة • أعد المحاولة" }
             finally { connectButton.text = "▶  دخول إلى BLOFY"; connectJob = null }
         }
     }
 
-    private suspend fun connectFlow() {
+    private suspend fun connectFlow(requested: ProviderEntity? = null) {
+        if (!databaseAvailable()) return
         val dao = BlofyDatabase.get(applicationContext).dao()
-        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
-        if (endpoint.isBlank()) {
-            val localProvider = dao.providers().first().firstOrNull()
-            if (localProvider == null) { status.text = "أضف قائمة تشغيل أولاً"; return }
-            if (hasCachedCatalog(dao, localProvider.id)) openHome() else openCatalogLoading(localProvider.id)
+        val endpoint = activationEndpoint
+        val manager = ActivationManager(applicationContext, dao)
+        val local = loadLocalProviders(dao)
+        val candidate = if (requested != null) local.firstOrNull { it.id == requested.id }
+            else local.firstOrNull { it.enabled }
+        if (requested != null && candidate == null) {
+            status.text = "القائمة غير متاحة محليًا • حدّث القوائم من الموقع"
             return
         }
-        status.text = "جاري التحقق من تفعيل الجهاز..."
-        val manager = ActivationManager(applicationContext, dao)
-        val result = runSuspendCatching { withContext(Dispatchers.IO) { manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME) } }
-        if (result.isSuccess) {
-            val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
-            renderIdentity(identity.deviceId, identity.activationCode)
+        val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
+
+        // Use the SAME cached entitlement rule already used for offline fallback. Missing,
+        // expired or explicitly blocked activation still requires a successful server check.
+        if (candidate != null && hasCachedCatalog(dao, candidate.id) &&
+            (endpoint.isBlank() || manager.cachedCanUse(identity))) {
+            enterProvider(dao, endpoint, candidate)
+            return
         }
-        result.onSuccess { remote ->
-            if (!remote.canUse()) { status.text = activationLabel(remote); return@onSuccess }
-            val portalSync = runSuspendCatching { PortalPlaylistClient.sync(applicationContext, endpoint, dao) }.getOrNull()
-            renderPortalPlaylists(portalSync?.providers.orEmpty())
-            val activeProvider = portalSync?.activeProvider ?: dao.providers().first().firstOrNull()
-            if (activeProvider == null) { status.text = "الجهاز مفعل • أضف قائمة"; addPlaylist.requestFocus(); return@onSuccess }
-            withContext(Dispatchers.IO) { dao.upsertProvider(activeProvider) }
-            val ready = hasCachedCatalog(dao, activeProvider.id)
-            val changed = portalSync?.changedProviderIds?.contains(activeProvider.id) == true
-            if (changed || !ready) { status.text = "جاري تجهيز ${activeProvider.name}"; openCatalogLoading(activeProvider.id); return@onSuccess }
-            withContext(Dispatchers.IO) { dao.saveAndActivateProvider(activeProvider) }
-            applyRemoteProviderProfile(endpoint, dao, activeProvider.id)
+        if (endpoint.isBlank()) {
+            if (candidate == null) status.text = "أضف قائمة تشغيل أولاً"
+            else enterProvider(dao, endpoint, candidate)
+            return
+        }
+
+        status.text = "جاري التحقق من تفعيل الجهاز..."
+        val remote = runSuspendCatching {
+            withTimeoutOrNull(12_000L) {
+                withContext(Dispatchers.IO) { manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME) }
+            }
+        }.getOrNull()
+        if (remote == null) {
+            status.text = "تعذر التحقق من التفعيل • أعد المحاولة"
+            return
+        }
+        if (!remote.canUse()) { status.text = activationLabel(remote); return }
+
+        // A known provider never waits for /playlists/list or /provider-profile on entry.
+        val active = candidate ?: runSuspendCatching {
+            withTimeoutOrNull(12_000L) {
+                PortalPlaylistClient.sync(applicationContext, endpoint, dao, PortalPlaylistClient.SyncMode.PULL_ONLY)
+            }?.activeProvider
+        }.getOrNull()
+        if (active == null) {
+            status.text = "الجهاز مفعل • أضف قائمة"; addPlaylist.requestFocus(); return
+        }
+        enterProvider(dao, endpoint, active)
+    }
+
+    private suspend fun enterProvider(dao: BlofyDao, endpoint: String, provider: ProviderEntity) {
+        val selected = PortalPlaylistClient.selectProvider(applicationContext, endpoint, provider, dao)
+        if (hasCachedCatalog(dao, selected.id)) {
+            // Follow-up checks are application-owned and do not delay or repaint Login.
+            LoginFollowUp.enqueue(applicationContext, endpoint, selected.id)
             openHome()
-        }.onFailure {
-            val cached = withContext(Dispatchers.IO) { dao.activation() }
-            val provider = dao.providers().first().firstOrNull()
-            if (cached != null && manager.cachedCanUse(cached) && provider != null && hasCachedCatalog(dao, provider.id)) openHome()
-            else status.text = "تعذر التحقق من التفعيل"
+        } else {
+            status.text = "جاري تجهيز ${selected.name}"
+            openCatalogLoading(selected.id)
         }
     }
 
     private fun selectPortalProvider(provider: ProviderEntity) {
-        if (playlistJob?.isActive == true) return
+        if (openingScreen || playlistJob?.isActive == true || connectJob?.isActive == true) return
         playlistJob = lifecycleScope.launch {
-            val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
-            val dao = BlofyDatabase.get(applicationContext).dao()
-            val existing = withContext(Dispatchers.IO) { dao.provider(provider.id) }
-            val changed = existing == null || existing.baseUrl != provider.baseUrl || existing.username != provider.username || existing.password != provider.password || existing.providerType != provider.providerType
-            status.text = "جاري اختيار ${provider.name}..."
-            runSuspendCatching { PortalPlaylistClient.selectProvider(applicationContext, endpoint, provider, dao) }.onSuccess { selected ->
-                renderPortalPlaylists(loadPortalProviders(endpoint, dao))
-                if (!changed && hasCachedCatalog(dao, selected.id)) { applyRemoteProviderProfile(endpoint, dao, selected.id); openHome() }
-                else { status.text = "جاري تجهيز ${selected.name}"; openCatalogLoading(selected.id) }
-            }.onFailure { status.text = "تعذر اختيار القائمة • حاول مرة أخرى" }
-            playlistJob = null
+            try { connectFlow(provider) }
+            catch (_: CancellationException) { }
+            catch (_: Exception) { status.text = "تعذر اختيار القائمة • حاول مرة أخرى" }
+            finally { playlistJob = null }
         }
     }
 
-    private suspend fun loadPortalProviders(endpoint: String, dao: BlofyDao): List<ProviderEntity> =
-        if (endpoint.isBlank()) dao.allProviders().first()
-        else runSuspendCatching { PortalPlaylistClient.sync(applicationContext, endpoint, dao).providers }.getOrElse { dao.allProviders().first() }
+    private suspend fun loadLocalProviders(dao: BlofyDao): List<ProviderEntity> = withContext(Dispatchers.IO) {
+        tv.blofy.player.core.identity.PortalSyncBook.visible(applicationContext, dao.allProviders().first())
+            .filter { it.providerType.equals("xtream", true) }
+    }
+
+    private suspend fun databaseAvailable(): Boolean {
+        val ready = DatabaseStartup.awaitReady(applicationContext, 2_500L)
+        if (!ready) status.text = "التخزين المحلي لم يجهز بعد • أعد المحاولة، لا تحذف بيانات التطبيق"
+        return ready
+    }
 
     private fun renderPortalPlaylists(allProviders: List<ProviderEntity>) {
         val providers = tv.blofy.player.core.identity.PortalSyncBook.visible(this, allProviders)
         val row = playlistRow ?: return
+        if (openingScreen || renderedPlaylists == providers) return
+        renderedPlaylists = providers.toList()
         row.removeAllViews()
         if (providers.isEmpty()) {
             row.addView(emptyPlaylistView("ما عندك قوائم إلى الآن • اضغط إضافة / إدارة"), LinearLayout.LayoutParams(-1, dp(86)))
@@ -533,36 +574,63 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun openCatalogLoading(providerId: String) {
+        if (openingScreen) return
+        openingScreen = true
         startActivity(Intent(this, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, providerId))
     }
 
-    private suspend fun refreshIdentityAndProvider() {
-        val dao = BlofyDatabase.get(applicationContext).dao()
-        val identity = withContext(Dispatchers.IO) { ActivationManager(applicationContext, dao).ensureIdentity() }
-        renderIdentity(identity.deviceId, identity.activationCode)
-        refreshProviderStatus()
-        renderPortalPlaylists(loadPortalProviders(BuildConfig.ACTIVATION_BASE_URL.trim(), dao))
+    private suspend fun refreshIdentityAndProvider(remoteCheck: Boolean = false) {
+        if (openingScreen || !identityRefreshMutex.tryLock()) return
+        try {
+            if (!databaseAvailable()) return
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val local = loadLocalProviders(dao)
+            if (openingScreen || connectJob?.isActive == true || playlistJob?.isActive == true) return
+            // Show saved cards BEFORE identity/QR work; never clear them for a network failure.
+            renderPortalPlaylists(local)
+            refreshProviderStatus()
+            val manager = ActivationManager(applicationContext, dao)
+            val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
+            renderIdentity(identity.deviceId, identity.activationCode)
+            // Automatic resume remains local-only. The explicit refresh button must still check
+            // the server and show its result, without clearing saved cards or blocking navigation.
+            if (remoteCheck && activationEndpoint.isNotBlank() && !openingScreen) {
+                status.text = "جاري التحقق من تفعيل الجهاز..."
+                val remote = runSuspendCatching {
+                    withTimeoutOrNull(12_000L) {
+                        withContext(Dispatchers.IO) {
+                            manager.refresh(ActivationRemoteClient.create(activationEndpoint), BuildConfig.VERSION_NAME)
+                        }
+                    }
+                }.getOrNull()
+                if (!openingScreen && connectJob?.isActive != true && playlistJob?.isActive != true) {
+                    status.text = remote?.let(::activationLabel) ?: "تعذر التحقق من التفعيل • أعد المحاولة"
+                    val refreshed = withContext(Dispatchers.IO) { manager.ensureIdentity() }
+                    renderIdentity(refreshed.deviceId, refreshed.activationCode)
+                }
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { status.text = "تعذر قراءة التخزين المحلي • أعد المحاولة" }
+        finally { identityRefreshMutex.unlock() }
     }
 
     private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) {
-        CatalogSyncState.isFullyReady(applicationContext, providerId) && dao.hasStreamsForProvider(providerId)
+        CatalogSyncState.isEntryReady(applicationContext, providerId) && dao.hasStreamsForProvider(providerId)
     }
 
     private suspend fun <T> runSuspendCatching(block: suspend () -> T): Result<T> = try { Result.success(block()) }
     catch (c: CancellationException) { throw c }
     catch (e: Throwable) { Result.failure(e) }
 
-    private fun renderIdentity(deviceId: String, activationCode: String) {
+    private suspend fun renderIdentity(deviceId: String, activationCode: String) {
         deviceView.text = deviceId
         codeView.text = activationCode
-        val url = ActivationPortalUrl.create(BuildConfig.ACTIVATION_BASE_URL, deviceId, activationCode)
-        if (url != null) qrView.setImageBitmap(createQr(url)) else qrView.setImageDrawable(null)
-    }
-
-    private suspend fun applyRemoteProviderProfile(endpoint: String, dao: BlofyDao, providerId: String) {
-        val current = dao.provider(providerId) ?: return
-        val updated = RemoteProviderProfileClient.applyIfAvailable(applicationContext, endpoint, current)
-        if (updated != current) dao.upsertProvider(updated)
+        val url = ActivationPortalUrl.create(activationEndpoint, deviceId, activationCode)
+        if (url == renderedQrUrl) return
+        val bitmap = url?.let { withContext(Dispatchers.Default) { createQr(it) } }
+        if (isFinishing || openingScreen) return
+        renderedQrUrl = url
+        if (bitmap != null) qrView.setImageBitmap(bitmap) else qrView.setImageDrawable(null)
     }
 
     private fun activationLabel(remote: ActivationCheckResponse) = when (remote.state()) {
@@ -573,24 +641,33 @@ class LoginActivity : AppCompatActivity() {
         ActivationCheckResponse.State.UNKNOWN -> remote.message ?: "حالة التفعيل غير معروفة"
     }
 
-    private fun openHome() { startActivity(Intent(this, HomeActivity::class.java)); finish() }
+    private fun openHome() {
+        if (openingScreen) return
+        openingScreen = true
+        startActivity(Intent(this, HomeActivity::class.java))
+        finish()
+    }
 
     override fun onResume() {
         super.onResume()
+        openingScreen = false
         if (::status.isInitialized && connectJob?.isActive != true) lifecycleScope.launch { refreshIdentityAndProvider() }
     }
 
     private suspend fun refreshProviderStatus() {
         if (connectJob?.isActive == true) return
-        val provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
+        val provider = withContext(Dispatchers.IO) {
+            BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
+        }
         status.text = if (provider == null) "في انتظار إضافة قائمة" else "● جاهز • ${provider.name}"
     }
 
     private fun createQr(value: String): Bitmap {
         val matrix = QRCodeWriter().encode(value, BarcodeFormat.QR_CODE, 360, 360)
-        return Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.RGB_565).apply {
-            for (y in 0 until matrix.height) for (x in 0 until matrix.width) setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
+        val pixels = IntArray(matrix.width * matrix.height) { index ->
+            if (matrix[index % matrix.width, index / matrix.width]) Color.BLACK else Color.WHITE
         }
+        return Bitmap.createBitmap(pixels, matrix.width, matrix.height, Bitmap.Config.RGB_565)
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {

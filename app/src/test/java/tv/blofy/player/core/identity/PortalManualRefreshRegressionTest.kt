@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -227,11 +228,18 @@ class PortalManualRefreshRegressionTest {
                 PortalPlaylistClient.selectProvider(app, server.url("/").toString(), provider("two"), dao)
             }
             assertTrue(selectedStarted.await(5, TimeUnit.SECONDS))
-            assertNull(server.takeRequest(200, TimeUnit.MILLISECONDS))
-            release.countDown()
-            refresh.await()
-            selection.await()
+            // Local activation must complete while /list is still deliberately blocked. Previously
+            // selectProvider waited on the same mutex as that network response.
+            val selected = withTimeout(1_500L) { selection.await() }
+            assertEquals("two", selected.id)
             assertEquals(listOf("two"), rows.values.filter { it.enabled }.map { it.id })
+            assertEquals(1L, release.count)
+            assertNull(server.takeRequest(100, TimeUnit.MILLISECONDS))
+            release.countDown()
+            val refreshed = refresh.await()
+            assertEquals("two", refreshed.activeProvider?.id)
+            assertEquals(listOf("two"), rows.values.filter { it.enabled }.map { it.id })
+            assertNotNull(server.takeRequest(3, TimeUnit.SECONDS))
         } finally { release.countDown() }
     }
 

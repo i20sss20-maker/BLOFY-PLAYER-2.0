@@ -24,6 +24,7 @@ import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 object PortalPlaylistClient {
     enum class SyncMode { MERGE_AND_UPLOAD, PULL_ONLY }
@@ -35,7 +36,12 @@ object PortalPlaylistClient {
         val remoteCount: Int
     )
 
+    // Network requests are serialized separately from short local state transactions. A slow
+    // website must never own the lock needed to activate a saved playlist.
     private val syncMutex = Mutex()
+    private val stateMutex = Mutex()
+    private val selectionEpoch = AtomicLong(0L)
+    private var pendingSelectionEpoch: Long? = null
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val client = OkHttpClient.Builder()
         .callTimeout(12, TimeUnit.SECONDS)
@@ -70,135 +76,152 @@ object PortalPlaylistClient {
             catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { }
         }
+        val beforeFetch = selectionEpoch.get()
         val pending = PortalSyncBook.pending(context)
         val remote = fetchRemote(endpoint, auth).filterNot { it.id in pending || it.aliasIds.any(pending::contains) }
-        val local = supportedProviders(dao.allProviders().first())
-        val localById = local.associateBy { it.id }
-        val changed = linkedSetOf<String>()
-        val remoteProviders = ArrayList<ProviderEntity>(remote.size)
-        var remoteActive: ProviderEntity? = null
+        val (result, uploads) = stateMutex.withLock {
+            val local = supportedProviders(dao.allProviders().first())
+            val localById = local.associateBy { it.id }
+            val keepLocalSelection = selectionEpoch.get() != beforeFetch || pendingSelectionEpoch != null
+            val localActiveId = local.firstOrNull { it.enabled }?.id
+            val changed = linkedSetOf<String>()
+            val remoteProviders = ArrayList<ProviderEntity>(remote.size)
+            var remoteActive: ProviderEntity? = null
 
-        remote.forEach { item ->
-            val candidates = local.filter { it.id == item.id || it.id in item.aliasIds ||
-                (PortalSyncBook.isKnown(context, it.id) && PortalSyncBook.remoteId(context, it.id) == item.id) }
-            val existing = candidates.firstOrNull { CatalogSyncState.isFullyReady(context, it.id) && dao.hasCatalog(it.id) }
-                ?: candidates.firstOrNull { dao.hasCatalog(it.id) } ?: localById[item.id] ?: candidates.firstOrNull()
-            val existingHasCatalog = existing?.let { dao.hasCatalog(it.id) } == true
-            val existingReadyCatalog = existingHasCatalog && existing != null && CatalogSyncState.isReady(context, existing.id)
-            val localId = existing?.id ?: item.id
-            val aliases = (candidates.map { it.id } + item.aliasIds + item.id).toSet() - localId
-            PortalSyncBook.bind(context, localId, item.id, aliases)
-            aliases.forEach { dao.deactivateProvider(it) }
-            val next = ProviderEntity(
-                id = localId,
-                name = item.name,
-                baseUrl = item.baseUrl.trimEnd('/'),
-                username = item.username,
-                password = item.password,
-                providerType = "xtream",
-                liveFormat = existing?.liveFormat ?: "ts",
-                preferredTransport = existing?.preferredTransport ?: "cronet",
-                preferredEngine = existing?.preferredEngine ?: "media3",
-                allowCrossProtocolRedirects = existing?.allowCrossProtocolRedirects ?: true,
-                enabled = item.active,
-                updatedAt = item.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
-            )
-            val contentChanged = existing == null || !sameSource(existing, next)
-            if (contentChanged) {
-                // New/uncommitted sources still require the normal foreground preparation path.
-                // Only a genuinely committed local catalog may keep opening while a website source
-                // replacement is staged in the background.
-                if (!existingReadyCatalog) changed += next.id
-                CatalogSyncState.markPending(context, next.id)
-            }
-
-            val visible = if (contentChanged && existing != null && existingReadyCatalog) {
-                val pendingId = PortalSyncBook.pendingSourceId(next.id)
-                PortalSyncBook.hide(context, setOf(pendingId))
-                dao.upsertProvider(next.copy(id = pendingId, enabled = false))
-                PortalSyncBook.markPendingSource(context, next.id)
-                existing.copy(name = next.name, enabled = next.enabled, updatedAt = next.updatedAt)
-            } else {
-                discardPendingSource(context, dao, next.id)
-                next
-            }
-            remoteProviders += visible
-            dao.upsertProvider(visible.copy(enabled = if (item.active) true else existing?.enabled ?: false))
-            if (contentChanged && existingReadyCatalog) {
-                // WorkManager is available in production, but pure JVM/Robolectric callers may not
-                // initialize it. A scheduling failure must not corrupt or block the known-good list.
-                runCatching { CatalogRefreshWorker.enqueueNow(context.applicationContext, next.id) }
-            }
-            if (item.active) remoteActive = visible
-        }
-
-        val remoteIds = remote.mapTo(hashSetOf()) { it.id }
-        val remoteAllIds = remote.flatMap { it.aliasIds + it.id }.toSet()
-        val siteDeleted = local.filter { PortalSyncBook.isKnown(context, it.id) &&
-            PortalSyncBook.remoteId(context, it.id) !in remoteAllIds }
-        PortalSyncBook.hide(context, siteDeleted.map { it.id }.toSet())
-        siteDeleted.forEach { dao.deactivateProvider(it.id); discardPendingSource(context, dao, it.id) }
-        if (mode == SyncMode.MERGE_AND_UPLOAD) {
-            PortalSyncBook.visible(context, local)
-                .filter { it.providerType.equals("xtream", true) }
-                .filterNot { PortalSyncBook.isKnown(context, it.id) || it.id in remoteIds }
-                .forEach { provider ->
-                    try {
-                        push(endpoint, auth, provider.copy(enabled = provider.enabled && remoteActive == null))
-                            .also { remoteId -> PortalSyncBook.bind(context, provider.id, remoteId) }
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                    }
+            remote.forEach { item ->
+                val candidates = local.filter { it.id == item.id || it.id in item.aliasIds ||
+                    (PortalSyncBook.isKnown(context, it.id) && PortalSyncBook.remoteId(context, it.id) == item.id) }
+                val existing = candidates.firstOrNull { CatalogSyncState.isFullyReady(context, it.id) && dao.hasCatalog(it.id) }
+                    ?: candidates.firstOrNull { dao.hasCatalog(it.id) } ?: localById[item.id] ?: candidates.firstOrNull()
+                val existingHasCatalog = existing?.let { dao.hasCatalog(it.id) } == true
+                val existingReadyCatalog = existingHasCatalog && existing != null && CatalogSyncState.isReady(context, existing.id)
+                val localId = existing?.id ?: item.id
+                val aliases = (candidates.map { it.id } + item.aliasIds + item.id).toSet() - localId
+                PortalSyncBook.bind(context, localId, item.id, aliases)
+                aliases.forEach { dao.deactivateProvider(it) }
+                val next = ProviderEntity(
+                    id = localId,
+                    name = item.name,
+                    baseUrl = item.baseUrl.trimEnd('/'),
+                    username = item.username,
+                    password = item.password,
+                    providerType = "xtream",
+                    liveFormat = existing?.liveFormat ?: "ts",
+                    preferredTransport = existing?.preferredTransport ?: "cronet",
+                    preferredEngine = existing?.preferredEngine ?: "media3",
+                    allowCrossProtocolRedirects = existing?.allowCrossProtocolRedirects ?: true,
+                    enabled = if (keepLocalSelection) localId == localActiveId else item.active,
+                    updatedAt = item.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+                )
+                val contentChanged = existing == null || !sameSource(existing, next)
+                if (contentChanged) {
+                    // New/uncommitted sources still require the normal foreground preparation path.
+                    // Only a genuinely committed local catalog may keep opening while a website source
+                    // replacement is staged in the background.
+                    if (!existingReadyCatalog) changed += next.id
+                    CatalogSyncState.markPending(context, next.id)
                 }
-        }
 
-        val mergedById = linkedMapOf<String, ProviderEntity>()
-        local.forEach { mergedById[it.id] = it }
-        remoteProviders.forEach { remoteProvider ->
-            val old = mergedById[remoteProvider.id]
-            mergedById[remoteProvider.id] = remoteProvider.copy(
-                enabled = remoteProvider.enabled || (old?.enabled == true && remoteActive == null)
-            )
+                val visible = if (contentChanged && existing != null && existingReadyCatalog) {
+                    val pendingId = PortalSyncBook.pendingSourceId(next.id)
+                    PortalSyncBook.hide(context, setOf(pendingId))
+                    dao.upsertProvider(next.copy(id = pendingId, enabled = false))
+                    PortalSyncBook.markPendingSource(context, next.id)
+                    existing.copy(name = next.name, enabled = next.enabled, updatedAt = next.updatedAt)
+                } else {
+                    discardPendingSource(context, dao, next.id)
+                    next
+                }
+                remoteProviders += visible
+                dao.upsertProvider(visible.copy(enabled = if (keepLocalSelection) localId == localActiveId else if (item.active) true else existing?.enabled ?: false))
+                if (contentChanged && existingReadyCatalog) {
+                    // WorkManager is available in production, but pure JVM/Robolectric callers may not
+                    // initialize it. A scheduling failure must not corrupt or block the known-good list.
+                    runCatching { CatalogRefreshWorker.enqueueNow(context.applicationContext, next.id) }
+                }
+                if (!keepLocalSelection && item.active) remoteActive = visible
+            }
+
+            val remoteIds = remote.mapTo(hashSetOf()) { it.id }
+            val remoteAllIds = remote.flatMap { it.aliasIds + it.id }.toSet()
+            val siteDeleted = local.filter { PortalSyncBook.isKnown(context, it.id) &&
+                PortalSyncBook.remoteId(context, it.id) !in remoteAllIds }
+            PortalSyncBook.hide(context, siteDeleted.map { it.id }.toSet())
+            siteDeleted.forEach { dao.deactivateProvider(it.id); discardPendingSource(context, dao, it.id) }
+            val uploads = if (mode == SyncMode.MERGE_AND_UPLOAD) {
+                PortalSyncBook.visible(context, local)
+                    .filter { it.providerType.equals("xtream", true) }
+                    .filterNot { PortalSyncBook.isKnown(context, it.id) || it.id in remoteIds }
+                    .map { it.copy(enabled = it.enabled && remoteActive == null) }
+            } else emptyList()
+
+            val mergedById = linkedMapOf<String, ProviderEntity>()
+            local.forEach { mergedById[it.id] = it }
+            remoteProviders.forEach { remoteProvider ->
+                val old = mergedById[remoteProvider.id]
+                mergedById[remoteProvider.id] = remoteProvider.copy(
+                    enabled = remoteProvider.enabled || (old?.enabled == true && remoteActive == null)
+                )
+            }
+            val merged = supportedProviders(PortalSyncBook.visible(context, mergedById.values.toList())).sortedByDescending { it.updatedAt }
+            val activeCandidate = (if (keepLocalSelection) merged.firstOrNull { it.id == localActiveId } else remoteActive)
+                ?: merged.firstOrNull { it.enabled } ?: merged.firstOrNull()
+            SyncResult(activeCandidate, merged, changed, remote.size) to uploads
         }
-        val merged = supportedProviders(PortalSyncBook.visible(context, mergedById.values.toList())).sortedByDescending { it.updatedAt }
-        val activeCandidate = remoteActive ?: merged.firstOrNull { it.enabled } ?: merged.firstOrNull()
-        SyncResult(activeCandidate, merged, changed, remote.size)
+        // No HTTP request runs while stateMutex is held.
+        for (provider in uploads) {
+            try {
+                val remoteId = push(endpoint, auth, provider)
+                stateMutex.withLock { PortalSyncBook.bind(context, provider.id, remoteId) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { }
+        }
+        result
     }
 
-    suspend fun selectProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao): ProviderEntity = syncMutex.withLock {
+    suspend fun selectProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao): ProviderEntity =
         withContext(Dispatchers.IO) {
-            require(provider.providerType.equals("xtream", true)) { "Xtream provider required" }
-            val selected = (dao.provider(provider.id) ?: provider).copy(
-                enabled = true,
-                providerType = "xtream",
-                updatedAt = System.currentTimeMillis()
-            )
-            // Local selection is the user-visible transaction. Never make entering a saved list wait
-            // for a portal POST; mirror the selection after the caller has already returned.
-            dao.saveAndActivateProvider(selected)
             val app = context.applicationContext
-            backgroundScope.launch {
+            val (selected, epoch) = stateMutex.withLock {
+                require(provider.providerType.equals("xtream", true)) { "Xtream provider required" }
+                val selected = (dao.provider(provider.id) ?: provider).copy(
+                    enabled = true,
+                    providerType = "xtream",
+                    updatedAt = System.currentTimeMillis()
+                )
+                dao.saveAndActivateProvider(selected)
+                val epoch = selectionEpoch.incrementAndGet()
+                pendingSelectionEpoch = if (baseUrl.isBlank()) null else epoch
+                selected to epoch
+            }
+            if (baseUrl.isNotBlank()) backgroundScope.launch {
                 syncMutex.withLock {
-                    runCatching {
-                        // Keep using the same DAO snapshot that staged the website source. Reopening
-                        // a different database here can lose the pending credentials in tests and in
-                        // multi-process/recovery edge cases, causing old credentials to be uploaded.
-                        val remoteSelection = (pendingSource(app, dao, selected.id) ?: selected)
-                            .copy(enabled = true, providerType = "xtream", updatedAt = selected.updatedAt)
+                    try {
+                        val remoteSelection = stateMutex.withLock {
+                            if (selectionEpoch.get() != epoch) return@launch
+                            val current = dao.provider(selected.id) ?: return@launch
+                            if (!current.enabled || PortalSyncBook.visible(app, listOf(current)).isEmpty()) return@launch
+                            (pendingSource(app, dao, selected.id) ?: current).copy(enabled = true)
+                        }
                         pushProviderInternal(app, baseUrl, remoteSelection)
+                        stateMutex.withLock {
+                            if (pendingSelectionEpoch == epoch) pendingSelectionEpoch = null
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) {
+                        // Retain the local choice if the mirror failed; a later pull must not
+                        // activate an older website choice over this user's explicit selection.
                     }
                 }
             }
             selected
         }
-    }
 
     suspend fun pushProvider(context: Context, baseUrl: String, provider: ProviderEntity) = syncMutex.withLock {
         withContext(Dispatchers.IO) {
             if (baseUrl.isBlank()) return@withContext
             pushProviderInternal(context, baseUrl, provider)
-            discardPendingSource(context, BlofyDatabase.get(context).dao(), provider.id)
+            stateMutex.withLock { discardPendingSource(context, BlofyDatabase.get(context).dao(), provider.id) }
         }
     }
 
@@ -227,11 +250,13 @@ object PortalPlaylistClient {
         expectedSource: ProviderEntity,
         commit: suspend () -> Unit,
     ) = syncMutex.withLock {
-        val latest = pendingSource(context, dao, expectedSource.id)
-        check(latest != null && sameSource(latest, expectedSource)) { "Website source changed during preparation" }
-        withContext(NonCancellable + Dispatchers.IO) {
-            commit()
-            discardPendingSource(context, dao, expectedSource.id)
+        stateMutex.withLock {
+            val latest = pendingSource(context, dao, expectedSource.id)
+            check(latest != null && sameSource(latest, expectedSource)) { "Website source changed during preparation" }
+            withContext(NonCancellable + Dispatchers.IO) {
+                commit()
+                discardPendingSource(context, dao, expectedSource.id)
+            }
         }
     }
 
@@ -248,10 +273,12 @@ object PortalPlaylistClient {
     suspend fun removeProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao): Boolean = syncMutex.withLock {
         withContext(Dispatchers.IO) {
             val remoteId = PortalSyncBook.remoteId(context, provider.id)
-            val ids = dao.allProviders().first().filter { it.id == provider.id ||
-                PortalSyncBook.remoteId(context, it.id) == remoteId }.map { it.id }.toSet()
-            PortalSyncBook.queueDelete(context, remoteId, ids)
-            ids.forEach { dao.deactivateProvider(it); discardPendingSource(context, dao, it) }
+            stateMutex.withLock {
+                val ids = dao.allProviders().first().filter { it.id == provider.id ||
+                    PortalSyncBook.remoteId(context, it.id) == remoteId }.map { it.id }.toSet()
+                PortalSyncBook.queueDelete(context, remoteId, ids)
+                ids.forEach { dao.deactivateProvider(it); discardPendingSource(context, dao, it) }
+            }
             val endpoint = baseUrl.trim().trimEnd('/')
             if (endpoint.isBlank()) return@withContext false
             val auth = JSONObject().apply {
