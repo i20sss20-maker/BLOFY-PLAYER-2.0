@@ -12,6 +12,17 @@ test('injects BLOFY subscriber option and secure session flow once', () => {
   assert.equal(injectSubscriberPortalUi(injected), injected);
 });
 
+test('retains authenticated device fields for BLOFY save and dispatches native field events', () => {
+  const injected = injectSubscriberPortalUi('<html><body></body></html>');
+  assert.match(injected, /rememberedDeviceId/);
+  assert.match(injected, /rememberedActivationCode/);
+  assert.match(injected, /resolvedDeviceAuth\(\)/);
+  assert.match(injected, /addEventListener\('input', rememberDeviceAuth, true\)/);
+  assert.match(injected, /dispatchEvent\(new Event\('input', \{ bubbles: true \}\)\)/);
+  assert.match(injected, /dispatchValue\(qs\('baseUrl'\), session\.baseUrl\)/);
+  assert.match(injected, /!payload\.providerId/);
+});
+
 test('leaves non-html responses unchanged', () => {
   assert.equal(injectSubscriberPortalUi('{"ok":true}'), '{"ok":true}');
 });
