@@ -179,7 +179,11 @@ class BlofySubscriberActivity : AppCompatActivity() {
                         val dao = BlofyDatabase.get(applicationContext).dao()
                         val remoteId = session.providerId.ifBlank { UUID.nameUUIDFromBytes("blofy-subscriber|$endpoint|$user".toByteArray()).toString() }
                         val existing = editingId?.let { dao.provider(it) } ?: dao.provider(remoteId)
+                        val oldRemoteId = existing?.let { PortalSyncBook.remoteId(applicationContext, it.id) }
                         val providerId = existing?.id ?: remoteId
+                        val sameLogicalSubscriber = existing != null &&
+                            existing.baseUrl.trimEnd('/') == session.baseUrl.trimEnd('/') &&
+                            (existing.id == remoteId || oldRemoteId == remoteId)
                         PortalSyncBook.bind(applicationContext, providerId, remoteId)
                         val next = ProviderEntity(
                             providerId,
@@ -195,16 +199,15 @@ class BlofySubscriberActivity : AppCompatActivity() {
                             existing?.enabled ?: false,
                             System.currentTimeMillis()
                         )
-                        val credentialsChanged = existing == null ||
-                            existing.baseUrl != next.baseUrl ||
-                            existing.username != next.username ||
-                            existing.password != next.password
+                        // The BLOFY proxy token is intentionally renewed. A token change for the same
+                        // stable providerId is authentication renewal, not a new catalog source.
+                        val sourceChanged = existing == null || !sameLogicalSubscriber
                         val readyCatalog = CatalogSyncState.isReady(applicationContext, providerId) && dao.hasCatalog(providerId)
 
                         dao.upsertProvider(next)
-                        if (credentialsChanged || !readyCatalog) CatalogSyncState.markPending(applicationContext, providerId)
+                        if (sourceChanged || !readyCatalog) CatalogSyncState.markPending(applicationContext, providerId)
                         runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
-                        Triple(providerId, credentialsChanged, readyCatalog)
+                        Triple(providerId, sourceChanged, readyCatalog)
                     }
 
                     setResult(RESULT_OK)
