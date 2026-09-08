@@ -14,6 +14,8 @@ object TwoPaneFocusGuard {
     private val topTargets = WeakHashMap<RecyclerView, WeakReference<View>>()
     private val focusGenerations = WeakHashMap<RecyclerView, Int>()
     private val logicalPositions = WeakHashMap<RecyclerView, Int>()
+    private val pendingPositions = WeakHashMap<RecyclerView, Int>()
+    private val pendingCleanups = WeakHashMap<RecyclerView, () -> Unit>()
 
     fun registerTopTarget(root: View, target: View) {
         val recyclers = ArrayList<RecyclerView>()
@@ -53,7 +55,8 @@ object TwoPaneFocusGuard {
             ?.let(owner::findContainingViewHolder)
             ?.bindingAdapterPosition
             ?.takeIf { it in 0 until count }
-        val position = holderPosition ?: logicalPositions[owner]?.takeIf { it in 0 until count }
+        val position = pendingPositions[owner]?.takeIf { it in 0 until count }
+            ?: holderPosition ?: logicalPositions[owner]?.takeIf { it in 0 until count }
             ?: firstVisiblePosition(owner).takeIf { it in 0 until count }
             ?: 0
         logicalPositions[owner] = position
@@ -64,7 +67,9 @@ object TwoPaneFocusGuard {
 
         if (direction == View.FOCUS_UP && position < columns) {
             val top = topTargets[owner]?.get()
-            if (top != null && top.isShown && top.isFocusable && top.requestFocus()) return true
+            if (top != null && top.isShown && top.isFocusable && top.requestFocus()) {
+                cancelPending(owner)
+            }
             return true
         }
 
@@ -82,16 +87,16 @@ object TwoPaneFocusGuard {
         // Browser zones are physical: categories are on the left, content is on the right.
         // Never let Android's generic focusSearch guess a different zone.
         if (owner === categories) {
-            if (direction == View.FOCUS_RIGHT) focusContent()
+            if (direction == View.FOCUS_RIGHT && focusContent()) cancelPending(owner)
             return true
         }
         if (owner === content && grid == null) {
-            if (direction == View.FOCUS_LEFT) focusCategories()
+            if (direction == View.FOCUS_LEFT && focusCategories()) cancelPending(owner)
             return true
         }
         if (owner === content && direction == View.FOCUS_LEFT &&
             isLeftEdge(position, count, columns, rtl)) {
-            focusCategories()
+            if (focusCategories()) cancelPending(owner)
             return true
         }
         if (grid != null && (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT)) {
@@ -117,22 +122,39 @@ object TwoPaneFocusGuard {
     fun focusItem(list: RecyclerView, position: Int): Boolean {
         val adapter = list.adapter ?: return false
         if (position !in 0 until adapter.itemCount) return false
+        val hadPendingMove = pendingPositions.containsKey(list)
+        cancelPending(list)
+        val generation = (focusGenerations[list] ?: 0) + 1
+        focusGenerations[list] = generation
         logicalPositions[list] = position
         val existing = list.findViewHolderForAdapterPosition(position)?.itemView
         if (existing != null && existing.isShown) {
-            return existing.requestFocus().also { moved ->
-                if (moved) existing.requestRectangleOnScreen(Rect(0, 0, existing.width, existing.height), true)
+            // A previous scrollToPosition may still be waiting for layout even though this newer
+            // target is attached. Replace that scroll too, not just its focus callback.
+            if (hadPendingMove) list.scrollToPosition(position)
+            if (existing.requestFocus()) {
+                existing.requestRectangleOnScreen(Rect(0, 0, existing.width, existing.height), true)
+                return true
             }
         }
 
-        val generation = (focusGenerations[list] ?: 0) + 1
-        focusGenerations[list] = generation
         val itemId = if (adapter.hasStableIds()) adapter.getItemId(position) else null
+        pendingPositions[list] = position
+        parkFocus(list)
         var listener: RecyclerView.OnChildAttachStateChangeListener? = null
+        var attempt: Runnable? = null
+        var timeout: Runnable? = null
 
-        list.isFocusable = true
-        list.isFocusableInTouchMode = true
-        list.requestFocus()
+        fun cleanup() {
+            listener?.let(list::removeOnChildAttachStateChangeListener)
+            listener = null
+            attempt?.let(list::removeCallbacks)
+            timeout?.let(list::removeCallbacks)
+            if (focusGenerations[list] == generation) {
+                pendingPositions.remove(list)
+                pendingCleanups.remove(list)
+            }
+        }
 
         fun stillValid(): Boolean {
             if (!list.isAttachedToWindow || list.adapter !== adapter) return false
@@ -141,50 +163,57 @@ object TwoPaneFocusGuard {
             if (logicalPositions[list] != position) return false
             if (itemId != null && adapter.getItemId(position) != itemId) return false
             val currentFocus = list.rootView.findFocus()
-            if (currentFocus != null && currentFocus !== list && !contains(list, currentFocus)) return false
-            return true
+            return currentFocus == null || currentFocus === list || contains(list, currentFocus)
         }
 
         fun tryFocus(): Boolean {
-            if (!stillValid()) return false
+            if (!stillValid() || list.isComputingLayout) return false
             val target = list.findViewHolderForAdapterPosition(position)?.itemView ?: return false
             return target.requestFocus().also { moved ->
                 if (moved) target.requestRectangleOnScreen(Rect(0, 0, target.width, target.height), true)
             }
         }
 
+        attempt = Runnable {
+            if (!stillValid() || tryFocus()) cleanup()
+        }
         listener = object : RecyclerView.OnChildAttachStateChangeListener {
             override fun onChildViewAttachedToWindow(view: View) {
                 if (!stillValid()) {
-                    listener?.let(list::removeOnChildAttachStateChangeListener)
-                    listener = null
-                    return
-                }
-                if (list.getChildViewHolder(view).bindingAdapterPosition == position && tryFocus()) {
-                    listener?.let(list::removeOnChildAttachStateChangeListener)
-                    listener = null
+                    cleanup()
+                } else {
+                    // Attachment can happen in the middle of RecyclerView's layout. Focus only
+                    // after binding/layout, when bindingAdapterPosition is trustworthy.
+                    attempt?.let { list.removeCallbacks(it); list.post(it) }
                 }
             }
             override fun onChildViewDetachedFromWindow(view: View) = Unit
         }
-        list.addOnChildAttachStateChangeListener(listener!!)
-        list.scrollToPosition(position)
-        list.post {
-            if (tryFocus() || !stillValid()) {
-                listener?.let(list::removeOnChildAttachStateChangeListener)
-                listener = null
-            }
+        timeout = Runnable {
+            if (stillValid() && !tryFocus()) parkFocus(list)
+            cleanup()
         }
-        list.postDelayed({
-            if (stillValid() && !tryFocus()) {
-                // Do not send focus anywhere else. Keep RecyclerView as the temporary owner and a
-                // later DPAD event will continue from logicalPositions.
-                list.requestFocus()
-            }
-            listener?.let(list::removeOnChildAttachStateChangeListener)
-            listener = null
-        }, FOCUS_REQUEST_TIMEOUT_MS)
+        pendingCleanups[list] = ::cleanup
+        list.addOnChildAttachStateChangeListener(checkNotNull(listener))
+        list.scrollToPosition(position)
+        list.post(checkNotNull(attempt))
+        list.postDelayed(checkNotNull(timeout), FOCUS_REQUEST_TIMEOUT_MS)
         return true
+    }
+
+    private fun cancelPending(list: RecyclerView) {
+        pendingCleanups.remove(list)?.invoke()
+        pendingPositions.remove(list)
+    }
+
+    private fun parkFocus(list: RecyclerView) {
+        list.isFocusable = true
+        list.isFocusableInTouchMode = true
+        val previous = list.descendantFocusability
+        // requestFocus() with FOCUS_AFTER_DESCENDANTS focuses the FIRST visible child, not the
+        // RecyclerView. That was the reproducible jump-to-top at an off-screen row boundary.
+        list.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        try { list.requestFocus() } finally { list.descendantFocusability = previous }
     }
 
     private fun firstVisiblePosition(list: RecyclerView): Int = when (val lm = list.layoutManager) {
