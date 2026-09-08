@@ -34,8 +34,6 @@ class CatalogRefreshWorker(
 
         if (!dao.hasCatalog(provider.id)) return Result.success()
 
-        // A website host/credential change is staged beside the known-good provider. Refresh the
-        // pending source in the worker while Home keeps using the old local catalog.
         val sourceChanged = PortalSyncBook.hasPendingSource(app, provider.id)
         val refreshSource = if (sourceChanged) {
             PortalPlaylistClient.pendingSource(app, dao, provider.id) ?: return Result.retry()
@@ -47,9 +45,6 @@ class CatalogRefreshWorker(
             series = dao.catalogCountAll(provider.id, "series")
         )
 
-        // A full provider refresh temporarily needs room for the staged replacement + SQLite WAL.
-        // If storage is critically low, keep the known-good catalog and retry later instead of
-        // risking a half-written refresh on small Android boxes.
         LocalStorageManager.trimTemporaryIfNeeded(app)
         if (!LocalStorageManager.hasHealthyFreeSpace(app)) return Result.retry()
 
@@ -75,8 +70,6 @@ class CatalogRefreshWorker(
                     series = dao.catalogCountAll(staged.id, "series")
                 )
                 if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
-                    // A valid-looking HTTP/JSON response can still be truncated or temporarily empty.
-                    // Never let that destroy a working local library; leave the previous snapshot live.
                     dao.discardStagedCatalog(staged.id)
                     return Result.retry()
                 }
@@ -84,21 +77,19 @@ class CatalogRefreshWorker(
 
             val refreshedProvider = refreshSource.copy(enabled = true, updatedAt = staged.updatedAt)
             if (sourceChanged) {
-                // Serialize promotion with portal edits. If the website changes again while this
-                // worker is downloading, the stale candidate is rejected and the old catalog stays live.
                 PortalPlaylistClient.commitPendingSource(app, dao, refreshSource) {
                     dao.promoteStagedCatalog(staged.id, refreshedProvider)
-                    CatalogSyncState.markSourceReplaced(app, provider.id)
+                    promoted = true
+                    // Readiness/cache markers are recoverable. A failure here must never cause a
+                    // second network import after the new catalog has already been promoted.
+                    runCatching { CatalogSyncState.markSourceReplaced(app, provider.id) }
                 }
             } else {
                 dao.promoteStagedRefresh(staged.id, refreshedProvider)
-                CatalogSyncState.markCatalogCommitted(app, provider.id)
+                promoted = true
+                runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
             }
-            promoted = true
 
-            // Promotion itself is the durable point of no return. From here on, never turn a local
-            // Home/manifest preparation problem into another full network download. The new catalog
-            // is already complete and active; entry preparation is recoverable on the next launch.
             runCatching {
                 tv.blofy.player.data.preparation.FullCatalogPreparer.prepare(app, provider.id) { }
             }
@@ -108,8 +99,6 @@ class CatalogRefreshWorker(
                 runCatching { dao.discardStagedCatalog(staged.id) }
                 Result.retry()
             } else {
-                // A post-promotion failure must not redownload the provider. The promoted catalog
-                // stays active and the normal cache-first entry path can rebuild local snapshots.
                 Result.success()
             }
         }
@@ -124,7 +113,6 @@ class CatalogRefreshWorker(
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        /** Remove periodic work registered by older builds so upgrades become truly cache-first. */
         fun cancelLegacyAutomatic(context: Context) {
             WorkManager.getInstance(context.applicationContext).cancelUniqueWork(LEGACY_PERIODIC_NAME)
         }
