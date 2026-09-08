@@ -35,6 +35,7 @@ import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
 import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.DatabaseStartup
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.data.preparation.FullCatalogPreparer
@@ -85,8 +86,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 onTimeout = { fail(getString(if (preflight) R.string.catalog_preflight_timeout else R.string.catalog_prepare_failed)) },
                 onFailure = { fail(preparationMessage(it)) }
             ) {
-                val hasCachedCatalog = withTimeout(CACHED_CATALOG_CHECK_TIMEOUT_MS) {
-                    withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().hasCatalog(providerId) }
+                if (!DatabaseStartup.awaitReady(applicationContext, CACHED_CATALOG_CHECK_TIMEOUT_MS)) {
+                    fail(getString(R.string.catalog_preflight_timeout))
+                    return@run
+                }
+                val hasCachedCatalog = withContext(Dispatchers.IO) {
+                    CatalogSyncState.isEntryReady(applicationContext, providerId) &&
+                        BlofyDatabase.get(applicationContext).dao().hasCatalog(providerId)
                 }
                 preflight = false
                 val sourceChanged = PortalSyncBook.hasPendingSource(applicationContext, providerId)
@@ -94,9 +100,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 // A durable local library is always the entry path. Refreshes, website source
                 // replacements and derived cache repair must never hold the user on this screen.
                 if (hasCachedCatalog) {
-                    if (!CatalogSyncState.isReady(applicationContext, providerId)) {
-                        CatalogSyncState.markReady(applicationContext, providerId)
-                    }
                     if (forceRefresh || sourceChanged) {
                         CatalogRefreshWorker.enqueueNow(applicationContext, providerId)
                     }
@@ -298,8 +301,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
 
         // A race can make a local catalog appear after preflight; never replace it synchronously.
-        if (!firstLoad) {
-            CatalogSyncState.markReady(applicationContext, providerId)
+        if (!firstLoad && CatalogSyncState.isEntryReady(applicationContext, providerId)) {
             CatalogRefreshWorker.enqueueNow(applicationContext, providerId)
             openHome()
             return
@@ -318,7 +320,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             }
             check(result.freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
             check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
-            render(30, getString(R.string.catalog_finishing))
+            render(96, getString(R.string.catalog_finishing))
             withContext(NonCancellable + Dispatchers.IO) {
                 val saved = target.copy(enabled = true, updatedAt = System.currentTimeMillis())
                 dao.saveAndActivateProvider(saved)
@@ -357,7 +359,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.MOVIES -> getString(R.string.catalog_stage_movies)
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
-        render((p.percent.coerceIn(0, 95) * 30 / 95), label)
+        render(5 + (p.percent.coerceIn(0, 95) * 90 / 95), label)
     }
 
     private fun render(value: Int, label: String) {
@@ -368,10 +370,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
         stage.text = label
         serverStep.setTextColor(if (safe >= 5) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
         contentStep.setTextColor(if (safe >= 10) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        prepareStep.setTextColor(if (safe >= 30) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        prepareStep.setTextColor(if (safe >= 96) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
         readyStep.setTextColor(if (safe >= 100) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
         serverStep.text = "${if (safe >= 10) "✓" else "●"}  ${getString(R.string.catalog_step_server)}"
-        contentStep.text = "${if (safe >= 30) "✓" else "○"}  ${getString(R.string.catalog_step_content)}"
+        contentStep.text = "${if (safe >= 96) "✓" else "○"}  ${getString(R.string.catalog_step_content)}"
         prepareStep.text = "${if (safe >= 100) "✓" else "○"}  ${getString(R.string.catalog_step_prepare)}"
         readyStep.text = "${if (safe >= 100) "✓" else "○"}  ${getString(R.string.catalog_step_ready)}"
     }
