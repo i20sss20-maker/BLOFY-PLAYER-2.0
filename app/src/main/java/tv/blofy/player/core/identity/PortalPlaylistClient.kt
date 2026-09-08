@@ -1,10 +1,13 @@
 package tv.blofy.player.core.identity
 
 import android.content.Context
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -13,12 +16,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import tv.blofy.player.core.network.awaitResponse
+import tv.blofy.player.core.url.PlaylistUrlPolicy
+import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
-import tv.blofy.player.core.network.awaitResponse
-import tv.blofy.player.core.url.PlaylistUrlPolicy
 import java.util.concurrent.TimeUnit
 
 object PortalPlaylistClient {
@@ -32,6 +36,7 @@ object PortalPlaylistClient {
     )
 
     private val syncMutex = Mutex()
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val client = OkHttpClient.Builder()
         .callTimeout(12, TimeUnit.SECONDS)
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -78,6 +83,7 @@ object PortalPlaylistClient {
                 (PortalSyncBook.isKnown(context, it.id) && PortalSyncBook.remoteId(context, it.id) == item.id) }
             val existing = candidates.firstOrNull { CatalogSyncState.isFullyReady(context, it.id) && dao.hasCatalog(it.id) }
                 ?: candidates.firstOrNull { dao.hasCatalog(it.id) } ?: localById[item.id] ?: candidates.firstOrNull()
+            val existingHasCatalog = existing?.let { dao.hasCatalog(it.id) } == true
             val localId = existing?.id ?: item.id
             val aliases = (candidates.map { it.id } + item.aliasIds + item.id).toSet() - localId
             PortalSyncBook.bind(context, localId, item.id, aliases)
@@ -98,12 +104,15 @@ object PortalPlaylistClient {
             )
             val contentChanged = existing == null || !sameSource(existing, next)
             if (contentChanged) {
-                changed += next.id
+                // A new provider must still go through first import. A changed source with a
+                // known-good local catalog is staged and refreshed in WorkManager instead of
+                // blocking Login/Home behind a 30% promotion screen.
+                if (!existingHasCatalog) changed += next.id
                 CatalogSyncState.markPending(context, next.id)
             }
 
-            val visible = if (contentChanged && existing != null &&
-                CatalogSyncState.isReady(context, existing.id) && dao.hasCatalog(existing.id)) {
+            val visible = if (contentChanged && existing != null && existingHasCatalog &&
+                CatalogSyncState.isReady(context, existing.id)) {
                 val pendingId = PortalSyncBook.pendingSourceId(next.id)
                 PortalSyncBook.hide(context, setOf(pendingId))
                 dao.upsertProvider(next.copy(id = pendingId, enabled = false))
@@ -115,6 +124,9 @@ object PortalPlaylistClient {
             }
             remoteProviders += visible
             dao.upsertProvider(visible.copy(enabled = if (item.active) true else existing?.enabled ?: false))
+            if (contentChanged && existingHasCatalog) {
+                CatalogRefreshWorker.enqueueNow(context.applicationContext, next.id)
+            }
             if (item.active) remoteActive = visible
         }
 
@@ -155,14 +167,25 @@ object PortalPlaylistClient {
     suspend fun selectProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao): ProviderEntity = syncMutex.withLock {
         withContext(Dispatchers.IO) {
             require(provider.providerType.equals("xtream", true)) { "Xtream provider required" }
-            val selected = (dao.provider(provider.id) ?: provider).copy(enabled = true, providerType = "xtream", updatedAt = System.currentTimeMillis())
+            val selected = (dao.provider(provider.id) ?: provider).copy(
+                enabled = true,
+                providerType = "xtream",
+                updatedAt = System.currentTimeMillis()
+            )
+            // Local selection is the user-visible transaction. Never make entering a saved list wait
+            // for a portal POST; mirror the selection after the caller has already returned.
             dao.saveAndActivateProvider(selected)
-            try {
-                val remoteSelection = (pendingSource(context, dao, selected.id) ?: selected)
-                    .copy(enabled = true, providerType = "xtream", updatedAt = selected.updatedAt)
-                pushProviderInternal(context, baseUrl, remoteSelection)
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { }
+            val app = context.applicationContext
+            backgroundScope.launch {
+                syncMutex.withLock {
+                    runCatching {
+                        val backgroundDao = BlofyDatabase.get(app).dao()
+                        val remoteSelection = (pendingSource(app, backgroundDao, selected.id) ?: selected)
+                            .copy(enabled = true, providerType = "xtream", updatedAt = selected.updatedAt)
+                        pushProviderInternal(app, baseUrl, remoteSelection)
+                    }
+                }
+            }
             selected
         }
     }
