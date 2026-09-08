@@ -6,12 +6,39 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import tv.blofy.player.core.provider.ProviderKind
 import tv.blofy.player.core.provider.ProviderProfile
+import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.data.local.StreamEntity
 
 class ContentUrlResolverTest {
     private val xtreamProfile = ProviderProfile(
         providerKey = "xtream-under-test",
         providerKind = ProviderKind.XTREAM
     )
+
+    @Test
+    fun hiddenPublicDirectSourceIsPrimaryPlaybackRoute() {
+        val provider = ProviderEntity(
+            id = "p1",
+            name = "provider",
+            baseUrl = "http://panel.example.com",
+            username = "user",
+            password = "pass"
+        )
+        val stream = StreamEntity(
+            key = "p1:live:100",
+            providerId = "p1",
+            remoteId = "100",
+            categoryId = null,
+            kind = "live",
+            name = "channel",
+            directSource = "http://cf.tstor8k.xyz/live/user/pass/100.ts"
+        )
+
+        assertEquals(
+            "http://cf.tstor8k.xyz/live/user/pass/100.ts",
+            ContentUrlResolver.live(provider, xtreamProfile, stream)
+        )
+    }
 
     @Test
     fun retriesTsAsHlsWithoutChangingQuery() {
