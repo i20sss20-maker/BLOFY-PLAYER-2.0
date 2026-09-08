@@ -17,7 +17,7 @@ import tv.blofy.player.data.remote.XtreamClient
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-/** Explicit/manual catalog refresh only. Opening or resuming the app never schedules this worker. */
+/** Explicit/manual or source-change catalog refresh. Opening a normal saved list never schedules it. */
 class CatalogRefreshWorker(
     appContext: Context,
     params: WorkerParameters
@@ -63,16 +63,16 @@ class CatalogRefreshWorker(
                 return if (sync.failedSectionCount > 0) Result.retry() else Result.success()
             }
 
-            if (!sourceChanged) {
-                val candidateCounts = CatalogRefreshIntegrityPolicy.Counts(
-                    live = dao.catalogCountAll(staged.id, "live"),
-                    movies = dao.catalogCountAll(staged.id, "movie"),
-                    series = dao.catalogCountAll(staged.id, "series")
-                )
-                if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
-                    dao.discardStagedCatalog(staged.id)
-                    return Result.retry()
-                }
+            val candidateCounts = CatalogRefreshIntegrityPolicy.Counts(
+                live = dao.catalogCountAll(staged.id, "live"),
+                movies = dao.catalogCountAll(staged.id, "movie"),
+                series = dao.catalogCountAll(staged.id, "series")
+            )
+            // A website host/credential change for the same playlist must not be allowed to replace
+            // a known-good 50k/100k library with a truncated but syntactically valid response.
+            if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
+                dao.discardStagedCatalog(staged.id)
+                return Result.retry()
             }
 
             val refreshedProvider = refreshSource.copy(enabled = true, updatedAt = staged.updatedAt)
@@ -80,8 +80,6 @@ class CatalogRefreshWorker(
                 PortalPlaylistClient.commitPendingSource(app, dao, refreshSource) {
                     dao.promoteStagedCatalog(staged.id, refreshedProvider)
                     promoted = true
-                    // Readiness/cache markers are recoverable. A failure here must never cause a
-                    // second network import after the new catalog has already been promoted.
                     runCatching { CatalogSyncState.markSourceReplaced(app, provider.id) }
                 }
             } else {
@@ -90,9 +88,9 @@ class CatalogRefreshWorker(
                 runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
             }
 
-            runCatching {
-                tv.blofy.player.data.preparation.FullCatalogPreparer.prepare(app, provider.id) { }
-            }
+            // Promotion is the durable result. Do not immediately rebuild Home/FTS/manifest here;
+            // CatalogEnrichmentLifecycle owns that work after its UI quiet period so Room/CPU do not
+            // compete with the user just after opening Home.
             Result.success()
         } catch (_: Throwable) {
             if (!promoted) {
