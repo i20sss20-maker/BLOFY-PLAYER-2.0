@@ -1,0 +1,33 @@
+name: Apply reviewed RC0715 loading source patch
+on:
+  push:
+    branches: [rc07.15-loading-entry]
+    paths: [tools/rc0715-loading.patch.b64]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and apply source-only patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/rc07.15-loading-entry
+          python3 - <<'PY'
+          import base64, gzip, hashlib, pathlib
+          data = gzip.decompress(base64.b64decode(pathlib.Path('tools/rc0715-loading.patch.b64').read_text(), validate=True))
+          assert hashlib.sha256(data).hexdigest() == '64887c6c392ec5fe59b46f3927fc63ceecbd2b0f01d0341496faec32c4cde6ba'
+          pathlib.Path('/tmp/rc0715-loading.patch').write_bytes(data)
+          PY
+          git apply --check /tmp/rc0715-loading.patch
+          git apply /tmp/rc0715-loading.patch
+          git rm .github/workflows/rc0715-apply-loading-fix.yml tools/rc0715-loading.patch.b64
+          git add app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt app/src/test/java/tv/blofy/player/ui/login/LoginSavedEntryRegressionTest.kt
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: preserve explicit activation refresh and test saved-card entry'
+          git push origin HEAD:rc07.15-loading-entry
