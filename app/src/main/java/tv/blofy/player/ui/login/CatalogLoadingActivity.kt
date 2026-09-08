@@ -29,21 +29,18 @@ import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.CatalogSyncState
-import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
 import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
-import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.data.preparation.FullCatalogPreparer
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
-import java.util.UUID
 
 class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var retryButton: Button
@@ -88,15 +85,14 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 val hasCachedCatalog = withTimeout(CACHED_CATALOG_CHECK_TIMEOUT_MS) {
                     withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().hasCatalog(providerId) }
                 }
+                val entryReady = CatalogSyncState.isEntryReady(applicationContext, providerId)
                 preflight = false
                 val sourceChanged = PortalSyncBook.hasPendingSource(applicationContext, providerId)
 
-                // A durable local library is always the entry path. Refreshes, website source
-                // replacements and derived cache repair must never hold the user on this screen.
-                if (hasCachedCatalog) {
-                    if (!CatalogSyncState.isReady(applicationContext, providerId)) {
-                        CatalogSyncState.markReady(applicationContext, providerId)
-                    }
+                // Rows written by an interrupted first import are not a saved library. Only a real
+                // CatalogSyncState commit may take the local fast path; otherwise sync() discards the
+                // partial rows and resumes a clean first import instead of reopening empty sections.
+                if (hasCachedCatalog && entryReady) {
                     if (forceRefresh || sourceChanged) {
                         CatalogRefreshWorker.enqueueNow(applicationContext, providerId)
                     }
@@ -104,7 +100,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
                     return@run
                 }
 
-                // Only a true first import may block on network/catalog construction.
                 CatalogSyncState.markPending(applicationContext, providerId)
                 sync(providerId)
             }
@@ -297,13 +292,14 @@ class CatalogLoadingActivity : AppCompatActivity() {
             }
         }
 
-        // A race can make a local catalog appear after preflight; never replace it synchronously.
-        if (!firstLoad) {
-            CatalogSyncState.markReady(applicationContext, providerId)
-            CatalogRefreshWorker.enqueueNow(applicationContext, providerId)
+        // If another process path committed while preflight was running, open only when its durable
+        // state marker agrees. Never convert stray rows into a successful library here.
+        if (!firstLoad && CatalogSyncState.isEntryReady(applicationContext, providerId)) {
+            if (sourceChanged) CatalogRefreshWorker.enqueueNow(applicationContext, providerId)
             openHome()
             return
         }
+        check(firstLoad) { "Catalog rows exist without a committed catalog state" }
 
         val syncProvider: ProviderEntity = target.copy(enabled = true, updatedAt = System.currentTimeMillis())
         var catalogCommitted = false
@@ -318,7 +314,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             }
             check(result.freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
             check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
-            render(30, getString(R.string.catalog_finishing))
+            render(96, getString(R.string.catalog_finishing))
             withContext(NonCancellable + Dispatchers.IO) {
                 val saved = target.copy(enabled = true, updatedAt = System.currentTimeMillis())
                 dao.saveAndActivateProvider(saved)
@@ -330,8 +326,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 }
             }
 
-            // The durable Room commit is enough to enter. Home/search snapshots are accelerators,
-            // not a reason to leave the user stuck at 30% while a huge library is prepared again.
             render(100, getString(R.string.catalog_complete))
             delay(80L)
             openHome()
@@ -357,7 +351,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.MOVIES -> getString(R.string.catalog_stage_movies)
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
-        render((p.percent.coerceIn(0, 95) * 30 / 95), label)
+        // PlaylistSyncProgress already represents the actual import. Do not compress 95% of real
+        // work into a fake 0..30 range; that made a healthy large import look frozen at 30%.
+        val mapped = 5 + (p.percent.coerceIn(0, 95) * 87 / 95)
+        render(mapped, label)
     }
 
     private fun render(value: Int, label: String) {
@@ -367,12 +364,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
         percent.text = "$safe%"
         stage.text = label
         serverStep.setTextColor(if (safe >= 5) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        contentStep.setTextColor(if (safe >= 10) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        prepareStep.setTextColor(if (safe >= 30) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        contentStep.setTextColor(if (safe >= 92) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        prepareStep.setTextColor(if (safe >= 96) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
         readyStep.setTextColor(if (safe >= 100) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
-        serverStep.text = "${if (safe >= 10) "✓" else "●"}  ${getString(R.string.catalog_step_server)}"
-        contentStep.text = "${if (safe >= 30) "✓" else "○"}  ${getString(R.string.catalog_step_content)}"
-        prepareStep.text = "${if (safe >= 100) "✓" else "○"}  ${getString(R.string.catalog_step_prepare)}"
+        serverStep.text = "${if (safe >= 5) "✓" else "●"}  ${getString(R.string.catalog_step_server)}"
+        contentStep.text = "${if (safe >= 92) "✓" else "○"}  ${getString(R.string.catalog_step_content)}"
+        prepareStep.text = "${if (safe >= 96) "✓" else "○"}  ${getString(R.string.catalog_step_prepare)}"
         readyStep.text = "${if (safe >= 100) "✓" else "○"}  ${getString(R.string.catalog_step_ready)}"
     }
 
@@ -392,6 +389,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"
         const val EXTRA_FORCE_REFRESH = "force_refresh"
-        private const val CACHED_CATALOG_CHECK_TIMEOUT_MS = 4_000L
+        private const val CACHED_CATALOG_CHECK_TIMEOUT_MS = 2_500L
     }
 }
