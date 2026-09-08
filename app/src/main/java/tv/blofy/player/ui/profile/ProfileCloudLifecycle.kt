@@ -3,6 +3,7 @@ package tv.blofy.player.ui.profile
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +30,12 @@ class ProfileCloudLifecycle : Application.ActivityLifecycleCallbacks {
         when (activity) {
             is HomeActivity -> activity.lifecycleScope.launch {
                 delay(HOME_DEFER_MS)
-                if (!activity.isFinishing && !activity.isDestroyed) schedule(activity, force = false)
+                // lifecycleScope survives pause. Do not let a delayed Home task wake up while the
+                // user is already inside Player/details and compete with playback/network work.
+                if (!activity.isFinishing && !activity.isDestroyed &&
+                    activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    schedule(activity, force = false)
+                }
             }
             is ProfilesActivity, is ProfileWatchlistActivity, is HomePersonalizationActivity ->
                 schedule(activity, force = false)
