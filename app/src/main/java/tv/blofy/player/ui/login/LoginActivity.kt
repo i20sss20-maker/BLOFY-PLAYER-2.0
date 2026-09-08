@@ -272,7 +272,7 @@ class LoginActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.TOP
-            addView(emptyPlaylistView("ما عندك قوائم إلى الآن • اضغط إضافة / إدارة"), LinearLayout.LayoutParams(-1, dp(86)))
+            addView(subtitle(getString(R.string.login_loading_saved_playlists)), LinearLayout.LayoutParams(-1, dp(86)))
         }
         scroll.addView(playlistRow, FrameLayout.LayoutParams(-1, -2))
         playlistsPanel.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -457,7 +457,7 @@ class LoginActivity : AppCompatActivity() {
                 return@onSuccess
             }
             val portalSync = runSuspendCatching { PortalPlaylistClient.sync(applicationContext, endpoint, dao) }.getOrNull()
-            renderPortalPlaylists(portalSync?.providers ?: withContext(Dispatchers.IO) { dao.allProviders().first() })
+            renderPortalPlaylists(portalSync?.providers ?: withContext(Dispatchers.IO) { dao.allProvidersStored().first() })
             val activeProvider = portalSync?.activeProvider ?: dao.providers().first().firstOrNull()
             if (activeProvider == null) { status.text = "الجهاز مفعل • أضف قائمة"; addPlaylist.requestFocus(); return@onSuccess }
             val ready = hasCachedCatalog(dao, activeProvider.id)
@@ -623,11 +623,13 @@ class LoginActivity : AppCompatActivity() {
 
     private suspend fun refreshIdentityAndProvider(fromWebsite: Boolean) {
         val dao = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
-        val local = withContext(Dispatchers.IO) { dao.allProviders().first() }
-        renderPortalPlaylists(local)
         val manager = ActivationManager(applicationContext, dao)
         val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
         renderIdentity(identity.deviceId, identity.activationCode)
+        // Identity and card labels do not use transport secrets. A slow TV Keystore must not
+        // hold the initial screen here; selection/connect resolves the chosen provider later.
+        val local = withContext(Dispatchers.IO) { dao.allProvidersStored().first() }
+        renderPortalPlaylists(local)
         val active = local.firstOrNull { it.enabled }
         status.text = if (active == null) "في انتظار إضافة قائمة" else "● جاهز • ${active.name}"
         if (!fromWebsite) return

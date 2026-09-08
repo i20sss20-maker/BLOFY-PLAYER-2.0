@@ -1,4 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="login_loading_saved_playlists">Loading saved playlists…</string>
     <!-- English is the product default. Arabic overrides live in values-ar; other locales
          intentionally fall back to English until their translations are completed. -->
     <string name="login_everything_starts_here">Everything starts here</string>

@@ -7,6 +7,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.room.Room
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -37,6 +38,17 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.home.HomeActivity
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.CountDownLatch
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.security.Key
+import java.security.KeyStoreSpi
+import java.security.Provider
+import java.security.Security
+import java.security.cert.Certificate
+import java.util.Collections
+import java.util.Date
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Requests go only to MockWebServer. No production service or user credentials are used. */
 @RunWith(RobolectricTestRunner::class)
@@ -126,6 +138,31 @@ class LoginLocalEntryRegressionTest {
         }
         assertEquals(0, server.requestCount)
         assertNull(shadowOf(activity).nextStartedActivity)
+    }
+
+    @Test fun identityAndSavedCardsDoNotWaitForProviderKeystoreAccess() {
+        val stored = provider.copy(baseUrl = "BLOFYENC1:stored-host", username = "BLOFYENC1:stored-user",
+            password = "BLOFYENC1:stored-password", subscriberToken = "BLOFYENC1:stored-token")
+        val identity = runBlocking(Dispatchers.IO) {
+            db.dao().upsertProviderStored(stored)
+            checkNotNull(db.dao().activation())
+        }
+        LoginKeystoreSpi.loads.set(0)
+        val recording = object : Provider("BlofyLoginRegression", 1.0, "Records unwanted login key access") {
+            init { put("KeyStore.AndroidKeyStore", LoginKeystoreSpi::class.java.name) }
+        }
+        Security.insertProviderAt(recording, 1)
+        try {
+            launch()
+            assertEquals(identity.deviceId, field<TextView>("deviceView").text.toString())
+            assertEquals(identity.activationCode, field<TextView>("codeView").text.toString())
+            assertNotNull(field<LinearLayout>("playlistRow").findViewWithTag<View>(provider.id))
+            assertEquals("Drawing saved identities must not contact a TV's Keystore", 0, LoginKeystoreSpi.loads.get())
+            assertEquals(stored, runBlocking(Dispatchers.IO) { db.dao().providerStored(provider.id) })
+            assertEquals(0, server.requestCount)
+        } finally {
+            Security.removeProvider(recording.name)
+        }
     }
 
     @Test fun connectOpensCommittedLibraryWithoutAnyNetworkRequest() {
@@ -255,4 +292,28 @@ class LoginLocalEntryRegressionTest {
         }
         assertEquals(1, server.requestCount)
     }
+}
+
+/** Failing keys are enough to expose an unnecessary read, without hanging a test worker. */
+class LoginKeystoreSpi : KeyStoreSpi() {
+    companion object { val loads = AtomicInteger() }
+    override fun engineLoad(stream: InputStream?, password: CharArray?) {
+        loads.incrementAndGet()
+        throw IOException("Simulated unavailable TV Keystore")
+    }
+    override fun engineGetKey(alias: String?, password: CharArray?): Key? = null
+    override fun engineGetCertificateChain(alias: String?): Array<Certificate>? = null
+    override fun engineGetCertificate(alias: String?): Certificate? = null
+    override fun engineGetCreationDate(alias: String?): Date? = null
+    override fun engineSetKeyEntry(alias: String?, key: Key?, password: CharArray?, chain: Array<out Certificate>?) = Unit
+    override fun engineSetKeyEntry(alias: String?, key: ByteArray?, chain: Array<out Certificate>?) = Unit
+    override fun engineSetCertificateEntry(alias: String?, cert: Certificate?) = Unit
+    override fun engineDeleteEntry(alias: String?) = Unit
+    override fun engineAliases() = Collections.emptyEnumeration<String>()
+    override fun engineContainsAlias(alias: String?) = false
+    override fun engineSize() = 0
+    override fun engineIsKeyEntry(alias: String?) = false
+    override fun engineIsCertificateEntry(alias: String?) = false
+    override fun engineGetCertificateAlias(cert: Certificate?): String? = null
+    override fun engineStore(stream: OutputStream?, password: CharArray?) = Unit
 }

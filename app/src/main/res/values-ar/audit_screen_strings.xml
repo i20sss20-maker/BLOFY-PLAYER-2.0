@@ -1,4 +1,5 @@
 <resources>
+    <string name="login_loading_saved_playlists">جاري قراءة القوائم المحفوظة…</string>
     <string name="login_everything_starts_here">كل شيء يبدأ من هنا</string>
     <string name="login_activate_choose_enter">فعّل جهازك، اختر قائمتك، وادخل مباشرة إلى BLOFY</string>
     <string name="login_activate_device">تفعيل جهاز BLOFY</string>

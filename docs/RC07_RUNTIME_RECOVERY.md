@@ -1,4 +1,27 @@
-# rc07.16 runtime recovery candidate
+# rc07.18 runtime recovery candidate
+
+## Login initialization follow-up
+
+The rc07.17 device screenshot shows the initial "Creating device identity" label,
+no QR/pairing values, and the default empty-playlist card. A screenshot alone does
+not establish whether it was a transient frame or a persistent stall.
+
+Login was awaiting decryption of every saved provider before displaying identity
+or cards. The new regression injects an unavailable Android Keystore: rc07.17
+performs one unnecessary key-store load, while rc07.18 must display the existing
+identity and saved provider card with zero key-store loads and zero network calls.
+The stored credentials and activation identity are checked to remain unchanged.
+
+Display the identity first, then render stored provider metadata without decrypting
+transport fields. The first frame says "Loading saved playlists" until the actual
+local query completes, so it does not claim the library is empty before reading it.
+Selection, authentication, direct subscriber migration and playback retain their
+existing checks. No schema, backend, theme or player-engine changes are required;
+the only resource additions are the English/Arabic loading message.
+
+The rc07.17 backend is already deployed at production deployment
+`dpl_FmZAr83dELWpx52NQuHopzwfFmGD`, with direct subscriber connections enabled.
+Keep PR #46 draft and unmerged; physical TV acceptance is still required.
 
 The rc07.15 recovery build passed automated checks, but device testing still showed
 blank catalog screens for minutes after import and slow category selection.
