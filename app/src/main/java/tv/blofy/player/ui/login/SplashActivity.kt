@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import tv.blofy.player.R
 import tv.blofy.player.data.local.BlofyDatabase
 
@@ -55,20 +56,19 @@ class SplashActivity : AppCompatActivity() {
         setContentView(root)
 
         lifecycleScope.launch {
-            // The splash must be visible before Room opens. On upgrades from RC06,
-            // migration 8 -> 9 can index a very large catalog and must never block
-            // Android's cold-start frame with a black window.
             val minimumSplash = async { delay(450) }
             statusView.text = "جاري تهيئة مكتبتك..."
             val databaseReady = async(Dispatchers.IO) {
-                runCatching {
-                    BlofyDatabase.get(applicationContext).openHelper.writableDatabase
-                }.isSuccess
+                withTimeoutOrNull(DATABASE_STARTUP_TIMEOUT_MS) {
+                    runCatching {
+                        BlofyDatabase.get(applicationContext).openHelper.writableDatabase
+                    }.isSuccess
+                } ?: false
             }
             minimumSplash.await()
             val ready = databaseReady.await()
-            statusView.text = if (ready) "تم التجهيز" else "سيتم إصلاح المكتبة تلقائيًا"
-            delay(120)
+            statusView.text = if (ready) "تم التجهيز" else "فتح BLOFY والمتابعة في الخلفية"
+            delay(90)
             startActivity(Intent(this@SplashActivity, LoginActivity::class.java))
             finish()
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
@@ -76,4 +76,8 @@ class SplashActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val DATABASE_STARTUP_TIMEOUT_MS = 2_500L
+    }
 }
