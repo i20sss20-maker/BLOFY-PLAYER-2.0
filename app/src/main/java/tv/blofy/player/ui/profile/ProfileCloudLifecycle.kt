@@ -10,12 +10,12 @@ import kotlinx.coroutines.launch
 import tv.blofy.player.core.cloud.ProfileCloudSync
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
-import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.library.ProfileWatchlistActivity
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Opportunistic BLOFY Cloud sync. It never blocks Activity startup and never opens playback state.
+ * Opportunistic BLOFY Cloud sync. It never runs merely because Home became visible; the Home
+ * path is kept local-only so profile networking cannot compete with catalog reads, artwork or DPAD.
  */
 class ProfileCloudLifecycle : Application.ActivityLifecycleCallbacks {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -23,7 +23,7 @@ class ProfileCloudLifecycle : Application.ActivityLifecycleCallbacks {
     @Volatile private var lastAttemptAt = 0L
 
     override fun onActivityResumed(activity: Activity) {
-        if (activity is HomeActivity || activity is ProfilesActivity || activity is ProfileWatchlistActivity || activity is HomePersonalizationActivity) {
+        if (activity is ProfilesActivity || activity is ProfileWatchlistActivity || activity is HomePersonalizationActivity) {
             schedule(activity, force = false)
         }
     }
