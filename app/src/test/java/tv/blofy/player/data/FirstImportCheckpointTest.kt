@@ -70,6 +70,20 @@ class FirstImportCheckpointTest {
         assertEquals(0, dao.categorySnapshot("p1", "live").size)
     }
 
+    @Test fun changedPasswordInvalidatesOldCheckpointEvenOnSameHostAndUsername() = runBlocking(Dispatchers.IO) {
+        val dao = db.dao()
+        dao.upsertCategories(listOf(CategoryEntity("p1:live:1", "p1", "1", "live", "Live", 0)))
+        dao.upsertStreams(listOf(StreamEntity("p1:live:10", "p1", "10", "1", "live", "Old account channel")))
+        FirstImportCheckpoint.markCompleted(app, provider, "live")
+
+        val rotated = provider.copy(password = "new-pass")
+        val state = FirstImportCheckpoint.discardIncompleteSections(app, dao, rotated)
+
+        assertTrue(state.completed.isEmpty())
+        assertEquals(0, dao.catalogCountAll("p1", "live"))
+        assertEquals(0, dao.categorySnapshot("p1", "live").size)
+    }
+
     @Test fun legacyPartialRowsWithoutCheckpointAreClearedOnce() = runBlocking(Dispatchers.IO) {
         val dao = db.dao()
         dao.upsertStreams(listOf(StreamEntity("p1:series:30", "p1", "30", "3", "series", "Partial series")))
