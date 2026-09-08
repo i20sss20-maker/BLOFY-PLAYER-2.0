@@ -178,9 +178,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         )
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
-            onClick = {
-                loadStreams(categoryId(it))
-            },
+            onClick = { loadStreams(categoryId(it)) },
             onFocus = null,
             itemKey = { it.key }
         )
@@ -191,19 +189,20 @@ class ContentBrowserActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
             dao.categories(provider.id, kind).collect { items ->
-                val displayed = if (kind == KIND_LIVE) items else listOf(allCategory()) + items
+                // All content kinds expose a stable synthetic All entry. For Live this prevents a
+                // stale/empty saved provider category from becoming the only entry path to channels.
+                val displayed = listOf(allCategory()) + items
                 categoryAdapter.submit(displayed)
                 if (kind != KIND_LIVE) {
                     if (currentCategoryId == null && streamAdapter.itemCount == 0 && streamsJob?.isActive != true) {
                         loadStreams(null)
                     }
                     requestInitialCatalogFocus()
-                } else if (items.isEmpty()) {
-                    if (liveItems.isEmpty() && !liveLoading) loadStreams(null)
                 } else if (currentCategoryId == null && liveItems.isEmpty() && !liveLoading) {
-                    val saved = savedCategoryId()
-                    val initial = items.firstOrNull { it.remoteId == saved }?.remoteId ?: items.first().remoteId
-                    loadStreams(initial)
+                    val saved = savedCategoryId()?.takeIf { id -> items.any { it.remoteId == id } }
+                    // A valid saved category is restored. Otherwise start from All Channels so a
+                    // provider category with zero/stale rows can never make Live look globally empty.
+                    loadStreams(saved)
                 }
             }
         }
@@ -449,7 +448,11 @@ class ContentBrowserActivity : AppCompatActivity() {
         providerId = if (::provider.isInitialized) provider.id else "catalog",
         remoteId = ALL_CATEGORY_ID,
         kind = kind,
-        name = if (kind == KIND_MOVIE) "كل الأفلام" else "كل المسلسلات",
+        name = when (kind) {
+            KIND_LIVE -> "كل القنوات"
+            KIND_MOVIE -> "كل الأفلام"
+            else -> "كل المسلسلات"
+        },
         orderIndex = -1
     )
 
@@ -467,8 +470,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun startPreview(stream: StreamEntity) {
         if (!previewEnabled) return
         val profile = profile(provider)
-        val url = ContentUrlResolver.live(provider, profile, stream)
-        val fallbackUrl = ContentUrlResolver.liveFallback(provider, profile, stream)
+        val route = ContentUrlResolver.liveRoute(provider, profile, stream)
         if (previewSession == null) {
             previewSession = BlofyPlaybackSession(this, profile, "live_preview")
             previewView?.player = previewSession?.player
@@ -476,7 +478,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         lastPreviewKey = stream.key
         rememberStream(stream)
         previewTitle?.text = stream.name
-        previewSession?.play(url = url, fallbackUrl = fallbackUrl)
+        previewSession?.play(url = route.primaryUrl, fallbackUrl = route.fallbackUrl)
     }
 
     private fun refreshShortEpg(stream: StreamEntity) {
@@ -525,14 +527,14 @@ class ContentBrowserActivity : AppCompatActivity() {
             else -> {
                 rememberStream(stream)
                 refreshShortEpg(stream)
-                val url = ContentUrlResolver.live(provider, profile(provider), stream)
+                val route = ContentUrlResolver.liveRoute(provider, profile(provider), stream)
                 stopPreview()
-                launchPlayer(stream, url)
+                launchPlayer(stream, route.primaryUrl, route.fallbackUrl)
             }
         }
     }
 
-    private fun launchPlayer(stream: StreamEntity, url: String) {
+    private fun launchPlayer(stream: StreamEntity, url: String, fallbackUrl: String?) {
         startActivity(Intent(this, PlayerActivity::class.java).apply {
             putExtra(PlayerActivity.EXTRA_URL, url)
             putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
@@ -543,7 +545,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
             putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
             putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(provider, stream))
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, fallbackUrl)
             putExtra(PlayerActivity.EXTRA_RESUME_MS, 0L)
             putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
             putExtra(PlayerActivity.EXTRA_CATEGORY_ID, currentCategoryId)
