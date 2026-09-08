@@ -31,6 +31,9 @@ const username = `fixture-user-${suffix}-${'u'.repeat(96)}`;
 const password = `fixture-password-${suffix}-${'p'.repeat(96)}`;
 const identities = [];
 const media = Buffer.from([0, 255, 1, 128, 71, 42, 0, 90]);
+// The service socket is local; saved descriptors use the public host a TLS gateway supplies.
+// This exercises portal validation without allowing loopback playlist destinations.
+const sessionHeaders = { 'x-forwarded-host': 'subscriber-gateway.example.test', 'x-forwarded-proto': 'https' };
 let providerRequests = 0;
 let rangeSeen = null;
 let breakStream;
@@ -126,7 +129,7 @@ try {
   });
   assert.equal((await json('/api/v1/subscribers/health')).ok, true);
   const identity = await device();
-  const session = await json('/api/v1/subscribers/session', { body: sessionBody(identity) });
+  const session = await json('/api/v1/subscribers/session', { body: sessionBody(identity), headers: sessionHeaders });
   const token = session.username;
   assert.equal(session.password, 'blofy');
   assert.ok(token.length > 256, 'exercise saved subscriber envelopes beyond the old truncation limit');
@@ -141,7 +144,7 @@ try {
   assert.equal(resolved.items[0].baseUrl, provider.origin);
   assert.equal(resolved.items[0].username, username);
   assert.equal(resolved.items[0].password, password);
-  const directSession = await json('/api/v1/subscribers/session', { body: { ...sessionBody(identity), delivery: 'direct' } });
+  const directSession = await json('/api/v1/subscribers/session', { body: { ...sessionBody(identity), delivery: 'direct' }, headers: sessionHeaders });
   assert.equal(directSession.providerId, saved.id, 'changing delivery must not duplicate the saved account');
   assert.equal(directSession.baseUrl, provider.origin);
   const directPlayback = await fetch(`${directSession.baseUrl}/live/${encodeURIComponent(directSession.username)}/${encodeURIComponent(directSession.password)}/42.m3u8`);
