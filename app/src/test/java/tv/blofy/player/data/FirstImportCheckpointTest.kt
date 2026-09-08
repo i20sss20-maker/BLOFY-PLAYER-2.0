@@ -56,6 +56,32 @@ class FirstImportCheckpointTest {
         assertEquals(0, dao.categorySnapshot("p1", "movie").size)
     }
 
+    @Test fun completedMarkerIsRejectedWhenItsRoomRowsAreMissing() = runBlocking(Dispatchers.IO) {
+        val dao = db.dao()
+        FirstImportCheckpoint.markCompleted(app, provider, "live")
+
+        val state = FirstImportCheckpoint.discardIncompleteSections(app, dao, provider)
+
+        assertFalse(state.isCompleted("live"))
+        assertEquals(0, dao.catalogCountAll("p1", "live"))
+        assertFalse(FirstImportCheckpoint.state(app, provider).isCompleted("live"))
+    }
+
+    @Test fun vanishedCompletedSectionDoesNotDeleteAnotherVerifiedSection() = runBlocking(Dispatchers.IO) {
+        val dao = db.dao()
+        dao.upsertCategories(listOf(CategoryEntity("p1:live:1", "p1", "1", "live", "Live", 0)))
+        dao.upsertStreams(listOf(StreamEntity("p1:live:10", "p1", "10", "1", "live", "Channel")))
+        FirstImportCheckpoint.markCompleted(app, provider, "live")
+        FirstImportCheckpoint.markCompleted(app, provider, "movie")
+
+        val state = FirstImportCheckpoint.discardIncompleteSections(app, dao, provider)
+
+        assertTrue(state.isCompleted("live"))
+        assertFalse(state.isCompleted("movie"))
+        assertEquals(1, dao.catalogCountAll("p1", "live"))
+        assertFalse(FirstImportCheckpoint.state(app, provider).isCompleted("movie"))
+    }
+
     @Test fun changedSourceInvalidatesOldCheckpointAndClearsEveryUncommittedSection() = runBlocking(Dispatchers.IO) {
         val dao = db.dao()
         dao.upsertCategories(listOf(CategoryEntity("p1:live:1", "p1", "1", "live", "Live", 0)))
