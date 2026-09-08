@@ -83,12 +83,17 @@ object FirstImportCheckpoint {
     private fun doneKey(providerId: String, kind: String) = "$DONE_PREFIX$providerId:$kind"
 
     private fun fingerprint(provider: ProviderEntity): String {
+        // The digest is persisted, never the raw credentials. Password must be part of the source
+        // identity: panels commonly keep the same host/username while rotating the password, and a
+        // checkpoint from the old account must never cause sections from that account to be reused.
         val value = buildString {
             append(provider.providerType.lowercase())
             append('|')
             append(provider.baseUrl.trim().trimEnd('/').lowercase())
             append('|')
             append(provider.username)
+            append('|')
+            append(provider.password)
         }
         return MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
