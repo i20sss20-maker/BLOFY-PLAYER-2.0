@@ -10,13 +10,8 @@ import tv.blofy.player.data.local.StreamEntity
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
-/** Xtream-only playback URL policy for rc07.14. */
+/** Xtream playback URL policy. Playback engines are intentionally untouched. */
 object ContentUrlResolver {
-    /**
-     * A few legacy screens still ask for a context-free fallback after resolving the primary URL.
-     * Keep only the last provider route in memory so those callers can receive the canonical panel
-     * URL instead of accidentally passing direct_source twice. No persistence or network work occurs.
-     */
     private data class RouteContext(
         val provider: ProviderEntity,
         val liveProfile: ProviderProfile? = null,
@@ -40,29 +35,32 @@ object ContentUrlResolver {
     }
 
     /**
-     * When direct_source is the primary route, retain the canonical panel route as a distinct
-     * configured fallback. If direct_source is absent, the canonical route is already primary.
+     * If a provider gives a public-looking hidden/CDN host, the first fallback preserves the exact
+     * direct_source path/query but swaps only the origin to the configured provider host. This is
+     * important for panels whose hidden hostname is unreachable from some TV networks. If that
+     * route is not applicable, fall back to the canonical Xtream URL.
      */
     fun liveFallback(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String? {
         val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: return null
-        return canonicalLive(provider, profile, stream).takeUnless { it == primary }
+        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, stream.directSource)
+            ?.takeUnless { it == primary }
+        return origin ?: canonicalLive(provider, profile, stream).takeUnless { it == primary }
     }
 
     fun movieFallback(provider: ProviderEntity, stream: StreamEntity): String? {
         val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: return null
-        return canonicalMovie(provider, stream).takeUnless { it == primary }
+        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, stream.directSource)
+            ?.takeUnless { it == primary }
+        return origin ?: canonicalMovie(provider, stream).takeUnless { it == primary }
     }
 
     fun episodeFallback(provider: ProviderEntity, episode: EpisodeEntity): String? {
         val primary = primaryDirectSource(provider.baseUrl, episode.directSource) ?: return null
-        return canonicalEpisode(provider, episode).takeUnless { it == primary }
+        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, episode.directSource)
+            ?.takeUnless { it == primary }
+        return origin ?: canonicalEpisode(provider, episode).takeUnless { it == primary }
     }
 
-    /**
-     * Compatibility overloads are fallback APIs. The primary direct_source route is selected only
-     * by live/movie/episode above. This keeps older UI call sites safe without changing Media3,
-     * FFmpeg, the playback session, or engine-selection policy.
-     */
     fun directFallback(provider: ProviderEntity, stream: StreamEntity): String? = when (stream.kind) {
         "live" -> recentRoutes[provider.id]?.liveProfile?.let { liveFallback(provider, it, stream) }
         "movie" -> movieFallback(provider, stream)
@@ -72,15 +70,12 @@ object ContentUrlResolver {
     fun directFallback(provider: ProviderEntity, episode: EpisodeEntity): String? =
         episodeFallback(provider, episode)
 
-    /**
-     * Legacy context-free callers normally invoke this immediately after live/movie/episode. Use
-     * the remembered provider route to return a genuinely different canonical fallback. With no
-     * route context (for example isolated tests/old callers), preserve the historical safe behavior.
-     */
     fun directFallback(stream: StreamEntity): String? {
         val route = recentRoutes[stream.providerId] ?: return stream.directSource.safeContextFreeFallback()
-        val primary = primaryDirectSource(route.provider.baseUrl, stream.directSource)
-            ?: return null
+        val primary = primaryDirectSource(route.provider.baseUrl, stream.directSource) ?: return null
+        val origin = ProviderHostResolver.providerOriginFallback(route.provider.baseUrl, stream.directSource)
+            ?.takeUnless { it == primary }
+        if (origin != null) return origin
         val canonical = when (stream.kind) {
             "live" -> route.liveProfile?.let { canonicalLive(route.provider, it, stream) }
             "movie" -> canonicalMovie(route.provider, stream)
@@ -92,15 +87,12 @@ object ContentUrlResolver {
 
     fun directFallback(episode: EpisodeEntity): String? {
         val route = recentRoutes[episode.providerId] ?: return episode.directSource.safeContextFreeFallback()
-        val primary = primaryDirectSource(route.provider.baseUrl, episode.directSource)
-            ?: return null
-        return canonicalEpisode(route.provider, episode).takeUnless { it == primary }
+        val primary = primaryDirectSource(route.provider.baseUrl, episode.directSource) ?: return null
+        val origin = ProviderHostResolver.providerOriginFallback(route.provider.baseUrl, episode.directSource)
+            ?.takeUnless { it == primary }
+        return origin ?: canonicalEpisode(route.provider, episode).takeUnless { it == primary }
     }
 
-    /**
-     * Xtream installations do not all accept the same live output suffix. If the configured
-     * TS/HLS endpoint fails, try the other standard endpoint inside BLOFY before terminal error.
-     */
     fun alternateLiveFormat(url: String, profile: ProviderProfile): String? {
         if (profile.providerKind != ProviderKind.XTREAM) return null
 
@@ -165,7 +157,7 @@ object ContentUrlResolver {
         return value.takeUnless { ProviderHostResolver.isClearlyInternal(host) }
     }
 
-    private fun String?.validHttpUrl(): String? = this?.takeIf {
+    private fun String?.validHttpUrl(): String? = this?.trim()?.takeIf {
         it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true)
     }
 }

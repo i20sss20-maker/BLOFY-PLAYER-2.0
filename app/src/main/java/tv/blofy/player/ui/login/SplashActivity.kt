@@ -12,19 +12,15 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import tv.blofy.player.R
-import tv.blofy.player.data.local.BlofyDatabase
 
 class SplashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val statusView = TextView(this).apply {
-            text = "جاري تجهيز BLOFY..."
+            text = "جاري فتح BLOFY..."
             textSize = 13.5f
             setTextColor(0xFFB8ABC7.toInt())
             gravity = Gravity.CENTER
@@ -55,20 +51,11 @@ class SplashActivity : AppCompatActivity() {
         root.addView(statusView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { topMargin = dp(8) })
         setContentView(root)
 
+        // Startup must never wait for Room, migrations, catalog recovery or the network.
+        // The login screen is interactive first; all data work happens after the UI is visible.
         lifecycleScope.launch {
-            val minimumSplash = async { delay(450) }
-            statusView.text = "جاري تهيئة مكتبتك..."
-            val databaseReady = async(Dispatchers.IO) {
-                withTimeoutOrNull(DATABASE_STARTUP_TIMEOUT_MS) {
-                    runCatching {
-                        BlofyDatabase.get(applicationContext).openHelper.writableDatabase
-                    }.isSuccess
-                } ?: false
-            }
-            minimumSplash.await()
-            val ready = databaseReady.await()
-            statusView.text = if (ready) "تم التجهيز" else "فتح BLOFY والمتابعة في الخلفية"
-            delay(90)
+            delay(MINIMUM_SPLASH_MS)
+            if (isFinishing || isDestroyed) return@launch
             startActivity(Intent(this@SplashActivity, LoginActivity::class.java))
             finish()
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
@@ -78,6 +65,6 @@ class SplashActivity : AppCompatActivity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
-        private const val DATABASE_STARTUP_TIMEOUT_MS = 2_500L
+        private const val MINIMUM_SPLASH_MS = 320L
     }
 }

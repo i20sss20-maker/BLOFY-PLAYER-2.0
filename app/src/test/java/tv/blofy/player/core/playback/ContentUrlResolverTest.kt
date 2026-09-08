@@ -17,7 +17,7 @@ class ContentUrlResolverTest {
     )
 
     @Test
-    fun hiddenPublicDirectSourceIsPrimaryPlaybackRouteWithCanonicalFallback() {
+    fun hiddenPublicDirectSourceIsPrimaryPlaybackRouteWithProviderOriginFallback() {
         val provider = ProviderEntity(
             id = "p1",
             name = "provider",
@@ -42,15 +42,43 @@ class ContentUrlResolverTest {
             ContentUrlResolver.liveFallback(provider, xtreamProfile, stream)
         )
 
-        // Several older screens still call the context-free compatibility overload after resolving
-        // the primary URL. It must never hand the player the same hidden-host URL twice.
         val legacyFallback = ContentUrlResolver.directFallback(stream)
         assertEquals("http://panel.example.com/live/user/pass/100.ts", legacyFallback)
         assertNotEquals(primary, legacyFallback)
     }
 
     @Test
-    fun movieProviderAwareCompatibilityFallbackIsCanonicalAndDistinct() {
+    fun hiddenHostFallbackPreservesNonCanonicalPathQueryAndUsesProviderOrigin() {
+        val provider = ProviderEntity(
+            id = "hidden-path",
+            name = "provider",
+            baseUrl = "http://panel.example.com:8080",
+            username = "user",
+            password = "pass"
+        )
+        val stream = StreamEntity(
+            key = "hidden-path:movie:77",
+            providerId = "hidden-path",
+            remoteId = "77",
+            categoryId = null,
+            kind = "movie",
+            name = "movie",
+            extension = "mkv",
+            directSource = "http://cf.tstor8k.xyz:9090/tokenized/media/77?token=abc&edge=4"
+        )
+
+        assertEquals(
+            "http://cf.tstor8k.xyz:9090/tokenized/media/77?token=abc&edge=4",
+            ContentUrlResolver.movie(provider, stream)
+        )
+        assertEquals(
+            "http://panel.example.com:8080/tokenized/media/77?token=abc&edge=4",
+            ContentUrlResolver.movieFallback(provider, stream)
+        )
+    }
+
+    @Test
+    fun movieProviderAwareCompatibilityFallbackIsDistinct() {
         val provider = ProviderEntity(
             id = "movie-provider",
             name = "provider",

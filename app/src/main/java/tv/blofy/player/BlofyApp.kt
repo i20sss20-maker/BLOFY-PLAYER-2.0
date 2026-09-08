@@ -23,6 +23,7 @@ import tv.blofy.player.ui.catalog.CatalogPageMemory
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
+import tv.blofy.player.ui.login.LoginLocalFastPathLifecycle
 import tv.blofy.player.ui.login.LoginPortalRefreshLifecycle
 import tv.blofy.player.ui.profile.ProfileCloudLifecycle
 import tv.blofy.player.ui.profile.ProfileHomeLayoutLifecycle
@@ -66,6 +67,7 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
+        registerActivityLifecycleCallbacks(LoginLocalFastPathLifecycle())
         registerActivityLifecycleCallbacks(LoginPortalRefreshLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
         registerActivityLifecycleCallbacks(KidsContentGuard())
