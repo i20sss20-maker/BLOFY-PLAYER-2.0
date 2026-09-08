@@ -21,8 +21,6 @@ import tv.blofy.player.ui.catalog.CatalogPageMemory
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
-import tv.blofy.player.ui.login.LoginLocalFastPathLifecycle
-import tv.blofy.player.ui.login.LoginPortalRefreshLifecycle
 import tv.blofy.player.ui.profile.ProfileCloudLifecycle
 import tv.blofy.player.ui.profile.ProfileHomeLayoutLifecycle
 import tv.blofy.player.ui.profile.ProfileSwitcherLifecycle
@@ -63,8 +61,6 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
-        registerActivityLifecycleCallbacks(LoginLocalFastPathLifecycle())
-        registerActivityLifecycleCallbacks(LoginPortalRefreshLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
         registerActivityLifecycleCallbacks(KidsContentGuard())
         registerActivityLifecycleCallbacks(ProfileUxLifecycle())
@@ -75,10 +71,9 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
         registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
 
-        // Stability rule: Activity resume must never start full-catalog preparation, FTS rebuilds,
-        // provider-secret migration or recursive cache scans. Those jobs compete with Room reads,
-        // RecyclerView binding and DPAD on low-powered TV boxes. Catalog refresh/preparation stays
-        // explicit (first import / user refresh / worker), while Home remains read-only and instant.
+        // Stability rule: Application-level callbacks must never own Login controls or start
+        // catalog/database maintenance on Activity resume. Login remains self-contained, while
+        // catalog refresh/preparation stays explicit (first import / user refresh / worker).
         applicationScope.launch {
             runCatching { CommercialConfigRepository.refresh(this@BlofyApp) }
         }
