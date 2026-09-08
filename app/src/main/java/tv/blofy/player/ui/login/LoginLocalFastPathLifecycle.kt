@@ -23,11 +23,8 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.home.HomeActivity
 
 /**
- * Keeps the login screen local-first.
- *
- * A saved provider with a durable catalog never waits for activation/portal network calls before it
- * can be opened. Background catalog work is scheduled only when a newer website source is actually
- * pending; merely reopening BLOFY must not start a huge sync that competes with Home/DPAD/Room.
+ * Keeps the login screen local-first without mistaking interrupted first-import rows for a durable
+ * library. A provider is fast-path eligible only after CatalogSyncState recorded a real commit.
  */
 class LoginLocalFastPathLifecycle : Application.ActivityLifecycleCallbacks {
     private val jobs = mutableMapOf<Activity, Job>()
@@ -124,12 +121,8 @@ class LoginLocalFastPathLifecycle : Application.ActivityLifecycleCallbacks {
         withTimeoutOrNull(LOCAL_WRITE_TIMEOUT_MS) {
             withContext(Dispatchers.IO) { dao.saveAndActivateProvider(provider) }
         }
-        if (!CatalogSyncState.isReady(app, provider.id)) {
-            CatalogSyncState.markReady(app, provider.id)
-        }
-        // Do not run a full refresh on every launch. That was competing with Home reads, artwork and
-        // remote focus on large providers. Only a genuinely staged website/source replacement gets
-        // an immediate background refresh; normal periodic refresh remains owned by its scheduler.
+        // Never manufacture readiness here. Only the catalog commit path can mark a library ready.
+        // Reopening should also never start a huge refresh unless the website staged a new source.
         if (PortalSyncBook.hasPendingSource(app, provider.id)) {
             CatalogRefreshWorker.enqueueNow(app, provider.id)
         }
@@ -139,7 +132,9 @@ class LoginLocalFastPathLifecycle : Application.ActivityLifecycleCallbacks {
     }
 
     private suspend fun hasDurableCatalog(activity: LoginActivity, providerId: String): Boolean {
-        val dao = BlofyDatabase.get(activity.applicationContext).dao()
+        val app = activity.applicationContext
+        if (!CatalogSyncState.isEntryReady(app, providerId)) return false
+        val dao = BlofyDatabase.get(app).dao()
         return withTimeoutOrNull(LOCAL_READ_TIMEOUT_MS) {
             withContext(Dispatchers.IO) { dao.hasStreamsForProvider(providerId) }
         } == true
