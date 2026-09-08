@@ -11,13 +11,23 @@ import tv.blofy.player.ui.home.HomeActivity
 /** Runs the one-per-process update check only after Home has had time to become interactive. */
 class AppUpdateLifecycle : Application.ActivityLifecycleCallbacks {
     private var checkedThisProcess = false
+    private var checkScheduled = false
 
     override fun onActivityResumed(activity: Activity) {
-        if (checkedThisProcess || activity !is HomeActivity) return
-        checkedThisProcess = true
+        if (checkedThisProcess || checkScheduled || activity !is HomeActivity) return
+        checkScheduled = true
         activity.lifecycleScope.launch {
-            delay(HOME_SETTLE_MS)
-            if (!activity.isFinishing && !activity.isDestroyed) AppUpdatePrompt.check(activity)
+            try {
+                delay(HOME_SETTLE_MS)
+                if (!activity.isFinishing && !activity.isDestroyed) {
+                    // Consume the once-per-process allowance only when the check really starts. If
+                    // Home disappears during the settle delay, a later Home can still schedule it.
+                    checkedThisProcess = true
+                    AppUpdatePrompt.check(activity)
+                }
+            } finally {
+                checkScheduled = false
+            }
         }
     }
 
