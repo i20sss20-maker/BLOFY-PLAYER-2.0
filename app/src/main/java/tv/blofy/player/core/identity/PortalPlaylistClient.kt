@@ -251,7 +251,7 @@ object PortalPlaylistClient {
             val ids = dao.allProviders().first().filter { it.id == provider.id ||
                 PortalSyncBook.remoteId(context, it.id) == remoteId }.map { it.id }.toSet()
             PortalSyncBook.queueDelete(context, remoteId, ids)
-            ids.forEach { dao.deactivateProvider(it.id); discardPendingSource(context, dao, it) }
+            ids.forEach { dao.deactivateProvider(it); discardPendingSource(context, dao, it) }
             val endpoint = baseUrl.trim().trimEnd('/')
             if (endpoint.isBlank()) return@withContext false
             val auth = JSONObject().apply {
