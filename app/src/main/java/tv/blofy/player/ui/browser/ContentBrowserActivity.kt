@@ -179,8 +179,6 @@ class ContentBrowserActivity : AppCompatActivity() {
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
             onClick = {
-                // TV stability rule: moving focus through categories must be free. Only OK/click
-                // commits a category change and starts a Room query / Live page load.
                 loadStreams(categoryId(it))
             },
             onFocus = null,
@@ -196,8 +194,6 @@ class ContentBrowserActivity : AppCompatActivity() {
                 val displayed = if (kind == KIND_LIVE) items else listOf(allCategory()) + items
                 categoryAdapter.submit(displayed)
                 if (kind != KIND_LIVE) {
-                    // Do not reset the user's selected category when the categories Flow emits the
-                    // same/new snapshot. Initial All is loaded once; after that OK owns selection.
                     if (currentCategoryId == null && streamAdapter.itemCount == 0 && streamsJob?.isActive != true) {
                         loadStreams(null)
                     }
@@ -472,6 +468,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (!previewEnabled) return
         val profile = profile(provider)
         val url = ContentUrlResolver.live(provider, profile, stream)
+        val fallbackUrl = ContentUrlResolver.liveFallback(provider, profile, stream)
         if (previewSession == null) {
             previewSession = BlofyPlaybackSession(this, profile, "live_preview")
             previewView?.player = previewSession?.player
@@ -479,9 +476,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         lastPreviewKey = stream.key
         rememberStream(stream)
         previewTitle?.text = stream.name
-        previewSession?.play(url)
-        // Never issue EPG/network work just because DPAD focus moved. EPG refresh happens when the
-        // user actually opens a stream, keeping navigation deterministic on slow TV hardware.
+        previewSession?.play(url = url, fallbackUrl = fallbackUrl)
     }
 
     private fun refreshShortEpg(stream: StreamEntity) {
