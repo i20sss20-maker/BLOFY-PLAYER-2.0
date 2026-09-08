@@ -28,9 +28,10 @@ class CatalogEnrichmentLifecycle : Application.ActivityLifecycleCallbacks {
                     ?.takeIf { CatalogSyncState.isEntryReady(app, it.id) }
             } ?: return@launch
 
-            // Let Home and remote focus become interactive before optional local-cache/enrichment work.
-            // Low-memory boxes receive a longer quiet period to avoid a visible post-login stall.
-            delay(if (DeviceClass.isLowMemory(app)) 4_000L else 1_200L)
+            // Entry, Home rendering, artwork and DPAD get an uncontested window. Rebuilding derived
+            // search/home/manifest caches can touch a very large Room database; starting it 1s after
+            // login caused visible lag on TV boxes even though the work was technically on IO.
+            delay(if (DeviceClass.isLowMemory(app)) LOW_MEMORY_QUIET_PERIOD_MS else NORMAL_QUIET_PERIOD_MS)
             if (activity.isFinishing || !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@launch
 
             withContext(Dispatchers.IO) {
@@ -46,9 +47,6 @@ class CatalogEnrichmentLifecycle : Application.ActivityLifecycleCallbacks {
             if (!LocalStorageManager.hasHealthyFreeSpace(app)) return@launch
 
             if (!activity.isFinishing && activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                // Process death may happen after the durable Room catalog commit but before Home/
-                // manifest readiness markers are written. Rebuild those accelerators quietly after
-                // entry; failure here must never evict or hide the working local library.
                 if (!CatalogSyncState.isEntryCachesReady(app, provider.id)) {
                     runCatching { FullCatalogPreparer.prepare(app, provider.id) { } }
                 }
@@ -70,5 +68,7 @@ class CatalogEnrichmentLifecycle : Application.ActivityLifecycleCallbacks {
         private const val STORAGE_PREFS = "blofy_storage_maintenance_v1"
         private const val KEY_LAST_TRIM_AT = "last_trim_at"
         private const val STORAGE_TRIM_INTERVAL_MS = 6L * 60L * 60L * 1000L
+        private const val NORMAL_QUIET_PERIOD_MS = 15_000L
+        private const val LOW_MEMORY_QUIET_PERIOD_MS = 30_000L
     }
 }
