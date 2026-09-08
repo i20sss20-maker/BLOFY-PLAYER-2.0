@@ -83,9 +83,11 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 onTimeout = { fail(getString(if (preflight) R.string.catalog_preflight_timeout else R.string.catalog_prepare_failed)) },
                 onFailure = { fail(preparationMessage(it)) }
             ) {
-                val hasCachedCatalog = withTimeout(CACHED_CATALOG_CHECK_TIMEOUT_MS) {
-                    withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().hasCatalog(providerId) }
-                }
+                // Room can legitimately need several seconds to cold-open/decrypt on low-end TV boxes,
+                // especially immediately after reinstall. Lifecycle cancellation already bounds this local
+                // operation; a 2.5s timeout made healthy devices fail at exactly 1% before Xtream started.
+                val dao = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
+                val hasCachedCatalog = withContext(Dispatchers.IO) { dao.hasCatalog(providerId) }
                 val entryReady = CatalogSyncState.isEntryReady(applicationContext, providerId)
                 preflight = false
                 val sourceChanged = PortalSyncBook.hasPendingSource(applicationContext, providerId)
@@ -108,7 +110,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private fun preparationMessage(error: Throwable): String = when (error) {
         is FullCatalogPreparer.Incomplete -> error.message.orEmpty()
         is ArtworkLoader.StorageFull -> error.message.orEmpty()
-        else -> getString(R.string.catalog_prepare_failed)
+        else -> error.message?.takeIf { it.isNotBlank() }?.let { getString(R.string.catalog_first_failed, it) }
+            ?: getString(R.string.catalog_prepare_failed)
     }
 
     private fun buildUi() {
@@ -363,16 +366,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
             delay(80L)
             openHome()
         } catch (cancelled: CancellationException) {
-            // Completed sections remain checkpointed and safe in Room. PlaylistManager clears only
-            // the currently incomplete direct section before propagating cancellation.
             throw cancelled
         } catch (error: Throwable) {
             if (catalogCommitted) {
                 openHome()
                 return
             }
-            // Keep validated completed sections. The failed/current section is discarded by
-            // PlaylistManager and will be downloaded again on Retry or process restart.
             fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
         }
     }
@@ -420,6 +419,5 @@ class CatalogLoadingActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"
         const val EXTRA_FORCE_REFRESH = "force_refresh"
-        private const val CACHED_CATALOG_CHECK_TIMEOUT_MS = 2_500L
     }
 }
