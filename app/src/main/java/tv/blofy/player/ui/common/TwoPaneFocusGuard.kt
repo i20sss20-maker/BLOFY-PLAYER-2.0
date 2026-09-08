@@ -12,6 +12,7 @@ import java.util.WeakHashMap
 /** Explicit DPAD zones. No focus position is persisted across screens or app launches. */
 object TwoPaneFocusGuard {
     private val topTargets = WeakHashMap<RecyclerView, WeakReference<View>>()
+    private val focusGenerations = WeakHashMap<RecyclerView, Int>()
 
     fun registerTopTarget(root: View, target: View) {
         val recyclers = ArrayList<RecyclerView>()
@@ -57,8 +58,6 @@ object TwoPaneFocusGuard {
         }
 
         // Vertical movement is computed by adapter position instead of Android geometry search.
-        // This prevents a long/virtualized RecyclerView from choosing the top search field while
-        // the user is repeatedly pressing DOWN.
         if (direction == View.FOCUS_DOWN) {
             val next = position + columns
             if (next < count) focusItem(owner, next)
@@ -70,7 +69,6 @@ object TwoPaneFocusGuard {
             return true
         }
 
-        // Product choice: entering content starts at the first item; no previous poster bookmark.
         if (owner === categories && direction == View.FOCUS_RIGHT) {
             focusContent()
             return true
@@ -106,20 +104,30 @@ object TwoPaneFocusGuard {
         return next.takeIf { it in 0 until count && it / columns == index / columns }
     }
 
-    /** Explicit cross-pane request with a bounded wait for slow off-screen binding. */
+    /**
+     * Explicit focus move with a bounded wait for off-screen binding. While RecyclerView recycles
+     * the old focused child we temporarily park focus on the RecyclerView itself, so Android never
+     * falls back to an unrelated top/search control. A per-list generation prevents an old delayed
+     * request from stealing focus after the user has pressed another direction.
+     */
     fun focusItem(list: RecyclerView, position: Int): Boolean {
         val adapter = list.adapter ?: return false
         if (position !in 0 until adapter.itemCount) return false
         val existing = list.findViewHolderForAdapterPosition(position)?.itemView
         if (existing != null) return existing.requestFocus()
 
-        val origin = list.rootView.findFocus()
+        val generation = (focusGenerations[list] ?: 0) + 1
+        focusGenerations[list] = generation
         val itemId = if (adapter.hasStableIds()) adapter.getItemId(position) else null
         var listener: RecyclerView.OnChildAttachStateChangeListener? = null
 
+        list.isFocusable = true
+        list.isFocusableInTouchMode = true
+        list.requestFocus()
+
         fun stillValid(): Boolean {
             if (!list.isAttachedToWindow || list.adapter !== adapter) return false
-            if (list.rootView.findFocus() !== origin) return false
+            if (focusGenerations[list] != generation) return false
             if (position !in 0 until adapter.itemCount) return false
             if (itemId != null && adapter.getItemId(position) != itemId) return false
             return true
