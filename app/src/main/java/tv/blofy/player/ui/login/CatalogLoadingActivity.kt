@@ -29,6 +29,7 @@ import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.FirstImportCheckpoint
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -89,10 +90,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 preflight = false
                 val sourceChanged = PortalSyncBook.hasPendingSource(applicationContext, providerId)
 
-                // Rows written by an interrupted first import are not a saved library. Only a real
-                // CatalogSyncState commit may take the local fast path; otherwise sync() discards the
-                // partial rows and resumes a clean first import instead of reopening empty sections.
                 if (hasCachedCatalog && entryReady) {
+                    FirstImportCheckpoint.clear(applicationContext, providerId)
                     if (forceRefresh || sourceChanged) {
                         CatalogRefreshWorker.enqueueNow(applicationContext, providerId)
                     }
@@ -285,35 +284,68 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 } else dao.provider(providerId)
             }
         } ?: return fail(getString(R.string.catalog_provider_not_found))
-        val firstLoad = withTimeout(20_000L) {
-            withContext(Dispatchers.IO) {
-                CatalogSyncState.discardUncommittedCatalog(applicationContext, dao, providerId)
-                !dao.hasStreamsForProvider(providerId)
-            }
-        }
 
-        // If another process path committed while preflight was running, open only when its durable
-        // state marker agrees. Never convert stray rows into a successful library here.
-        if (!firstLoad && CatalogSyncState.isEntryReady(applicationContext, providerId)) {
+        if (CatalogSyncState.isEntryReady(applicationContext, providerId)) {
+            FirstImportCheckpoint.clear(applicationContext, providerId)
             if (sourceChanged) CatalogRefreshWorker.enqueueNow(applicationContext, providerId)
             openHome()
             return
         }
-        check(firstLoad) { "Catalog rows exist without a committed catalog state" }
 
         val syncProvider: ProviderEntity = target.copy(enabled = true, updatedAt = System.currentTimeMillis())
+        val checkpoint = withTimeout(20_000L) {
+            withContext(Dispatchers.IO) {
+                FirstImportCheckpoint.discardIncompleteSections(applicationContext, dao, syncProvider)
+            }
+        }
         var catalogCommitted = false
         try {
             render(5, getString(R.string.catalog_start_full))
-            val result = PlaylistSyncPolicy.run {
+            PlaylistSyncPolicy.run {
+                val manager = PlaylistManager(XtreamClient.api, dao)
                 withContext(Dispatchers.IO) {
-                    PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider) { p ->
-                        withContext(Dispatchers.Main.immediate) { renderProgress(p) }
+                    if (!checkpoint.isCompleted("live")) {
+                        manager.syncLive(syncProvider) { value ->
+                            withContext(Dispatchers.Main.immediate) {
+                                renderProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, value))
+                            }
+                        }
+                        FirstImportCheckpoint.markCompleted(applicationContext, syncProvider, "live")
+                    } else {
+                        withContext(Dispatchers.Main.immediate) {
+                            renderProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, 30))
+                        }
+                    }
+
+                    if (!checkpoint.isCompleted("movie")) {
+                        manager.syncVod(syncProvider) { value ->
+                            withContext(Dispatchers.Main.immediate) {
+                                renderProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, value))
+                            }
+                        }
+                        FirstImportCheckpoint.markCompleted(applicationContext, syncProvider, "movie")
+                    } else {
+                        withContext(Dispatchers.Main.immediate) {
+                            renderProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, 88))
+                        }
+                    }
+
+                    if (!checkpoint.isCompleted("series")) {
+                        manager.syncSeries(syncProvider) { value ->
+                            withContext(Dispatchers.Main.immediate) {
+                                renderProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, value))
+                            }
+                        }
+                        FirstImportCheckpoint.markCompleted(applicationContext, syncProvider, "series")
+                    } else {
+                        withContext(Dispatchers.Main.immediate) {
+                            renderProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, 95))
+                        }
                     }
                 }
             }
-            check(result.freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
-            check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
+            val freshItemCount = withContext(Dispatchers.IO) { dao.streamCountForProvider(providerId) }
+            check(freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
             render(96, getString(R.string.catalog_finishing))
             withContext(NonCancellable + Dispatchers.IO) {
                 val saved = target.copy(enabled = true, updatedAt = System.currentTimeMillis())
@@ -324,22 +356,23 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 } else {
                     CatalogSyncState.markCatalogCommitted(applicationContext, providerId)
                 }
+                FirstImportCheckpoint.clear(applicationContext, providerId)
             }
 
             render(100, getString(R.string.catalog_complete))
             delay(80L)
             openHome()
         } catch (cancelled: CancellationException) {
-            if (!catalogCommitted) {
-                withContext(NonCancellable + Dispatchers.IO) { dao.clearProviderCatalog(providerId) }
-            }
+            // Completed sections remain checkpointed and safe in Room. PlaylistManager clears only
+            // the currently incomplete direct section before propagating cancellation.
             throw cancelled
         } catch (error: Throwable) {
             if (catalogCommitted) {
                 openHome()
                 return
             }
-            withContext(Dispatchers.IO) { dao.clearProviderCatalog(providerId) }
+            // Keep validated completed sections. The failed/current section is discarded by
+            // PlaylistManager and will be downloaded again on Retry or process restart.
             fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
         }
     }
@@ -351,8 +384,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.MOVIES -> getString(R.string.catalog_stage_movies)
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
-        // PlaylistSyncProgress already represents the actual import. Do not compress 95% of real
-        // work into a fake 0..30 range; that made a healthy large import look frozen at 30%.
         val mapped = 5 + (p.percent.coerceIn(0, 95) * 87 / 95)
         render(mapped, label)
     }
