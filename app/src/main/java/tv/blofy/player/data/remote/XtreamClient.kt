@@ -7,8 +7,11 @@ import java.util.concurrent.TimeUnit
 
 object XtreamClient {
     private val okHttp = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(35, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        // Large Xtream lists are streamed and may pause between chunks on overloaded panels.
+        // This is an inactivity timeout, not a total download timeout; keep it generous enough
+        // that a healthy huge catalog is not killed halfway through while still bounding a dead read.
+        .readTimeout(90, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .retryOnConnectionFailure(true)
