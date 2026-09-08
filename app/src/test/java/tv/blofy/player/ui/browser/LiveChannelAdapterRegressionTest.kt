@@ -1,9 +1,15 @@
 package tv.blofy.player.ui.browser
 
+import android.app.Application
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import tv.blofy.player.data.local.StreamEntity
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], application = Application::class)
 class LiveChannelAdapterRegressionTest {
     private fun stream(name: String, locked: Boolean = false, icon: String? = null) = StreamEntity(
         key = "p1:live:10",
