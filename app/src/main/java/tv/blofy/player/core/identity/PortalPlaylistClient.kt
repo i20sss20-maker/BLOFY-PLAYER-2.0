@@ -105,9 +105,6 @@ object PortalPlaylistClient {
             )
             val contentChanged = existing == null || !sameSource(existing, next)
             if (contentChanged) {
-                // New/uncommitted sources still require the normal foreground preparation path.
-                // Only a genuinely committed local catalog may keep opening while a website source
-                // replacement is staged in the background.
                 if (!existingReadyCatalog) changed += next.id
                 CatalogSyncState.markPending(context, next.id)
             }
@@ -125,8 +122,6 @@ object PortalPlaylistClient {
             remoteProviders += visible
             dao.upsertProvider(visible.copy(enabled = if (item.active) true else existing?.enabled ?: false))
             if (contentChanged && existingReadyCatalog) {
-                // WorkManager is available in production, but pure JVM/Robolectric callers may not
-                // initialize it. A scheduling failure must not corrupt or block the known-good list.
                 runCatching { CatalogRefreshWorker.enqueueNow(context.applicationContext, next.id) }
             }
             if (item.active) remoteActive = visible
@@ -174,16 +169,11 @@ object PortalPlaylistClient {
                 providerType = "xtream",
                 updatedAt = System.currentTimeMillis()
             )
-            // Local selection is the user-visible transaction. Never make entering a saved list wait
-            // for a portal POST; mirror the selection after the caller has already returned.
             dao.saveAndActivateProvider(selected)
             val app = context.applicationContext
             backgroundScope.launch {
                 syncMutex.withLock {
                     runCatching {
-                        // Keep using the same DAO snapshot that staged the website source. Reopening
-                        // a different database here can lose the pending credentials in tests and in
-                        // multi-process/recovery edge cases, causing old credentials to be uploaded.
                         val remoteSelection = (pendingSource(app, dao, selected.id) ?: selected)
                             .copy(enabled = true, providerType = "xtream", updatedAt = selected.updatedAt)
                         pushProviderInternal(app, baseUrl, remoteSelection)
@@ -241,9 +231,18 @@ object PortalPlaylistClient {
         dao.deleteProvider(PortalSyncBook.pendingSourceId(providerId))
     }
 
-    private fun sameSource(first: ProviderEntity, second: ProviderEntity): Boolean =
-        first.baseUrl == second.baseUrl && first.username == second.username &&
-            first.password == second.password && first.providerType.equals(second.providerType, true)
+    /** BLOFY subscriber tokens are renewable credentials for one stable providerId, not catalog identity. */
+    internal fun sameSource(first: ProviderEntity, second: ProviderEntity): Boolean {
+        if (!first.providerType.equals(second.providerType, true)) return false
+        if (first.baseUrl.trimEnd('/') != second.baseUrl.trimEnd('/')) return false
+        if (isBlofySubscriberProxy(first.baseUrl) && isBlofySubscriberProxy(second.baseUrl)) return true
+        return first.username == second.username && first.password == second.password
+    }
+
+    private fun isBlofySubscriberProxy(baseUrl: String): Boolean = runCatching {
+        val path = java.net.URI(baseUrl).path?.trimEnd('/').orEmpty()
+        path == "/api/v1/subscribers/xtream"
+    }.getOrDefault(false)
 
     suspend fun removeProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao): Boolean = syncMutex.withLock {
         withContext(Dispatchers.IO) {
