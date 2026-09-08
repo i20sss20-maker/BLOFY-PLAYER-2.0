@@ -49,15 +49,12 @@ object TwoPaneFocusGuard {
         val columns = grid?.spanCount ?: 1
         val rtl = owner.layoutDirection == View.LAYOUT_DIRECTION_RTL
 
-        // Search/top controls are reachable only by an explicit UP from the first visual row.
-        // DOWN can never escape a list/grid and jump back to the search bar.
         if (direction == View.FOCUS_UP && position < columns) {
             val top = topTargets[owner]?.get()
             if (top != null && top.isShown && top.isFocusable && top.requestFocus()) return true
             return true
         }
 
-        // Vertical movement is computed by adapter position instead of Android geometry search.
         if (direction == View.FOCUS_DOWN) {
             val next = position + columns
             if (next < count) focusItem(owner, next)
@@ -107,8 +104,7 @@ object TwoPaneFocusGuard {
     /**
      * Explicit focus move with a bounded wait for off-screen binding. While RecyclerView recycles
      * the old focused child we temporarily park focus on the RecyclerView itself, so Android never
-     * falls back to an unrelated top/search control. A per-list generation prevents an old delayed
-     * request from stealing focus after the user has pressed another direction.
+     * falls back to an unrelated top/search control. A per-list generation prevents stale moves.
      */
     fun focusItem(list: RecyclerView, position: Int): Boolean {
         val adapter = list.adapter ?: return false
@@ -130,6 +126,8 @@ object TwoPaneFocusGuard {
             if (focusGenerations[list] != generation) return false
             if (position !in 0 until adapter.itemCount) return false
             if (itemId != null && adapter.getItemId(position) != itemId) return false
+            val currentFocus = list.rootView.findFocus()
+            if (currentFocus != null && currentFocus !== list && !contains(list, currentFocus)) return false
             return true
         }
 
