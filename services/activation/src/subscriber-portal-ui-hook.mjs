@@ -22,6 +22,9 @@ export function injectSubscriberPortalUi(html) {
 </style>
 <script>
 (function () {
+  var rememberedDeviceId = '';
+  var rememberedActivationCode = '';
+
   function qs(id) { return document.getElementById(id); }
   function fieldWrapper(input) { return input && input.closest ? input.closest('.field') : null; }
   function setHidden(node, hidden) { if (node) node.style.display = hidden ? 'none' : ''; }
@@ -30,6 +33,34 @@ export function injectSubscriberPortalUi(html) {
     if (!node) return;
     node.textContent = message || '';
     node.classList.toggle('bad', !!bad);
+  }
+  function rememberDeviceAuth() {
+    var device = qs('deviceId');
+    var code = qs('activationCode');
+    var deviceId = device && device.value ? device.value.trim() : '';
+    var activationCode = code && code.value ? code.value.trim() : '';
+    if (deviceId) rememberedDeviceId = deviceId;
+    if (activationCode) rememberedActivationCode = activationCode;
+  }
+  function resolvedDeviceAuth() {
+    rememberDeviceAuth();
+    return { deviceId: rememberedDeviceId, activationCode: rememberedActivationCode };
+  }
+  function dispatchValue(node, value) {
+    if (!node) return;
+    node.value = value == null ? '' : String(value);
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  function installAuthCapture() {
+    ['deviceId', 'activationCode'].forEach(function (id) {
+      var node = qs(id);
+      if (!node || node.dataset.blofyAuthCapture) return;
+      node.dataset.blofyAuthCapture = '1';
+      node.addEventListener('input', rememberDeviceAuth, true);
+      node.addEventListener('change', rememberDeviceAuth, true);
+    });
+    rememberDeviceAuth();
   }
   function addSubscriberOption() {
     var select = qs('providerType');
@@ -78,12 +109,13 @@ export function injectSubscriberPortalUi(html) {
   }
 
   async function createSubscriberSession() {
-    var deviceId = (qs('deviceId') && qs('deviceId').value || '').trim();
-    var activationCode = (qs('activationCode') && qs('activationCode').value || '').trim();
+    var deviceAuth = resolvedDeviceAuth();
+    var deviceId = deviceAuth.deviceId;
+    var activationCode = deviceAuth.activationCode;
     var username = (qs('username') && qs('username').value || '').trim();
     var password = (qs('password') && qs('password').value || '');
     if (!username || !password) throw new Error('أدخل اسم المستخدم وكلمة المرور');
-    if (!deviceId || !activationCode) throw new Error('بيانات الجهاز غير مكتملة');
+    if (!deviceId || !activationCode) throw new Error('بيانات الجهاز غير مكتملة. ارجع لصفحة الربط ثم ادخل مرة أخرى.');
 
     var response = await fetch('/api/v1/subscribers/session', {
       method: 'POST',
@@ -101,7 +133,9 @@ export function injectSubscriberPortalUi(html) {
       if (code === 'subscriber_upstream_unavailable') throw new Error('سيرفر المشتركين لا يستجيب حاليًا');
       throw new Error('تعذر تسجيل الدخول إلى مشتركين BLOFY');
     }
-    if (!payload.baseUrl || !payload.username || !payload.password) throw new Error('استجابة BLOFY غير مكتملة');
+    if (!payload || !payload.providerId || !payload.baseUrl || !payload.username || !payload.password) {
+      throw new Error('تعذر تجهيز بيانات مشترك BLOFY. حاول مرة أخرى.');
+    }
     return payload;
   }
 
@@ -120,14 +154,10 @@ export function injectSubscriberPortalUi(html) {
       status('جاري التحقق من اشتراك BLOFY…', false);
       try {
         var session = await createSubscriberSession();
-        var name = qs('name');
-        var base = qs('baseUrl');
-        var user = qs('username');
-        var pass = qs('password');
-        if (name) name.value = session.providerName || 'مشتركين BLOFY';
-        if (base) base.value = session.baseUrl;
-        if (user) user.value = session.username;
-        if (pass) pass.value = session.password;
+        dispatchValue(qs('name'), session.providerName || 'مشتركين BLOFY');
+        dispatchValue(qs('baseUrl'), session.baseUrl);
+        dispatchValue(qs('username'), session.username);
+        dispatchValue(qs('password'), session.password);
         select.value = 'xtream';
         select.dispatchEvent(new Event('change', { bubbles: true }));
         status('تم التحقق. جاري حفظ القائمة على جهازك…', false);
@@ -143,6 +173,7 @@ export function injectSubscriberPortalUi(html) {
   }
 
   function install() {
+    installAuthCapture();
     addSubscriberOption();
     installSaveInterceptor();
   }
