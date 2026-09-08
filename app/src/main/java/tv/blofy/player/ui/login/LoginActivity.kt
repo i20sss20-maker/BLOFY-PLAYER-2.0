@@ -220,7 +220,7 @@ class LoginActivity : AppCompatActivity() {
             setPadding(dp(12), 0, dp(12), 0)
         }
         activation.addView(status, LinearLayout.LayoutParams(-1, dp(39)).apply { topMargin = dp(8) })
-        refreshCodeButton = actionButton("↻  تحديث حالة التفعيل") { lifecycleScope.launch { refreshIdentityAndProvider() } }
+        refreshCodeButton = actionButton("↻  تحديث حالة التفعيل") { lifecycleScope.launch { refreshIdentityAndProvider(remoteCheck = true) } }
         activation.addView(refreshCodeButton, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(8) })
 
         val playlistsPanel = LinearLayout(this).apply {
@@ -320,7 +320,7 @@ class LoginActivity : AppCompatActivity() {
         status.background = statusBackground(); root.addView(status, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
         addPlaylist = primaryActionButton("إضافة / إدارة القوائم") { startActivity(Intent(this, PlaylistActivity::class.java)) }
         connectButton = actionButton("دخول") { startOrCancelConnect() }
-        refreshCodeButton = actionButton("تحديث") { lifecycleScope.launch { refreshIdentityAndProvider() } }
+        refreshCodeButton = actionButton("تحديث") { lifecycleScope.launch { refreshIdentityAndProvider(remoteCheck = true) } }
         root.addView(addPlaylist, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(12) })
         root.addView(connectButton, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(10) })
         return root
@@ -579,7 +579,7 @@ class LoginActivity : AppCompatActivity() {
         startActivity(Intent(this, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, providerId))
     }
 
-    private suspend fun refreshIdentityAndProvider() {
+    private suspend fun refreshIdentityAndProvider(remoteCheck: Boolean = false) {
         if (openingScreen || !identityRefreshMutex.tryLock()) return
         try {
             if (!databaseAvailable()) return
@@ -589,8 +589,26 @@ class LoginActivity : AppCompatActivity() {
             // Show saved cards BEFORE identity/QR work; never clear them for a network failure.
             renderPortalPlaylists(local)
             refreshProviderStatus()
-            val identity = withContext(Dispatchers.IO) { ActivationManager(applicationContext, dao).ensureIdentity() }
+            val manager = ActivationManager(applicationContext, dao)
+            val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
             renderIdentity(identity.deviceId, identity.activationCode)
+            // Automatic resume remains local-only. The explicit refresh button must still check
+            // the server and show its result, without clearing saved cards or blocking navigation.
+            if (remoteCheck && activationEndpoint.isNotBlank() && !openingScreen) {
+                status.text = "جاري التحقق من تفعيل الجهاز..."
+                val remote = runSuspendCatching {
+                    withTimeoutOrNull(12_000L) {
+                        withContext(Dispatchers.IO) {
+                            manager.refresh(ActivationRemoteClient.create(activationEndpoint), BuildConfig.VERSION_NAME)
+                        }
+                    }
+                }.getOrNull()
+                if (!openingScreen && connectJob?.isActive != true && playlistJob?.isActive != true) {
+                    status.text = remote?.let(::activationLabel) ?: "تعذر التحقق من التفعيل • أعد المحاولة"
+                    val refreshed = withContext(Dispatchers.IO) { manager.ensureIdentity() }
+                    renderIdentity(refreshed.deviceId, refreshed.activationCode)
+                }
+            }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { status.text = "تعذر قراءة التخزين المحلي • أعد المحاولة" }
         finally { identityRefreshMutex.unlock() }

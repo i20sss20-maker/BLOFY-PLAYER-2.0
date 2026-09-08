@@ -9,6 +9,7 @@ import android.widget.Button
 import android.widget.TextView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -128,6 +129,39 @@ class LoginSavedEntryRegressionTest {
         assertEquals(HomeActivity::class.java.name, next.component?.className)
         assertEquals(1L, release.count)
         assertFalse(requests.any { it.endsWith("/playlists/list") || it.endsWith("/provider-profile") })
+    }
+
+    @Test fun choosingSavedCardOpensHomeWithoutWaitingForWebsite() {
+        val activity = openLogin()
+        val label = views(activity.window.decorView).filterIsInstance<TextView>()
+            .single { it.text.toString() == provider.name }
+        var card = label as View
+        while (!card.isClickable) card = card.parent as View
+        assertTrue(card.performClick())
+        var next: Intent? = null
+        waitUntil { next = shadowOf(activity).nextStartedActivity; next != null }
+        assertEquals(HomeActivity::class.java.name, next?.component?.className)
+        assertEquals(1L, release.count)
+        assertFalse(requests.any { it.endsWith("/playlists/list") || it.endsWith("/provider-profile") })
+    }
+
+    @Test fun explicitActivationRefreshStillChecksServerWithoutRemovingSavedCards() {
+        release.countDown()
+        val activity = openLogin()
+        val mutex = LoginActivity::class.java.getDeclaredField("identityRefreshMutex").apply { isAccessible = true }
+            .get(activity) as Mutex
+        waitUntil { !mutex.isLocked }
+        val originalCard = views(activity.window.decorView).filterIsInstance<TextView>()
+            .single { it.text.toString() == provider.name }
+        val button = LoginActivity::class.java.getDeclaredField("refreshCodeButton").apply { isAccessible = true }
+            .get(activity) as Button
+        button.performClick()
+        waitUntil { views(activity.window.decorView).filterIsInstance<TextView>()
+            .any { it.text.toString().contains("تعذر التحقق من التفعيل") } }
+        assertTrue(requests.any { it.endsWith("/activation/check") })
+        assertSame(originalCard, views(activity.window.decorView).filterIsInstance<TextView>()
+            .single { it.text.toString() == provider.name })
+        assertNull(shadowOf(activity).nextStartedActivity)
     }
 
     @Test fun pendingWebsiteSourceDoesNotSendKnownGoodCatalogBackToLoader() {
