@@ -80,7 +80,20 @@ object PortalPlaylistClient {
             catch (_: Exception) { }
         }
         val pending = PortalSyncBook.pending(context)
-        val remote = fetchRemote(endpoint, auth).filterNot { it.id in pending || it.aliasIds.any(pending::contains) }
+        val remoteRows = fetchRemote(endpoint, auth).filterNot { it.id in pending || it.aliasIds.any(pending::contains) }
+        val beforeMigration = supportedProviders(dao.allProviders().first())
+        val tokens = beforeMigration.filter { BlofySubscriberClient.isLegacyProxy(it, endpoint) }.map { it.username } +
+            remoteRows.filter { BlofySubscriberClient.isLegacyProxy(it.provider(), endpoint) }.map { it.username }
+        val resolved = BlofySubscriberClient.resolveConnections(context, endpoint, tokens)
+        for (provider in beforeMigration.filter { BlofySubscriberClient.isLegacyProxy(it, endpoint) }) {
+            resolved[provider.username]?.let { migrateSubscriber(context, dao, provider, it) }
+        }
+        val remote = remoteRows.map { item ->
+            if (!BlofySubscriberClient.isLegacyProxy(item.provider(), endpoint)) item else {
+                val direct = checkNotNull(resolved[item.username]) { "أعد تسجيل الدخول إلى مشترك BLOFY" }
+                item.copy(baseUrl = direct.baseUrl, username = direct.username, password = direct.password, subscriberToken = direct.sessionToken)
+            }
+        }
         val local = supportedProviders(dao.allProviders().first())
         val localById = local.associateBy { it.id }
         val changed = linkedSetOf<String>()
@@ -109,11 +122,12 @@ object PortalPlaylistClient {
                 preferredEngine = existing?.preferredEngine ?: "media3",
                 allowCrossProtocolRedirects = existing?.allowCrossProtocolRedirects ?: true,
                 enabled = item.active,
-                updatedAt = item.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+                updatedAt = item.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                subscriberToken = item.subscriberToken
             )
             // A subscriber account edit shares the proxy URL with the old account. Token renewal
             // is normally source-neutral, but must not bypass an already staged account change.
-            val pendingSubscriberSource = existing != null && isBlofySubscriberProxy(existing.baseUrl) &&
+            val pendingSubscriberSource = existing != null && BlofySubscriberClient.isManaged(existing) &&
                 PortalSyncBook.hasPendingSource(context, existing.id)
             val contentChanged = existing == null || !sameSource(existing, next) || pendingSubscriberSource
             if (contentChanged) {
@@ -172,7 +186,8 @@ object PortalPlaylistClient {
     suspend fun selectProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao): ProviderEntity = syncMutex.withLock {
         withContext(Dispatchers.IO) {
             require(provider.providerType.equals("xtream", true)) { "Xtream provider required" }
-            val current = checkNotNull(dao.provider(provider.id)) { "Playlist no longer exists" }
+            val current = ensureSubscriberConnectionInternal(context, baseUrl, dao, provider.id)
+                ?: error("Playlist no longer exists")
             check(PortalSyncBook.visible(context, listOf(current)).isNotEmpty()) { "Playlist was removed" }
             val selected = current.copy(
                 enabled = true,
@@ -216,7 +231,7 @@ object PortalPlaylistClient {
         withContext(Dispatchers.IO) {
             val existing = dao.provider(provider.id)
             val sameSubscriber = existing != null &&
-                existing.baseUrl.trimEnd('/') == provider.baseUrl.trimEnd('/') &&
+                sameSource(existing, provider) &&
                 (existing.id == remoteId || PortalSyncBook.remoteId(context, existing.id) == remoteId)
             // Binding may already point at an earlier pending account. A retry must not mistake
             // that binding for the identity of the still-visible, known-good catalog.
@@ -246,6 +261,31 @@ object PortalPlaylistClient {
             SubscriberPreparation(provider.id, sourceChanged, ready,
                 approvedSourceFingerprint = if (sourceChanged && ready) sourceFingerprint(next) else null)
         }
+    }
+
+    suspend fun ensureSubscriberConnection(context: Context, endpoint: String, dao: BlofyDao, providerId: String): ProviderEntity? = syncMutex.withLock {
+        withContext(Dispatchers.IO) { ensureSubscriberConnectionInternal(context, endpoint, dao, providerId) }
+    }
+
+    private suspend fun ensureSubscriberConnectionInternal(context: Context, endpoint: String, dao: BlofyDao, providerId: String): ProviderEntity? {
+        val provider = dao.provider(providerId) ?: return null
+        val candidates = listOfNotNull(provider, dao.provider(PortalSyncBook.pendingSourceId(providerId)))
+            .filter { BlofySubscriberClient.isLegacyProxy(it, endpoint) }
+        if (candidates.isEmpty()) return provider
+        val resolved = BlofySubscriberClient.resolveConnections(context, endpoint, candidates.map { it.username })
+        for (candidate in candidates) {
+            val direct = checkNotNull(resolved[candidate.username]) { "أعد تسجيل الدخول إلى مشترك BLOFY" }
+            migrateSubscriber(context, dao, candidate, direct)
+        }
+        return dao.provider(providerId)
+    }
+
+    private suspend fun migrateSubscriber(context: Context, dao: BlofyDao, provider: ProviderEntity, direct: BlofySubscriberClient.Session) {
+        // Disposable detail metadata can contain artwork URLs from the previous proxy session.
+        // Clear it before committing the transport change so interrupted upgrades retry safely.
+        tv.blofy.player.data.metadata.ProviderMetadataCache.clearProvider(context, provider.id)
+        check(dao.migrateSubscriberConnection(provider, provider.copy(baseUrl = direct.baseUrl, username = direct.username,
+            password = direct.password, subscriberToken = direct.sessionToken))) { "تغيّرت القائمة أثناء تحديث اتصال BLOFY" }
     }
 
     /** Binds an explicit account-replacement action to one candidate without passing its secrets. */
@@ -396,13 +436,14 @@ object PortalPlaylistClient {
 
     private suspend fun push(endpoint: String, auth: JSONObject, provider: ProviderEntity, remoteId: String = provider.id): String {
         require(provider.providerType.equals("xtream", true)) { "Xtream provider required" }
+        val portal = BlofySubscriberClient.portalSource(provider, endpoint)
         val body = JSONObject(auth.toString()).apply {
             put("id", remoteId)
             put("name", provider.name)
             put("providerType", "xtream")
-            put("baseUrl", provider.baseUrl.trimEnd('/'))
-            put("username", provider.username)
-            put("password", provider.password)
+            put("baseUrl", portal.baseUrl.trimEnd('/'))
+            put("username", portal.username)
+            put("password", portal.password)
             put("active", provider.enabled)
         }
         val request = Request.Builder()
@@ -427,6 +468,9 @@ object PortalPlaylistClient {
         val username: String,
         val password: String,
         val active: Boolean,
-        val updatedAt: Long
-    )
+        val updatedAt: Long,
+        val subscriberToken: String = ""
+    ) {
+        fun provider() = ProviderEntity(id, name, baseUrl, username, password, subscriberToken = subscriberToken)
+    }
 }

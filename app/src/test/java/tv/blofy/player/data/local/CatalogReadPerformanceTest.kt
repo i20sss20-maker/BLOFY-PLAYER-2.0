@@ -74,6 +74,7 @@ class CatalogReadPerformanceTest {
         val ftsCount = db.openHelper.readableDatabase.query("SELECT COUNT(*) FROM streams_fts").use { it.moveToFirst(); it.getInt(0) }
         db.close()
         SQLiteDatabase.openDatabase(app.getDatabasePath(name).absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use {
+            restoreV11Providers(it)
             for (index in listOf("index_streams_providerId_kind", "index_streams_providerId_kind_categoryId", "index_streams_home_page")) it.execSQL("DROP INDEX $index")
             it.version = 10
         }

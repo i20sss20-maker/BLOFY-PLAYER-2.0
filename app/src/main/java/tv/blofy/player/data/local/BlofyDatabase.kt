@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-internal const val BLOFY_DATABASE_VERSION = 11
+internal const val BLOFY_DATABASE_VERSION = 12
 
 @Database(
     entities = [
@@ -242,6 +242,11 @@ abstract class BlofyDatabase : RoomDatabase() {
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind` ON `streams` (`providerId`, `kind`)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_categoryId` ON `streams` (`providerId`, `kind`, `categoryId`)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_home_page` ON `streams` (`providerId` ASC, `kind` ASC, `addedAt` DESC, `name` ASC, `key` ASC)")
+                }
+            },
+            object : Migration(11, 12) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `providers` ADD COLUMN `subscriberToken` TEXT NOT NULL DEFAULT ''")
                 }
             }
         )

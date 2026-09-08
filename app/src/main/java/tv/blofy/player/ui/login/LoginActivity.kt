@@ -430,6 +430,10 @@ class LoginActivity : AppCompatActivity() {
             }
         }
         val localProvider = local.second
+        if (localProvider != null && tv.blofy.player.core.identity.BlofySubscriberClient.isLegacyProxy(localProvider, endpoint)) {
+            status.text = "جاري تحديث اتصال مشترك BLOFY..."
+            PortalPlaylistClient.ensureSubscriberConnection(applicationContext, endpoint, dao, localProvider.id)
+        }
         if (localProvider != null && (endpoint.isBlank() || manager.cachedCanUse(local.first)) &&
             hasCachedCatalog(dao, localProvider.id)) {
             openHome()

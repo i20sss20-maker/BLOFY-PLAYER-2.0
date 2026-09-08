@@ -296,7 +296,7 @@ class ProviderManagerActivity : AppCompatActivity() {
 
     private fun isBlofySubscriber(provider: ProviderEntity): Boolean {
         val stableId = UUID.nameUUIDFromBytes("blofy-subscriber".toByteArray()).toString()
-        return provider.id == stableId ||
+        return tv.blofy.player.core.identity.BlofySubscriberClient.isManaged(provider) || provider.id == stableId ||
             provider.name.equals("مشتركين BLOFY", ignoreCase = true) ||
             provider.baseUrl.contains("/subscribers/", ignoreCase = true) ||
             provider.baseUrl.contains("/subscriber/", ignoreCase = true)

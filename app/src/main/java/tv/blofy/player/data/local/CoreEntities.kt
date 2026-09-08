@@ -1,6 +1,7 @@
 package tv.blofy.player.data.local
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -17,7 +18,8 @@ data class ProviderEntity(
     val preferredEngine: String = "media3",
     val allowCrossProtocolRedirects: Boolean = true,
     val enabled: Boolean = true,
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "''") val subscriberToken: String = ""
 )
 
 @Entity(

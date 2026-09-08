@@ -25,6 +25,7 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.identity.BlofySubscriberClient
 import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
@@ -165,6 +166,11 @@ class PlaylistActivity : AppCompatActivity() {
 
         if (editingProviderId != null) lifecycleScope.launch {
             val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: return@launch
+            if (BlofySubscriberClient.isManaged(provider)) {
+                startActivity(Intent(this@PlaylistActivity, BlofySubscriberActivity::class.java).putExtra(EXTRA_PROVIDER_ID, provider.id))
+                finish()
+                return@launch
+            }
             name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password)
             status.text = if (provider.providerType.equals("xtream", true)) "XTREAM • ${provider.name}" else "هذه القائمة قديمة وغير مدعومة • أدخل بيانات Xtream"
         }

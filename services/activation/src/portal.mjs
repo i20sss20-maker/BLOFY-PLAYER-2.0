@@ -203,13 +203,16 @@ export function createPortalHandlers({
     const name = cleanText(body.name, 128) || 'BLOFY Playlist';
     const providerType = cleanText(body.providerType, 16).toLowerCase();
     const baseUrl = cleanText(body.baseUrl, 2048);
-    const username = cleanText(body.username, 256);
+    // Subscriber envelopes grow with the encrypted credentials; never truncate their GCM tag.
+    const subscriber = /\/api\/v1\/subscribers\/xtream\/?$/.test(baseUrl);
+    const username = cleanText(body.username, subscriber ? 4096 : 256);
     const password = cleanText(body.password, 256);
     const active = body.active !== false;
     if (!validType(providerType)) return rejectPlaylist(res, 'invalid_playlist');
     const urlError = playlistUrlValidation(baseUrl);
     if (urlError) return rejectPlaylist(res, urlError);
     if (providerType === 'xtream' && (!username || !password)) return rejectPlaylist(res, 'xtream_credentials_required');
+    if (subscriber && String(body.username || '').trim().length > 4096) return rejectPlaylist(res, 'invalid_playlist');
 
     const client = await pool.connect();
     try {

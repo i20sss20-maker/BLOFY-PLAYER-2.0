@@ -60,17 +60,17 @@ internal class ProviderSecretKeyAccess(
 
 /** Injectable key access lets regression tests exercise real AES-GCM without a hardware Keystore. */
 internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
-    private data class Fields(val baseUrl: String, val username: String, val password: String) {
-        fun applyTo(provider: ProviderEntity) = provider.copy(baseUrl = baseUrl, username = username, password = password)
+    private data class Fields(val baseUrl: String, val username: String, val password: String, val subscriberToken: String) {
+        fun applyTo(provider: ProviderEntity) = provider.copy(baseUrl = baseUrl, username = username, password = password, subscriberToken = subscriberToken)
     }
     // Cache successful reads by exact ciphertext, never by provider ID. Hardware Keystore can be
-    // slow on TVs; category/navigation reads must not repeat three AES operations per emission.
+    // slow on TVs; category/navigation reads must not repeat AES operations per emission.
     // Failed reads remain retryable and changed credentials cannot reuse an older plaintext row.
     private val opened = object : LinkedHashMap<Fields, Fields>(16, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Fields, Fields>?) = size > 16
     }
     fun needsSealing(provider: ProviderEntity): Boolean =
-        needsSealing(provider.baseUrl) || needsSealing(provider.username) || needsSealing(provider.password)
+        needsSealing(provider.baseUrl) || needsSealing(provider.username) || needsSealing(provider.password) || needsSealing(provider.subscriberToken)
 
     fun sealForUpdate(provider: ProviderEntity, stored: ProviderEntity?): ProviderEntity {
         if (stored == null) return seal(provider)
@@ -85,13 +85,14 @@ internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
             baseUrl = keepCiphertext(provider.baseUrl, stored.baseUrl),
             username = if (sameType) keepCiphertext(provider.username, stored.username) else provider.username,
             password = if (sameType) keepCiphertext(provider.password, stored.password) else provider.password,
+            subscriberToken = if (sameType) keepCiphertext(provider.subscriberToken, stored.subscriberToken) else provider.subscriberToken,
         ))
     }
 
     fun seal(provider: ProviderEntity): ProviderEntity {
         if (!needsSealing(provider)) return provider
         return try {
-            val fields = listOf(provider.baseUrl, provider.username, provider.password)
+            val fields = listOf(provider.baseUrl, provider.username, provider.password, provider.subscriberToken)
             // A partially migrated row already depends on an existing key. Never create a new key
             // to encrypt just its remaining fields when that existing key cannot be read.
             val secretKey = key(fields.none(::isSealed))
@@ -99,6 +100,7 @@ internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
                 baseUrl = sealValue(provider.baseUrl, secretKey),
                 username = sealValue(provider.username, secretKey),
                 password = sealValue(provider.password, secretKey),
+                subscriberToken = sealValue(provider.subscriberToken, secretKey),
             )
         } catch (_: Exception) {
             // Compatibility policy: keep the *entire original row* on defective TV firmware.
@@ -109,9 +111,9 @@ internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
     }
 
     fun open(provider: ProviderEntity): ProviderEntity {
-        val fields = listOf(provider.baseUrl, provider.username, provider.password)
+        val fields = listOf(provider.baseUrl, provider.username, provider.password, provider.subscriberToken)
         if (fields.none(::isSealed)) return provider
-        val stored = Fields(provider.baseUrl, provider.username, provider.password)
+        val stored = Fields(provider.baseUrl, provider.username, provider.password, provider.subscriberToken)
         synchronized(opened) { opened[stored] }?.let { return it.applyTo(provider) }
         return try {
             val secretKey = key(false)
@@ -119,8 +121,9 @@ internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
                 baseUrl = openValue(provider.baseUrl, secretKey),
                 username = openValue(provider.username, secretKey),
                 password = openValue(provider.password, secretKey),
+                subscriberToken = openValue(provider.subscriberToken, secretKey),
             )
-            synchronized(opened) { opened[stored] = Fields(result.baseUrl, result.username, result.password) }
+            synchronized(opened) { opened[stored] = Fields(result.baseUrl, result.username, result.password, result.subscriberToken) }
             result
         } catch (_: Exception) {
             // This is only the returned API projection; the stored row is never mutated.
@@ -129,6 +132,7 @@ internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
                 baseUrl = if (isSealed(provider.baseUrl)) "" else provider.baseUrl,
                 username = if (isSealed(provider.username)) "" else provider.username,
                 password = if (isSealed(provider.password)) "" else provider.password,
+                subscriberToken = if (isSealed(provider.subscriberToken)) "" else provider.subscriberToken,
             )
         }
     }

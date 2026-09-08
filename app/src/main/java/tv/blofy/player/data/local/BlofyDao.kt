@@ -15,6 +15,38 @@ import tv.blofy.player.data.CatalogRefreshIntegrityPolicy
 
 @Dao
 interface BlofyDao {
+
+    /** Replace transport credentials and cached proxy links atomically, retaining IDs and history. */
+    @Transaction suspend fun migrateSubscriberConnection(expected: ProviderEntity, direct: ProviderEntity): Boolean {
+        val current = provider(expected.id) ?: return false
+        if (!sameCatalogSource(current, expected) || current.subscriberToken.isNotEmpty() ||
+            direct.id != current.id || direct.subscriberToken != expected.username) return false
+        val proxyPrefix = expected.baseUrl.trimEnd('/') + "/"
+        rewriteSubscriberStreamUrls(current.id, proxyPrefix, proxyPrefix + "raw/", direct.baseUrl.trimEnd('/'))
+        rewriteSubscriberEpisodeUrls(current.id, proxyPrefix, proxyPrefix + "raw/", direct.baseUrl.trimEnd('/'))
+        upsertProvider(current.copy(baseUrl = direct.baseUrl, username = direct.username,
+            password = direct.password, subscriberToken = direct.subscriberToken))
+        return true
+    }
+
+    @Query("""
+        UPDATE streams SET
+            icon = CASE WHEN substr(icon, 1, length(:rawPrefix)) = :rawPrefix AND instr(substr(icon, length(:rawPrefix) + 1), '/') > 0 THEN :directBase || substr(icon, length(:rawPrefix) + instr(substr(icon, length(:rawPrefix) + 1), '/')) WHEN substr(icon, 1, length(:proxyPrefix)) = :proxyPrefix THEN NULL ELSE icon END,
+            backdrop = CASE WHEN substr(backdrop, 1, length(:rawPrefix)) = :rawPrefix AND instr(substr(backdrop, length(:rawPrefix) + 1), '/') > 0 THEN :directBase || substr(backdrop, length(:rawPrefix) + instr(substr(backdrop, length(:rawPrefix) + 1), '/')) WHEN substr(backdrop, 1, length(:proxyPrefix)) = :proxyPrefix THEN NULL ELSE backdrop END,
+            directSource = CASE WHEN substr(directSource, 1, length(:rawPrefix)) = :rawPrefix AND instr(substr(directSource, length(:rawPrefix) + 1), '/') > 0 THEN :directBase || substr(directSource, length(:rawPrefix) + instr(substr(directSource, length(:rawPrefix) + 1), '/')) WHEN substr(directSource, 1, length(:proxyPrefix)) = :proxyPrefix THEN NULL ELSE directSource END
+        WHERE providerId = :providerId AND
+            (substr(icon, 1, length(:proxyPrefix)) = :proxyPrefix OR
+             substr(backdrop, 1, length(:proxyPrefix)) = :proxyPrefix OR
+             substr(directSource, 1, length(:proxyPrefix)) = :proxyPrefix)
+    """)
+    suspend fun rewriteSubscriberStreamUrls(providerId: String, proxyPrefix: String, rawPrefix: String, directBase: String)
+
+    @Query("""
+        UPDATE episodes SET directSource = CASE WHEN substr(directSource, 1, length(:rawPrefix)) = :rawPrefix AND instr(substr(directSource, length(:rawPrefix) + 1), '/') > 0 THEN :directBase || substr(directSource, length(:rawPrefix) + instr(substr(directSource, length(:rawPrefix) + 1), '/')) WHEN substr(directSource, 1, length(:proxyPrefix)) = :proxyPrefix THEN NULL ELSE directSource END
+        WHERE providerId = :providerId AND substr(directSource, 1, length(:proxyPrefix)) = :proxyPrefix
+    """)
+    suspend fun rewriteSubscriberEpisodeUrls(providerId: String, proxyPrefix: String, rawPrefix: String, directBase: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertProviderStored(provider: ProviderEntity)
     @Transaction suspend fun upsertProvider(provider: ProviderEntity) =
         upsertProviderStored(ProviderSecretCodec.sealForUpdate(provider, providerStored(provider.id)))

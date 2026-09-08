@@ -20,6 +20,23 @@ import javax.crypto.spec.SecretKeySpec
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
 class ProviderSecretCipherTest {
+    @Test fun subscriberEnvelopeIsEncryptedAndParticipatesInCacheIdentity() {
+        val codec = ProviderSecretCipher { aesKey }
+        val managed = original.copy(subscriberToken = "first-session-token")
+        val sealed = codec.seal(managed)
+        assertTrue(sealed.subscriberToken.startsWith("BLOFYENC1:"))
+        assertEquals(managed, codec.open(sealed))
+        val renewed = codec.seal(managed.copy(subscriberToken = "second-session-token"))
+        val sameOtherFields = sealed.copy(subscriberToken = renewed.subscriberToken)
+        assertEquals("second-session-token", codec.open(sameOtherFields).subscriberToken)
+        val broken = sealed.copy(subscriberToken = "BLOFYENC1:invalid")
+        val opened = codec.open(broken)
+        assertEquals("", opened.subscriberToken)
+        assertEquals("", opened.username)
+        assertEquals("", opened.password)
+        assertEquals("", opened.baseUrl)
+        assertEquals(sealed.subscriberToken, codec.sealForUpdate(opened, sealed).subscriberToken)
+    }
     private val aesKey = SecretKeySpec(ByteArray(32) { (it + 1).toByte() }, "AES")
     private val original = ProviderEntity(
         "secret-test", "Library", "https://example.test:8443/api?q=a%2Fb&lang=ar",

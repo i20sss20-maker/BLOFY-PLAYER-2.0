@@ -8,7 +8,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import org.json.JSONArray
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tv.blofy.player.core.network.awaitResponse
+import tv.blofy.player.core.url.PlaylistUrlPolicy
+import tv.blofy.player.data.local.ProviderEntity
 import java.util.concurrent.TimeUnit
 
 object BlofySubscriberClient {
@@ -18,7 +22,8 @@ object BlofySubscriberClient {
         val username: String,
         val password: String,
         val expiresAt: Long,
-        val providerId: String = ""
+        val providerId: String = "",
+        val sessionToken: String = ""
     )
 
     private val client = OkHttpClient.Builder()
@@ -26,6 +31,8 @@ object BlofySubscriberClient {
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .writeTimeout(8, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 
@@ -35,10 +42,7 @@ object BlofySubscriberClient {
         username: String,
         password: String
     ): Session = withContext(Dispatchers.IO) {
-        val endpoint = activationBaseUrl.trim().trimEnd('/')
-        require(endpoint.startsWith("https://", true) || endpoint.startsWith("http://", true)) {
-            "خدمة BLOFY غير مهيأة"
-        }
+        val endpoint = serviceEndpoint(activationBaseUrl)
         verifyServiceReady(endpoint)
 
         val body = JSONObject().apply {
@@ -46,6 +50,7 @@ object BlofySubscriberClient {
             put("activationCode", DeviceIdentity.activationCode(context))
             put("username", username.trim())
             put("password", password)
+            put("delivery", "direct")
         }
         val request = Request.Builder()
             .url("$endpoint/api/v1/subscribers/session")
@@ -66,22 +71,82 @@ object BlofySubscriberClient {
                 }
                 error(message)
             }
-            val baseUrl = root.optString("baseUrl").trim().trimEnd('/')
-            val proxyUser = root.optString("username").trim()
-            val proxyPassword = root.optString("password")
-            require(baseUrl.isNotBlank() && proxyUser.isNotBlank()) { "استجابة BLOFY غير مكتملة" }
-            require(baseUrl.startsWith("$endpoint/api/v1/subscribers/xtream", ignoreCase = true)) {
-                "استجابة BLOFY غير آمنة"
-            }
-            Session(
-                providerName = root.optString("providerName").ifBlank { "مشتركين BLOFY" },
-                baseUrl = baseUrl,
-                username = proxyUser,
-                password = proxyPassword.ifBlank { "blofy" },
-                expiresAt = root.optLong("expiresAt"),
-                providerId = root.optString("providerId").takeIf { runCatching { java.util.UUID.fromString(it) }.isSuccess }.orEmpty()
-            )
+            parseDirectSession(root)
         }
+    }
+
+    internal fun serviceEndpoint(value: String): String {
+        val endpoint = value.trim().trimEnd('/')
+        val url = endpoint.toHttpUrlOrNull()
+        require(url != null && url.isHttps && url.encodedUsername.isEmpty() && url.encodedPassword.isEmpty() &&
+            url.query == null && url.fragment == null) { "خدمة BLOFY غير مهيأة" }
+        return endpoint
+    }
+
+    internal fun parseDirectSession(root: JSONObject): Session {
+        check(root.optString("delivery") == "direct") { "خدمة BLOFY تحتاج تحديث الاتصال المباشر" }
+        val baseUrl = root.optString("baseUrl").trim().trimEnd('/')
+        val url = baseUrl.toHttpUrlOrNull()
+        val username = root.optString("username")
+        val password = root.optString("password")
+        val token = root.optString("sessionToken")
+        check(PlaylistUrlPolicy.isValid(baseUrl) && url?.query == null && url?.fragment == null &&
+            !isProxyPath(baseUrl) && username.isNotBlank() && password.isNotBlank() &&
+            token.length in 1..4096 && token.all { it.isLetterOrDigit() && it.code < 128 || it == '-' || it == '_' }) {
+            "استجابة BLOFY غير مكتملة"
+        }
+        return Session(root.optString("providerName").ifBlank { "مشتركين BLOFY" }, baseUrl, username, password,
+            root.optLong("expiresAt"), root.optString("providerId").takeIf {
+                runCatching { java.util.UUID.fromString(it) }.isSuccess
+            }.orEmpty(), token)
+    }
+
+    internal fun isProxyPath(value: String): Boolean =
+        value.toHttpUrlOrNull()?.encodedPath?.trimEnd('/') == "/api/v1/subscribers/xtream"
+
+    internal fun isLegacyProxy(provider: ProviderEntity, endpoint: String): Boolean {
+        val base = endpoint.trim().trimEnd('/').toHttpUrlOrNull() ?: return false
+        val url = provider.baseUrl.toHttpUrlOrNull() ?: return false
+        return provider.providerType.equals("xtream", true) && provider.subscriberToken.isBlank() &&
+            url.scheme == base.scheme && url.host == base.host && url.port == base.port &&
+            url.encodedPath.trimEnd('/') == base.encodedPath.trimEnd('/') + "/api/v1/subscribers/xtream" &&
+            url.query == null && url.fragment == null && url.encodedUsername.isEmpty() && url.encodedPassword.isEmpty()
+    }
+
+    fun isManaged(provider: ProviderEntity): Boolean = provider.subscriberToken.isNotBlank() || isProxyPath(provider.baseUrl)
+
+    internal fun portalSource(provider: ProviderEntity, endpoint: String): ProviderEntity =
+        if (provider.subscriberToken.isBlank()) provider else provider.copy(
+            baseUrl = serviceEndpoint(endpoint) + "/api/v1/subscribers/xtream",
+            username = provider.subscriberToken, password = "blofy"
+        )
+
+    internal suspend fun resolveConnections(context: Context, baseUrl: String, tokens: Collection<String>): Map<String, Session> = withContext(Dispatchers.IO) {
+        if (tokens.isEmpty()) return@withContext emptyMap()
+        val endpoint = serviceEndpoint(baseUrl)
+        val resolved = linkedMapOf<String, Session>()
+        for (batch in tokens.filter(String::isNotBlank).distinct().chunked(20)) {
+            val body = JSONObject().apply {
+                put("deviceId", DeviceIdentity.deviceId(context))
+                put("activationCode", DeviceIdentity.activationCode(context))
+                put("sessionTokens", JSONArray(batch))
+            }
+            val request = Request.Builder().url("$endpoint/api/v1/subscribers/resolve")
+                .post(body.toString().toRequestBody(jsonType)).build()
+            client.newCall(request).awaitResponse().use { response ->
+                check(response.isSuccessful) { "تعذر تحديث اتصال مشترك BLOFY" }
+                val items = JSONObject(response.body?.string().orEmpty()).optJSONArray("items")
+                check(items != null) { "استجابة BLOFY غير مكتملة" }
+                for (index in 0 until items.length()) {
+                    val row = items.getJSONObject(index)
+                    val token = row.optString("sessionToken")
+                    check(token in batch) { "استجابة BLOFY غير مكتملة" }
+                    if (row.has("error")) continue
+                    resolved[token] = parseDirectSession(row)
+                }
+            }
+        }
+        resolved
     }
 
     private suspend fun verifyServiceReady(endpoint: String) {

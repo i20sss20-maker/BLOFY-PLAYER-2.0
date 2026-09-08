@@ -125,7 +125,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
         panel.addView(playlistName, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 66)))
         val editingId = intent.getStringExtra(PlaylistActivity.EXTRA_PROVIDER_ID)
         if (editingId != null) lifecycleScope.launch {
-            BlofyDatabase.get(applicationContext).dao().provider(editingId)?.let { playlistName.setText(it.name) }
+            BlofyDatabase.get(applicationContext).dao().providerStored(editingId)?.let { playlistName.setText(it.name) }
         }
         panel.addView(label("اسم المستخدم"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val username = field("أدخل اسم المستخدم")
@@ -193,7 +193,8 @@ class BlofySubscriberActivity : AppCompatActivity() {
                             existing?.preferredEngine ?: "media3",
                             existing?.allowCrossProtocolRedirects ?: true,
                             existing?.enabled ?: false,
-                            System.currentTimeMillis()
+                            System.currentTimeMillis(),
+                            subscriberToken = session.sessionToken
                         )
                         PortalPlaylistClient.prepareSubscriberProvider(applicationContext, endpoint, dao, next, remoteId)
                     }
@@ -246,7 +247,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
         }
 
         panel.addView(TextView(this).apply {
-            text = "عنوان الخدمة الخاص مخفي ومحمي داخل BLOFY"
+            text = "إعدادات السيرفر تُجهّز تلقائيًا لحسابك"
             textSize = 12f
             setTextColor(0xFF857B91.toInt())
             gravity = Gravity.CENTER

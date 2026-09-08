@@ -36,11 +36,12 @@ authentication. They do not establish whether the upstream rejects the hosting
 network, request headers, stream entitlement or another provider-specific condition.
 Do not relabel 511 as success or expose the private origin to work around it.
 
-Automatic approval review rejected a subsequent compatibility probe using the
-session token from logs, citing credential disclosure to an unverified destination.
-No further credential-bearing stream probes are authorized by that review.
-Finish the catalog candidate and request explicit approval for a narrowly scoped
-probe through the existing BLOFY production gateway before continuing that check.
+Automatic approval review initially rejected a compatibility probe. The user then
+explicitly approved the limited test through the existing BLOFY production gateway.
+On 2026-09-08 at 22:46-22:48 UTC, three HLS User-Agent variants and HLS/TS without
+Range all returned HTTP 511 with zero bytes. The account API remained active.
+The user subsequently approved centrally managed direct connections; see
+`SUBSCRIBER_DIRECT_CONNECTION.md` for the rc07.17 contract and acceptance gates.
 Session tokens, provider hosts, passwords and full credential-bearing URLs are
 excluded from this document.
 
