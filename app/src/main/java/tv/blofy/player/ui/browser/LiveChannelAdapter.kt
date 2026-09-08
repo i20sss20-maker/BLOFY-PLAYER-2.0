@@ -30,8 +30,9 @@ internal class LiveChannelAdapter(
     fun submit(newItems: List<StreamEntity>) = replace(newItems)
 
     fun replace(newItems: List<StreamEntity>) {
-        // Avoid a full layout/focus pass for an identical page snapshot.
-        if (items.size == newItems.size && items.indices.all { itemKey(items[it]) == itemKey(newItems[it]) }) return
+        // Skip only a truly identical snapshot. Stable IDs alone are not enough: a channel may keep
+        // the same key while its name, icon, lock/archive flag or direct source changes after refresh.
+        if (items.size == newItems.size && items.indices.all { items[it] == newItems[it] }) return
         items.clear()
         items.addAll(newItems)
         notifyDataSetChanged()
