@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.metadata.ProviderMetadataCache
 
@@ -55,10 +56,13 @@ object CatalogSyncState {
     }
 
     /**
-     * Compatibility entry gate. A pending website/provider source must never revoke a known-good
-     * local catalog: the old library remains immediately usable while replacement data is staged.
+     * Full readiness means there is no unresolved website/provider source replacement. This is
+     * intentionally stricter than isEntryReady(): a pending replacement must not block reopening
+     * the known-good local catalog, but callers that need the current source to be fully reconciled
+     * still need a reliable distinction.
      */
-    fun isFullyReady(context: Context, providerId: String): Boolean = isEntryReady(context, providerId)
+    fun isFullyReady(context: Context, providerId: String): Boolean =
+        isEntryReady(context, providerId) && !PortalSyncBook.hasPendingSource(context, providerId)
 
     fun lastUpdatedAt(context: Context, providerId: String): Long =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(UPDATED_PREFIX + providerId, 0L)
