@@ -181,8 +181,10 @@ object PortalPlaylistClient {
             backgroundScope.launch {
                 syncMutex.withLock {
                     runCatching {
-                        val backgroundDao = BlofyDatabase.get(app).dao()
-                        val remoteSelection = (pendingSource(app, backgroundDao, selected.id) ?: selected)
+                        // Keep using the same DAO snapshot that staged the website source. Reopening
+                        // a different database here can lose the pending credentials in tests and in
+                        // multi-process/recovery edge cases, causing old credentials to be uploaded.
+                        val remoteSelection = (pendingSource(app, dao, selected.id) ?: selected)
                             .copy(enabled = true, providerType = "xtream", updatedAt = selected.updatedAt)
                         pushProviderInternal(app, baseUrl, remoteSelection)
                     }
@@ -249,7 +251,7 @@ object PortalPlaylistClient {
             val ids = dao.allProviders().first().filter { it.id == provider.id ||
                 PortalSyncBook.remoteId(context, it.id) == remoteId }.map { it.id }.toSet()
             PortalSyncBook.queueDelete(context, remoteId, ids)
-            ids.forEach { dao.deactivateProvider(it); discardPendingSource(context, dao, it) }
+            ids.forEach { dao.deactivateProvider(it.id); discardPendingSource(context, dao, it) }
             val endpoint = baseUrl.trim().trimEnd('/')
             if (endpoint.isBlank()) return@withContext false
             val auth = JSONObject().apply {
