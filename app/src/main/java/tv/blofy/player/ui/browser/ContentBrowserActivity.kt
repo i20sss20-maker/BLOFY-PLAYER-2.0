@@ -180,8 +180,6 @@ class ContentBrowserActivity : AppCompatActivity() {
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
             onClick = { loadStreams(categoryId(it)) },
-            // Moving through a category rail must be cheap. Loading is an explicit OK/click action,
-            // matching stable TV apps and preventing held-DPAD from launching dozens of DB queries.
             onFocus = null,
             itemKey = { it.key }
         )
@@ -198,8 +196,6 @@ class ContentBrowserActivity : AppCompatActivity() {
                     if (currentCategoryId == null && liveItems.isEmpty()) loadStreams(null)
                     requestInitialCatalogFocus()
                 } else if (livePageJob == null && liveItems.isEmpty()) {
-                    // Always provide a safe All Channels route. A stale remembered category must not
-                    // be able to open Live as an empty screen.
                     val saved = savedCategoryId()
                     val initial = items.firstOrNull { it.remoteId == saved }?.remoteId
                     loadStreams(initial)
@@ -345,9 +341,6 @@ class ContentBrowserActivity : AppCompatActivity() {
             if (previewEnabled) startInitialPreview(cached.items)
             return
         }
-
-        // Keep the previous visible list until the replacement page is ready. This avoids the
-        // blank/flicker state that made Live look broken while a local Room query was in flight.
         loadNextLivePage(reset = true)
     }
 
@@ -368,12 +361,13 @@ class ContentBrowserActivity : AppCompatActivity() {
             }
             if (generation != liveGeneration) return@launch
 
-            // A stale/empty category must never strand Live on a blank screen. Fall back to All.
             if (reset && result.first.isEmpty() && categoryId != null) {
                 liveLoading = false
-                currentCategoryId = null
-                displayedLiveCategoryId = null
                 rememberCategory(null)
+                // Make displayed != requested so loadLiveStreams(null) cannot be short-circuited by
+                // the still-visible previous page. Then perform a real All Channels query.
+                displayedLiveCategoryId = categoryId
+                currentCategoryId = null
                 liveGeneration += 1
                 loadLiveStreams(null)
                 categoryList.post { TwoPaneFocusGuard.focusItem(categoryList, 0) }
