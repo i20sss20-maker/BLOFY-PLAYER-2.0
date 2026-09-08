@@ -32,7 +32,6 @@ import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
-import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import java.util.UUID
 
@@ -104,7 +103,7 @@ class PlaylistActivity : AppCompatActivity() {
                     .setNegativeButton("رجوع", null).setPositiveButton("متابعة") { _, _ -> confirmedHttpUrl = baseUrl; lifecycleScope.launch { persist(connectAfter) } }.show(); return
             }
             if (busy) return
-            busy = true; status.text = "جاري تجهيز Xtream..."
+            busy = true; status.text = "جاري حفظ Xtream..."
             try {
                 val provider = withContext(Dispatchers.IO) {
                     val dao = BlofyDatabase.get(applicationContext).dao(); val existing = editingProviderId?.let { dao.provider(it) }
@@ -115,19 +114,16 @@ class PlaylistActivity : AppCompatActivity() {
                         existing?.liveFormat ?: "ts", existing?.preferredTransport ?: "cronet", existing?.preferredEngine ?: "media3", existing?.allowCrossProtocolRedirects ?: true, true, System.currentTimeMillis())
                     val hasCatalog = dao.hasCatalog(id)
                     val cacheReady = hasCatalog && CatalogSyncState.isReady(applicationContext, id)
+                    val sourceChanged = existing != null && (existing.baseUrl != next.baseUrl || existing.username != next.username || existing.password != next.password || existing.providerType != next.providerType)
+
                     if (!cacheReady) {
+                        // Do not perform a huge first import inside this form. Persist the provider and
+                        // let CatalogLoadingActivity own progress, cancellation and section checkpoints.
                         CatalogSyncState.markPending(applicationContext, id)
-                        dao.upsertProvider(next)
-                        try {
-                            if (hasCatalog) dao.clearProviderCatalog(id)
-                            val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(next) }
-                            check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }; check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
-                            dao.saveAndActivateProvider(next)
-                        } catch (error: Throwable) {
-                            withContext(NonCancellable) { dao.clearProviderCatalog(id) }
-                            throw error
-                        }
-                    } else if (existing != null && (existing.baseUrl != next.baseUrl || existing.username != next.username || existing.password != next.password || existing.providerType != next.providerType)) {
+                        dao.saveAndActivateProvider(next)
+                    } else if (sourceChanged) {
+                        // Existing healthy libraries keep the staged replacement path so a failed edit
+                        // cannot destroy the last known-good catalog.
                         CatalogSyncState.markPending(applicationContext, id)
                         val staging = next.copy(id = UUID.randomUUID().toString(), enabled = false); var promoted = false
                         try {
@@ -138,13 +134,18 @@ class PlaylistActivity : AppCompatActivity() {
                                 CatalogSyncState.markSourceReplaced(applicationContext, id)
                             }
                         } finally { if (!promoted) withContext(NonCancellable) { dao.discardStagedCatalog(staging.id) } }
-                    } else { dao.upsertProvider(next); dao.disableAllProviders(); dao.activateProvider(id) }
-                    CatalogSyncState.markReady(applicationContext, id)
+                        CatalogSyncState.markReady(applicationContext, id)
+                    } else {
+                        dao.upsertProvider(next); dao.disableAllProviders(); dao.activateProvider(id)
+                        CatalogSyncState.markReady(applicationContext, id)
+                    }
                     val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim(); if (endpoint.isNotBlank()) runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
                     next
                 }
                 setResult(RESULT_OK); status.text = if (connectAfter) "تم الحفظ • جاري الدخول" else "تم الحفظ"
-                if (connectAfter) { startActivity(Intent(this@PlaylistActivity, CatalogLoadingActivity::class.java).putExtra("provider_id", provider.id)); finish() } else finish()
+                if (connectAfter) {
+                    startActivity(Intent(this@PlaylistActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)); finish()
+                } else finish()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { status.text = "تعذر تجهيز السيرفر • ${error.message ?: "خطأ اتصال"}"; busy = false }
         }

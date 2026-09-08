@@ -53,8 +53,6 @@ jobs:
         run: |
           set -euo pipefail
           file="app/src/main/java/tv/blofy/player/data/PlaylistManager.kt"
-          # Formatting is intentionally irrelevant: verify the streaming parser exists and each
-          # large Xtream endpoint is present, while forbidding the old full-list API path.
           grep -Fq 'private suspend fun <T> parseStreamingArray(' "$file"
           grep -Fq 'actionUrl(provider, "get_live_streams")' "$file"
           grep -Fq 'actionUrl(provider, "get_vod_streams")' "$file"
@@ -92,7 +90,6 @@ jobs:
           grep -Fq 'EntryPreparationPipeline.run(' "$file"
           grep -Fq 'HomeSnapshotStore.rebuild(app, dao, provider)' "$file"
           grep -Fq 'CatalogSyncState.markEntryReady(app, providerId, expectedEpoch)' "$file"
-          # Network detail/artwork work must remain outside the entry pipeline.
           start=$(grep -n 'EntryPreparationPipeline.run(' "$file" | head -1 | cut -d: -f1)
           end=$(tail -n +"$start" "$file" | grep -n '^                )' | head -1 | cut -d: -f1)
           if [ -n "$start" ] && [ -n "$end" ]; then
@@ -101,6 +98,30 @@ jobs:
               echo 'Network enrichment returned to the first-entry gate' >&2
               exit 1
             fi
+          fi
+      - name: Verify deep-clean UI paths stay local-first
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="app/src/main/java/tv/blofy/player/BlofyApp.kt"
+          live="app/src/main/java/tv/blofy/player/ui/browser/LiveChannelAdapter.kt"
+          cloud="app/src/main/java/tv/blofy/player/ui/profile/ProfileCloudLifecycle.kt"
+
+          test ! -f app/src/main/java/tv/blofy/player/ui/login/LoginLocalFastPathLifecycle.kt
+          test ! -f app/src/main/java/tv/blofy/player/ui/login/LoginPortalRefreshLifecycle.kt
+          ! grep -Fq 'LoginLocalFastPathLifecycle' "$app"
+          ! grep -Fq 'LoginPortalRefreshLifecycle' "$app"
+
+          if grep -Eq 'BlofyDatabase|get\(applicationContext\)|syncShortEpg' "$live"; then
+            echo 'Live row binding regressed to database/network work' >&2
+            exit 1
+          fi
+          grep -Fq 'is HomeActivity -> activity.lifecycleScope.launch' "$cloud"
+          grep -Fq 'delay(HOME_DEFER_MS)' "$cloud"
+          grep -Fq 'private const val HOME_DEFER_MS = 10_000L' "$cloud"
+          if grep -Fq 'if (activity is HomeActivity' "$cloud"; then
+            echo 'Immediate Home profile cloud sync returned' >&2
+            exit 1
           fi
       - name: Test lint and assemble
         shell: bash
@@ -137,6 +158,7 @@ jobs:
             echo "home_bounded_cache=true"
             echo "catalog_streaming=true"
             echo "entry_gate_network_free=true"
+            echo "deep_clean_ui=true"
             echo "metadata=provider_only"
           } > app/build/outputs/apk/debug/build-info.txt
           sha256sum "$APK" | tee app/build/outputs/apk/debug/app-debug.apk.sha256

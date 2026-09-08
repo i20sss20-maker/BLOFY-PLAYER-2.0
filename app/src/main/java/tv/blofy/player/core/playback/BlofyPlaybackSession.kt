@@ -66,7 +66,6 @@ class BlofyPlaybackSession(
                     if (playbackState == Player.STATE_BUFFERING) metric?.let { metric = PlaybackDiagnostics.buffering(it) }
                     if (playbackState == Player.STATE_READY) {
                         resetLiveStallTimer(keepPosition = true)
-                        // A seek that reached READY is healthy; invalidate its delayed recovery.
                         if (!contentKind.isLiveContent()) seekRecoveryGeneration++
                     }
                 }
@@ -82,8 +81,6 @@ class BlofyPlaybackSession(
                 }
 
                 override fun onRenderedFirstFrame() {
-                    // A completed render proves this source recovered. A later seek/error deserves
-                    // its own bounded retry instead of inheriting a startup retry forever.
                     automaticRetries = 0
                     if (!firstFrameRecorded) {
                         metric?.let {
@@ -121,6 +118,16 @@ class BlofyPlaybackSession(
                         retryHandler.post { retrySameUrl() }
                     } else if (failedUrl.isNotBlank()) {
                         retryHandler.post {
+                            // A configured provider-origin fallback exists specifically to escape an
+                            // unreachable direct/hidden host. Try that route before changing .ts/.m3u8
+                            // on the same failed origin; otherwise a dead hidden hostname costs another
+                            // full timeout before the reachable provider is even attempted.
+                            val configuredFallback = fallbackState.nextConfiguredUrl()
+                            if (configuredFallback != null) {
+                                fallbackState.markConfiguredUrlAttempted(configuredFallback)
+                                playInternalFallback(configuredFallback)
+                                return@post
+                            }
                             val alternateUrl = if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
                                 ContentUrlResolver.alternateLiveFormat(failedUrl, profile)
                             } else {
@@ -130,13 +137,7 @@ class BlofyPlaybackSession(
                                 alternateLiveFormatAttempted = true
                                 playInternalFallback(alternateUrl)
                             } else {
-                                val configuredFallback = fallbackState.nextConfiguredUrl()
-                                if (configuredFallback != null) {
-                                    fallbackState.markConfiguredUrlAttempted(configuredFallback)
-                                    playInternalFallback(configuredFallback)
-                                } else {
-                                    onTerminalError?.invoke(failedUrl)
-                                }
+                                onTerminalError?.invoke(failedUrl)
                             }
                         }
                     }
@@ -183,9 +184,6 @@ class BlofyPlaybackSession(
             if (generation != seekRecoveryGeneration || contentKind.isLiveContent()) return@postDelayed
             if (player.currentMediaItem == null || !player.playWhenReady) return@postDelayed
             if (player.playbackState == Player.STATE_BUFFERING) {
-                // Keep the same MediaItem/engine and retry at the current seek position. This is
-                // intentionally not a fallback/engine switch: many IPTV VOD servers need a fresh
-                // HTTP range request after an otherwise valid seek.
                 automaticRetries = 0
                 retrySameUrl()
             }
@@ -284,7 +282,6 @@ class BlofyPlaybackSession(
     private fun String.isLiveContent(): Boolean = this == "live" || this == "live_preview"
 }
 
-/** Replace only the source, retaining the same VOD timeline position before Player resets it. */
 @OptIn(markerClass = [UnstableApi::class])
 internal fun prepareFallbackItem(player: Player, item: MediaItem, live: Boolean) {
     val resumeMs = if (live) 0L else player.currentPosition.coerceAtLeast(0L)

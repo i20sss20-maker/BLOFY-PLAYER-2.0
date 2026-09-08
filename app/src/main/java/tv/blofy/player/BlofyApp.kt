@@ -17,14 +17,10 @@ import tv.blofy.player.core.update.AppUpdateLifecycle
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.ResumeStateWriter
 import tv.blofy.player.data.local.BlofyDatabase
-import tv.blofy.player.data.preparation.CatalogEnrichmentLifecycle
-import tv.blofy.player.data.preparation.StorageMaintenanceLifecycle
 import tv.blofy.player.ui.catalog.CatalogPageMemory
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
-import tv.blofy.player.ui.login.LoginLocalFastPathLifecycle
-import tv.blofy.player.ui.login.LoginPortalRefreshLifecycle
 import tv.blofy.player.ui.profile.ProfileCloudLifecycle
 import tv.blofy.player.ui.profile.ProfileHomeLayoutLifecycle
 import tv.blofy.player.ui.profile.ProfileSwitcherLifecycle
@@ -53,8 +49,6 @@ class BlofyApp : Application() {
         super.onCreate()
         current = this
 
-        // BLOFY's product language is English. Preserve an explicit user choice, but a fresh
-        // install must not inherit Arabic merely because the Android TV system locale is Arabic.
         val settings = getSharedPreferences("blofy_player_settings", MODE_PRIVATE)
         if (AppCompatDelegate.getApplicationLocales().isEmpty) {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
@@ -67,8 +61,6 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
-        registerActivityLifecycleCallbacks(LoginLocalFastPathLifecycle())
-        registerActivityLifecycleCallbacks(LoginPortalRefreshLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
         registerActivityLifecycleCallbacks(KidsContentGuard())
         registerActivityLifecycleCallbacks(ProfileUxLifecycle())
@@ -76,16 +68,13 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(CatalogSearchLifecycle())
         registerActivityLifecycleCallbacks(ProfileCloudLifecycle())
         registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
-        registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())
-        registerActivityLifecycleCallbacks(StorageMaintenanceLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
         registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
 
-        // Absolutely no Room open, migration, catalog repair, artwork preload or network wait is
-        // allowed from Application startup. Catalog maintenance is started only after a screen has
-        // successfully opened the database and the UI is already interactive.
+        // Stability rule: Application-level callbacks must never own Login controls or start
+        // catalog/database maintenance on Activity resume. Login remains self-contained, while
+        // catalog refresh/preparation stays explicit (first import / user refresh / worker).
         applicationScope.launch {
-            // Last-known-good config means an unavailable server never disables the app.
             runCatching { CommercialConfigRepository.refresh(this@BlofyApp) }
         }
     }

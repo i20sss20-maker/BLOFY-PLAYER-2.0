@@ -12,6 +12,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Xtream playback URL policy. Playback engines are intentionally untouched. */
 object ContentUrlResolver {
+    data class LiveRoute(val primaryUrl: String, val fallbackUrl: String?)
+
     private data class RouteContext(
         val provider: ProviderEntity,
         val liveProfile: ProviderProfile? = null,
@@ -19,10 +21,16 @@ object ContentUrlResolver {
 
     private val recentRoutes = ConcurrentHashMap<String, RouteContext>()
 
-    fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String {
+    /** Single source of truth used by both Live preview and full-screen playback. */
+    fun liveRoute(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): LiveRoute {
         recentRoutes[provider.id] = RouteContext(provider, profile)
-        return primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalLive(provider, profile, stream)
+        val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalLive(provider, profile, stream)
+        val fallback = liveFallbackForPrimary(provider, profile, stream, primary)
+        return LiveRoute(primary, fallback)
     }
+
+    fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String =
+        liveRoute(provider, profile, stream).primaryUrl
 
     fun movie(provider: ProviderEntity, stream: StreamEntity): String {
         recentRoutes[provider.id] = RouteContext(provider, recentRoutes[provider.id]?.liveProfile)
@@ -41,8 +49,20 @@ object ContentUrlResolver {
      * route is not applicable, fall back to the canonical Xtream URL.
      */
     fun liveFallback(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String? {
-        val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: return null
-        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, stream.directSource)
+        recentRoutes[provider.id] = RouteContext(provider, profile)
+        val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalLive(provider, profile, stream)
+        return liveFallbackForPrimary(provider, profile, stream, primary)
+    }
+
+    private fun liveFallbackForPrimary(
+        provider: ProviderEntity,
+        profile: ProviderProfile,
+        stream: StreamEntity,
+        primary: String,
+    ): String? {
+        val source = stream.directSource
+        if (source.validHttpUrl() == null) return null
+        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, source)
             ?.takeUnless { it == primary }
         return origin ?: canonicalLive(provider, profile, stream).takeUnless { it == primary }
     }
