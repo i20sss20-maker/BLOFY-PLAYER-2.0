@@ -7,11 +7,7 @@ import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import java.util.IdentityHashMap
 
-/**
- * The HomeActivity dispatch entry owns all four arrows. No Window wrapper, per-item key listener,
- * persistent focus memory, coordinate-based region split, or deferred focus request is installed.
- * Dynamic profile/watchlist controls are discovered from the same hierarchy as stock shelves.
- */
+/** Single deterministic focus engine for the TV Home screen. */
 internal class HomeFocusController(
     private val root: ViewGroup,
     private val sidebar: ViewGroup,
@@ -23,7 +19,8 @@ internal class HomeFocusController(
     private var dirty = true
     private var disposed = false
     private val repeatGate = HomeDpadRepeatGate()
-    private var lastMain: View? = null // Same-screen sidebar round-trip only; never persisted.
+    private var lastMain: View? = null
+    private var pendingFocus: View? = null
     private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener { dirty = true }
     private val observer = root.viewTreeObserver
 
@@ -39,6 +36,7 @@ internal class HomeFocusController(
         }
         entries = emptyList()
         lastMain = null
+        pendingFocus = null
         repeatGate.reset()
     }
 
@@ -49,7 +47,7 @@ internal class HomeFocusController(
             KeyEvent.KEYCODE_DPAD_DOWN -> HomeNavigationPolicy.Direction.DOWN
             KeyEvent.KEYCODE_DPAD_LEFT -> HomeNavigationPolicy.Direction.LEFT
             KeyEvent.KEYCODE_DPAD_RIGHT -> HomeNavigationPolicy.Direction.RIGHT
-            else -> return false // OK, Back, Menu, and accessibility actions keep their normal path.
+            else -> return false
         }
         if (event.action == KeyEvent.ACTION_UP) { repeatGate.reset(); return true }
         if (event.action != KeyEvent.ACTION_DOWN) return false
@@ -57,7 +55,6 @@ internal class HomeFocusController(
         if (root.width <= 0 || feed.width <= 0) return false
         if (dirty) rebuild()
         val currentView = root.findFocus()
-        // A just-injected control may receive focus before the next global layout notification.
         if (currentView != null && entries.none { it.view === currentView }) rebuild()
         val usable = entries.filter { attachedAndFocusable(it.view) }
         if (usable.isEmpty()) return true
@@ -90,16 +87,32 @@ internal class HomeFocusController(
             sidebarOnLeft = centerX(sidebar) < centerX(feed),
             entryId = indexOf(entry), sidebarId = indexOf(side),
         ) ?: return true
-        if (targetIndex == currentIndex) return true // Never fall through to a second focus engine.
+        if (targetIndex == currentIndex) return true
         if (!usable[currentIndex].sidebar && usable[targetIndex].sidebar) lastMain = currentView
         focus(usable[targetIndex].view)
         return true
     }
 
+    /**
+     * Some Android TV boxes reject requestFocus for one frame while a HorizontalScrollView is
+     * settling. Keep the target and retry briefly instead of forcing the user to press LEFT/RIGHT
+     * several times. A newer DPAD press replaces the pending target, so stale retries cannot jump.
+     */
     private fun focus(view: View) {
-        if (view.requestFocus()) {
-            // Immediate scrolling avoids a queue of smooth-scroll animations fighting held arrows.
-            view.requestRectangleOnScreen(Rect(0, 0, view.width, view.height), true)
+        pendingFocus = view
+        fun attempt(): Boolean {
+            if (disposed || pendingFocus !== view || !attachedAndFocusable(view)) return false
+            val moved = view.requestFocus()
+            if (moved) {
+                view.requestRectangleOnScreen(Rect(0, 0, view.width, view.height), true)
+                pendingFocus = null
+            }
+            return moved
+        }
+        if (attempt()) return
+        root.post {
+            if (attempt()) return@post
+            root.postDelayed({ attempt() }, 45L)
         }
     }
 
@@ -117,7 +130,7 @@ internal class HomeFocusController(
         if (view.visibility != View.VISIBLE || !view.isEnabled) return
         if (view.isFocusable && view.isClickable) {
             result += view
-            return // A clickable card is one action; its image/labels are not additional stops.
+            return
         }
         if (view is ViewGroup) for (i in 0 until view.childCount) collect(view.getChildAt(i), result)
     }
@@ -143,7 +156,6 @@ internal class HomeFocusController(
         return null
     }
 
-    /** Layout coordinates minus scrolling; focus scale/translation animations cannot change order. */
     private fun centerX(view: View): Int {
         var x = view.width / 2
         var cursor: View? = view
