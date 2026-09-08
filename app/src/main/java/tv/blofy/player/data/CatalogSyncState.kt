@@ -39,8 +39,7 @@ object CatalogSyncState {
      * Entry is governed by the durable Room catalog, not by derived Home/manifest/search markers.
      * A successful catalog commit already persisted the provider and rows atomically. If the process
      * dies before secondary snapshots are marked ready, reopening must still use that local catalog
-     * immediately instead of forcing another loading screen/network pass. Search has a bounded SQL
-     * fallback and Home can read Room directly while derived caches rebuild after entry.
+     * immediately instead of forcing another loading screen/network pass.
      */
     fun isEntryReady(context: Context, providerId: String): Boolean =
         providerId.isNotBlank() && lastUpdatedAt(context, providerId) > 0L && isReady(context, providerId)
@@ -56,9 +55,14 @@ object CatalogSyncState {
             CatalogSearchIndex.isReady(context, providerId)
     }
 
-    /** Compatibility name used by existing login paths; pending source changes still block entry. */
+    /**
+     * Full readiness means there is no unresolved website/provider source replacement. This is
+     * intentionally stricter than isEntryReady(): a pending replacement must not block reopening
+     * the known-good local catalog, but callers that need the current source to be fully reconciled
+     * still need a reliable distinction.
+     */
     fun isFullyReady(context: Context, providerId: String): Boolean =
-        !PortalSyncBook.hasPendingSource(context, providerId) && isEntryReady(context, providerId)
+        isEntryReady(context, providerId) && !PortalSyncBook.hasPendingSource(context, providerId)
 
     fun lastUpdatedAt(context: Context, providerId: String): Long =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(UPDATED_PREFIX + providerId, 0L)
@@ -88,9 +92,6 @@ object CatalogSyncState {
 
     @Synchronized
     fun markPending(context: Context, providerId: String) {
-        // A working catalog is the last-known-good snapshot. Website/provider changes are staged
-        // beside it and must never revoke local entry before the replacement commits. This keeps
-        // exit/re-entry instant even when the network is down or a refresh later proves incomplete.
         if (isReady(context, providerId)) return
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(ENTRY_EPOCH_PREFIX + providerId)
@@ -105,7 +106,6 @@ object CatalogSyncState {
         CatalogManifestStore.clear(context.applicationContext, providerId)
     }
 
-    /** Compatibility entry: making the base catalog ready again never restarts preparation. */
     fun markReady(context: Context, providerId: String) {
         if (isReady(context, providerId)) return
         markCatalogCommitted(context, providerId)
@@ -123,11 +123,8 @@ object CatalogSyncState {
             .putLong(UPDATED_PREFIX + providerId, epoch).commit()) { "Unable to persist catalog state" }
     }
 
-    /** Called only after a different playlist source has been durably promoted under this ID. */
     suspend fun markSourceReplaced(context: Context, providerId: String) =
         withContext(NonCancellable + Dispatchers.IO) {
-            // IDs can be reused by unrelated providers. Neither the previous Home selection nor
-            // cached metadata may be carried into the replacement source, even in the same ms.
             markCatalogCommitted(context, providerId)
             HomeSnapshotStore.clear(context, providerId)
             CatalogManifestStore.clear(context, providerId)
@@ -145,7 +142,6 @@ object CatalogSyncState {
             .putLong(ENTRY_EPOCH_PREFIX + providerId, expectedEpoch).commit()) { "Unable to persist entry readiness" }
     }
 
-    /** Kept for older callers. Does not mark remote enrichment as complete. */
     fun markFullyReady(context: Context, providerId: String, expectedEpoch: Long) = markEntryReady(context, providerId, expectedEpoch)
 
     fun markMetadataReady(context: Context, providerId: String) {

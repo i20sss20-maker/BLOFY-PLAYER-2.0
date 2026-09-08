@@ -8,54 +8,94 @@ import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 
-/** Xtream-only playback URL policy for rc07.13. */
+/** Xtream-only playback URL policy for rc07.14. */
 object ContentUrlResolver {
-    fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String =
-        XtreamUrlBuilder.live(
-            provider.baseUrl,
-            provider.username,
-            provider.password,
-            stream.remoteId,
-            profile.liveFormat
-        )
+    /**
+     * A few legacy screens still ask for a context-free fallback after resolving the primary URL.
+     * Keep only the last provider route in memory so those callers can receive the canonical panel
+     * URL instead of accidentally passing direct_source twice. No persistence or network work occurs.
+     */
+    private data class RouteContext(
+        val provider: ProviderEntity,
+        val liveProfile: ProviderProfile? = null,
+    )
 
-    fun movie(provider: ProviderEntity, stream: StreamEntity): String =
-        XtreamUrlBuilder.movie(
-            provider.baseUrl,
-            provider.username,
-            provider.password,
-            stream.remoteId,
-            stream.extension ?: "mp4"
-        )
+    private val recentRoutes = ConcurrentHashMap<String, RouteContext>()
 
-    fun episode(provider: ProviderEntity, episode: EpisodeEntity): String =
-        XtreamUrlBuilder.episode(
-            provider.baseUrl,
-            provider.username,
-            provider.password,
-            episode.remoteId,
-            episode.extension
-        )
+    fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String {
+        recentRoutes[provider.id] = RouteContext(provider, profile)
+        return primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalLive(provider, profile, stream)
+    }
+
+    fun movie(provider: ProviderEntity, stream: StreamEntity): String {
+        recentRoutes[provider.id] = RouteContext(provider, recentRoutes[provider.id]?.liveProfile)
+        return primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalMovie(provider, stream)
+    }
+
+    fun episode(provider: ProviderEntity, episode: EpisodeEntity): String {
+        recentRoutes[provider.id] = RouteContext(provider, recentRoutes[provider.id]?.liveProfile)
+        return primaryDirectSource(provider.baseUrl, episode.directSource) ?: canonicalEpisode(provider, episode)
+    }
 
     /**
-     * direct_source is secondary to the canonical Xtream URL.
-     *
-     * Important: a public-looking alternate host can be the provider's real playback/CDN route.
-     * Do not rewrite it merely because its origin differs from the login/panel origin. This is the
-     * common "hidden host" case. Only clearly local/private hosts are repaired to the provider
-     * origin. This keeps aliases such as cf.tstor8k.xyz usable while still repairing LAN/internal
-     * direct_source values.
+     * When direct_source is the primary route, retain the canonical panel route as a distinct
+     * configured fallback. If direct_source is absent, the canonical route is already primary.
      */
-    fun directFallback(provider: ProviderEntity, stream: StreamEntity): String? =
-        providerAwareFallback(provider.baseUrl, stream.directSource)
+    fun liveFallback(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String? {
+        val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: return null
+        return canonicalLive(provider, profile, stream).takeUnless { it == primary }
+    }
+
+    fun movieFallback(provider: ProviderEntity, stream: StreamEntity): String? {
+        val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: return null
+        return canonicalMovie(provider, stream).takeUnless { it == primary }
+    }
+
+    fun episodeFallback(provider: ProviderEntity, episode: EpisodeEntity): String? {
+        val primary = primaryDirectSource(provider.baseUrl, episode.directSource) ?: return null
+        return canonicalEpisode(provider, episode).takeUnless { it == primary }
+    }
+
+    /**
+     * Compatibility overloads are fallback APIs. The primary direct_source route is selected only
+     * by live/movie/episode above. This keeps older UI call sites safe without changing Media3,
+     * FFmpeg, the playback session, or engine-selection policy.
+     */
+    fun directFallback(provider: ProviderEntity, stream: StreamEntity): String? = when (stream.kind) {
+        "live" -> recentRoutes[provider.id]?.liveProfile?.let { liveFallback(provider, it, stream) }
+        "movie" -> movieFallback(provider, stream)
+        else -> null
+    }
 
     fun directFallback(provider: ProviderEntity, episode: EpisodeEntity): String? =
-        providerAwareFallback(provider.baseUrl, episode.directSource)
+        episodeFallback(provider, episode)
 
-    /** Legacy context-free callers never receive a clearly-internal URL. */
-    fun directFallback(stream: StreamEntity): String? = stream.directSource.safeContextFreeFallback()
-    fun directFallback(episode: EpisodeEntity): String? = episode.directSource.safeContextFreeFallback()
+    /**
+     * Legacy context-free callers normally invoke this immediately after live/movie/episode. Use
+     * the remembered provider route to return a genuinely different canonical fallback. With no
+     * route context (for example isolated tests/old callers), preserve the historical safe behavior.
+     */
+    fun directFallback(stream: StreamEntity): String? {
+        val route = recentRoutes[stream.providerId] ?: return stream.directSource.safeContextFreeFallback()
+        val primary = primaryDirectSource(route.provider.baseUrl, stream.directSource)
+            ?: return null
+        val canonical = when (stream.kind) {
+            "live" -> route.liveProfile?.let { canonicalLive(route.provider, it, stream) }
+            "movie" -> canonicalMovie(route.provider, stream)
+            else -> null
+        }
+        return canonical?.takeUnless { it == primary }
+            ?: stream.directSource.safeContextFreeFallback()?.takeUnless { it == primary }
+    }
+
+    fun directFallback(episode: EpisodeEntity): String? {
+        val route = recentRoutes[episode.providerId] ?: return episode.directSource.safeContextFreeFallback()
+        val primary = primaryDirectSource(route.provider.baseUrl, episode.directSource)
+            ?: return null
+        return canonicalEpisode(route.provider, episode).takeUnless { it == primary }
+    }
 
     /**
      * Xtream installations do not all accept the same live output suffix. If the configured
@@ -78,11 +118,35 @@ object ContentUrlResolver {
         return alternatePath + suffix
     }
 
-    private fun providerAwareFallback(providerBaseUrl: String, directSource: String?): String? {
+    private fun canonicalLive(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String =
+        XtreamUrlBuilder.live(
+            provider.baseUrl,
+            provider.username,
+            provider.password,
+            stream.remoteId,
+            profile.liveFormat
+        )
+
+    private fun canonicalMovie(provider: ProviderEntity, stream: StreamEntity): String =
+        XtreamUrlBuilder.movie(
+            provider.baseUrl,
+            provider.username,
+            provider.password,
+            stream.remoteId,
+            stream.extension ?: "mp4"
+        )
+
+    private fun canonicalEpisode(provider: ProviderEntity, episode: EpisodeEntity): String =
+        XtreamUrlBuilder.episode(
+            provider.baseUrl,
+            provider.username,
+            provider.password,
+            episode.remoteId,
+            episode.extension
+        )
+
+    private fun primaryDirectSource(providerBaseUrl: String, directSource: String?): String? {
         val value = directSource.validHttpUrl() ?: return null
-        // resolve() preserves normal/public alternate DNS hosts exactly as supplied by Xtream and
-        // rewrites only clearly internal/private hosts. rc07.12 did the opposite ordering here:
-        // providerOriginFallback() ran first and destroyed valid hidden/CDN origins.
         return ProviderHostResolver.resolve(providerBaseUrl, value).validHttpUrl()
     }
 
