@@ -17,8 +17,6 @@ import tv.blofy.player.core.update.AppUpdateLifecycle
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.ResumeStateWriter
 import tv.blofy.player.data.local.BlofyDatabase
-import tv.blofy.player.data.preparation.CatalogEnrichmentLifecycle
-import tv.blofy.player.data.preparation.StorageMaintenanceLifecycle
 import tv.blofy.player.ui.catalog.CatalogPageMemory
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
@@ -53,8 +51,6 @@ class BlofyApp : Application() {
         super.onCreate()
         current = this
 
-        // BLOFY's product language is English. Preserve an explicit user choice, but a fresh
-        // install must not inherit Arabic merely because the Android TV system locale is Arabic.
         val settings = getSharedPreferences("blofy_player_settings", MODE_PRIVATE)
         if (AppCompatDelegate.getApplicationLocales().isEmpty) {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
@@ -76,16 +72,14 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(CatalogSearchLifecycle())
         registerActivityLifecycleCallbacks(ProfileCloudLifecycle())
         registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
-        registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())
-        registerActivityLifecycleCallbacks(StorageMaintenanceLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
         registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
 
-        // Absolutely no Room open, migration, catalog repair, artwork preload or network wait is
-        // allowed from Application startup. Catalog maintenance is started only after a screen has
-        // successfully opened the database and the UI is already interactive.
+        // Stability rule: Activity resume must never start full-catalog preparation, FTS rebuilds,
+        // provider-secret migration or recursive cache scans. Those jobs compete with Room reads,
+        // RecyclerView binding and DPAD on low-powered TV boxes. Catalog refresh/preparation stays
+        // explicit (first import / user refresh / worker), while Home remains read-only and instant.
         applicationScope.launch {
-            // Last-known-good config means an unavailable server never disables the app.
             runCatching { CommercialConfigRepository.refresh(this@BlofyApp) }
         }
     }
