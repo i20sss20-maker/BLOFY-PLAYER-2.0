@@ -16,7 +16,7 @@ class ContentUrlResolverTest {
     )
 
     @Test
-    fun hiddenPublicDirectSourceIsPrimaryPlaybackRoute() {
+    fun hiddenPublicDirectSourceIsPrimaryPlaybackRouteWithCanonicalFallback() {
         val provider = ProviderEntity(
             id = "p1",
             name = "provider",
@@ -38,6 +38,34 @@ class ContentUrlResolverTest {
             "http://cf.tstor8k.xyz/live/user/pass/100.ts",
             ContentUrlResolver.live(provider, xtreamProfile, stream)
         )
+        assertEquals(
+            "http://panel.example.com/live/user/pass/100.ts",
+            ContentUrlResolver.liveFallback(provider, xtreamProfile, stream)
+        )
+    }
+
+    @Test
+    fun canonicalRouteHasNoDuplicateConfiguredFallbackWhenDirectSourceMissing() {
+        val provider = ProviderEntity(
+            id = "p1",
+            name = "provider",
+            baseUrl = "http://panel.example.com",
+            username = "user",
+            password = "pass"
+        )
+        val stream = StreamEntity(
+            key = "p1:live:100",
+            providerId = "p1",
+            remoteId = "100",
+            categoryId = null,
+            kind = "live",
+            name = "channel"
+        )
+        assertEquals(
+            "http://panel.example.com/live/user/pass/100.ts",
+            ContentUrlResolver.live(provider, xtreamProfile, stream)
+        )
+        assertNull(ContentUrlResolver.liveFallback(provider, xtreamProfile, stream))
     }
 
     @Test
