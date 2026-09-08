@@ -58,7 +58,6 @@ class ContentBrowserActivity : AppCompatActivity() {
     private lateinit var streamAdapter: LiveChannelAdapter
     private var streamsJob: Job? = null
     private var livePageJob: Job? = null
-    private var categoryFocusJob: Job? = null
     private var catalogRefreshJob: Job? = null
     private var previewJob: Job? = null
     private var previewSession: BlofyPlaybackSession? = null
@@ -124,6 +123,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             clipToPadding = false
             itemAnimator = null
             setItemViewCacheSize(if (phoneMode) 10 else 16)
+            preserveFocusAfterLayout = true
         }
         streamList = RecyclerView(this).apply {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -135,6 +135,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             clipToPadding = false
             itemAnimator = null
             setItemViewCacheSize(if (phoneMode) 12 else 22)
+            preserveFocusAfterLayout = true
             recycledViewPool.setMaxRecycledViews(0, 28)
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
@@ -178,10 +179,11 @@ class ContentBrowserActivity : AppCompatActivity() {
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
             onClick = {
-                categoryFocusJob?.cancel()
+                // TV stability rule: moving focus through categories must be free. Only OK/click
+                // commits a category change and starts a Room query / Live page load.
                 loadStreams(categoryId(it))
             },
-            onFocus = { if (!phoneMode) scheduleCategoryLoad(categoryId(it)) },
+            onFocus = null,
             itemKey = { it.key }
         )
         categoryList.adapter = categoryAdapter
@@ -194,25 +196,20 @@ class ContentBrowserActivity : AppCompatActivity() {
                 val displayed = if (kind == KIND_LIVE) items else listOf(allCategory()) + items
                 categoryAdapter.submit(displayed)
                 if (kind != KIND_LIVE) {
-                    loadStreams(null)
+                    // Do not reset the user's selected category when the categories Flow emits the
+                    // same/new snapshot. Initial All is loaded once; after that OK owns selection.
+                    if (currentCategoryId == null && streamAdapter.itemCount == 0 && streamsJob?.isActive != true) {
+                        loadStreams(null)
+                    }
                     requestInitialCatalogFocus()
                 } else if (items.isEmpty()) {
-                    loadStreams(null)
-                } else {
+                    if (liveItems.isEmpty() && !liveLoading) loadStreams(null)
+                } else if (currentCategoryId == null && liveItems.isEmpty() && !liveLoading) {
                     val saved = savedCategoryId()
                     val initial = items.firstOrNull { it.remoteId == saved }?.remoteId ?: items.first().remoteId
-                    if (currentCategoryId != initial || liveItems.isEmpty()) loadStreams(initial)
+                    loadStreams(initial)
                 }
             }
-        }
-    }
-
-    private fun scheduleCategoryLoad(categoryId: String?) {
-        if (!::provider.isInitialized || currentCategoryId == categoryId) return
-        categoryFocusJob?.cancel()
-        categoryFocusJob = lifecycleScope.launch {
-            delay(if (kind == KIND_LIVE) 90L else 70L)
-            loadStreams(categoryId)
         }
     }
 
@@ -378,7 +375,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             liveLoading = false
             saveLiveMemorySnapshot()
             if (result.first.isNotEmpty()) {
-                ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(20).map { it.icon })
+                ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(12).map { it.icon })
             }
             if (reset && previewEnabled) startInitialPreview(result.first)
         }.also { job ->
@@ -466,7 +463,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (!previewEnabled || !::provider.isInitialized || stream.locked || stream.key == lastPreviewKey) return
         previewJob?.cancel()
         previewJob = lifecycleScope.launch {
-            if (!immediate) delay(180)
+            if (!immediate) delay(220)
             startPreview(stream)
         }
     }
@@ -483,7 +480,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         rememberStream(stream)
         previewTitle?.text = stream.name
         previewSession?.play(url)
-        refreshShortEpg(stream)
+        // Never issue EPG/network work just because DPAD focus moved. EPG refresh happens when the
+        // user actually opens a stream, keeping navigation deterministic on slow TV hardware.
     }
 
     private fun refreshShortEpg(stream: StreamEntity) {
@@ -550,7 +548,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
             putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
             putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream))
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(provider, stream))
             putExtra(PlayerActivity.EXTRA_RESUME_MS, 0L)
             putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
             putExtra(PlayerActivity.EXTRA_CATEGORY_ID, currentCategoryId)
@@ -606,7 +604,6 @@ class ContentBrowserActivity : AppCompatActivity() {
         saveLiveMemorySnapshot()
         streamsJob?.cancel()
         livePageJob?.cancel()
-        categoryFocusJob?.cancel()
         catalogRefreshJob?.cancel()
         liveGeneration += 1
         stopPreview()
