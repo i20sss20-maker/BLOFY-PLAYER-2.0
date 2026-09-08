@@ -282,7 +282,7 @@ class PlaylistManager(
         )
         if (!accepted) {
             if (direct) clearDirectSection(providerId, kind)
-            return
+            throw IllegalStateException("Incomplete $kind catalog section")
         }
         if (!direct) dao.replaceCatalog(providerId, kind, categoryRows, parsed.items)
     }

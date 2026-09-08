@@ -31,12 +31,18 @@ import java.util.concurrent.TimeUnit
 class PortalManualRefreshRegressionTest {
     private lateinit var server: MockWebServer
     private val rows = linkedMapOf<String, ProviderEntity>()
+    private val enabledDuringUpsert = mutableListOf<List<String>>()
     private var failProviderDelete = false
     private val dao: BlofyDao = Proxy.newProxyInstance(BlofyDao::class.java.classLoader, arrayOf(BlofyDao::class.java)) { _, method, args ->
         when (method.name) {
             "allProviders" -> flowOf(rows.values.toList())
             "provider" -> rows[args!![0] as String]
-            "upsertProvider" -> { val provider = args!![0] as ProviderEntity; rows[provider.id] = provider; Unit }
+            "upsertProvider" -> {
+                val provider = args!![0] as ProviderEntity
+                rows[provider.id] = provider
+                enabledDuringUpsert += rows.values.filter { it.enabled }.map { it.id }
+                Unit
+            }
             "deleteProvider" -> {
                 check(!failProviderDelete) { "simulated cleanup failure" }
                 rows.remove(args!![0] as String)
@@ -46,6 +52,12 @@ class PortalManualRefreshRegressionTest {
                 val selected = args!![0] as ProviderEntity
                 rows.keys.toList().forEach { id -> rows[id] = checkNotNull(rows[id]).copy(enabled = false) }
                 rows[selected.id] = selected.copy(enabled = true)
+                Unit
+            }
+            "activateExistingProvider" -> {
+                val id = args!![0] as String
+                check(rows.containsKey(id))
+                rows.keys.toList().forEach { key -> rows[key] = checkNotNull(rows[key]).copy(enabled = key == id) }
                 Unit
             }
             "hasCatalog" -> rows.containsKey(args!![0] as String)
@@ -61,6 +73,7 @@ class PortalManualRefreshRegressionTest {
 
     @Before fun setup() {
         rows.clear()
+        enabledDuringUpsert.clear()
         failProviderDelete = false
         RuntimeEnvironment.getApplication().getSharedPreferences("blofy_catalog_sync_state", 0).edit().clear().commit()
         RuntimeEnvironment.getApplication()
@@ -280,5 +293,150 @@ class PortalManualRefreshRegressionTest {
         assertEquals(2, server.requestCount)
         assertEquals("/api/v1/portal/playlists/list", server.takeRequest().path)
         assertEquals("/api/v1/portal/playlists", server.takeRequest().path)
+    }
+
+    @Test fun editingSubscriberAccountKeepsWorkingCredentialsUntilValidatedCommit() = runBlocking {
+        val app = RuntimeEnvironment.getApplication()
+        val original = provider("local-subscriber").copy(
+            baseUrl = "https://portal.example/api/v1/subscribers/xtream",
+            username = "original-token", enabled = false
+        )
+        rows[original.id] = original
+        rows["currently-playing"] = provider("currently-playing")
+        PortalSyncBook.bind(app, original.id, "original-account")
+        CatalogSyncState.markCatalogCommitted(app, original.id)
+        val candidate = original.copy(username = "new-account-token")
+
+        val prepared = PortalPlaylistClient.prepareSubscriberProvider(app, "", dao, candidate, "new-account")
+
+        assertTrue(prepared.sourceChanged)
+        assertTrue(prepared.hadReadyCatalog)
+        assertEquals(PortalPlaylistClient.sourceFingerprint(candidate), prepared.approvedSourceFingerprint)
+        assertEquals(original, rows[original.id])
+        assertEquals("new-account-token", PortalPlaylistClient.pendingSource(app, dao, original.id)?.username)
+        assertEquals(listOf("currently-playing"), rows.values.filter { it.enabled }.map { it.id })
+        assertTrue(CatalogSyncState.isEntryReady(app, original.id))
+        assertEquals(setOf(original.id, "currently-playing"), PortalSyncBook.visible(app, rows.values.toList()).map { it.id }.toSet())
+
+        assertTrue(runCatching {
+            PortalPlaylistClient.commitPendingSource(app, dao, candidate) { error("catalog validation failed") }
+        }.isFailure)
+        assertEquals(original, rows[original.id])
+        assertTrue(PortalSyncBook.hasPendingSource(app, original.id))
+    }
+
+    @Test fun sameSubscriberTokenRenewalKeepsCatalogReadyWithoutAReplacement() = runBlocking {
+        val app = RuntimeEnvironment.getApplication()
+        val original = provider("subscriber").copy(baseUrl = "https://portal.example/api/v1/subscribers/xtream")
+        rows[original.id] = original
+        PortalSyncBook.bind(app, original.id, "same-account")
+        CatalogSyncState.markCatalogCommitted(app, original.id)
+        val epoch = CatalogSyncState.lastUpdatedAt(app, original.id)
+
+        val prepared = PortalPlaylistClient.prepareSubscriberProvider(app, "", dao, original.copy(username = "renewed-token"), "same-account")
+
+        assertFalse(prepared.sourceChanged)
+        assertTrue(prepared.hadReadyCatalog)
+        assertNull(prepared.approvedSourceFingerprint)
+        assertEquals("renewed-token", rows[original.id]?.username)
+        assertFalse(PortalSyncBook.hasPendingSource(app, original.id))
+        assertEquals(epoch, CatalogSyncState.lastUpdatedAt(app, original.id))
+        assertEquals(1, rows.size)
+    }
+
+    @Test fun retryingPendingSubscriberChangeCannotOverwriteWorkingOrNewerCandidateCredentials() = runBlocking {
+        val app = RuntimeEnvironment.getApplication()
+        val original = provider("subscriber").copy(
+            baseUrl = "https://portal.example/api/v1/subscribers/xtream", username = "working-token"
+        )
+        rows[original.id] = original
+        PortalSyncBook.bind(app, original.id, "old-account")
+        CatalogSyncState.markCatalogCommitted(app, original.id)
+        PortalPlaylistClient.prepareSubscriberProvider(app, "", dao, original.copy(username = "first-token"), "new-account")
+        val first = checkNotNull(PortalPlaylistClient.pendingSource(app, dao, original.id))
+        val retried = PortalPlaylistClient.prepareSubscriberProvider(app, "", dao, original.copy(username = "second-token"), "new-account")
+
+        assertTrue(retried.sourceChanged)
+        assertNotEquals(PortalPlaylistClient.sourceFingerprint(first), retried.approvedSourceFingerprint)
+        assertEquals(PortalPlaylistClient.sourceFingerprint(checkNotNull(PortalPlaylistClient.pendingSource(app, dao, original.id))), retried.approvedSourceFingerprint)
+        assertEquals("working-token", rows[original.id]?.username)
+        assertEquals("second-token", PortalPlaylistClient.pendingSource(app, dao, original.id)?.username)
+        var committed = false
+        assertTrue(runCatching {
+            PortalPlaylistClient.commitPendingSource(app, dao, first) { committed = true }
+        }.isFailure)
+        assertFalse(committed)
+        assertTrue(PortalSyncBook.hasPendingSource(app, original.id))
+    }
+
+    @Test fun staleSelectionCannotResurrectADeletedOrHiddenPlaylist() = runBlocking {
+        val app = RuntimeEnvironment.getApplication()
+        val removed = provider("removed")
+        rows["active"] = provider("active")
+        assertTrue(runCatching { PortalPlaylistClient.selectProvider(app, "", removed, dao) }.isFailure)
+        assertFalse(rows.containsKey(removed.id))
+        rows[removed.id] = removed.copy(enabled = false)
+        PortalSyncBook.hide(app, setOf(removed.id))
+        assertTrue(runCatching { PortalPlaylistClient.selectProvider(app, "", removed, dao) }.isFailure)
+        assertEquals(listOf("active"), rows.values.filter { it.enabled }.map { it.id })
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test fun websiteRefreshCannotBypassAPendingSubscriberAccountReplacement() = runBlocking {
+        val app = RuntimeEnvironment.getApplication()
+        val original = provider("local-subscriber").copy(
+            baseUrl = "https://portal.example/api/v1/subscribers/xtream", username = "old-account-token"
+        )
+        rows[original.id] = original
+        PortalSyncBook.bind(app, original.id, "old-account")
+        CatalogSyncState.markCatalogCommitted(app, original.id)
+        PortalPlaylistClient.prepareSubscriberProvider(app, "", dao, original.copy(username = "new-account-token"), "new-account")
+        reply(original.copy(id = "new-account", username = "refreshed-new-account-token"))
+
+        val synced = PortalPlaylistClient.sync(app, server.url("/").toString(), dao, PortalPlaylistClient.SyncMode.PULL_ONLY)
+
+        assertEquals("old-account-token", rows[original.id]?.username)
+        assertEquals("old-account-token", synced.activeProvider?.username)
+        assertTrue(PortalSyncBook.hasPendingSource(app, original.id))
+        assertEquals("refreshed-new-account-token", PortalPlaylistClient.pendingSource(app, dao, original.id)?.username)
+    }
+
+    @Test fun websiteSelectionIsExclusiveDuringReconciliationAndInReturnedRows() {
+        rows["old"] = provider("old")
+        rows["new"] = provider("new").copy(enabled = false)
+        reply(provider("old").copy(enabled = false), provider("new"))
+
+        val synced = pull()
+
+        assertEquals(listOf("new"), rows.values.filter { it.enabled }.map { it.id })
+        assertEquals(listOf("new"), synced.providers.filter { it.enabled }.map { it.id })
+        assertEquals("new", synced.activeProvider?.id)
+        assertTrue(enabledDuringUpsert.all { it.size <= 1 })
+    }
+
+    @Test fun absentWebsiteSelectionKeepsTheExistingLocalChoice() {
+        rows["chosen"] = provider("chosen")
+        rows["other"] = provider("other").copy(enabled = false)
+        reply(provider("chosen").copy(enabled = false), provider("other").copy(enabled = false))
+
+        val synced = pull()
+
+        assertEquals(listOf("chosen"), rows.values.filter { it.enabled }.map { it.id })
+        assertEquals("chosen", synced.activeProvider?.id)
+    }
+
+    @Test fun deletedWebsiteSelectionIsNotReactivatedFromTheOldSnapshot() {
+        val app = RuntimeEnvironment.getApplication()
+        rows["deleted"] = provider("deleted")
+        rows["local"] = provider("local").copy(enabled = false)
+        PortalSyncBook.bind(app, "deleted", "deleted")
+        reply()
+
+        val synced = pull()
+
+        assertFalse(checkNotNull(rows["deleted"]).enabled)
+        assertEquals(listOf("local"), synced.providers.map { it.id })
+        assertEquals("local", synced.activeProvider?.id)
+        assertEquals(listOf("local"), rows.values.filter { it.enabled }.map { it.id })
     }
 }

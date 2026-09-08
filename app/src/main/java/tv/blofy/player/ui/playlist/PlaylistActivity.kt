@@ -92,6 +92,7 @@ class PlaylistActivity : AppCompatActivity() {
         var busy = false
         suspend fun persist(connectAfter: Boolean) {
             val baseUrl = url.text.toString().trim(); val user = username.text.toString().trim(); val pass = password.text.toString()
+            val playlistName = name.text.toString().trim().ifBlank { "BLOFY Server" }
             val validation = PlaylistUrlPolicy.validate(baseUrl)
             if (validation == PlaylistUrlPolicy.Result.EMPTY) { status.text = "أدخل رابط السيرفر"; return }
             if (validation == PlaylistUrlPolicy.Result.INVALID) { status.text = "الرابط غير صحيح"; return }
@@ -110,7 +111,7 @@ class PlaylistActivity : AppCompatActivity() {
                     val type = "xtream"
                     val normalizedBaseUrl = baseUrl.trimEnd('/')
                     val id = existing?.id ?: UUID.nameUUIDFromBytes("$type|$normalizedBaseUrl|$user".toByteArray()).toString()
-                    val next = ProviderEntity(id, name.text.toString().trim().ifBlank { "BLOFY Server" }, normalizedBaseUrl, user, pass, type,
+                    val next = ProviderEntity(id, playlistName, normalizedBaseUrl, user, pass, type,
                         existing?.liveFormat ?: "ts", existing?.preferredTransport ?: "cronet", existing?.preferredEngine ?: "media3", existing?.allowCrossProtocolRedirects ?: true, true, System.currentTimeMillis())
                     val hasCatalog = dao.hasCatalog(id)
                     val cacheReady = hasCatalog && CatalogSyncState.isReady(applicationContext, id)
@@ -136,7 +137,7 @@ class PlaylistActivity : AppCompatActivity() {
                         } finally { if (!promoted) withContext(NonCancellable) { dao.discardStagedCatalog(staging.id) } }
                         CatalogSyncState.markReady(applicationContext, id)
                     } else {
-                        dao.upsertProvider(next); dao.disableAllProviders(); dao.activateProvider(id)
+                        dao.saveAndActivateProvider(next)
                         CatalogSyncState.markReady(applicationContext, id)
                     }
                     val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim(); if (endpoint.isNotBlank()) runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }

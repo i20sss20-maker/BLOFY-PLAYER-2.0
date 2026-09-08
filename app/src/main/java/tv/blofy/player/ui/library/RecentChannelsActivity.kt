@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
@@ -49,6 +50,15 @@ class RecentChannelsActivity : AppCompatActivity() {
             gravity = Gravity.RIGHT
             setPadding(0, 4, 0, 14)
         })
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(list)
+        }
+        root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
         lifecycleScope.launch {
@@ -57,7 +67,7 @@ class RecentChannelsActivity : AppCompatActivity() {
             val keys = RecentChannelStore.keys(this@RecentChannelsActivity, provider.id)
             val streams = keys.mapNotNull { dao.stream(it) }
             if (streams.isEmpty()) {
-                root.addView(TextView(this@RecentChannelsActivity).apply {
+                list.addView(TextView(this@RecentChannelsActivity).apply {
                     text = "لا توجد قنوات حديثة"
                     textSize = 17f
                     setTextColor(BlofyTvDesign.TextMuted)
@@ -112,9 +122,9 @@ class RecentChannelsActivity : AppCompatActivity() {
                         })
                     }
                 }
-                root.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 78).apply { topMargin = 8 })
+                list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 78).apply { topMargin = 8 })
             }
-            root.getChildAt(2)?.requestFocus()
+            list.getChildAt(0)?.requestFocus()
         }
     }
 

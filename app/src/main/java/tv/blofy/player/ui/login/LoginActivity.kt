@@ -35,6 +35,7 @@ import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationPortalUrl
 import tv.blofy.player.core.identity.ActivationRemoteClient
 import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.core.provider.RemoteProviderProfileClient
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDao
@@ -455,7 +456,6 @@ class LoginActivity : AppCompatActivity() {
             renderPortalPlaylists(portalSync?.providers ?: withContext(Dispatchers.IO) { dao.allProviders().first() })
             val activeProvider = portalSync?.activeProvider ?: dao.providers().first().firstOrNull()
             if (activeProvider == null) { status.text = "الجهاز مفعل • أضف قائمة"; addPlaylist.requestFocus(); return@onSuccess }
-            withContext(Dispatchers.IO) { dao.saveAndActivateProvider(activeProvider) }
             val ready = hasCachedCatalog(dao, activeProvider.id)
             val changed = portalSync?.changedProviderIds?.contains(activeProvider.id) == true
             if (changed || !ready) { status.text = "جاري تجهيز ${activeProvider.name}"; openCatalogLoading(activeProvider.id); return@onSuccess }
@@ -680,10 +680,11 @@ class LoginActivity : AppCompatActivity() {
         lastQrIdentity = identity
     }
 
-    private suspend fun applyRemoteProviderProfile(endpoint: String, dao: BlofyDao, providerId: String) {
+    internal suspend fun applyRemoteProviderProfile(endpoint: String, dao: BlofyDao, providerId: String) {
         val current = dao.provider(providerId) ?: return
+        val remoteId = PortalSyncBook.remoteId(applicationContext, providerId)
         val updated = RemoteProviderProfileClient.applyIfAvailable(applicationContext, endpoint, current)
-        if (updated != current) dao.upsertProvider(updated)
+        if (updated != current) PortalPlaylistClient.mergeProviderProfile(applicationContext, dao, current, remoteId, updated)
     }
 
     private fun activationLabel(remote: ActivationCheckResponse) = when (remote.state()) {

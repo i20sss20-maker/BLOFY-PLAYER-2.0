@@ -51,6 +51,49 @@ interface BlofyDao {
         activateProvider(provider.id, provider.updatedAt)
     }
 
+    @Transaction suspend fun activateExistingProvider(providerId: String) {
+        val current = checkNotNull(providerStored(providerId)) { "Provider no longer exists" }
+        disableAllProviders()
+        activateProvider(providerId, current.updatedAt)
+    }
+
+    @Transaction suspend fun activateImportedProvider(
+        expectedSource: ProviderEntity,
+        updatedAt: Long = System.currentTimeMillis()
+    ) {
+        val current = checkNotNull(provider(expectedSource.id)) { "Provider no longer exists" }
+        check(sameCatalogSource(current, expectedSource)) { "Provider source changed during import" }
+        saveAndActivateProvider(current.copy(enabled = true, updatedAt = maxOf(current.updatedAt, updatedAt)))
+    }
+
+    @Transaction suspend fun mergeProviderProfileIfSourceUnchanged(
+        expected: ProviderEntity,
+        updated: ProviderEntity
+    ): Boolean {
+        val current = provider(expected.id) ?: return false
+        if (expected.id != updated.id || !sameCatalogSource(current, expected)) return false
+        // Network profile results may arrive after a selection, rename or preference edit.
+        // Apply each default only while that field still has the value seen by the request.
+        val merged = current.copy(
+            liveFormat = if (current.liveFormat == expected.liveFormat) updated.liveFormat else current.liveFormat,
+            preferredTransport = if (current.preferredTransport == expected.preferredTransport) updated.preferredTransport else current.preferredTransport,
+            preferredEngine = if (current.preferredEngine == expected.preferredEngine) updated.preferredEngine else current.preferredEngine,
+            allowCrossProtocolRedirects = if (current.allowCrossProtocolRedirects == expected.allowCrossProtocolRedirects) updated.allowCrossProtocolRedirects else current.allowCrossProtocolRedirects
+        )
+        if (merged != current) upsertProvider(merged)
+        return true
+    }
+
+    @Transaction suspend fun discardUncommittedCatalogIfSourceUnchanged(
+        expectedSource: ProviderEntity,
+        canDiscard: () -> Boolean = { true }
+    ): Boolean {
+        val current = provider(expectedSource.id) ?: return false
+        if (!sameCatalogSource(current, expectedSource) || current.updatedAt != expectedSource.updatedAt || !canDiscard()) return false
+        clearProviderCatalog(expectedSource.id)
+        return true
+    }
+
     @Query("SELECT * FROM categories WHERE providerId = :providerId") suspend fun allCategoriesForProvider(providerId: String): List<CategoryEntity>
     @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind") suspend fun categorySnapshot(providerId: String, kind: String): List<CategoryEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId") suspend fun allStreamsForProvider(providerId: String): List<StreamEntity>
@@ -166,7 +209,25 @@ interface BlofyDao {
 
     /** Same-source refreshes must validate the durable candidate before replacing known-good rows. */
     @Transaction
-    suspend fun promoteStagedRefresh(stagedProviderId: String, targetProvider: ProviderEntity) {
+    suspend fun promoteStagedRefresh(
+        stagedProviderId: String,
+        targetProvider: ProviderEntity,
+        activateTarget: Boolean = true,
+        expectedSource: ProviderEntity? = null
+    ) {
+        val current = provider(targetProvider.id)
+        if (expectedSource != null) {
+            check(expectedSource.id == targetProvider.id) { "Catalog target changed" }
+            checkNotNull(current) { "Provider no longer exists" }
+            check(sameCatalogSource(current, expectedSource)) { "Provider source changed during refresh" }
+        }
+        val target = if (expectedSource != null && current != null) current.copy(
+            baseUrl = targetProvider.baseUrl,
+            username = targetProvider.username,
+            password = targetProvider.password,
+            providerType = targetProvider.providerType,
+            updatedAt = maxOf(current.updatedAt, targetProvider.updatedAt)
+        ) else targetProvider
         val previous = CatalogRefreshIntegrityPolicy.Counts(
             live = catalogCountAll(targetProvider.id, "live"),
             movies = catalogCountAll(targetProvider.id, "movie"),
@@ -178,24 +239,91 @@ interface BlofyDao {
             series = catalogCountAll(stagedProviderId, "series")
         )
         check(CatalogRefreshIntegrityPolicy.accepts(previous, candidate)) { "Incomplete catalog refresh" }
-        promoteStagedCatalog(stagedProviderId, targetProvider)
+        val sameSource = current?.let { sameCatalogSource(it, target) } == true
+        promoteStagedCatalog(stagedProviderId, target, activateTarget, preserveEpisodes = sameSource)
     }
 
+    /** A completed background request must not undo a later selection, edit or removal. */
     @Transaction
-    suspend fun promoteStagedCatalog(stagedProviderId: String, targetProvider: ProviderEntity) {
+    suspend fun promoteStagedBackgroundRefresh(
+        stagedProviderId: String,
+        expectedProvider: ProviderEntity,
+        refreshedProvider: ProviderEntity
+    ) {
+        check(expectedProvider.id == refreshedProvider.id) { "Catalog target changed" }
+        val current = checkNotNull(provider(expectedProvider.id)) { "Provider no longer exists" }
+        check(sameCatalogSource(current, expectedProvider)) { "Provider source changed during refresh" }
+        val target = current.copy(
+            baseUrl = refreshedProvider.baseUrl,
+            username = refreshedProvider.username,
+            password = refreshedProvider.password,
+            providerType = refreshedProvider.providerType,
+            updatedAt = maxOf(current.updatedAt, refreshedProvider.updatedAt)
+        )
+        promoteStagedRefresh(stagedProviderId, target, activateTarget = false)
+    }
+
+    /** Only an explicitly requested account replacement may legitimately have a smaller catalog. */
+    @Transaction
+    suspend fun promoteExplicitSourceReplacement(
+        stagedProviderId: String,
+        targetProvider: ProviderEntity,
+        expectedSource: ProviderEntity
+    ) {
+        check(expectedSource.id == targetProvider.id && stagedProviderId != targetProvider.id) { "Catalog target changed" }
+        val current = checkNotNull(provider(expectedSource.id)) { "Provider no longer exists" }
+        check(sameCatalogSource(current, expectedSource)) { "Provider source changed during replacement" }
+        check(!sameCatalogSource(current, targetProvider)) { "Replacement source is unchanged" }
+        val candidate = CatalogRefreshIntegrityPolicy.Counts(
+            live = catalogCountAll(stagedProviderId, "live"),
+            movies = catalogCountAll(stagedProviderId, "movie"),
+            series = catalogCountAll(stagedProviderId, "series")
+        )
+        check(candidate.total > 0) { "Replacement catalog is empty" }
+        val target = current.copy(
+            baseUrl = targetProvider.baseUrl,
+            username = targetProvider.username,
+            password = targetProvider.password,
+            providerType = targetProvider.providerType,
+            updatedAt = maxOf(current.updatedAt, targetProvider.updatedAt)
+        )
+        promoteStagedCatalog(stagedProviderId, target, activateTarget = true, preserveEpisodes = false)
+    }
+
+    @Query("""DELETE FROM episodes WHERE providerId = :targetProviderId AND (
+        NOT EXISTS (SELECT 1 FROM streams WHERE streams.`key` =
+            :targetProviderId || ':series:' || episodes.seriesId)
+        OR EXISTS (SELECT 1 FROM episodes AS staged WHERE staged.`key` =
+            :stagedProviderId || ':episode:' || episodes.remoteId))""")
+    suspend fun pruneRetainedEpisodes(targetProviderId: String, stagedProviderId: String)
+
+    @Transaction
+    suspend fun promoteStagedCatalog(
+        stagedProviderId: String,
+        targetProvider: ProviderEntity,
+        activateTarget: Boolean = true,
+        preserveEpisodes: Boolean = false
+    ) {
         inheritStagedCategoryFlags(stagedProviderId, targetProvider.id)
         inheritStagedStreamFlags(stagedProviderId, targetProvider.id)
-        clearProviderCatalog(targetProvider.id)
+        clearProviderCategories(targetProvider.id)
+        clearProviderStreams(targetProvider.id)
+        clearProviderEpg(targetProvider.id)
+        clearSearchIndex(targetProvider.id)
+        if (!preserveEpisodes) clearProviderEpisodes(targetProvider.id)
         promoteStagedCategoriesInPlace(stagedProviderId, targetProvider.id)
         promoteStagedStreamsInPlace(stagedProviderId, targetProvider.id)
+        if (preserveEpisodes) pruneRetainedEpisodes(targetProvider.id, stagedProviderId)
         promoteStagedEpisodesInPlace(stagedProviderId, targetProvider.id)
         // The staged sync already built FTS section-by-section while data was arriving. Re-key the
         // staged FTS rows atomically instead of rebuilding the entire 100k–200k item index here.
         promoteStagedSearchIndexInPlace(stagedProviderId, targetProvider.id)
         clearProviderEpg(stagedProviderId)
-        upsertProvider(targetProvider.copy(enabled = true))
-        disableAllProviders()
-        activateProvider(targetProvider.id, targetProvider.updatedAt)
+        upsertProvider(targetProvider.copy(enabled = activateTarget || targetProvider.enabled))
+        if (activateTarget) {
+            disableAllProviders()
+            activateProvider(targetProvider.id, targetProvider.updatedAt)
+        }
         deleteProvider(stagedProviderId)
     }
 
@@ -320,6 +448,11 @@ interface BlofyDao {
 
     @Query("DELETE FROM epg WHERE providerId = :providerId AND streamId = :streamId") suspend fun clearEpg(providerId: String, streamId: String)
 }
+
+private fun sameCatalogSource(first: ProviderEntity, second: ProviderEntity): Boolean =
+    first.providerType.equals(second.providerType, ignoreCase = true) &&
+        first.baseUrl.trimEnd('/') == second.baseUrl.trimEnd('/') &&
+        first.username == second.username && first.password == second.password
 
 private fun searchRow(stream: StreamEntity) = StreamSearchFtsEntity(
     contentKey = stream.key,

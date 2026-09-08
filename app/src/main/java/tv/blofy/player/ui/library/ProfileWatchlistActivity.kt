@@ -4,7 +4,6 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
-import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -13,7 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
@@ -28,6 +27,8 @@ import tv.blofy.player.ui.details.SeriesDetailsActivity
 /** Profile-scoped watchlist. It deliberately reuses the existing details/player flow. */
 class ProfileWatchlistActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
+    private var loadJob: Job? = null
+    private var loadGeneration = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,7 +58,6 @@ class ProfileWatchlistActivity : AppCompatActivity() {
         })
         scroll.addView(list)
         setContentView(scroll)
-        load()
     }
 
     override fun onResume() {
@@ -65,25 +65,34 @@ class ProfileWatchlistActivity : AppCompatActivity() {
         if (::list.isInitialized) load()
     }
 
+    override fun onStop() {
+        loadGeneration++
+        loadJob?.cancel()
+        loadJob = null
+        super.onStop()
+    }
+
     private fun load() {
+        val generation = ++loadGeneration
+        loadJob?.cancel()
+        loadJob = null
         while (list.childCount > 2) list.removeViewAt(2)
         val keys = ProfileLibraryStore.watchlist(applicationContext).toList().asReversed()
         if (keys.isEmpty()) {
             showEmpty()
             return
         }
-        lifecycleScope.launch {
+        loadJob = lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val provider = dao.providers().first().firstOrNull() ?: return@withContext null
-                provider.id to keys.mapNotNull { dao.stream(it) }
+                keys.mapNotNull { dao.stream(it) }
             }
-            if (result == null || result.second.isEmpty()) {
+            if (generation != loadGeneration) return@launch
+            if (result.isEmpty()) {
                 showEmpty()
                 return@launch
             }
-            val providerId = result.first
-            result.second.forEachIndexed { index, item ->
+            result.forEachIndexed { index, item ->
                 val row = Button(this@ProfileWatchlistActivity).apply {
                     text = buildString {
                         append(item.name)
@@ -96,7 +105,7 @@ class ProfileWatchlistActivity : AppCompatActivity() {
                     setTextColor(Color.WHITE)
                     typeface = BlofyTvDesign.BodyTypeface
                     BlofyTvDesign.installTvFocus(this, dp(18).toFloat(), 1.018f, false)
-                    setOnClickListener { openDetails(providerId, item) }
+                    setOnClickListener { openDetails(item) }
                     setOnLongClickListener {
                         ProfileLibraryStore.setWatchlisted(applicationContext, item.key, false)
                         load()
@@ -119,10 +128,10 @@ class ProfileWatchlistActivity : AppCompatActivity() {
         })
     }
 
-    private fun openDetails(providerId: String, item: StreamEntity) {
+    private fun openDetails(item: StreamEntity) {
         val target = if (item.kind == "series") SeriesDetailsActivity::class.java else MovieDetailsActivity::class.java
         startActivity(Intent(this, target).apply {
-            putExtra("provider_id", providerId)
+            putExtra("provider_id", item.providerId)
             putExtra("content_key", item.key)
         })
     }

@@ -35,6 +35,7 @@ import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.WatchStateEntity
+import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.catalog.PosterCatalogActivity
@@ -76,6 +77,12 @@ class HomeActivity : AppCompatActivity() {
     private var heroIndex = 0
 
     private var homeResumed = false
+    private var displayedHomeData: HomeData? = null
+    private val historyObserver by lazy {
+        HomeHistoryObserver(lifecycleScope, changes = {
+            BlofyDatabase.get(applicationContext).invalidationTracker.createFlow("watch_state")
+        }, refresh = ::refreshHomeHistory)
+    }
     private val refreshScheduler = HomeRefreshScheduler(
         uiHandler, 30_000L, HERO_ROTATION_MS,
         refreshClock = {
@@ -123,19 +130,26 @@ class HomeActivity : AppCompatActivity() {
         if (deviceKind == DeviceClass.Kind.TV) {
             renderSkeleton()
             loadHomeExperience()
-            if (homeResumed) refreshScheduler.start()
+            if (homeResumed) {
+                refreshScheduler.start()
+                historyObserver.start()
+            }
         }
     }
 
     override fun onResume() {
         super.onResume()
         homeResumed = true
-        if (homeFeed != null && deviceKind == DeviceClass.Kind.TV) refreshScheduler.start()
+        if (homeFeed != null && deviceKind == DeviceClass.Kind.TV) {
+            refreshScheduler.start()
+            historyObserver.start()
+        }
     }
 
     override fun onPause() {
         homeResumed = false
         refreshScheduler.stop()
+        historyObserver.stop()
         homeFocusController?.resetPress()
         super.onPause()
     }
@@ -144,6 +158,7 @@ class HomeActivity : AppCompatActivity() {
         homeFocusController?.dispose()
         homeFocusController = null
         refreshScheduler.stop()
+        historyObserver.stop()
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -189,12 +204,7 @@ class HomeActivity : AppCompatActivity() {
                 val snapshot = HomeSnapshotStore.read(applicationContext, provider.id)
                 val all = snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }
                     ?: dao.latestHomeStreams(provider.id, 320)
-                val byKey = all.associateBy { it.key }
-                val states = dao.watchStates(provider.id).sortedByDescending { it.updatedAt }
-                val continueItems = states.filter { !it.completed && it.positionMs > 30_000L }
-                    .mapNotNull { byKey[it.contentKey] }.distinctBy { it.key }.take(16)
-                val recentItems = states.filter { it.positionMs > 0L }
-                    .mapNotNull { byKey[it.contentKey] }.distinctBy { it.key }.take(16)
+                val history = HomeWatchHistory.load(dao, provider.id)
                 val rated = all.sortedByDescending { ratingValue(it.rating) }
                     .filter { ratingValue(it.rating) > 0.0 }.take(24)
                 val arabic = all.filter { hasArabic(it.name) || hasArabic(it.genre.orEmpty()) || it.genre.orEmpty().contains("arab", true) }.take(20)
@@ -204,9 +214,9 @@ class HomeActivity : AppCompatActivity() {
                     providerId = provider.id,
                     providerName = provider.name,
                     heroItems = heroes,
-                    continueWatching = continueItems,
-                    recentlyWatched = recentItems,
-                    watchStates = states.associateBy { it.contentKey },
+                    continueWatching = history.continueItems,
+                    recentlyWatched = history.recentItems,
+                    watchStates = history.watchStates,
                     latest = latest.take(22),
                     topRated = rated,
                     topTen = rated.take(10).ifEmpty { latest.take(10) },
@@ -218,10 +228,12 @@ class HomeActivity : AppCompatActivity() {
             }
 
             if (data == null) {
+                displayedHomeData = null
                 renderNoCatalogState()
                 return@launch
             }
 
+            displayedHomeData = data
             serverLabel?.text = data.providerName.ifBlank { "BLOFY" }
             heroProviderId = data.providerId
             heroCandidates = data.heroItems
@@ -232,6 +244,53 @@ class HomeActivity : AppCompatActivity() {
             renderHomeFeed(data)
             refreshScheduler.restartHero()
             restoreDynamicFocus()
+        }
+    }
+
+    private suspend fun refreshHomeHistory() {
+        val previous = displayedHomeData ?: return
+        val history = withContext(Dispatchers.IO) {
+            HomeWatchHistory.load(BlofyDatabase.get(applicationContext).dao(), previous.providerId)
+        }
+        if (displayedHomeData !== previous || !homeResumed) return
+        if (history.continueItems == previous.continueWatching && history.recentItems == previous.recentlyWatched &&
+            history.watchStates == previous.watchStates) return
+        val updated = previous.copy(continueWatching = history.continueItems,
+            recentlyWatched = history.recentItems, watchStates = history.watchStates)
+        displayedHomeData = updated
+        renderHistoryShelves(updated)
+    }
+
+    /** Refresh only history rows; the hero, latest titles, artwork and other focused rows stay put. */
+    private fun renderHistoryShelves(data: HomeData) {
+        val feed = homeFeed ?: return
+        val focused = feed.findFocus()
+        val focusedContent = focused?.tag as? String
+        val historyKeys = setOf("continue_watching", "recent_channels")
+        for (index in feed.childCount - 1 downTo 0) {
+            if (HomeRowOrder.key(feed.getChildAt(index)) in historyKeys) feed.removeViewAt(index)
+        }
+        actionViews.keys.filter { it.startsWith("poster_continue_") || it.startsWith("poster_recent_") }
+            .toList().forEach(actionViews::remove)
+        val holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        if (data.continueWatching.isNotEmpty()) {
+            addShelf(holder, "تابع المشاهدة", "أكمل من آخر نقطة", "continue", data.providerId,
+                data.continueWatching, data.watchStates)
+        }
+        if (data.recentlyWatched.isNotEmpty()) {
+            addShelf(holder, "شاهدت مؤخرًا", "ارجع بسرعة لآخر ما فتحته", "recent", data.providerId, data.recentlyWatched)
+        }
+        var index = minOf(1, feed.childCount)
+        while (holder.childCount > 0) {
+            val row = holder.getChildAt(0)
+            holder.removeViewAt(0)
+            feed.addView(row, index++)
+        }
+        HomeRowOrder.apply(feed, ProfileLibraryStore.homeRows(this))
+        if (focused != null && focused.isShown) focused.requestFocus()
+        else if (focusedContent != null) {
+            actionViews.values.firstOrNull { it.tag == focusedContent && it.isShown }?.requestFocus()
+                ?: firstAction?.requestFocus()
         }
     }
 
@@ -414,6 +473,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun posterCard(providerId: String, item: StreamEntity, key: String, state: WatchStateEntity?) = FrameLayout(this).apply {
         id = View.generateViewId()
+        tag = item.key
         isFocusable = true
         isFocusableInTouchMode = true
         isClickable = true

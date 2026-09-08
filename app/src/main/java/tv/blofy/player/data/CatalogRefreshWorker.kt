@@ -9,10 +9,18 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.remote.XtreamClient
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -32,7 +40,8 @@ class CatalogRefreshWorker(
             dao.provider(providerId)
         } ?: return Result.success()
 
-        if (!dao.hasCatalog(provider.id)) return Result.success()
+        // A first import writes batches before it commits; those rows are not a refresh baseline.
+        if (!CatalogSyncState.isReady(app, provider.id) || !dao.hasCatalog(provider.id)) return Result.success()
 
         val sourceChanged = PortalSyncBook.hasPendingSource(app, provider.id)
         val refreshSource = if (sourceChanged) {
@@ -45,8 +54,7 @@ class CatalogRefreshWorker(
             series = dao.catalogCountAll(provider.id, "series")
         )
 
-        LocalStorageManager.trimTemporaryIfNeeded(app)
-        if (!LocalStorageManager.hasHealthyFreeSpace(app)) return Result.retry()
+        if (!LocalStorageManager.prepareForCatalogRefresh(app)) return Result.retry()
 
         val staged = refreshSource.copy(
             id = UUID.randomUUID().toString(),
@@ -59,7 +67,6 @@ class CatalogRefreshWorker(
                 PlaylistManager(XtreamClient.api, dao).syncAll(staged)
             }
             if (sync.freshItemCount <= 0 || sync.failedSectionCount > 0) {
-                dao.discardStagedCatalog(staged.id)
                 return if (sync.failedSectionCount > 0) Result.retry() else Result.success()
             }
 
@@ -71,33 +78,40 @@ class CatalogRefreshWorker(
             // A website host/credential change for the same playlist must not be allowed to replace
             // a known-good 50k/100k library with a truncated but syntactically valid response.
             if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
-                dao.discardStagedCatalog(staged.id)
                 return Result.retry()
             }
 
             val refreshedProvider = refreshSource.copy(enabled = true, updatedAt = staged.updatedAt)
+            currentCoroutineContext().ensureActive()
             if (sourceChanged) {
                 PortalPlaylistClient.commitPendingSource(app, dao, refreshSource) {
-                    dao.promoteStagedCatalog(staged.id, refreshedProvider)
+                    dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
                     promoted = true
                     runCatching { CatalogSyncState.markSourceReplaced(app, provider.id) }
                 }
             } else {
-                dao.promoteStagedRefresh(staged.id, refreshedProvider)
-                promoted = true
-                runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
+                withContext(NonCancellable + Dispatchers.IO) {
+                    dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
+                    promoted = true
+                    runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
+                }
             }
 
             // Promotion is the durable result. Do not immediately rebuild Home/FTS/manifest here;
             // CatalogEnrichmentLifecycle owns that work after its UI quiet period so Room/CPU do not
             // compete with the user just after opening Home.
             Result.success()
-        } catch (_: Throwable) {
+        } catch (_: TimeoutCancellationException) {
+            // A provider timeout is retryable; a cancelled Worker must still stop immediately.
+            currentCoroutineContext().ensureActive()
+            if (promoted) Result.success() else Result.retry()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            if (promoted) Result.success() else Result.retry()
+        } finally {
             if (!promoted) {
-                runCatching { dao.discardStagedCatalog(staged.id) }
-                Result.retry()
-            } else {
-                Result.success()
+                runCatching { discardStagedCatalogSafely(dao, staged.id) }
             }
         }
     }
@@ -128,4 +142,8 @@ class CatalogRefreshWorker(
             )
         }
     }
+}
+
+internal suspend fun discardStagedCatalogSafely(dao: BlofyDao, stagedProviderId: String) {
+    withContext(NonCancellable + Dispatchers.IO) { dao.discardStagedCatalog(stagedProviderId) }
 }

@@ -6,6 +6,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
@@ -59,7 +60,10 @@ class LibraryActivity : AppCompatActivity() {
             setPadding(0, 4, 0, 14)
         })
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(list)
+        root.addView(ScrollView(this).apply {
+            isFillViewport = true
+            addView(list)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         load(mode)
     }

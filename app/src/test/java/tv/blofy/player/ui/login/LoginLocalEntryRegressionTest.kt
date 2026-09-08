@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import androidx.room.Room
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -35,6 +36,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.home.HomeActivity
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CountDownLatch
 
 /** Requests go only to MockWebServer. No production service or user credentials are used. */
 @RunWith(RobolectricTestRunner::class)
@@ -204,5 +206,53 @@ class LoginLocalEntryRegressionTest {
             assertTrue(checkNotNull(db.dao().provider(chosen.id)).enabled)
             assertFalse(checkNotNull(db.dao().provider(provider.id)).enabled)
         }
+    }
+
+    private fun requestProfileWhile(update: suspend () -> Unit) = runBlocking(Dispatchers.IO) {
+        val requested = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.path != "/api/v1/provider-profile") return MockResponse().setResponseCode(404)
+                requested.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+                return MockResponse().setHeader("Content-Type", "application/json")
+                    .setBody("""{"liveFormat":"m3u8","preferredTransport":"http"}""")
+            }
+        }
+        val request = async { activity.applyRemoteProviderProfile(server.url("/").toString(), db.dao(), provider.id) }
+        try {
+            assertTrue("Profile request did not start", requested.await(5, TimeUnit.SECONDS))
+            update()
+        } finally {
+            release.countDown()
+        }
+        request.await()
+    }
+
+    @Test fun delayedProfileCannotOverwriteACommittedSourceReplacement() {
+        launch()
+        val replacement = provider.copy(baseUrl = "https://replacement.test", username = "new-user", password = "new-password")
+        requestProfileWhile { db.dao().upsertProvider(replacement) }
+        runBlocking(Dispatchers.IO) { assertEquals(replacement, db.dao().provider(provider.id)) }
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test fun delayedProfileCannotApplyToAReboundRemoteIdentity() {
+        PortalSyncBook.bind(app, provider.id, "original-remote")
+        launch()
+        requestProfileWhile { PortalSyncBook.bind(app, provider.id, "replacement-remote") }
+        runBlocking(Dispatchers.IO) { assertEquals(provider, db.dao().provider(provider.id)) }
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test fun profileMergesIntoLatestNameAndSelectionWithoutRestoringOldSnapshot() {
+        launch()
+        val latest = provider.copy(name = "Renamed while waiting", enabled = false, updatedAt = 123L)
+        requestProfileWhile { db.dao().upsertProvider(latest) }
+        runBlocking(Dispatchers.IO) {
+            assertEquals(latest.copy(liveFormat = "m3u8", preferredTransport = "http"), db.dao().provider(provider.id))
+        }
+        assertEquals(1, server.requestCount)
     }
 }

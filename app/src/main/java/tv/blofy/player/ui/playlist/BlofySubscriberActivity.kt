@@ -28,8 +28,6 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.BlofySubscriberClient
 import tv.blofy.player.core.identity.PortalPlaylistClient
-import tv.blofy.player.core.identity.PortalSyncBook
-import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
@@ -147,7 +145,9 @@ class BlofySubscriberActivity : AppCompatActivity() {
         panel.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         lateinit var login: Button
+        var submitting = false
         fun submit() {
+            if (submitting) return
             val user = username.text.toString().trim()
             val pass = password.text.toString()
             if (user.isBlank()) {
@@ -167,6 +167,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                 return
             }
 
+            submitting = true
             login.isEnabled = false
             username.isEnabled = false
             password.isEnabled = false
@@ -179,12 +180,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                         val dao = BlofyDatabase.get(applicationContext).dao()
                         val remoteId = session.providerId.ifBlank { UUID.nameUUIDFromBytes("blofy-subscriber|$endpoint|$user".toByteArray()).toString() }
                         val existing = editingId?.let { dao.provider(it) } ?: dao.provider(remoteId)
-                        val oldRemoteId = existing?.let { PortalSyncBook.remoteId(applicationContext, it.id) }
                         val providerId = existing?.id ?: remoteId
-                        val sameLogicalSubscriber = existing != null &&
-                            existing.baseUrl.trimEnd('/') == session.baseUrl.trimEnd('/') &&
-                            (existing.id == remoteId || oldRemoteId == remoteId)
-                        PortalSyncBook.bind(applicationContext, providerId, remoteId)
                         val next = ProviderEntity(
                             providerId,
                             selectedName,
@@ -199,27 +195,23 @@ class BlofySubscriberActivity : AppCompatActivity() {
                             existing?.enabled ?: false,
                             System.currentTimeMillis()
                         )
-                        // The BLOFY proxy token is intentionally renewed. A token change for the same
-                        // stable providerId is authentication renewal, not a new catalog source.
-                        val sourceChanged = existing == null || !sameLogicalSubscriber
-                        val readyCatalog = CatalogSyncState.isReady(applicationContext, providerId) && dao.hasCatalog(providerId)
-
-                        dao.upsertProvider(next)
-                        if (sourceChanged || !readyCatalog) CatalogSyncState.markPending(applicationContext, providerId)
-                        runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
-                        Triple(providerId, sourceChanged, readyCatalog)
+                        PortalPlaylistClient.prepareSubscriberProvider(applicationContext, endpoint, dao, next, remoteId)
                     }
 
                     setResult(RESULT_OK)
                     status.text = "تم التحقق • جاري تجهيز المكتبة"
                     startActivity(Intent(this@BlofySubscriberActivity, CatalogLoadingActivity::class.java).apply {
-                        putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, prepared.first)
-                        putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, prepared.second && prepared.third)
+                        putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, prepared.providerId)
+                        putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, prepared.sourceChanged && prepared.hadReadyCatalog)
+                        prepared.approvedSourceFingerprint?.let {
+                            putExtra(CatalogLoadingActivity.EXTRA_APPROVED_SOURCE_FINGERPRINT, it)
+                        }
                     })
                     finish()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
+                    submitting = false
                     status.text = "تعذر الدخول • ${error.message ?: "تحقق من البيانات"}"
                     login.isEnabled = true
                     username.isEnabled = true
