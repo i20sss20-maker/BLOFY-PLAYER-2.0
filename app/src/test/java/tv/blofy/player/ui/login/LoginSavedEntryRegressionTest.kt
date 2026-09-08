@@ -50,7 +50,7 @@ class LoginSavedEntryRegressionTest {
     private val release = CountDownLatch(1)
     private val requests = CopyOnWriteArrayList<String>()
 
-    @Before fun setup() = runBlocking(Dispatchers.IO) {
+    @Before fun setup(): Unit = runBlocking(Dispatchers.IO) {
         server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
