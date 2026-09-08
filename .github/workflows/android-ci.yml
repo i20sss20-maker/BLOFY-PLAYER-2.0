@@ -116,8 +116,11 @@ jobs:
             echo 'Live row binding regressed to database/network work' >&2
             exit 1
           fi
-          if grep -Fq 'activity is HomeActivity' "$cloud"; then
-            echo 'Profile cloud sync returned to Home resume path' >&2
+          grep -Fq 'is HomeActivity -> activity.lifecycleScope.launch' "$cloud"
+          grep -Fq 'delay(HOME_DEFER_MS)' "$cloud"
+          grep -Fq 'private const val HOME_DEFER_MS = 10_000L' "$cloud"
+          if grep -Fq 'if (activity is HomeActivity' "$cloud"; then
+            echo 'Immediate Home profile cloud sync returned' >&2
             exit 1
           fi
       - name: Test lint and assemble
