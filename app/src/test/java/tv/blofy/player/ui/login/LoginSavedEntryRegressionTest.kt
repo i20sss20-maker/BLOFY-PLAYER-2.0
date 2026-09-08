@@ -2,6 +2,7 @@ package tv.blofy.player.ui.login
 
 import android.app.Application
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
@@ -26,6 +27,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogSyncState
@@ -39,7 +41,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class, qualifiers = "w1280dp-h720dp-land-television")
+@Config(sdk = [28], application = Application::class, qualifiers = "sw720dp-w1280dp-h720dp-land-television")
 @LooperMode(LooperMode.Mode.PAUSED)
 class LoginSavedEntryRegressionTest {
     private val app get() = RuntimeEnvironment.getApplication()
@@ -51,6 +53,9 @@ class LoginSavedEntryRegressionTest {
     private val requests = CopyOnWriteArrayList<String>()
 
     @Before fun setup(): Unit = runBlocking(Dispatchers.IO) {
+        // Resource UI qualifiers do not configure PackageManager/UiModeManager hardware state.
+        shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
+        assertEquals(DeviceClass.Kind.TV, DeviceClass.detect(app))
         server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -74,13 +79,13 @@ class LoginSavedEntryRegressionTest {
     @After fun cleanup() {
         release.countDown()
         controller?.pause()?.stop()?.destroy()
-        runBlocking(Dispatchers.IO) {
+        if (::provider.isInitialized) runBlocking(Dispatchers.IO) {
             PortalSyncBook.clearPendingSource(app, provider.id)
             dao.clearProviderCatalog(provider.id)
             dao.deleteProvider(provider.id)
             CatalogSyncState.clear(app, provider.id)
         }
-        server.shutdown()
+        if (::server.isInitialized) server.shutdown()
     }
 
     private fun openLogin(): LoginActivity {
@@ -89,6 +94,7 @@ class LoginSavedEntryRegressionTest {
         controller = activityController
         activityController.setup()
         val activity = activityController.get()
+        assertEquals(DeviceClass.Kind.TV, DeviceClass.detect(activity))
         waitUntil { views(activity.window.decorView).filterIsInstance<TextView>().any { it.text.toString() == provider.name } }
         return activity
     }
@@ -100,7 +106,11 @@ class LoginSavedEntryRegressionTest {
             if (check()) return
             Thread.sleep(10)
         } while (System.nanoTime() < deadline)
-        fail("Expected local UI state did not appear before the stalled network was released")
+        val status = controller?.get()?.let { activity ->
+            (LoginActivity::class.java.getDeclaredField("status").apply { isAccessible = true }
+                .get(activity) as TextView).text.toString()
+        }
+        fail("Expected local UI state before network release; device=${DeviceClass.detect(app)}; status=$status")
     }
 
     private fun views(root: View): List<View> = listOf(root) + if (root is ViewGroup)
