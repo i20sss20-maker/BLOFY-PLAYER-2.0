@@ -49,7 +49,7 @@ internal object HomeNavigationPolicy {
 }
 
 /** Only repeats of the same held key are paced. Separate quick taps/direction changes are not lost. */
-internal class HomeDpadRepeatGate(private val intervalMs: Long = 100L) {
+internal class HomeDpadRepeatGate(private val intervalMs: Long = 75L) {
     private var key = -1
     private var device = -1
     private var downAt = Long.MIN_VALUE
