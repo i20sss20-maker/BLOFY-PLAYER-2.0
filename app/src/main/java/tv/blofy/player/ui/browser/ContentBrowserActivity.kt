@@ -58,13 +58,13 @@ class ContentBrowserActivity : AppCompatActivity() {
     private lateinit var streamAdapter: LiveChannelAdapter
     private var streamsJob: Job? = null
     private var livePageJob: Job? = null
-    private var categoryFocusJob: Job? = null
     private var catalogRefreshJob: Job? = null
     private var previewJob: Job? = null
     private var previewSession: BlofyPlaybackSession? = null
     private var previewView: PlayerView? = null
     private var previewTitle: TextView? = null
     private var currentCategoryId: String? = null
+    private var displayedLiveCategoryId: String? = null
     private var catalogRepairAttempted = false
     private lateinit var categoryList: RecyclerView
     private lateinit var streamList: RecyclerView
@@ -124,6 +124,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             clipToPadding = false
             itemAnimator = null
             setItemViewCacheSize(if (phoneMode) 10 else 16)
+            preserveFocusAfterLayout = true
         }
         streamList = RecyclerView(this).apply {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -135,6 +136,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             clipToPadding = false
             itemAnimator = null
             setItemViewCacheSize(if (phoneMode) 12 else 22)
+            preserveFocusAfterLayout = true
             recycledViewPool.setMaxRecycledViews(0, 28)
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
@@ -177,11 +179,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         )
         categoryAdapter = FocusTextAdapter(
             label = { it.name },
-            onClick = {
-                categoryFocusJob?.cancel()
-                loadStreams(categoryId(it))
-            },
-            onFocus = { if (!phoneMode) scheduleCategoryLoad(categoryId(it)) },
+            onClick = { loadStreams(categoryId(it)) },
+            onFocus = null,
             itemKey = { it.key }
         )
         categoryList.adapter = categoryAdapter
@@ -191,28 +190,18 @@ class ContentBrowserActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
             dao.categories(provider.id, kind).collect { items ->
-                val displayed = if (kind == KIND_LIVE) items else listOf(allCategory()) + items
+                val displayed = listOf(allCategory()) + items
                 categoryAdapter.submit(displayed)
                 if (kind != KIND_LIVE) {
-                    loadStreams(null)
+                    if (currentCategoryId == null && liveItems.isEmpty()) loadStreams(null)
                     requestInitialCatalogFocus()
-                } else if (items.isEmpty()) {
-                    loadStreams(null)
-                } else {
+                } else if (livePageJob == null && liveItems.isEmpty()) {
                     val saved = savedCategoryId()
-                    val initial = items.firstOrNull { it.remoteId == saved }?.remoteId ?: items.first().remoteId
-                    if (currentCategoryId != initial || liveItems.isEmpty()) loadStreams(initial)
+                    val initial = items.firstOrNull { it.remoteId == saved }?.remoteId
+                    loadStreams(initial)
+                    requestInitialLiveFocus(initial, displayed)
                 }
             }
-        }
-    }
-
-    private fun scheduleCategoryLoad(categoryId: String?) {
-        if (!::provider.isInitialized || currentCategoryId == categoryId) return
-        categoryFocusJob?.cancel()
-        categoryFocusJob = lifecycleScope.launch {
-            delay(if (kind == KIND_LIVE) 90L else 70L)
-            loadStreams(categoryId)
         }
     }
 
@@ -224,6 +213,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun focusFirstChannel(): Boolean {
+        if (kind == KIND_LIVE && (liveLoading || displayedLiveCategoryId != currentCategoryId)) return false
         if (streamAdapter.itemCount == 0) return false
         val savedIndex = streamAdapter.indexOfKey(savedStreamKey()).takeIf { it >= 0 } ?: 0
         return TwoPaneFocusGuard.focusItem(streamList, savedIndex)
@@ -234,6 +224,12 @@ class ContentBrowserActivity : AppCompatActivity() {
         val position = categoryAdapter.focusedIndex().takeIf { it in 0 until categoryAdapter.itemCount }
             ?: lm.findFirstVisibleItemPosition().coerceAtLeast(0)
         return TwoPaneFocusGuard.focusItem(categoryList, position)
+    }
+
+    private fun requestInitialLiveFocus(categoryId: String?, displayed: List<CategoryEntity>) {
+        if (phoneMode || categoryList.hasFocus() || streamList.hasFocus()) return
+        val position = displayed.indexOfFirst { this.categoryId(it) == categoryId }.takeIf { it >= 0 } ?: 0
+        categoryList.post { TwoPaneFocusGuard.focusItem(categoryList, position) }
     }
 
     private fun createCatalogStatusRow() = LinearLayout(this).apply {
@@ -322,7 +318,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun loadLiveStreams(categoryId: String?) {
-        if (currentCategoryId == categoryId && liveItems.isNotEmpty()) return
+        if (currentCategoryId == categoryId && displayedLiveCategoryId == categoryId && liveItems.isNotEmpty()) return
         saveLiveMemorySnapshot()
         currentCategoryId = categoryId
         rememberCategory(categoryId)
@@ -330,22 +326,21 @@ class ContentBrowserActivity : AppCompatActivity() {
         previewJob?.cancel()
         liveGeneration += 1
         livePageJob?.cancel()
-        liveItems.clear()
         liveHasMore = true
         liveLastRowId = 0L
         liveLoading = false
 
         val cached = CatalogPageMemory.get(liveMemoryKey())
         if (cached != null && cached.items.isNotEmpty()) {
+            liveItems.clear()
             liveItems.addAll(cached.items)
+            displayedLiveCategoryId = categoryId
             liveLastRowId = cached.lastRowId
             liveHasMore = cached.total == Int.MAX_VALUE
             streamAdapter.replace(cached.items)
             if (previewEnabled) startInitialPreview(cached.items)
             return
         }
-
-        streamAdapter.replace(emptyList())
         loadNextLivePage(reset = true)
     }
 
@@ -365,11 +360,26 @@ class ContentBrowserActivity : AppCompatActivity() {
                 page to rowId
             }
             if (generation != liveGeneration) return@launch
+
+            if (reset && result.first.isEmpty() && categoryId != null) {
+                liveLoading = false
+                rememberCategory(null)
+                // Make displayed != requested so loadLiveStreams(null) cannot be short-circuited by
+                // the still-visible previous page. Then perform a real All Channels query.
+                displayedLiveCategoryId = categoryId
+                currentCategoryId = null
+                liveGeneration += 1
+                loadLiveStreams(null)
+                categoryList.post { TwoPaneFocusGuard.focusItem(categoryList, 0) }
+                return@launch
+            }
+
             liveLastRowId = result.second
             liveHasMore = result.first.size >= LIVE_PAGE_SIZE
             if (reset) {
                 liveItems.clear()
                 liveItems.addAll(result.first)
+                displayedLiveCategoryId = categoryId
                 streamAdapter.replace(result.first)
             } else {
                 liveItems.addAll(result.first)
@@ -388,6 +398,7 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun saveLiveMemorySnapshot() {
         if (kind != KIND_LIVE || !::provider.isInitialized || liveItems.isEmpty()) return
+        if (displayedLiveCategoryId != currentCategoryId) return
         CatalogPageMemory.put(
             liveMemoryKey(),
             liveItems,
@@ -456,7 +467,11 @@ class ContentBrowserActivity : AppCompatActivity() {
         providerId = if (::provider.isInitialized) provider.id else "catalog",
         remoteId = ALL_CATEGORY_ID,
         kind = kind,
-        name = if (kind == KIND_MOVIE) "كل الأفلام" else "كل المسلسلات",
+        name = when (kind) {
+            KIND_LIVE -> "كل القنوات"
+            KIND_MOVIE -> "كل الأفلام"
+            else -> "كل المسلسلات"
+        },
         orderIndex = -1
     )
 
@@ -503,6 +518,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun openStream(stream: StreamEntity) {
+        if (kind == KIND_LIVE && displayedLiveCategoryId != currentCategoryId) return
         if (stream.locked) ParentalGate.requirePin(this) { openUnlockedStream(stream) } else openUnlockedStream(stream)
     }
 
@@ -532,14 +548,15 @@ class ContentBrowserActivity : AppCompatActivity() {
             else -> {
                 rememberStream(stream)
                 refreshShortEpg(stream)
-                val url = ContentUrlResolver.live(provider, profile(provider), stream)
+                val p = profile(provider)
+                val url = ContentUrlResolver.live(provider, p, stream)
                 stopPreview()
-                launchPlayer(stream, url)
+                launchPlayer(stream, url, p)
             }
         }
     }
 
-    private fun launchPlayer(stream: StreamEntity, url: String) {
+    private fun launchPlayer(stream: StreamEntity, url: String, p: ProviderProfile) {
         startActivity(Intent(this, PlayerActivity::class.java).apply {
             putExtra(PlayerActivity.EXTRA_URL, url)
             putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
@@ -550,7 +567,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
             putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
             putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream))
+            putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.liveFallback(provider, p, stream))
             putExtra(PlayerActivity.EXTRA_RESUME_MS, 0L)
             putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
             putExtra(PlayerActivity.EXTRA_CATEGORY_ID, currentCategoryId)
@@ -590,7 +607,11 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun rememberCategory(categoryId: String?) {
-        if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.edit().putString(categoryKey(), categoryId).apply()
+        if (::provider.isInitialized && kind == KIND_LIVE) {
+            val editor = statePrefs.edit()
+            if (categoryId == null) editor.remove(categoryKey()) else editor.putString(categoryKey(), categoryId)
+            editor.apply()
+        }
     }
 
     private fun rememberStream(stream: StreamEntity) {
@@ -606,7 +627,6 @@ class ContentBrowserActivity : AppCompatActivity() {
         saveLiveMemorySnapshot()
         streamsJob?.cancel()
         livePageJob?.cancel()
-        categoryFocusJob?.cancel()
         catalogRefreshJob?.cancel()
         liveGeneration += 1
         stopPreview()
