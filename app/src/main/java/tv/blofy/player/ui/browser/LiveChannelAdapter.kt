@@ -10,16 +10,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import tv.blofy.player.R
-import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -32,14 +23,30 @@ internal class LiveChannelAdapter(
     private val itemKey: (StreamEntity) -> String
 ) : RecyclerView.Adapter<LiveChannelAdapter.Holder>() {
     private val items = ArrayList<StreamEntity>(256)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var focusedKey: String? = null
 
     init { setHasStableIds(true) }
 
     fun submit(newItems: List<StreamEntity>) = replace(newItems)
-    fun replace(newItems: List<StreamEntity>) { items.clear(); items.addAll(newItems); notifyDataSetChanged() }
-    fun append(newItems: List<StreamEntity>) { if (newItems.isEmpty()) return; val start = items.size; items.addAll(newItems); notifyItemRangeInserted(start, newItems.size) }
+
+    fun replace(newItems: List<StreamEntity>) {
+        // Avoid a full layout/focus pass for an identical page snapshot.
+        if (items.size == newItems.size && items.indices.all { itemKey(items[it]) == itemKey(newItems[it]) }) return
+        items.clear()
+        items.addAll(newItems)
+        notifyDataSetChanged()
+    }
+
+    fun append(newItems: List<StreamEntity>) {
+        if (newItems.isEmpty()) return
+        val existingKeys = items.asSequence().map(itemKey).toHashSet()
+        val unique = newItems.filter { existingKeys.add(itemKey(it)) }
+        if (unique.isEmpty()) return
+        val start = items.size
+        items.addAll(unique)
+        notifyItemRangeInserted(start, unique.size)
+    }
+
     fun indexOfKey(key: String?): Int = if (key.isNullOrBlank()) -1 else items.indexOfFirst { itemKey(it) == key }
     fun itemAt(position: Int): StreamEntity? = items.getOrNull(position)
     override fun getItemId(position: Int) = itemKey(items[position]).hashCode().toLong()
@@ -100,7 +107,7 @@ internal class LiveChannelAdapter(
         val progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 1000
             progress = 0
-            visibility = View.INVISIBLE
+            visibility = View.GONE
             progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
             progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF31233E.toInt())
         }
@@ -126,19 +133,19 @@ internal class LiveChannelAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
-        holder.epgJob?.cancel()
         holder.title.text = (if (item.locked) "🔒  " else "") + item.name
         holder.meta.text = if (item.archiveEnabled) "مباشر • أرشيف متاح" else "مباشر الآن"
         holder.badge.text = if (item.archiveEnabled) "ARCH" else "LIVE"
-        holder.progress.visibility = View.INVISIBLE
+        holder.progress.visibility = View.GONE
         val art = item.icon ?: item.backdrop
         if (!art.isNullOrBlank()) ArtworkLoader.load(holder.logo, art) else {
             ArtworkLoader.cancel(holder.logo)
             holder.logo.setImageResource(R.drawable.blofy_logo)
         }
-        // EPG is loaded once when the row is bound. Moving focus must stay purely visual and
-        // never schedule a database query; this keeps rapid DPAD navigation responsive on TV SoCs.
-        loadLocalEpg(holder, item)
+
+        // Scrolling must be render-only. Do not query Room or touch network while RecyclerView binds
+        // rows; EPG is refreshed when a stream is actually opened. This mirrors the fast-list model
+        // used by polished TV players and keeps held-DPAD smooth on low-powered boxes.
         renderFocus(holder, holder.itemView.hasFocus())
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnLongClickListener { onLongClick(item); true }
@@ -160,31 +167,7 @@ internal class LiveChannelAdapter(
         holder.badge.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.PurpleSoft)
     }
 
-    private fun loadLocalEpg(holder: Holder, item: StreamEntity) {
-        holder.epgJob?.cancel()
-        holder.epgJob = scope.launch {
-            val now = System.currentTimeMillis()
-            val current = withContext(Dispatchers.IO) {
-                BlofyDatabase.get(holder.itemView.context.applicationContext).dao()
-                    .epg(item.providerId, item.remoteId, now, 2).first()
-                    .firstOrNull { it.startMs <= now && it.endMs > now }
-            }
-            val position = holder.bindingAdapterPosition
-            if (position == RecyclerView.NO_POSITION || itemKey(item) != itemKey(items.getOrNull(position) ?: return@launch)) return@launch
-            if (current != null) {
-                val span = (current.endMs - current.startMs).coerceAtLeast(1L)
-                val pct = (((now - current.startMs).coerceIn(0L, span) * 1000L) / span).toInt()
-                holder.meta.text = current.title
-                holder.progress.progress = pct
-                holder.progress.visibility = View.VISIBLE
-            } else {
-                holder.progress.visibility = View.INVISIBLE
-            }
-        }
-    }
-
     override fun onViewRecycled(holder: Holder) {
-        holder.epgJob?.cancel()
         ArtworkLoader.cancel(holder.logo)
         holder.logo.setImageDrawable(null)
         holder.itemView.animate().cancel()
@@ -195,9 +178,9 @@ internal class LiveChannelAdapter(
         super.onViewRecycled(holder)
     }
 
-    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
-        scope.cancel()
-        super.onDetachedFromRecyclerView(recyclerView)
+    override fun onViewDetachedFromWindow(holder: Holder) {
+        ArtworkLoader.cancel(holder.logo)
+        super.onViewDetachedFromWindow(holder)
     }
 
     override fun getItemCount() = items.size
@@ -208,8 +191,7 @@ internal class LiveChannelAdapter(
         val title: TextView,
         val meta: TextView,
         val badge: TextView,
-        val progress: ProgressBar,
-        var epgJob: Job? = null
+        val progress: ProgressBar
     ) : RecyclerView.ViewHolder(item)
 
     private fun rowBackground(focused: Boolean) = GradientDrawable(
