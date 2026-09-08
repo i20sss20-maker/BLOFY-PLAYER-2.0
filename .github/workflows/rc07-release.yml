@@ -115,7 +115,19 @@ jobs:
             echo '::error::The loading screen must not bypass deferred catalog enrichment'
             exit 1
           fi
-          grep -Fq 'registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())' app/src/main/java/tv/blofy/player/BlofyApp.kt
+
+          app="app/src/main/java/tv/blofy/player/BlofyApp.kt"
+          test ! -f app/src/main/java/tv/blofy/player/data/preparation/CatalogEnrichmentLifecycle.kt
+          test ! -f app/src/main/java/tv/blofy/player/data/preparation/StorageMaintenanceLifecycle.kt
+          test ! -f app/src/main/java/tv/blofy/player/ui/login/LoginLocalFastPathLifecycle.kt
+          test ! -f app/src/main/java/tv/blofy/player/ui/login/LoginPortalRefreshLifecycle.kt
+          ! grep -Fq 'CatalogEnrichmentLifecycle' "$app"
+          ! grep -Fq 'StorageMaintenanceLifecycle' "$app"
+          ! grep -Fq 'LoginLocalFastPathLifecycle' "$app"
+          ! grep -Fq 'LoginPortalRefreshLifecycle' "$app"
+          grep -Fq 'FirstImportCheckpoint.discardIncompleteSections' app/src/main/java/tv/blofy/player/ui/login/CatalogLoadingActivity.kt
+          grep -Fq 'ContentUrlResolver.liveFallback' app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt
+
           dao="app/src/main/java/tv/blofy/player/data/local/BlofyDao.kt"
           grep -Fq 'promoteStagedSearchIndexInPlace(stagedProviderId, targetProvider.id)' "$dao"
           if sed -n '/suspend fun promoteStagedCatalog/,/^    }/p' "$dao" | grep -Fq 'rebuildSearchIndex(targetProvider.id)'; then
