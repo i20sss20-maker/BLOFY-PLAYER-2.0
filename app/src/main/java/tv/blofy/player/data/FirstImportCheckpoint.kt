@@ -18,7 +18,7 @@ object FirstImportCheckpoint {
     private const val DONE_PREFIX = "done:"
     val sections = listOf("live", "movie", "series")
 
-    data class State internal constructor(
+    data class State(
         val providerId: String,
         val sourceFingerprint: String,
         val completed: Set<String>,
