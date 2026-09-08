@@ -84,6 +84,7 @@ object PortalPlaylistClient {
             val existing = candidates.firstOrNull { CatalogSyncState.isFullyReady(context, it.id) && dao.hasCatalog(it.id) }
                 ?: candidates.firstOrNull { dao.hasCatalog(it.id) } ?: localById[item.id] ?: candidates.firstOrNull()
             val existingHasCatalog = existing?.let { dao.hasCatalog(it.id) } == true
+            val existingReadyCatalog = existingHasCatalog && existing != null && CatalogSyncState.isReady(context, existing.id)
             val localId = existing?.id ?: item.id
             val aliases = (candidates.map { it.id } + item.aliasIds + item.id).toSet() - localId
             PortalSyncBook.bind(context, localId, item.id, aliases)
@@ -104,15 +105,14 @@ object PortalPlaylistClient {
             )
             val contentChanged = existing == null || !sameSource(existing, next)
             if (contentChanged) {
-                // A new provider must still go through first import. A changed source with a
-                // known-good local catalog is staged and refreshed in WorkManager instead of
-                // blocking Login/Home behind a 30% promotion screen.
-                if (!existingHasCatalog) changed += next.id
+                // New/uncommitted sources still require the normal foreground preparation path.
+                // Only a genuinely committed local catalog may keep opening while a website source
+                // replacement is staged in the background.
+                if (!existingReadyCatalog) changed += next.id
                 CatalogSyncState.markPending(context, next.id)
             }
 
-            val visible = if (contentChanged && existing != null && existingHasCatalog &&
-                CatalogSyncState.isReady(context, existing.id)) {
+            val visible = if (contentChanged && existing != null && existingReadyCatalog) {
                 val pendingId = PortalSyncBook.pendingSourceId(next.id)
                 PortalSyncBook.hide(context, setOf(pendingId))
                 dao.upsertProvider(next.copy(id = pendingId, enabled = false))
@@ -124,8 +124,10 @@ object PortalPlaylistClient {
             }
             remoteProviders += visible
             dao.upsertProvider(visible.copy(enabled = if (item.active) true else existing?.enabled ?: false))
-            if (contentChanged && existingHasCatalog) {
-                CatalogRefreshWorker.enqueueNow(context.applicationContext, next.id)
+            if (contentChanged && existingReadyCatalog) {
+                // WorkManager is available in production, but pure JVM/Robolectric callers may not
+                // initialize it. A scheduling failure must not corrupt or block the known-good list.
+                runCatching { CatalogRefreshWorker.enqueueNow(context.applicationContext, next.id) }
             }
             if (item.active) remoteActive = visible
         }
