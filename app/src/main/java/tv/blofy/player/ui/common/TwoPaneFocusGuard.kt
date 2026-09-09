@@ -173,8 +173,9 @@ object TwoPaneFocusGuard {
 
         val itemId = if (adapter.hasStableIds()) adapter.getItemId(position) else null
         pendingPositions[list] = position
-        // Retain the visible row while scrolling. Only park when entering from another pane.
-        if (!list.hasFocus()) parkFocus(list)
+        // Release the old row while scrolling so RecyclerView can attach the requested row.
+        // Confirm keys received during this short transition are queued above, not dropped.
+        parkFocus(list)
         var listener: RecyclerView.OnChildAttachStateChangeListener? = null
         var attempt: Runnable? = null
         var timeout: Runnable? = null

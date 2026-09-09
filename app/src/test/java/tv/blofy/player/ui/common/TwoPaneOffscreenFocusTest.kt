@@ -79,11 +79,11 @@ class TwoPaneOffscreenFocusTest {
         { TwoPaneFocusGuard.focusItem(content, 1) }
     )
 
-    @Test fun offscreenRequestRetainsCurrentRowUntilTargetAttaches() {
+    @Test fun parkingAnOffscreenRequestCannotFocusTheFirstAttachedChild() {
         assertTrue(TwoPaneFocusGuard.focusItem(categories, 2))
         assertTrue(TwoPaneFocusGuard.focusItem(categories, 40))
-        // Preserve the current row during layout instead of moving focus to the container or row 0.
-        assertEquals(2, position(categories))
+        // FOCUS_AFTER_DESCENDANTS made requestFocus() choose category 0 here.
+        assertSame(categories, categories.findFocus())
         settle()
         assertEquals(40, position(categories))
     }
