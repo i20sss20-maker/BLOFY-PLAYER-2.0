@@ -100,7 +100,7 @@ class FocusTextAdapter<T : Any>(
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(TvUiTuning.dp(context, 14), 0, TvUiTuning.dp(context, 14), 0)
+            setPadding(TvUiTuning.dp(context, 16), 0, TvUiTuning.dp(context, 16), 0)
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             isFocusable = true
@@ -109,10 +109,10 @@ class FocusTextAdapter<T : Any>(
             isLongClickable = true
             background = itemBackground(false)
         }
-        view.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TvUiTuning.dp(context, 54)).apply {
-            bottomMargin = TvUiTuning.dp(context, 6)
-            marginStart = TvUiTuning.dp(context, 2)
-            marginEnd = TvUiTuning.dp(context, 2)
+        view.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TvUiTuning.dp(context, 56)).apply {
+            bottomMargin = TvUiTuning.dp(context, 8)
+            marginStart = TvUiTuning.dp(context, 3)
+            marginEnd = TvUiTuning.dp(context, 3)
         }
         return Holder(view).also { holder ->
             view.setOnFocusChangeListener { focusedView, focused ->
@@ -120,7 +120,7 @@ class FocusTextAdapter<T : Any>(
                 focusedView.animate().cancel()
                 focusedView.scaleX = 1f
                 focusedView.scaleY = 1f
-                focusedView.translationZ = if (focused) 5f else 0f
+                focusedView.translationZ = if (focused) TvUiTuning.dp(context, 4).toFloat() else 0f
                 text.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
                 text.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
                 focusedView.background = itemBackground(focused)
@@ -181,5 +181,5 @@ class FocusTextAdapter<T : Any>(
         }
     }
 
-    private fun itemBackground(focused: Boolean) = BlofyTvDesign.glassSurface(14f, focused)
+    private fun itemBackground(focused: Boolean) = BlofyTvDesign.glassSurface(16f, focused)
 }
