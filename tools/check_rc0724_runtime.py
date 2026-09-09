@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# rc07.24 field fixes: hidden-host recovery, cached login identity, bounded catalog paging.
 resolver = Path("app/src/main/java/tv/blofy/player/core/playback/ContentUrlResolver.kt").read_text()
 assert "val canonical = canonicalLive(provider, profile, stream).takeUnless { it == primary }" in resolver
 assert resolver.index("val canonical = canonicalLive") < resolver.index("ProviderHostResolver.providerOriginFallback(provider.baseUrl, source)")
