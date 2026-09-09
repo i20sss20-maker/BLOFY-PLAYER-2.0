@@ -1,0 +1,353 @@
+name: Apply rc07.24 Runtime Fixes
+
+on:
+  push:
+    branches: [rc07-runtime-recovery]
+    paths:
+      - .github/workflows/runtime-fix-rc0724.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rc07-runtime-recovery
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply focused runtime fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def patch(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if new in text:
+                  return
+              if old not in text:
+                  raise SystemExit(f'expected patch anchor missing: {path}')
+              p.write_text(text.replace(old, new, 1))
+
+          # 1) Hidden/public direct_source failures must fall back to canonical Xtream first.
+          p = Path('app/src/main/java/tv/blofy/player/core/playback/ContentUrlResolver.kt')
+          text = p.read_text()
+          text = text.replace(
+'''        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, source)
+            ?.takeUnless { it == primary }
+        return origin ?: canonicalLive(provider, profile, stream).takeUnless { it == primary }''',
+'''        val canonical = canonicalLive(provider, profile, stream).takeUnless { it == primary }
+        if (canonical != null) return canonical
+        return ProviderHostResolver.providerOriginFallback(provider.baseUrl, source)
+            ?.takeUnless { it == primary }''', 1)
+          text = text.replace(
+'''        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, stream.directSource)
+            ?.takeUnless { it == primary }
+        return origin ?: canonicalMovie(provider, stream).takeUnless { it == primary }''',
+'''        val canonical = canonicalMovie(provider, stream).takeUnless { it == primary }
+        if (canonical != null) return canonical
+        return ProviderHostResolver.providerOriginFallback(provider.baseUrl, stream.directSource)
+            ?.takeUnless { it == primary }''', 1)
+          text = text.replace(
+'''        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, episode.directSource)
+            ?.takeUnless { it == primary }
+        return origin ?: canonicalEpisode(provider, episode).takeUnless { it == primary }''',
+'''        val canonical = canonicalEpisode(provider, episode).takeUnless { it == primary }
+        if (canonical != null) return canonical
+        return ProviderHostResolver.providerOriginFallback(provider.baseUrl, episode.directSource)
+            ?.takeUnless { it == primary }''', 1)
+          p.write_text(text)
+
+          # 2) Existing device identity is rendered immediately from SharedPreferences, before Room opens.
+          p = Path('app/src/main/java/tv/blofy/player/core/identity/DeviceIdentity.kt')
+          text = p.read_text()
+          anchor = '''    @Synchronized
+    fun deviceId(context: Context): String {'''
+          insert = '''    @Synchronized
+    fun cachedIdentity(context: Context): Pair<String, String>? {
+        val preferences = preferences(context)
+        val deviceId = preferences.getString(DEVICE_ID, null)?.takeIf(::validDeviceId) ?: return null
+        val activationCode = preferences.getString(ACTIVE_CODE, null)?.takeIf(::validActivationCode) ?: return null
+        return deviceId to activationCode
+    }
+
+    @Synchronized
+    fun deviceId(context: Context): String {'''
+          if insert not in text:
+              if anchor not in text: raise SystemExit('DeviceIdentity anchor missing')
+              text = text.replace(anchor, insert, 1)
+          p.write_text(text)
+
+          p = Path('app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt')
+          text = p.read_text()
+          if 'import tv.blofy.player.core.identity.DeviceIdentity' not in text:
+              text = text.replace('import tv.blofy.player.core.identity.ActivationRemoteClient\n', 'import tv.blofy.player.core.identity.ActivationRemoteClient\nimport tv.blofy.player.core.identity.DeviceIdentity\n', 1)
+          text = text.replace(
+'''        if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
+        installWebsiteRefreshButton()
+    }''',
+'''        if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
+        installWebsiteRefreshButton()
+        renderCachedIdentityImmediately()
+    }''', 1)
+          anchor = '''    private fun requestIdentityRefresh(fromWebsite: Boolean = false) {'''
+          method = '''    private fun renderCachedIdentityImmediately() {
+        val cached = DeviceIdentity.cachedIdentity(applicationContext) ?: return
+        deviceView.text = cached.first
+        codeView.text = cached.second
+        status.text = "جاري تحميل القوائم المحفوظة..."
+        val url = ActivationPortalUrl.create(activationEndpoint, cached.first, cached.second) ?: return
+        lastQrIdentity = cached
+        lifecycleScope.launch {
+            val bitmap = withContext(Dispatchers.Default) { createQr(url) }
+            if (lastQrIdentity == cached) qrView.setImageBitmap(bitmap)
+        }
+    }
+
+    private fun requestIdentityRefresh(fromWebsite: Boolean = false) {'''
+          if method not in text:
+              if anchor not in text: raise SystemExit('LoginActivity anchor missing')
+              text = text.replace(anchor, method, 1)
+          p.write_text(text)
+
+          # Remove the artificial splash wait; one frame is enough for the transition.
+          p = Path('app/src/main/java/tv/blofy/player/ui/login/SplashActivity.kt')
+          text = p.read_text().replace('private const val MINIMUM_SPLASH_MS = 320L', 'private const val MINIMUM_SPLASH_MS = 60L')
+          p.write_text(text)
+
+          # 3) Movies/series use bounded pages instead of materializing the full catalog.
+          p = Path('app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt')
+          text = p.read_text()
+          text = text.replace(
+'''    private var liveGeneration = 0
+
+    private val kind by lazy''',
+'''    private var liveGeneration = 0
+
+    private val catalogItems = ArrayList<StreamEntity>(CATALOG_PAGE_SIZE)
+    private var catalogHasMore = true
+    private var catalogLastRowId = 0L
+    private var catalogLoading = false
+    private var catalogGeneration = 0
+
+    private val kind by lazy''', 1)
+          text = text.replace(
+'''                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (kind != KIND_LIVE || dy <= 0 || liveLoading || !liveHasMore) return
+                    val lm = recyclerView.layoutManager as? LinearLayoutManager ?: return
+                    if (lm.findLastVisibleItemPosition() >= liveItems.size - LIVE_PREFETCH_THRESHOLD) loadNextLivePage()
+                }''',
+'''                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (dy <= 0) return
+                    val lm = recyclerView.layoutManager as? LinearLayoutManager ?: return
+                    if (kind == KIND_LIVE) {
+                        if (!liveLoading && liveHasMore && lm.findLastVisibleItemPosition() >= liveItems.size - LIVE_PREFETCH_THRESHOLD) loadNextLivePage()
+                    } else if (!catalogLoading && catalogHasMore && lm.findLastVisibleItemPosition() >= catalogItems.size - CATALOG_PREFETCH_THRESHOLD) {
+                        loadNextCatalogPage()
+                    }
+                }''', 1)
+          text = text.replace(
+'''                if (kind == KIND_LIVE) {
+                    rememberStream(stream)
+                    val index = streamAdapter.indexOfKey(stream.key)
+                    if (index >= liveItems.size - LIVE_PREFETCH_THRESHOLD) loadNextLivePage()
+                }
+                if (previewEnabled && !stream.locked) schedulePreview(stream)''',
+'''                val index = streamAdapter.indexOfKey(stream.key)
+                if (kind == KIND_LIVE) {
+                    rememberStream(stream)
+                    if (index >= liveItems.size - LIVE_PREFETCH_THRESHOLD) loadNextLivePage()
+                } else if (index >= catalogItems.size - CATALOG_PREFETCH_THRESHOLD) {
+                    loadNextCatalogPage()
+                }
+                if (previewEnabled && !stream.locked) schedulePreview(stream)''', 1)
+          text = text.replace(
+'''                if (kind != KIND_LIVE) {
+                    if (currentCategoryId == null && streamAdapter.itemCount == 0 && streamsJob?.isActive != true) {
+                        loadStreams(null)
+                    }
+                    requestInitialCatalogFocus()''',
+'''                if (kind != KIND_LIVE) {
+                    if (currentCategoryId == null && catalogItems.isEmpty() && !catalogLoading) {
+                        loadStreams(null)
+                    }
+                    requestInitialCatalogFocus()''', 1)
+          old_load = '''    private fun loadStreams(categoryId: String?) {
+        if (!::provider.isInitialized) return
+        if (kind == KIND_LIVE) {
+            loadLiveStreams(categoryId)
+            return
+        }
+        if (currentCategoryId == categoryId && streamsJob?.isActive == true) return
+        currentCategoryId = categoryId
+        streamsJob?.cancel()
+        streamsJob = lifecycleScope.launch {
+            BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, categoryId).collect { items ->
+                streamAdapter.submit(items)
+                updateCatalogState(items, categoryId)
+            }
+        }
+    }
+'''
+          new_load = '''    private fun loadStreams(categoryId: String?) {
+        if (!::provider.isInitialized) return
+        if (kind == KIND_LIVE) {
+            loadLiveStreams(categoryId)
+            return
+        }
+        if (currentCategoryId == categoryId && catalogItems.isNotEmpty()) return
+        saveCatalogMemorySnapshot()
+        currentCategoryId = categoryId
+        catalogGeneration += 1
+        streamsJob?.cancel()
+        catalogItems.clear()
+        catalogHasMore = true
+        catalogLastRowId = 0L
+        catalogLoading = false
+
+        val cached = CatalogPageMemory.get(catalogMemoryKey())
+        if (cached != null && cached.items.isNotEmpty()) {
+            catalogItems.addAll(cached.items)
+            catalogLastRowId = cached.lastRowId
+            catalogHasMore = cached.total == Int.MAX_VALUE
+            streamAdapter.replace(cached.items)
+            updateCatalogState(cached.items, categoryId)
+            return
+        }
+
+        streamAdapter.replace(emptyList())
+        showCatalogStatus("جاري تحميل ${catalogLabel()}...", retry = false)
+        loadNextCatalogPage(reset = true)
+    }
+
+    private fun loadNextCatalogPage(reset: Boolean = false) {
+        if (!::provider.isInitialized || kind == KIND_LIVE || catalogLoading) return
+        if (!reset && !catalogHasMore) return
+        val generation = catalogGeneration
+        val cursor = if (reset) 0L else catalogLastRowId
+        val categoryId = currentCategoryId
+        catalogLoading = true
+        streamsJob = lifecycleScope.launch {
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val result = withContext(Dispatchers.IO) {
+                val page = if (categoryId == null) dao.catalogPageAfterAll(provider.id, kind, cursor, CATALOG_PAGE_SIZE)
+                else dao.catalogPageAfterInCategory(provider.id, kind, categoryId, cursor, CATALOG_PAGE_SIZE)
+                val rowId = page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor
+                page to rowId
+            }
+            if (generation != catalogGeneration) return@launch
+            catalogLastRowId = result.second
+            catalogHasMore = result.first.size >= CATALOG_PAGE_SIZE
+            if (reset) {
+                catalogItems.clear()
+                catalogItems.addAll(result.first)
+                streamAdapter.replace(result.first)
+            } else {
+                catalogItems.addAll(result.first)
+                streamAdapter.append(result.first)
+            }
+            catalogLoading = false
+            saveCatalogMemorySnapshot()
+            updateCatalogState(catalogItems, categoryId)
+            if (result.first.isNotEmpty()) ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(12).map { it.icon })
+        }.also { job ->
+            job.invokeOnCompletion { if (generation == catalogGeneration) runOnUiThread { catalogLoading = false } }
+        }
+    }
+
+    private fun saveCatalogMemorySnapshot() {
+        if (kind == KIND_LIVE || !::provider.isInitialized || catalogItems.isEmpty()) return
+        CatalogPageMemory.put(
+            catalogMemoryKey(),
+            catalogItems,
+            if (catalogHasMore) Int.MAX_VALUE else catalogItems.size,
+            catalogLastRowId,
+            null
+        )
+    }
+
+    private fun catalogMemoryKey(): String = "${provider.id}:$kind:${currentCategoryId ?: ALL_CATEGORY_ID}"
+'''
+          if new_load not in text:
+              if old_load not in text: raise SystemExit('ContentBrowser loadStreams anchor missing')
+              text = text.replace(old_load, new_load, 1)
+          text = text.replace(
+'''    override fun onPause() {
+        saveLiveMemorySnapshot()
+        super.onPause()
+    }''',
+'''    override fun onPause() {
+        saveLiveMemorySnapshot()
+        saveCatalogMemorySnapshot()
+        super.onPause()
+    }''', 1)
+          text = text.replace(
+'''        catalogRefreshJob?.cancel()
+        liveGeneration += 1
+        stopPreview()''',
+'''        catalogRefreshJob?.cancel()
+        liveGeneration += 1
+        catalogGeneration += 1
+        saveCatalogMemorySnapshot()
+        stopPreview()''', 1)
+          text = text.replace(
+'''        private const val LIVE_PAGE_SIZE = 96
+        private const val LIVE_PREFETCH_THRESHOLD = 28''',
+'''        private const val LIVE_PAGE_SIZE = 96
+        private const val LIVE_PREFETCH_THRESHOLD = 28
+        private const val CATALOG_PAGE_SIZE = 120
+        private const val CATALOG_PREFETCH_THRESHOLD = 36''', 1)
+          p.write_text(text)
+
+          # Version bump.
+          p = Path('app/build.gradle.kts')
+          text = p.read_text().replace('versionCode = 2000031', 'versionCode = 2000032').replace('versionName = "2.0.0-rc07.23"', 'versionName = "2.0.0-rc07.24"')
+          p.write_text(text)
+
+          # Signed release expectations and filenames.
+          p = Path('.github/workflows/rc07-release.yml')
+          text = p.read_text()
+          text = text.replace('EXPECTED_VERSION_CODE: "2000031"', 'EXPECTED_VERSION_CODE: "2000032"')
+          text = text.replace('EXPECTED_VERSION_NAME: 2.0.0-rc07.23', 'EXPECTED_VERSION_NAME: 2.0.0-rc07.24')
+          text = text.replace('rc07.23', 'rc07.24')
+          text = text.replace('versionCode = 2000031', 'versionCode = 2000032')
+          text = text.replace('versionName = "2.0.0-rc07.23"', 'versionName = "2.0.0-rc07.24"')
+          p.write_text(text)
+
+          # Fast source-level regression checks that fail if these three fixes disappear.
+          Path('tools/check_rc0724_runtime.py').write_text(r'''from pathlib import Path
+
+resolver = Path("app/src/main/java/tv/blofy/player/core/playback/ContentUrlResolver.kt").read_text()
+assert "val canonical = canonicalLive(provider, profile, stream).takeUnless { it == primary }" in resolver
+assert resolver.index("val canonical = canonicalLive") < resolver.index("ProviderHostResolver.providerOriginFallback(provider.baseUrl, source)")
+
+login = Path("app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt").read_text()
+identity = Path("app/src/main/java/tv/blofy/player/core/identity/DeviceIdentity.kt").read_text()
+assert "renderCachedIdentityImmediately()" in login
+assert "fun cachedIdentity(context: Context)" in identity
+
+browser = Path("app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt").read_text()
+assert "loadNextCatalogPage" in browser
+assert "CATALOG_PAGE_SIZE = 120" in browser
+assert ".dao().streams(provider.id, kind, categoryId).collect" not in browser
+print("rc07.24 runtime recovery checks passed")
+''')
+          PY
+          python3 tools/check_rc0724_runtime.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/tv/blofy/player/core/playback/ContentUrlResolver.kt \
+                  app/src/main/java/tv/blofy/player/core/identity/DeviceIdentity.kt \
+                  app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt \
+                  app/src/main/java/tv/blofy/player/ui/login/SplashActivity.kt \
+                  app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt \
+                  app/build.gradle.kts .github/workflows/rc07-release.yml tools/check_rc0724_runtime.py
+          git commit -m "fix: rc07.24 playback and catalog responsiveness"
+          git push origin HEAD:rc07-runtime-recovery
