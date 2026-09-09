@@ -17,7 +17,7 @@ class ContentUrlResolverTest {
     )
 
     @Test
-    fun hiddenPublicDirectSourceIsPrimaryPlaybackRouteWithProviderOriginFallback() {
+    fun hiddenPublicDirectSourceIsPrimaryPlaybackRouteWithCanonicalXtreamFallback() {
         val provider = ProviderEntity(
             id = "p1",
             name = "provider",
@@ -48,7 +48,7 @@ class ContentUrlResolverTest {
     }
 
     @Test
-    fun hiddenHostFallbackPreservesNonCanonicalPathQueryAndUsesProviderOrigin() {
+    fun hiddenHostFallbackUsesCanonicalXtreamBeforeProviderOriginPathRewrite() {
         val provider = ProviderEntity(
             id = "hidden-path",
             name = "provider",
@@ -72,7 +72,7 @@ class ContentUrlResolverTest {
             ContentUrlResolver.movie(provider, stream)
         )
         assertEquals(
-            "http://panel.example.com:8080/tokenized/media/77?token=abc&edge=4",
+            "http://panel.example.com:8080/movie/user/pass/77.mkv",
             ContentUrlResolver.movieFallback(provider, stream)
         )
     }
