@@ -19,3 +19,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run rc07-release.yml --repo "$GITHUB_REPOSITORY" --ref rc07-runtime-recovery
+
+# trigger verified rc07.24 release
