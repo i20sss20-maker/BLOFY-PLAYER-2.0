@@ -233,7 +233,16 @@ class BlofyPlaybackSession(
         ) {
             liveStallRecoveries++
             lastLiveStallRecoveryAtMs = now
-            retrySameUrl()
+            val configuredFallback = fallbackState.nextConfiguredUrl()
+            if (configuredFallback != null) {
+                // A hidden/public-looking provider alias can hang in buffering without producing
+                // onPlayerError. Reuse the already configured provider-origin fallback here rather
+                // than retrying the same dead origin and leaving the TV on a black screen.
+                fallbackState.markConfiguredUrlAttempted(configuredFallback)
+                playInternalFallback(configuredFallback)
+            } else {
+                retrySameUrl()
+            }
         }
     }
 
