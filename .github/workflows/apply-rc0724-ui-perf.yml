@@ -35,3 +35,5 @@ jobs:
           git add app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt app/src/main/java/tv/blofy/player/ui/catalog/PosterCatalogActivity.kt
           git commit -m 'fix: space browser UI and speed first catalog render'
           git push origin HEAD:rc07-runtime-recovery
+
+# one-shot trigger for rc07.24 layout/performance patch
