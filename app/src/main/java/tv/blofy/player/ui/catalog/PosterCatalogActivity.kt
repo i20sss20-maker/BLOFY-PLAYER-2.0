@@ -300,7 +300,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 posterAdapter.append(result.first)
             }
             updateCount()
-            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(8).map { it.icon ?: it.backdrop })
+            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(6).map { it.icon ?: it.backdrop })
             loadingPage = false
             saveMemorySnapshot()
         }.also { job ->
@@ -363,8 +363,8 @@ class PosterCatalogActivity : AppCompatActivity() {
         const val EXTRA_KIND = "kind"
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
-        private const val PAGE_SIZE = 96
-        private const val PREFETCH_THRESHOLD = 28
+        private const val PAGE_SIZE = 64
+        private const val PREFETCH_THRESHOLD = 20
         private const val ALL_CATEGORY_ID = "__all__"
     }
 }

@@ -21,7 +21,6 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
@@ -88,7 +87,8 @@ class ContentBrowserActivity : AppCompatActivity() {
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND) ?: KIND_LIVE }
     private val deviceKind by lazy { DeviceClass.detect(this) }
     private val phoneMode get() = deviceKind == DeviceClass.Kind.PHONE
-    private val previewEnabled get() = kind == KIND_LIVE && !phoneMode && RuntimeSettings.autoplayLive(this)
+    private val screenWidthDp get() = resources.configuration.screenWidthDp.takeIf { it > 0 } ?: resources.configuration.smallestScreenWidthDp
+    private val previewEnabled get() = kind == KIND_LIVE && !phoneMode && screenWidthDp >= 1100 && RuntimeSettings.autoplayLive(this)
     private val statePrefs by lazy { getSharedPreferences("blofy_browser_state", MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,7 +96,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            setPadding(if (phoneMode) 18 else 30, if (phoneMode) 16 else 22, if (phoneMode) 18 else 30, if (phoneMode) 16 else 22)
+            setPadding(dp(if (phoneMode) 10 else 22), dp(if (phoneMode) 10 else 16), dp(if (phoneMode) 10 else 22), dp(if (phoneMode) 10 else 16))
             background = AppCompatResources.getDrawable(this@ContentBrowserActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -109,8 +109,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             includeFontPadding = false
-            setPadding(8, 0, 0, if (phoneMode) 10 else 14)
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phoneMode) 58 else 64))
+            setPadding(dp(8), 0, 0, dp(if (phoneMode) 8 else 10))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phoneMode) 54 else 62)))
 
         val body = LinearLayout(this).apply {
             orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
@@ -123,8 +123,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, false)
             else LinearLayoutManager(this@ContentBrowserActivity)
             background = BlofyTvDesign.elevatedSurface(24f)
-            elevation = 4f
-            setPadding(8, 10, 8, 10)
+            elevation = dp(4).toFloat()
+            setPadding(dp(8), dp(10), dp(8), dp(10))
             clipChildren = false
             clipToPadding = false
             itemAnimator = null
@@ -135,8 +135,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             layoutManager = LinearLayoutManager(this@ContentBrowserActivity)
             background = BlofyTvDesign.elevatedSurface(24f)
-            elevation = 4f
-            setPadding(8, 10, 8, 10)
+            elevation = dp(4).toFloat()
+            setPadding(dp(8), dp(10), dp(8), dp(10))
             clipChildren = false
             clipToPadding = false
             itemAnimator = null
@@ -159,12 +159,14 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (kind != KIND_LIVE) root.addView(createCatalogStatusRow())
 
         if (phoneMode) {
-            body.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 92).apply { bottomMargin = 10 })
+            body.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(76)).apply { bottomMargin = dp(10) })
             body.addView(streamList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            body.addView(categoryList, LinearLayout.LayoutParams(250, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 20 })
+            val railWidth = when { screenWidthDp >= 1600 -> 244; screenWidthDp >= 1100 -> 228; else -> 206 }
+            body.addView(categoryList, LinearLayout.LayoutParams(dp(railWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(16) })
             if (previewEnabled) {
-                body.addView(streamList, LinearLayout.LayoutParams(420, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 22 })
+                val channelWidth = if (screenWidthDp >= 1600) 410 else 360
+                body.addView(streamList, LinearLayout.LayoutParams(dp(channelWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(18) })
                 body.addView(createPreviewPanel(), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             } else {
                 body.addView(streamList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
@@ -199,7 +201,8 @@ class ContentBrowserActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
+            val activeId = dao.activeProviderId() ?: run { finish(); return@launch }
+            provider = dao.provider(activeId) ?: run { finish(); return@launch }
             dao.categories(provider.id, kind).collect { items ->
                 // All content kinds expose a stable synthetic All entry. For Live this prevents a
                 // stale/empty saved provider category from becoming the only entry path to channels.
@@ -244,7 +247,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         layoutDirection = View.LAYOUT_DIRECTION_RTL
-        setPadding(12, 0, 12, if (phoneMode) 8 else 12)
+        setPadding(dp(12), 0, dp(12), dp(if (phoneMode) 8 else 12))
         background = BlofyTvDesign.elevatedSurface(20f)
         catalogStatus = TextView(this@ContentBrowserActivity).apply {
             text = "جاري التحقق من ${catalogLabel()}..."
@@ -263,15 +266,15 @@ class ContentBrowserActivity : AppCompatActivity() {
             BlofyTvDesign.installTvFocus(this, 16f, 1.025f, false)
             setOnClickListener { refreshMissingCatalog() }
         }
-        addView(catalogRetry, LinearLayout.LayoutParams(if (phoneMode) 170 else 210, if (phoneMode) 58 else 64))
+        addView(catalogRetry, LinearLayout.LayoutParams(dp(if (phoneMode) 150 else 190), dp(if (phoneMode) 52 else 58)))
     }
 
     private fun createPreviewPanel() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         layoutDirection = View.LAYOUT_DIRECTION_RTL
-        setPadding(18, 18, 18, 18)
+        setPadding(dp(18), dp(18), dp(18), dp(18))
         background = BlofyTvDesign.elevatedSurface(26f)
-        elevation = 5f
+        elevation = dp(5).toFloat()
         previewTitle = TextView(this@ContentBrowserActivity).apply {
             text = "اختر قناة"
             textSize = 22f
@@ -279,17 +282,17 @@ class ContentBrowserActivity : AppCompatActivity() {
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
             includeFontPadding = false
-            setPadding(4, 0, 4, 10)
+            setPadding(dp(4), 0, dp(4), dp(10))
         }
-        addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48))
+        addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         addView(TextView(this@ContentBrowserActivity).apply {
             text = "● مباشر  •  المعاينة تبدأ تلقائيًا"
             textSize = 13f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.Mint)
             gravity = Gravity.RIGHT
-            setPadding(4, 0, 4, 10)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 34))
+            setPadding(dp(4), 0, dp(4), dp(10))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
         previewView = PlayerView(this@ContentBrowserActivity).apply {
             useController = false
             player = null
@@ -304,8 +307,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
-            setPadding(4, 12, 4, 0)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 40))
+            setPadding(dp(4), dp(12), dp(4), 0)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
     }
 
     private fun loadStreams(categoryId: String?) {
@@ -368,7 +371,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             catalogLoading = false
             saveCatalogMemorySnapshot()
             updateCatalogState(catalogItems, categoryId)
-            if (result.first.isNotEmpty()) ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(12).map { it.icon })
+            if (result.first.isNotEmpty()) ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon })
         }.also { job ->
             job.invokeOnCompletion { if (generation == catalogGeneration) runOnUiThread { catalogLoading = false } }
         }
@@ -444,7 +447,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             liveLoading = false
             saveLiveMemorySnapshot()
             if (result.first.isNotEmpty()) {
-                ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(12).map { it.icon })
+                ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon })
             }
             if (reset && previewEnabled) startInitialPreview(result.first)
         }.also { job ->
@@ -693,15 +696,18 @@ class ContentBrowserActivity : AppCompatActivity() {
         providerKind = tv.blofy.player.core.provider.ProviderKind.from(provider.providerType)
     )
 
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
     companion object {
         const val EXTRA_KIND = "kind"
         const val KIND_LIVE = "live"
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
         private const val ALL_CATEGORY_ID = "__all__"
-        private const val LIVE_PAGE_SIZE = 96
-        private const val LIVE_PREFETCH_THRESHOLD = 28
-        private const val CATALOG_PAGE_SIZE = 120
-        private const val CATALOG_PREFETCH_THRESHOLD = 36
+        // Keep the first render small so lists become interactive quickly; subsequent pages stream in before the user reaches the end.
+        private const val LIVE_PAGE_SIZE = 48
+        private const val LIVE_PREFETCH_THRESHOLD = 16
+        private const val CATALOG_PAGE_SIZE = 64
+        private const val CATALOG_PREFETCH_THRESHOLD = 20
     }
 }
