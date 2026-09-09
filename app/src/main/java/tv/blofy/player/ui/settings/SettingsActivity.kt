@@ -3,7 +3,13 @@ package tv.blofy.player.ui.settings
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -107,11 +113,11 @@ class SettingsActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setPadding(dp(18), dp(10), dp(18), dp(10))
             background = BlofyTvDesign.badge(dp(14).toFloat())
         }
         updateSyncStatus()
-        page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { bottomMargin = dp(18) })
+        page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { bottomMargin = dp(20) })
 
         grid = GridLayout(this).apply {
             columnCount = if (isTv()) 3 else 2
@@ -166,6 +172,7 @@ class SettingsActivity : AppCompatActivity() {
         page.addView(TextView(this).apply {
             text = "BLOFY PLAYER 2.0"
             BlofyTvDesign.applyCaption(this)
+            letterSpacing = .08f
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(16) })
         scroll.addView(page)
@@ -180,26 +187,41 @@ class SettingsActivity : AppCompatActivity() {
         button = settingButton("", false) {
             val next = (currentIndex() + 1) % values.size
             prefs.edit().putString(key, values[next]).apply()
-            button.text = "$title\n${labels[next]}"
+            button.text = settingLabel(title, labels[next])
             status.text = getString(R.string.setting_saved)
         }
-        button.text = "$title\n${labels[currentIndex()]}"
+        button.text = settingLabel(title, labels[currentIndex()])
         return button
     }
 
     private fun actionCard(title: String, subtitle: String, action: () -> Unit): Button =
-        settingButton("$title\n$subtitle", false, action)
+        settingButton("", false, action).apply { text = settingLabel(title, subtitle) }
+
+    private fun settingLabel(title: String, subtitle: String): SpannableString {
+        val value = "$title\n$subtitle"
+        val styled = SpannableString(value)
+        styled.setSpan(StyleSpan(Typeface.BOLD), 0, title.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val start = title.length + 1
+        if (start < value.length) {
+            styled.setSpan(RelativeSizeSpan(.82f), start, value.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            styled.setSpan(ForegroundColorSpan(BlofyTvDesign.TextMuted), start, value.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        return styled
+    }
 
     private fun settingButton(label: String, compact: Boolean, action: () -> Unit): Button = Button(this).apply {
         text = label
         isAllCaps = false
-        textSize = if (compact) 15f else 14.5f
-        typeface = BlofyTvDesign.BodyTypeface
+        textSize = if (compact) 15f else 15f
+        typeface = if (compact) BlofyTvDesign.LabelTypeface else BlofyTvDesign.BodyTypeface
         setTextColor(Color.WHITE)
-        gravity = Gravity.CENTER
+        gravity = if (compact) Gravity.CENTER else Gravity.CENTER_VERTICAL or Gravity.END
+        textAlignment = if (compact) View.TEXT_ALIGNMENT_CENTER else View.TEXT_ALIGNMENT_VIEW_END
         includeFontPadding = false
-        letterSpacing = 0.005f
-        BlofyTvDesign.installTvFocus(this, dp(if (compact) 18 else 21).toFloat(), if (compact) 1.02f else 1.018f, false)
+        setLineSpacing(dp(2).toFloat(), 1.06f)
+        letterSpacing = 0.004f
+        if (!compact) setPadding(dp(20), dp(12), dp(20), dp(12))
+        BlofyTvDesign.installTvFocus(this, dp(if (compact) 18 else 21).toFloat(), if (compact) 1.012f else 1.01f, false)
         setOnClickListener { action() }
     }
 
@@ -208,7 +230,7 @@ class SettingsActivity : AppCompatActivity() {
         grid.addView(button, GridLayout.LayoutParams().apply {
             columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
             width = 0
-            height = dp(100)
+            height = dp(104)
             setMargins(dp(8), dp(8), dp(8), dp(8))
         })
     }
@@ -262,7 +284,7 @@ class SettingsActivity : AppCompatActivity() {
             if (last > 0L) getString(R.string.setting_status_saved_at, formatSyncTime(last))
             else getString(R.string.setting_status_saved)
         }
-        if (::refreshCard.isInitialized) refreshCard.text = "${getString(R.string.setting_refresh_content)}\n${syncSubtitle()}"
+        if (::refreshCard.isInitialized) refreshCard.text = settingLabel(getString(R.string.setting_refresh_content), syncSubtitle())
     }
 
     private fun syncSubtitle(): String {
@@ -284,8 +306,10 @@ class SettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val stats = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext) }
             if (!isFinishing && ::storageCard.isInitialized) {
-                storageCard.text = "${getString(R.string.setting_storage_local)}\n" +
+                storageCard.text = settingLabel(
+                    getString(R.string.setting_storage_local),
                     getString(R.string.setting_storage_used, LocalStorageManager.format(applicationContext, stats.totalBytes))
+                )
             }
         }
     }
