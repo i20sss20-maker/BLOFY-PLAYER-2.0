@@ -89,15 +89,38 @@ jobs:
           chmod +x tools/build_media3_ffmpeg.sh
           tools/build_media3_ffmpeg.sh
 
+      - name: Test BLOFY with FFmpeg
+        shell: bash
+        run: |
+          set -euxo pipefail
+          AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
+          test -s "$AAR"
+          gradle --no-daemon --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PBLOFY_FFMPEG_AAR="$AAR" \
+            testDebugUnitTest
+
+      - name: Lint BLOFY with FFmpeg
+        shell: bash
+        run: |
+          set -euxo pipefail
+          AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
+          test -s "$AAR"
+          gradle --no-daemon --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PBLOFY_FFMPEG_AAR="$AAR" \
+            lintDebug
+
       - name: Build BLOFY APK with FFmpeg
         shell: bash
         run: |
           set -euxo pipefail
           AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
           test -s "$AAR"
-          gradle --no-daemon \
+          gradle --no-daemon --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
             -PBLOFY_FFMPEG_AAR="$AAR" \
-            testDebugUnitTest lintDebug assembleDebug
+            assembleDebug
 
       - name: Verify FFmpeg is bundled in final APK
         shell: bash
