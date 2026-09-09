@@ -30,8 +30,6 @@ internal class LiveChannelAdapter(
     fun submit(newItems: List<StreamEntity>) = replace(newItems)
 
     fun replace(newItems: List<StreamEntity>) {
-        // Skip only a truly identical snapshot. Stable IDs alone are not enough: a channel may keep
-        // the same key while its name, icon, lock/archive flag or direct source changes after refresh.
         if (items.size == newItems.size && items.indices.all { items[it] == newItems[it] }) return
         items.clear()
         items.addAll(newItems)
@@ -59,15 +57,15 @@ internal class LiveChannelAdapter(
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(5), dp(12), dp(5))
+            setPadding(dp(11), dp(6), dp(13), dp(6))
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
             background = rowBackground(false)
         }
-        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(82)).apply {
-            bottomMargin = dp(5)
+        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(84)).apply {
+            bottomMargin = dp(6)
             marginStart = dp(2)
             marginEnd = dp(2)
         }
@@ -75,19 +73,19 @@ internal class LiveChannelAdapter(
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(5), dp(5), dp(5), dp(5))
             background = GradientDrawable().apply {
-                cornerRadius = dp(10).toFloat()
-                setColor(0xFF120D1A.toInt())
-                setStroke(dp(1), 0xFF433153.toInt())
+                cornerRadius = dp(11).toFloat()
+                setColor(BlofyTvDesign.BackgroundRaised)
+                setStroke(dp(1), BlofyTvDesign.Divider)
             }
         }
-        row.addView(logo, LinearLayout.LayoutParams(dp(52), dp(52)).apply { marginStart = dp(10) })
+        row.addView(logo, LinearLayout.LayoutParams(dp(54), dp(54)).apply { marginStart = dp(11) })
 
         val textBox = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
         }
         val title = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 13.2f)
+            textSize = TvUiTuning.sp(context, 13.4f)
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             maxLines = 2
@@ -97,7 +95,7 @@ internal class LiveChannelAdapter(
             setLineSpacing(0f, 1.02f)
         }
         val meta = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 10.2f)
+            textSize = TvUiTuning.sp(context, 10.4f)
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextMuted)
             maxLines = 1
@@ -110,25 +108,21 @@ internal class LiveChannelAdapter(
             progress = 0
             visibility = View.GONE
             progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
-            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF31233E.toInt())
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.Divider)
         }
         textBox.addView(title, LinearLayout.LayoutParams(-1, 0, 1f))
-        textBox.addView(meta, LinearLayout.LayoutParams(-1, dp(17)))
+        textBox.addView(meta, LinearLayout.LayoutParams(-1, dp(18)))
         textBox.addView(progress, LinearLayout.LayoutParams(-1, dp(3)).apply { topMargin = dp(2) })
-        row.addView(textBox, LinearLayout.LayoutParams(0, dp(63), 1f))
+        row.addView(textBox, LinearLayout.LayoutParams(0, dp(65), 1f))
 
         val badge = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 8.5f)
+            textSize = TvUiTuning.sp(context, 8.6f)
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                cornerRadius = dp(8).toFloat()
-                setColor(0x55382252)
-                setStroke(dp(1), 0x885F3D82.toInt())
-            }
+            background = BlofyTvDesign.badge(dp(9).toFloat())
         }
-        row.addView(badge, LinearLayout.LayoutParams(dp(44), dp(25)).apply { marginStart = dp(7) })
+        row.addView(badge, LinearLayout.LayoutParams(dp(46), dp(26)).apply { marginStart = dp(8) })
         return Holder(row, logo, title, meta, badge, progress)
     }
 
@@ -144,9 +138,6 @@ internal class LiveChannelAdapter(
             holder.logo.setImageResource(R.drawable.blofy_logo)
         }
 
-        // Scrolling must be render-only. Do not query Room or touch network while RecyclerView binds
-        // rows; EPG is refreshed when a stream is actually opened. This mirrors the fast-list model
-        // used by polished TV players and keeps held-DPAD smooth on low-powered boxes.
         renderFocus(holder, holder.itemView.hasFocus())
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnLongClickListener { onLongClick(item); true }
@@ -155,7 +146,7 @@ internal class LiveChannelAdapter(
             view.animate().cancel()
             view.scaleX = 1f
             view.scaleY = 1f
-            view.translationZ = if (focused) 3f else 0f
+            view.translationZ = if (focused) 4f else 0f
             renderFocus(holder, focused)
             if (focused) onFocus(item)
         }
@@ -164,7 +155,7 @@ internal class LiveChannelAdapter(
     private fun renderFocus(holder: Holder, focused: Boolean) {
         holder.itemView.background = rowBackground(focused)
         holder.title.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextPrimary)
-        holder.meta.setTextColor(if (focused) 0xFFE8D8FA.toInt() else BlofyTvDesign.TextMuted)
+        holder.meta.setTextColor(if (focused) BlofyTvDesign.Lavender else BlofyTvDesign.TextMuted)
         holder.badge.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.PurpleSoft)
     }
 
@@ -195,11 +186,5 @@ internal class LiveChannelAdapter(
         val progress: ProgressBar
     ) : RecyclerView.ViewHolder(item)
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF6840A7.toInt(), 0xFF332047.toInt()) else intArrayOf(0xE621172E.toInt(), 0xEB15101C.toInt())
-    ).apply {
-        cornerRadius = 14f
-        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF3B2C49.toInt())
-    }
+    private fun rowBackground(focused: Boolean) = BlofyTvDesign.glassSurface(15f, focused)
 }
