@@ -34,3 +34,5 @@ jobs:
           git add app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt
           git commit -m "fix: add DeviceIdentity import for rc07.24 login fast path"
           git push origin HEAD:rc07-runtime-recovery
+
+# Trigger marker: rc07.24 import repair
