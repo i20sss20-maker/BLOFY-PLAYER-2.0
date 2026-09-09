@@ -21,6 +21,14 @@ object DeviceIdentity {
      * this value remains in SharedPreferences.
      */
     @Synchronized
+    fun cachedIdentity(context: Context): Pair<String, String>? {
+        val preferences = preferences(context)
+        val deviceId = preferences.getString(DEVICE_ID, null)?.takeIf(::validDeviceId) ?: return null
+        val activationCode = preferences.getString(ACTIVE_CODE, null)?.takeIf(::validActivationCode) ?: return null
+        return deviceId to activationCode
+    }
+
+    @Synchronized
     fun deviceId(context: Context): String {
         val preferences = preferences(context)
         preferences.getString(DEVICE_ID, null)?.takeIf(::validDeviceId)?.let { return it }

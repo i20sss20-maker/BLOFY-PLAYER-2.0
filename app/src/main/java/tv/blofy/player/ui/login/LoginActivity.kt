@@ -70,6 +70,7 @@ class LoginActivity : AppCompatActivity() {
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildTvLogin() else buildPhoneLogin())
         if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
         installWebsiteRefreshButton()
+        renderCachedIdentityImmediately()
     }
 
     private fun buildTvLogin(): LinearLayout {
@@ -596,6 +597,19 @@ class LoginActivity : AppCompatActivity() {
 
     private fun openCatalogLoading(providerId: String) {
         startActivity(Intent(this, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, providerId))
+    }
+
+    private fun renderCachedIdentityImmediately() {
+        val cached = DeviceIdentity.cachedIdentity(applicationContext) ?: return
+        deviceView.text = cached.first
+        codeView.text = cached.second
+        status.text = "جاري تحميل القوائم المحفوظة..."
+        val url = ActivationPortalUrl.create(activationEndpoint, cached.first, cached.second) ?: return
+        lastQrIdentity = cached
+        lifecycleScope.launch {
+            val bitmap = withContext(Dispatchers.Default) { createQr(url) }
+            if (lastQrIdentity == cached) qrView.setImageBitmap(bitmap)
+        }
     }
 
     private fun requestIdentityRefresh(fromWebsite: Boolean = false) {

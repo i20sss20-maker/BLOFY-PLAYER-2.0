@@ -79,6 +79,12 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var liveLoading = false
     private var liveGeneration = 0
 
+    private val catalogItems = ArrayList<StreamEntity>(CATALOG_PAGE_SIZE)
+    private var catalogHasMore = true
+    private var catalogLastRowId = 0L
+    private var catalogLoading = false
+    private var catalogGeneration = 0
+
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND) ?: KIND_LIVE }
     private val deviceKind by lazy { DeviceClass.detect(this) }
     private val phoneMode get() = deviceKind == DeviceClass.Kind.PHONE
@@ -139,9 +145,13 @@ class ContentBrowserActivity : AppCompatActivity() {
             recycledViewPool.setMaxRecycledViews(0, 28)
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    if (kind != KIND_LIVE || dy <= 0 || liveLoading || !liveHasMore) return
+                    if (dy <= 0) return
                     val lm = recyclerView.layoutManager as? LinearLayoutManager ?: return
-                    if (lm.findLastVisibleItemPosition() >= liveItems.size - LIVE_PREFETCH_THRESHOLD) loadNextLivePage()
+                    if (kind == KIND_LIVE) {
+                        if (!liveLoading && liveHasMore && lm.findLastVisibleItemPosition() >= liveItems.size - LIVE_PREFETCH_THRESHOLD) loadNextLivePage()
+                    } else if (!catalogLoading && catalogHasMore && lm.findLastVisibleItemPosition() >= catalogItems.size - CATALOG_PREFETCH_THRESHOLD) {
+                        loadNextCatalogPage()
+                    }
                 }
             })
         }
@@ -166,10 +176,12 @@ class ContentBrowserActivity : AppCompatActivity() {
         streamAdapter = LiveChannelAdapter(
             onClick = ::openStream,
             onFocus = { stream ->
+                val index = streamAdapter.indexOfKey(stream.key)
                 if (kind == KIND_LIVE) {
                     rememberStream(stream)
-                    val index = streamAdapter.indexOfKey(stream.key)
                     if (index >= liveItems.size - LIVE_PREFETCH_THRESHOLD) loadNextLivePage()
+                } else if (index >= catalogItems.size - CATALOG_PREFETCH_THRESHOLD) {
+                    loadNextCatalogPage()
                 }
                 if (previewEnabled && !stream.locked) schedulePreview(stream)
             },
@@ -194,7 +206,7 @@ class ContentBrowserActivity : AppCompatActivity() {
                 val displayed = listOf(allCategory()) + items
                 categoryAdapter.submit(displayed)
                 if (kind != KIND_LIVE) {
-                    if (currentCategoryId == null && streamAdapter.itemCount == 0 && streamsJob?.isActive != true) {
+                    if (currentCategoryId == null && catalogItems.isEmpty() && !catalogLoading) {
                         loadStreams(null)
                     }
                     requestInitialCatalogFocus()
@@ -302,16 +314,78 @@ class ContentBrowserActivity : AppCompatActivity() {
             loadLiveStreams(categoryId)
             return
         }
-        if (currentCategoryId == categoryId && streamsJob?.isActive == true) return
+        if (currentCategoryId == categoryId && catalogItems.isNotEmpty()) return
+        saveCatalogMemorySnapshot()
         currentCategoryId = categoryId
+        catalogGeneration += 1
         streamsJob?.cancel()
+        catalogItems.clear()
+        catalogHasMore = true
+        catalogLastRowId = 0L
+        catalogLoading = false
+
+        val cached = CatalogPageMemory.get(catalogMemoryKey())
+        if (cached != null && cached.items.isNotEmpty()) {
+            catalogItems.addAll(cached.items)
+            catalogLastRowId = cached.lastRowId
+            catalogHasMore = cached.total == Int.MAX_VALUE
+            streamAdapter.replace(cached.items)
+            updateCatalogState(cached.items, categoryId)
+            return
+        }
+
+        streamAdapter.replace(emptyList())
+        showCatalogStatus("جاري تحميل ${catalogLabel()}...", retry = false)
+        loadNextCatalogPage(reset = true)
+    }
+
+    private fun loadNextCatalogPage(reset: Boolean = false) {
+        if (!::provider.isInitialized || kind == KIND_LIVE || catalogLoading) return
+        if (!reset && !catalogHasMore) return
+        val generation = catalogGeneration
+        val cursor = if (reset) 0L else catalogLastRowId
+        val categoryId = currentCategoryId
+        catalogLoading = true
         streamsJob = lifecycleScope.launch {
-            BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, categoryId).collect { items ->
-                streamAdapter.submit(items)
-                updateCatalogState(items, categoryId)
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val result = withContext(Dispatchers.IO) {
+                val page = if (categoryId == null) dao.catalogPageAfterAll(provider.id, kind, cursor, CATALOG_PAGE_SIZE)
+                else dao.catalogPageAfterInCategory(provider.id, kind, categoryId, cursor, CATALOG_PAGE_SIZE)
+                val rowId = page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor
+                page to rowId
             }
+            if (generation != catalogGeneration) return@launch
+            catalogLastRowId = result.second
+            catalogHasMore = result.first.size >= CATALOG_PAGE_SIZE
+            if (reset) {
+                catalogItems.clear()
+                catalogItems.addAll(result.first)
+                streamAdapter.replace(result.first)
+            } else {
+                catalogItems.addAll(result.first)
+                streamAdapter.append(result.first)
+            }
+            catalogLoading = false
+            saveCatalogMemorySnapshot()
+            updateCatalogState(catalogItems, categoryId)
+            if (result.first.isNotEmpty()) ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(12).map { it.icon })
+        }.also { job ->
+            job.invokeOnCompletion { if (generation == catalogGeneration) runOnUiThread { catalogLoading = false } }
         }
     }
+
+    private fun saveCatalogMemorySnapshot() {
+        if (kind == KIND_LIVE || !::provider.isInitialized || catalogItems.isEmpty()) return
+        CatalogPageMemory.put(
+            catalogMemoryKey(),
+            catalogItems,
+            if (catalogHasMore) Int.MAX_VALUE else catalogItems.size,
+            catalogLastRowId,
+            null
+        )
+    }
+
+    private fun catalogMemoryKey(): String = "${provider.id}:$kind:${currentCategoryId ?: ALL_CATEGORY_ID}"
 
     private fun loadLiveStreams(categoryId: String?) {
         if (currentCategoryId == categoryId && liveItems.isNotEmpty()) return
@@ -564,6 +638,7 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     override fun onPause() {
         saveLiveMemorySnapshot()
+        saveCatalogMemorySnapshot()
         super.onPause()
     }
 
@@ -603,6 +678,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         livePageJob?.cancel()
         catalogRefreshJob?.cancel()
         liveGeneration += 1
+        catalogGeneration += 1
+        saveCatalogMemorySnapshot()
         stopPreview()
         super.onDestroy()
     }
@@ -624,5 +701,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         private const val ALL_CATEGORY_ID = "__all__"
         private const val LIVE_PAGE_SIZE = 96
         private const val LIVE_PREFETCH_THRESHOLD = 28
+        private const val CATALOG_PAGE_SIZE = 120
+        private const val CATALOG_PREFETCH_THRESHOLD = 36
     }
 }

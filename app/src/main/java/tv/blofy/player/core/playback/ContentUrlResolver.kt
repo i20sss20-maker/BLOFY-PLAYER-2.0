@@ -62,23 +62,26 @@ object ContentUrlResolver {
     ): String? {
         val source = stream.directSource
         if (source.validHttpUrl() == null) return null
-        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, source)
+        val canonical = canonicalLive(provider, profile, stream).takeUnless { it == primary }
+        if (canonical != null) return canonical
+        return ProviderHostResolver.providerOriginFallback(provider.baseUrl, source)
             ?.takeUnless { it == primary }
-        return origin ?: canonicalLive(provider, profile, stream).takeUnless { it == primary }
     }
 
     fun movieFallback(provider: ProviderEntity, stream: StreamEntity): String? {
         val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: return null
-        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, stream.directSource)
+        val canonical = canonicalMovie(provider, stream).takeUnless { it == primary }
+        if (canonical != null) return canonical
+        return ProviderHostResolver.providerOriginFallback(provider.baseUrl, stream.directSource)
             ?.takeUnless { it == primary }
-        return origin ?: canonicalMovie(provider, stream).takeUnless { it == primary }
     }
 
     fun episodeFallback(provider: ProviderEntity, episode: EpisodeEntity): String? {
         val primary = primaryDirectSource(provider.baseUrl, episode.directSource) ?: return null
-        val origin = ProviderHostResolver.providerOriginFallback(provider.baseUrl, episode.directSource)
+        val canonical = canonicalEpisode(provider, episode).takeUnless { it == primary }
+        if (canonical != null) return canonical
+        return ProviderHostResolver.providerOriginFallback(provider.baseUrl, episode.directSource)
             ?.takeUnless { it == primary }
-        return origin ?: canonicalEpisode(provider, episode).takeUnless { it == primary }
     }
 
     fun directFallback(provider: ProviderEntity, stream: StreamEntity): String? = when (stream.kind) {
