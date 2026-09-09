@@ -11,24 +11,24 @@ import android.widget.TextView
  * surfaces, typography and DPAD focus here instead of styling every screen independently.
  */
 object BlofyTvDesign {
-    val Background = Color.rgb(8, 7, 13)
-    val BackgroundRaised = Color.rgb(14, 11, 21)
-    val Surface = Color.rgb(22, 17, 30)
-    val SurfaceRaised = Color.rgb(29, 22, 40)
-    val SurfaceFocused = Color.rgb(68, 39, 101)
+    val Background = Color.rgb(7, 6, 11)
+    val BackgroundRaised = Color.rgb(13, 10, 19)
+    val Surface = Color.rgb(20, 15, 28)
+    val SurfaceRaised = Color.rgb(26, 19, 36)
+    val SurfaceFocused = Color.rgb(61, 35, 90)
 
-    val Purple = Color.rgb(132, 76, 218)
-    val PurpleBright = Color.rgb(180, 116, 255)
-    val PurpleDeep = Color.rgb(58, 31, 88)
-    val PurpleSoft = Color.rgb(211, 186, 240)
-    val Lavender = Color.rgb(230, 216, 245)
+    val Purple = Color.rgb(127, 73, 209)
+    val PurpleBright = Color.rgb(178, 116, 250)
+    val PurpleDeep = Color.rgb(53, 28, 80)
+    val PurpleSoft = Color.rgb(210, 187, 238)
+    val Lavender = Color.rgb(232, 220, 246)
     val Mint = Color.rgb(91, 220, 187)
     val Error = Color.rgb(255, 118, 140)
 
-    val TextPrimary = Color.rgb(251, 249, 253)
-    val TextSecondary = Color.rgb(221, 216, 228)
-    val TextMuted = Color.rgb(151, 143, 163)
-    val Divider = Color.rgb(49, 40, 59)
+    val TextPrimary = Color.rgb(250, 248, 252)
+    val TextSecondary = Color.rgb(218, 213, 225)
+    val TextMuted = Color.rgb(146, 138, 159)
+    val Divider = Color.rgb(48, 38, 58)
 
     const val HeroTitleSp = 42f
     const val DetailTitleSp = 40f
@@ -39,17 +39,17 @@ object BlofyTvDesign {
     const val CaptionSp = 12f
 
     const val ScreenPadding = 30
-    const val PanelPadding = 16
+    const val PanelPadding = 18
     const val RailWidth = 250
     const val CategoryRowHeight = 60
     const val LiveListWidth = 455
-    const val CardRadius = 22
-    const val PanelRadius = 26
-    const val ButtonRadius = 18
-    const val BadgeRadius = 12
-    const val StandardGap = 20
-    const val FocusInMs = 90L
-    const val FocusOutMs = 70L
+    const val CardRadius = 18
+    const val PanelRadius = 22
+    const val ButtonRadius = 16
+    const val BadgeRadius = 10
+    const val StandardGap = 18
+    const val FocusInMs = 80L
+    const val FocusOutMs = 65L
     const val SectionTransitionMs = 120L
 
     val DisplayTypeface: Typeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
@@ -61,45 +61,45 @@ object BlofyTvDesign {
     fun surface(radius: Float = CardRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         if (focused) {
-            intArrayOf(0xFF5D3987.toInt(), 0xFF2B1A3B.toInt(), 0xFF19121F.toInt())
+            intArrayOf(0xFF513173.toInt(), 0xFF2A1A39.toInt(), 0xFF18111F.toInt())
         } else {
-            intArrayOf(0xF5221B2C.toInt(), 0xF517121F.toInt(), 0xF2110E16.toInt())
+            intArrayOf(0xF21D1725.toInt(), 0xF216111D.toInt(), 0xF2100D15.toInt())
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFE0C1FF.toInt() else 0xFF3B3046.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) 0xFFDCC1FA.toInt() else 0xFF382C43.toInt())
     }
 
     fun glassSurface(radius: Float = CardRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         if (focused) {
-            intArrayOf(0xEB5A367F.toInt(), 0xED261A35.toInt(), 0xED16101E.toInt())
+            intArrayOf(0xEB503071.toInt(), 0xEB261934.toInt(), 0xEB15101C.toInt())
         } else {
-            intArrayOf(0xE31D1726.toInt(), 0xE616111D.toInt(), 0xE6110D16.toInt())
+            intArrayOf(0xDF1B1523.toInt(), 0xE014101B.toInt(), 0xE00F0C14.toInt())
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFD7B2FF.toInt() else 0x6B51415F)
+        setStroke(if (focused) 2 else 1, if (focused) 0xFFD6B8F4.toInt() else 0x66483A55)
     }
 
     fun elevatedSurface(radius: Float = PanelRadius.toFloat()) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xF52A2137.toInt(), 0xF51C1626.toInt(), 0xF513101A.toInt())
+        intArrayOf(0xF3241C30.toInt(), 0xF3191422.toInt(), 0xF3110E17.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(1, 0xFF443650.toInt())
+        setStroke(1, 0xFF3C3048.toInt())
     }
 
     fun primaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) {
-            intArrayOf(0xFFBE7CFF.toInt(), 0xFF8A51E3.toInt(), 0xFF6230B4.toInt())
+            intArrayOf(0xFFB979F4.toInt(), 0xFF8750D7.toInt(), 0xFF6232AA.toInt())
         } else {
-            intArrayOf(0xFF8D50E3.toInt(), 0xFF6D35BF.toInt(), 0xFF54279C.toInt())
+            intArrayOf(0xFF874CD5.toInt(), 0xFF6B36B5.toInt(), 0xFF51288F.toInt())
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFF1E1FF.toInt() else 0xFF9A70C9.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) 0xFFF0E1FC.toInt() else 0xFF8964AE.toInt())
     }
 
     fun secondaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) =
@@ -107,10 +107,10 @@ object BlofyTvDesign {
 
     fun badge(radius: Float = BadgeRadius.toFloat()) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0xD6261B32.toInt(), 0xD61A1422.toInt())
+        intArrayOf(0xD421182D.toInt(), 0xD617121E.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(1, 0xFF635078.toInt())
+        setStroke(1, 0xFF584768.toInt())
     }
 
     fun applyTitle(t: TextView) = t.apply {
@@ -162,7 +162,7 @@ object BlofyTvDesign {
     fun installTvFocus(
         v: View,
         radius: Float = CardRadius.toFloat(),
-        scale: Float = 1.025f,
+        scale: Float = 1.018f,
         primary: Boolean = false,
         onFocused: (() -> Unit)? = null
     ) {
@@ -172,7 +172,7 @@ object BlofyTvDesign {
     fun installTvFocusState(
         v: View,
         radius: Float = CardRadius.toFloat(),
-        scale: Float = 1.025f,
+        scale: Float = 1.018f,
         primary: Boolean = false,
         onFocusChanged: (Boolean) -> Unit
     ) {
@@ -197,12 +197,12 @@ object BlofyTvDesign {
             view.animate().cancel()
             view.background = if (hasFocus) focused else normal
             (view as? TextView)?.setTextColor(TextPrimary)
-            val targetScale = if (hasFocus) minOf(scale, 1.016f) else 1f
+            val targetScale = if (hasFocus) minOf(scale, 1.012f) else 1f
             val duration = if (hasFocus) FocusInMs else FocusOutMs
             view.animate()
                 .scaleX(targetScale)
                 .scaleY(targetScale)
-                .translationZ(if (hasFocus) 8f else 0f)
+                .translationZ(if (hasFocus) 6f else 0f)
                 .alpha(1f)
                 .setDuration(duration)
                 .start()
