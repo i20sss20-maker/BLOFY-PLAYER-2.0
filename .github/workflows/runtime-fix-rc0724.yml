@@ -28,6 +28,7 @@ jobs:
       - name: Commit runtime fixes
         shell: bash
         run: |
+          git checkout -- .github/workflows/rc07-release.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add app/src/main/java/tv/blofy/player/core/playback/ContentUrlResolver.kt \
@@ -35,6 +36,6 @@ jobs:
                   app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt \
                   app/src/main/java/tv/blofy/player/ui/login/SplashActivity.kt \
                   app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt \
-                  app/build.gradle.kts .github/workflows/rc07-release.yml tools/check_rc0724_runtime.py
+                  app/build.gradle.kts tools/check_rc0724_runtime.py
           git commit -m "fix: rc07.24 playback and catalog responsiveness"
           git push origin HEAD:rc07-runtime-recovery
