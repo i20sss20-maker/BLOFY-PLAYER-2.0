@@ -74,6 +74,10 @@ class PosterCatalogActivity : AppCompatActivity() {
             DeviceClass.Kind.TABLET -> 12
             DeviceClass.Kind.PHONE -> 6
         }
+        // Size columns from the space left after the category rail, not the whole screen.
+        val contentWidthDp = (widthDp - outerPadding * 2 - railWidth - railGap - 10).coerceAtLeast(1)
+        val minimumCardWidthDp = if (deviceKind == DeviceClass.Kind.PHONE) 108 else 148
+        gridColumns = (contentWidthDp / minimumCardWidthDp).coerceIn(1, 7)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

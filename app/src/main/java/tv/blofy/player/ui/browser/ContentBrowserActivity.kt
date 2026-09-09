@@ -317,7 +317,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             loadLiveStreams(categoryId)
             return
         }
-        if (currentCategoryId == categoryId && catalogItems.isNotEmpty()) return
+        if (currentCategoryId == categoryId && (catalogItems.isNotEmpty() || catalogLoading)) return
         saveCatalogMemorySnapshot()
         currentCategoryId = categoryId
         catalogGeneration += 1
@@ -391,7 +391,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun catalogMemoryKey(): String = "${provider.id}:$kind:${currentCategoryId ?: ALL_CATEGORY_ID}"
 
     private fun loadLiveStreams(categoryId: String?) {
-        if (currentCategoryId == categoryId && liveItems.isNotEmpty()) return
+        if (currentCategoryId == categoryId && (liveItems.isNotEmpty() || liveLoading)) return
         saveLiveMemorySnapshot()
         currentCategoryId = categoryId
         rememberCategory(categoryId)
@@ -555,7 +555,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         lastPreviewKey = stream.key
         rememberStream(stream)
         previewTitle?.text = stream.name
-        previewSession?.play(url = route.primaryUrl, fallbackUrl = route.fallbackUrl)
+        previewSession?.play(url = route.primaryUrl, fallbackUrl = route.fallbackUrl, fallbackUrls = route.fallbackUrls)
     }
 
     private fun refreshShortEpg(stream: StreamEntity) {
@@ -623,6 +623,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
             putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
             putExtra(PlayerActivity.EXTRA_FALLBACK_URL, fallbackUrl)
+            putStringArrayListExtra(PlayerActivity.EXTRA_FALLBACK_URLS, ArrayList(ContentUrlResolver.recoveryUrls(stream)))
             putExtra(PlayerActivity.EXTRA_RESUME_MS, 0L)
             putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
             putExtra(PlayerActivity.EXTRA_CATEGORY_ID, currentCategoryId)

@@ -133,7 +133,7 @@ class BlofyPlaybackSession(
                             } else {
                                 null
                             }
-                            if (alternateUrl != null) {
+                            if (alternateUrl != null && !fallbackState.wasAttempted(alternateUrl)) {
                                 alternateLiveFormatAttempted = true
                                 playInternalFallback(alternateUrl)
                             } else {
@@ -145,7 +145,7 @@ class BlofyPlaybackSession(
             })
         }
 
-    fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null) {
+    fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null, fallbackUrls: List<String> = emptyList()) {
         retryHandler.removeCallbacksAndMessages(null)
         seekRecoveryGeneration++
         automaticRetries = 0
@@ -154,7 +154,7 @@ class BlofyPlaybackSession(
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
         val preferredUrl = PlaybackIntelligence.preferredUrl(appContext, profile, contentKind, url)
-        fallbackState.begin(preferredUrl, fallbackUrl)
+        fallbackState.begin(preferredUrl, fallbackUrl, listOf(url) + fallbackUrls)
         firstFrameRecorded = false
         playStartedAtMs = SystemClock.elapsedRealtime()
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, preferredUrl)
@@ -254,6 +254,8 @@ class BlofyPlaybackSession(
     private fun playInternalFallback(url: String) {
         fallbackState.markUrlAttempted(url)
         automaticRetries = MAX_AUTOMATIC_RETRIES
+        // A new route needs its own stall window, not the old host's one-minute cooldown.
+        lastLiveStallRecoveryAtMs = 0L
         firstFrameRecorded = false
         playStartedAtMs = SystemClock.elapsedRealtime()
         resetLiveStallTimer(keepPosition = false)

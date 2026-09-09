@@ -45,13 +45,18 @@ class PosterStreamAdapter(
             marginEnd = dp(4)
             bottomMargin = dp(10)
         }
-        val frame = FrameLayout(parent.context)
+        val frame = object : FrameLayout(parent.context) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val width = View.MeasureSpec.getSize(widthMeasureSpec)
+                super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(width * 3 / 2, View.MeasureSpec.EXACTLY))
+            }
+        }
         val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             setBackgroundColor(Color.rgb(18, 13, 25))
             clipToOutline = true
         }
-        frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(176)))
+        frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         val rating = TextView(parent.context).apply {
             textSize = 9.2f
             typeface = BlofyTvDesign.LabelTypeface
@@ -66,7 +71,7 @@ class PosterStreamAdapter(
             }
         }
         frame.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = dp(7); marginEnd = dp(7) })
-        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(176)))
+        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val title = TextView(parent.context).apply {
             textSize = 11.3f
             typeface = BlofyTvDesign.MediumTypeface
@@ -77,7 +82,8 @@ class PosterStreamAdapter(
             setPadding(dp(4), dp(6), dp(4), 0)
             includeFontPadding = false
         }
-        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
+        val titleHeight = maxOf(dp(36), title.lineHeight * 2 + title.paddingTop + title.paddingBottom)
+        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, titleHeight))
         val meta = TextView(parent.context).apply {
             textSize = 9.3f
             typeface = BlofyTvDesign.MediumTypeface

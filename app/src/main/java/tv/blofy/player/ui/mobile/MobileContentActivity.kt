@@ -180,7 +180,7 @@ class MobileContentActivity : AppCompatActivity() {
                     putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
                     putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
                     putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream))
+                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream)); putStringArrayListExtra(PlayerActivity.EXTRA_FALLBACK_URLS, ArrayList(ContentUrlResolver.recoveryUrls(stream)))
                     putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
                     putExtra(PlayerActivity.EXTRA_CATEGORY_ID, stream.categoryId)
                     putExtra(PlayerActivity.EXTRA_TITLE, stream.name)

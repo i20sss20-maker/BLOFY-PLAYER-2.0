@@ -16,6 +16,14 @@ object TwoPaneFocusGuard {
     private val logicalPositions = WeakHashMap<RecyclerView, Int>()
     private val pendingPositions = WeakHashMap<RecyclerView, Int>()
     private val pendingCleanups = WeakHashMap<RecyclerView, () -> Unit>()
+    private data class PendingClick(
+        val position: Int,
+        val adapter: WeakReference<RecyclerView.Adapter<*>>,
+        val itemId: Long?,
+        var released: Boolean = false,
+    )
+    private val pendingClicks = WeakHashMap<RecyclerView, PendingClick>()
+    private val consumedConfirmKeys = WeakHashMap<RecyclerView, Int>()
 
     fun registerTopTarget(root: View, target: View) {
         val recyclers = ArrayList<RecyclerView>()
@@ -30,6 +38,32 @@ object TwoPaneFocusGuard {
         focusCategories: () -> Boolean,
         focusContent: () -> Boolean,
     ): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER ||
+            event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+            val lists = listOf(categories, content)
+            val captured = lists.firstOrNull { consumedConfirmKeys[it] == event.keyCode }
+            if (captured != null) {
+                if (event.action == KeyEvent.ACTION_UP) {
+                    consumedConfirmKeys.remove(captured)
+                    if (event.isCanceled || !captured.hasFocus()) pendingClicks.remove(captured)
+                    else {
+                        pendingClicks[captured]?.released = true
+                        deliverPendingClick(captured)
+                    }
+                }
+                return true
+            }
+            val owner = lists.firstOrNull { it.hasFocus() }
+            val position = owner?.let { pendingPositions[it] }
+            if (event.action == KeyEvent.ACTION_DOWN && owner != null && position != null) {
+                val adapter = owner.adapter ?: return true
+                if (position !in 0 until adapter.itemCount) return true
+                consumedConfirmKeys[owner] = event.keyCode
+                pendingClicks[owner] = PendingClick(position, WeakReference(adapter), if (adapter.hasStableIds()) adapter.getItemId(position) else null)
+                return true
+            }
+            return false
+        }
         if (event.action != KeyEvent.ACTION_DOWN) return false
         val direction = when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> View.FOCUS_UP
@@ -48,9 +82,8 @@ object TwoPaneFocusGuard {
         val count = adapter.itemCount
         if (count <= 0) return true
 
-        // During an off-screen move focus is intentionally parked on RecyclerView. Keep a logical
-        // position so held/repeated DPAD presses continue from the requested row instead of being
-        // dropped or escaping to Search/the first item.
+        // Keep a logical position while the requested row is being attached, so held/repeated
+        // DPAD presses continue from that row instead of escaping to Search/the first item.
         val holderPosition = focused?.takeIf { it !== owner }
             ?.let(owner::findContainingViewHolder)
             ?.bindingAdapterPosition
@@ -140,7 +173,8 @@ object TwoPaneFocusGuard {
 
         val itemId = if (adapter.hasStableIds()) adapter.getItemId(position) else null
         pendingPositions[list] = position
-        parkFocus(list)
+        // Retain the visible row while scrolling. Only park when entering from another pane.
+        if (!list.hasFocus()) parkFocus(list)
         var listener: RecyclerView.OnChildAttachStateChangeListener? = null
         var attempt: Runnable? = null
         var timeout: Runnable? = null
@@ -170,12 +204,16 @@ object TwoPaneFocusGuard {
             if (!stillValid() || list.isComputingLayout) return false
             val target = list.findViewHolderForAdapterPosition(position)?.itemView ?: return false
             return target.requestFocus().also { moved ->
-                if (moved) target.requestRectangleOnScreen(Rect(0, 0, target.width, target.height), true)
+                if (moved) {
+                    target.requestRectangleOnScreen(Rect(0, 0, target.width, target.height), true)
+                    deliverPendingClick(list)
+                }
             }
         }
 
         attempt = Runnable {
-            if (!stillValid() || tryFocus()) cleanup()
+            if (!stillValid()) { pendingClicks.remove(list); cleanup() }
+            else if (tryFocus()) cleanup()
         }
         listener = object : RecyclerView.OnChildAttachStateChangeListener {
             override fun onChildViewAttachedToWindow(view: View) {
@@ -190,7 +228,7 @@ object TwoPaneFocusGuard {
             override fun onChildViewDetachedFromWindow(view: View) = Unit
         }
         timeout = Runnable {
-            if (stillValid() && !tryFocus()) parkFocus(list)
+            if (!stillValid() || !tryFocus()) pendingClicks.remove(list)
             cleanup()
         }
         pendingCleanups[list] = ::cleanup
@@ -204,6 +242,22 @@ object TwoPaneFocusGuard {
     private fun cancelPending(list: RecyclerView) {
         pendingCleanups.remove(list)?.invoke()
         pendingPositions.remove(list)
+        pendingClicks.remove(list)
+    }
+
+    private fun deliverPendingClick(list: RecyclerView) {
+        val click = pendingClicks[list] ?: return
+        if (!click.released) return
+        val adapter = click.adapter.get()
+        if (adapter == null || list.adapter !== adapter || click.position !in 0 until adapter.itemCount ||
+            (click.itemId != null && adapter.getItemId(click.position) != click.itemId)) {
+            pendingClicks.remove(list)
+            return
+        }
+        val target = list.findViewHolderForAdapterPosition(click.position)?.itemView ?: return
+        if (!target.hasFocus()) return
+        pendingClicks.remove(list)
+        target.performClick()
     }
 
     private fun parkFocus(list: RecyclerView) {

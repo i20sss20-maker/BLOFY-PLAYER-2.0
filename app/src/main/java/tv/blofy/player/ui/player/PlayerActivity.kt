@@ -160,7 +160,8 @@ class PlayerActivity : AppCompatActivity() {
         session.play(
             url = url,
             resumeMs = intent.getLongExtra(EXTRA_RESUME_MS, 0L),
-            fallbackUrl = intent.getStringExtra(EXTRA_FALLBACK_URL)
+            fallbackUrl = intent.getStringExtra(EXTRA_FALLBACK_URL),
+            fallbackUrls = intent.getStringArrayListExtra(EXTRA_FALLBACK_URLS).orEmpty()
         )
         updateTitle(currentTitle)
         refreshFavoriteState()
@@ -669,7 +670,7 @@ class PlayerActivity : AppCompatActivity() {
                 session.play(
                     url = ContentUrlResolver.episode(provider, target),
                     resumeMs = 0L,
-                    fallbackUrl = ContentUrlResolver.directFallback(target)
+                    fallbackUrl = ContentUrlResolver.directFallback(target), fallbackUrls = ContentUrlResolver.recoveryUrls(target)
                 )
             }
             autoNextTriggered = false
@@ -855,7 +856,7 @@ class PlayerActivity : AppCompatActivity() {
         showCachedChannelPosition(stream.remoteId)
         session.play(
             url = ContentUrlResolver.live(provider, profile, stream),
-            fallbackUrl = ContentUrlResolver.directFallback(stream)
+            fallbackUrl = ContentUrlResolver.directFallback(stream), fallbackUrls = ContentUrlResolver.recoveryUrls(stream)
         )
         refreshFavoriteState()
         requestShortEpgRefresh(provider, stream)
@@ -1261,6 +1262,7 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS =
             "allow_cross_protocol_redirects"
         const val EXTRA_FALLBACK_URL = "fallback_url"
+        const val EXTRA_FALLBACK_URLS = "fallback_urls"
         const val EXTRA_RESUME_MS = "resume_ms"
         const val EXTRA_STREAM_ID = "stream_id"
         const val EXTRA_CATEGORY_ID = "category_id"
