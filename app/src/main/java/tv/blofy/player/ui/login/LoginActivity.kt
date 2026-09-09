@@ -34,6 +34,7 @@ import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationPortalUrl
 import tv.blofy.player.core.identity.ActivationRemoteClient
+import tv.blofy.player.core.identity.DeviceIdentity
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.core.provider.RemoteProviderProfileClient
