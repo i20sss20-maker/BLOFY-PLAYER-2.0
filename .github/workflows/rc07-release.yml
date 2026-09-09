@@ -185,3 +185,5 @@ jobs:
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
+
+# rc07.24 signed rerun marker after canonical-fallback regression updates
