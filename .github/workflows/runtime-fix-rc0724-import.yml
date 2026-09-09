@@ -1,0 +1,36 @@
+name: Apply rc07.24 Login Import Fix
+
+on:
+  push:
+    branches: [rc07-runtime-recovery]
+    paths:
+      - .github/workflows/runtime-fix-rc0724-import.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rc07-runtime-recovery
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply LoginActivity import fix
+        run: python3 tools/fix_rc0724_login_import.py
+      - name: Verify import
+        run: grep -Fq 'import tv.blofy.player.core.identity.DeviceIdentity' app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt
+          git commit -m "fix: add DeviceIdentity import for rc07.24 login fast path"
+          git push origin HEAD:rc07-runtime-recovery
