@@ -35,55 +35,61 @@ class PosterStreamAdapter(
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
-            setPadding(dp(4), dp(4), dp(4), dp(5))
-            background = card(false)
+            setPadding(dp(5), dp(5), dp(5), dp(6))
+            background = card(false, dp(16).toFloat(), dp(1))
             clipToOutline = true
             elevation = 0f
+        }
+        root.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            marginStart = dp(4)
+            marginEnd = dp(4)
+            bottomMargin = dp(10)
         }
         val frame = FrameLayout(parent.context)
         val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(Color.rgb(20, 15, 31))
+            setBackgroundColor(Color.rgb(18, 13, 25))
             clipToOutline = true
         }
         frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(176)))
         val rating = TextView(parent.context).apply {
-            textSize = 9.4f
+            textSize = 9.2f
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            setPadding(dp(6), dp(2), dp(6), dp(2))
+            setPadding(dp(7), dp(2), dp(7), dp(2))
             visibility = View.GONE
             background = GradientDrawable().apply {
                 cornerRadius = dp(8).toFloat()
-                setColor(0xE85A2A82.toInt())
-                setStroke(dp(1), BlofyTvDesign.PurpleBright)
+                setColor(0xE5522B78.toInt())
+                setStroke(dp(1), 0xFFB77BEA.toInt())
             }
         }
-        frame.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = dp(6); marginEnd = dp(6) })
+        frame.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = dp(7); marginEnd = dp(7) })
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(176)))
         val title = TextView(parent.context).apply {
-            textSize = 11.2f
+            textSize = 11.3f
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.START
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(dp(3), dp(5), dp(3), 0)
+            setPadding(dp(4), dp(6), dp(4), 0)
             includeFontPadding = false
         }
-        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
+        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
         val meta = TextView(parent.context).apply {
-            textSize = 9.4f
+            textSize = 9.3f
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.START
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(dp(3), 0, dp(3), 0)
+            setPadding(dp(4), 0, dp(4), 0)
+            includeFontPadding = false
         }
-        root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(17)))
-        return Holder(root, image, title, meta, rating)
+        root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(18)))
+        return Holder(root, image, title, meta, rating, dp(16).toFloat(), dp(1))
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -103,7 +109,7 @@ class PosterStreamAdapter(
             view.animate().cancel()
             view.scaleX = 1f
             view.scaleY = 1f
-            view.translationZ = if (focused) 3f else 0f
+            view.translationZ = if (focused) 4f else 0f
             renderFocus(holder, focused)
             if (focused) {
                 val currentPosition = holder.bindingAdapterPosition
@@ -113,11 +119,11 @@ class PosterStreamAdapter(
     }
 
     private fun renderFocus(holder: Holder, focused: Boolean) {
-        holder.itemView.background = card(focused)
+        holder.itemView.background = card(focused, holder.radius, holder.stroke)
         holder.title.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
         holder.title.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
         holder.meta.setTextColor(if (focused) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        holder.rating.alpha = if (focused) 1f else .92f
+        holder.rating.alpha = if (focused) 1f else .9f
     }
 
     override fun onViewRecycled(holder: Holder) {
@@ -137,13 +143,22 @@ class PosterStreamAdapter(
 
     override fun getItemCount(): Int = items.size
 
-    class Holder(itemView: View, val image: ImageView, val title: TextView, val meta: TextView, val rating: TextView) : RecyclerView.ViewHolder(itemView)
+    class Holder(
+        itemView: View,
+        val image: ImageView,
+        val title: TextView,
+        val meta: TextView,
+        val rating: TextView,
+        val radius: Float,
+        val stroke: Int
+    ) : RecyclerView.ViewHolder(itemView)
 
-    private fun card(focused: Boolean) = GradientDrawable(
+    private fun card(focused: Boolean, radius: Float, stroke: Int) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF5A3187.toInt(), 0xFF20142B.toInt()) else intArrayOf(0xFF1D1428.toInt(), 0xFF120D1A.toInt())
+        if (focused) intArrayOf(0xFF4B2D69.toInt(), 0xFF241730.toInt(), 0xFF16101D.toInt())
+        else intArrayOf(0xFF1A1423.toInt(), 0xFF120E19.toInt(), 0xFF0E0B12.toInt())
     ).apply {
-        cornerRadius = 14f
-        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF3A2B47.toInt())
+        cornerRadius = radius
+        setStroke(if (focused) stroke * 2 else stroke, if (focused) 0xFFD5B4F3.toInt() else 0xFF352A40.toInt())
     }
 }
