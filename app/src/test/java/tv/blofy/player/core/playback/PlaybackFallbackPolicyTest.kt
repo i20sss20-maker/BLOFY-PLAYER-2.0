@@ -66,4 +66,16 @@ class PlaybackFallbackPolicyTest {
         )
         assertNull(state.nextConfiguredUrl())
     }
+
+    @Test
+    fun silentStallConsumesConfiguredFallbackOnlyOnce() {
+        val primary = "http://hidden.example.net:9090/live/u/p/100.ts"
+        val fallback = "http://panel.example.com:8080/live/u/p/100.ts"
+        val state = PlaybackFallbackState()
+        state.begin(primaryUrl = primary, fallbackUrl = fallback)
+
+        assertEquals(fallback, state.nextConfiguredUrl())
+        state.markConfiguredUrlAttempted(fallback)
+        assertNull(state.nextConfiguredUrl())
+    }
 }
