@@ -38,3 +38,5 @@ jobs:
           path: release/
           if-no-files-found: error
           retention-days: 30
+
+# direct user-triggered production build
