@@ -57,28 +57,28 @@ internal class LiveChannelAdapter(
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(11), dp(6), dp(13), dp(6))
+            setPadding(dp(12), dp(7), dp(14), dp(7))
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
             background = rowBackground(false)
         }
-        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(84)).apply {
-            bottomMargin = dp(6)
-            marginStart = dp(2)
-            marginEnd = dp(2)
+        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(82)).apply {
+            bottomMargin = dp(8)
+            marginStart = dp(3)
+            marginEnd = dp(3)
         }
         val logo = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(5), dp(5), dp(5), dp(5))
             background = GradientDrawable().apply {
-                cornerRadius = dp(11).toFloat()
+                cornerRadius = dp(10).toFloat()
                 setColor(BlofyTvDesign.BackgroundRaised)
                 setStroke(dp(1), BlofyTvDesign.Divider)
             }
         }
-        row.addView(logo, LinearLayout.LayoutParams(dp(54), dp(54)).apply { marginStart = dp(11) })
+        row.addView(logo, LinearLayout.LayoutParams(dp(52), dp(52)).apply { marginStart = dp(12) })
 
         val textBox = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -92,7 +92,7 @@ internal class LiveChannelAdapter(
             ellipsize = android.text.TextUtils.TruncateAt.END
             gravity = Gravity.RIGHT
             includeFontPadding = false
-            setLineSpacing(0f, 1.02f)
+            setLineSpacing(0f, 1.03f)
         }
         val meta = TextView(context).apply {
             textSize = TvUiTuning.sp(context, 10.4f)
@@ -113,16 +113,16 @@ internal class LiveChannelAdapter(
         textBox.addView(title, LinearLayout.LayoutParams(-1, 0, 1f))
         textBox.addView(meta, LinearLayout.LayoutParams(-1, dp(18)))
         textBox.addView(progress, LinearLayout.LayoutParams(-1, dp(3)).apply { topMargin = dp(2) })
-        row.addView(textBox, LinearLayout.LayoutParams(0, dp(65), 1f))
+        row.addView(textBox, LinearLayout.LayoutParams(0, dp(63), 1f))
 
         val badge = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 8.6f)
+            textSize = TvUiTuning.sp(context, 8.4f)
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.CENTER
             background = BlofyTvDesign.badge(dp(9).toFloat())
         }
-        row.addView(badge, LinearLayout.LayoutParams(dp(46), dp(26)).apply { marginStart = dp(8) })
+        row.addView(badge, LinearLayout.LayoutParams(dp(44), dp(25)).apply { marginStart = dp(10) })
         return Holder(row, logo, title, meta, badge, progress)
     }
 
@@ -186,5 +186,5 @@ internal class LiveChannelAdapter(
         val progress: ProgressBar
     ) : RecyclerView.ViewHolder(item)
 
-    private fun rowBackground(focused: Boolean) = BlofyTvDesign.glassSurface(15f, focused)
+    private fun rowBackground(focused: Boolean) = BlofyTvDesign.glassSurface(16f, focused)
 }
