@@ -9,6 +9,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -27,6 +28,7 @@ import java.util.UUID
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
 class LocalEntryIntegrationTest {
+    @get:Rule internal val databaseIsolation = DatabaseIsolationRule()
     private val app get() = RuntimeEnvironment.getApplication()
     private lateinit var server: MockWebServer
     private lateinit var provider: ProviderEntity

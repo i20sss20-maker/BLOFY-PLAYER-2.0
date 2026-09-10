@@ -3,6 +3,7 @@ package tv.blofy.player.ui.common
 import android.content.Context
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import tv.blofy.player.core.device.DeviceClass
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
@@ -11,7 +12,7 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 
-/** Compact TV actions: quiet at rest, high contrast when reached with a remote. */
+/** Shared cinematic actions: compact visuals and a distinct remote focus state. */
 object CinemaStyle {
     val Background = 0xFF090B10.toInt()
     val Surface = 0xFF191D25.toInt()
@@ -29,8 +30,8 @@ object CinemaStyle {
 
     fun buttonBackground(context: Context, primary: Boolean, focused: Boolean) = GradientDrawable().apply {
         cornerRadius = 6 * context.resources.displayMetrics.density
-        setColor(if (primary || focused) White else 0xCC252A33.toInt())
-        if (focused) setStroke((2 * context.resources.displayMetrics.density).toInt(), Accent)
+        setColor(if (primary) Accent else if (focused) 0xFF30293F.toInt() else 0xCC252A33.toInt())
+        if (focused) setStroke((2 * context.resources.displayMetrics.density).toInt(), White)
     }
 
     fun styleButton(button: Button, primary: Boolean = false, onFocus: ((Boolean) -> Unit)? = null) {
@@ -45,7 +46,7 @@ object CinemaStyle {
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.END
             isFocusable = true
-            isFocusableInTouchMode = true
+            isFocusableInTouchMode = DeviceClass.detect(context) == DeviceClass.Kind.TV
             stateListAnimator = null
             backgroundTintList = null
             elevation = 0f
@@ -53,7 +54,7 @@ object CinemaStyle {
             setTextColor(if (primary) Background else White)
             setOnFocusChangeListener { view, focused ->
                 background = buttonBackground(context, primary, focused)
-                setTextColor(if (primary || focused) Background else White)
+                setTextColor(if (primary) Background else White)
                 view.animate().cancel()
                 view.animate().scaleX(if (focused) 1.02f else 1f).scaleY(if (focused) 1.02f else 1f)
                     .setDuration(120).start()
