@@ -1,5 +1,7 @@
 # Receiver first registration
 
+The initial Refresh from website action in playlist management also checks activation before requesting the authenticated portal list. A first-install integration test verifies the request order and that refresh controls are restored on completion.
+
 On a fresh Android installation, the welcome screen's Enter button previously waited for activation and portal synchronization. When the portal contained no playlist, the action returned to the same screen without opening registration. A regression test reproduces this with real Enter key down/up events and a successful activation response.
 
 Enter now opens playlist management when there is no selected local provider. The registration page is available even before the device can reach the service. A user who linked playlists on the website can retrieve them with Refresh from website; selected, committed local libraries retain their existing entry path.
