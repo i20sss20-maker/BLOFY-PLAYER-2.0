@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Xtream playback URL policy. Playback engines are intentionally untouched. */
 object ContentUrlResolver {
-    data class LiveRoute(val primaryUrl: String, val fallbackUrl: String?)
+    data class LiveRoute(val primaryUrl: String, val fallbackUrl: String?, val fallbackUrls: List<String> = emptyList())
 
     private data class RouteContext(
         val provider: ProviderEntity,
@@ -26,7 +26,39 @@ object ContentUrlResolver {
         recentRoutes[provider.id] = RouteContext(provider, profile)
         val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalLive(provider, profile, stream)
         val fallback = liveFallbackForPrimary(provider, profile, stream, primary)
-        return LiveRoute(primary, fallback)
+        return LiveRoute(primary, fallback, recoveryUrls(provider, profile, stream).filterNot { it == primary })
+    }
+
+    /** Ordered routes for one item. Preserve signed paths/queries; never invent a CDN path. */
+    fun recoveryUrls(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): List<String> {
+        val canonical = when (stream.kind) {
+            "live" -> canonicalLive(provider, profile, stream)
+            "movie" -> canonicalMovie(provider, stream)
+            else -> return emptyList()
+        }
+        return listOfNotNull(
+            primaryDirectSource(provider.baseUrl, stream.directSource),
+            ProviderHostResolver.providerOriginFallback(provider.baseUrl, stream.directSource),
+            canonical,
+            if (stream.kind == "live") alternateLiveFormat(canonical, profile) else null,
+        ).distinct()
+    }
+
+    fun recoveryUrls(provider: ProviderEntity, episode: EpisodeEntity): List<String> = listOfNotNull(
+        primaryDirectSource(provider.baseUrl, episode.directSource),
+        ProviderHostResolver.providerOriginFallback(provider.baseUrl, episode.directSource),
+        canonicalEpisode(provider, episode),
+    ).distinct()
+
+    fun recoveryUrls(stream: StreamEntity): List<String> {
+        val context = recentRoutes[stream.providerId] ?: return listOfNotNull(stream.directSource.safeContextFreeFallback())
+        val profile = context.liveProfile ?: ProviderProfile(providerKey = context.provider.id)
+        return recoveryUrls(context.provider, profile, stream)
+    }
+
+    fun recoveryUrls(episode: EpisodeEntity): List<String> {
+        val context = recentRoutes[episode.providerId] ?: return listOfNotNull(episode.directSource.safeContextFreeFallback())
+        return recoveryUrls(context.provider, episode)
     }
 
     fun live(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String =

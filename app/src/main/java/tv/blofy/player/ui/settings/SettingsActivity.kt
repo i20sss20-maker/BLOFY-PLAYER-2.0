@@ -1,5 +1,7 @@
 package tv.blofy.player.ui.settings
 
+import tv.blofy.player.ui.common.CinemaStyle
+
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
@@ -7,7 +9,6 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
-import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.view.Gravity
@@ -76,7 +77,7 @@ class SettingsActivity : AppCompatActivity() {
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = uiDirection
-            setPadding(dp(46), dp(30), dp(46), dp(34))
+            setPadding(dp(36), dp(22), dp(36), dp(24))
             clipChildren = false
             clipToPadding = false
         }
@@ -88,36 +89,37 @@ class SettingsActivity : AppCompatActivity() {
         }
         val titleBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             layoutDirection = uiDirection
         }
         titleBox.addView(TextView(this).apply {
             text = getString(R.string.settings_title)
             BlofyTvDesign.applyTitle(this)
-            gravity = Gravity.END
+            textSize = 26f
+            gravity = Gravity.START
         })
         titleBox.addView(TextView(this).apply {
             text = getString(R.string.settings_subtitle)
             BlofyTvDesign.applyCaption(this)
-            textSize = 14f
-            gravity = Gravity.END
+            textSize = 12f
+            gravity = Gravity.START
             setPadding(0, dp(6), 0, 0)
         })
-        header.addView(titleBox, LinearLayout.LayoutParams(0, dp(80), 1f))
-        val back = settingButton("↩  ${getString(R.string.back)}", true) { finish() }.apply { id = View.generateViewId() }
-        header.addView(back, LinearLayout.LayoutParams(dp(156), dp(54)))
-        page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(88)))
+        header.addView(titleBox, LinearLayout.LayoutParams(0, dp(56), 1f))
+        val back = settingButton(getString(R.string.back), true) { finish() }.apply { id = View.generateViewId() }
+        header.addView(back, LinearLayout.LayoutParams(dp(98), dp(CinemaStyle.ActionHeight)))
+        page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
 
         status = TextView(this).apply {
-            textSize = 13.5f
+            textSize = 12f
             typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.PurpleSoft)
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            setPadding(dp(18), dp(10), dp(18), dp(10))
-            background = BlofyTvDesign.badge(dp(14).toFloat())
+            setTextColor(CinemaStyle.Muted)
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            setPadding(dp(14), 0, dp(14), 0)
+            background = CinemaStyle.surface(this@SettingsActivity)
         }
         updateSyncStatus()
-        page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { bottomMargin = dp(20) })
+        page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)).apply { bottomMargin = dp(12) })
 
         grid = GridLayout(this).apply {
             columnCount = if (isTv()) 3 else 2
@@ -197,31 +199,30 @@ class SettingsActivity : AppCompatActivity() {
     private fun actionCard(title: String, subtitle: String, action: () -> Unit): Button =
         settingButton("", false, action).apply { text = settingLabel(title, subtitle) }
 
-    private fun settingLabel(title: String, subtitle: String): SpannableString {
+    private fun settingLabel(rawTitle: String, subtitle: String): SpannableString {
+        val title = rawTitle.replace(Regex("^[^\\p{L}\\p{N}]+"), "")
         val value = "$title\n$subtitle"
         val styled = SpannableString(value)
         styled.setSpan(StyleSpan(Typeface.BOLD), 0, title.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         val start = title.length + 1
         if (start < value.length) {
             styled.setSpan(RelativeSizeSpan(.82f), start, value.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            styled.setSpan(ForegroundColorSpan(BlofyTvDesign.TextMuted), start, value.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         return styled
     }
 
     private fun settingButton(label: String, compact: Boolean, action: () -> Unit): Button = Button(this).apply {
         text = label
-        isAllCaps = false
-        textSize = if (compact) 15f else 15f
-        typeface = if (compact) BlofyTvDesign.LabelTypeface else BlofyTvDesign.BodyTypeface
-        setTextColor(Color.WHITE)
-        gravity = if (compact) Gravity.CENTER else Gravity.CENTER_VERTICAL or Gravity.END
-        textAlignment = if (compact) View.TEXT_ALIGNMENT_CENTER else View.TEXT_ALIGNMENT_VIEW_END
-        includeFontPadding = false
-        setLineSpacing(dp(2).toFloat(), 1.06f)
-        letterSpacing = 0.004f
-        if (!compact) setPadding(dp(20), dp(12), dp(20), dp(12))
-        BlofyTvDesign.installTvFocus(this, dp(if (compact) 18 else 21).toFloat(), if (compact) 1.012f else 1.01f, false)
+        CinemaStyle.styleButton(this)
+        if (!compact) {
+            setSingleLine(false)
+            maxLines = 3
+            textSize = 13.5f
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+            setLineSpacing(dp(2).toFloat(), 1f)
+        }
         setOnClickListener { action() }
     }
 
@@ -230,8 +231,8 @@ class SettingsActivity : AppCompatActivity() {
         grid.addView(button, GridLayout.LayoutParams().apply {
             columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
             width = 0
-            height = dp(104)
-            setMargins(dp(8), dp(8), dp(8), dp(8))
+            height = dp(76)
+            setMargins(dp(5), dp(5), dp(5), dp(5))
         })
     }
 

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cinema_episode_title">Épisode %1$d</string>
+    <string name="cinema_episode_completed">✓ Vu</string>
+    <string name="cinema_episode_resume">Reprendre %1$d%%</string>
+    <string name="cinema_episode_play">▶ Lire</string>
+</resources>

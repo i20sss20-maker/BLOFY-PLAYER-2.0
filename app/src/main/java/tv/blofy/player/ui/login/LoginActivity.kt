@@ -53,6 +53,7 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var deviceKind: DeviceClass.Kind
     private lateinit var deviceView: TextView
     private lateinit var codeView: TextView
+    private lateinit var qrMessage: TextView
     private lateinit var qrView: ImageView
     private lateinit var addPlaylist: Button
     private lateinit var connectButton: Button
@@ -61,7 +62,7 @@ class LoginActivity : AppCompatActivity() {
     private var connectJob: Job? = null
     private var playlistJob: Job? = null
     private var identityJob: Job? = null
-    private var lastQrIdentity: Pair<String, String>? = null
+    private var lastQrUrl: String? = null
     private var renderedPlaylists: List<List<String>>? = null
     private var websiteRefreshButton: Button? = null
 
@@ -76,236 +77,151 @@ class LoginActivity : AppCompatActivity() {
 
     private fun buildTvLogin(): LinearLayout {
         createIdentityViews(false)
+        val direction = resources.configuration.layoutDirection
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(34), dp(16), dp(34), dp(18))
+            layoutDirection = direction
+            setPadding(dp(32), dp(20), dp(32), dp(20))
             background = AppCompatResources.getDrawable(this@LoginActivity, R.drawable.blofy_home_background)
         }
-
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(4), 0, dp(4), 0)
         }
         header.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-        }, LinearLayout.LayoutParams(dp(126), dp(74)))
-        val headerText = LinearLayout(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, LinearLayout.LayoutParams(dp(78), dp(50)).apply { marginEnd = dp(16) })
+        header.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            addView(loginText(R.string.login_welcome_title, 24f, true))
+            addView(loginText(R.string.login_welcome_hint, 12f))
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        refreshCodeButton = actionButton(getString(R.string.refresh_from_website)) { requestIdentityRefresh(true) }.apply {
+            textSize = 12f
         }
-        headerText.addView(TextView(this).apply {
-            text = "BLOFY PLAYER  •  PREMIUM"
-            textSize = 11.5f
-            letterSpacing = .11f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(BlofyTvDesign.PurpleBright)
-            gravity = Gravity.RIGHT
-        })
-        headerText.addView(TextView(this).apply {
-            text = "كل شيء يبدأ من هنا"
-            textSize = 31f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT
-            includeFontPadding = false
-        })
-        headerText.addView(TextView(this).apply {
-            text = "فعّل جهازك، اختر قائمتك، وادخل مباشرة إلى BLOFY"
-            textSize = 13.5f
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.TextSecondary)
-            gravity = Gravity.RIGHT
-        })
-        header.addView(headerText, LinearLayout.LayoutParams(0, dp(78), 1f).apply { marginEnd = dp(12) })
-        header.addView(TextView(this).apply {
-            text = "●  SECURE ACCESS"
-            textSize = 11.5f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(BlofyTvDesign.Mint)
-            gravity = Gravity.CENTER
-            background = secureBadge()
-        }, LinearLayout.LayoutParams(dp(154), dp(40)))
-        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(86)))
+        header.addView(refreshCodeButton, LinearLayout.LayoutParams(dp(196), dp(44)).apply { marginStart = dp(16) })
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
 
         val workspace = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
-            gravity = Gravity.CENTER
+            // Match the selected language; the English UI must not retain Arabic ordering.
+            layoutDirection = direction
             clipChildren = false
             clipToPadding = false
         }
-
         val activation = LinearLayout(this).apply {
+            tag = "blofy_login_activation_panel"
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(24), dp(17), dp(24), dp(17))
-            background = premiumPanelBackground(true)
-            elevation = dp(9).toFloat()
-            clipChildren = false
-        }
-        activation.addView(TextView(this).apply {
-            text = "تفعيل جهاز BLOFY"
-            textSize = 22f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.CENTER
-        })
-        activation.addView(TextView(this).apply {
-            text = "امسح الرمز بالكاميرا لإدارة هذا الجهاز بسرعة"
-            textSize = 12.5f
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.CENTER
-            setPadding(0, dp(3), 0, dp(9))
-        })
-
-        val qrFrame = FrameLayout(this).apply {
-            background = qrGlowBackground()
-            elevation = dp(10).toFloat()
-            setPadding(dp(9), dp(9), dp(9), dp(9))
-            addView(qrView, FrameLayout.LayoutParams(-1, -1))
-            addView(TextView(this@LoginActivity).apply {
-                text = "SCAN TO ACTIVATE"
-                textSize = 9.5f
-                letterSpacing = .08f
-                typeface = BlofyTvDesign.HeadingTypeface
-                setTextColor(0xFF6E3FA4.toInt())
-                gravity = Gravity.CENTER
-                background = GradientDrawable().apply {
-                    cornerRadius = dp(10).toFloat()
-                    setColor(0xFFF8F3FF.toInt())
-                }
-            }, FrameLayout.LayoutParams(dp(128), dp(25), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(8) })
-        }
-        activation.addView(qrFrame, LinearLayout.LayoutParams(dp(218), dp(218)))
-
-        val steps = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.CENTER
-            setPadding(0, dp(9), 0, dp(4))
-        }
-        steps.addView(stepChip("1", "امسح QR"), LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(4) })
-        steps.addView(stepChip("2", "أضف قائمتك"), LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(4); marginEnd = dp(4) })
-        steps.addView(stepChip("3", "ابدأ المشاهدة"), LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(4) })
-        activation.addView(steps, LinearLayout.LayoutParams(-1, dp(51)))
-
-        activation.addView(label("رقم الجهاز"), LinearLayout.LayoutParams(-1, dp(24)).apply { topMargin = dp(2) })
-        deviceView.apply {
-            textSize = 18f
-            gravity = Gravity.CENTER
-            setPadding(dp(12), 0, dp(12), 0)
-            background = premiumFieldBackground(false)
-            setTextColor(BlofyTvDesign.TextPrimary)
-        }
-        activation.addView(deviceView, LinearLayout.LayoutParams(-1, dp(49)))
-        activation.addView(label("رمز الربط"), LinearLayout.LayoutParams(-1, dp(24)).apply { topMargin = dp(5) })
-        codeView.apply {
-            textSize = 30f
-            letterSpacing = .18f
-            gravity = Gravity.CENTER
-            setTextColor(BlofyTvDesign.PurpleBright)
-            background = premiumFieldBackground(true)
-        }
-        activation.addView(codeView, LinearLayout.LayoutParams(-1, dp(57)))
-        status.apply {
-            textSize = 12.8f
-            gravity = Gravity.CENTER
-            setTextColor(BlofyTvDesign.PurpleSoft)
-            background = statusBackground()
-            setPadding(dp(12), 0, dp(12), 0)
-        }
-        activation.addView(status, LinearLayout.LayoutParams(-1, dp(39)).apply { topMargin = dp(8) })
-        refreshCodeButton = actionButton("↻  تحديث حالة التفعيل") { requestIdentityRefresh(fromWebsite = true) }
-        activation.addView(refreshCodeButton, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(8) })
-
-        val playlistsPanel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.TOP
-            setPadding(dp(25), dp(20), dp(25), dp(20))
+            setPadding(dp(18), dp(16), dp(18), dp(16))
             background = premiumPanelBackground(false)
-            elevation = dp(8).toFloat()
-            clipChildren = false
         }
-        val playlistHeader = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        playlistHeader.addView(TextView(this).apply {
-            text = "قوائم التشغيل"
-            textSize = 24f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT
-        }, LinearLayout.LayoutParams(0, dp(42), 1f))
-        playlistHeader.addView(TextView(this).apply {
-            text = "● جاهز للدخول"
-            textSize = 11.8f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(BlofyTvDesign.Mint)
+        activation.addView(loginText(R.string.login_link_tv, 19f, true).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(-1, dp(28)))
+        activation.addView(loginText(R.string.login_scan_hint, 12f).apply {
             gravity = Gravity.CENTER
-            background = secureBadge()
-        }, LinearLayout.LayoutParams(dp(138), dp(36)))
-        playlistsPanel.addView(playlistHeader)
-        playlistsPanel.addView(TextView(this).apply {
-            text = "اختر قائمتك المحفوظة أو أضف قائمة جديدة. العودة لاحقًا تفتح من الكاش مباشرة."
-            textSize = 13.2f
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT
-            setPadding(0, dp(2), 0, dp(12))
+            maxLines = 2
+        }, LinearLayout.LayoutParams(-1, dp(36)))
+        val qrSize = (resources.configuration.screenHeightDp - 360).coerceIn(112, 180)
+        activation.addView(qrPanel(), LinearLayout.LayoutParams(dp(qrSize), dp(qrSize)).apply {
+            topMargin = dp(8)
+            bottomMargin = dp(8)
         })
-        playlistsPanel.addView(featureStrip(), LinearLayout.LayoutParams(-1, dp(72)).apply { bottomMargin = dp(12) })
+        val identity = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = premiumFieldBackground(false)
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+        }
+        fun identityField(labelId: Int, value: TextView, size: Float) = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            addView(loginText(labelId, 10f).apply { gravity = Gravity.CENTER })
+            value.apply {
+                textSize = size
+                layoutDirection = View.LAYOUT_DIRECTION_LTR
+                textDirection = View.TEXT_DIRECTION_LTR
+                gravity = Gravity.CENTER
+                setSingleLine(true)
+                setPadding(0, 0, 0, 0)
+            }
+            addView(value, LinearLayout.LayoutParams(-1, dp(30)))
+        }
+        identity.addView(identityField(R.string.login_device_label, deviceView, 12f), LinearLayout.LayoutParams(0, -1, 1.8f))
+        identity.addView(identityField(R.string.login_pairing_label, codeView, 20f), LinearLayout.LayoutParams(0, -1, 1f))
+        activation.addView(identity, LinearLayout.LayoutParams(-1, dp(56)))
+        activation.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+        status.apply {
+            textSize = 11f
+            maxLines = 2
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 0)
+        }
+        activation.addView(status, LinearLayout.LayoutParams(-1, dp(32)).apply { topMargin = dp(6) })
 
+        val playlists = LinearLayout(this).apply {
+            tag = "blofy_login_playlists_panel"
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(20), dp(24), dp(20))
+            background = premiumPanelBackground(false)
+            clipChildren = false
+            clipToPadding = false
+        }
+        playlists.addView(loginText(R.string.login_your_playlists, 21f, true), LinearLayout.LayoutParams(-1, dp(32)))
+        playlists.addView(loginText(R.string.login_playlists_hint, 13f).apply { maxLines = 2 }, LinearLayout.LayoutParams(-1, dp(42)))
         val scroll = ScrollView(this).apply {
+            // Saved cards own focus; an empty scroll viewport must not consume a DPAD stop.
+            isFocusable = false
+            isFocusableInTouchMode = false
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             clipToPadding = false
+            setPadding(dp(4), dp(6), dp(4), dp(6))
         }
         playlistRow = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.TOP
             addView(subtitle(getString(R.string.login_loading_saved_playlists)), LinearLayout.LayoutParams(-1, dp(86)))
         }
         scroll.addView(playlistRow, FrameLayout.LayoutParams(-1, -2))
-        playlistsPanel.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-
+        playlists.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.CENTER
-            setPadding(0, dp(10), 0, 0)
+            setPadding(0, dp(12), 0, 0)
+            clipChildren = false
+            clipToPadding = false
         }
-        addPlaylist = primaryActionButton("＋  إضافة / إدارة القوائم") { startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java)) }
-        connectButton = actionButton("▶  دخول إلى BLOFY") { startOrCancelConnect() }
-        actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(58), 1f).apply { marginStart = dp(8) })
-        actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(58), 1f))
-        playlistsPanel.addView(actions)
-
-        workspace.addView(activation, LinearLayout.LayoutParams(0, -1, .88f).apply { marginEnd = dp(12) })
-        workspace.addView(playlistsPanel, LinearLayout.LayoutParams(0, -1, 1.12f).apply { marginStart = dp(12) })
-        root.addView(workspace, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(7) })
-        root.addView(TextView(this).apply {
-            text = "BLOFY SECURE SESSION  •  بياناتك محفوظة محليًا  •  القوائم لا يعاد تحميلها عند كل دخول"
-            textSize = 11.5f
-            letterSpacing = .02f
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(-1, dp(27)).apply { topMargin = dp(3) })
+        addPlaylist = primaryActionButton(getString(R.string.login_add_playlist)) {
+            startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java))
+        }.apply { textSize = 14f }
+        connectButton = actionButton(getString(R.string.login_enter_blofy)) { startOrCancelConnect() }.apply { textSize = 14f }
+        actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(12) })
+        actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(48), 1f))
+        playlists.addView(actions)
+        workspace.addView(activation, LinearLayout.LayoutParams(0, -1, .38f).apply { marginEnd = dp(18) })
+        workspace.addView(playlists, LinearLayout.LayoutParams(0, -1, .62f))
+        root.addView(workspace, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(16) })
+        root.addView(loginText(R.string.login_remote_hint, 10f).apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(-1, dp(20)))
         return root
     }
 
-    private fun buildPhoneLogin(): LinearLayout {
+    private fun loginText(labelId: Int, size: Float, heading: Boolean = false) = TextView(this).apply {
+        setText(labelId)
+        textSize = size
+        typeface = if (heading) BlofyTvDesign.HeadingTypeface else BlofyTvDesign.BodyTypeface
+        setTextColor(if (heading) BlofyTvDesign.TextPrimary else BlofyTvDesign.TextSecondary)
+        gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        includeFontPadding = false
+    }
+
+    private fun qrPanel() = FrameLayout(this).apply {
+        tag = "blofy_login_qr_panel"
+        background = qrBackground()
+        addView(qrView, FrameLayout.LayoutParams(-1, -1))
+        addView(qrMessage, FrameLayout.LayoutParams(-1, -1))
+    }
+
+    private fun buildPhoneLogin(): View {
         createIdentityViews(true)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -318,14 +234,18 @@ class LoginActivity : AppCompatActivity() {
         root.addView(subtitle("فعّل جهازك ثم اختر قائمة التشغيل"))
         deviceView.background = fieldBackground(); root.addView(deviceView, LinearLayout.LayoutParams(-1, dp(54)))
         codeView.background = premiumFieldBackground(true); root.addView(codeView, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(8) })
-        root.addView(qrView, LinearLayout.LayoutParams(dp(180), dp(180)).apply { topMargin = dp(12) })
+        root.addView(qrPanel(), LinearLayout.LayoutParams(dp(180), dp(180)).apply { topMargin = dp(12) })
         status.background = statusBackground(); root.addView(status, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
         addPlaylist = primaryActionButton("إضافة / إدارة القوائم") { startActivity(Intent(this, PlaylistActivity::class.java)) }
         connectButton = actionButton("دخول") { startOrCancelConnect() }
         refreshCodeButton = actionButton("تحديث") { requestIdentityRefresh(fromWebsite = true) }
         root.addView(addPlaylist, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(12) })
         root.addView(connectButton, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(10) })
-        return root
+        root.addView(refreshCodeButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
+        return ScrollView(this).apply {
+            isFillViewport = true
+            addView(root, FrameLayout.LayoutParams(-1, -2))
+        }
     }
 
     private fun createIdentityViews(phone: Boolean) {
@@ -344,8 +264,15 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }
         qrView = ImageView(this).apply {
-            contentDescription = "رمز تفعيل BLOFY"
+            contentDescription = getString(R.string.login_qr_description)
+            visibility = View.INVISIBLE
+            scaleType = ImageView.ScaleType.FIT_CENTER
             background = qrBackground()
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        }
+        qrMessage = loginText(R.string.login_qr_loading, 12f).apply {
+            gravity = Gravity.CENTER
+            setTextColor(0xFF43364F.toInt())
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
         status = TextView(this).apply {
@@ -355,50 +282,6 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(dp(10), dp(8), dp(10), dp(8))
         }
-    }
-
-    private fun stepChip(number: String, textValue: String) = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
-        background = stepBackground()
-        addView(TextView(this@LoginActivity).apply {
-            text = number
-            textSize = 11f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFF8246D9.toInt()) }
-        }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) })
-        addView(TextView(this@LoginActivity).apply {
-            text = textValue
-            textSize = 10.8f
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.TextSecondary)
-            gravity = Gravity.CENTER
-            maxLines = 1
-        })
-    }
-
-    private fun featureStrip() = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
-        gravity = Gravity.CENTER
-        background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF2B183C.toInt(), 0xFF1B1328.toInt())).apply {
-            cornerRadius = dp(17).toFloat()
-            setStroke(dp(1), 0xFF5D3E77.toInt())
-        }
-        addView(featurePoint("⚡", "فتح سريع", "من الكاش"), LinearLayout.LayoutParams(0, -1, 1f))
-        addView(featurePoint("✓", "قائمة آمنة", "محفوظة محليًا"), LinearLayout.LayoutParams(0, -1, 1f))
-        addView(featurePoint("◉", "جهاز واحد", "هوية مستقرة"), LinearLayout.LayoutParams(0, -1, 1f))
-    }
-
-    private fun featurePoint(icon: String, title: String, caption: String) = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER
-        addView(TextView(this@LoginActivity).apply { text = icon; textSize = 17f; setTextColor(BlofyTvDesign.PurpleBright); gravity = Gravity.CENTER })
-        addView(TextView(this@LoginActivity).apply { text = title; textSize = 11.5f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER })
-        addView(TextView(this@LoginActivity).apply { text = caption; textSize = 9.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER })
     }
 
     private fun startOrCancelConnect() {
@@ -416,7 +299,7 @@ class LoginActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 status.text = getString(R.string.refresh_site_failed)
             } finally {
-                connectButton.text = "▶  دخول إلى BLOFY"
+                connectButton.setText(R.string.login_enter_blofy)
                 if (connectJob === coroutineContext[Job]) connectJob = null
             }
         }
@@ -542,14 +425,14 @@ class LoginActivity : AppCompatActivity() {
         isFocusableInTouchMode = true
         isClickable = true
         background = playlistCardBackground(provider.enabled, false)
-        val info = LinearLayout(this@LoginActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT }
+        val info = LinearLayout(this@LoginActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START }
         info.addView(TextView(this@LoginActivity).apply {
             text = provider.name
             textSize = 16f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             maxLines = 1
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         info.addView(TextView(this@LoginActivity).apply {
             val type = if (provider.providerType.equals("xtream", true)) "Xtream" else "M3U"
@@ -557,7 +440,7 @@ class LoginActivity : AppCompatActivity() {
             textSize = 11.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         addView(info, LinearLayout.LayoutParams(0, -1, 1f))
         addView(TextView(this@LoginActivity).apply {
@@ -590,9 +473,9 @@ class LoginActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(dp(54), -1))
         addView(LinearLayout(this@LoginActivity).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-            addView(TextView(this@LoginActivity).apply { text = "ابدأ بإضافة أول قائمة"; textSize = 14f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.RIGHT })
-            addView(TextView(this@LoginActivity).apply { text = message; textSize = 11.5f; typeface = BlofyTvDesign.BodyTypeface; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            addView(TextView(this@LoginActivity).apply { text = "ابدأ بإضافة أول قائمة"; textSize = 14f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.START })
+            addView(TextView(this@LoginActivity).apply { text = message; textSize = 11.5f; typeface = BlofyTvDesign.BodyTypeface; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.START })
         }, LinearLayout.LayoutParams(0, -1, 1f))
     }
 
@@ -604,13 +487,8 @@ class LoginActivity : AppCompatActivity() {
         val cached = DeviceIdentity.cachedIdentity(applicationContext) ?: return
         deviceView.text = cached.first
         codeView.text = cached.second
-        status.text = "جاري تحميل القوائم المحفوظة..."
-        val url = ActivationPortalUrl.create(activationEndpoint, cached.first, cached.second) ?: return
-        lastQrIdentity = cached
-        lifecycleScope.launch {
-            val bitmap = withContext(Dispatchers.Default) { createQr(url) }
-            if (lastQrIdentity == cached) qrView.setImageBitmap(bitmap)
-        }
+        status.setText(R.string.login_loading_saved_playlists)
+        lifecycleScope.launch { renderIdentity(cached.first, cached.second) }
     }
 
     private fun requestIdentityRefresh(fromWebsite: Boolean = false) {
@@ -663,23 +541,9 @@ class LoginActivity : AppCompatActivity() {
         // A website refresh updates data only. Entering a playlist is an explicit user action.
     }
 
-    /** Same website control as before, now owned directly by this screen rather than reflection. */
+    /** Keep refresh in the layout flow so it cannot cover headings or the QR code. */
     private fun installWebsiteRefreshButton() {
-        val content = findViewById<FrameLayout>(android.R.id.content)
-        val compact = deviceKind == DeviceClass.Kind.PHONE
-        val tablet = deviceKind == DeviceClass.Kind.TABLET
-        val button = actionButton(getString(R.string.refresh_from_website)) { requestIdentityRefresh(true) }.apply {
-            tag = "blofy_login_portal_refresh"
-        }
-        websiteRefreshButton = button
-        content.addView(button, FrameLayout.LayoutParams(
-            if (compact) FrameLayout.LayoutParams.MATCH_PARENT else dp(if (tablet) 250 else 236),
-            dp(if (compact) 48 else 50), Gravity.TOP or Gravity.END
-        ).apply {
-            topMargin = dp(if (compact) 12 else 96)
-            marginEnd = dp(if (compact) 16 else if (tablet) 24 else 42)
-            if (compact) marginStart = dp(16)
-        })
+        websiteRefreshButton = refreshCodeButton.apply { tag = "blofy_login_portal_refresh" }
     }
 
     private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) {
@@ -693,12 +557,24 @@ class LoginActivity : AppCompatActivity() {
     private suspend fun renderIdentity(deviceId: String, activationCode: String) {
         deviceView.text = deviceId
         codeView.text = activationCode
-        val identity = deviceId to activationCode
-        if (lastQrIdentity == identity) return
         val url = ActivationPortalUrl.create(activationEndpoint, deviceId, activationCode)
-        val bitmap = if (url == null) null else withContext(Dispatchers.Default) { createQr(url) }
+        if (url == null) {
+            lastQrUrl = null
+            qrView.setImageDrawable(null)
+            qrView.visibility = View.INVISIBLE
+            qrMessage.setText(R.string.login_qr_unavailable)
+            qrMessage.visibility = View.VISIBLE
+            return
+        }
+        if (lastQrUrl == url && qrView.drawable != null) return
+        val bitmap = withContext(Dispatchers.Default) { createQr(url) }
+        if (deviceView.text.toString() != deviceId || codeView.text.toString() != activationCode ||
+            ActivationPortalUrl.create(activationEndpoint, deviceId, activationCode) != url) return
         qrView.setImageBitmap(bitmap)
-        lastQrIdentity = identity
+        qrView.visibility = View.VISIBLE
+        qrMessage.visibility = View.GONE
+        // Cache only a rendered URL. A cancelled render or missing endpoint must remain retryable.
+        lastQrUrl = url
     }
 
     internal suspend fun applyRemoteProviderProfile(endpoint: String, dao: BlofyDao, providerId: String) {
@@ -760,14 +636,6 @@ class LoginActivity : AppCompatActivity() {
         setOnClickListener { action() }
     }
 
-    private fun label(value: String) = TextView(this).apply {
-        text = value
-        textSize = 12.2f
-        typeface = BlofyTvDesign.BodyTypeface
-        setTextColor(BlofyTvDesign.TextMuted)
-        gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-    }
-
     private fun title(value: String, size: Float) = TextView(this).apply {
         text = value
         textSize = size
@@ -816,23 +684,6 @@ class LoginActivity : AppCompatActivity() {
     private fun qrBackground() = GradientDrawable().apply {
         cornerRadius = dp(18).toFloat()
         setColor(Color.WHITE)
-    }
-
-    private fun qrGlowBackground() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFFB56BFF.toInt(), 0xFF6C35B5.toInt(), 0xFF3F215E.toInt())).apply {
-        cornerRadius = dp(24).toFloat()
-        setStroke(dp(2), 0xFFD7B2FF.toInt())
-    }
-
-    private fun secureBadge() = GradientDrawable().apply {
-        cornerRadius = dp(14).toFloat()
-        setColor(0x221FCB91)
-        setStroke(dp(1), 0x6654D3A9)
-    }
-
-    private fun stepBackground() = GradientDrawable().apply {
-        cornerRadius = dp(13).toFloat()
-        setColor(0xFF1E152A.toInt())
-        setStroke(dp(1), 0xFF4D365F.toInt())
     }
 
     private fun miniCircle() = GradientDrawable().apply {

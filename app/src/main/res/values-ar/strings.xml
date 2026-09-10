@@ -128,4 +128,17 @@
     <string name="storage_cleaning">جاري تنظيف التخزين المحلي…</string>
     <string name="storage_cleaned">✓ تم تنظيف %1$s بدون حذف بياناتك</string>
     <string name="storage_clean_failed">تعذر تنظيف بعض الملفات — بياناتك لم تتأثر</string>
+    <string name="login_welcome_title">مرحبًا بك في BLOFY</string>
+    <string name="login_welcome_hint">مشاهدتك القادمة تبدأ هنا.</string>
+    <string name="login_link_tv">اربط تلفزيونك</string>
+    <string name="login_scan_hint">امسح الرمز بجوالك لإدارة هذا الجهاز.</string>
+    <string name="login_device_label">رقم الجهاز</string>
+    <string name="login_pairing_label">رمز الربط</string>
+    <string name="login_your_playlists">قوائمك</string>
+    <string name="login_playlists_hint">اختر قائمة محفوظة أو أضف اشتراكك لبدء المشاهدة.</string>
+    <string name="login_add_playlist">إضافة / إدارة</string>
+    <string name="login_remote_hint">تنقّل بالأسهم · اضغط OK للاختيار</string>
+    <string name="login_qr_description">رمز QR لربط الجهاز</string>
+    <string name="login_qr_loading">جاري إعداد رمز الربط…</string>
+    <string name="login_qr_unavailable">ربط الجهاز غير متاح في هذه النسخة. يمكنك إضافة قائمة مباشرة.</string>
 </resources>

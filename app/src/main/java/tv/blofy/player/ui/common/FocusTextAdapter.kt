@@ -1,6 +1,5 @@
 package tv.blofy.player.ui.common
 
-import android.graphics.Color
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -98,8 +97,8 @@ class FocusTextAdapter<T : Any>(
             textSize = TvUiTuning.sp(context, 13f)
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            layoutDirection = context.resources.configuration.layoutDirection
             setPadding(TvUiTuning.dp(context, 16), 0, TvUiTuning.dp(context, 16), 0)
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
@@ -107,10 +106,10 @@ class FocusTextAdapter<T : Any>(
             isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
-            background = itemBackground(false)
+            background = CinemaStyle.surface(context, filledFocus = true)
         }
-        view.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TvUiTuning.dp(context, 56)).apply {
-            bottomMargin = TvUiTuning.dp(context, 8)
+        view.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TvUiTuning.dp(context, 46)).apply {
+            bottomMargin = TvUiTuning.dp(context, 6)
             marginStart = TvUiTuning.dp(context, 3)
             marginEnd = TvUiTuning.dp(context, 3)
         }
@@ -122,8 +121,8 @@ class FocusTextAdapter<T : Any>(
                 focusedView.scaleY = 1f
                 focusedView.translationZ = if (focused) TvUiTuning.dp(context, 4).toFloat() else 0f
                 text.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
-                text.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
-                focusedView.background = itemBackground(focused)
+                text.setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
+                focusedView.background = CinemaStyle.surface(context, focused, filledFocus = true)
                 if (focused) {
                     restorePending = false
                     val position = holder.bindingAdapterPosition
@@ -144,7 +143,7 @@ class FocusTextAdapter<T : Any>(
             holder.text.typeface = BlofyTvDesign.MediumTypeface
             holder.text.setTextColor(BlofyTvDesign.TextSecondary)
         }
-        holder.text.background = itemBackground(holder.text.hasFocus())
+        holder.text.background = CinemaStyle.surface(holder.text.context, holder.text.hasFocus(), filledFocus = true)
         holder.text.setOnClickListener { onClick(item) }
         holder.text.setOnLongClickListener { onLongClick?.invoke(item); onLongClick != null }
         if (restorePending && position == focusedPosition) {
@@ -181,5 +180,4 @@ class FocusTextAdapter<T : Any>(
         }
     }
 
-    private fun itemBackground(focused: Boolean) = BlofyTvDesign.glassSurface(16f, focused)
 }

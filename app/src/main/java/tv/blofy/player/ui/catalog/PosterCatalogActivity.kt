@@ -1,5 +1,7 @@
 package tv.blofy.player.ui.catalog
 
+import tv.blofy.player.ui.common.CinemaStyle
+
 import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
@@ -48,6 +50,7 @@ class PosterCatalogActivity : AppCompatActivity() {
     private var loadingPage = false
     private var generation = 0
     private var gridColumns = 6
+    private val focusedPosterKeys = mutableMapOf<String, String>()
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty().ifBlank { KIND_MOVIE } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,7 +68,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             DeviceClass.Kind.PHONE -> 8
         }
         val railWidth = when (deviceKind) {
-            DeviceClass.Kind.TV -> 228
+            DeviceClass.Kind.TV -> 190
             DeviceClass.Kind.TABLET -> 180
             DeviceClass.Kind.PHONE -> 112
         }
@@ -74,6 +77,10 @@ class PosterCatalogActivity : AppCompatActivity() {
             DeviceClass.Kind.TABLET -> 12
             DeviceClass.Kind.PHONE -> 6
         }
+        // Size columns from the space left after the category rail, not the whole screen.
+        val contentWidthDp = (widthDp - outerPadding * 2 - railWidth - railGap - 10).coerceAtLeast(1)
+        val minimumCardWidthDp = if (deviceKind == DeviceClass.Kind.PHONE) 108 else 132
+        gridColumns = (contentWidthDp / minimumCardWidthDp).coerceIn(1, 7)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -89,18 +96,18 @@ class PosterCatalogActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             layoutDirection = resources.configuration.layoutDirection
             textSize = when (deviceKind) {
-                DeviceClass.Kind.TV -> 17f
+                DeviceClass.Kind.TV -> 14f
                 DeviceClass.Kind.TABLET -> 16f
                 DeviceClass.Kind.PHONE -> 14f
             }
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
             setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20), 0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20), 0)
-            background = BlofyTvDesign.glassSurface(dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 18).toFloat())
+            background = CinemaStyle.surface(this@PosterCatalogActivity)
             isFocusable = true
             isFocusableInTouchMode = deviceKind == DeviceClass.Kind.TV
             isClickable = true
-            elevation = dp(2).toFloat()
+            elevation = 0f
             setOnClickListener {
                 startActivity(Intent(this@PosterCatalogActivity, SearchActivity::class.java)
                     .putExtra(SearchActivity.EXTRA_KIND, kind))
@@ -110,11 +117,12 @@ class PosterCatalogActivity : AppCompatActivity() {
                     requestSelectedCategoryFocus()
                 } else false
             }
-            BlofyTvDesign.installTvFocusState(this, dp(16).toFloat(), 1.01f, false) { focused ->
-                setTextColor(if (focused) BlofyTvDesign.TextPrimary else BlofyTvDesign.TextSecondary)
+            setOnFocusChangeListener { _, focused ->
+                background = CinemaStyle.surface(this@PosterCatalogActivity, focused, filledFocus = true)
+                setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
             }
         }
-        root.addView(searchBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 54)).apply {
+        root.addView(searchBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 40)).apply {
             bottomMargin = dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12)
         })
 
@@ -130,13 +138,13 @@ class PosterCatalogActivity : AppCompatActivity() {
             gravity = Gravity.TOP
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 5 else 9), dp(8), dp(if (deviceKind == DeviceClass.Kind.PHONE) 5 else 9), dp(8))
-            background = BlofyTvDesign.glassSurface(dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20).toFloat())
-            elevation = dp(2).toFloat()
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            elevation = 0f
         }
         rail.addView(TextView(this).apply {
             text = getString(R.string.categories)
             BlofyTvDesign.applyHeading(this)
-            textSize = if (deviceKind == DeviceClass.Kind.PHONE) 13f else 17f
+            textSize = if (deviceKind == DeviceClass.Kind.PHONE) 13f else 14f
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 38 else 44)))
         categoryList = RecyclerView(this).apply {
@@ -165,21 +173,21 @@ class PosterCatalogActivity : AppCompatActivity() {
             text = getString(if (kind == KIND_SERIES) R.string.series else R.string.movies)
             BlofyTvDesign.applyTitle(this)
             textSize = when (deviceKind) {
-                DeviceClass.Kind.TV -> 28f
+                DeviceClass.Kind.TV -> 24f
                 DeviceClass.Kind.TABLET -> 24f
                 DeviceClass.Kind.PHONE -> 20f
             }
             gravity = Gravity.START
-        }, LinearLayout.LayoutParams(0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 54), 1f))
+        }, LinearLayout.LayoutParams(0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 40), 1f))
         countView = TextView(this).apply {
             textSize = if (deviceKind == DeviceClass.Kind.PHONE) 10.5f else 12f
             typeface = BlofyTvDesign.MediumTypeface
-            setTextColor(BlofyTvDesign.PurpleSoft)
+            setTextColor(CinemaStyle.Muted)
             gravity = Gravity.CENTER
             setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12), 0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12), 0)
-            background = BlofyTvDesign.badge(dp(11).toFloat())
+            background = CinemaStyle.surface(this@PosterCatalogActivity)
         }
-        header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 32 else 36)))
+        header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(28)))
         content.addView(header)
 
         val manager = GridLayoutManager(this, gridColumns)
@@ -206,7 +214,8 @@ class PosterCatalogActivity : AppCompatActivity() {
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
-        posterAdapter = PosterStreamAdapter(::openItem) { _, index ->
+        posterAdapter = PosterStreamAdapter(::openItem) { item, index ->
+            focusedPosterKeys[memoryKey(displayedCategoryId)] = item.key
             if (index >= loadedItems.size - PREFETCH_THRESHOLD) loadNextPage()
         }
         posterGrid.adapter = posterAdapter
@@ -263,6 +272,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             lastRowId = cached.lastRowId
             hasMore = cached.items.size >= PAGE_SIZE
             posterAdapter.replace(cached.items)
+            cached.focusedKey?.let { focusedPosterKeys.putIfAbsent(memoryKey(id), it) }
             updateCount()
             return
         }
@@ -320,14 +330,16 @@ class PosterCatalogActivity : AppCompatActivity() {
     private fun saveMemorySnapshot() {
         if (providerId.isBlank() || loadedItems.isEmpty()) return
         if (displayedCategoryId != selectedCategoryId) return
-        CatalogPageMemory.put(memoryKey(displayedCategoryId), loadedItems, if (hasMore) Int.MAX_VALUE else loadedItems.size, lastRowId, null)
+        CatalogPageMemory.put(memoryKey(displayedCategoryId), loadedItems, if (hasMore) Int.MAX_VALUE else loadedItems.size, lastRowId, focusedPosterKeys[memoryKey(displayedCategoryId)])
     }
 
     private fun memoryKey(categoryId: String? = selectedCategoryId) = "$providerId:$kind:${categoryId ?: ALL_CATEGORY_ID}"
 
     private fun requestPosterFocus(): Boolean {
         if (displayedCategoryId != selectedCategoryId || (loadingPage && lastRowId == 0L)) return false
-        return TwoPaneFocusGuard.focusItem(posterGrid, 0)
+        val remembered = focusedPosterKeys[memoryKey(displayedCategoryId)]
+        val index = loadedItems.indexOfFirst { it.key == remembered }.coerceAtLeast(0)
+        return TwoPaneFocusGuard.focusItem(posterGrid, index)
     }
 
     private fun requestSelectedCategoryFocus(): Boolean {

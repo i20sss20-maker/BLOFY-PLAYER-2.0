@@ -1,5 +1,9 @@
 package tv.blofy.player.ui.catalog
 
+import tv.blofy.player.ui.common.CinemaStyle
+
+import tv.blofy.player.ui.common.ContentPresentation
+
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -35,8 +39,8 @@ class PosterStreamAdapter(
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
-            setPadding(dp(5), dp(5), dp(5), dp(6))
-            background = card(false, dp(16).toFloat(), dp(1))
+            setPadding(dp(3), dp(3), dp(3), dp(6))
+            background = card(false, dp(8).toFloat(), dp(1))
             clipToOutline = true
             elevation = 0f
         }
@@ -45,13 +49,18 @@ class PosterStreamAdapter(
             marginEnd = dp(4)
             bottomMargin = dp(10)
         }
-        val frame = FrameLayout(parent.context)
+        val frame = object : FrameLayout(parent.context) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val width = View.MeasureSpec.getSize(widthMeasureSpec)
+                super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(width * 3 / 2, View.MeasureSpec.EXACTLY))
+            }
+        }
         val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             setBackgroundColor(Color.rgb(18, 13, 25))
             clipToOutline = true
         }
-        frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(176)))
+        frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         val rating = TextView(parent.context).apply {
             textSize = 9.2f
             typeface = BlofyTvDesign.LabelTypeface
@@ -61,12 +70,11 @@ class PosterStreamAdapter(
             visibility = View.GONE
             background = GradientDrawable().apply {
                 cornerRadius = dp(8).toFloat()
-                setColor(0xE5522B78.toInt())
-                setStroke(dp(1), 0xFFB77BEA.toInt())
+                setColor(0xE6191D25.toInt())
             }
         }
         frame.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = dp(7); marginEnd = dp(7) })
-        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(176)))
+        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val title = TextView(parent.context).apply {
             textSize = 11.3f
             typeface = BlofyTvDesign.MediumTypeface
@@ -77,7 +85,8 @@ class PosterStreamAdapter(
             setPadding(dp(4), dp(6), dp(4), 0)
             includeFontPadding = false
         }
-        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
+        val titleHeight = maxOf(dp(36), title.lineHeight * 2 + title.paddingTop + title.paddingBottom)
+        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, titleHeight))
         val meta = TextView(parent.context).apply {
             textSize = 9.3f
             typeface = BlofyTvDesign.MediumTypeface
@@ -89,17 +98,19 @@ class PosterStreamAdapter(
             includeFontPadding = false
         }
         root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(18)))
-        return Holder(root, image, title, meta, rating, dp(16).toFloat(), dp(1))
+        return Holder(root, image, title, meta, rating, dp(8).toFloat(), dp(1))
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
         holder.itemView.tag = item.key
-        holder.title.text = item.name
+        val presentation = ContentPresentation.of(item)
+        holder.title.text = presentation.title
+        holder.itemView.contentDescription = presentation.title
         holder.meta.text = listOfNotNull(
             item.year?.takeIf(String::isNotBlank),
             item.genre?.takeIf(String::isNotBlank)?.substringBefore(',')
-        ).joinToString("  •  ")
+        ).plus(presentation.badges).distinct().joinToString("  •  ")
         holder.rating.text = item.rating?.takeIf(String::isNotBlank)?.let { "★ $it" }.orEmpty()
         holder.rating.visibility = if (holder.rating.text.isNotBlank()) View.VISIBLE else View.GONE
         renderFocus(holder, holder.itemView.hasFocus())
@@ -122,7 +133,7 @@ class PosterStreamAdapter(
         holder.itemView.background = card(focused, holder.radius, holder.stroke)
         holder.title.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
         holder.title.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
-        holder.meta.setTextColor(if (focused) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        holder.meta.setTextColor(CinemaStyle.Muted)
         holder.rating.alpha = if (focused) 1f else .9f
     }
 
@@ -153,12 +164,9 @@ class PosterStreamAdapter(
         val stroke: Int
     ) : RecyclerView.ViewHolder(itemView)
 
-    private fun card(focused: Boolean, radius: Float, stroke: Int) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF4B2D69.toInt(), 0xFF241730.toInt(), 0xFF16101D.toInt())
-        else intArrayOf(0xFF1A1423.toInt(), 0xFF120E19.toInt(), 0xFF0E0B12.toInt())
-    ).apply {
+    private fun card(focused: Boolean, radius: Float, stroke: Int) = GradientDrawable().apply {
+        setColor(CinemaStyle.Surface)
         cornerRadius = radius
-        setStroke(if (focused) stroke * 2 else stroke, if (focused) 0xFFD5B4F3.toInt() else 0xFF352A40.toInt())
+        if (focused) setStroke(stroke * 2, CinemaStyle.White)
     }
 }

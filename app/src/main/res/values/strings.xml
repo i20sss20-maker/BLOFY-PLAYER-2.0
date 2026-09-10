@@ -129,4 +129,17 @@
     <string name="storage_cleaning">Cleaning local storage…</string>
     <string name="storage_cleaned">✓ Cleaned %1$s without deleting your data</string>
     <string name="storage_clean_failed">Could not clean some files — your data was not affected</string>
+    <string name="login_welcome_title">Welcome to BLOFY</string>
+    <string name="login_welcome_hint">Your next watch starts here.</string>
+    <string name="login_link_tv">Link your TV</string>
+    <string name="login_scan_hint">Scan with your phone to manage this device.</string>
+    <string name="login_device_label">Device ID</string>
+    <string name="login_pairing_label">Pairing code</string>
+    <string name="login_your_playlists">Your playlists</string>
+    <string name="login_playlists_hint">Choose a saved playlist, or add your subscription to start watching.</string>
+    <string name="login_add_playlist">Add / manage</string>
+    <string name="login_remote_hint">Use the arrow keys to navigate · Press OK to select</string>
+    <string name="login_qr_description">Device linking QR code</string>
+    <string name="login_qr_loading">Preparing your QR code…</string>
+    <string name="login_qr_unavailable">Device linking is unavailable in this build. You can add a playlist directly.</string>
 </resources>

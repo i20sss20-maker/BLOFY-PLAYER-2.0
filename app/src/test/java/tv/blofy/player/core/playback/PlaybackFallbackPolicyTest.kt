@@ -5,6 +5,22 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PlaybackFallbackPolicyTest {
+    @Test fun exhaustsDistinctRoutesInOrderAndResetsForNextChannel() {
+        val state = PlaybackFallbackState()
+        val primary = "https://hidden.example/a.ts"
+        val origin = "https://panel.example/a.ts"
+        val canonical = "https://panel.example/live/u/p/1.ts"
+        val hls = "https://panel.example/live/u/p/1.m3u8"
+        state.begin(primary, canonical, listOf(primary, origin, origin, "file:///bad", canonical, hls))
+        for (url in listOf(origin, canonical, hls)) {
+            assertEquals(url, state.nextConfiguredUrl())
+            state.markConfiguredUrlAttempted(url)
+        }
+        assertNull(state.nextConfiguredUrl())
+        state.begin("https://panel.example/live/u/p/2.ts", null)
+        assertNull(state.nextConfiguredUrl())
+    }
+
     @Test
     fun returnsUnusedHttpFallback() {
         assertEquals(
