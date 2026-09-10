@@ -24,6 +24,8 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.identity.ActivationManager
+import tv.blofy.player.core.identity.ActivationRemoteClient
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
@@ -154,6 +156,11 @@ class ProviderManagerActivity : AppCompatActivity() {
                 val result = withTimeout(20_000L) {
                     withContext(Dispatchers.IO) {
                         val dao = BlofyDatabase.get(applicationContext).dao()
+                        val activation = ActivationManager(applicationContext, dao)
+                        if (!activation.cachedCanUse(activation.ensureIdentity())) {
+                            val checked = activation.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
+                            check(checked.canUse()) { "device_activation_required" }
+                        }
                         val synced = PortalPlaylistClient.sync(applicationContext, endpoint, dao, PortalPlaylistClient.SyncMode.PULL_ONLY)
                         synced.changedProviderIds.forEach { CatalogSyncState.markPending(applicationContext, it) }
                         synced
