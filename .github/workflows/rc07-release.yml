@@ -17,8 +17,8 @@ concurrency:
 env:
   PRODUCTION_ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
-  EXPECTED_VERSION_CODE: "2000042"
-  EXPECTED_VERSION_NAME: 2.0.0-rc07.31
+  EXPECTED_VERSION_CODE: "2000043"
+  EXPECTED_VERSION_NAME: 2.0.0-rc07.32
   EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
   MEDIA3_VERSION: "1.6.1"
   FFMPEG_DECODERS: ac3 eac3 dca truehd aac mp3 opus vorbis flac
@@ -28,7 +28,7 @@ env:
 
 jobs:
   signed-release:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[signed rc07.31]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[signed rc07.32]')
     name: Verify + FFmpeg + signed APK/AAB
     runs-on: ubuntu-latest
     timeout-minutes: 150
@@ -45,7 +45,7 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Validate rc07.31 and signing inputs
+      - name: Validate rc07.32 and signing inputs
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
@@ -58,8 +58,8 @@ jobs:
           for value in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
           done
-          grep -Fq 'versionCode = 2000042' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.31"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000043' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.32"' app/build.gradle.kts
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
 
       - name: Install Android native and signing toolchain
@@ -158,10 +158,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          cp app/build/outputs/apk/release/app-release.apk release/BLOFY-PLAYER-2.0-rc07.31-signed.apk
-          cp app/build/outputs/bundle/release/app-release.aab release/BLOFY-PLAYER-2.0-rc07.31-signed.aab
+          cp app/build/outputs/apk/release/app-release.apk release/BLOFY-PLAYER-2.0-rc07.32-signed.apk
+          cp app/build/outputs/bundle/release/app-release.aab release/BLOFY-PLAYER-2.0-rc07.32-signed.aab
           tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
-          apk="release/BLOFY-PLAYER-2.0-rc07.31-signed.apk"
+          apk="release/BLOFY-PLAYER-2.0-rc07.32-signed.apk"
           "$tools/aapt" dump badging "$apk" | tee release/apk-badging.txt
           if grep -Fq "application-debuggable" release/apk-badging.txt; then echo "::error::Release APK must not be debuggable"; exit 1; fi
           grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$EXPECTED_VERSION_CODE' versionName='$EXPECTED_VERSION_NAME'" release/apk-badging.txt
@@ -169,16 +169,16 @@ jobs:
           "$tools/apksigner" verify --verbose --print-certs "$apk" | tee release/apk-signature.txt
           actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
           [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
-          jarsigner -verify -certs release/BLOFY-PLAYER-2.0-rc07.31-signed.aab | tee release/aab-signature.txt
+          jarsigner -verify -certs release/BLOFY-PLAYER-2.0-rc07.32-signed.aab | tee release/aab-signature.txt
           unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
             grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/apk-files.txt"
           done
-          (cd release && sha256sum BLOFY-PLAYER-2.0-rc07.31-signed.apk BLOFY-PLAYER-2.0-rc07.31-signed.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
+          (cd release && sha256sum BLOFY-PLAYER-2.0-rc07.32-signed.apk BLOFY-PLAYER-2.0-rc07.32-signed.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc07.31-signed-${{ github.sha }}
+          name: BLOFY-PLAYER-2.0-rc07.32-signed-${{ github.sha }}
           path: release/
           if-no-files-found: error
           retention-days: 30
@@ -186,7 +186,7 @@ jobs:
       - name: Upload FFmpeg source and relink materials
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc07.31-ffmpeg-sources-${{ github.sha }}
+          name: BLOFY-PLAYER-2.0-rc07.32-ffmpeg-sources-${{ github.sha }}
           path: build/ffmpeg-native/compliance/
           if-no-files-found: error
           retention-days: 30
@@ -195,4 +195,4 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
 
-# rc07.31 signed release for the cinematic adaptive home
+# rc07.32 signed release for first receiver registration
