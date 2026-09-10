@@ -10,6 +10,7 @@ on:
       - '.github/workflows/activation-ci.yml'
   pull_request:
     paths:
+      - '.github/workflows/rc07-release.yml'
       - 'services/activation/**'
       - '.github/workflows/activation-ci.yml'
   workflow_dispatch:
