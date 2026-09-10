@@ -2,6 +2,7 @@ package tv.blofy.player.ui.home
 
 import android.app.Application
 import android.graphics.Rect
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -14,17 +15,47 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.local.StreamEntity
+import java.time.Duration
 
 /** Real Home views at the emulator's 540dp height, without catalog/network startup. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class, qualifiers = "en-w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class HomeTvLayoutRegressionTest {
+    @Test fun heroDoesNotChangeTheSelectedActionWhileTheRemoteIsOnItsButtons() {
+        val activity = Robolectric.buildActivity(HomeActivity::class.java).get()
+        activity.setTheme(R.style.Theme_Blofy)
+        HomeActivity::class.java.getDeclaredField("deviceKind").apply { isAccessible = true }
+            .set(activity, DeviceClass.Kind.TV)
+        val root = call(activity, "buildTvHome") as FrameLayout
+        activity.setContentView(root)
+        val items = listOf("First", "Second").mapIndexed { index, name ->
+            StreamEntity("hero:$index", "test", "$index", "movies", "movie", name)
+        }
+        HomeActivity::class.java.getDeclaredField("heroCandidates").apply { isAccessible = true }.set(activity, items)
+        call(activity, "renderHero", items.first())
+        val primary = field<Button>(activity, "heroPrimary")
+        assertTrue(primary.requestFocus())
+        assertTrue(field<View>(activity, "heroContent").hasFocus())
+        val scheduler = field<HomeRefreshScheduler>(activity, "refreshScheduler")
+        scheduler.start()
+        try {
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(16))
+            assertEquals("First", field<TextView>(activity, "heroTitle").text.toString())
+            primary.clearFocus()
+            root.isFocusableInTouchMode = true
+            root.requestFocus()
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(8))
+            assertEquals("Second", field<TextView>(activity, "heroTitle").text.toString())
+        } finally { scheduler.stop() }
+    }
+
     @Test fun englishRailAndLongHeroFitAndRevealTheNextShelf() = checkLayout(false)
 
     @Test

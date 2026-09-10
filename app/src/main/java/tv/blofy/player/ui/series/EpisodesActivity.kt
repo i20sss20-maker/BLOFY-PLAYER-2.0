@@ -1,9 +1,12 @@
 package tv.blofy.player.ui.series
 
+import tv.blofy.player.ui.common.ContentPresentation
+
+import tv.blofy.player.ui.common.CinemaStyle
+
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
@@ -80,13 +83,13 @@ class EpisodesActivity : AppCompatActivity() {
             textSize = if (compact) 10.5f else 12f
             letterSpacing = .11f
             typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.PurpleBright)
+            setTextColor(CinemaStyle.Muted)
             gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = seriesName.ifBlank { getString(R.string.episodes) }
+            text = ContentPresentation.title(seriesName, "series").ifBlank { getString(R.string.episodes) }
             textSize = when (deviceKind) {
-                DeviceClass.Kind.TV -> 31f
+                DeviceClass.Kind.TV -> 26f
                 DeviceClass.Kind.TABLET -> 28f
                 DeviceClass.Kind.PHONE -> 23f
             }
@@ -111,7 +114,7 @@ class EpisodesActivity : AppCompatActivity() {
         }.apply { visibility = View.GONE }
         root.addView(retryButton, LinearLayout.LayoutParams(
             if (compact) LinearLayout.LayoutParams.MATCH_PARENT else dp(250),
-            dp(if (compact) 50 else 58)
+            dp(if (compact) 48 else CinemaStyle.ActionHeight)
         ).apply {
             bottomMargin = dp(10)
             gravity = Gravity.START
@@ -128,7 +131,7 @@ class EpisodesActivity : AppCompatActivity() {
             itemAnimator = null
             setHasFixedSize(true)
             setPadding(dp(if (compact) 6 else 9), dp(6), dp(if (compact) 6 else 9), dp(6))
-            background = panelBackground(true)
+            setBackgroundColor(Color.TRANSPARENT)
             clipChildren = false
             clipToPadding = false
         }
@@ -137,7 +140,7 @@ class EpisodesActivity : AppCompatActivity() {
             itemAnimator = null
             setHasFixedSize(true)
             setPadding(dp(if (compact) 6 else 9), dp(6), dp(if (compact) 6 else 9), dp(6))
-            background = panelBackground(false)
+            setBackgroundColor(Color.TRANSPARENT)
             clipChildren = false
             clipToPadding = false
         }
@@ -145,8 +148,8 @@ class EpisodesActivity : AppCompatActivity() {
             body.addView(seasonList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(116)).apply { bottomMargin = dp(8) })
             body.addView(episodeList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            val seasonWidth = if (tablet) 200 else 245
-            body.addView(seasonList, LinearLayout.LayoutParams(dp(seasonWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(if (tablet) 14 else 22) })
+            val seasonWidth = if (tablet) 170 else 178
+            body.addView(seasonList, LinearLayout.LayoutParams(dp(seasonWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(14) })
             body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         }
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -342,7 +345,7 @@ class EpisodesActivity : AppCompatActivity() {
             if (resume > 15_000L) {
                 if (RuntimeSettings.askBeforeResume(this@EpisodesActivity)) {
                     AlertDialog.Builder(this@EpisodesActivity)
-                        .setTitle(getString(R.string.episodes_current_title, episode.episode, episode.title))
+                        .setTitle(getString(R.string.episodes_current_title, episode.episode, ContentPresentation.title(episode.title, "episode")))
                         .setMessage(getString(R.string.episodes_resume_message))
                         .setPositiveButton(getString(R.string.episodes_resume)) { _, _ -> launchEpisode(provider, episode, url, resume) }
                         .setNegativeButton(getString(R.string.episodes_start_over)) { _, _ -> launchEpisode(provider, episode, url, 0L) }
@@ -377,37 +380,8 @@ class EpisodesActivity : AppCompatActivity() {
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
-        isAllCaps = false
-        textSize = if (deviceKind == DeviceClass.Kind.PHONE) 13f else 14.5f
-        typeface = BlofyTvDesign.BodyTypeface
-        isFocusable = true
-        isFocusableInTouchMode = deviceKind == DeviceClass.Kind.TV
-        setTextColor(Color.WHITE)
-        background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = buttonBackground(focused)
-            if (deviceKind == DeviceClass.Kind.TV) {
-                view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f)
-                    .translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(85).start()
-            }
-        }
+        CinemaStyle.styleButton(this)
         setOnClickListener { action() }
-    }
-
-    private fun panelBackground(emphasis: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (emphasis) intArrayOf(0xFF2B203B.toInt(), 0xFF17111F.toInt()) else intArrayOf(0xFF241932.toInt(), 0xFF120D19.toInt())
-    ).apply {
-        cornerRadius = dp(if (deviceKind == DeviceClass.Kind.PHONE) 15 else 22).toFloat()
-        setStroke(dp(1), if (emphasis) 0xFF5D4674.toInt() else 0xFF49375E.toInt())
-    }
-
-    private fun buttonBackground(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFFA653FF.toInt(), 0xFF7130D2.toInt()) else intArrayOf(0xFF30213F.toInt(), 0xFF1A1325.toInt())
-    ).apply {
-        cornerRadius = dp(16).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.PurpleBright else 0xFF513C67.toInt())
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()

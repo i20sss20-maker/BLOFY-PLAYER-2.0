@@ -20,6 +20,13 @@ object CinemaStyle {
     val Accent = 0xFFB8A0ED.toInt()
     const val ActionHeight = 34
 
+    fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 8) = GradientDrawable().apply {
+        val density = context.resources.displayMetrics.density
+        cornerRadius = radiusDp * density
+        setColor(if (focused && filledFocus) White else Surface)
+        if (focused) setStroke((2 * density).toInt(), if (filledFocus) Accent else White)
+    }
+
     fun buttonBackground(context: Context, primary: Boolean, focused: Boolean) = GradientDrawable().apply {
         cornerRadius = 6 * context.resources.displayMetrics.density
         setColor(if (primary || focused) White else 0xCC252A33.toInt())

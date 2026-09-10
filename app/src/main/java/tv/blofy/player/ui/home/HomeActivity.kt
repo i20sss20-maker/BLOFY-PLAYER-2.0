@@ -1,5 +1,7 @@
 package tv.blofy.player.ui.home
 
+import tv.blofy.player.ui.common.ContentPresentation
+
 import android.content.Intent
 import android.content.res.ColorStateList
 import tv.blofy.player.ui.common.CinemaStyle
@@ -100,7 +102,7 @@ class HomeActivity : AppCompatActivity() {
                 ConfigurationCompat.getLocales(resources.configuration)[0] ?: Locale.getDefault()).format(Date())
         },
         rotateHero = {
-            if (heroCandidates.size > 1 && !isFinishing) {
+            if (heroCandidates.size > 1 && !isFinishing && heroContent?.hasFocus() != true) {
                 heroIndex = (heroIndex + 1) % heroCandidates.size
                 heroItem = heroCandidates[heroIndex]
                 renderHero(heroCandidates[heroIndex])
@@ -311,12 +313,12 @@ class HomeActivity : AppCompatActivity() {
 
     private fun renderHero(item: StreamEntity) {
         heroKicker?.text = getString(if (item.kind == "series") R.string.home_new_series else R.string.home_new_movie)
-        heroTitle?.text = item.name
+        heroTitle?.text = ContentPresentation.of(item).title
         heroMeta?.text = buildList {
             item.year?.takeIf(String::isNotBlank)?.let(::add)
             item.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
             item.genre?.substringBefore(',')?.trim()?.takeIf(String::isNotBlank)?.let(::add)
-            qualityBadges(item).firstOrNull()?.let(::add)
+            addAll(qualityBadges(item).filter { it != "NEW" }.take(3))
             add(if (item.kind == "series") getString(R.string.home_series_type) else getString(R.string.home_movie_type))
         }.joinToString("   •   ")
         heroSubtitle?.text = item.plot?.takeIf(String::isNotBlank)?.take(210)
@@ -516,7 +518,7 @@ class HomeActivity : AppCompatActivity() {
             layoutDirection = uiDirection
             gravity = Gravity.BOTTOM or Gravity.START
             setPadding(dp(10), dp(8), dp(10), dp(10))
-            addView(TextView(this@HomeActivity).apply { text = item.name; textSize = 12.2f; typeface = Typeface.DEFAULT_BOLD; maxLines = 2; setTextColor(Color.WHITE); gravity = Gravity.START })
+            addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 12.2f; typeface = Typeface.DEFAULT_BOLD; maxLines = 2; setTextColor(Color.WHITE); gravity = Gravity.START })
             addView(TextView(this@HomeActivity).apply {
                 text = buildList {
                     item.year?.takeIf(String::isNotBlank)?.let(::add)
@@ -555,7 +557,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun qualityBadges(item: StreamEntity): List<String> {
         val source = "${item.name} ${item.genre.orEmpty()} ${item.extension.orEmpty()}"
-        val result = mutableListOf<String>()
+        val result = ContentPresentation.of(item).badges.toMutableList()
         if (Regex("(?i)(4k|uhd|2160p)").containsMatchIn(source)) result += "4K"
         if (Regex("(?i)(hdr|dolby\\s*vision)").containsMatchIn(source)) result += "HDR"
         if (hasArabic(item.name) || hasArabic(item.genre.orEmpty()) || source.contains("arab", true)) result += "AR"
@@ -590,7 +592,7 @@ class HomeActivity : AppCompatActivity() {
             val copy = LinearLayout(this@HomeActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(28), dp(18), dp(28), dp(18))
                 addView(TextView(this@HomeActivity).apply { text = "BLOFY FEATURED"; textSize = 11.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
-                addView(TextView(this@HomeActivity).apply { text = item.name; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.START; maxLines = 1 })
+                addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.START; maxLines = 1 })
                 addView(TextView(this@HomeActivity).apply { text = buildList { item.year?.let(::add); item.rating?.let { add("★ $it") }; item.genre?.substringBefore(',')?.let(::add) }.joinToString("   •   "); textSize = 12.5f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = item.plot?.take(150) ?: "اكتشف هذا الاختيار الآن."; textSize = 13f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START; maxLines = 2; setPadding(0, dp(5), 0, 0) })
             }

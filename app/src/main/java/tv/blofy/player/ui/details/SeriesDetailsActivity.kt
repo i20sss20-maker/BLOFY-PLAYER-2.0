@@ -1,5 +1,7 @@
 package tv.blofy.player.ui.details
 
+import tv.blofy.player.ui.common.ContentPresentation
+
 import android.content.Intent
 import android.graphics.Color
 import tv.blofy.player.ui.common.CinemaStyle
@@ -127,7 +129,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 gravity = Gravity.END
             })
 
-            val title = metadata?.title?.takeIf(String::isNotBlank) ?: stream.name
+            val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
             metadata?.logoUrl?.takeIf(String::isNotBlank)?.let { logoUrl ->
                 val logo = ImageView(this@SeriesDetailsActivity).apply {
                     scaleType = ImageView.ScaleType.FIT_END
@@ -154,6 +156,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = buildList {
                     add(getString(R.string.details_series_type))
+                    addAll(ContentPresentation.of(stream).badges)
                     (metadata?.releaseDate?.take(4) ?: stream.year)?.takeIf(String::isNotBlank)?.let(::add)
                     if (seasons > 0) add(getString(R.string.details_seasons_count, seasons))
                     if (allEpisodes.isNotEmpty()) add(getString(R.string.details_episodes_count, allEpisodes.size))

@@ -1,5 +1,7 @@
 package tv.blofy.player.ui.details
 
+import tv.blofy.player.ui.common.ContentPresentation
+
 import android.content.Intent
 import android.graphics.Color
 import tv.blofy.player.ui.common.CinemaStyle
@@ -116,7 +118,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 gravity = contentGravity
             })
 
-            val title = metadata?.title?.takeIf(String::isNotBlank) ?: stream.name
+            val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
             metadata?.logoUrl?.takeIf(String::isNotBlank)?.let { logoUrl ->
                 val logo = ImageView(this@MovieDetailsActivity).apply {
                     scaleType = ImageView.ScaleType.FIT_END
@@ -143,6 +145,7 @@ class MovieDetailsActivity : AppCompatActivity() {
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = buildList {
                     add(getString(R.string.details_movie_type))
+                    addAll(ContentPresentation.of(stream).badges)
                     (metadata?.releaseDate?.take(4) ?: stream.year)?.takeIf(String::isNotBlank)?.let(::add)
                     metadata?.runtimeMinutes?.takeIf { it > 0 }?.let { add(getString(R.string.details_minutes, it)) }
                         ?: stream.duration?.takeIf(String::isNotBlank)?.let(::add)

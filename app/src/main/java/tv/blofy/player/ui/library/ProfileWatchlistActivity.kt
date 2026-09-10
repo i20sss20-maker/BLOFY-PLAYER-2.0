@@ -1,5 +1,8 @@
 package tv.blofy.player.ui.library
 
+import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.ContentPresentation
+
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -43,7 +46,7 @@ class ProfileWatchlistActivity : AppCompatActivity() {
         }
         list.addView(TextView(this).apply {
             text = "MY WATCHLIST"
-            textSize = 29f
+            textSize = 26f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.START
@@ -95,7 +98,7 @@ class ProfileWatchlistActivity : AppCompatActivity() {
             result.forEachIndexed { index, item ->
                 val row = Button(this@ProfileWatchlistActivity).apply {
                     text = buildString {
-                        append(item.name)
+                        append(ContentPresentation.of(item).title)
                         item.year?.takeIf(String::isNotBlank)?.let { append("   •   $it") }
                         item.rating?.takeIf(String::isNotBlank)?.let { append("   •   ★ $it") }
                     }
@@ -104,7 +107,9 @@ class ProfileWatchlistActivity : AppCompatActivity() {
                     gravity = Gravity.START or Gravity.CENTER_VERTICAL
                     setTextColor(Color.WHITE)
                     typeface = BlofyTvDesign.BodyTypeface
-                    BlofyTvDesign.installTvFocus(this, dp(18).toFloat(), 1.018f, false)
+                    CinemaStyle.styleButton(this)
+                    gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                    textSize = 13f
                     setOnClickListener { openDetails(item) }
                     setOnLongClickListener {
                         ProfileLibraryStore.setWatchlisted(applicationContext, item.key, false)
@@ -112,7 +117,7 @@ class ProfileWatchlistActivity : AppCompatActivity() {
                         true
                     }
                 }
-                list.addView(row, LinearLayout.LayoutParams(-1, dp(62)).apply { bottomMargin = dp(8) })
+                list.addView(row, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(8) })
                 if (index == 0) row.post { row.requestFocus() }
             }
         }

@@ -1,5 +1,7 @@
 package tv.blofy.player.ui.library
 
+import tv.blofy.player.ui.common.ContentPresentation
+
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -106,7 +108,7 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
         val row = TextView(this).apply {
-            text = "${kindLabel(stream.kind)}   •   ${stream.name}"
+            text = "${kindLabel(stream.kind)}   •   ${ContentPresentation.of(stream).title}"
             textSize = 17f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -129,7 +131,7 @@ class LibraryActivity : AppCompatActivity() {
         val episode = entry.episode
         val seriesName = entry.parentSeries?.name?.takeIf(String::isNotBlank) ?: "مسلسل"
         val row = TextView(this).apply {
-            text = "$seriesName   •   الموسم ${episode.season}   •   الحلقة ${episode.episode}   •   ${episode.title}"
+            text = "${ContentPresentation.title(seriesName, "series")}   •   الموسم ${episode.season}   •   الحلقة ${episode.episode}   •   ${ContentPresentation.title(episode.title, "episode")}"
             textSize = 17f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)

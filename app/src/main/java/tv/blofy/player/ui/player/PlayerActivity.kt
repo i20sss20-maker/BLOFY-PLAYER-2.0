@@ -1,5 +1,7 @@
 package tv.blofy.player.ui.player
 
+import tv.blofy.player.ui.common.ContentPresentation
+
 import android.app.AlertDialog
 import android.graphics.Color
 import tv.blofy.player.ui.common.CinemaStyle
@@ -768,7 +770,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun updateTitle(title: String) {
-        titleView.text = if (title.isBlank()) "BLOFY PLAYER" else title
+        titleView.text = if (title.isBlank()) "BLOFY PLAYER" else ContentPresentation.title(title, kind)
     }
 
     private fun primeSmartZapping() {
