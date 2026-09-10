@@ -315,17 +315,23 @@ class LoginActivity : AppCompatActivity() {
             }
         }
         val localProvider = local.second
-        if (localProvider != null && tv.blofy.player.core.identity.BlofySubscriberClient.isLegacyProxy(localProvider, endpoint)) {
+        // A fresh receiver has nothing to play yet. Enter must open registration, not wait
+        // for activation/portal requests and leave the user on the same empty welcome screen.
+        // Opening the form grants no playback access; submission and entry still check activation.
+        if (localProvider == null) {
+            openPlaylistManagement()
+            return
+        }
+        if (tv.blofy.player.core.identity.BlofySubscriberClient.isLegacyProxy(localProvider, endpoint)) {
             status.text = "جاري تحديث اتصال مشترك BLOFY..."
             PortalPlaylistClient.ensureSubscriberConnection(applicationContext, endpoint, dao, localProvider.id)
         }
-        if (localProvider != null && (endpoint.isBlank() || manager.cachedCanUse(local.first)) &&
+        if ((endpoint.isBlank() || manager.cachedCanUse(local.first)) &&
             hasCachedCatalog(dao, localProvider.id)) {
             openHome()
             return
         }
         if (endpoint.isBlank()) {
-            if (localProvider == null) { status.text = "أضف قائمة تشغيل أولاً"; return }
             if (hasCachedCatalog(dao, localProvider.id)) openHome() else openCatalogLoading(localProvider.id)
             return
         }
@@ -337,14 +343,14 @@ class LoginActivity : AppCompatActivity() {
         }
         result.onSuccess { remote ->
             if (!remote.canUse()) { status.text = activationLabel(remote); return@onSuccess }
-            if (localProvider != null && hasCachedCatalog(dao, localProvider.id)) {
+            if (hasCachedCatalog(dao, localProvider.id)) {
                 openHome()
                 return@onSuccess
             }
             val portalSync = runSuspendCatching { PortalPlaylistClient.sync(applicationContext, endpoint, dao) }.getOrNull()
             renderPortalPlaylists(portalSync?.providers ?: withContext(Dispatchers.IO) { dao.allProvidersStored().first() })
             val activeProvider = portalSync?.activeProvider ?: dao.providers().first().firstOrNull()
-            if (activeProvider == null) { status.text = "الجهاز مفعل • أضف قائمة"; addPlaylist.requestFocus(); return@onSuccess }
+            if (activeProvider == null) { openPlaylistManagement(); return@onSuccess }
             val ready = hasCachedCatalog(dao, activeProvider.id)
             val changed = portalSync?.changedProviderIds?.contains(activeProvider.id) == true
             if (changed || !ready) { status.text = "جاري تجهيز ${activeProvider.name}"; openCatalogLoading(activeProvider.id); return@onSuccess }
@@ -481,6 +487,10 @@ class LoginActivity : AppCompatActivity() {
 
     private fun openCatalogLoading(providerId: String) {
         startActivity(Intent(this, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, providerId))
+    }
+
+    private fun openPlaylistManagement() {
+        startActivity(Intent(this, PlaylistActivity::class.java))
     }
 
     private fun renderCachedIdentityImmediately() {

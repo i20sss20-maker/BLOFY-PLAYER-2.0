@@ -8,6 +8,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.view.FocusFinder
+import android.view.KeyEvent
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -46,6 +47,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.home.HomeActivity
+import tv.blofy.player.ui.playlist.PlaylistActivity
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.CountDownLatch
 import java.io.IOException
@@ -180,6 +182,38 @@ class LoginLocalEntryRegressionTest {
         connect()
         assertHomeOpened()
         assertEquals(0, server.requestCount)
+    }
+
+    @Test fun firstInstallEnterOpensRegistrationWithoutWaitingForActivation() {
+        runBlocking(Dispatchers.IO) { db.clearAllTables() }
+        app.getSharedPreferences("blofy_device_identity", Application.MODE_PRIVATE).edit().clear().commit()
+        launch()
+        val enter = field<Button>("connectButton")
+        assertTrue(enter.requestFocus())
+        assertTrue(enter.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER)))
+        assertTrue(enter.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER)))
+        awaitJob("connectJob")
+        val opened = shadowOf(activity).nextStartedActivity
+        assertNotNull("A new receiver must reach playlist registration after pressing Enter", opened)
+        assertEquals(PlaylistActivity::class.java.name, opened.component?.className)
+        assertEquals("Opening registration must also work before the device can reach the service", 0, server.requestCount)
+        assertFalse(runBlocking(Dispatchers.IO) { checkNotNull(db.dao().activation()).activated })
+    }
+
+    @Test fun savedReceiverWithBlockedActivationCannotEnterHome() {
+        runBlocking(Dispatchers.IO) {
+            val identity = checkNotNull(db.dao().activation())
+            db.dao().upsertActivation(identity.copy(activated = false))
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) = MockResponse().setHeader("Content-Type", "application/json")
+                .setBody("""{"status":"blocked"}""")
+        }
+        launch()
+        connect()
+        assertNull(shadowOf(activity).nextStartedActivity)
+        assertEquals(1, server.requestCount)
+        assertTrue(field<Button>("connectButton").isEnabled)
     }
 
     @Test fun pendingWebsiteReplacementDoesNotBlockTheKnownGoodLibrary() {

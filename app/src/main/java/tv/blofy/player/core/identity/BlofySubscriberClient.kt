@@ -13,6 +13,9 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tv.blofy.player.core.network.awaitResponse
 import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.ActivationEntity
+import tv.blofy.player.BuildConfig
 import java.util.concurrent.TimeUnit
 
 object BlofySubscriberClient {
@@ -44,10 +47,11 @@ object BlofySubscriberClient {
     ): Session = withContext(Dispatchers.IO) {
         val endpoint = serviceEndpoint(activationBaseUrl)
         verifyServiceReady(endpoint)
+        val identity = sessionIdentity(context, ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
 
         val body = JSONObject().apply {
-            put("deviceId", DeviceIdentity.deviceId(context))
-            put("activationCode", DeviceIdentity.activationCode(context))
+            put("deviceId", identity.deviceId)
+            put("activationCode", identity.activationCode)
             put("username", username.trim())
             put("password", password)
             put("delivery", "direct")
@@ -73,6 +77,17 @@ object BlofySubscriberClient {
             }
             parseDirectSession(root)
         }
+    }
+
+    /** The registration form is reachable before a new installation has checked in. */
+    internal suspend fun sessionIdentity(context: Context, api: ActivationApi, appVersion: String): ActivationEntity {
+        val manager = ActivationManager(context, BlofyDatabase.get(context).dao())
+        val current = manager.ensureIdentity()
+        if (manager.cachedCanUse(current)) return current
+        val checked = manager.refresh(api, appVersion)
+        check(checked.canUse()) { "يجب تفعيل جهاز BLOFY أولًا" }
+        // A successful check may also rotate a pending pairing code. Use the committed identity.
+        return manager.ensureIdentity()
     }
 
     internal fun serviceEndpoint(value: String): String {
