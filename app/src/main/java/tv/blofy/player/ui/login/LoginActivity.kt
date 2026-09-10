@@ -218,7 +218,7 @@ class LoginActivity : AppCompatActivity() {
         addView(qrMessage, FrameLayout.LayoutParams(-1, -1))
     }
 
-    private fun buildPhoneLogin(): LinearLayout {
+    private fun buildPhoneLogin(): View {
         createIdentityViews(true)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -239,7 +239,10 @@ class LoginActivity : AppCompatActivity() {
         root.addView(addPlaylist, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(12) })
         root.addView(connectButton, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(10) })
         root.addView(refreshCodeButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
-        return root
+        return ScrollView(this).apply {
+            isFillViewport = true
+            addView(root, FrameLayout.LayoutParams(-1, -2))
+        }
     }
 
     private fun createIdentityViews(phone: Boolean) {
@@ -426,7 +429,7 @@ class LoginActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             maxLines = 1
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         info.addView(TextView(this@LoginActivity).apply {
             val type = if (provider.providerType.equals("xtream", true)) "Xtream" else "M3U"
@@ -434,7 +437,7 @@ class LoginActivity : AppCompatActivity() {
             textSize = 11.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         addView(info, LinearLayout.LayoutParams(0, -1, 1f))
         addView(TextView(this@LoginActivity).apply {
@@ -467,9 +470,9 @@ class LoginActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(dp(54), -1))
         addView(LinearLayout(this@LoginActivity).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-            addView(TextView(this@LoginActivity).apply { text = "ابدأ بإضافة أول قائمة"; textSize = 14f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.RIGHT })
-            addView(TextView(this@LoginActivity).apply { text = message; textSize = 11.5f; typeface = BlofyTvDesign.BodyTypeface; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            addView(TextView(this@LoginActivity).apply { text = "ابدأ بإضافة أول قائمة"; textSize = 14f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.START })
+            addView(TextView(this@LoginActivity).apply { text = message; textSize = 11.5f; typeface = BlofyTvDesign.BodyTypeface; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.START })
         }, LinearLayout.LayoutParams(0, -1, 1f))
     }
 
@@ -562,6 +565,8 @@ class LoginActivity : AppCompatActivity() {
         }
         if (lastQrUrl == url && qrView.drawable != null) return
         val bitmap = withContext(Dispatchers.Default) { createQr(url) }
+        if (deviceView.text.toString() != deviceId || codeView.text.toString() != activationCode ||
+            ActivationPortalUrl.create(activationEndpoint, deviceId, activationCode) != url) return
         qrView.setImageBitmap(bitmap)
         qrView.visibility = View.VISIBLE
         qrMessage.visibility = View.GONE

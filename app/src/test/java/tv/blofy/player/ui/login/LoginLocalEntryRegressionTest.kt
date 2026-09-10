@@ -248,7 +248,10 @@ class LoginLocalEntryRegressionTest {
         content.measure(View.MeasureSpec.makeMeasureSpec(960, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(540, View.MeasureSpec.EXACTLY))
         content.layout(0, 0, 960, 540)
-        fun bounds(view: View): Rect = Rect(0, 0, view.width, view.height).also {
+        // Descendant coordinates include the view's own content scroll. Single-line
+        // centered TextViews can scroll their very wide text layout without moving the view.
+        fun bounds(view: View): Rect = Rect(view.scrollX, view.scrollY,
+            view.scrollX + view.width, view.scrollY + view.height).also {
             content.offsetDescendantRectToMyCoords(view, it)
         }
         val panel = content.findViewWithTag<ViewGroup>("blofy_login_activation_panel")
