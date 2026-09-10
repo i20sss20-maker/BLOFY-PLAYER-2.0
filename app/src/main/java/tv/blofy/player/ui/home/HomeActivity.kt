@@ -20,6 +20,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.os.ConfigurationCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -92,7 +93,8 @@ class HomeActivity : AppCompatActivity() {
     private val refreshScheduler = HomeRefreshScheduler(
         uiHandler, 30_000L, HERO_ROTATION_MS,
         refreshClock = {
-            clockLabel?.text = SimpleDateFormat("EEE  d MMM   •   h:mm a", resources.configuration.locales[0]).format(Date())
+            clockLabel?.text = SimpleDateFormat("EEE  d MMM   •   h:mm a",
+                ConfigurationCompat.getLocales(resources.configuration)[0] ?: Locale.getDefault()).format(Date())
         },
         rotateHero = {
             if (heroCandidates.size > 1 && !isFinishing) {

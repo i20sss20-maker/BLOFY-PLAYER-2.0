@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_pause">Duraklat</string>
+    <string name="player_play">Oynat</string>
+    <string name="player_seek_back">−10 sn</string>
+    <string name="player_seek_forward">+10 sn</string>
+</resources>
