@@ -659,6 +659,9 @@ class ContentBrowserActivity : AppCompatActivity() {
     override fun onPause() {
         saveLiveMemorySnapshot()
         saveCatalogMemorySnapshot()
+        // Search and other screens can launch playback too. Release the preview before they
+        // take over so a single-connection subscription never has two concurrent players.
+        stopPreview()
         super.onPause()
     }
 
