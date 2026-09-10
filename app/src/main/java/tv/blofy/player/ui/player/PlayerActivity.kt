@@ -350,7 +350,8 @@ class PlayerActivity : AppCompatActivity() {
             val playbackControls = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                // Seek follows the physical, left-to-right timeline in either app language.
+                layoutDirection = View.LAYOUT_DIRECTION_LTR
                 clipChildren = false
             }
 
@@ -367,7 +368,7 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             playbackControls.addView(
-                forwardButton,
+                rewindButton,
                 controlSize(96).apply { marginEnd = dp(8) }
             )
             playbackControls.addView(
@@ -375,7 +376,7 @@ class PlayerActivity : AppCompatActivity() {
                 controlSize(116).apply { marginEnd = dp(8) }
             )
             playbackControls.addView(
-                rewindButton,
+                forwardButton,
                 controlSize(96)
             )
             hud.addView(
@@ -389,7 +390,7 @@ class PlayerActivity : AppCompatActivity() {
             val options = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                layoutDirection = resources.configuration.layoutDirection
                 clipChildren = false
             }
 
@@ -919,7 +920,7 @@ class PlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val item = dao.stream(currentContentKey)
             favoriteButton.text = if (item?.favorite == true) {
-                "★  في المفضلة"
+                "★ " + getString(R.string.player_favorite)
             } else {
                 getString(R.string.player_favorite)
             }
@@ -932,7 +933,7 @@ class PlayerActivity : AppCompatActivity() {
             val item = dao.stream(currentContentKey) ?: return@launch
             dao.setFavorite(currentContentKey, !item.favorite)
             favoriteButton.text = if (!item.favorite) {
-                "★  في المفضلة"
+                "★ " + getString(R.string.player_favorite)
             } else {
                 getString(R.string.player_favorite)
             }
