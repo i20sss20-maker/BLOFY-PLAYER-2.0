@@ -3,9 +3,13 @@ package tv.blofy.player.ui.login
 import android.app.Application
 import android.content.pm.PackageManager
 import android.os.Looper
+import android.graphics.Rect
+import android.graphics.drawable.BitmapDrawable
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.room.Room
@@ -13,6 +17,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.HybridBinarizer
+import com.google.zxing.qrcode.QRCodeReader
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -30,6 +38,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import tv.blofy.player.core.identity.ActivationManager
+import tv.blofy.player.core.identity.ActivationPortalUrl
 import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
@@ -207,6 +216,56 @@ class LoginLocalEntryRegressionTest {
         assertTrue(refresh.isEnabled)
         assertEquals(1, server.requestCount)
         assertNull(shadowOf(activity).nextStartedActivity)
+    }
+
+    @Test fun missingPortalHasAnExplanationAndAConfiguredPortalRendersADecodableQr() {
+        launch()
+        // The local HTTP test endpoint is intentionally ineligible for a public QR.
+        assertEquals(View.VISIBLE, field<TextView>("qrMessage").visibility)
+        assertEquals(View.INVISIBLE, field<ImageView>("qrView").visibility)
+        activity.activationEndpoint = "https://example.test/api/v1/"
+        checkNotNull(controller).pause().resume()
+        awaitJob("identityJob")
+        val qr = field<ImageView>("qrView")
+        assertEquals(View.VISIBLE, qr.visibility)
+        assertEquals(View.GONE, field<TextView>("qrMessage").visibility)
+        val bitmap = (qr.drawable as BitmapDrawable).bitmap
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val decoded = QRCodeReader().decode(BinaryBitmap(HybridBinarizer(
+            RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
+        )))
+        assertEquals(ActivationPortalUrl.create(activity.activationEndpoint,
+            field<TextView>("deviceView").text.toString(), field<TextView>("codeView").text.toString()), decoded.text)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land-mdpi")
+    fun tvEntryControlsAndIdentityFitTheScreenWithoutAnOverlaidRefreshButton() {
+        launch()
+        val content = activity.findViewById<FrameLayout>(android.R.id.content)
+        content.measure(View.MeasureSpec.makeMeasureSpec(960, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(540, View.MeasureSpec.EXACTLY))
+        content.layout(0, 0, 960, 540)
+        fun bounds(view: View): Rect = Rect(0, 0, view.width, view.height).also {
+            content.offsetDescendantRectToMyCoords(view, it)
+        }
+        val panel = content.findViewWithTag<ViewGroup>("blofy_login_activation_panel")
+        val panelBounds = bounds(panel)
+        listOf("deviceView", "codeView", "status", "qrView").forEach { name ->
+            val rect = bounds(field<View>(name))
+            assertTrue("$name is clipped: $rect in $panelBounds", panelBounds.contains(rect))
+            assertTrue("$name must have visible dimensions", rect.width() > 0 && rect.height() > 0)
+        }
+        listOf("refreshCodeButton", "addPlaylist", "connectButton").forEach { name ->
+            assertTrue("$name is outside the TV viewport", Rect(0, 0, 960, 540).contains(bounds(field(name))))
+        }
+        val refresh = field<Button>("refreshCodeButton")
+        assertFalse("Refresh must be in the header, not over the playlist heading", Rect.intersects(bounds(refresh),
+            bounds(content.findViewWithTag<View>("blofy_login_playlists_panel"))))
+        assertFalse("Refresh must not cover activation", Rect.intersects(bounds(refresh), panelBounds))
+        assertTrue(refresh.isFocusable)
     }
 
     @Test fun uncommittedRowsCannotMasqueradeAsAReadySavedLibrary() {

@@ -33,6 +33,7 @@ permissions:
   contents: read
 
 env:
+  ORG_GRADLE_PROJECT_BLOFY_ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
   ANDROID_NDK_VERSION: 28.0.13004108
   ANDROID_BUILD_TOOLS_VERSION: 35.0.0
   GRADLE_CMD: gradle
