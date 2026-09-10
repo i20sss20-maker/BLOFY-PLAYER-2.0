@@ -170,6 +170,9 @@ class LoginActivity : AppCompatActivity() {
         playlists.addView(loginText(R.string.login_your_playlists, 21f, true), LinearLayout.LayoutParams(-1, dp(32)))
         playlists.addView(loginText(R.string.login_playlists_hint, 13f).apply { maxLines = 2 }, LinearLayout.LayoutParams(-1, dp(42)))
         val scroll = ScrollView(this).apply {
+            // Saved cards own focus; an empty scroll viewport must not consume a DPAD stop.
+            isFocusable = false
+            isFocusableInTouchMode = false
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             clipToPadding = false

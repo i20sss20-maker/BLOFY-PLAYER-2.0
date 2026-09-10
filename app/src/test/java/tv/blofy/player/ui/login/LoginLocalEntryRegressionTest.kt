@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.view.View
 import android.view.ViewGroup
+import android.view.FocusFinder
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -269,6 +270,9 @@ class LoginLocalEntryRegressionTest {
             bounds(content.findViewWithTag<View>("blofy_login_playlists_panel"))))
         assertFalse("Refresh must not cover activation", Rect.intersects(bounds(refresh), panelBounds))
         assertTrue(refresh.isFocusable)
+        field<LinearLayout>("playlistRow").removeAllViews()
+        assertSame("An empty playlist viewport must not swallow the Up key", refresh,
+            FocusFinder.getInstance().findNextFocus(content, field<Button>("addPlaylist"), View.FOCUS_UP))
     }
 
     @Test fun uncommittedRowsCannotMasqueradeAsAReadySavedLibrary() {
