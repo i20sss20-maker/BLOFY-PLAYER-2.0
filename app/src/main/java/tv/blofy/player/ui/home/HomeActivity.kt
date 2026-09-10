@@ -23,6 +23,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.os.ConfigurationCompat
+import androidx.core.view.doOnLayout
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -429,7 +430,8 @@ class HomeActivity : AppCompatActivity() {
             overScrollMode = View.OVER_SCROLL_NEVER
             clipChildren = false
             clipToPadding = false
-            layoutDirection = uiDirection
+            // Keep physical scroll coordinates stable when profile ordering reattaches the row.
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
         }
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -446,32 +448,32 @@ class HomeActivity : AppCompatActivity() {
             )
         }
         scroll.addView(row, FrameLayout.LayoutParams(-2, -1))
-        scroll.post { scroll.scrollTo(if (uiDirection == View.LAYOUT_DIRECTION_RTL) (row.width - scroll.width).coerceAtLeast(0) else 0, 0) }
+        scroll.doOnLayout { scroll.scrollTo(if (uiDirection == View.LAYOUT_DIRECTION_RTL) (row.width - scroll.width).coerceAtLeast(0) else 0, 0) }
         parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(posterHeight + 22)))
     }
 
     private fun addTopTenShelf(parent: LinearLayout, providerId: String, items: List<StreamEntity>) {
         if (items.isEmpty()) return
         parent.addView(sectionTitle("TOP 10", "الأكثر تميزًا في مكتبتك الآن"))
-        val scroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; layoutDirection = uiDirection; clipToPadding = false }
+        val scroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; layoutDirection = View.LAYOUT_DIRECTION_LTR; clipToPadding = false }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection; setPadding(dp(4), dp(6), dp(4), dp(14)); clipChildren = false }
         items.take(10).forEachIndexed { index, item ->
             val wrap = FrameLayout(this)
             val number = TextView(this).apply {
                 text = "${index + 1}"
-                textSize = if (compactTv) 48f else 64f
+                textSize = if (compactTv) 36f else 42f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(0xFF606671.toInt())
                 gravity = Gravity.CENTER_VERTICAL or Gravity.START
                 includeFontPadding = false
             }
-            wrap.addView(number, FrameLayout.LayoutParams(dp(60), -1, Gravity.START or Gravity.BOTTOM))
+            wrap.addView(number, FrameLayout.LayoutParams(dp(52), -1, Gravity.START or Gravity.BOTTOM))
             val card = posterCard(providerId, item, "top10_${index}", null)
             wrap.addView(card, FrameLayout.LayoutParams(dp(posterWidth), dp(posterHeight), Gravity.END or Gravity.CENTER_VERTICAL))
-            row.addView(wrap, LinearLayout.LayoutParams(dp(posterWidth + 34), dp(posterHeight + 8)).apply { marginStart = dp(8) })
+            row.addView(wrap, LinearLayout.LayoutParams(dp(posterWidth + 52), dp(posterHeight + 8)).apply { marginStart = dp(8) })
         }
         scroll.addView(row, FrameLayout.LayoutParams(-2, -1))
-        scroll.post { scroll.scrollTo(if (uiDirection == View.LAYOUT_DIRECTION_RTL) (row.width - scroll.width).coerceAtLeast(0) else 0, 0) }
+        scroll.doOnLayout { scroll.scrollTo(if (uiDirection == View.LAYOUT_DIRECTION_RTL) (row.width - scroll.width).coerceAtLeast(0) else 0, 0) }
         parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(posterHeight + 28)))
     }
 

@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import org.junit.Assert.*
@@ -29,6 +30,31 @@ class HomeTvLayoutRegressionTest {
     @Test
     @Config(qualifiers = "ar-rSA-w960dp-h540dp-land-xhdpi")
     fun arabicRailAndLongHeroFitAndMirrorTheEnglishLayout() = checkLayout(true)
+
+    @Test
+    @Config(qualifiers = "ar-rSA-w960dp-h540dp-land-xhdpi")
+    fun arabicRankingStartsAtOneAndKeepsPositionWhenProfileReordersRows() {
+        val activity = Robolectric.buildActivity(HomeActivity::class.java).get()
+        activity.setTheme(R.style.Theme_Blofy)
+        val feed = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        val items = (1..10).map { StreamEntity("rank:$it", "test", "$it", "movies", "movie", "Movie $it") }
+        call(activity, "addTopTenShelf", feed, "test", items)
+        fun layout() {
+            feed.measure(View.MeasureSpec.makeMeasureSpec(1500, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(500, View.MeasureSpec.EXACTLY))
+            feed.layout(0, 0, 1500, 500)
+        }
+        layout()
+        val scroll = descendants(feed).filterIsInstance<HorizontalScrollView>().single()
+        val first = feed.findViewWithTag<View>("rank:1")
+        assertTrue("Arabic ranking must initially expose item one", bounds(feed, scroll).contains(bounds(feed, first)))
+        val offset = scroll.scrollX
+        feed.removeView(scroll)
+        feed.addView(scroll)
+        layout()
+        assertEquals("Reattaching the row must not invert the RTL scroll position", offset, scroll.scrollX)
+        assertTrue(bounds(feed, scroll).contains(bounds(feed, first)))
+    }
 
     private fun checkLayout(rtl: Boolean) {
         // Build only the presentation: no onCreate, provider lookup, player, or network access.
