@@ -251,6 +251,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Small install package for device QA. The full source/relink compliance bundle above
+      # remains available with the same retention period and is not replaced by this artifact.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-2.0-ffmpeg-install-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            build/ffmpeg-native/final-artifacts.sha256
+            build/ffmpeg-native/build-apk-info.txt
+          if-no-files-found: error
+          retention-days: 30
+
       - uses: actions/upload-artifact@v4
         with:
           name: media3-ffmpeg-1.6.1-aar-${{ github.sha }}

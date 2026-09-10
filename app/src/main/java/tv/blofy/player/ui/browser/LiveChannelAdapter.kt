@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.R
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
+import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
 
@@ -62,10 +63,10 @@ internal class LiveChannelAdapter(
             isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
-            background = rowBackground(false)
+            background = rowBackground(context, false)
         }
-        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(82)).apply {
-            bottomMargin = dp(8)
+        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(68)).apply {
+            bottomMargin = dp(6)
             marginStart = dp(3)
             marginEnd = dp(3)
         }
@@ -78,7 +79,7 @@ internal class LiveChannelAdapter(
                 setStroke(dp(1), BlofyTvDesign.Divider)
             }
         }
-        row.addView(logo, LinearLayout.LayoutParams(dp(52), dp(52)).apply { marginStart = dp(12) })
+        row.addView(logo, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(8) })
 
         val textBox = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -113,7 +114,7 @@ internal class LiveChannelAdapter(
         textBox.addView(title, LinearLayout.LayoutParams(-1, 0, 1f))
         textBox.addView(meta, LinearLayout.LayoutParams(-1, dp(18)))
         textBox.addView(progress, LinearLayout.LayoutParams(-1, dp(3)).apply { topMargin = dp(2) })
-        row.addView(textBox, LinearLayout.LayoutParams(0, dp(63), 1f))
+        row.addView(textBox, LinearLayout.LayoutParams(0, dp(54), 1f))
 
         val badge = TextView(context).apply {
             textSize = TvUiTuning.sp(context, 8.4f)
@@ -122,7 +123,7 @@ internal class LiveChannelAdapter(
             gravity = Gravity.CENTER
             background = BlofyTvDesign.badge(dp(9).toFloat())
         }
-        row.addView(badge, LinearLayout.LayoutParams(dp(44), dp(25)).apply { marginStart = dp(10) })
+        row.addView(badge, LinearLayout.LayoutParams(dp(34), dp(23)).apply { marginStart = dp(8) })
         return Holder(row, logo, title, meta, badge, progress)
     }
 
@@ -153,7 +154,7 @@ internal class LiveChannelAdapter(
     }
 
     private fun renderFocus(holder: Holder, focused: Boolean) {
-        holder.itemView.background = rowBackground(focused)
+        holder.itemView.background = rowBackground(holder.itemView.context, focused)
         holder.title.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextPrimary)
         holder.meta.setTextColor(if (focused) BlofyTvDesign.Lavender else BlofyTvDesign.TextMuted)
         holder.badge.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.PurpleSoft)
@@ -186,5 +187,5 @@ internal class LiveChannelAdapter(
         val progress: ProgressBar
     ) : RecyclerView.ViewHolder(item)
 
-    private fun rowBackground(focused: Boolean) = BlofyTvDesign.glassSurface(16f, focused)
+    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean) = CinemaStyle.surface(contextForBackground, focused = focused)
 }
