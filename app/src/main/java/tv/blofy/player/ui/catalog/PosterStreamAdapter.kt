@@ -16,6 +16,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.core.device.DeviceClass
 
 class PosterStreamAdapter(
     private val onClick: (StreamEntity) -> Unit,
@@ -37,7 +38,7 @@ class PosterStreamAdapter(
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             isFocusable = true
-            isFocusableInTouchMode = true
+            isFocusableInTouchMode = DeviceClass.detect(context) == DeviceClass.Kind.TV
             isClickable = true
             setPadding(dp(3), dp(3), dp(3), dp(6))
             background = card(false, dp(8).toFloat(), dp(1))
@@ -167,6 +168,6 @@ class PosterStreamAdapter(
     private fun card(focused: Boolean, radius: Float, stroke: Int) = GradientDrawable().apply {
         setColor(CinemaStyle.Surface)
         cornerRadius = radius
-        if (focused) setStroke(stroke * 2, CinemaStyle.White)
+        if (focused) setStroke(stroke * 2, CinemaStyle.Accent)
     }
 }

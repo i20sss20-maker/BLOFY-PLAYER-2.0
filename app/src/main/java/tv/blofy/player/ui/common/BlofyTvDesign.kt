@@ -11,24 +11,24 @@ import android.widget.TextView
  * surfaces, typography and DPAD focus here instead of styling every screen independently.
  */
 object BlofyTvDesign {
-    val Background = Color.rgb(7, 6, 11)
-    val BackgroundRaised = Color.rgb(13, 10, 19)
-    val Surface = Color.rgb(20, 15, 28)
-    val SurfaceRaised = Color.rgb(26, 19, 36)
-    val SurfaceFocused = Color.rgb(61, 35, 90)
+    val Background = CinemaStyle.Background
+    val BackgroundRaised = Color.rgb(16, 19, 27)
+    val Surface = CinemaStyle.Surface
+    val SurfaceRaised = Color.rgb(33, 38, 48)
+    val SurfaceFocused = Color.rgb(48, 41, 63)
 
     val Purple = Color.rgb(127, 73, 209)
-    val PurpleBright = Color.rgb(178, 116, 250)
+    val PurpleBright = CinemaStyle.Accent
     val PurpleDeep = Color.rgb(53, 28, 80)
     val PurpleSoft = Color.rgb(210, 187, 238)
     val Lavender = Color.rgb(232, 220, 246)
     val Mint = Color.rgb(91, 220, 187)
     val Error = Color.rgb(255, 118, 140)
 
-    val TextPrimary = Color.rgb(250, 248, 252)
+    val TextPrimary = CinemaStyle.White
     val TextSecondary = Color.rgb(218, 213, 225)
-    val TextMuted = Color.rgb(146, 138, 159)
-    val Divider = Color.rgb(48, 38, 58)
+    val TextMuted = CinemaStyle.Muted
+    val Divider = Color.rgb(46, 51, 62)
 
     const val HeroTitleSp = 42f
     const val DetailTitleSp = 40f
@@ -43,9 +43,9 @@ object BlofyTvDesign {
     const val RailWidth = 250
     const val CategoryRowHeight = 60
     const val LiveListWidth = 455
-    const val CardRadius = 18
-    const val PanelRadius = 22
-    const val ButtonRadius = 16
+    const val CardRadius = 8
+    const val PanelRadius = 10
+    const val ButtonRadius = 6
     const val BadgeRadius = 10
     const val StandardGap = 18
     const val FocusInMs = 80L
@@ -61,21 +61,21 @@ object BlofyTvDesign {
     fun surface(radius: Float = CardRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         if (focused) {
-            intArrayOf(0xFF513173.toInt(), 0xFF2A1A39.toInt(), 0xFF18111F.toInt())
+            intArrayOf(SurfaceFocused, SurfaceRaised, Surface)
         } else {
-            intArrayOf(0xF21D1725.toInt(), 0xF216111D.toInt(), 0xF2100D15.toInt())
+            intArrayOf(Surface, Surface, BackgroundRaised)
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFDCC1FA.toInt() else 0xFF382C43.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) PurpleBright else Divider)
     }
 
     fun glassSurface(radius: Float = CardRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         if (focused) {
-            intArrayOf(0xEB503071.toInt(), 0xEB261934.toInt(), 0xEB15101C.toInt())
+            intArrayOf(SurfaceFocused, SurfaceRaised, Surface)
         } else {
-            intArrayOf(0xDF1B1523.toInt(), 0xE014101B.toInt(), 0xE00F0C14.toInt())
+            intArrayOf(Surface, Surface, BackgroundRaised)
         }
     ).apply {
         cornerRadius = radius
@@ -84,7 +84,7 @@ object BlofyTvDesign {
 
     fun elevatedSurface(radius: Float = PanelRadius.toFloat()) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xF3241C30.toInt(), 0xF3191422.toInt(), 0xF3110E17.toInt())
+        intArrayOf(SurfaceRaised, Surface, BackgroundRaised)
     ).apply {
         cornerRadius = radius
         setStroke(1, 0xFF3C3048.toInt())

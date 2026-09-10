@@ -26,6 +26,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.os.ConfigurationCompat
 import androidx.core.view.doOnLayout
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -34,8 +36,6 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
-import tv.blofy.player.core.theme.ThemeManager
-import tv.blofy.player.core.theme.ThemeProfile
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.HomeSnapshotStore
 import tv.blofy.player.ui.login.CatalogLoadingActivity
@@ -50,7 +50,6 @@ import tv.blofy.player.ui.catalog.SmartCollectionsActivity
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.library.LibraryActivity
-import tv.blofy.player.ui.library.RecentChannelsActivity
 import tv.blofy.player.ui.mobile.MobileContentActivity
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.SettingsActivity
@@ -59,12 +58,15 @@ import java.util.Date
 import java.util.Locale
 
 class HomeActivity : AppCompatActivity() {
-    private lateinit var theme: ThemeProfile
     private lateinit var deviceKind: DeviceClass.Kind
     private val uiDirection get() = resources.configuration.layoutDirection
+    private val remote get() = !::deviceKind.isInitialized || deviceKind == DeviceClass.Kind.TV
+    private val layoutSpec get() = HomeLayoutSpec(
+        resources.configuration.screenWidthDp.coerceAtLeast(320),
+        resources.configuration.screenHeightDp.coerceAtLeast(320), remote)
     private val compactTv get() = resources.configuration.screenHeightDp <= 600
-    private val railRowHeight get() = ((resources.configuration.screenHeightDp - 132) / 8 - 7).coerceIn(30, 36)
-    private val posterWidth get() = if (compactTv) 122 else 148
+    private val railRowHeight get() = layoutSpec.railRowHeight
+    private val posterWidth get() = layoutSpec.posterWidth
     private val posterHeight get() = posterWidth * 3 / 2
     private var firstAction: View? = null
     private val actionViews = linkedMapOf<String, View>()
@@ -102,7 +104,7 @@ class HomeActivity : AppCompatActivity() {
                 ConfigurationCompat.getLocales(resources.configuration)[0] ?: Locale.getDefault()).format(Date())
         },
         rotateHero = {
-            if (heroCandidates.size > 1 && !isFinishing && heroContent?.hasFocus() != true) {
+            if (remote && heroCandidates.size > 1 && !isFinishing && heroContent?.hasFocus() != true) {
                 heroIndex = (heroIndex + 1) % heroCandidates.size
                 heroItem = heroCandidates[heroIndex]
                 renderHero(heroCandidates[heroIndex])
@@ -113,7 +115,6 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        theme = ThemeManager.current(this)
         deviceKind = DeviceClass.detect(this)
         // A direct intent must not bypass the same readiness check as the login screen.
         setContentView(FrameLayout(this).apply { background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background) })
@@ -129,7 +130,16 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun showReadyHome() {
-        setContentView(if (deviceKind == DeviceClass.Kind.TV) buildTvHome() else buildCompactHome())
+        val root = if (layoutSpec.compact) buildCompactHome() else buildTvHome()
+        setContentView(root)
+        if (!remote) {
+            ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+                insets
+            }
+            ViewCompat.requestApplyInsets(root)
+        }
         if (deviceKind == DeviceClass.Kind.TV) {
             homeFocusController?.dispose()
             homeFocusController = HomeFocusController(
@@ -140,20 +150,18 @@ class HomeActivity : AppCompatActivity() {
         }
         restoreFocus()
         warmCatalogArtwork()
-        if (deviceKind == DeviceClass.Kind.TV) {
-            renderSkeleton()
-            loadHomeExperience()
-            if (homeResumed) {
-                refreshScheduler.start()
-                historyObserver.start()
-            }
+        renderSkeleton()
+        loadHomeExperience()
+        if (homeResumed) {
+            refreshScheduler.start()
+            historyObserver.start()
         }
     }
 
     override fun onResume() {
         super.onResume()
         homeResumed = true
-        if (homeFeed != null && deviceKind == DeviceClass.Kind.TV) {
+        if (homeFeed != null) {
             refreshScheduler.start()
             historyObserver.start()
         }
@@ -359,9 +367,9 @@ class HomeActivity : AppCompatActivity() {
             feed.addView(sectionTitle(if (shelfIndex == 0) "جاري تجهيز مكتبتك" else "", if (shelfIndex == 0) "نرتب المحتوى لك…" else ""))
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection; setPadding(0, dp(5), 0, dp(12)) }
             repeat(6) {
-                row.addView(View(this).apply { background = skeletonSurface() }, LinearLayout.LayoutParams(dp(148), dp(210)).apply { marginStart = dp(10) })
+                row.addView(View(this).apply { background = skeletonSurface() }, LinearLayout.LayoutParams(dp(posterWidth), dp(posterHeight)).apply { marginStart = dp(10) })
             }
-            feed.addView(row, LinearLayout.LayoutParams(-1, dp(224)))
+            feed.addView(row, LinearLayout.LayoutParams(-1, dp(posterHeight + 22)))
         }
         if (hero != null) feed.requestLayout()
     }
@@ -390,10 +398,8 @@ class HomeActivity : AppCompatActivity() {
         addPromotionBanner(feed)
 
         if (data.arabic.isNotEmpty()) addShelf(feed, "مختارات عربية", "محتوى عربي في واجهة واحدة", "arabic", data.providerId, data.arabic)
-        else feed.addView(compactEmpty("مختارات عربية", "ما لقينا محتوى عربي مصنف في هذه القائمة حاليًا.").also { HomeRowOrder.mark(it, "arabic") })
 
         if (data.ultraHd.isNotEmpty()) addShelf(feed, "4K • UHD", "للمحتوى عالي الجودة", "4k", data.providerId, data.ultraHd)
-        else feed.addView(compactEmpty("4K • UHD", "ما فيه عناصر 4K/HDR واضحة في أسماء المحتوى حاليًا.").also { HomeRowOrder.mark(it, "uhd") })
 
         feed.addView(sectionTitle("اختصارات سريعة", "وصل لأقسامك بضغطة واحدة").also { HomeRowOrder.mark(it, HomeRowOrder.QUICK_SHORTCUTS) })
         val quick = LinearLayout(this).apply {
@@ -408,7 +414,9 @@ class HomeActivity : AppCompatActivity() {
         addStory(quick, "series_story", "المسلسلات", "مواسم وحلقات", contentIntent("series"))
         addStory(quick, "favorite_story", "المفضلة", "اختياراتك", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addStory(quick, "search_story", "البحث", "ابحث فورًا", Intent(this, SearchActivity::class.java))
-        feed.addView(quick, LinearLayout.LayoutParams(-1, dp(118)))
+        if (layoutSpec.compact) {
+            feed.addView(CinemaStyle.actionStrip(this, quick), LinearLayout.LayoutParams(-1, dp(100)))
+        } else feed.addView(quick, LinearLayout.LayoutParams(-1, dp(100)))
 
         feed.alpha = 0f
         feed.translationY = dp(12).toFloat()
@@ -443,15 +451,18 @@ class HomeActivity : AppCompatActivity() {
             clipChildren = false
             clipToPadding = false
         }
+        val landscape = prefix == "continue"
+        val cardWidth = if (landscape) if (layoutSpec.compact) 208 else 224 else posterWidth
+        val cardHeight = if (landscape) cardWidth * 9 / 16 + 24 else posterHeight
         items.take(18).forEachIndexed { index, item ->
             row.addView(
-                posterCard(providerId, item, "poster_${prefix}_${item.kind}_$index", states[item.key]),
-                LinearLayout.LayoutParams(dp(posterWidth), dp(posterHeight)).apply { marginStart = dp(9); marginEnd = dp(3) }
+                posterCard(providerId, item, "poster_${prefix}_${item.kind}_$index", states[item.key], landscape),
+                LinearLayout.LayoutParams(dp(cardWidth), dp(cardHeight)).apply { marginStart = dp(9); marginEnd = dp(3) }
             )
         }
         scroll.addView(row, FrameLayout.LayoutParams(-2, -1))
         scroll.doOnLayout { scroll.scrollTo(if (uiDirection == View.LAYOUT_DIRECTION_RTL) (row.width - scroll.width).coerceAtLeast(0) else 0, 0) }
-        parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(posterHeight + 22)))
+        parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(cardHeight + 22)))
     }
 
     private fun addTopTenShelf(parent: LinearLayout, providerId: String, items: List<StreamEntity>) {
@@ -488,11 +499,11 @@ class HomeActivity : AppCompatActivity() {
         contentDescription = listOf(title, subtitle).filter(String::isNotBlank).joinToString(". ")
     }
 
-    private fun posterCard(providerId: String, item: StreamEntity, key: String, state: WatchStateEntity?) = FrameLayout(this).apply {
+    private fun posterCard(providerId: String, item: StreamEntity, key: String, state: WatchStateEntity?, landscape: Boolean = false) = FrameLayout(this).apply {
         id = View.generateViewId()
         tag = item.key
         isFocusable = true
-        isFocusableInTouchMode = true
+        isFocusableInTouchMode = remote
         isClickable = true
         background = posterSurface(false)
         clipChildren = false
@@ -500,7 +511,7 @@ class HomeActivity : AppCompatActivity() {
 
         val poster = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(0xFF17101F.toInt()) }
         addView(poster, FrameLayout.LayoutParams(-1, -1).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) })
-        ArtworkLoader.loadPriority(poster, listOf(item.icon, item.backdrop))
+        ArtworkLoader.loadPriority(poster, if (landscape) listOf(item.backdrop, item.icon) else listOf(item.icon, item.backdrop))
 
         val badges = qualityBadges(item)
         if (badges.isNotEmpty()) {
@@ -534,7 +545,8 @@ class HomeActivity : AppCompatActivity() {
             val progress = (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
             val track = FrameLayout(this@HomeActivity).apply { background = roundedColor(0x664E3C5F, 4) }
             val fill = View(this@HomeActivity).apply { background = roundedColor(PURPLE_BRIGHT, 4) }
-            track.addView(fill, FrameLayout.LayoutParams(0, dp(4)).apply { width = dp(((posterWidth - 12) * progress).toInt().coerceAtLeast(3)) })
+            track.addView(fill, FrameLayout.LayoutParams(0, dp(3)))
+            track.doOnLayout { fill.layoutParams = (fill.layoutParams as FrameLayout.LayoutParams).apply { width = (track.width * progress).toInt() } }
             addView(track, FrameLayout.LayoutParams(-1, dp(4), Gravity.BOTTOM).apply { leftMargin = dp(6); rightMargin = dp(6); bottomMargin = dp(5) })
         }
 
@@ -585,7 +597,7 @@ class HomeActivity : AppCompatActivity() {
     private fun addFeaturedBanner(parent: LinearLayout, providerId: String, item: StreamEntity) {
         parent.addView(sectionTitle("مميز لك", "اختيار بارز من مكتبتك"))
         val card = FrameLayout(this).apply {
-            id = View.generateViewId(); isFocusable = true; isFocusableInTouchMode = true; isClickable = true; background = heroSurface(); clipChildren = true
+            id = View.generateViewId(); isFocusable = true; isFocusableInTouchMode = remote; isClickable = true; background = heroSurface(); clipChildren = true
             val art = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; alpha = .50f }
             addView(art, FrameLayout.LayoutParams(-1, -1)); ArtworkLoader.loadPriority(art, listOf(item.backdrop, item.icon))
             addView(View(this@HomeActivity).apply { background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF5181021.toInt(), 0xB52A1738.toInt(), 0x4017101F)) }, FrameLayout.LayoutParams(-1, -1))
@@ -610,6 +622,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun addPromotionBanner(parent: LinearLayout) {
         val prefs = getSharedPreferences("blofy_home_promo", MODE_PRIVATE)
+        if (!prefs.contains("headline") && !prefs.contains("image_url")) return
         val headline = prefs.getString("headline", null)?.takeIf { it.isNotBlank() } ?: "اكتشف أكثر مع BLOFY"
         val subtitle = prefs.getString("subtitle", null)?.takeIf { it.isNotBlank() } ?: "مختارات متجددة وتجربة تلفزيون مصممة عشان توصل للمحتوى بأقل عدد من الضغطات."
         val imageUrl = prefs.getString("image_url", null)?.takeIf { it.isNotBlank() }
@@ -664,7 +677,7 @@ class HomeActivity : AppCompatActivity() {
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = uiDirection
-            setPadding(dp(22), dp(16), dp(22), dp(16))
+            setPadding(dp(layoutSpec.gutter), dp(14), dp(layoutSpec.gutter), dp(14))
         }
         root.addView(shell, FrameLayout.LayoutParams(-1, -1))
         // The rail fits all eight rows at 540dp and keeps a scroll fallback for shorter TVs.
@@ -678,7 +691,7 @@ class HomeActivity : AppCompatActivity() {
             background = null
             addView(buildSidebar(), FrameLayout.LayoutParams(-1, -2))
         }
-        shell.addView(rail, LinearLayout.LayoutParams(dp(if (compactTv) 138 else 160), -1).apply { marginEnd = dp(18) })
+        shell.addView(rail, LinearLayout.LayoutParams(dp(layoutSpec.railWidth), -1).apply { marginEnd = dp(12) })
         val main = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = uiDirection
@@ -702,7 +715,7 @@ class HomeActivity : AppCompatActivity() {
             textSize = 10f; setTextColor(TEXT_MUTED)
             gravity = Gravity.END; isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
         }
-        header.addView(clockLabel, LinearLayout.LayoutParams(dp(166), -2).apply { marginStart = dp(10) })
+        header.addView(clockLabel, LinearLayout.LayoutParams(dp(if (layoutSpec.width < 800) 120 else 166), -2).apply { marginStart = dp(10) })
         main.addView(header, LinearLayout.LayoutParams(-1, dp(32)))
         val scroll = ScrollView(this).apply {
             tag = "blofy_home_feed_scroll"
@@ -718,7 +731,7 @@ class HomeActivity : AppCompatActivity() {
             setPadding(dp(5), dp(5), dp(5), dp(24))
         }
         homeFeed = feed
-        feed.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(if (compactTv) 224 else 274)).apply { bottomMargin = dp(8) })
+        feed.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(layoutSpec.heroHeight)).apply { bottomMargin = dp(8) })
         scroll.addView(feed, FrameLayout.LayoutParams(-1, -2))
         main.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
@@ -734,7 +747,7 @@ class HomeActivity : AppCompatActivity() {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = "BLOFY PLAYER"
-        }, LinearLayout.LayoutParams(dp(82), dp(44)).apply { bottomMargin = dp(26) })
+        }, LinearLayout.LayoutParams(dp(72), dp(44)).apply { bottomMargin = dp(18) })
         addView(sideSelected(R.drawable.cinema_home, getString(R.string.home_home)))
         addView(sideAction("side_live", R.drawable.cinema_live, getString(R.string.home_live), contentIntent("live")))
         addView(sideAction("side_movies", R.drawable.cinema_movies, getString(R.string.home_movies), contentIntent("movie")))
@@ -751,7 +764,7 @@ class HomeActivity : AppCompatActivity() {
         addView(ImageView(this@HomeActivity).apply {
             setImageResource(icon); imageTintList = ColorStateList.valueOf(TEXT_MUTED)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginEnd = dp(12) })
+        }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginEnd = dp(8) })
         addView(TextView(this@HomeActivity).apply {
             text = label; textSize = 12f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(TEXT_PRIMARY); gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -760,16 +773,18 @@ class HomeActivity : AppCompatActivity() {
     }.also { it.layoutParams = LinearLayout.LayoutParams(-1, dp(railRowHeight)).apply { bottomMargin = dp(7) } }
 
     private fun sideSelected(icon: Int, label: String) = sideBase(icon, label).apply {
-        background = roundedColor(0xFF1B1F28.toInt(), 6)
+        background = roundedColor(0xFF211D2D.toInt(), 6)
+        (getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(PURPLE_BRIGHT)
+        (getChildAt(1) as? TextView)?.setTextColor(PURPLE_BRIGHT)
     }
     private fun sideAction(key: String, icon: Int, label: String, intent: Intent) = sideBase(icon, label).apply {
         id = View.generateViewId(); tag = key
-        isFocusable = true; isFocusableInTouchMode = true; isClickable = true
+        isFocusable = true; isFocusableInTouchMode = remote; isClickable = true
         background = transparentSurface(false)
         setOnFocusChangeListener { view, focused ->
             view.background = transparentSurface(focused)
-            (getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(if (focused) CinemaStyle.Background else TEXT_MUTED)
-            (getChildAt(1) as? TextView)?.setTextColor(if (focused) CinemaStyle.Background else TEXT_PRIMARY)
+            (getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(if (focused) PURPLE_BRIGHT else TEXT_MUTED)
+            (getChildAt(1) as? TextView)?.setTextColor(TEXT_PRIMARY)
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
             animateFocus(view, focused, 1f, 0f, 0f)
         }
@@ -783,24 +798,24 @@ class HomeActivity : AppCompatActivity() {
             scaleType = ImageView.ScaleType.CENTER_CROP; alpha = .88f
         }.also { addView(it, FrameLayout.LayoutParams(-1, -1)) }
         addView(View(this@HomeActivity).apply {
-            val direction = if (uiDirection == View.LAYOUT_DIRECTION_RTL) GradientDrawable.Orientation.LEFT_RIGHT else GradientDrawable.Orientation.RIGHT_LEFT
+            val direction = if (layoutSpec.compact) GradientDrawable.Orientation.TOP_BOTTOM else if (uiDirection == View.LAYOUT_DIRECTION_RTL) GradientDrawable.Orientation.LEFT_RIGHT else GradientDrawable.Orientation.RIGHT_LEFT
             background = GradientDrawable(direction, intArrayOf(0x08090B10, 0xA9090B10.toInt(), 0xFA090B10.toInt()))
         }, FrameLayout.LayoutParams(-1, -1))
         val content = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             layoutDirection = uiDirection
-            setPadding(dp(22), dp(16), dp(22), dp(16))
+            setPadding(dp(18), dp(16), dp(18), dp(if (layoutSpec.compact) 26 else 16))
         }
         heroContent = content
         heroKicker = TextView(this@HomeActivity).apply {
-            text = "BLOFY PREMIUM"; textSize = 10f; letterSpacing = .09f
+            text = "BLOFY PLAYER"; textSize = 10f
             typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT)
             gravity = Gravity.START; includeFontPadding = false
         }.also { content.addView(it) }
         heroTitle = TextView(this@HomeActivity).apply {
             text = getString(R.string.home_all_content)
-            textSize = if (compactTv) 26f else 32f
+            textSize = if (layoutSpec.compact || compactTv) 24f else 28f
             typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
             gravity = Gravity.START; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
             includeFontPadding = false; setPadding(0, dp(5), 0, 0)
@@ -814,7 +829,7 @@ class HomeActivity : AppCompatActivity() {
         heroSubtitle = TextView(this@HomeActivity).apply {
             text = getString(R.string.home_all_content_subtitle); textSize = 12f
             setTextColor(TEXT_SECONDARY); gravity = Gravity.START
-            maxLines = if (compactTv) 1 else 2; ellipsize = TextUtils.TruncateAt.END
+            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
             setPadding(0, dp(6), 0, dp(7))
         }.also { content.addView(it) }
         heroDots = LinearLayout(this@HomeActivity).apply {
@@ -826,10 +841,13 @@ class HomeActivity : AppCompatActivity() {
             clipChildren = false
         }
         heroPrimary = actionHeroButton(getString(R.string.home_watch_now), "hero_watch", true) { openHeroItem() }
-        row.addView(heroPrimary, LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(10) })
-        row.addView(heroButton(getString(R.string.home_explore_movies), "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(130), dp(CinemaStyle.ActionHeight)))
-        content.addView(row)
-        addView(content, FrameLayout.LayoutParams(dp(((resources.configuration.screenWidthDp - 204) * .72f).toInt().coerceAtLeast(360)), -1, Gravity.START))
+        row.addView(heroPrimary, LinearLayout.LayoutParams(dp(104), dp(layoutSpec.actionHeight)).apply { marginEnd = dp(10) })
+        row.addView(heroButton(getString(R.string.home_explore_movies), "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(122), dp(layoutSpec.actionHeight)))
+        content.addView(CinemaStyle.actionStrip(this@HomeActivity, row))
+        val available = layoutSpec.width - layoutSpec.gutter * 2 - layoutSpec.railWidth - 22
+        val contentWidth = if (layoutSpec.compact) -1 else dp((available * .74f).toInt().coerceAtLeast(280).coerceAtMost(available))
+        addView(content, FrameLayout.LayoutParams(contentWidth, if (layoutSpec.compact) -2 else -1,
+            Gravity.START or if (layoutSpec.compact) Gravity.BOTTOM else Gravity.TOP))
     }
 
     private fun actionHeroButton(label: String, key: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
@@ -843,22 +861,89 @@ class HomeActivity : AppCompatActivity() {
 
     private fun addStory(row: LinearLayout, key: String, title: String, subtitle: String, intent: Intent) {
         val card = LinearLayout(this).apply {
-            id = View.generateViewId(); orientation = LinearLayout.VERTICAL; gravity = Gravity.BOTTOM or Gravity.START; layoutDirection = uiDirection; setPadding(dp(16), dp(13), dp(16), dp(13)); background = storySurface(false); isFocusable = true; isFocusableInTouchMode = true; isClickable = true
+            id = View.generateViewId(); orientation = LinearLayout.VERTICAL; gravity = Gravity.BOTTOM or Gravity.START; layoutDirection = uiDirection; setPadding(dp(16), dp(13), dp(16), dp(13)); background = storySurface(false); isFocusable = true; isFocusableInTouchMode = remote; isClickable = true
             addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
             addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 11f; setTextColor(TEXT_MUTED); gravity = Gravity.START })
             setOnFocusChangeListener { view, focused -> view.background = storySurface(focused); childrenTextColor(this, focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key); animateFocus(view, focused, 1.035f, 0f, dp(10).toFloat()) }
             setOnClickListener { startActivity(intent) }
         }
-        registerAction(key, card); row.addView(card, LinearLayout.LayoutParams(0, -1, 1f).apply { marginStart = dp(6); marginEnd = dp(6) })
+        registerAction(key, card); row.addView(card, (if (layoutSpec.compact) LinearLayout.LayoutParams(dp(132), dp(76)) else LinearLayout.LayoutParams(0, -1, 1f)).apply { marginStart = dp(6); marginEnd = dp(6) })
     }
 
     private fun buildCompactHome(): LinearLayout {
-        val phone = deviceKind == DeviceClass.Kind.PHONE
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = if (phone) Gravity.TOP else Gravity.CENTER_VERTICAL; setPadding(if (phone) dp(24) else dp(62), if (phone) dp(24) else dp(46), if (phone) dp(24) else dp(62), if (phone) dp(24) else dp(46)); setBackgroundColor(theme.background); layoutDirection = uiDirection }
-        root.addView(title("BLOFY PLAYER", if (phone) 26f else 32f)); root.addView(subtitle("كل محتواك. أسرع. أبسط.", if (phone) dp(20) else dp(30)))
-        val primary = actionRow(phone); addCompactAction(primary, "live", "البث المباشر", contentIntent("live")); addCompactAction(primary, "movies", "الأفلام", contentIntent("movie")); addCompactAction(primary, "series", "المسلسلات", contentIntent("series")); addCompactAction(primary, "search", "البحث", Intent(this, SearchActivity::class.java)); root.addView(primary)
-        val secondary = actionRow(phone).apply { setPadding(0, if (phone) dp(8) else dp(16), 0, 0) }; addCompactAction(secondary, "recent", "آخر القنوات", Intent(this, RecentChannelsActivity::class.java)); addCompactAction(secondary, "continue", "متابعة المشاهدة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE)); addCompactAction(secondary, "collections", "مختارات BLOFY", collectionIntent(SmartCollectionsActivity.MODE_TOP_RATED)); addCompactAction(secondary, "favorites", "المفضلة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES)); addCompactAction(secondary, "settings", "الإعدادات", Intent(this, SettingsActivity::class.java)); root.addView(secondary)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; layoutDirection = uiDirection
+            setBackgroundColor(CinemaStyle.Background)
+        }
+        val header = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL; layoutDirection = uiDirection
+            setPadding(dp(16), 0, dp(12), 0)
+        }
+        header.addView(ImageView(this).apply {
+            setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE
+            contentDescription = "BLOFY PLAYER"
+        }, LinearLayout.LayoutParams(dp(48), dp(44)))
+        header.addView(TextView(this).apply {
+            text = "BLOFY PLAYER"; textSize = 12f; setTextColor(TEXT_PRIMARY)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(touchNav("mobile_search", R.drawable.cinema_search, getString(R.string.home_search),
+            Intent(this, SearchActivity::class.java), iconOnly = true), LinearLayout.LayoutParams(dp(48), dp(48)))
+        header.addView(touchNav("mobile_settings", R.drawable.cinema_settings, getString(R.string.home_settings),
+            Intent(this, SettingsActivity::class.java), iconOnly = true), LinearLayout.LayoutParams(dp(48), dp(48)))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(52)))
+        val tabs = LinearLayout(this).apply {
+            layoutDirection = uiDirection; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), 0, dp(12), 0)
+        }
+        listOf("live" to R.string.home_live, "movie" to R.string.home_movies, "series" to R.string.home_series).forEach { (kind, label) ->
+            tabs.addView(actionHeroButton(getString(label), "tab_" + kind, false) { startActivity(contentIntent(kind)) },
+                LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(4); marginEnd = dp(4) })
+        }
+        root.addView(tabs, LinearLayout.LayoutParams(-1, dp(52)))
+        val scroll = ScrollView(this).apply {
+            tag = "blofy_home_feed_scroll"; isVerticalScrollBarEnabled = false
+            isFocusable = false; isFocusableInTouchMode = false; overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val feed = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; layoutDirection = uiDirection
+            setPadding(dp(16), 0, dp(16), dp(16)); clipChildren = false; clipToPadding = false
+        }
+        homeFeed = feed
+        feed.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(layoutSpec.heroHeight)))
+        scroll.addView(feed, FrameLayout.LayoutParams(-1, -2))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        val bottom = LinearLayout(this).apply {
+            tag = "blofy_home_bottom_nav"; layoutDirection = uiDirection
+            setBackgroundColor(CinemaStyle.Surface); setPadding(dp(8), 0, dp(8), 0)
+        }
+        bottom.addView(touchNav("mobile_home", R.drawable.cinema_home, getString(R.string.home_home), null), LinearLayout.LayoutParams(0, -1, 1f))
+        bottom.addView(touchNav("mobile_live", R.drawable.cinema_live, getString(R.string.home_live), contentIntent("live")), LinearLayout.LayoutParams(0, -1, 1f))
+        bottom.addView(touchNav("mobile_library", R.drawable.cinema_favorite, getString(R.string.home_favorites),
+            Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES)), LinearLayout.LayoutParams(0, -1, 1f))
+        bottom.addView(touchNav("mobile_collections", R.drawable.cinema_collections, getString(R.string.home_collections),
+            collectionIntent(SmartCollectionsActivity.MODE_TOP_RATED)), LinearLayout.LayoutParams(0, -1, 1f))
+        root.addView(bottom, LinearLayout.LayoutParams(-1, dp(60)))
         return root
+    }
+
+    private fun touchNav(key: String, icon: Int, label: String, intent: Intent?, iconOnly: Boolean = false) = LinearLayout(this).apply {
+        tag = key; orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+        isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+        contentDescription = label; isSelected = key == "mobile_home"
+        addView(ImageView(this@HomeActivity).apply {
+            setImageResource(icon); imageTintList = ColorStateList.valueOf(if (key == "mobile_home") PURPLE_BRIGHT else TEXT_MUTED)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(20), dp(20)))
+        if (!iconOnly) addView(TextView(this@HomeActivity).apply {
+            text = label; textSize = 10f; isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
+            setTextColor(if (key == "mobile_home") PURPLE_BRIGHT else TEXT_MUTED)
+            setPadding(0, dp(4), 0, 0); gravity = Gravity.CENTER
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(-1, -2))
+        setOnFocusChangeListener { view, focused -> view.background = transparentSurface(focused) }
+        setOnClickListener { if (intent != null) startActivity(intent) else findViewById<View>(android.R.id.content).findViewWithTag<ScrollView>("blofy_home_feed_scroll")?.smoothScrollTo(0, 0) }
+        registerAction(key, this)
     }
 
     private fun contentIntent(kind: String): Intent = if (deviceKind == DeviceClass.Kind.TV) {
@@ -867,17 +952,6 @@ class HomeActivity : AppCompatActivity() {
     } else Intent(this, MobileContentActivity::class.java).putExtra(MobileContentActivity.EXTRA_KIND, kind)
 
     private fun collectionIntent(mode: String): Intent = Intent(this, SmartCollectionsActivity::class.java).putExtra(SmartCollectionsActivity.EXTRA_MODE, mode)
-    private fun actionRow(phone: Boolean) = LinearLayout(this).apply { orientation = if (phone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL; layoutDirection = uiDirection }
-    private fun addCompactAction(row: LinearLayout, key: String, label: String, intent: Intent) {
-        val phone = deviceKind == DeviceClass.Kind.PHONE; val button = compactButton(key, label, intent)
-        row.addView(button, if (phone) LinearLayout.LayoutParams(-1, dp(72)).apply { bottomMargin = dp(8) } else LinearLayout.LayoutParams(0, dp(112), 1f).apply { marginEnd = dp(14) })
-    }
-    private fun compactButton(key: String, label: String, intent: Intent) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = if (deviceKind == DeviceClass.Kind.PHONE) 15f else 16f; setTextColor(TEXT_PRIMARY); background = compactTile(false)
-        setOnFocusChangeListener { view, focused -> setTextColor(Color.WHITE); view.background = compactTile(focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key); animateFocus(view, focused, 1.025f, 0f, dp(7).toFloat()) }
-        setOnClickListener { startActivity(intent) }; registerAction(key, this)
-    }
-
     private fun animateFocus(view: View, focused: Boolean, scale: Float, translateX: Float, elevation: Float) {
         view.animate().cancel(); view.animate().scaleX(if (focused) scale else 1f).scaleY(if (focused) scale else 1f).translationX(if (focused) translateX else 0f).translationZ(if (focused) elevation else dp(1).toFloat()).alpha(if (focused) 1f else .97f).setDuration(if (focused) 95 else 80).start()
     }
@@ -890,11 +964,11 @@ class HomeActivity : AppCompatActivity() {
     private fun roundedColor(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = dp(radius).toFloat(); setColor(color); stroke?.let { setStroke(dp(1), it) } }
     private fun surface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF69409A.toInt(), 0xFF2B193F.toInt()) else intArrayOf(0xFF15121D.toInt(), 0xFF100D16.toInt())).apply { cornerRadius = dp(14).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFC092FF.toInt() else 0xFF30283D.toInt()) }
     private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8D4AE2.toInt(), 0xFF502779.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFC9A1F4.toInt()) }
-    private fun transparentSurface(focused: Boolean) = roundedColor(if (focused) CinemaStyle.White else Color.TRANSPARENT, 6)
+    private fun transparentSurface(focused: Boolean) = roundedColor(if (focused) CinemaStyle.Surface else Color.TRANSPARENT, 6, if (focused) PURPLE_BRIGHT else null)
     private fun heroSurface() = roundedColor(CinemaStyle.Background, 8)
     private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF4B276A.toInt(), 0xFF20142E.toInt(), 0xFF121019.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF7F56A0.toInt()) }
     private fun featuredSurface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, if (focused) intArrayOf(0xFF482461.toInt(), 0xFF21132F.toInt()) else intArrayOf(0xFF361C4B.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(24).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) PURPLE_BRIGHT else 0xFF6F4A86.toInt()) }
-    private fun posterSurface(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(7).toFloat(); setColor(CinemaStyle.Background); if (focused) setStroke(dp(2), CinemaStyle.White) }
+    private fun posterSurface(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(7).toFloat(); setColor(CinemaStyle.Background); if (focused) setStroke(dp(2), PURPLE_BRIGHT) }
     private fun storySurface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF8D4CE3.toInt(), 0xFF4E2672.toInt()) else intArrayOf(0xFF2A1D39.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(17).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFD3B0FA.toInt() else 0xFF4B385E.toInt()) }
     private fun compactTile(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(if (focused) 0xFF6C3BA5.toInt() else 0xFF241A35.toInt()); setStroke(dp(if (focused) 2 else 1), if (focused) PURPLE_BRIGHT else 0xFF4B385E.toInt()) }
     private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF2B2137.toInt(), 0xFF18131F.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF43344F.toInt()) }
