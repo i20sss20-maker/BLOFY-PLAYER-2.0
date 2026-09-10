@@ -1,6 +1,8 @@
 package tv.blofy.player.ui.home
 
 import android.content.Intent
+import android.content.res.ColorStateList
+import tv.blofy.player.ui.common.CinemaStyle
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -58,8 +60,8 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var deviceKind: DeviceClass.Kind
     private val uiDirection get() = resources.configuration.layoutDirection
     private val compactTv get() = resources.configuration.screenHeightDp <= 600
-    private val railRowHeight get() = ((resources.configuration.screenHeightDp - 116) / 8 - 4).coerceIn(32, 46)
-    private val posterWidth get() = if (compactTv) 128 else 154
+    private val railRowHeight get() = ((resources.configuration.screenHeightDp - 132) / 8 - 7).coerceIn(30, 36)
+    private val posterWidth get() = if (compactTv) 122 else 148
     private val posterHeight get() = posterWidth * 3 / 2
     private var firstAction: View? = null
     private val actionViews = linkedMapOf<String, View>()
@@ -323,7 +325,7 @@ class HomeActivity : AppCompatActivity() {
             it.animate().cancel()
             it.alpha = .10f
             ArtworkLoader.loadPriority(it, listOf(item.backdrop, item.icon))
-            it.animate().alpha(.56f).setDuration(330).start()
+            it.animate().alpha(.88f).setDuration(330).start()
         }
         heroContent?.apply {
             animate().cancel()
@@ -339,10 +341,10 @@ class HomeActivity : AppCompatActivity() {
         heroCandidates.forEachIndexed { index, _ ->
             row.addView(View(this).apply {
                 background = GradientDrawable().apply {
-                    cornerRadius = dp(5).toFloat()
+                    cornerRadius = dp(2).toFloat()
                     setColor(if (index == heroIndex) PURPLE_BRIGHT else 0x667B6A89)
                 }
-            }, LinearLayout.LayoutParams(if (index == heroIndex) dp(24) else dp(8), dp(6)).apply { marginStart = dp(5) })
+            }, LinearLayout.LayoutParams(if (index == heroIndex) dp(14) else dp(4), dp(3)).apply { marginStart = dp(5) })
         }
     }
 
@@ -444,6 +446,7 @@ class HomeActivity : AppCompatActivity() {
             )
         }
         scroll.addView(row, FrameLayout.LayoutParams(-2, -1))
+        scroll.post { scroll.scrollTo(if (uiDirection == View.LAYOUT_DIRECTION_RTL) (row.width - scroll.width).coerceAtLeast(0) else 0, 0) }
         parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(posterHeight + 22)))
     }
 
@@ -458,8 +461,8 @@ class HomeActivity : AppCompatActivity() {
                 text = "${index + 1}"
                 textSize = if (compactTv) 48f else 64f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(0xFF3B2A4D.toInt())
-                gravity = Gravity.BOTTOM or Gravity.START
+                setTextColor(0xFF606671.toInt())
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
                 includeFontPadding = false
             }
             wrap.addView(number, FrameLayout.LayoutParams(dp(60), -1, Gravity.START or Gravity.BOTTOM))
@@ -468,6 +471,7 @@ class HomeActivity : AppCompatActivity() {
             row.addView(wrap, LinearLayout.LayoutParams(dp(posterWidth + 34), dp(posterHeight + 8)).apply { marginStart = dp(8) })
         }
         scroll.addView(row, FrameLayout.LayoutParams(-2, -1))
+        scroll.post { scroll.scrollTo(if (uiDirection == View.LAYOUT_DIRECTION_RTL) (row.width - scroll.width).coerceAtLeast(0) else 0, 0) }
         parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(posterHeight + 28)))
     }
 
@@ -476,8 +480,8 @@ class HomeActivity : AppCompatActivity() {
         layoutDirection = uiDirection
         gravity = Gravity.START
         setPadding(0, dp(12), dp(4), dp(6))
-        addView(TextView(this@HomeActivity).apply { text = title; textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
-        if (subtitle.isNotBlank()) addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 11.5f; setTextColor(TEXT_MUTED); gravity = Gravity.START })
+        addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
+        contentDescription = listOf(title, subtitle).filter(String::isNotBlank).joinToString(". ")
     }
 
     private fun posterCard(providerId: String, item: StreamEntity, key: String, state: WatchStateEntity?) = FrameLayout(this).apply {
@@ -491,14 +495,14 @@ class HomeActivity : AppCompatActivity() {
         clipToOutline = true
 
         val poster = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(0xFF17101F.toInt()) }
-        addView(poster, FrameLayout.LayoutParams(-1, -1).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
+        addView(poster, FrameLayout.LayoutParams(-1, -1).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) })
         ArtworkLoader.loadPriority(poster, listOf(item.icon, item.backdrop))
 
         val badges = qualityBadges(item)
         if (badges.isNotEmpty()) {
             val badgeRow = LinearLayout(this@HomeActivity).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection; gravity = Gravity.START }
-            badges.take(if (compactTv) 2 else 3).forEach { badge -> badgeRow.addView(badgeChip(badge), LinearLayout.LayoutParams(-2, dp(24)).apply { marginStart = dp(4) }) }
-            addView(badgeRow, FrameLayout.LayoutParams(-2, dp(30), Gravity.TOP or Gravity.END).apply { topMargin = dp(8); marginEnd = dp(8) })
+            badges.take(if (compactTv) 2 else 3).forEach { badge -> badgeRow.addView(badgeChip(badge), LinearLayout.LayoutParams(-2, dp(18)).apply { marginStart = dp(4) }) }
+            addView(badgeRow, FrameLayout.LayoutParams(-2, dp(22), Gravity.TOP or Gravity.END).apply { topMargin = dp(8); marginEnd = dp(8) })
         }
 
         addView(View(this@HomeActivity).apply {
@@ -566,12 +570,12 @@ class HomeActivity : AppCompatActivity() {
 
     private fun badgeChip(label: String) = TextView(this).apply {
         text = label
-        textSize = 9.5f
+        textSize = 8f
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(Color.WHITE)
         gravity = Gravity.CENTER
         setPadding(dp(7), 0, dp(7), 0)
-        background = roundedColor(if (label == "NEW") 0xFF7C3FE0.toInt() else 0xCC15101E.toInt(), 8, 0xFFB98AF1.toInt())
+        background = roundedColor(0xDB12161D.toInt(), 3)
     }
 
     private fun addFeaturedBanner(parent: LinearLayout, providerId: String, item: StreamEntity) {
@@ -624,7 +628,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun compactEmpty(title: String, subtitle: String) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(20), dp(14), dp(20), dp(14)); background = surface(false)
-        addView(TextView(this@HomeActivity).apply { text = title; textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
+        addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
         addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 11.5f; setTextColor(TEXT_MUTED); gravity = Gravity.START })
     }.also { it.layoutParams = LinearLayout.LayoutParams(-1, dp(80)).apply { bottomMargin = dp(10) } }
 
@@ -667,10 +671,10 @@ class HomeActivity : AppCompatActivity() {
             isFocusableInTouchMode = false
             descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = surface(false)
+            background = null
             addView(buildSidebar(), FrameLayout.LayoutParams(-1, -2))
         }
-        shell.addView(rail, LinearLayout.LayoutParams(dp(if (compactTv) 164 else 184), -1).apply { marginEnd = dp(18) })
+        shell.addView(rail, LinearLayout.LayoutParams(dp(if (compactTv) 138 else 160), -1).apply { marginEnd = dp(18) })
         val main = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = uiDirection
@@ -681,8 +685,8 @@ class HomeActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         header.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"; textSize = 10f; letterSpacing = .12f
-            typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT)
+            text = getString(R.string.home_today); textSize = 16f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(TEXT_PRIMARY)
             includeFontPadding = false
         }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(18) })
         serverLabel = TextView(this).apply {
@@ -695,13 +699,7 @@ class HomeActivity : AppCompatActivity() {
             gravity = Gravity.END; isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
         }
         header.addView(clockLabel, LinearLayout.LayoutParams(dp(166), -2).apply { marginStart = dp(10) })
-        main.addView(header, LinearLayout.LayoutParams(-1, dp(24)))
-        main.addView(TextView(this).apply {
-            text = getString(R.string.home_today); textSize = if (compactTv) 21f else 25f
-            typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY)
-            gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
-        }, LinearLayout.LayoutParams(-1, dp(36)))
+        main.addView(header, LinearLayout.LayoutParams(-1, dp(32)))
         val scroll = ScrollView(this).apply {
             tag = "blofy_home_feed_scroll"
             isVerticalScrollBarEnabled = false
@@ -716,7 +714,7 @@ class HomeActivity : AppCompatActivity() {
             setPadding(dp(5), dp(5), dp(5), dp(24))
         }
         homeFeed = feed
-        feed.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(if (compactTv) 218 else 278)).apply { bottomMargin = dp(8) })
+        feed.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(if (compactTv) 224 else 274)).apply { bottomMargin = dp(8) })
         scroll.addView(feed, FrameLayout.LayoutParams(-1, -2))
         main.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
@@ -726,47 +724,50 @@ class HomeActivity : AppCompatActivity() {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
         layoutDirection = uiDirection
-        setPadding(dp(10), dp(12), dp(10), dp(12))
+        setPadding(dp(4), dp(12), dp(4), dp(12))
         clipChildren = false
         addView(ImageView(this@HomeActivity).apply {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = "BLOFY PLAYER"
-        }, LinearLayout.LayoutParams(dp(98), dp(52)).apply { bottomMargin = dp(8) })
-        addView(sideSelected("⌂", getString(R.string.home_home)))
-        addView(sideAction("side_live", "◉", getString(R.string.home_live), contentIntent("live")))
-        addView(sideAction("side_movies", "▣", getString(R.string.home_movies), contentIntent("movie")))
-        addView(sideAction("side_series", "▤", getString(R.string.home_series), contentIntent("series")))
-        addView(sideAction("side_collections", "✦", getString(R.string.home_collections), collectionIntent(SmartCollectionsActivity.MODE_TOP_RATED)))
-        addView(sideAction("side_favorites", "♡", getString(R.string.home_favorites), Intent(this@HomeActivity, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES)))
-        addView(sideAction("side_search", "⌕", getString(R.string.home_search), Intent(this@HomeActivity, SearchActivity::class.java)))
-        addView(sideAction("side_settings", "⚙", getString(R.string.home_settings), Intent(this@HomeActivity, SettingsActivity::class.java)))
+        }, LinearLayout.LayoutParams(dp(82), dp(44)).apply { bottomMargin = dp(26) })
+        addView(sideSelected(R.drawable.cinema_home, getString(R.string.home_home)))
+        addView(sideAction("side_live", R.drawable.cinema_live, getString(R.string.home_live), contentIntent("live")))
+        addView(sideAction("side_movies", R.drawable.cinema_movies, getString(R.string.home_movies), contentIntent("movie")))
+        addView(sideAction("side_series", R.drawable.cinema_series, getString(R.string.home_series), contentIntent("series")))
+        addView(sideAction("side_collections", R.drawable.cinema_collections, getString(R.string.home_collections), collectionIntent(SmartCollectionsActivity.MODE_TOP_RATED)))
+        addView(sideAction("side_favorites", R.drawable.cinema_favorite, getString(R.string.home_favorites), Intent(this@HomeActivity, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES)))
+        addView(sideAction("side_search", R.drawable.cinema_search, getString(R.string.home_search), Intent(this@HomeActivity, SearchActivity::class.java)))
+        addView(sideAction("side_settings", R.drawable.cinema_settings, getString(R.string.home_settings), Intent(this@HomeActivity, SettingsActivity::class.java)))
     }
 
-    private fun sideBase(icon: String, label: String) = LinearLayout(this).apply {
+    private fun sideBase(icon: Int, label: String) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         layoutDirection = uiDirection; setPadding(dp(9), 0, dp(9), 0)
+        addView(ImageView(this@HomeActivity).apply {
+            setImageResource(icon); imageTintList = ColorStateList.valueOf(TEXT_MUTED)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginEnd = dp(12) })
         addView(TextView(this@HomeActivity).apply {
-            text = icon; textSize = 18f; setTextColor(PURPLE_BRIGHT); gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(dp(25), -1).apply { marginEnd = dp(8) })
-        addView(TextView(this@HomeActivity).apply {
-            text = label; textSize = 13f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            text = label; textSize = 12f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(TEXT_PRIMARY); gravity = Gravity.START or Gravity.CENTER_VERTICAL
             isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(0, -1, 1f))
-    }.also { it.layoutParams = LinearLayout.LayoutParams(-1, dp(railRowHeight)).apply { bottomMargin = dp(4) } }
+    }.also { it.layoutParams = LinearLayout.LayoutParams(-1, dp(railRowHeight)).apply { bottomMargin = dp(7) } }
 
-    private fun sideSelected(icon: String, label: String) = sideBase(icon, label).apply {
-        background = roundedColor(0xFF271D36.toInt(), 10)
+    private fun sideSelected(icon: Int, label: String) = sideBase(icon, label).apply {
+        background = roundedColor(0xFF1B1F28.toInt(), 6)
     }
-    private fun sideAction(key: String, icon: String, label: String, intent: Intent) = sideBase(icon, label).apply {
+    private fun sideAction(key: String, icon: Int, label: String, intent: Intent) = sideBase(icon, label).apply {
         id = View.generateViewId(); tag = key
         isFocusable = true; isFocusableInTouchMode = true; isClickable = true
         background = transparentSurface(false)
         setOnFocusChangeListener { view, focused ->
             view.background = transparentSurface(focused)
+            (getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(if (focused) CinemaStyle.Background else TEXT_MUTED)
+            (getChildAt(1) as? TextView)?.setTextColor(if (focused) CinemaStyle.Background else TEXT_PRIMARY)
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
-            animateFocus(view, focused, 1.015f, 0f, dp(3).toFloat())
+            animateFocus(view, focused, 1f, 0f, 0f)
         }
         setOnClickListener { startActivity(intent) }; registerAction(key, this)
     }
@@ -775,17 +776,17 @@ class HomeActivity : AppCompatActivity() {
         tag = "blofy_home_hero"
         clipToOutline = true; background = heroSurface()
         heroArtwork = ImageView(this@HomeActivity).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP; alpha = .66f
+            scaleType = ImageView.ScaleType.CENTER_CROP; alpha = .88f
         }.also { addView(it, FrameLayout.LayoutParams(-1, -1)) }
         addView(View(this@HomeActivity).apply {
             val direction = if (uiDirection == View.LAYOUT_DIRECTION_RTL) GradientDrawable.Orientation.LEFT_RIGHT else GradientDrawable.Orientation.RIGHT_LEFT
-            background = GradientDrawable(direction, intArrayOf(0x28100D18, 0xBB100D18.toInt(), 0xFA100D18.toInt()))
+            background = GradientDrawable(direction, intArrayOf(0x08090B10, 0xA9090B10.toInt(), 0xFA090B10.toInt()))
         }, FrameLayout.LayoutParams(-1, -1))
         val content = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             layoutDirection = uiDirection
-            setPadding(dp(24), dp(12), dp(24), dp(12))
+            setPadding(dp(22), dp(16), dp(22), dp(16))
         }
         heroContent = content
         heroKicker = TextView(this@HomeActivity).apply {
@@ -795,7 +796,7 @@ class HomeActivity : AppCompatActivity() {
         }.also { content.addView(it) }
         heroTitle = TextView(this@HomeActivity).apply {
             text = getString(R.string.home_all_content)
-            textSize = if (compactTv) 24f else 32f
+            textSize = if (compactTv) 26f else 32f
             typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
             gravity = Gravity.START; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
             includeFontPadding = false; setPadding(0, dp(5), 0, 0)
@@ -814,22 +815,24 @@ class HomeActivity : AppCompatActivity() {
         }.also { content.addView(it) }
         heroDots = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection
-            gravity = Gravity.START; setPadding(0, 0, 0, dp(6))
-        }.also { content.addView(it, LinearLayout.LayoutParams(-1, dp(12))) }
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        }.also { addView(it, FrameLayout.LayoutParams(-2, dp(12), Gravity.BOTTOM or Gravity.END).apply { marginEnd = dp(20); bottomMargin = dp(12) }) }
         val row = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection; gravity = Gravity.START
             clipChildren = false
         }
         heroPrimary = actionHeroButton(getString(R.string.home_watch_now), "hero_watch", true) { openHeroItem() }
-        row.addView(heroPrimary, LinearLayout.LayoutParams(dp(140), dp(40)).apply { marginEnd = dp(10) })
-        row.addView(heroButton(getString(R.string.home_explore_movies), "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(150), dp(40)))
+        row.addView(heroPrimary, LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(10) })
+        row.addView(heroButton(getString(R.string.home_explore_movies), "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(130), dp(CinemaStyle.ActionHeight)))
         content.addView(row)
-        addView(content, FrameLayout.LayoutParams(-1, -1))
+        addView(content, FrameLayout.LayoutParams(dp(((resources.configuration.screenWidthDp - 204) * .72f).toInt().coerceAtLeast(360)), -1, Gravity.START))
     }
 
     private fun actionHeroButton(label: String, key: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
-        id = View.generateViewId(); text = label; isAllCaps = false; textSize = 13f; minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0; setPadding(dp(10), 0, dp(10), 0); isSingleLine = true; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER; typeface = Typeface.DEFAULT_BOLD; isFocusable = true; isFocusableInTouchMode = true; setTextColor(Color.WHITE); background = buttonSurface(primary, false)
-        setOnFocusChangeListener { view, focused -> view.background = buttonSurface(primary, focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key); animateFocus(view, focused, 1.035f, 0f, dp(10).toFloat()) }
+        id = View.generateViewId(); text = label
+        CinemaStyle.styleButton(this, primary) { focused ->
+            if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
+        }
         setOnClickListener { action() }; registerAction(key, this)
     }
     private fun heroButton(label: String, key: String, intent: Intent, primary: Boolean) = actionHeroButton(label, key, primary) { startActivity(intent) }
@@ -883,13 +886,12 @@ class HomeActivity : AppCompatActivity() {
     private fun roundedColor(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = dp(radius).toFloat(); setColor(color); stroke?.let { setStroke(dp(1), it) } }
     private fun surface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF69409A.toInt(), 0xFF2B193F.toInt()) else intArrayOf(0xFF15121D.toInt(), 0xFF100D16.toInt())).apply { cornerRadius = dp(14).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFC092FF.toInt() else 0xFF30283D.toInt()) }
     private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8D4AE2.toInt(), 0xFF502779.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFC9A1F4.toInt()) }
-    private fun transparentSurface(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(if (focused) 0xFF7542B6.toInt() else Color.TRANSPARENT); if (focused) setStroke(dp(1), 0xFFB67AEF.toInt()) }
-    private fun heroSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF361C4B.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF3B2C4D.toInt()) }
+    private fun transparentSurface(focused: Boolean) = roundedColor(if (focused) CinemaStyle.White else Color.TRANSPARENT, 6)
+    private fun heroSurface() = roundedColor(CinemaStyle.Background, 8)
     private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF4B276A.toInt(), 0xFF20142E.toInt(), 0xFF121019.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF7F56A0.toInt()) }
     private fun featuredSurface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, if (focused) intArrayOf(0xFF482461.toInt(), 0xFF21132F.toInt()) else intArrayOf(0xFF361C4B.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(24).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) PURPLE_BRIGHT else 0xFF6F4A86.toInt()) }
-    private fun posterSurface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF9A55F0.toInt(), 0xFF522777.toInt()) else intArrayOf(0xFF2A1D39.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(if (focused) dp(3) else dp(1), if (focused) 0xFFE1C5FF.toInt() else 0xFF49365A.toInt()) }
+    private fun posterSurface(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(7).toFloat(); setColor(CinemaStyle.Background); if (focused) setStroke(dp(2), CinemaStyle.White) }
     private fun storySurface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF8D4CE3.toInt(), 0xFF4E2672.toInt()) else intArrayOf(0xFF2A1D39.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(17).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFD3B0FA.toInt() else 0xFF4B385E.toInt()) }
-    private fun buttonSurface(primary: Boolean, focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, if (primary || focused) intArrayOf(if (focused) 0xFFB05CFF.toInt() else 0xFF8D45EA.toInt(), if (focused) 0xFF7633D9.toInt() else 0xFF5922B1.toInt()) else intArrayOf(0xFF30213F.toInt(), 0xFF1A1325.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFF0DEFF.toInt() else 0xFF5D4270.toInt()) }
     private fun compactTile(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(if (focused) 0xFF6C3BA5.toInt() else 0xFF241A35.toInt()); setStroke(dp(if (focused) 2 else 1), if (focused) PURPLE_BRIGHT else 0xFF4B385E.toInt()) }
     private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF2B2137.toInt(), 0xFF18131F.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF43344F.toInt()) }
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START }
@@ -899,9 +901,9 @@ class HomeActivity : AppCompatActivity() {
     companion object {
         private const val SCREEN_KEY = "home"
         private const val HERO_ROTATION_MS = 8_000L
-        private val PURPLE_BRIGHT = Color.rgb(178, 103, 255)
+        private val PURPLE_BRIGHT = Color.rgb(184, 160, 237)
         private val TEXT_PRIMARY = Color.rgb(249, 247, 252)
         private val TEXT_SECONDARY = Color.rgb(224, 216, 232)
-        private val TEXT_MUTED = Color.rgb(172, 160, 188)
+        private val TEXT_MUTED = Color.rgb(154, 162, 177)
     }
 }

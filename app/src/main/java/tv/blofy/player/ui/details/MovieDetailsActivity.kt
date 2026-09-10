@@ -2,6 +2,7 @@ package tv.blofy.player.ui.details
 
 import android.content.Intent
 import android.graphics.Color
+import tv.blofy.player.ui.common.CinemaStyle
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
@@ -130,7 +131,7 @@ class MovieDetailsActivity : AppCompatActivity() {
             }
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = title
-                textSize = if (metadata?.logoUrl.isNullOrBlank()) 36f else 19f
+                textSize = if (metadata?.logoUrl.isNullOrBlank()) 28f else 18f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
                 gravity = contentGravity
@@ -216,14 +217,14 @@ class MovieDetailsActivity : AppCompatActivity() {
             val play = actionButton(getString(if (resumeMs > 30_000L) R.string.details_resume else R.string.details_watch_now), true) {
                 openPlayer(provider, stream, url, resumeMs)
             }
-            actions.addView(play, LinearLayout.LayoutParams(dp(182), dp(56)).apply { marginEnd = dp(8) })
+            actions.addView(play, LinearLayout.LayoutParams(dp(126), dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(8) })
             if (resumeMs > 30_000L) {
                 actions.addView(actionButton(getString(R.string.details_start_over)) { openPlayer(provider, stream, url, 0L) },
-                    LinearLayout.LayoutParams(dp(150), dp(56)).apply { marginEnd = dp(8) })
+                    LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(8) })
             }
             metadata?.trailerUrl?.takeIf(String::isNotBlank)?.let { trailerUrl ->
                 actions.addView(actionButton(getString(R.string.details_trailer)) { openExternal(trailerUrl) },
-                    LinearLayout.LayoutParams(dp(142), dp(56)).apply { marginEnd = dp(8) })
+                    LinearLayout.LayoutParams(dp(106), dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(8) })
             }
             favoriteButton = actionButton(getString(if (stream.favorite) R.string.details_favorite_on else R.string.details_favorite_off)) {
                 lifecycleScope.launch {
@@ -232,8 +233,8 @@ class MovieDetailsActivity : AppCompatActivity() {
                     favoriteButton.text = getString(if (!current.favorite) R.string.details_favorite_on else R.string.details_favorite_off)
                 }
             }
-            actions.addView(favoriteButton, LinearLayout.LayoutParams(dp(150), dp(56)))
-            info.addView(actions)
+            actions.addView(favoriteButton, LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)))
+            info.addView(CinemaStyle.actionStrip(this@MovieDetailsActivity, actions))
 
             if (!metadata?.cast.isNullOrEmpty()) {
                 info.addView(TextView(this@MovieDetailsActivity).apply {
@@ -287,19 +288,7 @@ class MovieDetailsActivity : AppCompatActivity() {
 
     private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         text = label
-        isAllCaps = false
-        textSize = 13.5f
-        typeface = BlofyTvDesign.HeadingTypeface
-        isFocusable = true
-        isFocusableInTouchMode = true
-        setTextColor(Color.WHITE)
-        background = buttonBackground(false, primary)
-        setOnFocusChangeListener { view, focused ->
-            view.background = buttonBackground(focused, primary)
-            view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.022f else 1f).scaleY(if (focused) 1.022f else 1f)
-                .translationZ(if (focused) dp(9).toFloat() else dp(2).toFloat()).setDuration(65).start()
-        }
+        CinemaStyle.styleButton(this, primary)
         setOnClickListener { action() }
     }
 
@@ -309,19 +298,6 @@ class MovieDetailsActivity : AppCompatActivity() {
     ).apply {
         cornerRadius = dp(18).toFloat()
         setStroke(dp(1), 0x996B4D88.toInt())
-    }
-
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        when {
-            primary && focused -> intArrayOf(0xFFA653FF.toInt(), 0xFF7130D2.toInt())
-            primary -> intArrayOf(0xFF843FE6.toInt(), 0xFF5720AD.toInt())
-            focused -> intArrayOf(0xFF633A8D.toInt(), 0xFF35214C.toInt())
-            else -> intArrayOf(0xD92B203B.toInt(), 0xE61A1325.toInt())
-        }
-    ).apply {
-        cornerRadius = dp(15).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.PurpleBright else 0x99513C67.toInt())
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
