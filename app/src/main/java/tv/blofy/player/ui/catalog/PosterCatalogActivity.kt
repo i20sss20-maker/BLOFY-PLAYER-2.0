@@ -272,7 +272,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             lastRowId = cached.lastRowId
             hasMore = cached.items.size >= PAGE_SIZE
             posterAdapter.replace(cached.items)
-            cached.focusedKey?.let { focusedPosterKeys[memoryKey(id)] = it }
+            cached.focusedKey?.let { focusedPosterKeys.putIfAbsent(memoryKey(id), it) }
             updateCount()
             return
         }
