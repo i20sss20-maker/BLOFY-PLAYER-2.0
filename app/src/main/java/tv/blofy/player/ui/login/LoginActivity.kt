@@ -190,7 +190,7 @@ class LoginActivity : AppCompatActivity() {
         addPlaylist = primaryActionButton(getString(R.string.login_add_playlist)) {
             startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java))
         }.apply { textSize = 14f }
-        connectButton = actionButton(getString(R.string.login_enter)) { startOrCancelConnect() }.apply { textSize = 14f }
+        connectButton = actionButton(getString(R.string.login_enter_blofy)) { startOrCancelConnect() }.apply { textSize = 14f }
         actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(12) })
         actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(48), 1f))
         playlists.addView(actions)
@@ -293,7 +293,7 @@ class LoginActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 status.text = getString(R.string.refresh_site_failed)
             } finally {
-                connectButton.setText(R.string.login_enter)
+                connectButton.setText(R.string.login_enter_blofy)
                 if (connectJob === coroutineContext[Job]) connectJob = null
             }
         }

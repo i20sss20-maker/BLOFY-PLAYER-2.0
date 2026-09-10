@@ -137,7 +137,6 @@
     <string name="login_your_playlists">قوائمك</string>
     <string name="login_playlists_hint">اختر قائمة محفوظة أو أضف اشتراكك لبدء المشاهدة.</string>
     <string name="login_add_playlist">إضافة / إدارة</string>
-    <string name="login_enter">دخول إلى BLOFY</string>
     <string name="login_remote_hint">تنقّل بالأسهم · اضغط OK للاختيار</string>
     <string name="login_qr_description">رمز QR لربط الجهاز</string>
     <string name="login_qr_loading">جاري إعداد رمز الربط…</string>

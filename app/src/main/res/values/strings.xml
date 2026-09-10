@@ -138,7 +138,6 @@
     <string name="login_your_playlists">Your playlists</string>
     <string name="login_playlists_hint">Choose a saved playlist, or add your subscription to start watching.</string>
     <string name="login_add_playlist">Add / manage</string>
-    <string name="login_enter">Enter BLOFY</string>
     <string name="login_remote_hint">Use the arrow keys to navigate · Press OK to select</string>
     <string name="login_qr_description">Device linking QR code</string>
     <string name="login_qr_loading">Preparing your QR code…</string>
