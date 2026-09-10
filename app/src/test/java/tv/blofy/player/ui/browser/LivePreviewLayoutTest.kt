@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -19,6 +20,7 @@ import org.robolectric.annotation.Config
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.settings.RuntimeSettings
 
 /** Measure the actual browser views without provider loading, network requests, or a decoder. */
@@ -69,6 +71,22 @@ class LivePreviewLayoutTest {
 
     @Test fun manualPlaybackPreferenceStillDisablesAutoplayPreview() = checkWithoutPreview(build(DeviceClass.Kind.TV, false).second, 960, 540, false)
 
+    @Test fun allChannelsRestoresTheSavedChannelAcrossReturningFromPlayback() {
+        val (activity, _) = build(DeviceClass.Kind.TV)
+        ContentBrowserActivity::class.java.getDeclaredField("provider").apply { isAccessible = true }
+            .set(activity, ProviderEntity("test", "Test", "https://example.test", "user", "pass"))
+        val method = ContentBrowserActivity::class.java.getDeclaredMethod("canRestorePreview", StreamEntity::class.java).apply { isAccessible = true }
+        val channel = StreamEntity("test:1", "test", "1", "sports", "live", "Channel")
+        fun allowed(stream: StreamEntity) = method.invoke(activity, stream) as Boolean
+        assertTrue("All Channels includes channels belonging to a provider category", allowed(channel))
+        assertFalse(allowed(channel.copy(providerId = "other")))
+        assertFalse(allowed(channel.copy(locked = true)))
+        assertFalse(allowed(channel.copy(kind = "movie")))
+        ContentBrowserActivity::class.java.getDeclaredField("currentCategoryId").apply { isAccessible = true }.set(activity, "news")
+        assertFalse(allowed(channel))
+        assertTrue(allowed(channel.copy(categoryId = "news")))
+    }
+
     private fun build(kind: DeviceClass.Kind, autoplay: Boolean = true): Pair<ContentBrowserActivity, View> {
         val activity = Robolectric.buildActivity(ContentBrowserActivity::class.java, Intent().putExtra(ContentBrowserActivity.EXTRA_KIND, "live")).get()
         activity.setTheme(R.style.Theme_Blofy)
@@ -80,6 +98,9 @@ class LivePreviewLayoutTest {
 
     private fun checkThreePanes(root: View, widthDp: Int, heightDp: Int) {
         layout(root, widthDp, heightDp)
+        val heading = root.findViewWithTag<TextView>("blofy_browser_heading")
+        assertEquals(root.resources.configuration.layoutDirection, heading.layoutDirection)
+        assertTrue("Heading reserves the search shortcut's trailing area", heading.paddingEnd >= 178 * root.resources.displayMetrics.density)
         val categories = root.findViewWithTag<View>("blofy_live_categories")
         val channels = root.findViewWithTag<View>("blofy_live_channels")
         val preview = root.findViewWithTag<ViewGroup>("blofy_live_preview")

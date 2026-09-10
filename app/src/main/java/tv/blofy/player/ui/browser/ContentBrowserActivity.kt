@@ -155,6 +155,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             clipToPadding = false
         }
         root.addView(TextView(this).apply {
+            tag = "blofy_browser_heading"
+            layoutDirection = resources.configuration.layoutDirection
             val section = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
             text = "BLOFY  •  $section"
             textSize = if (phoneMode) 24f else 29f
@@ -162,7 +164,10 @@ class ContentBrowserActivity : AppCompatActivity() {
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             includeFontPadding = false
-            setPadding(dp(8), 0, 0, dp(if (phoneMode) 8 else 10))
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            // The global search shortcut occupies the trailing side of this header.
+            setPaddingRelative(dp(8), 0, dp(178), dp(if (phoneMode) 8 else 10))
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phoneMode) 54 else 62)))
 
         val body = LinearLayout(this).apply {
@@ -488,7 +493,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (page.isEmpty()) return
         lifecycleScope.launch {
             val saved = savedStreamKey()?.let { BlofyDatabase.get(applicationContext).dao().stream(it) }
-                ?.takeIf { it.providerId == provider.id && it.kind == KIND_LIVE && it.categoryId == currentCategoryId && !it.locked }
+                ?.takeIf(::canRestorePreview)
             val target = saved ?: page.firstOrNull { !it.locked }
             if (target != null) schedulePreview(target, immediate = previewSession == null)
         }
@@ -670,7 +675,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val saved = savedStreamKey()?.let { dao.stream(it) }
-                ?.takeIf { it.providerId == provider.id && it.kind == KIND_LIVE && it.categoryId == currentCategoryId && !it.locked }
+                ?.takeIf(::canRestorePreview)
             val fallback = if (saved == null) {
                 withContext(Dispatchers.IO) {
                     if (currentCategoryId == null) dao.catalogPageAfterAll(provider.id, KIND_LIVE, 0L, 1).firstOrNull()
@@ -681,6 +686,10 @@ class ContentBrowserActivity : AppCompatActivity() {
             if (target != null && !target.locked) schedulePreview(target, true)
         }
     }
+
+    private fun canRestorePreview(stream: StreamEntity): Boolean =
+        stream.providerId == provider.id && stream.kind == KIND_LIVE && !stream.locked &&
+            (currentCategoryId == null || stream.categoryId == currentCategoryId)
 
     private fun rememberCategory(categoryId: String?) {
         if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.edit().putString(categoryKey(), categoryId).apply()
