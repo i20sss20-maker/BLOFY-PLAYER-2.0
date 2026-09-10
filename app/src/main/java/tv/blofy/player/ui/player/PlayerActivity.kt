@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -30,6 +31,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import tv.blofy.player.R
 import tv.blofy.player.BlofyApp
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.playback.ContentUrlResolver
@@ -174,6 +176,13 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private fun controlSize(widthDp: Int): LinearLayout.LayoutParams {
+        val narrow = resources.configuration.screenWidthDp < 600
+        return LinearLayout.LayoutParams(if (narrow) 0 else dp(widthDp), dp(44), if (narrow) 1f else 0f)
+    }
+
     private fun buildPlayerUi() {
         val root = FrameLayout(this).apply {
             setBackgroundColor(Color.BLACK)
@@ -221,12 +230,12 @@ class PlayerActivity : AppCompatActivity() {
 
         hud = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(44, 28, 44, 34)
+            setPadding(dp(24), dp(14), dp(24), dp(20))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 intArrayOf(0xE60B0813.toInt(), 0xFA08060D.toInt())
             ).apply {
-                cornerRadii = floatArrayOf(30f, 30f, 30f, 30f, 0f, 0f, 0f, 0f)
+                cornerRadii = floatArrayOf(dp(16).toFloat(), dp(16).toFloat(), dp(16).toFloat(), dp(16).toFloat(), 0f, 0f, 0f, 0f)
                 setStroke(1, 0x553C2956)
             }
             visibility = View.GONE
@@ -247,11 +256,12 @@ class PlayerActivity : AppCompatActivity() {
         hud.addView(eyebrow)
 
         titleView = TextView(this).apply {
-            textSize = 25f
+            textSize = 20f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             maxLines = 1
-            setPadding(0, 0, 0, 8)
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(0, 0, 0, dp(6))
         }
         hud.addView(titleView)
 
@@ -277,19 +287,24 @@ class PlayerActivity : AppCompatActivity() {
             val timeline = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 4, 0, 14)
+                layoutDirection = View.LAYOUT_DIRECTION_LTR
+                setPadding(0, dp(4), 0, dp(8))
             }
             positionView = TextView(this).apply {
                 text = "00:00"
                 textSize = 13f
                 setTextColor(Color.WHITE)
-                gravity = Gravity.CENTER_VERTICAL
+                gravity = Gravity.CENTER
+                isSingleLine = true
+                textDirection = View.TEXT_DIRECTION_LTR
             }
             durationView = TextView(this).apply {
                 text = "00:00"
                 textSize = 13f
                 setTextColor(Color.rgb(190, 180, 205))
-                gravity = Gravity.CENTER_VERTICAL
+                gravity = Gravity.CENTER
+                isSingleLine = true
+                textDirection = View.TEXT_DIRECTION_LTR
             }
             progressBar = ProgressBar(
                 this,
@@ -300,15 +315,15 @@ class PlayerActivity : AppCompatActivity() {
                 progress = 0
             }
 
-            timeline.addView(positionView, LinearLayout.LayoutParams(72, 36))
+            timeline.addView(positionView, LinearLayout.LayoutParams(dp(66), dp(26)))
             timeline.addView(
                 progressBar,
-                LinearLayout.LayoutParams(0, 18, 1f).apply {
-                    marginEnd = 14
-                    marginStart = 14
+                LinearLayout.LayoutParams(0, dp(6), 1f).apply {
+                    marginEnd = dp(10)
+                    marginStart = dp(10)
                 }
             )
-            timeline.addView(durationView, LinearLayout.LayoutParams(72, 36))
+            timeline.addView(durationView, LinearLayout.LayoutParams(dp(66), dp(26)))
             hud.addView(timeline)
         }
 
@@ -316,7 +331,7 @@ class PlayerActivity : AppCompatActivity() {
             val liveHint = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                layoutDirection = resources.configuration.layoutDirection
             }
             liveHint.addView(
                 TextView(this).apply {
@@ -339,36 +354,36 @@ class PlayerActivity : AppCompatActivity() {
                 clipChildren = false
             }
 
-            val rewindButton = controlButton("−10 ث") {
+            val rewindButton = controlButton(getString(R.string.player_seek_back)) {
                 seekBy(-10_000L)
                 showHudBriefly()
             }
-            playPauseButton = controlButton("⏸  إيقاف") {
+            playPauseButton = controlButton(getString(R.string.player_pause)) {
                 togglePlayPause()
             }
-            val forwardButton = controlButton("+10 ث") {
+            val forwardButton = controlButton(getString(R.string.player_seek_forward)) {
                 seekBy(10_000L)
                 showHudBriefly()
             }
 
             playbackControls.addView(
                 forwardButton,
-                LinearLayout.LayoutParams(150, 64).apply { marginStart = 10 }
+                controlSize(96).apply { marginEnd = dp(8) }
             )
             playbackControls.addView(
                 playPauseButton,
-                LinearLayout.LayoutParams(190, 64).apply { marginStart = 10 }
+                controlSize(116).apply { marginEnd = dp(8) }
             )
             playbackControls.addView(
                 rewindButton,
-                LinearLayout.LayoutParams(150, 64)
+                controlSize(96)
             )
             hud.addView(
                 playbackControls,
                 LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = 10 }
+                ).apply { bottomMargin = dp(10) }
             )
 
             val options = LinearLayout(this).apply {
@@ -378,16 +393,16 @@ class PlayerActivity : AppCompatActivity() {
                 clipChildren = false
             }
 
-            audioButton = controlButton("🔊  الصوت") {
+            audioButton = controlButton(getString(R.string.player_audio)) {
                 showTrackDialog(C.TRACK_TYPE_AUDIO)
             }
-            subtitleButton = controlButton("CC  الترجمة") {
+            subtitleButton = controlButton(getString(R.string.player_subtitles)) {
                 showTrackDialog(C.TRACK_TYPE_TEXT)
             }
-            qualityButton = controlButton("▣  الجودة") {
+            qualityButton = controlButton(getString(R.string.player_quality)) {
                 showVideoQualityDialog()
             }
-            favoriteButton = controlButton("☆  المفضلة") {
+            favoriteButton = controlButton(getString(R.string.player_favorite)) {
                 toggleFavorite()
             }.apply {
                 visibility = if (kind == KIND_EPISODE) View.GONE else View.VISIBLE
@@ -395,30 +410,30 @@ class PlayerActivity : AppCompatActivity() {
 
             options.addView(
                 audioButton,
-                LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 }
+                controlSize(114).apply { marginEnd = dp(8) }
             )
             options.addView(
                 subtitleButton,
-                LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 }
+                controlSize(114).apply { marginEnd = dp(8) }
             )
             options.addView(
                 qualityButton,
-                LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 }
+                controlSize(114).apply { marginEnd = dp(8) }
             )
 
             if (kind != KIND_EPISODE) {
                 options.addView(
                     favoriteButton,
-                    LinearLayout.LayoutParams(184, 64)
+                    controlSize(114)
                 )
             } else {
                 options.addView(
-                    controlButton("‹  السابق") { playAdjacentEpisode(-1) },
-                    LinearLayout.LayoutParams(150, 64).apply { marginStart = 10 }
+                    controlButton(getString(R.string.player_previous)) { playAdjacentEpisode(-1) },
+                    controlSize(96).apply { marginEnd = dp(8) }
                 )
                 options.addView(
-                    controlButton("التالي  ›") { playAdjacentEpisode(1) },
-                    LinearLayout.LayoutParams(150, 64)
+                    controlButton(getString(R.string.player_next)) { playAdjacentEpisode(1) },
+                    controlSize(96)
                 )
             }
             hud.addView(options)
@@ -442,15 +457,21 @@ class PlayerActivity : AppCompatActivity() {
         isAllCaps = false
         isFocusable = true
         isFocusableInTouchMode = true
-        textSize = 14f
+        textSize = if (resources.configuration.screenWidthDp < 600) 11f else 13f
+        contentDescription = label
+        minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0
+        setPadding(dp(8), 0, dp(8), 0)
+        gravity = Gravity.CENTER
+        isSingleLine = true
+        ellipsize = TextUtils.TruncateAt.END
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(Color.WHITE)
         background = controlBackground(false)
         setOnFocusChangeListener { view, focused ->
             view.background = controlBackground(focused)
             view.animate()
-                .scaleX(if (focused) 1.055f else 1f)
-                .scaleY(if (focused) 1.055f else 1f)
+                .scaleX(if (focused) 1.025f else 1f)
+                .scaleY(if (focused) 1.025f else 1f)
                 .setDuration(100L)
                 .start()
             if (focused) keepHudVisible()
@@ -459,7 +480,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun controlBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 18f
+        cornerRadius = dp(10).toFloat()
         setColor(if (focused) PURPLE else 0xD5231A31.toInt())
         setStroke(
             if (focused) 2 else 1,
@@ -480,9 +501,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun updatePlayPauseLabel() {
         if (!::playPauseButton.isInitialized) return
         playPauseButton.text = if (session.player.isPlaying) {
-            "⏸  إيقاف"
+            getString(R.string.player_pause)
         } else {
-            "▶  تشغيل"
+            getString(R.string.player_play)
         }
     }
 
@@ -900,7 +921,7 @@ class PlayerActivity : AppCompatActivity() {
             favoriteButton.text = if (item?.favorite == true) {
                 "★  في المفضلة"
             } else {
-                "☆  المفضلة"
+                getString(R.string.player_favorite)
             }
         }
     }
@@ -913,7 +934,7 @@ class PlayerActivity : AppCompatActivity() {
             favoriteButton.text = if (!item.favorite) {
                 "★  في المفضلة"
             } else {
-                "☆  المفضلة"
+                getString(R.string.player_favorite)
             }
         }
     }
