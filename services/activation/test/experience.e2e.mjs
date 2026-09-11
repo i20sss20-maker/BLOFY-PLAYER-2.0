@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import {addCalendarMonths} from '../src/admin-renewals.mjs';
 const base=process.env.BLOFY_E2E_BASE_URL||'http://127.0.0.1:8080';
 assert.ok(['127.0.0.1','localhost'].includes(new URL(base).hostname),'Experience E2E is restricted to an isolated local service');
 const deviceId='BLOFY-'+crypto.randomBytes(2).toString('hex').toUpperCase()+'-'+crypto.randomBytes(2).toString('hex').toUpperCase();
@@ -27,3 +28,25 @@ assert.ok(record.audit.some(x=>x.action==='activation_changed'));assert.ok(recor
 await request('/api/v1/admin/experience/releases',{channel:'testing',versionCode:2000046,versionName:'2.0.0-rc07.35',downloadUrl:'https://example.test/fixture.apk',releaseNotes:'Isolated E2E release'},{admin:true});
 const releases=await request('/api/v1/releases');assert.equal(releases.items.find(x=>x.channel==='testing').versionCode,2000046);
 console.log('PASS: account ownership, expired-device read access, support persistence/resolution, audit and release publishing');
+
+const options=await request('/api/v1/admin/experience/renewal-options',null,{admin:true});
+assert.deepEqual(options.items.map(x=>x.months),[1,3,6,12,null]);
+for(const option of options.items){
+  const id='BLOFY-'+crypto.randomBytes(2).toString('hex').toUpperCase()+'-'+crypto.randomBytes(2).toString('hex').toUpperCase();
+  await request('/api/v1/activation/check',{deviceId:id,activationCode,appVersion:'manual-renewal-e2e',platform:'android'});
+  const before=await request('/api/v1/admin/experience/customer?deviceId='+id,null,{admin:true});
+  const preview=await request('/api/v1/admin/experience/renewal-preview',{deviceId:id,duration:option.key},{admin:true});
+  const expected=option.months===null?null:addCalendarMonths(before.expiresAt,option.months);
+  assert.equal(preview.expiresAt,expected);
+  const payload={deviceId:id,duration:option.key,requestId:crypto.randomUUID(),expectedExpiresAt:before.expiresAt};
+  const grant=await request('/api/v1/admin/experience/renew',payload,{admin:true});assert.equal(grant.expiresAt,expected);
+  const replay=await request('/api/v1/admin/experience/renew',payload,{admin:true});assert.equal(replay.replayed,true);
+  const after=await request('/api/v1/admin/experience/customer?deviceId='+id,null,{admin:true});
+  assert.equal(after.status,'active');assert.equal(after.expiresAt,expected);assert.equal(after.audit.filter(x=>x.action==='subscription_granted').length,1);
+  await request('/api/v1/admin/experience/renew',{...payload,requestId:crypto.randomUUID()},{admin:true,status:409});
+  if(option.key==='lifetime')await request('/api/v1/admin/experience/renewal-preview',{deviceId:id,duration:'year'},{admin:true,status:409});
+}
+const publicPlans=await request('/api/v1/subscriptions/plans');assert.ok(publicPlans.items.every(p=>!p.key.startsWith('admin-manual-')));
+await request('/api/v1/admin/devices/'+deviceId,{status:'blocked'},{method:'PATCH',admin:true});
+await request('/api/v1/admin/experience/renewal-preview',{deviceId,duration:'lifetime'},{admin:true,status:409});
+console.log('PASS: all five manual renewals persist, remaining time retained, lifetime has no expiry, duplicate/stale requests rejected safely, manual options hidden from checkout');
