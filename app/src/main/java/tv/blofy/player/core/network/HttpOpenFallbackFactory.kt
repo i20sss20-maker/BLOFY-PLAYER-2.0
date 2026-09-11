@@ -35,8 +35,8 @@ internal class HttpOpenFallbackFactory(
             try {
                 return primary.open(dataSpec)
             } catch (error: HttpDataSource.HttpDataSourceException) {
-                if (error.errorCode != PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED &&
-                    error.errorCode != PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT) throw error
+                if (error.reason != PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED &&
+                    error.reason != PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT) throw error
                 // Never mask an HTTP refusal, even if a vendor reports it with an unusual code.
                 if (error is HttpDataSource.InvalidResponseCodeException) throw error
                 try { primary.close() } catch (closeError: Exception) { error.addSuppressed(closeError) }

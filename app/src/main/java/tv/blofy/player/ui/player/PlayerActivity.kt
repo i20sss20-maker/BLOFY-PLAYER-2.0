@@ -1181,8 +1181,8 @@ open class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onResume() {
-        super.onResume()
         if (Build.VERSION.SDK_INT <= 23) restorePlaybackSession()
+        super.onResume()
         if (::hud.isInitialized && !sessionReleased && kind != KIND_LIVE) {
             hud.removeCallbacks(progressRunnable)
             hud.post(progressRunnable)
