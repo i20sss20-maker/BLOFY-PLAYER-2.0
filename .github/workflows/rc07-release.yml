@@ -195,4 +195,4 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
 
-# rc07.33 signed release for receiver playback diagnostics and shutdown recovery
+# rc07.33 signed release for receiver diagnostics and release-before-detach recovery

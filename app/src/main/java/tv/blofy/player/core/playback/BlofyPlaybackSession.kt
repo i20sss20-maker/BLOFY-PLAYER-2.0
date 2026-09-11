@@ -291,9 +291,11 @@ class BlofyPlaybackSession(
         seekRecoveryGeneration++
         retryHandler.removeCallbacksAndMessages(null)
         try {
-            detachOutput()
+            // release() removes Media3's surface callbacks. Clearing PlayerView afterwards
+            // avoids a separate, blocking surface-detach timeout on a stalled decoder.
+            player.release()
         } finally {
-            try { player.release() }
+            try { detachOutput() }
             finally { retryHandler.removeCallbacksAndMessages(null) }
         }
     }
