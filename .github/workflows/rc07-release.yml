@@ -28,6 +28,8 @@ env:
 
 jobs:
   signed-release:
+    permissions:
+      contents: write
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[signed rc07.35]')
     name: Verify + FFmpeg + signed APK/AAB
     runs-on: ubuntu-latest
@@ -190,6 +192,22 @@ jobs:
           path: build/ffmpeg-native/compliance/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish verified test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$EXPECTED_VERSION_NAME"
+          tar -czf "release/BLOFY-PLAYER-$EXPECTED_VERSION_NAME-ffmpeg-sources.tar.gz" -C build/ffmpeg-native compliance
+          printf '%s\n' 'BLOFY rc07.35: resumable library loading, saved-list recovery, mobile playback controls and account tools.' 'Install over the previous BLOFY version to retain device registration and saved lists. Physical receiver verification remains important; this is a test release.' > "$RUNNER_TEMP/release-notes.txt"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            [[ "$(gh release view "$tag" --json targetCommitish --jq .targetCommitish)" == "$GITHUB_SHA" ]] || { echo 'Existing release targets another commit'; exit 1; }
+            gh release upload "$tag" release/* --clobber
+          else
+            gh release create "$tag" release/* --target "$GITHUB_SHA" --prerelease --title "BLOFY PLAYER $EXPECTED_VERSION_NAME" --notes-file "$RUNNER_TEMP/release-notes.txt"
+          fi
 
       - name: Remove signing material
         if: always()

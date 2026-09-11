@@ -55,6 +55,16 @@ test('download publishing rejects insecure or incomplete releases before transac
   assert.equal(f.calls.length,0);
 });
 
+test('an expired device can read its account but cannot bypass active-only connection checks',async()=>{
+  const f=fixture({authorizedDevice:async()=>null,authorizedAccountDevice:async(id,pin)=>pin==='123456'?{device_id:id}:null,
+    pool:{async query(sql){return {rows:sql.includes('FROM devices d')?[{device_id:'BLOFY-DEMO-0001',status:'expired'}]:[]};}}});
+  const body={deviceId:'BLOFY-DEMO-0001',activationCode:'123456'};
+  const account=await f.request('/api/v1/portal/experience/customer',{method:'POST',body});
+  assert.equal(account.status,200);assert.equal(account.body.status,'expired');
+  assert.equal((await f.request('/api/v1/portal/experience/check',{method:'POST',body})).status,403);
+  assert.equal(f.probes,0);
+});
+
 test('new public pages retain legacy QR routing and enforce a self-only script policy',async()=>{
   const f=fixture();
   assert.equal((await f.request('/?deviceId=BLOFY-DEMO-0001&activationCode=123456')).handled,false);

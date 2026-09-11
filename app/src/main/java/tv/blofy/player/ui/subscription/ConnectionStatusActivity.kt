@@ -10,6 +10,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.diagnostics.SubscriptionHealth
 import tv.blofy.player.data.local.BlofyDatabase
@@ -59,7 +62,10 @@ class ConnectionStatusActivity : AppCompatActivity() {
             results.removeAllViews()
             lifecycleScope.launch {
                 try {
-                    val providers = BlofyDatabase.get(applicationContext).dao().providers().first()
+                    val providers = withTimeout(8_000L) {
+                        tv.blofy.player.core.identity.PortalSyncBook.visible(applicationContext,
+                            BlofyDatabase.get(applicationContext).dao().allProviders().first())
+                    }
                     if (providers.isEmpty()) results.addView(label("أضف قائمة أولًا لعرض حالة اشتراكها."))
                     for (provider in providers) {
                         val row = label("${provider.name}\nجارٍ الفحص…")
@@ -73,15 +79,30 @@ class ConnectionStatusActivity : AppCompatActivity() {
                             if (result.connections != null && result.limit != null) append("\nالاتصالات المستخدمة: ${result.connections} من ${result.limit}")
                         }
                     }
+                } catch (_: TimeoutCancellationException) {
+                    results.addView(label("تأخرت قراءة القوائم. أعد الفحص بعد قليل؛ بياناتك محفوظة."))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    results.addView(label("تعذر قراءة حالة الاشتراك. أعد الفحص بعد قليل."))
                 } finally { check.isEnabled = true }
             }
         }
         lifecycleScope.launch {
-            val state = BlofyDatabase.get(applicationContext).dao().activation()
-            activation.text = "تفعيل التطبيق: " + when {
-                state == null -> "لم تتم قراءته بعد"
-                state.activated -> "مفعّل"
-                else -> "غير مفعّل"
+            try {
+                val state = withTimeout(8_000L) { BlofyDatabase.get(applicationContext).dao().activation() }
+                activation.text = "تفعيل التطبيق: " + when {
+                    state == null -> "لم تتم قراءته بعد"
+                    state.expiresAt != null && state.expiresAt <= System.currentTimeMillis() -> "منتهي الصلاحية"
+                    state.activated -> "مفعّل"
+                    else -> "غير مفعّل"
+                }
+            } catch (_: TimeoutCancellationException) {
+                activation.text = "تأخرت قراءة تفعيل التطبيق. أعد فتح الصفحة للمحاولة."
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                activation.text = "تعذر قراءة تفعيل التطبيق حاليًا."
             }
         }
     }

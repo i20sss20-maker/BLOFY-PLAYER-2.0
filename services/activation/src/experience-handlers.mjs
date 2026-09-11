@@ -5,7 +5,7 @@ import { recordAudit } from './audit.mjs';
 import { appReleaseMetadata, sanitizeHttpsUrl, sanitizeVersionCode, sanitizeVersionName, sanitizeReleaseNotes } from './release-metadata.mjs';
 import { pseudonymizeDiagnosticProviderKey, sanitizeDiagnosticMessage } from './diagnostics-sanitizer.mjs';
 
-export function createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice, probe = probeAccount }) {
+export function createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice, authorizedAccountDevice = authorizedDevice, probe = probeAccount }) {
   const checked = new Map();
   const ms = value => value ? new Date(value).getTime() : null;
   const normalized = row => ['active','trial'].includes(row.status) && ms(row.expires_at) && ms(row.expires_at) <= Date.now() ? 'expired' : row.status;
@@ -71,7 +71,11 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
       if (req.method !== 'POST') { json(res,405,{error:'method_not_allowed'}); return true; }
       body = await readJson(req);
       deviceId = String(body.deviceId || '').trim();
-      if (!await authorizedDevice(deviceId,String(body.activationCode||''),req)) { json(res,403,{error:'unauthorized_device'}); return true; }
+      // An expired device can still read its status and ask for renewal/support. Transport checks
+      // retain the active-device requirement used by the original playlist portal.
+      const accountRoute = ['/api/v1/portal/experience/customer','/api/v1/portal/experience/support'].includes(pathname);
+      const authorize = accountRoute ? authorizedAccountDevice : authorizedDevice;
+      if (!await authorize(deviceId,String(body.activationCode||''),req)) { json(res,403,{error:'unauthorized_device'}); return true; }
     }
     const route = pathname.replace(/^\/api\/v1\/(?:admin|portal)\/experience/,'');
     if (admin && req.method==='GET' && route==='/tickets') {

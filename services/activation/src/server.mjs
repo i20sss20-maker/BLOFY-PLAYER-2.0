@@ -142,7 +142,7 @@ async function verifyDeviceCredential(client, row, activationCode) {
   return true;
 }
 
-async function authorizedDevice(deviceId, activationCode, req) {
+async function authorizedDevice(deviceId, activationCode, req, requireActive = true) {
   consumeDeviceAuthAttempt(req, deviceId);
   if (!validIdentity(deviceId, activationCode)) return null;
   const client = await pool.connect();
@@ -156,7 +156,7 @@ async function authorizedDevice(deviceId, activationCode, req) {
     }
     await client.query('COMMIT');
     const status = normalizeStatus(row);
-    return status === 'trial' || status === 'active' ? row : null;
+    return !requireActive || status === 'trial' || status === 'active' ? row : null;
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
@@ -166,7 +166,8 @@ async function authorizedDevice(deviceId, activationCode, req) {
 }
 
 const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
-const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice });
+const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice,
+  authorizedAccountDevice: (id, code, req) => authorizedDevice(id, code, req, false) });
 
 async function initializeDatabase() {
   const schemaUrl = new URL('../schema.sql', import.meta.url);
