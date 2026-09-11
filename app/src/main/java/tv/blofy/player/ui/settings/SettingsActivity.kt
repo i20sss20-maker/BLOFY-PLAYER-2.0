@@ -299,7 +299,8 @@ class SettingsActivity : AppCompatActivity() {
         else -> ""
     }
 
-    private fun copy(arabic: String, english: String) = if (resources.configuration.locales[0].language == "ar") arabic else english
+    private fun copy(arabic: String, english: String) =
+        if (androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") arabic else english
 
     private fun restoreDefaults() {
         prefs.edit().clear().apply()

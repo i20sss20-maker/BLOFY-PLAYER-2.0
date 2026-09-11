@@ -10,6 +10,7 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ScrollView
 import androidx.appcompat.app.AppCompatActivity
 import tv.blofy.player.ui.catalog.SmartCollectionsActivity
 import tv.blofy.player.ui.guide.LiveGuideActivity
@@ -40,7 +41,16 @@ class QuickMenuActivity : AppCompatActivity() {
             }
             elevation = dp(16).toFloat()
         }
-        root.addView(panel, FrameLayout.LayoutParams(dp(400), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+        val scroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            isFocusable = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(panel)
+        }
+        root.addView(scroll, FrameLayout.LayoutParams(minOf(dp(400), resources.displayMetrics.widthPixels - dp(40)), -1, Gravity.CENTER).apply {
+            topMargin = dp(24)
+            bottomMargin = dp(24)
+        })
 
         panel.addView(TextView(this).apply {
             text = "BLOFY QUICK MENU"

@@ -76,6 +76,18 @@ class CommercialUiRegressionTest {
     @Test fun homeReturnsFromLowerShelvesToHeroAndExitChoiceIsClear() {
         ActivityScenario.launch<HomeActivity>(Intent(context, HomeActivity::class.java)).use { scenario ->
             awaitUi { scenario.onActivity { a -> assertNotNull(a.window.decorView.findViewWithTag<View>("$id:movie:1")) } }
+            scenario.onActivity { a ->
+                val shelf = descendants(a.window.decorView).filterIsInstance<HorizontalScrollView>().first { scroll ->
+                    val row = scroll.getChildAt(0) as? ViewGroup
+                    row != null && row.childCount > 5 && row.getChildAt(0).tag?.toString()?.startsWith(id) == true
+                }
+                val row = shelf.getChildAt(0) as ViewGroup
+                val fullyVisible = (0 until row.childCount).map(row::getChildAt).count { card ->
+                    val rect = Rect()
+                    card.getGlobalVisibleRect(rect) && rect.width() >= card.width - 2
+                }
+                assertEquals("A TV shelf should expose five complete posters", 5, fullyVisible)
+            }
             screenshot("home")
             scenario.onActivity { a ->
                 val first = descendants(a.window.decorView).filterIsInstance<Button>().first { it.isShown }
