@@ -774,6 +774,10 @@ open class PlayerActivity : AppCompatActivity() {
         if (event.action != KeyEvent.ACTION_DOWN) {
             return super.dispatchKeyEvent(event)
         }
+        if (routed.action == RemoteAction.OK && ::connectionNotice.isInitialized && connectionNotice.hasFocus()) {
+            connectionNotice.performClick()
+            return true
+        }
         if (hud.visibility == View.VISIBLE && routed.action in HUD_NAVIGATION_ACTIONS) {
             keepHudVisible()
         }
@@ -1493,6 +1497,7 @@ open class PlayerActivity : AppCompatActivity() {
         if (!::connectionNotice.isInitialized || isFinishing || sessionReleased) return
         connectionNotice.text = message
         connectionNotice.visibility = View.VISIBLE
+        if (isTv && session.player.playerError != null) connectionNotice.requestFocus()
     }
 
     private fun retryPlayback() {
