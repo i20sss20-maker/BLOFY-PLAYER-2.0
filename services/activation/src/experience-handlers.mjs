@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { probeAccount } from './account-health.mjs';
 import { recordAudit } from './audit.mjs';
+import { RENEWAL_OPTIONS, RenewalError, renewalPreview, renewDevice } from './admin-renewals.mjs';
 import { appReleaseMetadata, sanitizeHttpsUrl, sanitizeVersionCode, sanitizeVersionName, sanitizeReleaseNotes } from './release-metadata.mjs';
 import { pseudonymizeDiagnosticProviderKey, sanitizeDiagnosticMessage } from './diagnostics-sanitizer.mjs';
 
@@ -10,7 +11,7 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
   const ms = value => value ? new Date(value).getTime() : null;
   const normalized = row => ['active','trial'].includes(row.status) && ms(row.expires_at) && ms(row.expires_at) <= Date.now() ? 'expired' : row.status;
   const pageFiles = { '/':'landing.html', '/downloads':'downloads.html', '/account':'account.html' };
-  const assetFiles = { '/experience.css':'experience.css', '/experience.js':'experience.js', '/app-preview.png':'app-preview.png' };
+  const assetFiles = { '/experience.css':'experience.css', '/premium.css':'premium.css', '/experience.js':'experience.js', '/app-preview.png':'app-preview.png', '/IBMPlexSansArabic-Regular.ttf':'IBMPlexSansArabic-Regular.ttf', '/IBMPlexSansArabic-Medium.ttf':'IBMPlexSansArabic-Medium.ttf', '/OFL.txt':'OFL.txt' };
 
   async function releases() {
     const result = await pool.query('SELECT * FROM app_releases ORDER BY channel');
@@ -52,7 +53,7 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
       if (pathname==='/' && (url.searchParams.has('deviceId') || url.searchParams.has('device') || url.searchParams.has('code') || url.searchParams.has('activationCode'))) return false;
       const file = pageFiles[pathname] || assetFiles[pathname];
       const body = await readFile(new URL('../web/'+file,import.meta.url));
-      const type = file.endsWith('.png')?'image/png':file.endsWith('.css')?'text/css':file.endsWith('.js')?'text/javascript':'text/html';
+      const type = file.endsWith('.ttf')?'font/ttf':file.endsWith('.txt')?'text/plain':file.endsWith('.png')?'image/png':file.endsWith('.css')?'text/css':file.endsWith('.js')?'text/javascript':'text/html';
       res.writeHead(200,{'content-type':type+'; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'no-referrer',
         'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"});
       res.end(body); return true;
@@ -78,6 +79,20 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
       if (!await authorize(deviceId,String(body.activationCode||''),req)) { json(res,403,{error:'unauthorized_device'}); return true; }
     }
     const route = pathname.replace(/^\/api\/v1\/(?:admin|portal)\/experience/,'');
+    if(admin && req.method==='GET' && route==='/renewal-options') {
+      json(res,200,{items:RENEWAL_OPTIONS});return true;
+    }
+    if(admin && req.method==='POST' && ['/renewal-preview','/renew'].includes(route)) {
+      if(!/^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId)){json(res,400,{error:'invalid_device'});return true;}
+      try {
+        if(route==='/renew') json(res,200,await renewDevice(pool,{...body,deviceId}));
+        else {
+          const result=await pool.query('SELECT status,expires_at FROM devices WHERE device_id=$1',[deviceId]);
+          json(res,200,{deviceId,...renewalPreview(result.rows[0],body.duration)});
+        }
+      }catch(error){if(!(error instanceof RenewalError))throw error;json(res,error.status,{error:error.message});}
+      return true;
+    }
     if (admin && req.method==='GET' && route==='/tickets') {
       const result=await pool.query("SELECT id,device_id,description,created_at FROM support_tickets WHERE status='open' ORDER BY created_at DESC LIMIT 50");
       json(res,200,{items:result.rows}); return true;

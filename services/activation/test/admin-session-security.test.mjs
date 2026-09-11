@@ -45,7 +45,7 @@ test('customer HTML is rendered only as literal cell text in the authenticated d
     tag, children: [], options: [], textContent: '', classList: {toggle(){}},
     append(...nodes) { this.children.push(...nodes); },
     replaceChildren() { this.children = []; },
-    addEventListener(){}, querySelector(){return {};}, setAttribute(){},
+    addEventListener(){}, querySelector(){return {};}, querySelectorAll(){return [];}, setAttribute(){},
     set innerHTML(_value) { throw new Error('HTML insertion is unsafe for customer fields'); }
   });
   const rows = makeElement('tbody');
@@ -55,7 +55,7 @@ test('customer HTML is rendered only as literal cell text in the authenticated d
   const context = vm.createContext({
     AbortController, setTimeout, clearTimeout, URLSearchParams,
     FormData: class { get(){return '';} },
-    document: { body:{dataset:{page:'admin'}}, getElementById:element, createElement: makeElement },
+    document: { body:{dataset:{page:'admin'}}, getElementById:element, createElement: makeElement, querySelectorAll(){return [];} },
     fetch: async url => ({ ok:true, status: 200, json: async () => url.includes('/users?') ? ({ items: [{ device_id: 'BLOFY-TEST-XSS', customer_name: malicious, customer_phone: malicious, customer_email: malicious, plan_key: malicious, status: 'active' }] }) : {items:[]} })
   });
   const script = await readFile(new URL('../web/experience.js',import.meta.url),'utf8');

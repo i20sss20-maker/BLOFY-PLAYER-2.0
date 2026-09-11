@@ -18,8 +18,8 @@ function fixture(overrides={}) {
 
 test('admin experience routes require admin authentication before reading or writing',async()=>{
   const f=fixture();
-  for(const path of ['overview','tickets','customer?deviceId=BLOFY-DEMO-0001','releases']) {
-    const res=await f.request('/api/v1/admin/experience/'+path,{method:path==='releases'?'POST':'GET'});
+  for(const path of ['overview','tickets','renewal-options','renewal-preview','renew','customer?deviceId=BLOFY-DEMO-0001','releases']) {
+    const res=await f.request('/api/v1/admin/experience/'+path,{method:['releases','renewal-preview','renew'].includes(path)?'POST':'GET'});
     assert.equal(res.status,401);
   }
   assert.equal(f.calls.length,0);assert.equal(f.probes,0);
