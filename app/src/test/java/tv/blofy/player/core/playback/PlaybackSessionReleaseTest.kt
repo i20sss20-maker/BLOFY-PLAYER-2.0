@@ -31,6 +31,7 @@ class PlaybackSessionReleaseTest {
         var releases = 0
         var prepares = 0
         var releaseError = false
+        var throwOnRelease = false
         val player = Proxy.newProxyInstance(ExoPlayer::class.java.classLoader, arrayOf(ExoPlayer::class.java)) { _, method, args ->
             when (method.name) {
                 "addListener" -> { listener = args!![0] as Player.Listener; Unit }
@@ -40,7 +41,7 @@ class PlaybackSessionReleaseTest {
                 "getPlayWhenReady" -> false
                 "getVideoFormat" -> null
                 "prepare" -> { prepares++; Unit }
-                "release" -> { releases++; if (releaseError) timeout(ExoTimeoutException.TIMEOUT_OPERATION_RELEASE); Unit }
+                "release" -> { releases++; if (releaseError) timeout(ExoTimeoutException.TIMEOUT_OPERATION_RELEASE); if (throwOnRelease) error("release failed"); Unit }
                 "setAudioAttributes", "stop", "setMediaItem", "setPlayWhenReady" -> Unit
                 "toString" -> "FakePlayer"
                 else -> error("Unexpected operation: ${method.name}")
@@ -104,6 +105,21 @@ class PlaybackSessionReleaseTest {
         session.release { detaches++ }
         session.release { detaches++ }
         assertEquals(1, detaches)
+        assertEquals(1, fake.releases)
+    }
+
+    @Test fun releaseRemovesSurfaceCallbacksBeforeTheViewIsDetached() {
+        val fake = FakePlayer()
+        val session = session(fake)
+        session.release { assertEquals("Avoid blocking on a separate surface detach first", 1, fake.releases) }
+    }
+
+    @Test fun releaseFailureStillClearsTheViewReference() {
+        val fake = FakePlayer().apply { throwOnRelease = true }
+        val session = session(fake)
+        var detached = false
+        assertTrue(runCatching { session.release { detached = true } }.isFailure)
+        assertTrue(detached)
         assertEquals(1, fake.releases)
     }
 
