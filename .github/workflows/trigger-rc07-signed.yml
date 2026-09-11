@@ -20,4 +20,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run rc07-release.yml --repo i20sss20-maker/BLOFY-PLAYER-2.0 --ref rc07-runtime-recovery
 
-# Manual signed-release trigger refresh for rc07.23
+# Manual signed-release trigger refresh for rc07.37 commercial UI update
