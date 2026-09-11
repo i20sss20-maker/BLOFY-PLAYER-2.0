@@ -102,6 +102,8 @@ internal class HomeFocusController(
         pendingFocus = view
         fun attempt(): Boolean {
             if (disposed || pendingFocus !== view || !attachedAndFocusable(view)) return false
+            // Reveal off-screen targets before requesting focus (notably the hero after scrolling).
+            view.requestRectangleOnScreen(Rect(0, 0, view.width, view.height), true)
             val moved = view.requestFocus()
             if (moved) {
                 view.requestRectangleOnScreen(Rect(0, 0, view.width, view.height), true)
@@ -186,6 +188,7 @@ internal class HomeFocusController(
         key.startsWith("poster_continue_") || key.startsWith("poster_recent_") || key == "favorite_story" || key.isBlank() -> "side_favorites"
         key.startsWith("poster_") || key.startsWith("top10_") || key in setOf("hero_movies", "movie_story", "featured") -> "side_movies"
         key == "search_story" -> "side_search"
+        key.startsWith("hero_") -> "side_home"
         else -> "side_live"
     }
 }

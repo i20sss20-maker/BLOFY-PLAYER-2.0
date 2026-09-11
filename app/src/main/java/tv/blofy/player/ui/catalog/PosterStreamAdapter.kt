@@ -168,6 +168,6 @@ class PosterStreamAdapter(
     private fun card(focused: Boolean, radius: Float, stroke: Int) = GradientDrawable().apply {
         setColor(CinemaStyle.Surface)
         cornerRadius = radius
-        if (focused) setStroke(stroke * 2, CinemaStyle.Accent)
+        setStroke(stroke * if (focused) 2 else 1, if (focused) CinemaStyle.White else 0x45FFFFFF)
     }
 }

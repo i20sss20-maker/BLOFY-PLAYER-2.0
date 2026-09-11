@@ -80,9 +80,14 @@ class PosterCatalogActivity : AppCompatActivity() {
         // Size columns from the space left after the category rail, not the whole screen.
         val contentWidthDp = (widthDp - outerPadding * 2 - railWidth - railGap - 10).coerceAtLeast(1)
         val minimumCardWidthDp = if (deviceKind == DeviceClass.Kind.PHONE) 108 else 132
-        gridColumns = (contentWidthDp / minimumCardWidthDp).coerceIn(1, 7)
+        gridColumns = if (deviceKind == DeviceClass.Kind.TV) 5
+            else (contentWidthDp / minimumCardWidthDp).coerceIn(1, gridColumns)
 
         val root = LinearLayout(this).apply {
+            // Own focus while the local categories are loading; search must not flash selected.
+            isFocusable = true
+            isFocusableInTouchMode = deviceKind == DeviceClass.Kind.TV
+            descendantFocusability = android.view.ViewGroup.FOCUS_BEFORE_DESCENDANTS
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             setPadding(dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 14), dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 18))
@@ -213,6 +218,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         body.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
+        if (deviceKind == DeviceClass.Kind.TV) root.requestFocus()
 
         posterAdapter = PosterStreamAdapter(::openItem) { item, index ->
             focusedPosterKeys[memoryKey(displayedCategoryId)] = item.key

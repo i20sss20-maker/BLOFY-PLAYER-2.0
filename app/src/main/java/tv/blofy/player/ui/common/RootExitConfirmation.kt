@@ -7,6 +7,12 @@ import android.content.DialogInterface
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -62,7 +68,20 @@ class RootExitConfirmationDialog : DialogFragment() {
         val alert = dialog as? AlertDialog ?: return
         alert.setCanceledOnTouchOutside(false)
         val density = resources.displayMetrics.density
-        alert.window?.setBackgroundDrawable(BlofyTvDesign.elevatedSurface(24f * density))
+        alert.window?.setBackgroundDrawable(CinemaStyle.surface(requireContext(), radiusDp = 20))
+        alert.window?.setDimAmount(.72f)
+        val screenWidth = resources.displayMetrics.widthPixels
+        alert.window?.setLayout(minOf((460 * density).toInt(), screenWidth - (40 * density).toInt()), ViewGroup.LayoutParams.WRAP_CONTENT)
+        alert.findViewById<TextView>(android.R.id.message)?.apply {
+            setTextColor(CinemaStyle.Muted)
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setPadding(0, (12 * density).toInt(), 0, (20 * density).toInt())
+        }
+        alert.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)?.apply {
+            setTextColor(CinemaStyle.White)
+            textSize = 24f
+        }
         val no = alert.getButton(DialogInterface.BUTTON_NEGATIVE)
         val yes = alert.getButton(DialogInterface.BUTTON_POSITIVE)
 
@@ -74,8 +93,26 @@ class RootExitConfirmationDialog : DialogFragment() {
             button.isFocusable = true
             button.isFocusableInTouchMode = true
             button.typeface = BlofyTvDesign.BodyTypeface
-            button.setTextColor(BlofyTvDesign.TextPrimary)
-            BlofyTvDesign.installTvFocus(button, 14f * density, 1.03f, button === no) {}
+            button.textSize = 17f
+            button.gravity = Gravity.CENTER
+            button.stateListAnimator = null
+            button.backgroundTintList = null
+            button.layoutParams = (button.layoutParams as LinearLayout.LayoutParams).apply {
+                width = 0
+                height = (54 * density).toInt()
+                weight = 1f
+                setMargins((6 * density).toInt(), (8 * density).toInt(), (6 * density).toInt(), (8 * density).toInt())
+            }
+            fun render(focused: Boolean) {
+                button.background = GradientDrawable().apply {
+                    cornerRadius = 10 * density
+                    setColor(if (focused) Color.WHITE else CinemaStyle.Surface)
+                    setStroke(((if (focused) 2 else 1) * density).toInt(), if (focused) Color.WHITE else 0x80FFFFFF.toInt())
+                }
+                button.setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
+            }
+            render(button.hasFocus())
+            button.setOnFocusChangeListener { _, focused -> render(focused) }
         }
 
         no.nextFocusLeftId = yes.id
@@ -85,12 +122,14 @@ class RootExitConfirmationDialog : DialogFragment() {
 
         no.setOnKeyListener { _, keyCode, event ->
             if (event.action == KeyEvent.ACTION_DOWN && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
-                yes.requestFocus(); true
+                if (event.repeatCount == 0) yes.requestFocus()
+                true
             } else false
         }
         yes.setOnKeyListener { _, keyCode, event ->
             if (event.action == KeyEvent.ACTION_DOWN && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
-                no.requestFocus(); true
+                if (event.repeatCount == 0) no.requestFocus()
+                true
             } else false
         }
 

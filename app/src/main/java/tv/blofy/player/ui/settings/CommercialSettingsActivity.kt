@@ -9,6 +9,8 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ScrollView
+import tv.blofy.player.ui.common.CinemaStyle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -27,11 +29,11 @@ class CommercialSettingsActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(48), dp(36), dp(48), dp(36))
-            setBackgroundColor(0xFF090711.toInt())
+            setPadding(dp(28), dp(24), dp(28), dp(24))
+            setBackgroundColor(CinemaStyle.Background)
         }
         page.addView(TextView(this).apply {
-            text = "BLOFY COMMERCIAL STABILITY"
+            text = "BLOFY"
             textSize = 12f
             letterSpacing = .12f
             typeface = Typeface.DEFAULT_BOLD
@@ -39,7 +41,7 @@ class CommercialSettingsActivity : AppCompatActivity() {
             gravity = Gravity.RIGHT
         }, LinearLayout.LayoutParams(-1, dp(30)))
         page.addView(TextView(this).apply {
-            text = "الأداء والاستقرار"
+            text = "جودة الصور والأداء"
             textSize = 31f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
@@ -53,20 +55,26 @@ class CommercialSettingsActivity : AppCompatActivity() {
             setPadding(dp(18), 0, dp(18), 0)
             background = card(false)
         }
-        page.addView(status, LinearLayout.LayoutParams(-1, dp(62)).apply { bottomMargin = dp(18) })
+        page.addView(status, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
+        status.setPadding(dp(18), dp(16), dp(18), dp(16))
 
         imageButton = actionButton("") { cycleImageMode() }
         safeButton = actionButton("") { toggleSafeMode() }
-        val refresh = actionButton("↻  تحديث إعدادات BLOFY\nFeature Flags + Rollout") { refreshRemote() }
-        val clearAuto = actionButton("✓  إعادة الوضع التلقائي\nمسح Safe Mode التلقائي") {
+        val refresh = actionButton("تحديث تفضيلات الخدمة\nالحصول على آخر تحسينات الأداء المتاحة") { refreshRemote() }
+        val clearAuto = actionButton("إعادة ضبط الأداء التلقائي\nإعادة تجربة المؤثرات وجودة الصور المعتادة") {
             CommercialRuntime.clearAutomaticSafeMode(this)
             render()
         }
-        val back = actionButton("↩  رجوع") { finish() }
+        val back = actionButton("رجوع") { finish() }
         listOf(imageButton, safeButton, refresh, clearAuto, back).forEach { button ->
             page.addView(button, LinearLayout.LayoutParams(-1, dp(78)).apply { bottomMargin = dp(10) })
         }
-        setContentView(page)
+        setContentView(ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            setBackgroundColor(CinemaStyle.Background)
+            addView(page)
+        })
         render()
         imageButton.requestFocus()
     }
@@ -104,44 +112,31 @@ class CommercialSettingsActivity : AppCompatActivity() {
             CommercialRuntime.ImageMode.BALANCED -> "متوازن"
             CommercialRuntime.ImageMode.HIGH -> "عالي الجودة"
         }
-        imageButton.text = "▣  جودة الصور\n$image"
+        imageButton.text = "جودة البوسترات والخلفيات • $image\nالجودة الأعلى تستخدم بيانات وذاكرة أكثر"
         val userSafe = getSharedPreferences("blofy_commercial_runtime", MODE_PRIVATE)
             .getBoolean("user_safe_mode", false)
-        safeButton.text = "◈  Safe Mode\n${if (userSafe) "مفعل يدويًا" else "تلقائي حسب الجهاز"}"
-        val config = CommercialConfigRepository.current(this)
+        safeButton.text = "الوضع الخفيف • ${if (userSafe) "مفعّل" else "تلقائي"}\nتقليل الصور والمؤثرات لمساعدة الأجهزة الأبطأ"
         status.text = buildString {
-            append(if (snapshot.safeMode) "Safe Mode نشط" else "الوضع الكامل نشط")
-            snapshot.reason?.let { append(" • $it") }
-            append(" • Config r${config.revision}")
-            append(" • الصور: $image")
+            append(if (snapshot.safeMode) "يعمل BLOFY الآن بوضع خفيف" else "تجربة العرض الكاملة مفعّلة")
+            append("\nهذه الخيارات تخص صور الواجهة؛ جودة الفيديو تتبع المحتوى المتاح.")
         }
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
-        isAllCaps = false
+        CinemaStyle.styleButton(this)
+        isSingleLine = false
+        maxLines = 3
         textSize = 15f
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(Color.WHITE)
         gravity = Gravity.CENTER
         isFocusable = true
-        background = card(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = card(focused)
-            view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.018f else 1f).scaleY(if (focused) 1.018f else 1f).setDuration(70).start()
-        }
+        setPadding(dp(16), dp(8), dp(16), dp(8))
         setOnClickListener { action() }
     }
 
-    private fun card(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF6638A2.toInt(), 0xFF35204C.toInt())
-        else intArrayOf(0xFF241831.toInt(), 0xFF17101F.toInt())
-    ).apply {
-        cornerRadius = dp(18).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFC897FF.toInt() else 0xFF513A68.toInt())
-    }
+    private fun card(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }

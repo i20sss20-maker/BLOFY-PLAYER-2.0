@@ -8,6 +8,7 @@ internal data class HomeLayoutSpec(val width: Int, val height: Int, val remote: 
     val railRowHeight = if (remote) ((height - 116) / 8 - 6).coerceIn(30, 36) else 48
     val posterWidth = when {
         compact -> ((width - gutter * 2 - 28) / 2.5f).toInt().coerceIn(104, 148)
+        remote -> ((width - gutter * 2 - railWidth - 22 - 10) / 5 - 12).coerceAtLeast(88)
         width < 1000 -> 122
         else -> 140
     }

@@ -366,7 +366,7 @@ class HomeActivity : AppCompatActivity() {
         repeat(3) { shelfIndex ->
             feed.addView(sectionTitle(if (shelfIndex == 0) "جاري تجهيز مكتبتك" else "", if (shelfIndex == 0) "نرتب المحتوى لك…" else ""))
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection; setPadding(0, dp(5), 0, dp(12)) }
-            repeat(6) {
+            repeat(if (remote) 5 else 6) {
                 row.addView(View(this).apply { background = skeletonSurface() }, LinearLayout.LayoutParams(dp(posterWidth), dp(posterHeight)).apply { marginStart = dp(10) })
             }
             feed.addView(row, LinearLayout.LayoutParams(-1, dp(posterHeight + 22)))
@@ -689,8 +689,8 @@ class HomeActivity : AppCompatActivity() {
             descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             overScrollMode = View.OVER_SCROLL_NEVER
             background = GradientDrawable().apply {
-                setColor(0xFF101013.toInt()); cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), 0xFF2C2638.toInt())
+                setColor(CinemaStyle.Surface); cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), 0x66FFFFFF)
             }
             addView(buildSidebar(), FrameLayout.LayoutParams(-1, -2))
         }
@@ -782,9 +782,21 @@ class HomeActivity : AppCompatActivity() {
     }.also { it.layoutParams = LinearLayout.LayoutParams(-1, dp(railRowHeight)).apply { bottomMargin = dp(7) } }
 
     private fun sideSelected(icon: Int, label: String) = sideBase(icon, label).apply {
-        background = roundedColor(0xFF211D2D.toInt(), 6)
+        id = View.generateViewId(); tag = "side_home"
+        isFocusable = true; isFocusableInTouchMode = remote; isClickable = true
+        background = CinemaStyle.surface(this@HomeActivity)
         (getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(PURPLE_BRIGHT)
         (getChildAt(1) as? TextView)?.setTextColor(PURPLE_BRIGHT)
+        setOnFocusChangeListener { view, focused ->
+            view.background = CinemaStyle.surface(this@HomeActivity, focused)
+            if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, "side_home")
+        }
+        setOnClickListener {
+            findViewById<View>(android.R.id.content)
+                .findViewWithTag<ScrollView>("blofy_home_feed_scroll")?.scrollTo(0, 0)
+            heroPrimary?.post { heroPrimary?.requestFocus() }
+        }
+        registerAction("side_home", this)
     }
     private fun sideAction(key: String, icon: Int, label: String, intent: Intent) = sideBase(icon, label).apply {
         id = View.generateViewId(); tag = key
@@ -971,15 +983,15 @@ class HomeActivity : AppCompatActivity() {
     private fun childrenTextColor(layout: LinearLayout, focused: Boolean) { for (i in 0 until layout.childCount) (layout.getChildAt(i) as? TextView)?.setTextColor(if (focused) Color.WHITE else if (i == layout.childCount - 1) PURPLE_BRIGHT else TEXT_PRIMARY) }
 
     private fun roundedColor(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = dp(radius).toFloat(); setColor(color); stroke?.let { setStroke(dp(1), it) } }
-    private fun surface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF69409A.toInt(), 0xFF2B193F.toInt()) else intArrayOf(0xFF15121D.toInt(), 0xFF100D16.toInt())).apply { cornerRadius = dp(14).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFC092FF.toInt() else 0xFF30283D.toInt()) }
+    private fun surface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
     private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8D4AE2.toInt(), 0xFF502779.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFC9A1F4.toInt()) }
-    private fun transparentSurface(focused: Boolean) = roundedColor(if (focused) CinemaStyle.Surface else Color.TRANSPARENT, 6, if (focused) PURPLE_BRIGHT else null)
-    private fun heroSurface() = roundedColor(Color.BLACK, 16)
+    private fun transparentSurface(focused: Boolean) = roundedColor(if (focused) CinemaStyle.Surface else Color.TRANSPARENT, 6, if (focused) Color.WHITE else null)
+    private fun heroSurface() = CinemaStyle.surface(this, radiusDp = 16)
     private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF4B276A.toInt(), 0xFF20142E.toInt(), 0xFF121019.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF7F56A0.toInt()) }
-    private fun featuredSurface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, if (focused) intArrayOf(0xFF482461.toInt(), 0xFF21132F.toInt()) else intArrayOf(0xFF361C4B.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(24).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) PURPLE_BRIGHT else 0xFF6F4A86.toInt()) }
-    private fun posterSurface(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(7).toFloat(); setColor(CinemaStyle.Background); if (focused) setStroke(dp(2), PURPLE_BRIGHT) }
-    private fun storySurface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF8D4CE3.toInt(), 0xFF4E2672.toInt()) else intArrayOf(0xFF2A1D39.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(17).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFD3B0FA.toInt() else 0xFF4B385E.toInt()) }
-    private fun compactTile(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(if (focused) 0xFF6C3BA5.toInt() else 0xFF241A35.toInt()); setStroke(dp(if (focused) 2 else 1), if (focused) PURPLE_BRIGHT else 0xFF4B385E.toInt()) }
+    private fun featuredSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 18)
+    private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 8)
+    private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
+    private fun compactTile(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 16)
     private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF2B2137.toInt(), 0xFF18131F.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF43344F.toInt()) }
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START }
     private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }

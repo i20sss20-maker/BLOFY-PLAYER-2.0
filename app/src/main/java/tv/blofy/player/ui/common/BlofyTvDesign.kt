@@ -12,10 +12,10 @@ import android.widget.TextView
  */
 object BlofyTvDesign {
     val Background = CinemaStyle.Background
-    val BackgroundRaised = Color.rgb(16, 19, 27)
+    val BackgroundRaised = Color.rgb(31, 17, 51)
     val Surface = CinemaStyle.Surface
-    val SurfaceRaised = Color.rgb(33, 38, 48)
-    val SurfaceFocused = Color.rgb(48, 41, 63)
+    val SurfaceRaised = Color.rgb(54, 33, 79)
+    val SurfaceFocused = Color.rgb(95, 57, 140)
 
     val Purple = Color.rgb(127, 73, 209)
     val PurpleBright = CinemaStyle.Accent
@@ -28,7 +28,7 @@ object BlofyTvDesign {
     val TextPrimary = CinemaStyle.White
     val TextSecondary = Color.rgb(218, 213, 225)
     val TextMuted = CinemaStyle.Muted
-    val Divider = Color.rgb(46, 51, 62)
+    val Divider = 0x45FFFFFF
 
     const val HeroTitleSp = 42f
     const val DetailTitleSp = 40f
@@ -67,7 +67,7 @@ object BlofyTvDesign {
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) PurpleBright else Divider)
+        setStroke(if (focused) 2 else 1, if (focused) TextPrimary else Divider)
     }
 
     fun glassSurface(radius: Float = CardRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
@@ -79,7 +79,7 @@ object BlofyTvDesign {
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFD6B8F4.toInt() else 0x66483A55)
+        setStroke(if (focused) 2 else 1, if (focused) TextPrimary else Divider)
     }
 
     fun elevatedSurface(radius: Float = PanelRadius.toFloat()) = GradientDrawable(
@@ -87,7 +87,7 @@ object BlofyTvDesign {
         intArrayOf(SurfaceRaised, Surface, BackgroundRaised)
     ).apply {
         cornerRadius = radius
-        setStroke(1, 0xFF3C3048.toInt())
+        setStroke(1, Divider)
     }
 
     fun primaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
