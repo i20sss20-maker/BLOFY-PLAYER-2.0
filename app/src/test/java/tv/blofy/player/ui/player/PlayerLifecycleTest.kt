@@ -20,6 +20,9 @@ import org.robolectric.annotation.LooperMode
 import tv.blofy.player.R
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.provider.ProviderProfile
+import tv.blofy.player.data.ResumeWriteRequest
+import org.robolectric.Shadows
+import java.time.Duration
 import java.lang.reflect.Proxy
 
 @OptIn(markerClass = [UnstableApi::class])
@@ -34,6 +37,7 @@ class PlayerLifecycleTest {
         var ready = false
         var releases = 0
         var prepares = 0
+        var playbackState = Player.STATE_IDLE
         var tracks = TrackSelectionParameters.DEFAULT_WITHOUT_CONTEXT
         val player = Proxy.newProxyInstance(ExoPlayer::class.java.classLoader, arrayOf(ExoPlayer::class.java)) { proxy, method, args ->
             when (method.name) {
@@ -46,7 +50,7 @@ class PlayerLifecycleTest {
                 "getCurrentPosition", "getContentPosition", "getBufferedPosition" -> position
                 "seekTo" -> { position = args!!.last() as Long; Unit }
                 "getDuration", "getContentDuration" -> 100_000L
-                "getPlaybackState" -> Player.STATE_IDLE
+                "getPlaybackState" -> playbackState
                 "getPlayWhenReady", "isPlaying" -> ready
                 "setPlayWhenReady" -> { ready = args!![0] as Boolean; Unit }
                 "getTrackSelectionParameters" -> tracks
@@ -77,6 +81,8 @@ class PlayerLifecycleTest {
 
     class TestPlayerActivity : PlayerActivity() {
         val players = mutableListOf<FakePlayer>()
+        val persisted = mutableListOf<ResumeWriteRequest>()
+        override fun persistResume(request: ResumeWriteRequest) { persisted += request }
         override fun onCreate(savedInstanceState: Bundle?) {
             setTheme(R.style.Theme_Blofy)
             super.onCreate(savedInstanceState)
@@ -135,5 +141,25 @@ class PlayerLifecycleTest {
         assertEquals(0L, session.resumeState()!!.positionMs)
         session.release()
         assertNull(session.resumeState())
+    }
+
+    @Test fun periodicCheckpointSurvivesBufferingZeroAndBackgroundRelease() {
+        val source = intent().putExtra(PlayerActivity.EXTRA_PROVIDER_ID, "checkpoint-test")
+            .putExtra(PlayerActivity.EXTRA_CONTENT_KEY, "episode:7")
+        val controller = Robolectric.buildActivity(TestPlayerActivity::class.java, source).create().start().resume()
+        val activity = controller.get()
+        val first = activity.players.single()
+        first.playbackState = Player.STATE_READY
+        first.position = 45_000L
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(6))
+        assertTrue("No checkpoint while the Activity is resumed", activity.persisted.isNotEmpty())
+        assertEquals(45_000L, activity.persisted.last().positionMs)
+        first.playbackState = Player.STATE_BUFFERING
+        first.position = 0L
+        controller.pause().stop()
+        assertTrue("Preparing zero overwrote the checkpoint", activity.persisted.all { it.positionMs == 45_000L })
+        controller.restart().start().resume()
+        assertEquals(45_000L, activity.players.last().position)
+        controller.pause().stop().destroy()
     }
 }

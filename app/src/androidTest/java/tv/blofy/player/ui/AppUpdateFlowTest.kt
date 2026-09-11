@@ -59,10 +59,16 @@ class AppUpdateFlowTest {
             scenario.onActivity { activity -> descendants(activity.window.decorView).filterIsInstance<Button>()
                 .first { it.text == activity.getString(R.string.update_install) }.performClick() }
             var installerVisible = false
-            repeat(50) {
+            repeat(100) {
                 if (!installerVisible) {
-                    val name = instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString().orEmpty()
-                    installerVisible = name.contains("packageinstaller") || name.contains("permissioncontroller")
+                    val window = instrumentation.uiAutomation.rootInActiveWindow
+                    val name = window?.packageName?.toString().orEmpty()
+                    installerVisible = (name.contains("packageinstaller") || name.contains("permissioncontroller")) &&
+                        listOf("Update", "Install", "تحديث", "تثبيت").any { label ->
+                            window?.findAccessibilityNodeInfosByText(label)?.any {
+                                it.isEnabled && it.isClickable && it.text?.toString().equals(label, ignoreCase = true)
+                            } == true
+                        }
                     SystemClock.sleep(150)
                 }
             }

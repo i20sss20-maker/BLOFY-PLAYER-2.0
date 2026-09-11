@@ -744,8 +744,8 @@ open class PlayerActivity : AppCompatActivity() {
 
     private fun updateProgressUi() {
         if (kind == KIND_LIVE || !::session.isInitialized) return
-        if (!checkpoint.sample(session.player.currentPosition, session.player.duration,
-                session.player.playbackState == Player.STATE_READY || session.player.playbackState == Player.STATE_ENDED)) return
+        checkpoint.sample(session.player.currentPosition, session.player.duration,
+            session.player.playbackState == Player.STATE_READY || session.player.playbackState == Player.STATE_ENDED)
         val position = checkpoint.positionMs
         val duration = checkpoint.durationMs
         positionView?.text = formatDuration(position)
@@ -1001,11 +1001,7 @@ open class PlayerActivity : AppCompatActivity() {
         hud.visibility = View.VISIBLE
         hudOverlay.visibility = View.VISIBLE
         if (kind != KIND_LIVE) updateProgressUi()
-        if (kind == KIND_LIVE) {
-            playerView.requestFocus()
-        } else {
-            playPauseButton.requestFocus()
-        }
+        playPauseButton.requestFocus()
     }
 
     private fun hideHud() {
@@ -1459,9 +1455,11 @@ open class PlayerActivity : AppCompatActivity() {
         ) {
             return
         }
-        val position = session.player.currentPosition.coerceAtLeast(0L)
-        val duration = session.player.duration.coerceAtLeast(0L)
-        (application as BlofyApp).resumeStateWriter.enqueue(
+        if (!checkpoint.sample(session.player.currentPosition, session.player.duration,
+                session.player.playbackState == Player.STATE_READY || session.player.playbackState == Player.STATE_ENDED)) return
+        val position = checkpoint.positionMs
+        val duration = checkpoint.durationMs
+        persistResume(
             ResumeWriteRequest(
                 contentKey = currentContentKey,
                 providerId = providerId,
@@ -1470,6 +1468,10 @@ open class PlayerActivity : AppCompatActivity() {
                 durationMs = duration
             )
         )
+    }
+
+    internal open fun persistResume(request: ResumeWriteRequest) {
+        (application as BlofyApp).resumeStateWriter.enqueue(request)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
