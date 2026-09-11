@@ -495,6 +495,7 @@ open class PlayerActivity : AppCompatActivity() {
 
         controlHint = TextView(this).apply {
             textSize = 11f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER
+            visibility = if (isTv) View.GONE else View.VISIBLE
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         hud.addView(controlHint, LinearLayout.LayoutParams(-1, dp(22)))
@@ -706,8 +707,11 @@ open class PlayerActivity : AppCompatActivity() {
         background = surface(false)
         setOnFocusChangeListener { view, focused ->
             view.background = surface(focused)
-            if (focused) { controlHint.text = view.contentDescription; keepHudVisible() }
-            else if (controlHint.text == view.contentDescription) controlHint.text = ""
+            if (!isTv) {
+                if (focused) { controlHint.text = view.contentDescription; keepHudVisible() }
+                else if (controlHint.text == view.contentDescription) controlHint.text = ""
+            }
+            if (focused) keepHudVisible()
         }
         setOnClickListener { action() }
     }
@@ -731,7 +735,7 @@ open class PlayerActivity : AppCompatActivity() {
             getString(R.string.player_play)
         }
         androidx.appcompat.widget.TooltipCompat.setTooltipText(playPauseButton, playPauseButton.contentDescription)
-        if (::controlHint.isInitialized && playPauseButton.hasFocus()) controlHint.text = playPauseButton.contentDescription
+        if (!isTv && ::controlHint.isInitialized && playPauseButton.hasFocus()) controlHint.text = playPauseButton.contentDescription
     }
 
     private fun seekBy(deltaMs: Long) {
