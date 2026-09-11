@@ -35,7 +35,8 @@ function playlistCards(container,items,request){container.replaceChildren();if(!
   }
 }
 async function releaseCards(container){try{const {items}=await api('/api/v1/releases');container.replaceChildren();
-  for(const channel of ['stable','testing']){const release=items.find(item=>item.channel===channel);const card=node('article',null,'card download-card'+(release?' available':''));card.append(badge(channel),node('h3',channel==='stable'?'الإصدار المعتمد':'الإصدار التجريبي'));
+  const channels=['stable','testing'].sort((a,b)=>Number(items.some(x=>x.channel===b))-Number(items.some(x=>x.channel===a)));
+  for(const channel of channels){const release=items.find(item=>item.channel===channel);const card=node('article',null,'card download-card'+(release?' available':''));card.append(badge(channel),node('h3',channel==='stable'?'الإصدار المعتمد':'الإصدار التجريبي'));
     if(!release){card.append(node('p',channel==='stable'?'لم يُعلن إصدار معتمد في مركز التحميل بعد.':'لا يوجد إصدار تجريبي منشور حاليًا.'));}
     else{card.append(node('div',release.versionName,'download-version'),node('p',release.releaseNotes||'لا توجد ملاحظات إضافية.','content-text'));
       if(release.downloadUrl&&/^https:\/\//i.test(release.downloadUrl)){const link=node('a','تحميل APK',channel==='stable'?'btn primary':'btn');link.href=release.downloadUrl;link.rel='noopener noreferrer';card.append(link);}
