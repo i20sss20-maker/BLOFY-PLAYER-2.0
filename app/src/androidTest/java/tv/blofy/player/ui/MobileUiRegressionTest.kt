@@ -87,7 +87,8 @@ class MobileUiRegressionTest {
                     point = bounds.centerX().toFloat() to (bounds.top + bounds.height() / 4).toFloat()
                 }
                 tap(point.first, point.second)
-                screenshot("player-$label-after-touch")
+                // Verify while the HUD is visible. A screenshot on a software-rendered emulator
+                // can take longer than its auto-hide timer and must not delay this assertion.
                 awaitUi { scenario.onActivity { activity ->
                     val buttons = descendants(activity.window.decorView).filterIsInstance<ImageButton>().filter { it.isShown }
                     val pause = buttons.firstOrNull { it.contentDescription == activity.getString(R.string.player_pause) || it.contentDescription == activity.getString(R.string.player_play) }
