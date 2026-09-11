@@ -1153,7 +1153,9 @@ class PlayerActivity : AppCompatActivity() {
             hud.removeCallbacks(hideHudRunnable)
             hud.removeCallbacks(progressRunnable)
         }
-        if (::session.isInitialized) session.release()
+        if (::session.isInitialized) session.release {
+            if (::playerView.isInitialized) playerView.player = null
+        }
         super.onDestroy()
     }
 

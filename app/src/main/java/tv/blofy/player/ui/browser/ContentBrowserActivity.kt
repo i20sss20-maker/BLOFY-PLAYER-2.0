@@ -590,8 +590,7 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun stopPreview() {
         previewJob?.cancel()
-        previewView?.player = null
-        previewSession?.release()
+        previewSession?.release { previewView?.player = null }
         previewSession = null
     }
 

@@ -26,6 +26,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.diagnostics.PlaybackDiagnostics
+import tv.blofy.player.core.diagnostics.PlaybackDiagnosticsUploader
+import tv.blofy.player.core.diagnostics.PlaybackFailureDetails
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.PlaylistManager
@@ -249,7 +252,14 @@ class EpisodesActivity : AppCompatActivity() {
                     else -> EpisodeLoadState.INVALID_PROVIDER_RESPONSE
                 }
             },
-            onFailure = { EpisodeLoadState.ERROR }
+            onFailure = { error ->
+                val metric = PlaybackDiagnostics.begin(provider.id, "series", provider.baseUrl)
+                PlaybackDiagnosticsUploader.enqueue(applicationContext, PlaybackDiagnostics.error(
+                    metric, PlaybackFailureDetails.requestErrorCode(error),
+                    PlaybackFailureDetails.describe(error, "episode_catalog")
+                ))
+                EpisodeLoadState.ERROR
+            }
         )
         refreshWatchProgress()
         retryButton.visibility = if (loadState.canRetry && allEpisodes.isEmpty()) View.VISIBLE else View.GONE
