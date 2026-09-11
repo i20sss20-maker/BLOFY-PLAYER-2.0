@@ -1,0 +1,17 @@
+<resources>
+    <string name="update_title">Update BLOFY</string>
+    <string name="update_preparing">Preparing your update…</string>
+    <string name="update_downloading">Downloading update…</string>
+    <string name="update_cancel">Cancel download</string>
+    <string name="update_leave_hint">You can go back while downloading. Android will ask you to confirm installation.</string>
+    <string name="update_ready">Your update is ready. Your account and watch history will stay saved.</string>
+    <string name="update_install">Install update</string>
+    <string name="update_invalid">The update could not be verified. Download it again.</string>
+    <string name="update_failed">Download interrupted. Check your connection and available storage, then retry.</string>
+    <string name="update_retry">Retry download</string>
+    <string name="update_progress">Downloading · %1$d%%</string>
+    <string name="update_allow_installs">Allow BLOFY to install updates in Settings, then return and select Install update.</string>
+    <string name="update_installer_missing">Open your device settings to allow app installation, then try again.</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_check_hint">Download and install the latest BLOFY version</string>
+</resources>

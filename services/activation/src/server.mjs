@@ -19,7 +19,7 @@ import {
   sanitizeDiagnosticMessage,
   sanitizeDiagnosticUrl
 } from './diagnostics-sanitizer.mjs';
-import { activationReleaseMetadata } from './release-metadata.mjs';
+import { activationReleaseMetadata, publishedAppRelease } from './release-metadata.mjs';
 import { createExperienceHandlers } from './experience-handlers.mjs';
 
 const { Pool } = pg;
@@ -180,11 +180,18 @@ async function initializeDatabase() {
 async function health(res) {
   try {
     await pool.query('SELECT 1');
+    // Publishing in admin becomes visible without a separate environment redeploy.
+    // Older databases may not yet have the release table; retain the configured fallback.
+    let app = RELEASE_METADATA.app;
+    try {
+      const published = await pool.query('SELECT channel, version_code, version_name, download_url, release_notes FROM app_releases');
+      app = publishedAppRelease(published.rows);
+    } catch { /* Metadata unavailability must not invalidate an otherwise healthy service. */ }
     return json(res, 200, {
       ok: true,
       database: 'ready',
       playlistEncryption: 'ready',
-      release: RELEASE_METADATA,
+      release: { ...RELEASE_METADATA, app },
       time: Date.now()
     });
   } catch (error) {

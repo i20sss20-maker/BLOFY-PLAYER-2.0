@@ -561,7 +561,7 @@ class HomeActivity : AppCompatActivity() {
                 renderHero(item)
                 renderHeroDots()
             }
-            animateFocus(view, focused, 1.035f, 0f, dp(15).toFloat())
+            animateFocus(view, focused, 1.015f, 0f, dp(15).toFloat())
         }
         setOnClickListener { openDetails(providerId, item) }
         registerAction(key, this)
@@ -688,7 +688,10 @@ class HomeActivity : AppCompatActivity() {
             isFocusableInTouchMode = false
             descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = null
+            background = GradientDrawable().apply {
+                setColor(0xFF101013.toInt()); cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), 0xFF2C2638.toInt())
+            }
             addView(buildSidebar(), FrameLayout.LayoutParams(-1, -2))
         }
         shell.addView(rail, LinearLayout.LayoutParams(dp(layoutSpec.railWidth), -1).apply { marginEnd = dp(12) })
@@ -701,11 +704,17 @@ class HomeActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(TextView(this).apply {
-            text = getString(R.string.home_today); textSize = 16f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(TEXT_PRIMARY)
-            includeFontPadding = false
-        }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(18) })
+        val welcome = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        welcome.addView(TextView(this).apply {
+            text = "BLOFY PLAYER"; textSize = 10f; letterSpacing = .12f
+            setTextColor(PURPLE_BRIGHT); includeFontPadding = false
+        })
+        welcome.addView(TextView(this).apply {
+            text = getString(R.string.home_today); textSize = 20f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(TEXT_PRIMARY); includeFontPadding = false
+        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
+        header.addView(welcome, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(18) })
         serverLabel = TextView(this).apply {
             text = "BLOFY"; textSize = 11f; setTextColor(TEXT_MUTED)
             isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
@@ -716,7 +725,7 @@ class HomeActivity : AppCompatActivity() {
             gravity = Gravity.END; isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
         }
         header.addView(clockLabel, LinearLayout.LayoutParams(dp(if (layoutSpec.width < 800) 120 else 166), -2).apply { marginStart = dp(10) })
-        main.addView(header, LinearLayout.LayoutParams(-1, dp(32)))
+        main.addView(header, LinearLayout.LayoutParams(-1, dp(58)))
         val scroll = ScrollView(this).apply {
             tag = "blofy_home_feed_scroll"
             isVerticalScrollBarEnabled = false
@@ -741,7 +750,7 @@ class HomeActivity : AppCompatActivity() {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
         layoutDirection = uiDirection
-        setPadding(dp(4), dp(12), dp(4), dp(12))
+        setPadding(dp(8), dp(12), dp(8), dp(12))
         clipChildren = false
         addView(ImageView(this@HomeActivity).apply {
             setImageResource(R.drawable.blofy_logo)
@@ -864,7 +873,7 @@ class HomeActivity : AppCompatActivity() {
             id = View.generateViewId(); orientation = LinearLayout.VERTICAL; gravity = Gravity.BOTTOM or Gravity.START; layoutDirection = uiDirection; setPadding(dp(16), dp(13), dp(16), dp(13)); background = storySurface(false); isFocusable = true; isFocusableInTouchMode = remote; isClickable = true
             addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
             addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 11f; setTextColor(TEXT_MUTED); gravity = Gravity.START })
-            setOnFocusChangeListener { view, focused -> view.background = storySurface(focused); childrenTextColor(this, focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key); animateFocus(view, focused, 1.035f, 0f, dp(10).toFloat()) }
+            setOnFocusChangeListener { view, focused -> view.background = storySurface(focused); childrenTextColor(this, focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key); animateFocus(view, focused, 1.015f, 0f, dp(10).toFloat()) }
             setOnClickListener { startActivity(intent) }
         }
         registerAction(key, card); row.addView(card, (if (layoutSpec.compact) LinearLayout.LayoutParams(dp(132), dp(76)) else LinearLayout.LayoutParams(0, -1, 1f)).apply { marginStart = dp(6); marginEnd = dp(6) })
@@ -965,7 +974,7 @@ class HomeActivity : AppCompatActivity() {
     private fun surface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF69409A.toInt(), 0xFF2B193F.toInt()) else intArrayOf(0xFF15121D.toInt(), 0xFF100D16.toInt())).apply { cornerRadius = dp(14).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFC092FF.toInt() else 0xFF30283D.toInt()) }
     private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8D4AE2.toInt(), 0xFF502779.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFC9A1F4.toInt()) }
     private fun transparentSurface(focused: Boolean) = roundedColor(if (focused) CinemaStyle.Surface else Color.TRANSPARENT, 6, if (focused) PURPLE_BRIGHT else null)
-    private fun heroSurface() = roundedColor(CinemaStyle.Background, 8)
+    private fun heroSurface() = roundedColor(Color.BLACK, 16)
     private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF4B276A.toInt(), 0xFF20142E.toInt(), 0xFF121019.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF7F56A0.toInt()) }
     private fun featuredSurface(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, if (focused) intArrayOf(0xFF482461.toInt(), 0xFF21132F.toInt()) else intArrayOf(0xFF361C4B.toInt(), 0xFF17101F.toInt())).apply { cornerRadius = dp(24).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) PURPLE_BRIGHT else 0xFF6F4A86.toInt()) }
     private fun posterSurface(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(7).toFloat(); setColor(CinemaStyle.Background); if (focused) setStroke(dp(2), PURPLE_BRIGHT) }

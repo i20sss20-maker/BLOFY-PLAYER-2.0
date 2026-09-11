@@ -165,6 +165,9 @@ class SettingsActivity : AppCompatActivity() {
         addCard(actionCard("اشتراكي وفحص الاتصال", "صلاحية البث، الاتصالات المستخدمة، والوضع الخفيف") {
             startActivity(Intent(this, tv.blofy.player.ui.subscription.ConnectionStatusActivity::class.java))
         })
+        addCard(actionCard(getString(R.string.update_check), getString(R.string.update_check_hint)) {
+            tv.blofy.player.core.update.AppUpdatePrompt.check(this, force = true)
+        })
         storageCard = actionCard(getString(R.string.setting_storage_local), getString(R.string.setting_storage_calculating)) { showStorageManager() }
         addCard(storageCard)
         addCard(actionCard(getString(R.string.setting_system_status), getString(R.string.setting_system_status_subtitle)) {

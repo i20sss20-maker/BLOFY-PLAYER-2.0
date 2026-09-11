@@ -1,0 +1,20 @@
+<resources>
+    <string name="player_offline">Bağlantı kesildi · İlerlemeniz kaydedildi. Yeniden denemek için seçin.</string>
+    <string name="player_retry_error">Oynatılamadı · Bu konumdan yeniden deneyin.</string>
+    <string name="player_reconnecting">Yeniden bağlanılıyor…</string>
+    <string name="update_title">BLOFY güncellemesi</string>
+    <string name="update_preparing">Güncelleme hazırlanıyor…</string>
+    <string name="update_downloading">Güncelleme indiriliyor…</string>
+    <string name="update_cancel">İndirmeyi iptal et</string>
+    <string name="update_leave_hint">İndirme sırasında geri dönebilirsiniz. Android kurulumdan önce onayınızı ister.</string>
+    <string name="update_ready">Güncelleme hazır. Hesabınız ve izleme geçmişiniz korunacak.</string>
+    <string name="update_install">Güncellemeyi yükle</string>
+    <string name="update_invalid">Güncelleme doğrulanamadı. Yeniden indirin.</string>
+    <string name="update_failed">İndirme kesildi. Bağlantıyı ve boş alanı kontrol edip yeniden deneyin.</string>
+    <string name="update_retry">Yeniden indir</string>
+    <string name="update_progress">İndiriliyor · %1$d%%</string>
+    <string name="update_allow_installs">Ayarlardan BLOFY için güncelleme yükleme izni verin. Ardından geri dönüp Güncellemeyi yükle seçeneğini seçin.</string>
+    <string name="update_installer_missing">Cihaz ayarlarından uygulama yüklemeye izin verip yeniden deneyin.</string>
+    <string name="update_check">Güncellemeleri denetle</string>
+    <string name="update_check_hint">En yeni BLOFY sürümünü indirip yükleyin</string>
+</resources>

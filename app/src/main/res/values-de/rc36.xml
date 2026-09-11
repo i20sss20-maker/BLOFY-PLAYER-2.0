@@ -1,0 +1,20 @@
+<resources>
+    <string name="player_offline">Verbindung unterbrochen · Fortschritt gespeichert. Zum Wiederholen auswählen.</string>
+    <string name="player_retry_error">Wiedergabe fehlgeschlagen · An dieser Stelle erneut versuchen.</string>
+    <string name="player_reconnecting">Verbindung wird wiederhergestellt…</string>
+    <string name="update_title">BLOFY aktualisieren</string>
+    <string name="update_preparing">Update wird vorbereitet…</string>
+    <string name="update_downloading">Update wird heruntergeladen…</string>
+    <string name="update_cancel">Download abbrechen</string>
+    <string name="update_leave_hint">Du kannst während des Downloads zurückgehen. Android fragt vor der Installation nach einer Bestätigung.</string>
+    <string name="update_ready">Update bereit. Konto und Wiedergabeverlauf bleiben gespeichert.</string>
+    <string name="update_install">Update installieren</string>
+    <string name="update_invalid">Update konnte nicht überprüft werden. Erneut herunterladen.</string>
+    <string name="update_failed">Download unterbrochen. Verbindung und Speicherplatz prüfen, dann erneut versuchen.</string>
+    <string name="update_retry">Erneut herunterladen</string>
+    <string name="update_progress">Download · %1$d%%</string>
+    <string name="update_allow_installs">Erlaube BLOFY in den Einstellungen die Installation. Kehre zurück und wähle Update installieren.</string>
+    <string name="update_installer_missing">Erlaube die Installation von Apps in den Geräteeinstellungen und versuche es erneut.</string>
+    <string name="update_check">Nach Updates suchen</string>
+    <string name="update_check_hint">Neueste BLOFY-Version herunterladen und installieren</string>
+</resources>
