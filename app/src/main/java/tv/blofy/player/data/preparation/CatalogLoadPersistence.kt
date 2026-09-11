@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.FirstImportCheckpoint
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.ProviderEntity
 import java.util.concurrent.ConcurrentHashMap
@@ -25,6 +26,8 @@ internal class CatalogLoadPersistence(
     private val providerId get() = expectedSource.id
     var catalogCommitted = false
         private set
+    var completedSections: Set<String> = emptySet()
+        private set
 
     /** Called only after the loading screen leaves its initial read-only catalog check. */
     suspend fun prepareFirstImport() = withContext(Dispatchers.IO) {
@@ -33,11 +36,23 @@ internal class CatalogLoadPersistence(
                 check(!dao.hasCatalog(providerId)) { "Catalog changed while starting the import" }
                 CatalogSyncState.clear(context, providerId)
             }
-            check(dao.discardUncommittedCatalogIfSourceUnchanged(expectedSource) {
+            val saved = FirstImportCheckpoint.state(context, expectedSource)
+            val verified = saved.completed.filterTo(linkedSetOf()) {
+                dao.catalogCountAll(providerId, it) > 0
+            }
+            check(dao.discardUncommittedCatalogIfSourceUnchanged(expectedSource, verified) {
                 !CatalogSyncState.isReady(context, providerId)
             }) {
                 "Playlist source changed while starting the import"
             }
+            completedSections = verified
+        }
+    }
+
+    suspend fun sectionCompleted(kind: String) = withContext(Dispatchers.IO) {
+        if (firstLoad) {
+            FirstImportCheckpoint.markCompleted(context, expectedSource, kind)
+            completedSections = completedSections + kind
         }
     }
 
@@ -50,13 +65,14 @@ internal class CatalogLoadPersistence(
             catalogCommitted = true
             if (firstLoad) CatalogSyncState.markCatalogCommitted(context, providerId)
             else CatalogSyncState.markSourceReplaced(context, providerId)
+            FirstImportCheckpoint.clear(context, providerId)
         }
     }
 
     suspend fun discardIfUncommitted() = withContext(NonCancellable + Dispatchers.IO) {
         if (!catalogCommitted) {
             if (firstLoad) {
-                dao.discardUncommittedCatalogIfSourceUnchanged(expectedSource) {
+                dao.discardUncommittedCatalogIfSourceUnchanged(expectedSource, completedSections) {
                     !CatalogSyncState.isReady(context, providerId)
                 }
             } else dao.discardStagedCatalog(importProviderId)

@@ -18,7 +18,7 @@ test('bootstrap session login owns /admin and authenticates downstream admin API
   const hooks = await adminHooks([{ device_id: 'BLOFY-TEST-ADMIN' }]);
   const loggedOut = await hooks.request('/admin');
   assert.equal(loggedOut.status, 200);
-  assert.match(loggedOut.body, /\/api\/v1\/admin\/session\/login/);
+  assert.match(loggedOut.body, /id="admin-login"/);
   assert.doesNotMatch(loggedOut.body, /Admin token|sessionStorage/);
   const denied = await hooks.request('/api/v1/admin/users');
   assert.equal(denied.status, 401);
@@ -27,7 +27,8 @@ test('bootstrap session login owns /admin and authenticates downstream admin API
   const cookie = login.headers['set-cookie'];
   assert.match(cookie, /HttpOnly; Secure; SameSite=Strict/);
   const dashboard = await hooks.request('/admin', { headers: { cookie } });
-  assert.match(dashboard.body, /\/api\/v1\/admin\/grant/);
+  assert.match(dashboard.body, /id="grant-form"/);
+  assert.match(dashboard.body, /src="\/experience.js"/);
   const users = await hooks.request('/api/v1/admin/users', { headers: { cookie } });
   assert.equal(users.status, 200);
   assert.equal(JSON.parse(users.body).items[0].device_id, 'BLOFY-TEST-ADMIN');
@@ -41,20 +42,27 @@ test('customer HTML is rendered only as literal cell text in the authenticated d
   const dashboard = await hooks.request('/admin', { headers: { cookie: login.headers['set-cookie'] } });
   const malicious = '<img src=x onerror="globalThis.compromised=true">';
   const makeElement = (tag) => ({
-    tag, children: [], textContent: '',
-    appendChild(node) { this.children.push(node); },
+    tag, children: [], options: [], textContent: '', classList: {toggle(){}},
+    append(...nodes) { this.children.push(...nodes); },
     replaceChildren() { this.children = []; },
+    addEventListener(){}, querySelector(){return {};}, setAttribute(){},
     set innerHTML(_value) { throw new Error('HTML insertion is unsafe for customer fields'); }
   });
   const rows = makeElement('tbody');
+  const elements = {'customer-rows':rows};
+  const element = id => elements[id] ||= makeElement('div');
+  element('grant-form').elements = {planKey:makeElement('select')};
   const context = vm.createContext({
-    rows, q: { value: '' }, document: { createElement: makeElement },
-    fetch: async () => ({ status: 200, json: async () => ({ items: [{ device_id: 'BLOFY-TEST-XSS', customer_name: malicious, customer_phone: malicious, customer_email: malicious, plan_key: malicious, status: 'active' }] }) })
+    AbortController, setTimeout, clearTimeout, URLSearchParams,
+    FormData: class { get(){return '';} },
+    document: { body:{dataset:{page:'admin'}}, getElementById:element, createElement: makeElement },
+    fetch: async url => ({ ok:true, status: 200, json: async () => url.includes('/users?') ? ({ items: [{ device_id: 'BLOFY-TEST-XSS', customer_name: malicious, customer_phone: malicious, customer_email: malicious, plan_key: malicious, status: 'active' }] }) : {items:[]} })
   });
-  const script = dashboard.body.match(/<script>([\s\S]*)<\/script>/)[1];
-  await vm.runInContext(script, context);
+  const script = await readFile(new URL('../web/experience.js',import.meta.url),'utf8');
+  vm.runInContext(script, context);
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(rows.children.length, 1);
-  assert.equal(rows.children[0].children.length, 8);
-  for (const i of [1, 2, 3, 5]) assert.equal(rows.children[0].children[i].textContent, malicious);
+  assert.equal(rows.children[0].children.length, 6);
+  assert.equal(rows.children[0].children[0].children[0].textContent, malicious);
   assert.equal(context.compromised, undefined);
 });

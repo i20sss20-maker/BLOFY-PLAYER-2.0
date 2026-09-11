@@ -20,6 +20,7 @@ import {
   sanitizeDiagnosticUrl
 } from './diagnostics-sanitizer.mjs';
 import { activationReleaseMetadata } from './release-metadata.mjs';
+import { createExperienceHandlers } from './experience-handlers.mjs';
 
 const { Pool } = pg;
 const PORT = Number(process.env.PORT || 8080);
@@ -165,6 +166,7 @@ async function authorizedDevice(deviceId, activationCode, req) {
 }
 
 const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
+const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice });
 
 async function initializeDatabase() {
   const schemaUrl = new URL('../schema.sql', import.meta.url);
@@ -469,8 +471,13 @@ async function adminUpdate(req, res, deviceId) {
   }
 
   const result = await pool.query(
-    `UPDATE devices SET status=$2, expires_at=$3, updated_at=NOW() WHERE device_id=$1
-     RETURNING device_id,status,expires_at,updated_at`,
+    `WITH changed AS (
+       UPDATE devices SET status=$2, expires_at=$3, updated_at=NOW() WHERE device_id=$1
+       RETURNING device_id,status,expires_at,updated_at
+     ), logged AS (
+       INSERT INTO device_audit(device_id,actor,action,details)
+       SELECT device_id,'admin','activation_changed',jsonb_build_object('status',status,'expiresAt',expires_at) FROM changed
+     ) SELECT * FROM changed`,
     [deviceId, status, expiresAt]
   );
   if (!result.rows[0]) return json(res, 404, { error: 'device_not_found' });
@@ -598,6 +605,7 @@ const server = http.createServer(async (req, res) => {
   if (res.writableEnded || res.destroyed) return;
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
+    if (await experience.handle(req,res,requestUrl)) return;
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);

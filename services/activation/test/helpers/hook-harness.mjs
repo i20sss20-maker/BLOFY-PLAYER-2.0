@@ -3,6 +3,7 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import * as auth from '../../src/auth-protection.mjs';
+import { recordAudit } from '../../src/audit.mjs';
 
 // Exercise the real hook handlers without a socket or production database.
 // Only module dependencies are substituted; handler/control-flow source is unchanged.
@@ -12,12 +13,12 @@ export async function loadHooks(names, { env = {}, pool, dependencies = {} } = {
   for (const name of names) {
     const source = await readFile(new URL(`../../src/${name}`, import.meta.url), 'utf8');
     const context = vm.createContext({
-      http, crypto, pg: { Pool: class { constructor() { return pool; } } },
-      ...auth, ...dependencies,
+      http, crypto, readFile, moduleUrl:new URL(`../../src/${name}`,import.meta.url).href, pg: { Pool: class { constructor() { return pool; } } },
+      ...auth, recordAudit, ...dependencies,
       process: { env }, Buffer, URL, console,
       setTimeout, clearTimeout, setInterval, clearInterval
     });
-    vm.runInContext(source.replace(/^import[\s\S]*?;\n/gm, '').replace(/^export /gm, ''), context, { filename: name });
+    vm.runInContext(source.replace(/\r\n/g, '\n').replace(/^import[\s\S]*?;\n/gm, '').replace(/^export /gm, '').replaceAll('import.meta.url','moduleUrl'), context, { filename: name });
     contexts.push(context);
   }
   const listener = http.createServer((_req, res) => {

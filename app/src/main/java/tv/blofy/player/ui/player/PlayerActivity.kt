@@ -3,6 +3,7 @@ package tv.blofy.player.ui.player
 import tv.blofy.player.ui.common.ContentPresentation
 
 import android.app.AlertDialog
+import android.content.res.Configuration
 import android.graphics.Color
 import tv.blofy.player.ui.common.CinemaStyle
 import android.graphics.Typeface
@@ -18,10 +19,17 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.Format
@@ -37,6 +45,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
 import tv.blofy.player.BlofyApp
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.PlaybackResumeState
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.playback.ContentUrlResolver
@@ -69,6 +78,11 @@ open class PlayerActivity : AppCompatActivity() {
     private var episodeNavigationJob: Job? = null
     private lateinit var playerView: PlayerView
     private lateinit var hud: LinearLayout
+    private lateinit var hudOverlay: View
+    private var touchPlaybackControls: LinearLayout? = null
+    private var controlInsets = Insets.NONE
+    private var seeking = false
+    private val isTv by lazy { DeviceClass.isTv(this) }
     private lateinit var titleView: TextView
     private lateinit var epgView: TextView
     private lateinit var channelNumberView: TextView
@@ -219,8 +233,8 @@ open class PlayerActivity : AppCompatActivity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private fun controlSize(widthDp: Int): LinearLayout.LayoutParams {
-        val narrow = resources.configuration.screenWidthDp < 600
-        return LinearLayout.LayoutParams(if (narrow) 0 else dp(widthDp), dp(CinemaStyle.ActionHeight), if (narrow) 1f else 0f)
+        val narrow = !isTv && resources.configuration.screenWidthDp < 600
+        return LinearLayout.LayoutParams(if (narrow) 0 else dp(widthDp), dp(if (isTv) CinemaStyle.ActionHeight else 48), if (narrow) 1f else 0f)
     }
 
     private fun buildPlayerUi() {
@@ -242,6 +256,16 @@ open class PlayerActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         )
+
+        if (!isTv) {
+            root.addView(View(this).apply {
+                contentDescription = getString(R.string.player_toggle_controls)
+                isFocusable = false
+                setOnClickListener {
+                    if (hud.visibility == View.VISIBLE) hideHud() else showHudBriefly()
+                }
+            }, FrameLayout.LayoutParams(-1, -1))
+        }
 
         channelNumberView = TextView(this).apply {
             textSize = 34f
@@ -343,7 +367,20 @@ open class PlayerActivity : AppCompatActivity() {
                 isSingleLine = true
                 textDirection = View.TEXT_DIRECTION_LTR
             }
-            progressBar = ProgressBar(
+            progressBar = if (!isTv) SeekBar(this).apply {
+                max = 1000
+                contentDescription = getString(R.string.player_seek_position)
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onStartTrackingTouch(seekBar: SeekBar) { seeking = true; keepHudVisible() }
+                    override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) = Unit
+                    override fun onStopTrackingTouch(seekBar: SeekBar) {
+                        seeking = false
+                        val duration = session.player.duration
+                        if (duration > 0) session.player.seekTo(duration * seekBar.progress / seekBar.max)
+                        showHudBriefly()
+                    }
+                })
+            } else ProgressBar(
                 this,
                 null,
                 android.R.attr.progressBarStyleHorizontal
@@ -355,7 +392,7 @@ open class PlayerActivity : AppCompatActivity() {
             timeline.addView(positionView, LinearLayout.LayoutParams(dp(66), dp(26)))
             timeline.addView(
                 progressBar,
-                LinearLayout.LayoutParams(0, dp(3), 1f).apply {
+                LinearLayout.LayoutParams(0, dp(if (isTv) 3 else 48), 1f).apply {
                     marginEnd = dp(10)
                     marginStart = dp(10)
                 }
@@ -364,7 +401,7 @@ open class PlayerActivity : AppCompatActivity() {
             hud.addView(timeline)
         }
 
-        if (kind == KIND_LIVE) {
+        if (kind == KIND_LIVE && isTv) {
             val liveHint = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -392,15 +429,15 @@ open class PlayerActivity : AppCompatActivity() {
                 clipChildren = false
             }
 
-            val rewindButton = controlButton(getString(R.string.player_seek_back)) {
-                seekBy(-10_000L)
+            val rewindButton = controlButton(getString(if (kind == KIND_LIVE) R.string.player_previous else R.string.player_seek_back)) {
+                if (kind == KIND_LIVE) switchLive(-1) else seekBy(-10_000L)
                 showHudBriefly()
             }
             playPauseButton = controlButton(getString(R.string.player_pause)) {
                 togglePlayPause()
-            }
-            val forwardButton = controlButton(getString(R.string.player_seek_forward)) {
-                seekBy(10_000L)
+            }.apply { tag = "blofy_play_pause" }
+            val forwardButton = controlButton(getString(if (kind == KIND_LIVE) R.string.player_next else R.string.player_seek_forward)) {
+                if (kind == KIND_LIVE) switchLive(1) else seekBy(10_000L)
                 showHudBriefly()
             }
 
@@ -423,6 +460,7 @@ open class PlayerActivity : AppCompatActivity() {
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply { bottomMargin = dp(10) }
             )
+            if (!isTv) touchPlaybackControls = playbackControls
 
             val options = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -474,11 +512,27 @@ open class PlayerActivity : AppCompatActivity() {
                     controlSize(76)
                 )
             }
-            hud.addView(options)
+            if (isTv) {
+                hud.addView(options)
+            } else {
+                for (index in 0 until options.childCount) {
+                    options.getChildAt(index).layoutParams = (options.getChildAt(index).layoutParams as LinearLayout.LayoutParams).apply {
+                        width = dp(88)
+                        weight = 0f
+                    }
+                }
+                hud.addView(CinemaStyle.actionStrip(this, options).apply { isHorizontalScrollBarEnabled = true })
+            }
         }
 
+        hudOverlay = if (isTv) hud else ScrollView(this).apply {
+            isFillViewport = false
+            isVerticalScrollBarEnabled = false
+            addView(hud, FrameLayout.LayoutParams(-1, -2))
+            visibility = View.GONE
+        }
         root.addView(
-            hud,
+            hudOverlay,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -486,8 +540,50 @@ open class PlayerActivity : AppCompatActivity() {
             )
         )
         setContentView(root)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            controlInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            updateHudLayout()
+            insets
+        }
+        updateHudLayout()
+        enterFullscreen()
         playerView.requestFocus()
         if (kind != KIND_LIVE) hud.post(progressRunnable)
+        if (!isTv) showHudBriefly()
+    }
+
+    private fun enterFullscreen() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    private fun updateHudLayout() {
+        if (!::hud.isInitialized) return
+        val horizontal = dp(if (isTv) 36 else 16)
+        hud.setPadding(horizontal + controlInsets.left, dp(if (isTv) 30 else 12) + controlInsets.top,
+            horizontal + controlInsets.right, dp(if (isTv) 18 else 12) + controlInsets.bottom)
+        touchPlaybackControls?.let { row ->
+            for (index in 0 until row.childCount) {
+                row.getChildAt(index).layoutParams = controlSize(if (index == 1) 100 else 76).apply {
+                    if (index < row.childCount - 1) marginEnd = dp(8)
+                }
+            }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        updateHudLayout()
+        ViewCompat.requestApplyInsets(window.decorView)
+        enterFullscreen()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) enterFullscreen()
     }
 
     private fun controlButton(label: String, action: () -> Unit) = Button(this).apply {
@@ -529,7 +625,7 @@ open class PlayerActivity : AppCompatActivity() {
         val duration = session.player.duration.coerceAtLeast(0L)
         positionView?.text = formatDuration(position)
         durationView?.text = formatDuration(duration)
-        progressBar?.progress = if (duration > 0L) {
+        if (!seeking) progressBar?.progress = if (duration > 0L) {
             ((position * 1000L / duration).coerceIn(0L, 1000L)).toInt()
         } else {
             0
@@ -776,6 +872,7 @@ open class PlayerActivity : AppCompatActivity() {
     private fun showHud() {
         keepHudVisible()
         hud.visibility = View.VISIBLE
+        hudOverlay.visibility = View.VISIBLE
         if (kind != KIND_LIVE) updateProgressUi()
         if (kind == KIND_LIVE) {
             playerView.requestFocus()
@@ -787,6 +884,7 @@ open class PlayerActivity : AppCompatActivity() {
     private fun hideHud() {
         keepHudVisible()
         hud.visibility = View.GONE
+        hudOverlay.visibility = View.GONE
         playerView.requestFocus()
     }
 
@@ -1017,6 +1115,7 @@ open class PlayerActivity : AppCompatActivity() {
     private fun showHudBriefly() {
         keepHudVisible()
         hud.visibility = View.VISIBLE
+        hudOverlay.visibility = View.VISIBLE
         if (kind != KIND_LIVE) {
             updateProgressUi()
             updatePlayPauseLabel()
@@ -1183,6 +1282,7 @@ open class PlayerActivity : AppCompatActivity() {
     override fun onResume() {
         if (Build.VERSION.SDK_INT <= 23) restorePlaybackSession()
         super.onResume()
+        enterFullscreen()
         if (::hud.isInitialized && !sessionReleased && kind != KIND_LIVE) {
             hud.removeCallbacks(progressRunnable)
             hud.post(progressRunnable)

@@ -4,6 +4,7 @@ const PORTAL_PATHS = new Set(['/', '/portal']);
 
 export function injectSubscriberPortalUi(html) {
   const source = String(html || '');
+  if (source.includes('data-page="home"')) return source;
   if (!source.includes('</body>') || source.includes('data-blofy-subscriber-ui="1"')) return source;
 
   const injection = String.raw`

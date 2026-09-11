@@ -1,0 +1,5 @@
+<resources>
+    <string name="player_toggle_controls">Mostra o nascondi i controlli di riproduzione</string>
+    <string name="player_seek_position">Posizione di riproduzione</string>
+    <string name="login_saved_playlists_failed">Impossibile leggere le liste salvate. Riprova; i tuoi dati sono conservati.</string>
+</resources>

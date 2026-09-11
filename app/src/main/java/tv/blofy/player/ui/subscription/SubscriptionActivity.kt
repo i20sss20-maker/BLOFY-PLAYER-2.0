@@ -109,6 +109,9 @@ class SubscriptionActivity : AppCompatActivity() {
 
     private fun render(current: SubscriptionClient.Status, plans: List<SubscriptionClient.Plan>) {
         while (content.childCount > 3) content.removeViewAt(3)
+        content.addView(actionButton("اشتراكي وفحص اتصال البث") {
+            startActivity(Intent(this, ConnectionStatusActivity::class.java))
+        }, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(12) })
         status.text = if (current.active) {
             buildString {
                 append("Active • ${current.planName ?: current.planKey ?: "BLOFY"}")

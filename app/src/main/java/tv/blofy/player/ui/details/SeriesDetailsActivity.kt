@@ -5,17 +5,13 @@ import tv.blofy.player.ui.common.ContentPresentation
 import android.content.Intent
 import android.graphics.Color
 import tv.blofy.player.ui.common.CinemaStyle
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
-import android.view.View
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -47,55 +43,10 @@ class SeriesDetailsActivity : AppCompatActivity() {
             return
         }
 
-        val root = FrameLayout(this).apply { setBackgroundColor(0xFF090711.toInt()) }
-        val backdrop = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            alpha = .55f
-        }
-        root.addView(backdrop, FrameLayout.LayoutParams(-1, -1))
-        root.addView(View(this).apply {
-            background = GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0xFA090711.toInt(), 0xE80D0915.toInt(), 0x85171024.toInt(), 0x30090711)
-            )
-        }, FrameLayout.LayoutParams(-1, -1))
-
-        val body = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutDirection = resources.configuration.layoutDirection
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(48), dp(24), dp(48), dp(24))
-        }
-        root.addView(body, FrameLayout.LayoutParams(-1, -1))
-        setContentView(root)
-
-        val posterCard = LinearLayout(this).apply {
-            gravity = Gravity.CENTER
-            setPadding(dp(6), dp(6), dp(6), dp(6))
-            background = cardBackground()
-            elevation = dp(8).toFloat()
-        }
-        val poster = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(0xFF16101F.toInt())
-        }
-        posterCard.addView(poster, LinearLayout.LayoutParams(dp(242), dp(360)))
-        body.addView(posterCard, LinearLayout.LayoutParams(dp(254), dp(372)).apply { marginEnd = dp(34) })
-
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.TOP or Gravity.END
-            layoutDirection = resources.configuration.layoutDirection
-            setPadding(0, dp(8), 0, dp(32))
-        }
-        val scroll = ScrollView(this).apply {
-            isFillViewport = true
-            isVerticalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-            clipToPadding = false
-        }
-        scroll.addView(panel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-        body.addView(scroll, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        val layout = DetailsLayout(this)
+        val backdrop = layout.backdrop
+        val poster = layout.poster
+        val panel = layout.info
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -136,10 +87,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     adjustViewBounds = true
                     contentDescription = title
                 }
-                panel.addView(logo, LinearLayout.LayoutParams(dp(390), dp(86)).apply {
-                    gravity = Gravity.END
-                    topMargin = dp(4)
-                })
+                panel.addView(logo, layout.logoParams())
                 ArtworkLoader.load(logo, logoUrl)
             }
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
@@ -276,7 +224,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 }
             }
             actions.addView(favoriteButton, LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)))
-            panel.addView(CinemaStyle.actionStrip(this@SeriesDetailsActivity, actions))
+            layout.attachActions(actions)
 
             if (!metadata?.cast.isNullOrEmpty()) {
                 panel.addView(TextView(this@SeriesDetailsActivity).apply {
@@ -299,7 +247,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 })
             }
 
-            primary?.requestFocus()
+            if (layout.isTv) primary?.requestFocus()
         }
     }
 
@@ -335,14 +283,6 @@ class SeriesDetailsActivity : AppCompatActivity() {
         text = label
         CinemaStyle.styleButton(this, primary)
         setOnClickListener { action() }
-    }
-
-    private fun cardBackground() = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xD92B203B.toInt(), 0xE617111F.toInt())
-    ).apply {
-        cornerRadius = dp(18).toFloat()
-        setStroke(dp(1), 0x996B4D88.toInt())
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
