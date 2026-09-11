@@ -7,6 +7,7 @@ import android.graphics.Color
 import tv.blofy.player.ui.common.CinemaStyle
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.Gravity
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
 import tv.blofy.player.BlofyApp
+import tv.blofy.player.core.playback.PlaybackResumeState
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.playback.SmartZappingCache
@@ -60,8 +62,11 @@ import java.util.Date
 import java.util.Locale
 
 @OptIn(markerClass = [UnstableApi::class])
-class PlayerActivity : AppCompatActivity() {
+open class PlayerActivity : AppCompatActivity() {
     private lateinit var session: BlofyPlaybackSession
+    private var sessionReleased = true
+    private var suspendedPlayback: PlaybackResumeState? = null
+    private var episodeNavigationJob: Job? = null
     private lateinit var playerView: PlayerView
     private lateinit var hud: LinearLayout
     private lateinit var titleView: TextView
@@ -107,7 +112,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private val progressRunnable = object : Runnable {
         override fun run() {
-            if (!::session.isInitialized || isFinishing || kind == KIND_LIVE) return
+            if (!::session.isInitialized || sessionReleased || isFinishing || kind == KIND_LIVE) return
             updateProgressUi()
             hud.postDelayed(this, 500L)
         }
@@ -127,39 +132,7 @@ class PlayerActivity : AppCompatActivity() {
         currentSeason = intent.getIntExtra(EXTRA_SEASON, 0)
         currentEpisode = intent.getIntExtra(EXTRA_EPISODE, 0)
 
-        val profile = profileFromIntent()
-        session = BlofyPlaybackSession(
-            context = this,
-            profile = profile,
-            contentKind = kind.ifBlank { "unknown" }
-        ) {
-            Toast.makeText(
-                this,
-                if (kind == KIND_LIVE) {
-                    "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى"
-                } else {
-                    "تعذر تشغيل هذا المحتوى داخل BLOFY"
-                },
-                Toast.LENGTH_LONG
-            ).show()
-        }
-
-        session.player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED && kind == KIND_EPISODE && !autoNextTriggered) {
-                    autoNextTriggered = true
-                    playAdjacentEpisode(1, automatic = true)
-                }
-                if (kind != KIND_LIVE) {
-                    updateProgressUi()
-                    updatePlayPauseLabel()
-                }
-            }
-
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (kind != KIND_LIVE) updatePlayPauseLabel()
-            }
-        })
+        initializePlaybackSession()
 
         buildPlayerUi()
         session.play(
@@ -177,6 +150,70 @@ class PlayerActivity : AppCompatActivity() {
             requestShortEpgRefresh()
             observeEpg()
         }
+    }
+
+    internal open fun createPlaybackSession(): BlofyPlaybackSession = BlofyPlaybackSession(
+            context = this,
+            profile = profileFromIntent(),
+            contentKind = kind.ifBlank { "unknown" }
+        ) {
+            Toast.makeText(
+                this,
+                if (kind == KIND_LIVE) {
+                    "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى"
+                } else {
+                    "تعذر تشغيل هذا المحتوى داخل BLOFY"
+                },
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+    private fun initializePlaybackSession() {
+        session = createPlaybackSession()
+        sessionReleased = false
+        session.player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (sessionReleased) return
+                if (playbackState == Player.STATE_ENDED && kind == KIND_EPISODE && !autoNextTriggered) {
+                    autoNextTriggered = true
+                    playAdjacentEpisode(1, automatic = true)
+                }
+                if (kind != KIND_LIVE) {
+                    updateProgressUi()
+                    updatePlayPauseLabel()
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (!sessionReleased && kind != KIND_LIVE) updatePlayPauseLabel()
+            }
+        })
+    }
+
+    private fun restorePlaybackSession() {
+        if (!sessionReleased || isFinishing) return
+        val state = suspendedPlayback ?: return
+        initializePlaybackSession()
+        playerView.player = session.player
+        session.player.trackSelectionParameters = state.trackSelectionParameters
+        session.play(state.url, state.positionMs, fallbackUrls = state.fallbackUrls)
+        session.player.playWhenReady = state.playWhenReady
+        suspendedPlayback = null
+    }
+
+    private fun releasePlaybackSession() {
+        if (!::session.isInitialized || sessionReleased) return
+        saveResume()
+        suspendedPlayback = session.resumeState()
+        sessionReleased = true
+        episodeNavigationJob?.cancel()
+        zappingJob?.cancel()
+        pendingZapDelta = 0
+        if (::hud.isInitialized) {
+            hud.removeCallbacks(progressRunnable)
+            hud.removeCallbacks(hideHudRunnable)
+        }
+        session.release { if (::playerView.isInitialized) playerView.player = null }
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -631,7 +668,8 @@ class PlayerActivity : AppCompatActivity() {
             autoNextTriggered = false
             return
         }
-        lifecycleScope.launch {
+        episodeNavigationJob?.cancel()
+        episodeNavigationJob = lifecycleScope.launch {
             val provider = dao.provider(providerId) ?: run {
                 autoNextTriggered = false
                 return@launch
@@ -1137,8 +1175,29 @@ class PlayerActivity : AppCompatActivity() {
             .joinToString(" • ")
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (Build.VERSION.SDK_INT > 23) restorePlaybackSession()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (Build.VERSION.SDK_INT <= 23) restorePlaybackSession()
+        if (::hud.isInitialized && !sessionReleased && kind != KIND_LIVE) {
+            hud.removeCallbacks(progressRunnable)
+            hud.post(progressRunnable)
+        }
+    }
+
+    override fun onPause() {
+        // Back/finish must close before Android destroys the video surface. On API 23,
+        // paused activities cannot retain scarce decoder resources either.
+        if (isFinishing || Build.VERSION.SDK_INT <= 23) releasePlaybackSession()
+        super.onPause()
+    }
+
     override fun onStop() {
-        saveResume()
+        releasePlaybackSession()
         super.onStop()
     }
 
@@ -1153,9 +1212,7 @@ class PlayerActivity : AppCompatActivity() {
             hud.removeCallbacks(hideHudRunnable)
             hud.removeCallbacks(progressRunnable)
         }
-        if (::session.isInitialized) session.release {
-            if (::playerView.isInitialized) playerView.player = null
-        }
+        releasePlaybackSession()
         super.onDestroy()
     }
 
@@ -1164,7 +1221,7 @@ class PlayerActivity : AppCompatActivity() {
             kind == KIND_LIVE ||
             currentContentKey.isBlank() ||
             providerId.isBlank() ||
-            !::session.isInitialized
+            !::session.isInitialized || sessionReleased
         ) {
             return
         }

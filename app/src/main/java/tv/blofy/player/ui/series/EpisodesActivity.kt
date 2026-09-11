@@ -7,6 +7,7 @@ import tv.blofy.player.ui.common.CinemaStyle
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
+import android.os.SystemClock
 import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
@@ -237,9 +238,10 @@ class EpisodesActivity : AppCompatActivity() {
         loadState = EpisodeLoadState.LOADING
         retryButton.visibility = View.GONE
         updateStatus()
+        val requestStartedAt = SystemClock.elapsedRealtime()
         val result = runCatching {
             withContext(Dispatchers.IO) {
-                PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncSeriesEpisodes(provider, seriesId)
+                PlaylistManager(XtreamClient.episodeApi, BlofyDatabase.get(applicationContext).dao()).syncSeriesEpisodes(provider, seriesId)
             }
         }
         result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
@@ -261,6 +263,14 @@ class EpisodesActivity : AppCompatActivity() {
                 EpisodeLoadState.ERROR
             }
         )
+        if (result.isSuccess) {
+            val metric = PlaybackDiagnostics.begin(provider.id, "series", provider.baseUrl)
+            PlaybackDiagnosticsUploader.enqueue(applicationContext, metric.copy(
+                errorMessage = "phase=episode_catalog;elapsed_ms=" +
+                    (SystemClock.elapsedRealtime() - requestStartedAt) +
+                    ";episodes=" + (result.getOrNull()?.episodeCount ?: 0)
+            ))
+        }
         refreshWatchProgress()
         retryButton.visibility = if (loadState.canRetry && allEpisodes.isEmpty()) View.VISIBLE else View.GONE
         updateStatus()
