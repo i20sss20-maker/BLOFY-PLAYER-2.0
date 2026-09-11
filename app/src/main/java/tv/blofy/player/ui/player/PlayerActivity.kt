@@ -194,12 +194,12 @@ open class PlayerActivity : AppCompatActivity() {
                 }
                 if (kind != KIND_LIVE) {
                     updateProgressUi()
-                    updatePlayPauseLabel()
                 }
+                updatePlayPauseLabel()
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (!sessionReleased && kind != KIND_LIVE) updatePlayPauseLabel()
+                if (!sessionReleased) updatePlayPauseLabel()
             }
         })
     }
@@ -1118,8 +1118,8 @@ open class PlayerActivity : AppCompatActivity() {
         hudOverlay.visibility = View.VISIBLE
         if (kind != KIND_LIVE) {
             updateProgressUi()
-            updatePlayPauseLabel()
         }
+        updatePlayPauseLabel()
         hud.postDelayed(
             hideHudRunnable,
             if (kind == KIND_LIVE) 2200L else 3200L
