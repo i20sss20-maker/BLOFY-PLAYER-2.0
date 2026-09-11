@@ -30,6 +30,7 @@ class BlofyPlaybackSession(
     private val onTerminalError: ((String) -> Unit)? = null
 ) {
     private var closing = false
+    private var resumeFallbackUrls: List<String> = emptyList()
     private var metric: PlaybackMetric? = null
     private var firstFrameRecorded = false
     private var playStartedAtMs = 0L
@@ -162,6 +163,7 @@ class BlofyPlaybackSession(
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
         val preferredUrl = PlaybackIntelligence.preferredUrl(appContext, profile, contentKind, url)
+        resumeFallbackUrls = (listOf(url) + fallbackUrls + listOfNotNull(fallbackUrl)).distinct()
         fallbackState.begin(preferredUrl, fallbackUrl, listOf(url) + fallbackUrls)
         firstFrameRecorded = false
         playStartedAtMs = SystemClock.elapsedRealtime()
@@ -284,6 +286,15 @@ class BlofyPlaybackSession(
         .build()
 
     fun isStarted(): Boolean = !closing && player.playbackState == Player.STATE_READY && player.playWhenReady
+
+    /** In-memory state only: stream URLs must never be persisted to diagnostics or saved bundles. */
+    fun resumeState(): PlaybackResumeState? {
+        if (closing) return null
+        val url = player.currentMediaItem?.localConfiguration?.uri?.toString() ?: return null
+        return PlaybackResumeState(url,
+            if (contentKind.isLiveContent()) 0L else player.currentPosition.coerceAtLeast(0L),
+            player.playWhenReady, resumeFallbackUrls, player.trackSelectionParameters)
+    }
 
     fun release(detachOutput: () -> Unit = {}) {
         if (closing) return
