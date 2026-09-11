@@ -241,10 +241,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
                 if (loadedItems.isEmpty() && pageJob == null) loadStreams(null)
-                if (!initialFocusRequested) {
-                    initialFocusRequested = true
-                    categoryList.post { requestSelectedCategoryFocus() }
-                }
+                requestInitialContentFocus()
             }
         }
     }
@@ -280,6 +277,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             posterAdapter.replace(cached.items)
             cached.focusedKey?.let { focusedPosterKeys.putIfAbsent(memoryKey(id), it) }
             updateCount()
+            requestInitialContentFocus()
             return
         }
 
@@ -319,6 +317,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(6).map { it.icon ?: it.backdrop })
             loadingPage = false
             saveMemorySnapshot()
+            requestInitialContentFocus()
         }.also { job ->
             job.invokeOnCompletion { if (requestGeneration == generation) runOnUiThread { loadingPage = false } }
         }
@@ -346,6 +345,14 @@ class PosterCatalogActivity : AppCompatActivity() {
         val remembered = focusedPosterKeys[memoryKey(displayedCategoryId)]
         val index = loadedItems.indexOfFirst { it.key == remembered }.coerceAtLeast(0)
         return TwoPaneFocusGuard.focusItem(posterGrid, index)
+    }
+
+    private fun requestInitialContentFocus() {
+        if (initialFocusRequested || !DeviceClass.isTv(this) || loadedItems.isEmpty()) return
+        initialFocusRequested = true
+        posterGrid.post {
+            if (!requestPosterFocus()) requestSelectedCategoryFocus()
+        }
     }
 
     private fun requestSelectedCategoryFocus(): Boolean {

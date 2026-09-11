@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">BLOFY PLAYER</string>
     <string name="settings_title">Settings</string>
-    <string name="settings_subtitle">Playback, playlists and storage options</string>
+    <string name="settings_subtitle">Control playback, subtitles, account and updates</string>
     <string name="settings_playback">Playback</string>
     <string name="settings_audio">Audio</string>
     <string name="settings_subtitles">Subtitles</string>
@@ -28,6 +28,8 @@
     <string name="live_tv">Live TV</string>
     <string name="exit_title">Exit BLOFY</string>
     <string name="exit_message">Do you want to exit the app?</string>
+    <string name="exit_confirm">Exit</string>
+    <string name="exit_stay">Stay</string>
     <string name="yes">Yes</string>
     <string name="no">No</string>
     <string name="back">Back</string>
@@ -106,7 +108,7 @@
     <string name="setting_storage_local">💾 Local storage</string>
     <string name="setting_storage_calculating">Calculating space…</string>
     <string name="setting_system_status">✓ System status</string>
-    <string name="setting_system_status_subtitle">Build and device information</string>
+    <string name="setting_system_status_subtitle">Version and library information</string>
     <string name="setting_restore">⟲ Restore settings</string>
     <string name="setting_restore_subtitle">Return to defaults</string>
     <string name="setting_restored">✓ Default viewing settings restored</string>

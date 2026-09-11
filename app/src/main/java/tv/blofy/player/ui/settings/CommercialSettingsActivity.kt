@@ -60,8 +60,8 @@ class CommercialSettingsActivity : AppCompatActivity() {
 
         imageButton = actionButton("") { cycleImageMode() }
         safeButton = actionButton("") { toggleSafeMode() }
-        val refresh = actionButton("تحديث تفضيلات الخدمة\nالحصول على آخر تحسينات الأداء المتاحة") { refreshRemote() }
-        val clearAuto = actionButton("إعادة ضبط الأداء التلقائي\nإعادة تجربة المؤثرات وجودة الصور المعتادة") {
+        val refresh = actionButton("تحديث نمط العرض\nتطبيق أحدث تفضيلات الجودة والأداء") { refreshRemote() }
+        val clearAuto = actionButton("استعادة توازن الأداء\nالرجوع لإعدادات العرض المناسبة للجهاز") {
             CommercialRuntime.clearAutomaticSafeMode(this)
             render()
         }
@@ -98,7 +98,7 @@ class CommercialSettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshRemote() {
-        status.text = "جاري تحديث إعدادات BLOFY..."
+        status.text = "جاري تحديث نمط العرض..."
         lifecycleScope.launch {
             CommercialConfigRepository.refresh(this@CommercialSettingsActivity, force = true)
             render()
@@ -112,13 +112,13 @@ class CommercialSettingsActivity : AppCompatActivity() {
             CommercialRuntime.ImageMode.BALANCED -> "متوازن"
             CommercialRuntime.ImageMode.HIGH -> "عالي الجودة"
         }
-        imageButton.text = "جودة البوسترات والخلفيات • $image\nالجودة الأعلى تستخدم بيانات وذاكرة أكثر"
+        imageButton.text = "جودة البوسترات والخلفيات • $image\nاختر توازنًا مناسبًا لسرعة الجهاز والإنترنت"
         val userSafe = getSharedPreferences("blofy_commercial_runtime", MODE_PRIVATE)
             .getBoolean("user_safe_mode", false)
-        safeButton.text = "الوضع الخفيف • ${if (userSafe) "مفعّل" else "تلقائي"}\nتقليل الصور والمؤثرات لمساعدة الأجهزة الأبطأ"
+        safeButton.text = "سلاسة الواجهة • ${if (userSafe) "خفيفة" else "تلقائية"}\nتقليل المؤثرات على الأجهزة الأضعف عند الحاجة"
         status.text = buildString {
-            append(if (snapshot.safeMode) "يعمل BLOFY الآن بوضع خفيف" else "تجربة العرض الكاملة مفعّلة")
-            append("\nهذه الخيارات تخص صور الواجهة؛ جودة الفيديو تتبع المحتوى المتاح.")
+            append(if (snapshot.safeMode) "تم تفعيل عرض أخف لزيادة السلاسة" else "تجربة العرض الكاملة تعمل الآن")
+            append("\nجودة الفيديو تعتمد على المحتوى نفسه، وهذه الخيارات تخص شكل الواجهة.")
         }
     }
 

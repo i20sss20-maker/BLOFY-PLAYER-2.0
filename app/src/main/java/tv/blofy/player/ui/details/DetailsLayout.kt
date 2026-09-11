@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnLayout
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.ui.common.CinemaStyle
 
@@ -28,7 +29,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         orientation = LinearLayout.VERTICAL
         gravity = (if (isTv) Gravity.CENTER_VERTICAL else Gravity.TOP) or Gravity.END
         layoutDirection = activity.resources.configuration.layoutDirection
-        setPadding(dp(if (isTv) 12 else 0), dp(if (isTv) 16 else 8), dp(if (isTv) 12 else 0), dp(if (isTv) 16 else 24))
+        setPadding(dp(if (isTv) 12 else 0), dp(if (isTv) 28 else 8), dp(if (isTv) 12 else 0), dp(if (isTv) 28 else 24))
     }
     private val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
     private val profileActions = LinearLayout(activity).apply { tag = "blofy_details_profile_actions" }
@@ -60,7 +61,10 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
             bottomMargin = if (stacked) dp(12) else 0
         })
         if (isTv) {
-            val scroll = scrollView().apply { addView(info, FrameLayout.LayoutParams(-1, -2)) }
+            val scroll = scrollView().apply {
+                addView(info, FrameLayout.LayoutParams(-1, -2))
+                doOnLayout { info.minimumHeight = height }
+            }
             body.addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
             root.addView(body, FrameLayout.LayoutParams(-1, -1))
         } else {

@@ -59,8 +59,8 @@ class RootExitConfirmationDialog : DialogFragment() {
         AlertDialog.Builder(requireContext())
             .setTitle(R.string.exit_title)
             .setMessage(R.string.exit_message)
-            .setPositiveButton(R.string.yes) { _, _ -> activity?.finishAffinity() }
-            .setNegativeButton(R.string.no, null)
+            .setPositiveButton(R.string.exit_confirm) { _, _ -> activity?.finishAffinity() }
+            .setNegativeButton(R.string.exit_stay, null)
             .create()
 
     override fun onStart() {
@@ -112,7 +112,12 @@ class RootExitConfirmationDialog : DialogFragment() {
                 button.setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
             }
             render(button.hasFocus())
-            button.setOnFocusChangeListener { _, focused -> render(focused) }
+            button.setOnFocusChangeListener { view, focused ->
+                render(focused)
+                view.animate().cancel()
+                view.animate().scaleX(if (focused) 1.02f else 1f).scaleY(if (focused) 1.02f else 1f)
+                    .setDuration(if (focused) 90 else 70).start()
+            }
         }
 
         no.nextFocusLeftId = yes.id

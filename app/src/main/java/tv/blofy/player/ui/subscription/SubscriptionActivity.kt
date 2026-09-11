@@ -46,14 +46,14 @@ class SubscriptionActivity : AppCompatActivity() {
             setPadding(dp(36), dp(28), dp(36), dp(34))
         }
         content.addView(TextView(this).apply {
-            text = "BLOFY PLUS"
+            text = "باقات BLOFY"
             textSize = if (DeviceClass.isTv(this@SubscriptionActivity)) 32f else 27f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.START
         })
         content.addView(TextView(this).apply {
-            text = "Manage your plan, renewal and device subscription"
+            text = "إدارة الباقة والتجديد والأجهزة المسموحة"
             textSize = 14f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -61,7 +61,7 @@ class SubscriptionActivity : AppCompatActivity() {
             setPadding(0, dp(4), 0, dp(14))
         })
         status = TextView(this).apply {
-            text = "Checking subscription…"
+            text = "جاري قراءة حالة الباقة…"
             textSize = 14f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
@@ -87,7 +87,7 @@ class SubscriptionActivity : AppCompatActivity() {
         if (loading) return
         val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
         if (endpoint.isBlank()) {
-            status.text = "Subscription service is not configured"
+            status.text = "الباقات غير متاحة الآن"
             return
         }
         loading = true
@@ -100,7 +100,7 @@ class SubscriptionActivity : AppCompatActivity() {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
-                status.text = "Unable to load subscription • ${error.message ?: "network error"}"
+                status.text = "تعذر تحميل الباقات • حاول لاحقًا"
             } finally {
                 loading = false
             }
@@ -114,14 +114,14 @@ class SubscriptionActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(12) })
         status.text = if (current.active) {
             buildString {
-                append("Active • ${current.planName ?: current.planKey ?: "BLOFY"}")
-                current.expiresAt?.let { append(" • until ${formatDate(it)}") }
-                if (current.maxDevices != null) append(" • ${current.maxDevices} device${if (current.maxDevices == 1) "" else "s"}")
+                append("الباقة مفعّلة • ${current.planName ?: current.planKey ?: "BLOFY"}")
+                current.expiresAt?.let { append(" • حتى ${formatDate(it)}") }
+                current.maxDevices?.let { append(" • $it جهاز") }
             }
-        } else "No active paid plan • choose a plan below"
+        } else "لا توجد باقة مفعّلة • اختر الباقة المناسبة"
 
         if (plans.isEmpty()) {
-            content.addView(messageCard("No plans are available right now."))
+            content.addView(messageCard("لا توجد باقات متاحة حالياً."))
             return
         }
         plans.forEach { plan ->
@@ -137,8 +137,8 @@ class SubscriptionActivity : AppCompatActivity() {
                     setTextColor(Color.WHITE)
                 })
                 addView(TextView(this@SubscriptionActivity).apply {
-                    val duration = plan.durationDays?.let { "$it days" } ?: "Lifetime"
-                    text = "$duration  •  ${plan.maxDevices} device${if (plan.maxDevices == 1) "" else "s"}"
+                    val duration = plan.durationDays?.let { "$it يوم" } ?: "مدى الحياة"
+                    text = "$duration  •  ${plan.maxDevices} جهاز"
                     textSize = 13.5f
                     typeface = BlofyTvDesign.BodyTypeface
                     setTextColor(BlofyTvDesign.TextMuted)
@@ -150,63 +150,63 @@ class SubscriptionActivity : AppCompatActivity() {
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.PurpleBright)
                 })
-                addView(actionButton("Choose plan") { askCouponAndQuote(plan) }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(12) })
+                addView(actionButton("اختيار الباقة") { askCouponAndQuote(plan) }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(12) })
             }
             content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
         }
-        content.addView(actionButton("Refresh status") { load() }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(4) })
+        content.addView(actionButton("تحديث الحالة") { load() }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(4) })
     }
 
     private fun askCouponAndQuote(plan: SubscriptionClient.Plan) {
         val coupon = EditText(this).apply {
-            hint = "Coupon code (optional)"
+            hint = "كود الخصم اختياري"
             isSingleLine = true
             setPadding(dp(18), dp(8), dp(18), dp(8))
         }
         AlertDialog.Builder(this)
             .setTitle(plan.name)
-            .setMessage("Review the final price before creating the payment order.")
+            .setMessage("راجع السعر النهائي قبل المتابعة.")
             .setView(coupon)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Continue") { _, _ -> quote(plan, coupon.text?.toString()) }
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("متابعة") { _, _ -> quote(plan, coupon.text?.toString()) }
             .show()
     }
 
     private fun quote(plan: SubscriptionClient.Plan, coupon: String?) {
         val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
-        status.text = "Calculating price…"
+        status.text = "جاري حساب السعر…"
         lifecycleScope.launch {
             try {
                 val quote = withContext(Dispatchers.IO) {
                     SubscriptionClient.quote(applicationContext, endpoint, plan.key, coupon)
                 }
                 AlertDialog.Builder(this@SubscriptionActivity)
-                    .setTitle("Confirm ${quote.name.ifBlank { plan.name }}")
+                    .setTitle("تأكيد ${quote.name.ifBlank { plan.name }}")
                     .setMessage(
-                        "Total: ${SubscriptionClient.formatMoney(quote.amountMinor, quote.currency)}\n" +
-                            "Devices: ${quote.maxDevices}\n" +
-                            (quote.couponCode?.let { "Coupon: $it\n" } ?: "") +
-                            "\nThe device activates only after BLOFY receives a verified payment confirmation."
+                        "الإجمالي: ${SubscriptionClient.formatMoney(quote.amountMinor, quote.currency)}\n" +
+                            "الأجهزة: ${quote.maxDevices}\n" +
+                            (quote.couponCode?.let { "كود الخصم: $it\n" } ?: "") +
+                            "\nيتم تفعيل الجهاز بعد تأكيد عملية الدفع."
                     )
-                    .setNegativeButton("Back", null)
-                    .setPositiveButton("Continue to payment") { _, _ -> createOrder(plan, quote.couponCode) }
+                    .setNegativeButton("رجوع", null)
+                    .setPositiveButton("متابعة الدفع") { _, _ -> createOrder(plan, quote.couponCode) }
                     .show()
-                status.text = "Price ready"
+                status.text = "السعر جاهز"
             } catch (error: Throwable) {
-                status.text = "Unable to calculate price • ${error.message ?: "error"}"
+                status.text = "تعذر حساب السعر • حاول مرة أخرى"
             }
         }
     }
 
     private fun createOrder(plan: SubscriptionClient.Plan, coupon: String?) {
         val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
-        status.text = "Creating secure order…"
+        status.text = "جاري تجهيز الطلب…"
         lifecycleScope.launch {
             try {
                 val order = withContext(Dispatchers.IO) {
                     SubscriptionClient.createOrder(applicationContext, endpoint, plan.key, coupon)
                 }
-                status.text = "Order ${order.orderId.take(8)}… created • awaiting payment"
+                status.text = "تم تجهيز الطلب ${order.orderId.take(8)}… بانتظار الدفع"
 
                 val checkout = runCatching {
                     withContext(Dispatchers.IO) {
@@ -216,28 +216,28 @@ class SubscriptionActivity : AppCompatActivity() {
 
                 if (!checkout.isNullOrBlank()) {
                     AlertDialog.Builder(this@SubscriptionActivity)
-                        .setTitle("Secure payment")
+                        .setTitle("الدفع الآمن")
                         .setMessage(
-                            "Order: ${order.orderId}\n" +
-                                "Amount: ${SubscriptionClient.formatMoney(order.amountMinor, order.currency)}\n\n" +
-                                "Continue to the secure payment page. BLOFY will activate this device automatically after the signed payment confirmation is verified."
+                            "رقم الطلب: ${order.orderId}\n" +
+                                "المبلغ: ${SubscriptionClient.formatMoney(order.amountMinor, order.currency)}\n\n" +
+                                "تابع إلى صفحة الدفع الآمن، وسيتم تفعيل الجهاز بعد تأكيد الدفع."
                         )
-                        .setNegativeButton("Later", null)
-                        .setPositiveButton("Pay now") { _, _ -> openCheckout(checkout) }
+                        .setNegativeButton("لاحقًا", null)
+                        .setPositiveButton("ادفع الآن") { _, _ -> openCheckout(checkout) }
                         .show()
                 } else {
                     AlertDialog.Builder(this@SubscriptionActivity)
-                        .setTitle("Order created")
+                        .setTitle("تم تجهيز الطلب")
                         .setMessage(
-                            "Order: ${order.orderId}\n" +
-                                "Amount: ${SubscriptionClient.formatMoney(order.amountMinor, order.currency)}\n\n" +
-                                "The payment provider is not connected yet. The order remains pending and cannot activate the device without a verified payment event."
+                            "رقم الطلب: ${order.orderId}\n" +
+                                "المبلغ: ${SubscriptionClient.formatMoney(order.amountMinor, order.currency)}\n\n" +
+                                "رابط الدفع غير متاح حالياً. يمكنك المحاولة لاحقاً من نفس الشاشة."
                         )
-                        .setPositiveButton("OK", null)
+                        .setPositiveButton("حسنًا", null)
                         .show()
                 }
             } catch (error: Throwable) {
-                status.text = "Unable to create order • ${error.message ?: "error"}"
+                status.text = "تعذر تجهيز الطلب • حاول مرة أخرى"
             }
         }
     }
@@ -246,7 +246,7 @@ class SubscriptionActivity : AppCompatActivity() {
         runCatching {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { addCategory(Intent.CATEGORY_BROWSABLE) })
         }.onFailure {
-            status.text = "Could not open secure payment page"
+            status.text = "تعذر فتح صفحة الدفع"
         }
     }
 

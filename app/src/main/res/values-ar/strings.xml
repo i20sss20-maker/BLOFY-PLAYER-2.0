@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">BLOFY PLAYER</string>
     <string name="settings_title">الإعدادات</string>
-    <string name="settings_subtitle">خيارات المشاهدة والقوائم والتخزين</string>
+    <string name="settings_subtitle">تحكم بالتشغيل والترجمة والحساب والتحديثات</string>
     <string name="settings_playback">التشغيل</string>
     <string name="settings_audio">الصوت</string>
     <string name="settings_subtitles">الترجمة</string>
@@ -28,6 +28,8 @@
     <string name="live_tv">البث المباشر</string>
     <string name="exit_title">الخروج من BLOFY</string>
     <string name="exit_message">هل تريد الخروج من التطبيق؟</string>
+    <string name="exit_confirm">خروج</string>
+    <string name="exit_stay">البقاء</string>
     <string name="yes">نعم</string>
     <string name="no">لا</string>
     <string name="back">رجوع</string>
@@ -108,7 +110,7 @@
     <string name="setting_storage_local">💾 التخزين المحلي</string>
     <string name="setting_storage_calculating">جارٍ حساب المساحة…</string>
     <string name="setting_system_status">✓ حالة النظام</string>
-    <string name="setting_system_status_subtitle">معلومات النسخة والجهاز</string>
+    <string name="setting_system_status_subtitle">رقم الإصدار ومعلومات المكتبة</string>
     <string name="setting_restore">⟲ استعادة الإعدادات</string>
     <string name="setting_restore_subtitle">العودة للوضع الافتراضي</string>
     <string name="setting_restored">✓ تمت استعادة إعدادات المشاهدة الافتراضية</string>

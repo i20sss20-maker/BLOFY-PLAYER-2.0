@@ -157,11 +157,11 @@ class SettingsActivity : AppCompatActivity() {
             arrayOf("smooth", "reduced"),
             arrayOf(getString(R.string.setting_smooth), getString(R.string.setting_reduced))))
         addCard(actionCard(getString(R.string.setting_app_language), currentLanguageLabel()) { chooseLanguage() })
-        addSection(page, copy("حسابي ومكتبتي", "Account and library"))
-        addCard(actionCard(copy("اشتراك BLOFY", "BLOFY subscription"), copy("باقتك ومدة تفعيل التطبيق", "Your plan and app activation")) {
+        addSection(page, copy("المكتبة والحساب", "Library and account"))
+        addCard(actionCard(copy("باقتي", "My plan"), copy("مدة التفعيل والأجهزة المسموحة", "Activation period and allowed devices")) {
             startActivity(Intent(this, tv.blofy.player.ui.subscription.SubscriptionActivity::class.java))
         }.apply { tag = "blofy_subscription_entry" })
-        addCard(actionCard(copy("اشتراكات البث", "Streaming subscriptions"), copy("الصلاحية والأجهزة المتصلة", "Expiry and active connections")) {
+        addCard(actionCard(copy("حالة الاشتراك", "Subscription status"), copy("صلاحية المحتوى والاتصالات الحالية", "Content validity and active connections")) {
             startActivity(Intent(this, tv.blofy.player.ui.subscription.ConnectionStatusActivity::class.java))
         })
         addCard(actionCard(getString(R.string.setting_playlists), getString(R.string.setting_playlists_subtitle)) {
@@ -171,13 +171,13 @@ class SettingsActivity : AppCompatActivity() {
         })
         refreshCard = actionCard(getString(R.string.setting_refresh_content), syncSubtitle()) { refreshLibrary() }
         addCard(refreshCard)
-        addSection(page, copy("التطبيق والتحديثات", "App and updates"))
+        addSection(page, copy("التطبيق", "App"))
         addCard(actionCard(getString(R.string.update_check), getString(R.string.update_check_hint)) {
             tv.blofy.player.core.update.AppUpdatePrompt.check(this, force = true)
         })
         storageCard = actionCard(getString(R.string.setting_storage_local), getString(R.string.setting_storage_calculating)) { showStorageManager() }
         addCard(storageCard)
-        addCard(actionCard(copy("حول BLOFY", "About BLOFY"), copy("إصدار التطبيق ومعلومات المكتبة", "App version and library information")) {
+        addCard(actionCard(copy("حول BLOFY", "About BLOFY"), copy("الإصدار والمكتبة والمساحة", "Version, library and storage")) {
             startActivity(Intent(this, SystemStatusActivity::class.java))
         })
         addCard(actionCard(getString(R.string.setting_restore), getString(R.string.setting_restore_subtitle)) { restoreDefaults() })

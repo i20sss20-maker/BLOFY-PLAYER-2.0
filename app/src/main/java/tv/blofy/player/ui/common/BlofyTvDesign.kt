@@ -12,9 +12,9 @@ import android.widget.TextView
  */
 object BlofyTvDesign {
     val Background = CinemaStyle.Background
-    val BackgroundRaised = Color.rgb(31, 17, 51)
+    val BackgroundRaised = Color.rgb(18, 10, 32)
     val Surface = CinemaStyle.Surface
-    val SurfaceRaised = Color.rgb(54, 33, 79)
+    val SurfaceRaised = Color.rgb(42, 24, 62)
     val SurfaceFocused = Color.rgb(95, 57, 140)
 
     val Purple = Color.rgb(127, 73, 209)
@@ -28,7 +28,7 @@ object BlofyTvDesign {
     val TextPrimary = CinemaStyle.White
     val TextSecondary = Color.rgb(218, 213, 225)
     val TextMuted = CinemaStyle.Muted
-    val Divider = 0x45FFFFFF
+    val Divider = 0x62FFFFFF
 
     const val HeroTitleSp = 42f
     const val DetailTitleSp = 40f
