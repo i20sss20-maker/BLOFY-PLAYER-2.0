@@ -3,7 +3,7 @@ package tv.blofy.player.core.playback
 /** Automatic defaults never override an explicit subtitle selection. */
 class ArabicSubtitlePolicy {
     var manual = false
-    private var disabledAutomatically = false
+    var disabledAutomatically = false
 
     fun reset() { manual = false; disabledAutomatically = false }
 

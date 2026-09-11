@@ -185,6 +185,7 @@ open class PlayerActivity : AppCompatActivity() {
         val initialPosition = savedInstanceState?.getLong(EXTRA_RESUME_MS) ?: intent.getLongExtra(EXTRA_RESUME_MS, 0L)
         checkpoint.reset(initialPosition)
         subtitlePolicy.manual = savedInstanceState?.getBoolean("subtitle_manual") ?: false
+        subtitlePolicy.disabledAutomatically = savedInstanceState?.getBoolean("subtitle_auto_disabled") ?: false
         initializePlaybackSession()
         defaultTextDisabled = session.player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
         savedInstanceState?.getBundle("track_parameters")?.let {
@@ -729,6 +730,8 @@ open class PlayerActivity : AppCompatActivity() {
         } else {
             getString(R.string.player_play)
         }
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(playPauseButton, playPauseButton.contentDescription)
+        if (::controlHint.isInitialized && playPauseButton.hasFocus()) controlHint.text = playPauseButton.contentDescription
     }
 
     private fun seekBy(deltaMs: Long) {
@@ -1474,6 +1477,7 @@ open class PlayerActivity : AppCompatActivity() {
             outState.putBundle("track_parameters", state.trackSelectionParameters.toBundle())
         }
         outState.putBoolean("subtitle_manual", subtitlePolicy.manual)
+        outState.putBoolean("subtitle_auto_disabled", subtitlePolicy.disabledAutomatically)
         outState.putString(EXTRA_CONTENT_KEY, currentContentKey)
         outState.putString(EXTRA_STREAM_ID, currentStreamId)
         outState.putString(EXTRA_TITLE, currentTitle)
