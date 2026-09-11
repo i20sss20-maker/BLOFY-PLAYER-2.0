@@ -22,7 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -49,6 +49,7 @@ import tv.blofy.player.ui.playlist.PlaylistActivity
 class LoginActivity : AppCompatActivity() {
     // Tests point requests at MockWebServer; production always starts from the signed build config.
     internal var activationEndpoint: String = BuildConfig.ACTIVATION_BASE_URL.trim()
+    internal var savedPlaylistDeadlineMillis = 8_000L
     private lateinit var status: TextView
     private lateinit var deviceKind: DeviceClass.Kind
     private lateinit var deviceView: TextView
@@ -236,6 +237,12 @@ class LoginActivity : AppCompatActivity() {
         codeView.background = premiumFieldBackground(true); root.addView(codeView, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(8) })
         root.addView(qrPanel(), LinearLayout.LayoutParams(dp(180), dp(180)).apply { topMargin = dp(12) })
         status.background = statusBackground(); root.addView(status, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
+        root.addView(loginText(R.string.login_your_playlists, 18f, true), LinearLayout.LayoutParams(-1, dp(40)))
+        playlistRow = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(subtitle(getString(R.string.login_loading_saved_playlists)), LinearLayout.LayoutParams(-1, dp(60)))
+        }
+        root.addView(playlistRow, LinearLayout.LayoutParams(-1, -2))
         addPlaylist = primaryActionButton("إضافة / إدارة القوائم") { startActivity(Intent(this, PlaylistActivity::class.java)) }
         connectButton = actionButton("دخول") { startOrCancelConnect() }
         refreshCodeButton = actionButton("تحديث") { requestIdentityRefresh(fromWebsite = true) }
@@ -290,7 +297,7 @@ class LoginActivity : AppCompatActivity() {
         connectJob = lifecycleScope.launch {
             connectButton.text = "إلغاء"
             try {
-                identityJob?.cancelAndJoin()
+                identityJob?.cancel()
                 withTimeout(25_000L) { connectFlow() }
             } catch (_: TimeoutCancellationException) {
                 status.text = getString(R.string.refresh_site_failed)
@@ -367,7 +374,7 @@ class LoginActivity : AppCompatActivity() {
         if (playlistJob?.isActive == true || connectJob?.isActive == true) return
         playlistJob = lifecycleScope.launch {
             try {
-                identityJob?.cancelAndJoin()
+                identityJob?.cancel()
                 withTimeout(25_000L) {
                     val endpoint = activationEndpoint
                     val dao = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
@@ -504,6 +511,16 @@ class LoginActivity : AppCompatActivity() {
     private fun requestIdentityRefresh(fromWebsite: Boolean = false) {
         if (identityJob?.isActive == true || connectJob?.isActive == true || playlistJob?.isActive == true) return
         identityJob = lifecycleScope.launch {
+            // Independent UI deadline: a blocked firmware/SQLite call may finish cancellation
+            // late. The placeholder must still become an actionable error on time.
+            val owner = coroutineContext[Job]
+            val cardsDeadline = lifecycleScope.launch {
+                delay(savedPlaylistDeadlineMillis)
+                if (renderedPlaylists == null) {
+                    owner?.cancel()
+                    renderPlaylistLoadFailure()
+                }
+            }
             try {
                 if (fromWebsite) {
                     websiteRefreshButton?.isEnabled = false
@@ -512,11 +529,14 @@ class LoginActivity : AppCompatActivity() {
                 withTimeout(20_000L) { refreshIdentityAndProvider(fromWebsite) }
             } catch (_: TimeoutCancellationException) {
                 status.text = getString(R.string.refresh_site_failed)
+                renderPlaylistLoadFailure()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 status.text = getString(R.string.refresh_site_failed)
+                renderPlaylistLoadFailure()
             } finally {
+                cardsDeadline.cancel()
                 websiteRefreshButton?.isEnabled = true
                 websiteRefreshButton?.setText(R.string.refresh_from_website)
                 if (identityJob === coroutineContext[Job]) identityJob = null
@@ -527,14 +547,14 @@ class LoginActivity : AppCompatActivity() {
     private suspend fun refreshIdentityAndProvider(fromWebsite: Boolean) {
         val dao = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
         val manager = ActivationManager(applicationContext, dao)
-        val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
-        renderIdentity(identity.deviceId, identity.activationCode)
         // Identity and card labels do not use transport secrets. A slow TV Keystore must not
         // hold the initial screen here; selection/connect resolves the chosen provider later.
-        val local = withContext(Dispatchers.IO) { dao.allProvidersStored().first() }
+        val local = withContext(Dispatchers.IO) { dao.providerSnapshotStored() }
         renderPortalPlaylists(local)
         val active = local.firstOrNull { it.enabled }
         status.text = if (active == null) "في انتظار إضافة قائمة" else "● جاهز • ${active.name}"
+        val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
+        renderIdentity(identity.deviceId, identity.activationCode)
         if (!fromWebsite) return
         val endpoint = activationEndpoint
         if (endpoint.isBlank()) { status.setText(R.string.refresh_site_missing); return }
@@ -549,6 +569,16 @@ class LoginActivity : AppCompatActivity() {
         renderPortalPlaylists(sync.providers)
         sync.activeProvider?.let { applyRemoteProviderProfile(endpoint, dao, it.id) }
         // A website refresh updates data only. Entering a playlist is an explicit user action.
+    }
+
+    private fun renderPlaylistLoadFailure() {
+        if (renderedPlaylists != null || isFinishing || isDestroyed) return
+        status.setText(R.string.login_saved_playlists_failed)
+        val row = playlistRow ?: return
+        row.removeAllViews()
+        row.addView(subtitle(getString(R.string.login_saved_playlists_failed)), LinearLayout.LayoutParams(-1, -2))
+        row.addView(actionButton(getString(R.string.catalog_retry)) { requestIdentityRefresh() },
+            LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(12) })
     }
 
     /** Keep refresh in the layout flow so it cannot cover headings or the QR code. */

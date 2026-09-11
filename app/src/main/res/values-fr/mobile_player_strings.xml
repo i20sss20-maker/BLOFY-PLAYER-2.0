@@ -1,0 +1,5 @@
+<resources>
+    <string name="player_toggle_controls">Afficher ou masquer les commandes de lecture</string>
+    <string name="player_seek_position">Position de lecture</string>
+    <string name="login_saved_playlists_failed">Impossible de lire les listes enregistrées. Réessayez ; vos données sont conservées.</string>
+</resources>

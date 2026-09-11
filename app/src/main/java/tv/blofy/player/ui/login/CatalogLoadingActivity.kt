@@ -320,7 +320,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
             persistence.prepareFirstImport()
             val result = PlaylistSyncPolicy.run {
                 withContext(Dispatchers.IO) {
-                    PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider) { p ->
+                    PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider,
+                        completedSections = persistence.completedSections,
+                        onSectionComplete = persistence::sectionCompleted) { p ->
                         withContext(Dispatchers.Main.immediate) { renderProgress(p) }
                     }
                 }

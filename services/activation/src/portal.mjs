@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { recordAudit } from './audit.mjs';
 import { groupPlaylists, playlistIdentity, playlistUuid } from './playlist-identity.mjs';
 
 function keyFromEnv() {
@@ -237,6 +238,7 @@ export function createPortalHandlers({
         [id, auth.deviceId, name, providerType, seal(baseUrl), seal(username), seal(password), active]
       );
       if (!result.rows[0]) { await client.query('ROLLBACK'); return json(res, 404, { error: 'playlist_not_found' }); }
+      await recordAudit(client,auth.deviceId,'playlist_saved',{playlistId:id},'device');
       await client.query('COMMIT');
       const row = result.rows[0];
       return json(res, 200, { id: row.id, active: row.active, revision: Number(row.revision), updatedAt: new Date(row.updated_at).getTime() });
@@ -263,6 +265,7 @@ export function createPortalHandlers({
       if (group.primary.active) {
         await client.query(`UPDATE device_playlists SET active=TRUE,updated_at=NOW() WHERE id=(SELECT id FROM device_playlists WHERE device_id=$1 ORDER BY updated_at DESC LIMIT 1)`, [auth.deviceId]);
       }
+      await recordAudit(client,auth.deviceId,'playlist_removed',{playlistId:group.primary.id},'device');
       await client.query('COMMIT');
       return json(res, 200, { deleted: true, deletedIds: ids });
     } catch (error) {

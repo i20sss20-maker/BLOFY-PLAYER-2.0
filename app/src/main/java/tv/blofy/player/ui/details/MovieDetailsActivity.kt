@@ -5,16 +5,12 @@ import tv.blofy.player.ui.common.ContentPresentation
 import android.content.Intent
 import android.graphics.Color
 import tv.blofy.player.ui.common.CinemaStyle
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
-import android.view.View
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -46,27 +42,9 @@ class MovieDetailsActivity : AppCompatActivity() {
 
         val uiDirection = resources.configuration.layoutDirection
         val contentGravity = Gravity.END
-        val root = FrameLayout(this).apply { setBackgroundColor(0xFF090711.toInt()) }
-        val backdrop = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            alpha = .56f
-        }
-        root.addView(backdrop, FrameLayout.LayoutParams(-1, -1))
-        root.addView(View(this).apply {
-            background = GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0xFA090711.toInt(), 0xE80D0915.toInt(), 0x85171024.toInt(), 0x30090711)
-            )
-        }, FrameLayout.LayoutParams(-1, -1))
-
-        val body = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutDirection = uiDirection
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(48), dp(24), dp(48), dp(24))
-        }
-        root.addView(body, FrameLayout.LayoutParams(-1, -1))
-        setContentView(root)
+        val layout = DetailsLayout(this)
+        val backdrop = layout.backdrop
+        val poster = layout.poster
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -80,34 +58,8 @@ class MovieDetailsActivity : AppCompatActivity() {
 
             ArtworkLoader.loadPriority(backdrop, listOf(metadata?.backdropUrl, stream.backdrop, stream.icon))
 
-            val posterCard = LinearLayout(this@MovieDetailsActivity).apply {
-                gravity = Gravity.CENTER
-                setPadding(dp(6), dp(6), dp(6), dp(6))
-                background = cardBackground()
-                elevation = dp(8).toFloat()
-            }
-            val poster = ImageView(this@MovieDetailsActivity).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(0xFF16101F.toInt())
-            }
-            posterCard.addView(poster, LinearLayout.LayoutParams(dp(242), dp(360)))
             ArtworkLoader.loadPriority(poster, listOf(metadata?.posterUrl, stream.icon, stream.backdrop))
-            body.addView(posterCard, LinearLayout.LayoutParams(dp(254), dp(372)).apply { marginEnd = dp(34) })
-
-            val info = LinearLayout(this@MovieDetailsActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.TOP or contentGravity
-                layoutDirection = uiDirection
-                setPadding(dp(12), dp(8), dp(12), dp(32))
-            }
-            val scroll = ScrollView(this@MovieDetailsActivity).apply {
-                isFillViewport = true
-                isVerticalScrollBarEnabled = false
-                overScrollMode = View.OVER_SCROLL_NEVER
-                clipToPadding = false
-            }
-            scroll.addView(info, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-            body.addView(scroll, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+            val info = layout.info
 
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = "BLOFY CINEMA"
@@ -125,10 +77,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                     adjustViewBounds = true
                     contentDescription = title
                 }
-                info.addView(logo, LinearLayout.LayoutParams(dp(390), dp(86)).apply {
-                    gravity = contentGravity
-                    topMargin = dp(4)
-                })
+                info.addView(logo, layout.logoParams())
                 ArtworkLoader.load(logo, logoUrl)
             }
             info.addView(TextView(this@MovieDetailsActivity).apply {
@@ -237,7 +186,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 }
             }
             actions.addView(favoriteButton, LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)))
-            info.addView(CinemaStyle.actionStrip(this@MovieDetailsActivity, actions))
+            layout.attachActions(actions)
 
             if (!metadata?.cast.isNullOrEmpty()) {
                 info.addView(TextView(this@MovieDetailsActivity).apply {
@@ -260,7 +209,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 })
             }
 
-            play.requestFocus()
+            if (layout.isTv) play.requestFocus()
         }
     }
 
@@ -293,14 +242,6 @@ class MovieDetailsActivity : AppCompatActivity() {
         text = label
         CinemaStyle.styleButton(this, primary)
         setOnClickListener { action() }
-    }
-
-    private fun cardBackground() = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xD92B203B.toInt(), 0xE617111F.toInt())
-    ).apply {
-        cornerRadius = dp(18).toFloat()
-        setStroke(dp(1), 0x996B4D88.toInt())
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

@@ -125,11 +125,20 @@ interface BlofyDao {
 
     @Transaction suspend fun discardUncommittedCatalogIfSourceUnchanged(
         expectedSource: ProviderEntity,
+        completedSections: Set<String> = emptySet(),
         canDiscard: () -> Boolean = { true }
     ): Boolean {
         val current = provider(expectedSource.id) ?: return false
         if (!sameCatalogSource(current, expectedSource) || current.updatedAt != expectedSource.updatedAt || !canDiscard()) return false
-        clearProviderCatalog(expectedSource.id)
+        if (completedSections.isEmpty()) clearProviderCatalog(expectedSource.id)
+        else for (kind in listOf("live", "movie", "series")) {
+            if (kind !in completedSections) {
+                clearSearchIndex(expectedSource.id, kind)
+                clearStreams(expectedSource.id, kind)
+                clearCategories(expectedSource.id, kind)
+                if (kind == "series") clearProviderEpisodes(expectedSource.id)
+            }
+        }
         return true
     }
 

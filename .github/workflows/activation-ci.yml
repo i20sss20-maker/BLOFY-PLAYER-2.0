@@ -122,6 +122,10 @@ jobs:
             'http://127.0.0.1:8080/api/v1/admin/diagnostics?deviceId=BLOFY-AB12-CD34&providerKey=provider-ci&limit=10' > /tmp/diag-list.json
           grep -q '"ttffMs":842' /tmp/diag-list.json
           grep -q '"bufferingCount":2' /tmp/diag-list.json
+      - name: Account support audit and release E2E
+        env:
+          BLOFY_E2E_BASE_URL: http://127.0.0.1:8080
+        run: node test/experience.e2e.mjs
       - name: Dump service log on failure
         if: failure()
         run: cat /tmp/blofy-activation.log || true

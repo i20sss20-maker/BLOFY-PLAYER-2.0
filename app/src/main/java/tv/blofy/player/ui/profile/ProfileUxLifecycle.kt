@@ -9,6 +9,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -77,6 +78,12 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
             refresh()
         }
 
+        val actions = host.findViewWithTag<LinearLayout>("blofy_details_profile_actions")
+        if (actions != null) {
+            button.isFocusableInTouchMode = false
+            actions.addView(button, LinearLayout.LayoutParams(dp(activity, 140), dp(activity, 48)))
+            return
+        }
         host.addView(button, FrameLayout.LayoutParams(dp(activity, 140), dp(activity, CinemaStyle.ActionHeight), Gravity.BOTTOM or Gravity.END).apply {
             marginEnd = dp(activity, 42)
             bottomMargin = dp(activity, 28)

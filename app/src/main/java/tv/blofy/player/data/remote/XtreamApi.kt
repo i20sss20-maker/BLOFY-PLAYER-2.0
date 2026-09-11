@@ -5,6 +5,7 @@ import okhttp3.ResponseBody
 import retrofit2.http.GET
 import retrofit2.http.Streaming
 import retrofit2.http.Url
+import retrofit2.Call
 
 interface XtreamApi {
     @GET
@@ -16,7 +17,7 @@ interface XtreamApi {
     /** Streams very large catalog arrays without buffering the complete HTTP body in memory. */
     @Streaming
     @GET
-    suspend fun streamingResponse(@Url url: String): ResponseBody
+    fun streamingCall(@Url url: String): Call<ResponseBody>
 
     /**
      * Some Xtream-compatible servers return `get_series_info` as a top-level JSON array

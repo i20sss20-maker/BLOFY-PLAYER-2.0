@@ -85,16 +85,32 @@ class PlaylistManagerPersistenceTest {
             if (url.contains("action=get_live_categories")) liveCategories
             else listOf(mapOf("category_id" to "1", "category_name" to "Category"))
 
-        override suspend fun streamingResponse(url: String): ResponseBody {
+        override fun streamingCall(url: String): retrofit2.Call<ResponseBody> {
             val payload = when {
                 url.contains("action=get_live_streams") -> liveStreams
                 url.contains("action=get_vod_streams") -> "[{\"stream_id\":1,\"name\":\"Movie item\",\"category_id\":1}]"
                 else -> "[{\"series_id\":1,\"name\":\"Series item\",\"category_id\":1}]"
             }
-            return payload.toResponseBody("application/json".toMediaType())
+            return FixtureCall(payload)
         }
 
         override suspend fun objectResponse(url: String): Map<String, Any?> = error("Unexpected EPG request")
         override suspend fun jsonResponse(url: String): JsonElement = error("Unexpected detail request")
+    }
+
+    private class FixtureCall(private val payload: String) : retrofit2.Call<ResponseBody> {
+        private var cancelled = false
+        private var executed = false
+        override fun enqueue(callback: retrofit2.Callback<ResponseBody>) {
+            executed = true
+            callback.onResponse(this, execute())
+        }
+        override fun execute() = retrofit2.Response.success(payload.toResponseBody("application/json".toMediaType()))
+        override fun cancel() { cancelled = true }
+        override fun isCanceled() = cancelled
+        override fun isExecuted() = executed
+        override fun clone(): retrofit2.Call<ResponseBody> = FixtureCall(payload)
+        override fun request() = okhttp3.Request.Builder().url("https://fixture.example.test").build()
+        override fun timeout() = okio.Timeout.NONE
     }
 }

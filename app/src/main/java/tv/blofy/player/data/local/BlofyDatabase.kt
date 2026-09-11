@@ -256,7 +256,10 @@ abstract class BlofyDatabase : RoomDatabase() {
                 context.applicationContext,
                 BlofyDatabase::class.java,
                 "blofy-player-2.db"
-            ).addMigrations(*ALL_MIGRATIONS).build().also { instance = it }
+            // AUTOMATIC chooses a single connection on low-RAM receivers. A large catalog
+            // write then blocks even the tiny saved-playlist/activation reads on Login.
+            ).setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
+                .addMigrations(*ALL_MIGRATIONS).build().also { instance = it }
         }
     }
 }
