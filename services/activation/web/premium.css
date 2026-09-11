@@ -12,3 +12,4 @@
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}}
 fieldset.duration-grid{border:0;padding:0;min-width:0}.admin-account button{min-height:36px;padding:5px 12px;font-size:13px}.record-drawer{overflow:auto;overscroll-behavior:contain}
 .version-cell{direction:ltr;unicode-bidi:isolate;text-align:right}
+@media(max-width:850px){.hero:before{left:0;width:100%}}

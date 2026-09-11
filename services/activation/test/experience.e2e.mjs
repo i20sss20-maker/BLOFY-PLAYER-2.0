@@ -1,13 +1,22 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import {addCalendarMonths} from '../src/admin-renewals.mjs';
+import {setTimeout as delay} from 'node:timers/promises';
 const base=process.env.BLOFY_E2E_BASE_URL||'http://127.0.0.1:8080';
 assert.ok(['127.0.0.1','localhost'].includes(new URL(base).hostname),'Experience E2E is restricted to an isolated local service');
 const deviceId='BLOFY-'+crypto.randomBytes(2).toString('hex').toUpperCase()+'-'+crypto.randomBytes(2).toString('hex').toUpperCase();
 const activationCode='654321';
 async function request(path,body,{admin=false,method=body?'POST':'GET',status=200}={}){
-  const response=await fetch(base+path,{method,headers:{'content-type':'application/json',...(admin?{authorization:'Bearer '+process.env.BLOFY_ADMIN_TOKEN}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)});
-  const data=await response.json();assert.equal(response.status,status,JSON.stringify(data));return data;
+  for(let attempt=0;attempt<3;attempt++){
+    const response=await fetch(base+path,{method,headers:{'content-type':'application/json',...(admin?{authorization:'Bearer '+process.env.BLOFY_ADMIN_TOKEN}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)});
+    const data=await response.json();
+    // The full CI suite shares an IP. Respect the real limiter instead of weakening it for tests.
+    if(response.status===429&&status!==429&&attempt<2){
+      const seconds=Number(response.headers.get('retry-after')||data.retryAfterSeconds||60);
+      await delay((Math.min(60,Math.max(1,seconds))+1)*1000);continue;
+    }
+    assert.equal(response.status,status,JSON.stringify(data));return data;
+  }
 }
 const identity={deviceId,activationCode};
 await request('/api/v1/activation/check',{...identity,appVersion:'experience-e2e',platform:'android'});
