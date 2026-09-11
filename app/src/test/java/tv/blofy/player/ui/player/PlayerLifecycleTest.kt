@@ -146,7 +146,7 @@ class PlayerLifecycleTest {
     @Test fun periodicCheckpointSurvivesBufferingZeroAndBackgroundRelease() {
         val source = intent().putExtra(PlayerActivity.EXTRA_PROVIDER_ID, "checkpoint-test")
             .putExtra(PlayerActivity.EXTRA_CONTENT_KEY, "episode:7")
-        val controller = Robolectric.buildActivity(TestPlayerActivity::class.java, source).create().start().resume()
+        val controller = Robolectric.buildActivity(TestPlayerActivity::class.java, source).create().start().resume().visible()
         val activity = controller.get()
         val first = activity.players.single()
         first.playbackState = Player.STATE_READY
