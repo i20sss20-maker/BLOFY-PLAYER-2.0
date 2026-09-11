@@ -15,7 +15,14 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
+import androidx.appcompat.widget.AppCompatImageButton
+import android.content.res.ColorStateList
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import tv.blofy.player.core.playback.ArabicSubtitlePolicy
+import tv.blofy.player.core.playback.ResumeCheckpoint
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -82,15 +89,42 @@ open class PlayerActivity : AppCompatActivity() {
     private var touchPlaybackControls: LinearLayout? = null
     private var controlInsets = Insets.NONE
     private var seeking = false
+    private val checkpoint = ResumeCheckpoint()
+    private val subtitlePolicy = ArabicSubtitlePolicy()
+    private var lastCheckpointAt = 0L
+    private var defaultTextDisabled = false
+    private var pendingNetworkRecovery = false
+    private lateinit var connectionNotice: TextView
+    private lateinit var controlHint: TextView
+    private var networkRegistered = false
+    private val connectivity by lazy { getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager }
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onLost(network: Network) { runOnUiThread {
+            if (!sessionReleased && !online()) {
+                pendingNetworkRecovery = true
+                saveResume()
+                showConnectionNotice(getString(R.string.player_offline))
+            }
+        } }
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+            if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) runOnUiThread {
+                if (!sessionReleased && pendingNetworkRecovery) {
+                    pendingNetworkRecovery = false
+                    if (session.player.playerError != null || session.player.playbackState == Player.STATE_BUFFERING || session.player.playbackState == Player.STATE_IDLE) retryPlayback()
+                    else if (::connectionNotice.isInitialized) connectionNotice.visibility = View.GONE
+                }
+            }
+        }
+    }
     private val isTv by lazy { DeviceClass.isTv(this) }
     private lateinit var titleView: TextView
     private lateinit var epgView: TextView
     private lateinit var channelNumberView: TextView
-    private lateinit var audioButton: Button
-    private lateinit var subtitleButton: Button
-    private lateinit var qualityButton: Button
-    private lateinit var favoriteButton: Button
-    private lateinit var playPauseButton: Button
+    private lateinit var audioButton: AppCompatImageButton
+    private lateinit var subtitleButton: AppCompatImageButton
+    private lateinit var qualityButton: AppCompatImageButton
+    private lateinit var favoriteButton: AppCompatImageButton
+    private lateinit var playPauseButton: AppCompatImageButton
 
     private var progressBar: ProgressBar? = null
     private var positionView: TextView? = null
@@ -128,6 +162,8 @@ open class PlayerActivity : AppCompatActivity() {
         override fun run() {
             if (!::session.isInitialized || sessionReleased || isFinishing || kind == KIND_LIVE) return
             updateProgressUi()
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - lastCheckpointAt >= 5_000L) { saveResume(); lastCheckpointAt = now }
             hud.postDelayed(this, 500L)
         }
     }
@@ -140,21 +176,52 @@ open class PlayerActivity : AppCompatActivity() {
             return
         }
 
-        currentContentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
-        currentStreamId = intent.getStringExtra(EXTRA_STREAM_ID).orEmpty()
-        currentTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
-        currentSeason = intent.getIntExtra(EXTRA_SEASON, 0)
-        currentEpisode = intent.getIntExtra(EXTRA_EPISODE, 0)
+        currentContentKey = savedInstanceState?.getString(EXTRA_CONTENT_KEY) ?: intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
+        currentStreamId = savedInstanceState?.getString(EXTRA_STREAM_ID) ?: intent.getStringExtra(EXTRA_STREAM_ID).orEmpty()
+        currentTitle = savedInstanceState?.getString(EXTRA_TITLE) ?: intent.getStringExtra(EXTRA_TITLE).orEmpty()
+        currentSeason = savedInstanceState?.getInt(EXTRA_SEASON) ?: intent.getIntExtra(EXTRA_SEASON, 0)
+        currentEpisode = savedInstanceState?.getInt(EXTRA_EPISODE) ?: intent.getIntExtra(EXTRA_EPISODE, 0)
 
+        val initialPosition = savedInstanceState?.getLong(EXTRA_RESUME_MS) ?: intent.getLongExtra(EXTRA_RESUME_MS, 0L)
+        checkpoint.reset(initialPosition)
+        subtitlePolicy.manual = savedInstanceState?.getBoolean("subtitle_manual") ?: false
         initializePlaybackSession()
+        defaultTextDisabled = session.player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
+        savedInstanceState?.getBundle("track_parameters")?.let {
+            session.player.trackSelectionParameters = androidx.media3.common.TrackSelectionParameters.fromBundle(it)
+        }
 
         buildPlayerUi()
-        session.play(
-            url = url,
-            resumeMs = intent.getLongExtra(EXTRA_RESUME_MS, 0L),
-            fallbackUrl = intent.getStringExtra(EXTRA_FALLBACK_URL),
-            fallbackUrls = intent.getStringArrayListExtra(EXTRA_FALLBACK_URLS).orEmpty()
-        )
+        if (savedInstanceState != null && currentContentKey != intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()) {
+            // Persist identities, never credential-bearing stream URLs in saved state.
+            lifecycleScope.launch {
+                val provider = dao.provider(providerId) ?: run { finish(); return@launch }
+                val episode = if (kind == KIND_EPISODE) dao.episode(currentContentKey) else null
+                val stream = if (kind != KIND_EPISODE) dao.stream(currentContentKey) else null
+                val restoredUrl = when {
+                    episode != null -> ContentUrlResolver.episode(provider, episode)
+                    stream != null && kind == KIND_LIVE -> ContentUrlResolver.live(provider, profileFromIntent(), stream)
+                    stream != null -> ContentUrlResolver.movie(provider, stream)
+                    else -> null
+                }
+                if (restoredUrl == null) { finish(); return@launch }
+                val fallbacks = when {
+                    episode != null -> ContentUrlResolver.recoveryUrls(provider, episode)
+                    stream != null -> ContentUrlResolver.recoveryUrls(provider, profileFromIntent(), stream)
+                    else -> emptyList()
+                }
+                val state = PlaybackResumeState(restoredUrl, initialPosition, savedInstanceState.getBoolean("play_when_ready", true),
+                    fallbacks, session.player.trackSelectionParameters)
+                if (sessionReleased) suspendedPlayback = state else {
+                    session.play(state.url, state.positionMs, fallbackUrls = state.fallbackUrls)
+                    session.player.playWhenReady = state.playWhenReady
+                }
+            }
+        } else {
+            session.play(url, initialPosition, fallbackUrl = intent.getStringExtra(EXTRA_FALLBACK_URL),
+                fallbackUrls = intent.getStringArrayListExtra(EXTRA_FALLBACK_URLS).orEmpty())
+            savedInstanceState?.let { session.player.playWhenReady = it.getBoolean("play_when_ready", true) }
+        }
         updateTitle(currentTitle)
         refreshFavoriteState()
 
@@ -171,15 +238,9 @@ open class PlayerActivity : AppCompatActivity() {
             profile = profileFromIntent(),
             contentKind = kind.ifBlank { "unknown" }
         ) {
-            Toast.makeText(
-                this,
-                if (kind == KIND_LIVE) {
-                    "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى"
-                } else {
-                    "تعذر تشغيل هذا المحتوى داخل BLOFY"
-                },
-                Toast.LENGTH_LONG
-            ).show()
+            saveResume()
+            pendingNetworkRecovery = !online()
+            showConnectionNotice(getString(if (pendingNetworkRecovery) R.string.player_offline else R.string.player_retry_error))
         }
 
     private fun initializePlaybackSession() {
@@ -188,6 +249,10 @@ open class PlayerActivity : AppCompatActivity() {
         session.player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (sessionReleased) return
+                if (playbackState == Player.STATE_READY && ::connectionNotice.isInitialized) {
+                    connectionNotice.visibility = View.GONE
+                }
+                if (playbackState == Player.STATE_ENDED) saveResume()
                 if (playbackState == Player.STATE_ENDED && kind == KIND_EPISODE && !autoNextTriggered) {
                     autoNextTriggered = true
                     playAdjacentEpisode(1, automatic = true)
@@ -199,7 +264,18 @@ open class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (!sessionReleased) updatePlayPauseLabel()
+                if (!sessionReleased) { updatePlayPauseLabel(); if (!isPlaying) saveResume() }
+            }
+            override fun onTracksChanged(tracks: Tracks) {
+                if (sessionReleased || kind == KIND_LIVE) return
+                val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                    .firstNotNullOfOrNull { group -> (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let { group.getTrackFormat(it).language } }
+                val disabled = subtitlePolicy.textDisabled(audio) ?: return
+                val desired = disabled || defaultTextDisabled
+                if (session.player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) != desired) {
+                    session.player.trackSelectionParameters = session.player.trackSelectionParameters.buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, desired).build()
+                }
             }
         })
     }
@@ -218,7 +294,10 @@ open class PlayerActivity : AppCompatActivity() {
     private fun releasePlaybackSession() {
         if (!::session.isInitialized || sessionReleased) return
         saveResume()
-        suspendedPlayback = session.resumeState()
+        suspendedPlayback = session.resumeState()?.let { state ->
+            if (kind != KIND_LIVE && state.positionMs <= 0L && session.player.playbackState != Player.STATE_READY)
+                state.copy(positionMs = checkpoint.positionMs) else state
+        }
         sessionReleased = true
         episodeNavigationJob?.cancel()
         zappingJob?.cancel()
@@ -234,7 +313,7 @@ open class PlayerActivity : AppCompatActivity() {
 
     private fun controlSize(widthDp: Int): LinearLayout.LayoutParams {
         val narrow = !isTv && resources.configuration.screenWidthDp < 600
-        return LinearLayout.LayoutParams(if (narrow) 0 else dp(widthDp), dp(if (isTv) CinemaStyle.ActionHeight else 48), if (narrow) 1f else 0f)
+        return LinearLayout.LayoutParams(if (narrow) 0 else dp(if (widthDp == 100) 60 else 52), dp(52), if (narrow) 1f else 0f)
     }
 
     private fun buildPlayerUi() {
@@ -301,6 +380,18 @@ open class PlayerActivity : AppCompatActivity() {
             )
             visibility = View.GONE
         }
+
+        connectionNotice = TextView(this).apply {
+            textSize = 13f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+            background = GradientDrawable().apply { setColor(0xED17131F.toInt()); cornerRadius = dp(14).toFloat(); setStroke(dp(1), PURPLE_SOFT) }
+            isFocusable = true; isClickable = true; visibility = View.GONE
+            setOnClickListener { retryPlayback() }
+            setOnFocusChangeListener { view, focused -> view.alpha = if (focused) 1f else .85f }
+        }
+        root.addView(connectionNotice, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(30); leftMargin = dp(24); rightMargin = dp(24)
+        })
 
         val eyebrow = TextView(this).apply {
             text = when (kind) {
@@ -401,26 +492,13 @@ open class PlayerActivity : AppCompatActivity() {
             hud.addView(timeline)
         }
 
-        if (kind == KIND_LIVE && isTv) {
-            val liveHint = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                layoutDirection = resources.configuration.layoutDirection
-            }
-            liveHint.addView(
-                TextView(this).apply {
-                    text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لإظهار معلومات البرنامج"
-                    textSize = 14f
-                    setTextColor(PURPLE_SOFT)
-                    gravity = Gravity.CENTER_VERTICAL
-                },
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    62
-                )
-            )
-            hud.addView(liveHint)
-        } else {
+        controlHint = TextView(this).apply {
+            textSize = 11f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        hud.addView(controlHint, LinearLayout.LayoutParams(-1, dp(22)))
+
+        run {
             val playbackControls = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
@@ -429,14 +507,14 @@ open class PlayerActivity : AppCompatActivity() {
                 clipChildren = false
             }
 
-            val rewindButton = controlButton(getString(if (kind == KIND_LIVE) R.string.player_previous else R.string.player_seek_back)) {
+            val rewindButton = controlButton(R.drawable.player_back, getString(if (kind == KIND_LIVE) R.string.player_previous else R.string.player_seek_back)) {
                 if (kind == KIND_LIVE) switchLive(-1) else seekBy(-10_000L)
                 showHudBriefly()
             }
-            playPauseButton = controlButton(getString(R.string.player_pause)) {
+            playPauseButton = controlButton(R.drawable.player_pause, getString(R.string.player_pause)) {
                 togglePlayPause()
             }.apply { tag = "blofy_play_pause" }
-            val forwardButton = controlButton(getString(if (kind == KIND_LIVE) R.string.player_next else R.string.player_seek_forward)) {
+            val forwardButton = controlButton(R.drawable.player_forward, getString(if (kind == KIND_LIVE) R.string.player_next else R.string.player_seek_forward)) {
                 if (kind == KIND_LIVE) switchLive(1) else seekBy(10_000L)
                 showHudBriefly()
             }
@@ -469,16 +547,16 @@ open class PlayerActivity : AppCompatActivity() {
                 clipChildren = false
             }
 
-            audioButton = controlButton(getString(R.string.player_audio)) {
+            audioButton = controlButton(R.drawable.player_audio, getString(R.string.player_audio)) {
                 showTrackDialog(C.TRACK_TYPE_AUDIO)
             }
-            subtitleButton = controlButton(getString(R.string.player_subtitles)) {
+            subtitleButton = controlButton(R.drawable.player_subtitles, getString(R.string.player_subtitles)) {
                 showTrackDialog(C.TRACK_TYPE_TEXT)
             }
-            qualityButton = controlButton(getString(R.string.player_quality)) {
+            qualityButton = controlButton(R.drawable.player_quality, getString(R.string.player_quality)) {
                 showVideoQualityDialog()
             }
-            favoriteButton = controlButton(getString(R.string.player_favorite)) {
+            favoriteButton = controlButton(R.drawable.player_favorite, getString(R.string.player_favorite)) {
                 toggleFavorite()
             }.apply {
                 visibility = if (kind == KIND_EPISODE) View.GONE else View.VISIBLE
@@ -504,20 +582,44 @@ open class PlayerActivity : AppCompatActivity() {
                 )
             } else {
                 options.addView(
-                    controlButton(getString(R.string.player_previous)) { playAdjacentEpisode(-1) },
+                    controlButton(R.drawable.player_previous, getString(R.string.player_previous)) { playAdjacentEpisode(-1) },
                     controlSize(76).apply { marginEnd = dp(8) }
                 )
                 options.addView(
-                    controlButton(getString(R.string.player_next)) { playAdjacentEpisode(1) },
+                    controlButton(R.drawable.player_next, getString(R.string.player_next)) { playAdjacentEpisode(1) },
                     controlSize(76)
                 )
             }
             if (isTv) {
-                hud.addView(options)
+                hud.removeView(playbackControls)
+                val previousEpisode = if (kind == KIND_EPISODE) options.getChildAt(3) else null
+                val nextEpisode = if (kind == KIND_EPISODE) options.getChildAt(4) else null
+                options.removeAllViews()
+                playbackControls.removeAllViews()
+                val dock = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+                    layoutDirection = View.LAYOUT_DIRECTION_LTR
+                    setPadding(dp(9), dp(8), dp(9), dp(8))
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(23).toFloat(); setColor(0xD4111116.toInt())
+                        setStroke(dp(1), 0x403F374D)
+                    }
+                }
+                val controls = listOfNotNull(audioButton, subtitleButton, previousEpisode, rewindButton,
+                    playPauseButton, forwardButton, nextEpisode, qualityButton,
+                    favoriteButton.takeIf { kind != KIND_EPISODE })
+                controls.forEachIndexed { index, view ->
+                    dock.addView(view, controlSize(if (view === playPauseButton) 100 else 76).apply {
+                        if (index < controls.lastIndex) marginEnd = dp(8)
+                    })
+                    view.nextFocusLeftId = controls.getOrNull(index - 1)?.id ?: view.id
+                    view.nextFocusRightId = controls.getOrNull(index + 1)?.id ?: view.id
+                }
+                hud.addView(dock, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.CENTER_HORIZONTAL })
             } else {
                 for (index in 0 until options.childCount) {
                     options.getChildAt(index).layoutParams = (options.getChildAt(index).layoutParams as LinearLayout.LayoutParams).apply {
-                        width = dp(88)
+                        width = dp(52)
                         weight = 0f
                     }
                 }
@@ -586,9 +688,26 @@ open class PlayerActivity : AppCompatActivity() {
         if (hasFocus) enterFullscreen()
     }
 
-    private fun controlButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label
-        CinemaStyle.styleButton(this) { focused -> if (focused) keepHudVisible() }
+    private fun controlButton(icon: Int, label: String, action: () -> Unit) = AppCompatImageButton(this).apply {
+        id = View.generateViewId()
+        setImageResource(icon); contentDescription = label
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(this, label)
+        scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+        setPadding(dp(13), dp(13), dp(13), dp(13))
+        imageTintList = ColorStateList.valueOf(Color.WHITE)
+        isFocusable = true; isFocusableInTouchMode = isTv
+        minimumWidth = dp(48); minimumHeight = dp(48)
+        fun surface(focused: Boolean) = GradientDrawable().apply {
+            cornerRadius = dp(18).toFloat()
+            setColor(if (focused) 0xFF744AC2.toInt() else if (icon == R.drawable.player_pause) 0xFF4E317C.toInt() else 0xB31B1A20.toInt())
+            setStroke(dp(1), if (focused) 0xFFE2D0FF.toInt() else 0x404D455A)
+        }
+        background = surface(false)
+        setOnFocusChangeListener { view, focused ->
+            view.background = surface(focused)
+            if (focused) { controlHint.text = view.contentDescription; keepHudVisible() }
+            else if (controlHint.text == view.contentDescription) controlHint.text = ""
+        }
         setOnClickListener { action() }
     }
 
@@ -604,7 +723,8 @@ open class PlayerActivity : AppCompatActivity() {
 
     private fun updatePlayPauseLabel() {
         if (!::playPauseButton.isInitialized) return
-        playPauseButton.text = if (session.player.isPlaying) {
+        playPauseButton.setImageResource(if (session.player.isPlaying) R.drawable.player_pause else R.drawable.player_play)
+        playPauseButton.contentDescription = if (session.player.isPlaying) {
             getString(R.string.player_pause)
         } else {
             getString(R.string.player_play)
@@ -621,8 +741,10 @@ open class PlayerActivity : AppCompatActivity() {
 
     private fun updateProgressUi() {
         if (kind == KIND_LIVE || !::session.isInitialized) return
-        val position = session.player.currentPosition.coerceAtLeast(0L)
-        val duration = session.player.duration.coerceAtLeast(0L)
+        if (!checkpoint.sample(session.player.currentPosition, session.player.duration,
+                session.player.playbackState == Player.STATE_READY || session.player.playbackState == Player.STATE_ENDED)) return
+        val position = checkpoint.positionMs
+        val duration = checkpoint.durationMs
         positionView?.text = formatDuration(position)
         durationView?.text = formatDuration(duration)
         if (!seeking) progressBar?.progress = if (duration > 0L) {
@@ -788,6 +910,10 @@ open class PlayerActivity : AppCompatActivity() {
             }
 
             transitionEpisode(automatic, ::saveResume, ::markCurrentCompleted) {
+                checkpoint.reset()
+                subtitlePolicy.reset()
+                session.player.trackSelectionParameters = session.player.trackSelectionParameters.buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, defaultTextDisabled).build()
                 currentContentKey = target.key
                 currentTitle = target.title
                 currentSeason = target.season
@@ -809,15 +935,9 @@ open class PlayerActivity : AppCompatActivity() {
         val completedContentKey = currentContentKey
         val completedProviderId = providerId
         val completedDuration = session.player.duration.coerceAtLeast(0L)
-        lifecycleScope.launch(Dispatchers.IO) {
-            ContentRepository(dao).saveResume(
-                completedContentKey,
-                completedProviderId,
-                KIND_EPISODE,
-                completedDuration,
-                completedDuration
-            )
-        }
+        if (completedDuration > 0L) (application as BlofyApp).resumeStateWriter.enqueue(
+            ResumeWriteRequest(completedContentKey, completedProviderId, KIND_EPISODE, completedDuration, completedDuration)
+        )
     }
 
     private fun handleChannelDigit(digit: Int) {
@@ -1025,7 +1145,7 @@ open class PlayerActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             val item = dao.stream(currentContentKey)
-            favoriteButton.text = if (item?.favorite == true) {
+            favoriteButton.contentDescription = if (item?.favorite == true) {
                 "★ " + getString(R.string.player_favorite)
             } else {
                 getString(R.string.player_favorite)
@@ -1038,7 +1158,7 @@ open class PlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val item = dao.stream(currentContentKey) ?: return@launch
             dao.setFavorite(currentContentKey, !item.favorite)
-            favoriteButton.text = if (!item.favorite) {
+            favoriteButton.contentDescription = if (!item.favorite) {
                 "★ " + getString(R.string.player_favorite)
             } else {
                 getString(R.string.player_favorite)
@@ -1165,6 +1285,7 @@ open class PlayerActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(if (isText) "الترجمة" else "المسار الصوتي")
             .setItems(labels.toTypedArray()) { dialog, which ->
+                if (isText) subtitlePolicy.manual = true
                 if (isText && which == 0) {
                     session.player.trackSelectionParameters =
                         session.player.trackSelectionParameters
@@ -1282,6 +1403,10 @@ open class PlayerActivity : AppCompatActivity() {
     override fun onResume() {
         if (Build.VERSION.SDK_INT <= 23) restorePlaybackSession()
         super.onResume()
+        if (!networkRegistered) {
+            runCatching { connectivity.registerNetworkCallback(NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), networkCallback) }
+                .onSuccess { networkRegistered = true }
+        }
         enterFullscreen()
         if (::hud.isInitialized && !sessionReleased && kind != KIND_LIVE) {
             hud.removeCallbacks(progressRunnable)
@@ -1290,6 +1415,7 @@ open class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        saveResume()
         // Back/finish must close before Android destroys the video surface. On API 23,
         // paused activities cannot retain scarce decoder resources either.
         if (isFinishing || Build.VERSION.SDK_INT <= 23) releasePlaybackSession()
@@ -1297,6 +1423,7 @@ open class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        if (networkRegistered) { runCatching { connectivity.unregisterNetworkCallback(networkCallback) }; networkRegistered = false }
         releasePlaybackSession()
         super.onStop()
     }
@@ -1336,6 +1463,43 @@ open class PlayerActivity : AppCompatActivity() {
                 durationMs = duration
             )
         )
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        saveResume()
+        val state = if (::session.isInitialized && !sessionReleased) session.resumeState() else suspendedPlayback
+        if (state != null) {
+            outState.putLong(EXTRA_RESUME_MS, maxOf(state.positionMs, if (state.positionMs <= 0L) checkpoint.positionMs else 0L))
+            outState.putBoolean("play_when_ready", state.playWhenReady)
+            outState.putBundle("track_parameters", state.trackSelectionParameters.toBundle())
+        }
+        outState.putBoolean("subtitle_manual", subtitlePolicy.manual)
+        outState.putString(EXTRA_CONTENT_KEY, currentContentKey)
+        outState.putString(EXTRA_STREAM_ID, currentStreamId)
+        outState.putString(EXTRA_TITLE, currentTitle)
+        outState.putInt(EXTRA_SEASON, currentSeason)
+        outState.putInt(EXTRA_EPISODE, currentEpisode)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun online(): Boolean = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+        ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+
+    private fun showConnectionNotice(message: String) {
+        if (!::connectionNotice.isInitialized || isFinishing || sessionReleased) return
+        connectionNotice.text = message
+        connectionNotice.visibility = View.VISIBLE
+    }
+
+    private fun retryPlayback() {
+        if (sessionReleased) return
+        if (!online()) { pendingNetworkRecovery = true; showConnectionNotice(getString(R.string.player_offline)); return }
+        saveResume()
+        val playWhenReady = session.player.playWhenReady
+        session.retrySameUrl()
+        if (kind != KIND_LIVE && checkpoint.positionMs > 0L) session.player.seekTo(checkpoint.positionMs)
+        session.player.playWhenReady = playWhenReady
+        showConnectionNotice(getString(R.string.player_reconnecting))
     }
 
     private fun profileFromIntent() = ProviderProfile(

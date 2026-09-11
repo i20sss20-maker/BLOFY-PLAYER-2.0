@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.Button
 import android.widget.TextView
 import androidx.core.view.ViewCompat
@@ -88,8 +89,8 @@ class MobileUiRegressionTest {
                 tap(point.first, point.second)
                 screenshot("player-$label-after-touch")
                 awaitUi { scenario.onActivity { activity ->
-                    val buttons = descendants(activity.window.decorView).filterIsInstance<Button>().filter { it.isShown }
-                    val pause = buttons.firstOrNull { it.text == activity.getString(R.string.player_pause) || it.text == activity.getString(R.string.player_play) }
+                    val buttons = descendants(activity.window.decorView).filterIsInstance<ImageButton>().filter { it.isShown }
+                    val pause = buttons.firstOrNull { it.contentDescription == activity.getString(R.string.player_pause) || it.contentDescription == activity.getString(R.string.player_play) }
                     assertNotNull("Touch did not reveal controls in $label", pause)
                     assertFullyVisible(pause!!)
                     val bars = ViewCompat.getRootWindowInsets(activity.window.decorView)!!
@@ -98,7 +99,7 @@ class MobileUiRegressionTest {
                 } }
                 screenshot("player-$label-controls")
                 scenario.onActivity { activity ->
-                    descendants(activity.window.decorView).filterIsInstance<Button>().first { it.text == activity.getString(R.string.player_quality) }.performClick()
+                    descendants(activity.window.decorView).filterIsInstance<ImageButton>().first { it.contentDescription == activity.getString(R.string.player_quality) }.performClick()
                 }
                 instrumentation.waitForIdleSync()
                 instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)

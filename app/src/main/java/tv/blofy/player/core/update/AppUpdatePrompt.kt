@@ -1,9 +1,7 @@
 package tv.blofy.player.core.update
 
 import android.app.AlertDialog
-import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -88,7 +86,11 @@ object AppUpdatePrompt {
             .setTitle(if (required) "تحديث BLOFY مهم" else "يتوفر تحديث جديد")
             .setMessage(message)
             .setPositiveButton("تحديث الآن") { _, _ ->
-                openDownload(activity, release.downloadUrl.orEmpty())
+                activity.startActivity(Intent(activity, AppUpdateActivity::class.java)
+                    .putExtra(AppUpdateWorker.VERSION, release.versionCode)
+                    .putExtra(AppUpdateWorker.URL, release.downloadUrl)
+                    .putExtra("name", release.versionName)
+                    .putExtra("notes", release.releaseNotes))
             }
             .setNegativeButton(if (required) "لاحقًا" else "ليس الآن", null)
             .create()
@@ -96,23 +98,6 @@ object AppUpdatePrompt {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.requestFocus()
         }
         dialog.show()
-    }
-
-    private fun openDownload(activity: AppCompatActivity, url: String) {
-        if (url.isBlank()) return
-        try {
-            activity.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                    addCategory(Intent.CATEGORY_BROWSABLE)
-                }
-            )
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(
-                activity,
-                "لا يوجد تطبيق قادر على فتح رابط التحديث",
-                Toast.LENGTH_LONG
-            ).show()
-        }
     }
 
     private fun shouldPrompt(
