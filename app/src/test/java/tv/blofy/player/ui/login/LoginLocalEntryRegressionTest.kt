@@ -233,7 +233,12 @@ class LoginLocalEntryRegressionTest {
         launch()
         connect()
         assertNull(shadowOf(activity).nextStartedActivity)
-        assertEquals(1, server.requestCount)
+        // The 503 fixture now exercises the initial check and its single bounded retry.
+        assertEquals(2, server.requestCount)
+        repeat(2) { assertEquals("/api/v1/activation/check", server.takeRequest().path) }
+        val persisted = runBlocking(Dispatchers.IO) { checkNotNull(db.dao().activation()) }
+        assertEquals(1L, persisted.expiresAt)
+        assertFalse(ActivationManager(app, db.dao()).cachedCanUse(persisted))
         assertTrue(field<Button>("connectButton").isEnabled)
     }
 
@@ -249,7 +254,9 @@ class LoginLocalEntryRegressionTest {
         awaitJob("identityJob")
         assertSame(card, row.getChildAt(0))
         assertTrue(refresh.isEnabled)
-        assertEquals(1, server.requestCount)
+        // Repeated clicks share one job: two requests total, never two retry loops.
+        assertEquals(2, server.requestCount)
+        repeat(2) { assertEquals("/api/v1/activation/check", server.takeRequest().path) }
         assertNull(shadowOf(activity).nextStartedActivity)
     }
 
