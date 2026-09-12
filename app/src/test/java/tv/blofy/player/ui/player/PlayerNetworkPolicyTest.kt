@@ -7,27 +7,33 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowNetworkCapabilities
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [23, 28], application = Application::class)
 class PlayerNetworkPolicyTest {
+    private fun internetNetwork(): NetworkCapabilities = ShadowNetworkCapabilities.newInstance().also {
+        shadowOf(it).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        shadowOf(it).removeCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
     @Test fun internetNetworkDoesNotRequireAndroidValidationToTryTheProvider() {
-        val capabilities = NetworkCapabilities().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        capabilities.removeCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-        assertTrue(PlayerNetworkPolicy.canAttempt(capabilities))
+        assertTrue(PlayerNetworkPolicy.canAttempt(internetNetwork()))
     }
     @Test fun validationArrivalDoesNotChangeRetryEligibility() {
-        val capabilities = NetworkCapabilities().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val capabilities = internetNetwork()
         assertTrue(PlayerNetworkPolicy.canAttempt(capabilities))
-        capabilities.addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        shadowOf(capabilities).addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         assertTrue(PlayerNetworkPolicy.canAttempt(capabilities))
-        capabilities.removeCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        shadowOf(capabilities).removeCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         assertTrue(PlayerNetworkPolicy.canAttempt(capabilities))
     }
     @Test fun noActiveNetworkOrNoInternetCapabilityIsNotTreatedAsUsable() {
         assertFalse(PlayerNetworkPolicy.canAttempt(null))
-        val capabilities = NetworkCapabilities().removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val capabilities = ShadowNetworkCapabilities.newInstance()
+        shadowOf(capabilities).removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         assertFalse(PlayerNetworkPolicy.canAttempt(capabilities))
     }
     @Test fun bufferingOrReadyPlaybackIsNotRestartedByAReconnectCallbackAlone() {
