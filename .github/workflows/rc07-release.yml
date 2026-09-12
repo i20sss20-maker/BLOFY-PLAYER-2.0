@@ -17,8 +17,8 @@ concurrency:
 env:
   PRODUCTION_ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
-  EXPECTED_VERSION_CODE: "2000050"
-  EXPECTED_VERSION_NAME: 2.0.0-rc07.39
+  EXPECTED_VERSION_CODE: "2000051"
+  EXPECTED_VERSION_NAME: 2.0.0-rc07.40
   EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
   MEDIA3_VERSION: "1.6.1"
   FFMPEG_DECODERS: ac3 eac3 dca truehd aac mp3 opus vorbis flac
@@ -30,7 +30,7 @@ jobs:
   signed-release:
     permissions:
       contents: write
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[signed rc07.39]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[signed rc07.40]')
     name: Verify + FFmpeg + signed APK/AAB
     runs-on: ubuntu-latest
     timeout-minutes: 150
@@ -47,7 +47,7 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Validate rc07.39 and signing inputs
+      - name: Validate rc07.40 and signing inputs
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
@@ -60,8 +60,8 @@ jobs:
           for value in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
           done
-          grep -Fq 'versionCode = 2000050' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.39"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000051' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.40"' app/build.gradle.kts
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
 
       - name: Install Android native and signing toolchain
@@ -160,10 +160,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          cp app/build/outputs/apk/release/app-release.apk release/BLOFY-PLAYER-2.0-rc07.39-signed.apk
-          cp app/build/outputs/bundle/release/app-release.aab release/BLOFY-PLAYER-2.0-rc07.39-signed.aab
+          cp app/build/outputs/apk/release/app-release.apk release/BLOFY-PLAYER-2.0-rc07.40-signed.apk
+          cp app/build/outputs/bundle/release/app-release.aab release/BLOFY-PLAYER-2.0-rc07.40-signed.aab
           tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
-          apk="release/BLOFY-PLAYER-2.0-rc07.39-signed.apk"
+          apk="release/BLOFY-PLAYER-2.0-rc07.40-signed.apk"
           "$tools/aapt" dump badging "$apk" | tee release/apk-badging.txt
           if grep -Fq "application-debuggable" release/apk-badging.txt; then echo "::error::Release APK must not be debuggable"; exit 1; fi
           grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$EXPECTED_VERSION_CODE' versionName='$EXPECTED_VERSION_NAME'" release/apk-badging.txt
@@ -171,16 +171,16 @@ jobs:
           "$tools/apksigner" verify --verbose --print-certs "$apk" | tee release/apk-signature.txt
           actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
           [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
-          jarsigner -verify -certs release/BLOFY-PLAYER-2.0-rc07.39-signed.aab | tee release/aab-signature.txt
+          jarsigner -verify -certs release/BLOFY-PLAYER-2.0-rc07.40-signed.aab | tee release/aab-signature.txt
           unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
             grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/apk-files.txt"
           done
-          (cd release && sha256sum BLOFY-PLAYER-2.0-rc07.39-signed.apk BLOFY-PLAYER-2.0-rc07.39-signed.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
+          (cd release && sha256sum BLOFY-PLAYER-2.0-rc07.40-signed.apk BLOFY-PLAYER-2.0-rc07.40-signed.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc07.39-signed-${{ github.sha }}
+          name: BLOFY-PLAYER-2.0-rc07.40-signed-${{ github.sha }}
           path: release/
           if-no-files-found: error
           retention-days: 30
@@ -188,7 +188,7 @@ jobs:
       - name: Upload FFmpeg source and relink materials
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc07.39-ffmpeg-sources-${{ github.sha }}
+          name: BLOFY-PLAYER-2.0-rc07.40-ffmpeg-sources-${{ github.sha }}
           path: build/ffmpeg-native/compliance/
           if-no-files-found: error
           retention-days: 30
@@ -201,7 +201,7 @@ jobs:
           set -euo pipefail
           tag="v$EXPECTED_VERSION_NAME"
           tar -czf "release/BLOFY-PLAYER-$EXPECTED_VERSION_NAME-ffmpeg-sources.tar.gz" -C build/ffmpeg-native compliance
-          printf '%s\n' 'BLOFY rc07.39: production-signed update based on rc07.38 with portal stability and BLOFY subscriber portal fixes. No playback engine, Media3, FFmpeg, fallback, or player-path changes.' 'Install over rc07.38 or an earlier compatible BLOFY version to retain device registration and saved lists.' > "$RUNNER_TEMP/release-notes.txt"
+          printf '%s\n' 'BLOFY rc07.40: fixes APK integrity verification on Android TV/OEM devices by keeping the staged download parseable as an APK and adding a signing-info fallback. Playback engines and player paths are unchanged.' 'Install over an earlier compatible BLOFY version to retain device registration and saved lists.' > "$RUNNER_TEMP/release-notes.txt"
           if gh release view "$tag" >/dev/null 2>&1; then
             [[ "$(gh release view "$tag" --json targetCommitish --jq .targetCommitish)" == "$GITHUB_SHA" ]] || { echo 'Existing release targets another commit'; exit 1; }
             gh release upload "$tag" release/* --clobber
@@ -213,4 +213,4 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
 
-# rc07.39 signed release based on rc07.38 plus portal-only fixes
+# rc07.40 signed release: Android TV updater integrity compatibility
