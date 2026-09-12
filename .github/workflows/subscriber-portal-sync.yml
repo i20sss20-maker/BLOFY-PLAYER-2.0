@@ -1,7 +1,7 @@
 name: BLOFY Subscriber Portal Sync
 on:
   push:
-    branches: [main, fix/subscriber-portal-sync]
+    branches: [main, fix/subscriber-portal-sync, fix/admin-device-insights]
     paths: ['services/activation/**', '.github/workflows/subscriber-portal-sync.yml']
   workflow_dispatch:
 permissions:
@@ -35,9 +35,12 @@ jobs:
           npm run check
           node --check src/subscriber-resolve.mjs
           node --check src/subscriber-resolve-hook.mjs
-          node --check test/subscriber-resolve-runtime.mjs
+          node --check src/admin-device-insights.mjs
+          node --check src/admin-device-insights-hook.mjs
           node --test test/auth-protection.test.mjs test/portal-url-policy.test.mjs
       - name: Subscriber resolver contract and security tests
         run: node --test test/subscriber-resolve.test.mjs
       - name: Reproduce baseline and verify mixed portal sync with PostgreSQL
         run: node test/subscriber-resolve-runtime.mjs
+      - name: Device insights and authenticated admin integration
+        run: node --test test/admin-device-insights.test.mjs
