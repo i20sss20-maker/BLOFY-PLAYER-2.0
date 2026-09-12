@@ -1,0 +1,87 @@
+name: BLOFY Network Feedback Guard
+on:
+  push:
+    branches: [fix/rc0740-activation-retry]
+    paths: ['.github/workflows/network-feedback-guard.yml']
+permissions:
+  contents: read
+jobs:
+  apply-reviewed-patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      source: ${{ steps.patch.outputs.source }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Apply the three reviewed network feedback substitutions only
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/fix/rc0740-activation-retry
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          p=Path('app/src/main/java/tv/blofy/player/ui/player/PlayerActivity.kt')
+          assert subprocess.check_output(['git','hash-object',str(p)],text=True).strip()=='4506ef85fa1906119d59955c6f007293b5edcf64', 'Player source changed; review before applying'
+          s=p.read_text()
+          edits=[
+            ('if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) runOnUiThread {',
+             'if (PlayerNetworkPolicy.canAttempt(capabilities)) runOnUiThread {'),
+            ('if (session.player.playerError != null || session.player.playbackState == Player.STATE_BUFFERING || session.player.playbackState == Player.STATE_IDLE) retryPlayback()',
+             'if (PlayerNetworkPolicy.shouldRetryAfterReconnect(session.player.playerError != null, session.player.playbackState)) retryPlayback()'),
+            ('private fun online(): Boolean = connectivity.getNetworkCapabilities(connectivity.activeNetwork)\n        ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true',
+             'private fun online(): Boolean = PlayerNetworkPolicy.canAttempt(\n        connectivity.getNetworkCapabilities(connectivity.activeNetwork)\n    )')
+          ]
+          for old,new in edits:
+            assert s.count(old)==1, 'Expected unique reviewed source anchor'
+            s=s.replace(old,new,1)
+          p.write_text(s)
+          assert subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()==[str(p)]
+          PY
+          git diff --check
+          git diff --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/tv/blofy/player/ui/player/PlayerActivity.kt
+          git commit -m 'fix(player-ui): allow unvalidated internet networks and avoid restarting healthy buffering'
+          git push origin HEAD:refs/heads/fix/rc0740-activation-retry
+          echo "source=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  verify-exact-source:
+    needs: apply-reviewed-patch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.apply-reviewed-patch.outputs.source }}
+      - name: Record exact compiled source
+        run: git rev-parse HEAD
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Full Android regression suite and packages
+        run: >-
+          gradle --no-daemon -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app
+          testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: network-activation-regressions-${{ needs.apply-reviewed-patch.outputs.source }}
+          path: |
+            app/build/test-results/
+            app/build/reports/
+          retention-days: 7
