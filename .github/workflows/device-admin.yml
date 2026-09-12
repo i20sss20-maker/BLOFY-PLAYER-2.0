@@ -1,0 +1,40 @@
+name: BLOFY Device Administration
+on:
+  push:
+    branches: [main, fix/admin-device-insights]
+    paths: ['services/activation/**', '.github/workflows/device-admin.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: blofy_test
+          POSTGRES_PASSWORD: local_test_only
+          POSTGRES_DB: blofy_device_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U blofy_test -d blofy_device_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      BLOFY_TEST_DATABASE_URL: postgresql://blofy_test:local_test_only@127.0.0.1:5432/blofy_device_test
+    defaults:
+      run:
+        working-directory: services/activation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Syntax and complete unit regression suite
+        run: npm run check && npm test
+      - name: Authenticated device management integration
+        run: node test/device-admin-runtime.mjs
+      - name: Preserve release management and public downloads
+        run: node test/admin-release-runtime.mjs

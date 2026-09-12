@@ -9,6 +9,7 @@ import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mj
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 import { servePublicDownloads } from './public-downloads.mjs';
+import { createDeviceAdmin } from './device-admin.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL,
   ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
@@ -51,8 +52,10 @@ function ensureAdmin() {
 }
 // Reuse the existing admin workflows. Device/portal routes are never delegated by this adapter.
 const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice: async () => null });
+const deviceAdmin = createDeviceAdmin({ pool, json, readJson, requireAdmin, ensureAdmin });
 const assets = new Map([
   ['/premium.css', ['premium.css', 'text/css']], ['/experience.js', ['experience.js', 'text/javascript']],
+  ['/device-admin.css', ['device-admin.css', 'text/css']],
   ['/release-manager.js', ['release-manager.js', 'text/javascript']], ['/release-manager.css', ['release-manager.css', 'text/css']],
   ['/IBMPlexSansArabic-Regular.ttf', ['IBMPlexSansArabic-Regular.ttf', 'font/ttf']],
   ['/IBMPlexSansArabic-Medium.ttf', ['IBMPlexSansArabic-Medium.ttf', 'font/ttf']],
@@ -91,6 +94,7 @@ http.createServer = function withAdminConsole(listener) {
         const release = { ...activationReleaseMetadata(), app: await catalog.primary() };
         json(res, 200, { ok: true, database: 'ready', playlistEncryption: 'ready', release, time: Date.now() }); return;
       }
+      if (await deviceAdmin(req, res, url)) return;
       if (await handleReleaseAdmin(catalog, req, res, url.pathname, { requireAdmin, readJson, json })) return;
       if (url.pathname === '/api/v1/admin/users' && req.method === 'GET') {
         if (!requireAdmin(req, res)) return;

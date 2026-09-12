@@ -2,7 +2,8 @@ import http from 'node:http';
 import pg from 'pg';
 import { createDeviceInsightsHandler } from './admin-device-insights.mjs';
 
-// Read-only inspection. No device or playlist writes, no schema changes.
+// Keep the existing read-only HTML/JSON inventory available alongside the
+// new interactive management view. Both adapters require admin authentication.
 const pool = process.env.DATABASE_URL ? new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
@@ -14,6 +15,8 @@ const previous = http.createServer.bind(http);
 http.createServer = function withDeviceInsights(listener) {
   if (typeof listener !== 'function') return previous(listener);
   return previous(async (req, res) => {
+    const url = new URL(req.url || '/', 'http://localhost');
+    if (url.pathname === '/api/v1/admin/device-insights' && url.searchParams.get('format') === 'manage') return listener(req, res);
     if (await handle(req, res)) return;
     return listener(req, res);
   });
