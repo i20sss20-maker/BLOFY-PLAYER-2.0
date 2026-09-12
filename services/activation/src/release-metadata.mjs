@@ -5,11 +5,11 @@ const VERSION_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const MAX_ANDROID_VERSION_CODE = 2_100_000_000;
 
 const DEFAULT_APP_RELEASE = Object.freeze({
-  versionCode: 2000050,
-  versionName: '2.0.0-rc07.39',
+  versionCode: 2000051,
+  versionName: '2.0.0-rc07.40',
   minSupportedVersionCode: 1,
-  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.39/BLOFY-PLAYER-2.0-rc07.39-signed.apk',
-  releaseNotes: 'BLOFY PLAYER 39 - تحديث رسمي موقّع. يمكن تثبيته فوق الإصدار 38 والإصدارات الأقدم مع الاحتفاظ ببيانات الجهاز والقوائم.'
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.40/BLOFY-PLAYER-2.0-rc07.40-signed.apk',
+  releaseNotes: 'BLOFY PLAYER 40 - تحسين التحقق من حزمة التحديث. إذا تعذر التحديث من داخل إصدار 38 أو 39، حمّل APK من الموقع وثبّته فوق النسخة الحالية دون حذف التطبيق. التحديث اختياري.'
 });
 
 export function sanitizeCommitSha(value) {
