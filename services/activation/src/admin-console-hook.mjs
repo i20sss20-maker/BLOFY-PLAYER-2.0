@@ -8,6 +8,7 @@ import { activationReleaseMetadata, appReleaseMetadata } from './release-metadat
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
+import { servePublicDownloads } from './public-downloads.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL,
   ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
@@ -55,7 +56,7 @@ const assets = new Map([
   ['/release-manager.js', ['release-manager.js', 'text/javascript']], ['/release-manager.css', ['release-manager.css', 'text/css']],
   ['/IBMPlexSansArabic-Regular.ttf', ['IBMPlexSansArabic-Regular.ttf', 'font/ttf']],
   ['/IBMPlexSansArabic-Medium.ttf', ['IBMPlexSansArabic-Medium.ttf', 'font/ttf']],
-  ['/OFL.txt', ['OFL.txt', 'text/plain']], ['/downloads', ['downloads.html', 'text/html']], ['/releases', ['downloads.html', 'text/html']]
+  ['/OFL.txt', ['OFL.txt', 'text/plain']]
 ]);
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function withAdminConsole(listener) {
@@ -64,6 +65,10 @@ http.createServer = function withAdminConsole(listener) {
     if (res.writableEnded || res.destroyed) return;
     let url; try { url = new URL(req.url || '/', 'http://localhost'); } catch { return listener(req, res); }
     try {
+      if (await servePublicDownloads(req, res, url.pathname, {
+        list: () => catalog.list(),
+        onError: error => console.error('public downloads failed:', safeErrorSummary(error))
+      })) return;
       if (req.method === 'GET' && assets.has(url.pathname)) {
         const [file, type] = assets.get(url.pathname);
         const body = await readFile(new URL('../web/' + file, import.meta.url));

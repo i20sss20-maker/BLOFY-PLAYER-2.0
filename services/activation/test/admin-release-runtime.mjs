@@ -28,6 +28,13 @@ try{
   for(const path of ['/api/v1/admin/users','/api/v1/admin/experience/overview','/api/v1/admin/experience/tickets','/api/v1/admin/experience/renewal-options'])assert.equal((await api(path)).status,200,path);
   const root='/api/v1/admin/experience/releases';
   let snapshot=await api(root);assert.equal(snapshot.status,200);const initial=snapshot.data.items.find(x=>x.isPrimary);assert.ok(initial);
+  async function publicPage(path='/releases') {
+    const r=await fetch(base+path);assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/charset=utf-8/);
+    assert.match(r.headers.get('cache-control'),/no-store/);const html=await r.text();
+    assert.match(html,/data-server-rendered="true"/);assert.doesNotMatch(html,/<script\b|جارٍ قراءة|experience\.js|release-manager\.js/);
+    return html;
+  }
+  for(const path of ['/releases','/releases/','/downloads','/downloads/'])assert.ok((await publicPage(path)).includes(initial.versionName));
   const body={channel:'testing',versionName:'2.0.0-ci-test',versionCode:2000099,downloadUrl:'https://example.com/test.apk',releaseNotes:'اختبار CI فقط'};
   response=await fetch(base+root,{method:'POST',headers:{...headers,origin:'https://foreign.invalid'},body:JSON.stringify(body)});assert.equal(response.status,403,'CSRF');
   let created=await api(root,'POST',body);assert.equal(created.status,200);const id=created.data.id;
@@ -36,12 +43,15 @@ try{
   let promoted=await api(root+'/'+id+'/primary','POST',{expectedRevision:2,expectedSelectionRevision:snapshot.data.selectionRevision});assert.equal(promoted.status,200);
   let health=await (await fetch(base+'/health')).json();assert.equal(health.release.app.versionCode,2000099);assert.equal(health.release.app.releaseNotes,'تعديل عربي');
   response=await fetch(base+'/download/latest.apk',{redirect:'manual'});assert.equal(response.status,302);assert.equal(response.headers.get('location'),body.downloadUrl);assert.match(response.headers.get('cache-control'),/no-store/);
+  const promotedHtml=await publicPage();assert.ok(promotedHtml.includes(body.downloadUrl));assert.ok(promotedHtml.includes('تعديل عربي'));
+  assert.ok(promotedHtml.indexOf('data-version-code="2000099"')<promotedHtml.indexOf('data-version-code="'+initial.versionCode+'"'));
   const removedPrimary=await api(root+'/'+id,'DELETE',{expectedRevision:2});assert.equal(removedPrimary.status,409);
   snapshot=await api(root);
   const restored=await api(root+'/'+initial.id+'/primary','POST',{expectedRevision:initial.revision,expectedSelectionRevision:snapshot.data.selectionRevision});assert.equal(restored.status,200);
   const removed=await api(root+'/'+id,'DELETE',{expectedRevision:2});assert.equal(removed.status,200);
   assert.equal((await api(root)).data.items.some(x=>x.id===id),false);
   const publicData=await (await fetch(base+'/api/v1/releases')).json();assert.equal(publicData.items.filter(x=>x.isPrimary).length,1);
+  const restoredHtml=await publicPage();assert.ok(!restoredHtml.includes(body.downloadUrl));assert.ok(restoredHtml.includes(initial.downloadUrl));
   health=await (await fetch(base+'/health')).json();assert.equal(health.release.app.versionCode,initial.versionCode);
-  console.log('PASS: canonical Admin route, authenticated dashboard, existing admin sections, CRUD, primary-delete guard, CSRF, public metadata and latest-APK redirect.');
+  console.log('PASS: canonical Admin route, authenticated dashboard, existing admin sections, CRUD, primary-delete guard, CSRF, public metadata, no-JavaScript downloads and latest-APK redirect.');
 }finally{server.kill('SIGTERM');await wait(300);if(server.exitCode===null)server.kill('SIGKILL');}
