@@ -37,6 +37,8 @@ import tv.blofy.player.core.identity.ActivationRemoteClient
 import tv.blofy.player.core.identity.DeviceIdentity
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalSyncBook
+import tv.blofy.player.core.identity.PortalRefreshFeedback
+import tv.blofy.player.core.identity.PortalRefreshFailure
 import tv.blofy.player.core.provider.RemoteProviderProfileClient
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDao
@@ -526,14 +528,14 @@ class LoginActivity : AppCompatActivity() {
                     websiteRefreshButton?.isEnabled = false
                     websiteRefreshButton?.setText(R.string.refreshing_from_website)
                 }
-                withTimeout(20_000L) { refreshIdentityAndProvider(fromWebsite) }
-            } catch (_: TimeoutCancellationException) {
-                status.text = getString(R.string.refresh_site_failed)
+                withTimeout(if (fromWebsite) 40_000L else 20_000L) { refreshIdentityAndProvider(fromWebsite) }
+            } catch (error: TimeoutCancellationException) {
+                status.text = PortalRefreshFeedback.failure(this@LoginActivity, error)
                 renderPlaylistLoadFailure()
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                status.text = getString(R.string.refresh_site_failed)
+            } catch (error: Exception) {
+                status.text = PortalRefreshFeedback.failure(this@LoginActivity, error)
                 renderPlaylistLoadFailure()
             } finally {
                 cardsDeadline.cancel()
@@ -558,16 +560,21 @@ class LoginActivity : AppCompatActivity() {
         if (!fromWebsite) return
         val endpoint = activationEndpoint
         if (endpoint.isBlank()) { status.setText(R.string.refresh_site_missing); return }
-        val remote = withContext(Dispatchers.IO) {
+        val remote = try { withContext(Dispatchers.IO) {
             manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
-        }
+        } } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { throw PortalRefreshFailure("AUTH", cause = error) }
         val updatedIdentity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
         renderIdentity(updatedIdentity.deviceId, updatedIdentity.activationCode)
         status.text = activationLabel(remote)
         if (!remote.canUse()) return
         val sync = PortalPlaylistClient.sync(applicationContext, endpoint, dao, PortalPlaylistClient.SyncMode.PULL_ONLY)
         renderPortalPlaylists(sync.providers)
-        sync.activeProvider?.let { applyRemoteProviderProfile(endpoint, dao, it.id) }
+        status.text = PortalRefreshFeedback.result(this, sync)
+        // Optional hints cannot turn a saved playlist refresh into a failure.
+        sync.activeProvider?.let { provider -> lifecycleScope.launch {
+            runSuspendCatching { applyRemoteProviderProfile(endpoint, dao, provider.id) }
+        } }
         // A website refresh updates data only. Entering a playlist is an explicit user action.
     }
 

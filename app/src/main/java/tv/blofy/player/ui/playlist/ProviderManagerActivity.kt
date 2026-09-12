@@ -26,6 +26,8 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationRemoteClient
+import tv.blofy.player.core.identity.PortalRefreshFeedback
+import tv.blofy.player.core.identity.PortalRefreshFailure
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
@@ -153,26 +155,29 @@ class ProviderManagerActivity : AppCompatActivity() {
         status.text = "جاري جلب القوائم وبياناتها من الموقع..."
         lifecycleScope.launch {
             try {
-                val result = withTimeout(20_000L) {
+                val result = withTimeout(40_000L) {
                     withContext(Dispatchers.IO) {
                         val dao = BlofyDatabase.get(applicationContext).dao()
                         val activation = ActivationManager(applicationContext, dao)
                         if (!activation.cachedCanUse(activation.ensureIdentity())) {
-                            val checked = activation.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
-                            check(checked.canUse()) { "device_activation_required" }
+                            val checked = try {
+                                activation.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
+                            } catch (cancelled: CancellationException) { throw cancelled }
+                            catch (error: Exception) { throw PortalRefreshFailure("AUTH", cause = error) }
+                            if (!checked.canUse()) throw PortalRefreshFailure("AUTH", 403)
                         }
                         val synced = PortalPlaylistClient.sync(applicationContext, endpoint, dao, PortalPlaylistClient.SyncMode.PULL_ONLY)
                         synced.changedProviderIds.forEach { CatalogSyncState.markPending(applicationContext, it) }
                         synced
                     }
                 }
-                status.text = "تم التحديث من الموقع • ${result.remoteCount} قائمة"
-            } catch (_: TimeoutCancellationException) {
-                status.text = "انتهت مهلة التحديث • قوائمك محفوظة، حاول مرة أخرى"
+                status.text = PortalRefreshFeedback.result(this@ProviderManagerActivity, result)
+            } catch (error: TimeoutCancellationException) {
+                status.text = PortalRefreshFeedback.failure(this@ProviderManagerActivity, error)
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                status.text = "تعذر التحديث من الموقع • تحقق من الاتصال أو ربط الجهاز"
+            } catch (error: Exception) {
+                status.text = PortalRefreshFeedback.failure(this@ProviderManagerActivity, error)
             } finally {
                 refreshingFromWebsite = false
                 if (!isFinishing && !isDestroyed) {

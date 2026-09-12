@@ -140,7 +140,10 @@ object BlofySubscriberClient {
         if (tokens.isEmpty()) return@withContext emptyMap()
         val endpoint = serviceEndpoint(baseUrl)
         val resolved = linkedMapOf<String, Session>()
-        for (batch in tokens.filter(String::isNotBlank).distinct().chunked(20)) {
+        // Malformed legacy tokens are deferred instead of poisoning the batch.
+        for (batch in tokens.filter { it.length in 1..4096 && it.all { c ->
+            c.code < 128 && (c.isLetterOrDigit() || c == '-' || c == '_')
+        } }.distinct().chunked(20)) {
             val body = JSONObject().apply {
                 put("deviceId", DeviceIdentity.deviceId(context))
                 put("activationCode", DeviceIdentity.activationCode(context))
@@ -149,7 +152,7 @@ object BlofySubscriberClient {
             val request = Request.Builder().url("$endpoint/api/v1/subscribers/resolve")
                 .post(body.toString().toRequestBody(jsonType)).build()
             client.newCall(request).awaitResponse().use { response ->
-                check(response.isSuccessful) { "تعذر تحديث اتصال مشترك BLOFY" }
+                if (!response.isSuccessful) throw PortalRefreshFailure("SUB", response.code)
                 val items = JSONObject(response.body?.string().orEmpty()).optJSONArray("items")
                 check(items != null) { "استجابة BLOFY غير مكتملة" }
                 for (index in 0 until items.length()) {
@@ -157,7 +160,8 @@ object BlofySubscriberClient {
                     val token = row.optString("sessionToken")
                     check(token in batch) { "استجابة BLOFY غير مكتملة" }
                     if (row.has("error")) continue
-                    resolved[token] = parseDirectSession(row)
+                    // Keep valid accounts when another account response is incomplete.
+                    runCatching { parseDirectSession(row) }.getOrNull()?.let { resolved[token] = it }
                 }
             }
         }

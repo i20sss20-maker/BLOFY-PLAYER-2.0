@@ -278,7 +278,7 @@ class PortalManualRefreshRegressionTest {
     @Test fun failedNetworkResponseLeavesSavedListsUntouched() {
         val original = provider("one")
         rows[original.id] = original
-        server.enqueue(MockResponse().setResponseCode(503))
+        repeat(2) { server.enqueue(MockResponse().setResponseCode(503)) }
         val error = runCatching { pull() }.exceptionOrNull()
         assertNotNull(error)
         assertEquals(original, rows[original.id])

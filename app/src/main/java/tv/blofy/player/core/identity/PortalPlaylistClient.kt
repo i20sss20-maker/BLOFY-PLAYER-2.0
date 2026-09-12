@@ -2,6 +2,13 @@ package tv.blofy.player.core.identity
 
 import android.content.Context
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
+import java.net.ProtocolException
+import javax.net.ssl.SSLException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -34,7 +41,8 @@ object PortalPlaylistClient {
         val activeProvider: ProviderEntity?,
         val providers: List<ProviderEntity>,
         val changedProviderIds: Set<String>,
-        val remoteCount: Int
+        val remoteCount: Int,
+        val deferredCount: Int = 0
     )
 
     data class SubscriberPreparation(
@@ -52,6 +60,9 @@ object PortalPlaylistClient {
         .readTimeout(8, TimeUnit.SECONDS)
         .writeTimeout(8, TimeUnit.SECONDS)
         .build()
+    // Retry list reads once, without redirecting device credentials elsewhere.
+    private val listClient = client.newBuilder().callTimeout(8, TimeUnit.SECONDS)
+        .followRedirects(false).followSslRedirects(false).build()
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 
     suspend fun sync(
@@ -60,10 +71,23 @@ object PortalPlaylistClient {
         dao: BlofyDao,
         mode: SyncMode = SyncMode.MERGE_AND_UPLOAD
     ): SyncResult = syncMutex.withLock {
-        syncInternal(context, baseUrl, dao, mode)
+        syncInternal(context, baseUrl, dao, mode, listClient) { tokens ->
+            BlofySubscriberClient.resolveConnections(context, baseUrl, tokens)
+        }
     }
 
-    private suspend fun syncInternal(context: Context, baseUrl: String, dao: BlofyDao, mode: SyncMode): SyncResult = withContext(Dispatchers.IO) {
+    /** Test the same reconciliation with local HTTP and subscriber fixtures. */
+    internal suspend fun syncWithResolver(
+        context: Context, baseUrl: String, dao: BlofyDao, transport: OkHttpClient = listClient,
+        resolve: suspend (Collection<String>) -> Map<String, BlofySubscriberClient.Session>
+    ): SyncResult = syncMutex.withLock {
+        syncInternal(context, baseUrl, dao, SyncMode.PULL_ONLY, transport, resolve)
+    }
+
+    private suspend fun syncInternal(
+        context: Context, baseUrl: String, dao: BlofyDao, mode: SyncMode, transport: OkHttpClient,
+        resolve: suspend (Collection<String>) -> Map<String, BlofySubscriberClient.Session>
+    ): SyncResult = withContext(Dispatchers.IO) {
         val endpoint = baseUrl.trim().trimEnd('/')
         if (endpoint.isBlank()) {
             val local = supportedProviders(PortalSyncBook.visible(context, dao.allProviders().first()))
@@ -74,26 +98,39 @@ object PortalPlaylistClient {
             put("deviceId", DeviceIdentity.deviceId(context))
             put("activationCode", DeviceIdentity.activationCode(context))
         }
-        for (id in PortalSyncBook.pending(context)) {
+        // Manual pull does not spend its deadline replaying queued write operations.
+        for (id in if (mode == SyncMode.PULL_ONLY) emptySet() else PortalSyncBook.pending(context)) {
             try { deleteRemote(endpoint, auth, id); PortalSyncBook.acknowledgeDelete(context, id) }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { }
         }
         val pending = PortalSyncBook.pending(context)
-        val remoteRows = fetchRemote(endpoint, auth).filterNot { it.id in pending || it.aliasIds.any(pending::contains) }
+        val snapshot = fetchRemote(endpoint, auth, transport)
+        val remoteRows = snapshot.items.filterNot { it.id in pending || it.aliasIds.any(pending::contains) }
         val beforeMigration = supportedProviders(dao.allProviders().first())
         val tokens = beforeMigration.filter { BlofySubscriberClient.isLegacyProxy(it, endpoint) }.map { it.username } +
             remoteRows.filter { BlofySubscriberClient.isLegacyProxy(it.provider(), endpoint) }.map { it.username }
-        val resolved = BlofySubscriberClient.resolveConnections(context, endpoint, tokens)
+        // A stale BLOFY token must not block independent Xtream lists.
+        val resolved = try {
+            if (tokens.isEmpty()) emptyMap() else withTimeoutOrNull(8_000L) { resolve(tokens) }.orEmpty()
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (failure: PortalRefreshFailure) {
+            if (failure.httpStatus in setOf(401, 403)) throw failure
+            emptyMap()
+        } catch (_: Exception) { emptyMap() }
+        var deferred = snapshot.deferredCount
         for (provider in beforeMigration.filter { BlofySubscriberClient.isLegacyProxy(it, endpoint) }) {
             resolved[provider.username]?.let { migrateSubscriber(context, dao, provider, it) }
         }
-        val remote = remoteRows.map { item ->
+        val remote = remoteRows.mapNotNull { item ->
             if (!BlofySubscriberClient.isLegacyProxy(item.provider(), endpoint)) item else {
-                val direct = checkNotNull(resolved[item.username]) { "أعد تسجيل الدخول إلى مشترك BLOFY" }
-                item.copy(baseUrl = direct.baseUrl, username = direct.username, password = direct.password, subscriberToken = direct.sessionToken)
+                val direct = resolved[item.username]
+                if (direct == null) { deferred++; null }
+                else item.copy(baseUrl = direct.baseUrl, username = direct.username,
+                    password = direct.password, subscriberToken = direct.sessionToken)
             }
         }
+        currentCoroutineContext().ensureActive()
         val local = supportedProviders(dao.allProviders().first())
         val localById = local.associateBy { it.id }
         val changed = linkedSetOf<String>()
@@ -155,12 +192,13 @@ object PortalPlaylistClient {
         }
 
         val remoteIds = remote.mapTo(hashSetOf()) { it.id }
-        val remoteAllIds = remote.flatMap { it.aliasIds + it.id }.toSet()
-        val siteDeleted = local.filter { PortalSyncBook.isKnown(context, it.id) &&
+        // An incomplete response is never evidence of deletion.
+        val remoteAllIds = snapshot.allRemoteIds
+        val siteDeleted = if (deferred > 0) emptyList() else local.filter { PortalSyncBook.isKnown(context, it.id) &&
             PortalSyncBook.remoteId(context, it.id) !in remoteAllIds }
         PortalSyncBook.hide(context, siteDeleted.map { it.id }.toSet())
         siteDeleted.forEach { dao.deactivateProvider(it.id); discardPendingSource(context, dao, it.id) }
-        if (mode == SyncMode.MERGE_AND_UPLOAD) {
+        if (mode == SyncMode.MERGE_AND_UPLOAD && deferred == 0) {
             PortalSyncBook.visible(context, local)
                 .filter { it.providerType.equals("xtream", true) }
                 .filterNot { PortalSyncBook.isKnown(context, it.id) || it.id in remoteIds }
@@ -180,7 +218,7 @@ object PortalPlaylistClient {
             ?: merged.firstOrNull { it.enabled } ?: merged.firstOrNull()
         activeCandidate?.let { dao.activateExistingProvider(it.id) }
         val reconciled = supportedProviders(PortalSyncBook.visible(context, dao.allProviders().first())).sortedByDescending { it.updatedAt }
-        SyncResult(reconciled.firstOrNull { it.enabled }, reconciled, changed, remote.size)
+        SyncResult(reconciled.firstOrNull { it.enabled }, reconciled, changed, remote.size, deferred)
     }
 
     suspend fun selectProvider(context: Context, baseUrl: String, provider: ProviderEntity, dao: BlofyDao): ProviderEntity = syncMutex.withLock {
@@ -398,40 +436,69 @@ object PortalPlaylistClient {
         }
     }
 
-    private suspend fun fetchRemote(endpoint: String, auth: JSONObject): List<RemotePlaylist> {
-        val request = Request.Builder()
-            .url("$endpoint/api/v1/portal/playlists/list")
-            .post(auth.toString().toRequestBody(jsonType))
-            .build()
-        client.newCall(request).awaitResponse().use { response ->
-            if (!response.isSuccessful) error("portal_list_http_${response.code}")
-            val root = JSONObject(response.body?.string().orEmpty())
-            val items = checkNotNull(root.optJSONArray("items")) { "portal_invalid_list" }
-            return buildList {
-                for (i in 0 until items.length()) {
-                    val row = checkNotNull(items.optJSONObject(i)) { "portal_invalid_row" }
-                    val type = row.optString("providerType").lowercase()
-                    if (type != "xtream") continue
-                    val url = row.optString("baseUrl").trim()
-                    val id = row.optString("id").trim()
-                    val username = row.optString("username")
-                    val password = row.optString("password")
-                    check(id.isNotBlank() && username.isNotBlank() && password.isNotBlank() && PlaylistUrlPolicy.isValid(url)) { "portal_invalid_row" }
-                    add(RemotePlaylist(
-                        id = id,
-                        aliasIds = row.optJSONArray("aliasIds")?.let { aliases ->
-                            (0 until aliases.length()).map { aliases.getString(it) }.filter(String::isNotBlank)
-                        }.orEmpty(),
-                        name = row.optString("name").ifBlank { "BLOFY Server" },
-                        baseUrl = url.trimEnd('/'),
-                        username = username,
-                        password = password,
-                        active = row.optBoolean("active"),
-                        updatedAt = row.optLong("updatedAt")
-                    ))
+    private data class RemoteSnapshot(
+        val items: List<RemotePlaylist>, val allRemoteIds: Set<String>, val deferredCount: Int
+    )
+
+    private suspend fun fetchRemote(endpoint: String, auth: JSONObject, transport: OkHttpClient): RemoteSnapshot {
+        val request = Request.Builder().url("$endpoint/api/v1/portal/playlists/list")
+            .post(auth.toString().toRequestBody(jsonType)).build()
+        repeat(2) { attempt ->
+            try {
+                transport.newCall(request).awaitResponse().use { response ->
+                    if (!response.isSuccessful) {
+                        if (attempt == 0 && response.code in setOf(408, 500, 502, 503, 504)) {
+                            response.close()
+                            delay(300L)
+                            return@repeat
+                        }
+                        throw PortalRefreshFailure("LIST", response.code)
+                    }
+                    val root = try { JSONObject(response.body?.string().orEmpty()) }
+                        catch (error: org.json.JSONException) { throw PortalRefreshFailure("DATA", cause = error) }
+                    return parseSnapshot(root)
                 }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: IOException) {
+                currentCoroutineContext().ensureActive()
+                if (attempt == 1 || error is SSLException || error is ProtocolException) throw error
+                delay(300L)
             }
         }
+        throw PortalRefreshFailure("LIST")
+    }
+
+    private fun parseSnapshot(root: JSONObject): RemoteSnapshot {
+        val items = root.optJSONArray("items") ?: throw PortalRefreshFailure("DATA")
+        val valid = mutableListOf<RemotePlaylist>()
+        val allIds = linkedSetOf<String>()
+        val seen = hashSetOf<String>()
+        val duplicates = hashSetOf<String>()
+        var deferred = root.optInt("skippedCorrupt", 0).coerceAtLeast(0)
+        if (root.has("complete") && !root.optBoolean("complete")) deferred++
+        for (i in 0 until items.length()) {
+            val row = items.optJSONObject(i)
+            if (row == null) { deferred++; continue }
+            val id = (row.opt("id") as? String).orEmpty().trim()
+            val aliasArray = row.optJSONArray("aliasIds")
+            val aliases = if (aliasArray == null) emptyList() else (0 until aliasArray.length())
+                .mapNotNull { aliasArray.opt(it) as? String }.filter(String::isNotBlank)
+            if (id.isNotBlank()) allIds += id
+            allIds += aliases
+            if (id.isNotBlank() && !seen.add(id)) { duplicates += id; deferred++; continue }
+            val type = (row.opt("providerType") as? String).orEmpty().lowercase()
+            if (type != "xtream") continue
+            val url = (row.opt("baseUrl") as? String).orEmpty().trim()
+            val username = (row.opt("username") as? String).orEmpty()
+            val password = (row.opt("password") as? String).orEmpty()
+            if (id.isBlank() || username.isBlank() || password.isBlank() || !PlaylistUrlPolicy.isValid(url)) {
+                deferred++; continue
+            }
+            valid += RemotePlaylist(id, aliases,
+                (row.opt("name") as? String).orEmpty().ifBlank { "BLOFY Server" },
+                url.trimEnd('/'), username, password, row.optBoolean("active"), row.optLong("updatedAt"))
+        }
+        return RemoteSnapshot(valid.filterNot { it.id in duplicates }, allIds, deferred)
     }
 
     private suspend fun push(endpoint: String, auth: JSONObject, provider: ProviderEntity, remoteId: String = provider.id): String {
