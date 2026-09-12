@@ -1,4 +1,4 @@
-name: Cancel duplicate rc07.41 dispatch
+name: Cancel superseded rc07.41 fixture builds
 on:
   push:
     branches: [fix/cancel-duplicate-rc0741]
@@ -7,11 +7,11 @@ permissions:
   contents: read
   actions: write
 jobs:
-  cancel-exact-duplicate:
+  cancel-exact-superseded-builds:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Preserve the original verified release run and cancel only its pending duplicate
+      - name: Cancel only superseded builds after verifying the corrected candidate
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -19,18 +19,16 @@ jobs:
         run: |
           set -euo pipefail
           test "$REPO" = i20sss20-maker/BLOFY-PLAYER-2.0
-          gh api "repos/$REPO/actions/runs/34725246277" > "$RUNNER_TEMP/primary.json"
-          gh api "repos/$REPO/actions/runs/34725250733" > "$RUNNER_TEMP/duplicate.json"
-          python3 - "$RUNNER_TEMP/primary.json" "$RUNNER_TEMP/duplicate.json" <<'PY'
+          test "$(gh api "repos/$REPO/git/ref/heads/rc07-runtime-recovery" --jq .object.sha)" = 60daaa00b35f42e7d0fc7b9bf91cf4ed4a9e0bc1
+          for id in 34725246277 34725250733; do
+            gh api "repos/$REPO/actions/runs/$id" > "$RUNNER_TEMP/superseded.json"
+            python3 - "$RUNNER_TEMP/superseded.json" <<'PY'
           import json,sys
-          primary,duplicate=[json.load(open(p)) for p in sys.argv[1:]]
-          for run in (primary,duplicate):
-            assert run['head_sha']=='616fd18bb87f11bc433d5828be10544d3ee63ec2'
-            assert run['workflow_id']==349395134
-            assert run['head_branch']=='rc07-runtime-recovery'
-          assert primary['event']=='push' and duplicate['event']=='workflow_dispatch'
-          assert primary['status']=='in_progress' or primary['conclusion']=='success'
-          assert duplicate['status'] in ('pending','queued','waiting')
+          run=json.load(open(sys.argv[1]))
+          assert run['head_sha']=='616fd18bb87f11bc433d5828be10544d3ee63ec2'
+          assert run['workflow_id']==349395134 and run['head_branch']=='rc07-runtime-recovery'
           PY
-          gh api --method POST "repos/$REPO/actions/runs/34725250733/cancel"
-          echo 'Only the duplicate dispatch was cancelled; the original signed release run is preserved.'
+            state="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["status"])' "$RUNNER_TEMP/superseded.json")"
+            if test "$state" != completed; then gh api --method POST "repos/$REPO/actions/runs/$id/cancel"; fi
+          done
+          echo 'Superseded test-fixture builds stopped. The corrected candidate and existing public release are untouched.'
