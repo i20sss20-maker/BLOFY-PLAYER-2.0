@@ -1,0 +1,59 @@
+name: BLOFY Customer Web Completion
+on:
+  push:
+    branches: [fix/customer-web-completion]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: blofy_test
+          POSTGRES_PASSWORD: local_test_only
+          POSTGRES_DB: blofy_customer_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U blofy_test -d blofy_customer_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      BLOFY_TEST_DATABASE_URL: postgresql://blofy_test:local_test_only@127.0.0.1:5432/blofy_customer_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply guarded integration
+        run: python3 .github/scripts/finish-customer-web.py
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+        working-directory: services/activation
+      - name: Syntax and unit regressions
+        run: npm run check && node --test --test-concurrency=1 test/*.test.mjs
+        working-directory: services/activation
+      - name: Authenticated device actions, conflicts, expiry and data preservation
+        run: node test/device-admin-runtime.mjs
+        working-directory: services/activation
+      - name: Existing subscriber and release integration
+        run: node test/subscriber-resolve-runtime.mjs && node test/subscriber-direct-session-runtime.mjs && node test/admin-release-runtime.mjs
+        working-directory: services/activation
+      - name: Commit only verified website integration
+        if: github.ref == 'refs/heads/fix/customer-web-completion'
+        run: |
+          git config user.name 'i20sss20-maker'
+          git config user.email '317876372+i20sss20-maker@users.noreply.github.com'
+          git add services/activation/src services/activation/web services/activation/test services/activation/package.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(web): integrate tested device tools and Android direct subscriber session contract'
+            git push origin HEAD:refs/heads/fix/customer-web-completion
+          fi
+          git rev-parse HEAD
+      - name: Verification summary
+        run: |
+          echo '## Customer website integration' >> "$GITHUB_STEP_SUMMARY"
+          echo "Verified revision: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo 'No Android, playback engine, customer credential or entitlement data changes.' >> "$GITHUB_STEP_SUMMARY"

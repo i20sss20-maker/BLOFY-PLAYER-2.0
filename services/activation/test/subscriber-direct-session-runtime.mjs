@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import {spawn} from 'node:child_process';
+import {setTimeout as wait} from 'node:timers/promises';
+import pg from 'pg';
+import {resolveEnvelope} from '../src/subscriber-resolve.mjs';
+const db=process.env.BLOFY_TEST_DATABASE_URL;
+if(!db || !['127.0.0.1','localhost','postgres'].includes(new URL(db).hostname) || !new URL(db).pathname.endsWith('_test'))throw Error('Dedicated local test database required');
+const id='BLOFY-DIRECT-CITEST',pin='246810',key='9'.repeat(64),base='http://127.0.0.1:8099';
+let calls=0;const upstream=http.createServer((req,res)=>{calls++;const u=new URL(req.url,'http://localhost');res.setHeader('content-type','application/json');res.end(JSON.stringify({user_info:{auth:u.searchParams.get('username')==='direct-user' && u.searchParams.get('password')==='test-password'?1:0}}));});
+await new Promise(resolve=>upstream.listen(0,'127.0.0.1',resolve));const host='http://127.0.0.1:'+upstream.address().port;
+const pool=new pg.Pool({connectionString:db,ssl:false});let log='';const child=spawn(process.execPath,['src/bootstrap.mjs'],{env:{...process.env,DATABASE_URL:db,PGSSLMODE:'disable',PORT:'8099',BLOFY_ADMIN_TOKEN:'test-only-direct-session-admin-token',BLOFY_PLAYLIST_ENCRYPTION_KEY:key,BLOFY_SUBSCRIBER_HOST:host},stdio:['ignore','pipe','pipe']});child.stdout.on('data',d=>log+=d);child.stderr.on('data',d=>log+=d);
+try{let ready=false;for(let n=0;n<60;n++){try{if((await fetch(base+'/health')).ok){ready=true;break;}}catch{}await wait(200);}assert.ok(ready,'service ready: '+log);
+await pool.query("INSERT INTO devices(device_id,activation_code,status,expires_at) VALUES($1,$2,'trial',NOW()+INTERVAL '3 days')",[id,pin]);
+const post=async(body)=>{const r=await fetch(base+'/api/v1/subscribers/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {status:r.status,headers:r.headers,data:await r.json()};};
+const body={deviceId:id,activationCode:pin,username:'direct-user',password:'test-password'};
+let result=await post({...body,activationCode:'000000',delivery:'direct'});assert.equal(result.status,403);assert.equal(calls,0,'wrong PIN cannot contact subscriber upstream');
+result=await post(body);assert.equal(result.status,200);assert.equal(result.data.password,'blofy');assert.ok(!('delivery' in result.data));assert.notEqual(result.data.baseUrl,host);assert.notEqual(result.data.username,body.username);
+result=await post({...body,delivery:'direct'});assert.equal(result.status,200);assert.equal(result.data.delivery,'direct');assert.equal(result.data.baseUrl,host);assert.equal(result.data.username,body.username);assert.equal(result.data.password,body.password);assert.match(result.headers.get('cache-control'),/no-store/);
+const envelope=resolveEnvelope(result.data.sessionToken,id,Buffer.from(key,'hex'));assert.ok(envelope);assert.equal(envelope.u,body.username);assert.equal(envelope.p,body.password);assert.equal(envelope.d,id);assert.ok(envelope.exp>Date.now());
+await pool.query("UPDATE devices SET status='blocked' WHERE device_id=$1",[id]);const before=calls;result=await post({...body,delivery:'direct'});assert.equal(result.status,403);assert.equal(calls,before);
+console.log('PASS: opted-in Android direct session, unchanged opaque portal response, valid same-device envelope, wrong PIN/blocked denial and no-store.');
+}finally{await pool.query('DELETE FROM devices WHERE device_id=$1',[id]).catch(()=>{});await pool.end();child.kill('SIGTERM');await wait(200);if(child.exitCode===null)child.kill('SIGKILL');await new Promise(resolve=>upstream.close(resolve));}
