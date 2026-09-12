@@ -1,0 +1,68 @@
+name: BLOFY Portal Refresh Recovery
+on:
+  push:
+    branches: [fix/portal-refresh-recovery]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      source: ${{ steps.prepare.outputs.source }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: prepare
+        name: Apply reviewed changes to the test branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/fix/portal-refresh-recovery
+          if test -f tools/apply_portal_refresh_fix.py; then
+            test "$(git hash-object app/src/main/java/tv/blofy/player/core/identity/PortalPlaylistClient.kt)" = 583e9f3b44d5f20a2462dff9262852752cce3f26
+            python3 tools/apply_portal_refresh_fix.py
+            git diff --check
+            git diff --name-only | grep -Ev '^(app/src/main/java/tv/blofy/player/(core/identity/(PortalPlaylistClient|BlofySubscriberClient)|ui/(login/LoginActivity|playlist/ProviderManagerActivity))\.kt|app/src/test/java/tv/blofy/player/core/identity/PortalManualRefreshRegressionTest\.kt)$' && exit 1 || true
+            git rm tools/apply_portal_refresh_fix.py
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add app
+            git commit -m 'fix(portal): isolate invalid playlists and preserve local lists during incomplete refresh'
+            git push origin HEAD:refs/heads/fix/portal-refresh-recovery
+          fi
+          echo "source=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git ls-tree -r HEAD app/src/main/java/tv/blofy/player/core/identity app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt app/src/main/java/tv/blofy/player/ui/playlist/ProviderManagerActivity.kt
+  verify:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Full Android tests, lint and install packages
+        run: >-
+          gradle --no-daemon --max-workers=2
+          -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app
+          testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portal-refresh-reports-${{ needs.prepare.outputs.source }}
+          path: |
+            app/build/test-results/
+            app/build/reports/
+          retention-days: 7

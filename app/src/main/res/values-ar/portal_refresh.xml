@@ -1,0 +1,15 @@
+<resources>
+    <string name="portal_refresh_complete">تم التحديث من الموقع • %1$d قائمة</string>
+    <string name="portal_refresh_partial">تم تحديث %1$d • راجع %2$d قائمة بالموقع؛ القوائم القديمة محفوظة</string>
+    <string name="portal_refresh_deferred">تعذر جلب %1$d قائمة؛ راجع بياناتها بالموقع. القوائم القديمة محفوظة</string>
+    <string name="portal_refresh_timeout">انتهت مهلة جلب القوائم؛ قوائمك محفوظة، حاول مرة أخرى</string>
+    <string name="portal_refresh_tls">تعذر التحقق من اتصال الموقع الآمن؛ تأكد من تاريخ الجهاز ووقته</string>
+    <string name="portal_refresh_dns">تعذر العثور على موقع BLOFY؛ تحقق من الاتصال</string>
+    <string name="portal_refresh_identity">الموقع رفض ربط الجهاز أو تفعيله؛ راجع سجل الجهاز</string>
+    <string name="portal_refresh_busy">طلبات تحديث كثيرة؛ انتظر قليلًا ثم حاول مجددًا</string>
+    <string name="portal_refresh_service">تعذر رد الموقع بالقوائم؛ قوائمك محفوظة، حاول مجددًا</string>
+    <string name="portal_refresh_data">وصلت استجابة قوائم غير مكتملة؛ القوائم القديمة محفوظة</string>
+    <string name="portal_refresh_activation">تعذر التحقق من الجهاز قبل جلب القوائم؛ قوائمك محفوظة</string>
+    <string name="portal_refresh_network">تعذر الاتصال بالموقع؛ تحقق من الشبكة، قوائمك محفوظة</string>
+    <string name="portal_refresh_local">تعذر تطبيق قوائم الموقع على الجهاز؛ لا تمسح بيانات التطبيق</string>
+</resources>

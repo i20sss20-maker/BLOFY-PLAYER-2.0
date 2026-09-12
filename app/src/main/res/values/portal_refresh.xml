@@ -1,0 +1,15 @@
+<resources>
+    <string name="portal_refresh_complete">Updated from website • %1$d playlists</string>
+    <string name="portal_refresh_partial">Updated %1$d • %2$d need review on the website; saved lists kept</string>
+    <string name="portal_refresh_deferred">%1$d playlists could not be retrieved; review their website details. Saved lists kept</string>
+    <string name="portal_refresh_timeout">Website refresh timed out; saved playlists kept. Try again</string>
+    <string name="portal_refresh_tls">Cannot verify the secure website connection. Check device date and time</string>
+    <string name="portal_refresh_dns">Cannot find the BLOFY website. Check the connection</string>
+    <string name="portal_refresh_identity">Website rejected device pairing or activation. Check the device record</string>
+    <string name="portal_refresh_busy">Too many refresh requests. Wait briefly and try again</string>
+    <string name="portal_refresh_service">The website could not return playlists. Saved lists kept; try again</string>
+    <string name="portal_refresh_data">Incomplete playlist response from website. Saved lists kept</string>
+    <string name="portal_refresh_activation">Device verification failed before retrieving playlists. Saved lists kept</string>
+    <string name="portal_refresh_network">Cannot reach the website. Check the connection; saved lists kept</string>
+    <string name="portal_refresh_local">Could not apply the website playlists on this device. Do not clear app data</string>
+</resources>
