@@ -63,7 +63,7 @@ export function injectSubscriberPortalUi(html) {
       badge = document.createElement('div');
       badge.id = 'blofySubscriberHint';
       badge.className = 'full';
-      badge.style.cssText = 'display:none;margin-top:12px;padding:12px 14px;border:1px solid rgba(177,108,255,.35);border-radius:14px;background:rgba(139,55,255,.10);color:#d9c4ff;font-size:13px;line-height:1.65';
+      badge.style.cssText = 'display:none;margin-top:12px;padding:12px 14px;border:1px solid var(--line-accent,rgba(164,97,255,.34));border-radius:var(--radius-md,16px);background:var(--accent-soft,rgba(139,55,255,.14));color:#d9c4ff;font-size:13px;line-height:1.65;box-shadow:inset 0 1px 0 rgba(255,255,255,.025)';
       badge.textContent = 'دخول BLOFY الخاص: أدخل اسم المستخدم وكلمة المرور فقط. عنوان السيرفر محفوظ داخل BLOFY ولا يظهر في الموقع أو التطبيق.';
       var grid = select.closest('.form-grid');
       if (grid) grid.appendChild(badge);
@@ -169,11 +169,16 @@ export function injectSubscriberPortalUi(html) {
     addSubscriberOption();
     installSaveInterceptor();
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
-  else install();
 
-  var observer = new MutationObserver(function () { install(); });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  // The subscriber UI only needs one idempotent initialization. A previous
+  // document-wide MutationObserver re-ran install() for every DOM mutation,
+  // including mutations made by install() itself, which could keep the main
+  // thread busy enough for browsers to report "page unresponsive".
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', install, { once: true });
+  } else {
+    install();
+  }
 })();
 </script>`;
 
