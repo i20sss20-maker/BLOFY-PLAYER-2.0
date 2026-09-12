@@ -1,0 +1,36 @@
+name: Cancel duplicate rc07.41 dispatch
+on:
+  push:
+    branches: [fix/cancel-duplicate-rc0741]
+    paths: ['.github/workflows/cancel-duplicate-rc0741.yml']
+permissions:
+  contents: read
+  actions: write
+jobs:
+  cancel-exact-duplicate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Preserve the original verified release run and cancel only its pending duplicate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$REPO" = i20sss20-maker/BLOFY-PLAYER-2.0
+          gh api "repos/$REPO/actions/runs/34725246277" > "$RUNNER_TEMP/primary.json"
+          gh api "repos/$REPO/actions/runs/34725250733" > "$RUNNER_TEMP/duplicate.json"
+          python3 - "$RUNNER_TEMP/primary.json" "$RUNNER_TEMP/duplicate.json" <<'PY'
+          import json,sys
+          primary,duplicate=[json.load(open(p)) for p in sys.argv[1:]]
+          for run in (primary,duplicate):
+            assert run['head_sha']=='616fd18bb87f11bc433d5828be10544d3ee63ec2'
+            assert run['workflow_id']==349395134
+            assert run['head_branch']=='rc07-runtime-recovery'
+          assert primary['event']=='push' and duplicate['event']=='workflow_dispatch'
+          assert primary['status']=='in_progress' or primary['conclusion']=='success'
+          assert duplicate['status'] in ('pending','queued','waiting')
+          PY
+          gh api --method POST "repos/$REPO/actions/runs/34725250733/cancel"
+          echo 'Only the duplicate dispatch was cancelled; the original signed release run is preserved.'
