@@ -1,0 +1,39 @@
+name: BLOFY Activation Client Resilience
+on:
+  push:
+    branches: [fix/rc0740-activation-retry]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Activation and portal regression tests
+        run: >-
+          gradle --no-daemon -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app
+          testDebugUnitTest --tests '*Activation*' --tests '*Portal*' --tests '*Subscriber*'
+      - name: Compile installation and instrumentation packages
+        run: gradle --no-daemon -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app assembleDebug assembleDebugAndroidTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: activation-client-test-reports
+          path: |
+            app/build/test-results/
+            app/build/reports/tests/
+          retention-days: 7

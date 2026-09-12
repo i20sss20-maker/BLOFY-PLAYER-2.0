@@ -10,17 +10,20 @@ object ActivationRemoteClient {
         val normalized = baseUrl.trim().let { if (it.endsWith('/')) it else "$it/" }
         require(normalized.startsWith("https://") || normalized.startsWith("http://")) { "Invalid activation endpoint" }
         val client = OkHttpClient.Builder()
-            .connectTimeout(8, TimeUnit.SECONDS)
-            .readTimeout(12, TimeUnit.SECONDS)
-            .writeTimeout(12, TimeUnit.SECONDS)
+            // Two bounded attempts fit inside the existing login screen deadline.
+            .callTimeout(8, TimeUnit.SECONDS)
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .writeTimeout(8, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
-        return Retrofit.Builder()
+        val api = Retrofit.Builder()
             .baseUrl(normalized)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(ActivationApi::class.java)
+        return RetryingActivationApi(api)
     }
 }
