@@ -298,19 +298,19 @@ async function createSubscriberSession(req, res) {
     return sendJson(res, 401, { error: 'subscriber_login_failed' });
   }
 
-  const token = sealSession({
-    u: username,
-    p: password,
-    d: deviceId,
-    exp: Date.now() + Math.max(60 * 60 * 1000, Math.min(SESSION_TTL_MS, 90 * 24 * 60 * 60 * 1000))
-  });
+  const expiresAt = Date.now() + Math.max(60 * 60 * 1000, Math.min(SESSION_TTL_MS, 90 * 24 * 60 * 60 * 1000));
+  const token = sealSession({ u: username, p: password, d: deviceId, exp: expiresAt });
+  // Released Android clients explicitly request the direct contract. The website
+  // still receives opaque credentials; no playback/proxy handler changes here.
   return sendJson(res, 200, {
     providerName: 'مشتركين BLOFY',
     providerType: 'xtream',
-    baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`,
-    username: token,
-    password: 'blofy',
-    expiresAt: Date.now() + Math.max(60 * 60 * 1000, Math.min(SESSION_TTL_MS, 90 * 24 * 60 * 60 * 1000))
+    ...(body.delivery === 'direct' ? {
+      delivery: 'direct', baseUrl: subscriberHost, username, password, sessionToken: token
+    } : {
+      baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`, username: token, password: 'blofy'
+    }),
+    expiresAt
   });
 }
 
