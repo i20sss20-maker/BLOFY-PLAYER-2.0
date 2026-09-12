@@ -31,7 +31,9 @@ class AppUpdateWorker(context: Context, parameters: WorkerParameters) : Coroutin
         val url = inputData.getString(URL).orEmpty()
         if (version <= BuildConfig.VERSION_CODE || !safeUrl(url)) return@withContext Result.failure()
         val target = file(applicationContext, version)
-        val partial = File(target.parentFile, "${target.name}.part")
+        // Keep the staging filename ending in .apk. Some Android TV/OEM PackageManager
+        // implementations refuse to parse package archives whose path ends in ".apk.part".
+        val partial = File(target.parentFile, "blofy-$version.download.apk")
         try {
             if (target.isFile && UpdatePackageVerifier.verify(applicationContext, target, version)) return@withContext Result.success()
             check(target.parentFile?.mkdirs() == true || target.parentFile?.isDirectory == true)
@@ -45,7 +47,6 @@ class AppUpdateWorker(context: Context, parameters: WorkerParameters) : Coroutin
             client.newCall(request).execute().use { response ->
                 if (!response.request.url.isHttps) throw IOException("download_failed")
                 val resuming = resumeFrom > 0 && response.code == 206
-                // The server ignored our Range request (or there was nothing to resume): start clean.
                 if (!resuming && partial.isFile && !partial.delete()) throw IOException("storage_failed")
                 if (!response.isSuccessful) throw IOException("download_failed")
                 val body = response.body ?: throw IOException("empty_response")
@@ -70,8 +71,6 @@ class AppUpdateWorker(context: Context, parameters: WorkerParameters) : Coroutin
                     }
                     output.fd.sync()
                 } }
-                // Fewer bytes than promised almost always means the connection dropped mid-transfer;
-                // keep the partial file so the next attempt can resume instead of starting over.
                 if (downloaded == 0L || (total > 0 && total != downloaded)) throw IOException("incomplete_download")
             }
             currentCoroutineContext().ensureActive()
@@ -83,16 +82,12 @@ class AppUpdateWorker(context: Context, parameters: WorkerParameters) : Coroutin
             if (!partial.renameTo(target)) throw IOException("storage_failed")
             Result.success()
         } catch (cancelled: CancellationException) {
-            // An explicit user cancel (or WorkManager tearing the worker down) should not leave a
-            // resumable file behind pretending progress survived - "cancel" means start clean.
             partial.delete()
             throw cancelled
         } catch (nonResumable: NonResumableException) {
             partial.delete()
             if (runAttemptCount < MAX_AUTO_RETRIES) Result.retry() else Result.failure(workDataOf(ERROR to nonResumable.message))
         } catch (_: Exception) {
-            // Network hiccups (timeouts, connection resets, a Wi-Fi drop) land here. The partial file
-            // is left in place on purpose so the retry - automatic or the user's manual tap - resumes.
             if (runAttemptCount < MAX_AUTO_RETRIES) Result.retry() else Result.failure(workDataOf(ERROR to "download_failed"))
         }
     }
