@@ -1,0 +1,43 @@
+name: BLOFY Subscriber Portal Sync
+on:
+  push:
+    branches: [main, fix/subscriber-portal-sync]
+    paths: ['services/activation/**', '.github/workflows/subscriber-portal-sync.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: blofy_test
+          POSTGRES_PASSWORD: local_test_only
+          POSTGRES_DB: blofy_sync_test
+        ports: ['5432:5432']
+        options: --health-cmd 'pg_isready -U blofy_test' --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      BLOFY_TEST_DATABASE_URL: postgresql://blofy_test:local_test_only@127.0.0.1:5432/blofy_sync_test
+    defaults:
+      run:
+        working-directory: services/activation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Syntax and existing auth tests
+        run: |
+          npm run check
+          node --check src/subscriber-resolve.mjs
+          node --check src/subscriber-resolve-hook.mjs
+          node --check test/subscriber-resolve-runtime.mjs
+          node --test test/auth-protection.test.mjs test/portal-url-policy.test.mjs
+      - name: Subscriber resolver contract and security tests
+        run: node --test test/subscriber-resolve.test.mjs
+      - name: Reproduce baseline and verify mixed portal sync with PostgreSQL
+        run: node test/subscriber-resolve-runtime.mjs
