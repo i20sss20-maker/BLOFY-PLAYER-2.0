@@ -22,6 +22,26 @@ export function injectSubscriberPortalUi(html) {
     node.textContent = message || '';
     node.classList.toggle('bad', !!bad);
   }
+  function installUnifiedTheme() {
+    if (!document.head || qs('blofyUnifiedTheme')) return;
+    var style = document.createElement('style');
+    style.id = 'blofyUnifiedTheme';
+    style.textContent = [
+      ':root{--bg:#07070d;--surface:rgba(18,15,29,.90);--surface-solid:#12101d;--surface-alt:#1b162a;--surface-hover:#251d35;--accent:#8b37ff;--accent-2:#b16cff;--accent-soft:rgba(139,55,255,.14);--text:#fff;--muted:#aaa4b7;--line:rgba(184,140,255,.19);--line-accent:rgba(164,97,255,.34);--radius-xl:30px;--radius-lg:22px;--radius-md:16px}',
+      'html,body{background:#07070d!important;color:var(--text)!important}',
+      'body{background:radial-gradient(circle at 84% -20%,rgba(109,32,217,.28),transparent 44%),linear-gradient(145deg,#07070d,#0b0911 52%,#09080f)!important}',
+      '.auth-card,.dashboard-panel,.editor-card{border-color:var(--line)!important;background:linear-gradient(155deg,rgba(27,22,42,.94),rgba(12,10,19,.93))!important;box-shadow:0 28px 80px rgba(0,0,0,.32)!important}',
+      '.language-control,.secondary,.toggle-row{border-color:var(--line)!important;background:var(--surface-alt)!important}',
+      '.playlist{border-color:var(--line)!important;background:linear-gradient(145deg,rgba(19,15,31,.88),rgba(10,8,17,.84))!important}',
+      '.playlist:hover{border-color:var(--line-accent)!important;background:linear-gradient(145deg,rgba(27,20,43,.94),rgba(13,10,22,.90))!important}',
+      'input,select{border-color:var(--line)!important;background:#0b0911!important;color:var(--text)!important}',
+      'input:focus,select:focus{border-color:var(--accent)!important;background:#0e0b16!important;box-shadow:0 0 0 4px rgba(139,55,255,.12)!important}',
+      '.primary-button{background:linear-gradient(110deg,#7524ef,#a84fff)!important;box-shadow:0 13px 30px rgba(111,35,229,.28)!important}',
+      '.eyebrow,.flow-step,.device-illustration,.playlist-icon,.empty-icon{border-color:var(--line-accent)!important;background:var(--accent-soft)!important}',
+      '.status{color:#cbb2ff!important}.status.bad{color:#ff9da6!important}.brand-copy span{color:#ad69ff!important}'
+    ].join('');
+    document.head.appendChild(style);
+  }
   function installOptionalName() {
     var input = qs('name');
     if (!input || input.dataset.blofyOptionalName === '1') return;
@@ -165,6 +185,7 @@ export function injectSubscriberPortalUi(html) {
   }
 
   function install() {
+    installUnifiedTheme();
     installOptionalName();
     addSubscriberOption();
     installSaveInterceptor();
