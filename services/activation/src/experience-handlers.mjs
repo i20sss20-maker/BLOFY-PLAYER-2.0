@@ -1,25 +1,22 @@
 import crypto from 'node:crypto';
+import { createReleaseCatalog, ReleaseError } from './release-catalog.mjs';
+import { createReleasePublicHandlers } from './release-public.mjs';
 import { readFile } from 'node:fs/promises';
 import { probeAccount } from './account-health.mjs';
 import { recordAudit } from './audit.mjs';
 import { RENEWAL_OPTIONS, RenewalError, renewalPreview, renewDevice } from './admin-renewals.mjs';
-import { appReleaseMetadata, sanitizeHttpsUrl, sanitizeVersionCode, sanitizeVersionName, sanitizeReleaseNotes } from './release-metadata.mjs';
 import { pseudonymizeDiagnosticProviderKey, sanitizeDiagnosticMessage } from './diagnostics-sanitizer.mjs';
 
 export function createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice, authorizedAccountDevice = authorizedDevice, probe = probeAccount }) {
   const checked = new Map();
+  const releaseCatalog = createReleaseCatalog({ pool, audit: (client, action, item) => recordAudit(client, null, 'release_updated', { channel: item.channel, versionName: item.versionName }) });
+  const releasePublic = createReleasePublicHandlers({ pool, json, catalog: releaseCatalog });
   const ms = value => value ? new Date(value).getTime() : null;
   const normalized = row => ['active','trial'].includes(row.status) && ms(row.expires_at) && ms(row.expires_at) <= Date.now() ? 'expired' : row.status;
   const pageFiles = { '/':'landing.html', '/downloads':'downloads.html', '/account':'account.html' };
-  const assetFiles = { '/experience.css':'experience.css', '/premium.css':'premium.css', '/experience.js':'experience.js', '/app-preview.png':'app-preview.png', '/IBMPlexSansArabic-Regular.ttf':'IBMPlexSansArabic-Regular.ttf', '/IBMPlexSansArabic-Medium.ttf':'IBMPlexSansArabic-Medium.ttf', '/OFL.txt':'OFL.txt' };
+  const assetFiles = { '/experience.css':'experience.css', '/premium.css':'premium.css', '/experience.js':'experience.js', '/release-manager.js':'release-manager.js', '/app-preview.png':'app-preview.png', '/IBMPlexSansArabic-Regular.ttf':'IBMPlexSansArabic-Regular.ttf', '/IBMPlexSansArabic-Medium.ttf':'IBMPlexSansArabic-Medium.ttf', '/OFL.txt':'OFL.txt' };
 
-  async function releases() {
-    const result = await pool.query('SELECT * FROM app_releases ORDER BY channel');
-    const items = result.rows.map(row => ({channel:row.channel,versionCode:row.version_code,versionName:row.version_name,downloadUrl:row.download_url,releaseNotes:row.release_notes,updatedAt:ms(row.updated_at)}));
-    const configured = appReleaseMetadata();
-    if (!items.length && configured) items.push({...configured,channel:/rc|beta|alpha/i.test(configured.versionName)?'testing':'stable'});
-    return items;
-  }
+  async function releases() { return (await releaseCatalog.list()).items; }
 
   async function summary(deviceId) {
     const result = await pool.query(`SELECT d.device_id,d.status,d.expires_at,d.last_seen_at,d.last_app_version,d.last_platform,
@@ -48,6 +45,7 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
 
   async function handle(req,res,url) {
     const pathname = url.pathname;
+    if (await releasePublic.handle(req,res,url)) return true;
     if (req.method==='GET' && (pageFiles[pathname] || assetFiles[pathname])) {
       // Existing QR links still enter the device portal.
       if (pathname==='/' && (url.searchParams.has('deviceId') || url.searchParams.has('device') || url.searchParams.has('code') || url.searchParams.has('activationCode'))) return false;
@@ -58,7 +56,6 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
         'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"});
       res.end(body); return true;
     }
-    if (req.method==='GET' && pathname==='/api/v1/releases') { json(res,200,{items:await releases()}); return true; }
     const admin = pathname.startsWith('/api/v1/admin/experience');
     const portal = pathname.startsWith('/api/v1/portal/experience');
     if (!admin && !portal) return false;
@@ -105,18 +102,28 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
         (SELECT COUNT(*)::int FROM support_tickets WHERE status='open') AS support FROM devices`);
       json(res,200,result.rows[0]); return true;
     }
-    if (admin && route==='/releases' && req.method==='POST') {
-      const channel = body.channel;
-      const versionCode = sanitizeVersionCode(body.versionCode), versionName=sanitizeVersionName(body.versionName), downloadUrl=sanitizeHttpsUrl(body.downloadUrl), releaseNotes=sanitizeReleaseNotes(body.releaseNotes);
-      if (!['stable','testing'].includes(channel) || !versionCode || !versionName || !downloadUrl) { json(res,400,{error:'invalid_release'}); return true; }
-      const client=await pool.connect();
+    if (admin && (route==='/releases' || route.startsWith('/releases/'))) {
+      if (req.method!=='GET') {
+        const headers = req.headers || {};
+        let foreign = headers['sec-fetch-site']==='cross-site';
+        try { if (headers.origin && new URL(headers.origin).host !== headers.host) foreign = true; }
+        catch { foreign = true; }
+        if (foreign) { json(res,403,{error:'forbidden_origin'}); return true; }
+        if (!String(headers['content-type']||'').toLowerCase().startsWith('application/json')) {
+          json(res,415,{error:'json_required'}); return true;
+        }
+      }
       try {
-        await client.query('BEGIN');
-        await client.query(`INSERT INTO app_releases(channel,version_code,version_name,download_url,release_notes) VALUES($1,$2,$3,$4,$5)
-          ON CONFLICT(channel) DO UPDATE SET version_code=$2,version_name=$3,download_url=$4,release_notes=$5,updated_at=NOW()`,[channel,versionCode,versionName,downloadUrl,releaseNotes]);
-        await recordAudit(client,null,'release_updated',{channel,versionName}); await client.query('COMMIT');
-      } catch(error) { await client.query('ROLLBACK').catch(()=>{}); throw error; } finally { client.release(); }
-      json(res,200,{ok:true}); return true;
+        if (req.method==='GET' && route==='/releases') json(res,200,await releaseCatalog.list());
+        else if (req.method==='POST' && route==='/releases') json(res,200,await releaseCatalog.mutate('create',body));
+        else {
+          const match = route.match(/^\/releases\/(\d+)(\/primary)?$/);
+          const action = match && (match[2] && req.method==='POST' ? 'primary' : !match[2] && req.method==='PATCH' ? 'edit' : !match[2] && req.method==='DELETE' ? 'delete' : null);
+          if (!action) json(res,405,{error:'method_not_allowed'});
+          else json(res,200,await releaseCatalog.mutate(action,{...body,targetVersionCode:Number(match[1])}));
+        }
+      } catch (error) { if (!(error instanceof ReleaseError)) throw error; json(res,error.status,{error:error.message}); }
+      return true;
     }
     if (!/^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId)) { json(res,400,{error:'invalid_device'}); return true; }
     if (route==='/customer' && (admin ? req.method==='GET' : true)) {
@@ -151,5 +158,5 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
     }
     json(res,404,{error:'not_found'}); return true;
   }
-  return {handle,summary,releases};
+  return {handle,summary,releases,appRelease:releaseCatalog.appRelease};
 }

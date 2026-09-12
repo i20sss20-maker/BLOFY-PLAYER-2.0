@@ -34,8 +34,22 @@ assert.equal(account.status,'expired');assert.equal(account.tickets[0].status,'r
 await request('/api/v1/portal/experience/check',{...identity,playlistId:crypto.randomUUID()},{status:403});
 record=await request('/api/v1/admin/experience/customer?deviceId='+deviceId,null,{admin:true});
 assert.ok(record.audit.some(x=>x.action==='activation_changed'));assert.ok(record.audit.some(x=>x.action==='support_updated'));
-await request('/api/v1/admin/experience/releases',{channel:'testing',versionCode:2000046,versionName:'2.0.0-rc07.35',downloadUrl:'https://example.test/fixture.apk',releaseNotes:'Isolated E2E release'},{admin:true});
-const releases=await request('/api/v1/releases');assert.equal(releases.items.find(x=>x.channel==='testing').versionCode,2000046);
+const releasePath='/api/v1/admin/experience/releases';
+const beforeReleases=await request(releasePath,null,{admin:true});
+await request(releasePath,{revision:beforeReleases.revision,channel:'testing',versionCode:2000046,versionName:'2.0.0-rc07.35',downloadUrl:'https://example.test/fixture.apk',releaseNotes:'Isolated E2E release'},{admin:true});
+const releases=await request('/api/v1/releases');assert.ok(releases.items.some(x=>x.versionCode===2000046));
+assert.equal(releases.primaryVersionCode,beforeReleases.primaryVersionCode,'Saving must not silently promote a version');
+let edited=await request(releasePath+'/2000046',{...releases.items.find(x=>x.versionCode===2000046),revision:releases.revision,releaseNotes:'Edited note'},{admin:true,method:'PATCH'});
+assert.equal(edited.items.find(x=>x.versionCode===2000046).releaseNotes,'Edited note');
+let promoted=await request(releasePath+'/2000046/primary',{revision:edited.revision},{admin:true});
+assert.equal((await request('/health')).release.app.versionCode,2000046);
+await request(releasePath+'/2000046',{revision:promoted.revision},{admin:true,method:'DELETE',status:409});
+await request(releasePath+'/2000046/primary',{revision:edited.revision},{admin:true,status:409});
+const redirect=await fetch(base+'/download/latest.apk',{redirect:'manual'});
+assert.equal(redirect.status,302);assert.equal(redirect.headers.get('location'),'https://example.test/fixture.apk');
+const restored=await request(releasePath+'/'+beforeReleases.primaryVersionCode+'/primary',{revision:promoted.revision},{admin:true});
+await request(releasePath+'/2000046',{revision:restored.revision},{admin:true,method:'DELETE'});
+assert.ok(!(await request('/api/v1/releases')).items.some(x=>x.versionCode===2000046));
 console.log('PASS: account ownership, expired-device read access, support persistence/resolution, audit and release publishing');
 
 const options=await request('/api/v1/admin/experience/renewal-options',null,{admin:true});

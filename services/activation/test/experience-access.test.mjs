@@ -11,7 +11,7 @@ function fixture(overrides={}) {
     probe:async()=>{probes++;return {state:'active'};},...overrides});
   return {calls,get probes(){return probes;},async request(path,{method='GET',body,admin=false}={}){
     const res={headers:{},writeHead(status,headers){this.status=status;this.headers=headers;},end(body){this.body=body;}};
-    res.handled=await handlers.handle({method,body,admin},res,new URL(path,'https://fixture.example'));
+    res.handled=await handlers.handle({method,body,admin,headers:{'content-type':'application/json'}},res,new URL(path,'https://fixture.example'));
     return res;
   }};
 }
