@@ -107,10 +107,10 @@ open class PlayerActivity : AppCompatActivity() {
             }
         } }
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) runOnUiThread {
+            if (PlayerNetworkPolicy.canAttempt(capabilities)) runOnUiThread {
                 if (!sessionReleased && pendingNetworkRecovery) {
                     pendingNetworkRecovery = false
-                    if (session.player.playerError != null || session.player.playbackState == Player.STATE_BUFFERING || session.player.playbackState == Player.STATE_IDLE) retryPlayback()
+                    if (PlayerNetworkPolicy.shouldRetryAfterReconnect(session.player.playerError != null, session.player.playbackState)) retryPlayback()
                     else if (::connectionNotice.isInitialized) connectionNotice.visibility = View.GONE
                 }
             }
@@ -1496,8 +1496,9 @@ open class PlayerActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
     }
 
-    private fun online(): Boolean = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
-        ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+    private fun online(): Boolean = PlayerNetworkPolicy.canAttempt(
+        connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+    )
 
     private fun showConnectionNotice(message: String) {
         if (!::connectionNotice.isInitialized || isFinishing || sessionReleased) return
