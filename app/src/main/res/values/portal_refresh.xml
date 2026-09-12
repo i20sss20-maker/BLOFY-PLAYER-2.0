@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en" tools:ignore="MissingTranslation">
     <string name="portal_refresh_complete">Updated from website • %1$d playlists</string>
     <string name="portal_refresh_partial">Updated %1$d • %2$d need review on the website; saved lists kept</string>
     <string name="portal_refresh_deferred">%1$d playlists could not be retrieved; review their website details. Saved lists kept</string>
