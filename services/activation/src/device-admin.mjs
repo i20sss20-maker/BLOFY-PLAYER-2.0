@@ -40,7 +40,7 @@ export function validateDeviceProfile(body) {
   return { ...fields, expectedRevision: body.expectedRevision };
 }
 const ID = /^BLOFY-[A-Z0-9-]{4,32}$/i;
-const ROOT = '/api/v1/admin/device-insights';
+const ROOT = '/api/v1/admin/device-manager';
 const statusSql = `CASE WHEN d.status IN ('active','trial') AND d.expires_at<=NOW() THEN 'expired' ELSE d.status END`;
 const joins = `FROM devices d LEFT JOIN device_customers c ON c.device_id=d.device_id LEFT JOIN device_admin_metadata m ON m.device_id=d.device_id`;
 const columns = `d.device_id,d.status,d.created_at,d.trial_started_at,d.expires_at,d.last_seen_at,d.last_app_version,d.last_platform,d.auth_locked_until,

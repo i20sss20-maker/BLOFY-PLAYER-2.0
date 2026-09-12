@@ -15,7 +15,7 @@ try{
  let r=await fetch(base+'/api/v1/admin/session/login',{method:'POST',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({username:env.BLOFY_ADMIN_USERNAME,password:env.BLOFY_ADMIN_PASSWORD})});assert.equal(r.status,200);const cookie=r.headers.get('set-cookie').split(';')[0];
  const headers={cookie,origin:base,'content-type':'application/json'};
  const request=async(path,method='GET',body,override={})=>{const response=await fetch(base+path,{method,headers:{...headers,...override},body:body===undefined?undefined:JSON.stringify(body)});return {status:response.status,headers:response.headers,data:await response.json()};};
- const root='/api/v1/admin/device-insights';assert.equal((await fetch(base+root)).status,401);assert.equal((await request(root)).status,200);
+ const root='/api/v1/admin/device-manager';assert.equal((await fetch(base+root)).status,401);assert.equal((await request(root)).status,200);
  await pool.query(`INSERT INTO devices(device_id,activation_code,status,created_at,trial_started_at,expires_at,last_seen_at,last_app_version,last_platform)
  SELECT 'BLOFY-CITEST-'||lpad(n::text,4,'0'),'123456',CASE WHEN n=2 THEN 'active' WHEN n=3 THEN 'blocked' ELSE 'trial' END,
  CASE WHEN n=1 THEN NOW()-INTERVAL '1 hour' ELSE NOW()-INTERVAL '10 days' END,NOW()-INTERVAL '10 days',

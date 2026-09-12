@@ -32,7 +32,7 @@ test('profile validation preserves Arabic and enforces revision, size and contro
 test('authorization precedes body parsing and all database/schema work',async()=>{
  let calls=0;const fail=()=>{calls++;throw Error('must not touch data');};
  const handler=createDeviceAdmin({pool:{query:fail,connect:fail},ensureAdmin:fail,readJson:fail,requireAdmin:()=>false,json:fail});
- for(const method of ['GET','PATCH','POST','DELETE'])assert.equal(await handler({method},{},new URL('http://test/api/v1/admin/device-insights/BLOFY-TEST-ABCD/status')),true);
+ for(const method of ['GET','PATCH','POST','DELETE'])assert.equal(await handler({method},{},new URL('http://test/api/v1/admin/device-manager/BLOFY-TEST-ABCD/status')),true);
  assert.equal(calls,0);
 });
 test('unrelated portal, playback, releases and activation routes are untouched',async()=>{
@@ -42,6 +42,6 @@ test('unrelated portal, playback, releases and activation routes are untouched',
 });
 test('invalid path/filter fails before database access',async()=>{
  const out=[];const handler=createDeviceAdmin({pool:{connect:()=>{throw Error('DB called');}},json:(_res,code,body)=>out.push([code,body]),requireAdmin:()=>true});
- for(const path of ['/api/v1/admin/device-insights?filter=oops','/api/v1/admin/device-insights/%ZZ','/api/v1/admin/device-insights/not-device'])await handler({method:'GET'},{},new URL('http://test'+path));
+ for(const path of ['/api/v1/admin/device-manager?filter=oops','/api/v1/admin/device-manager/%ZZ','/api/v1/admin/device-manager/not-device'])await handler({method:'GET'},{},new URL('http://test'+path));
  assert.deepEqual(out.map(x=>x[0]),[400,400,400]);
 });

@@ -307,9 +307,9 @@ async function createSubscriberSession(req, res) {
   return sendJson(res, 200, {
     providerName: 'مشتركين BLOFY',
     providerType: 'xtream',
-    baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`,
-    username: token,
-    password: 'blofy',
+    ...(body.delivery === 'direct'
+      ? { delivery: 'direct', baseUrl: subscriberHost, username, password, sessionToken: token }
+      : { baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`, username: token, password: 'blofy' }),
     expiresAt: Date.now() + Math.max(60 * 60 * 1000, Math.min(SESSION_TTL_MS, 90 * 24 * 60 * 60 * 1000))
   });
 }

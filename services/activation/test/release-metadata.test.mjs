@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   ACTIVATION_SERVICE_VERSION,
   activationReleaseMetadata,
+  appReleaseMetadata,
   sanitizeCommitSha
 } from '../src/release-metadata.mjs';
 
@@ -35,7 +36,8 @@ test('Vercel release metadata is stable, comparable and contains no unrelated en
     service: 'blofy-activation',
     version: ACTIVATION_SERVICE_VERSION,
     platform: 'vercel',
-    commitSha
+    commitSha,
+    app: appReleaseMetadata({})
   });
   assert.equal(JSON.stringify(metadata).includes('password'), false);
   assert.equal(JSON.stringify(metadata).includes('must-not-be-exposed'), false);
@@ -47,6 +49,7 @@ test('self-hosted release metadata may use an explicitly supplied sanitized comm
     service: 'blofy-activation',
     version: ACTIVATION_SERVICE_VERSION,
     platform: 'self-hosted',
-    commitSha
+    commitSha,
+    app: appReleaseMetadata({})
   });
 });
