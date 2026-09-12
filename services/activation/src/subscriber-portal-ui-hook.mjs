@@ -63,6 +63,43 @@ export function injectSubscriberPortalUi(html) {
     });
     rememberDeviceAuth();
   }
+  /** A saved subscriber list stores an opaque session token, never the typed credentials. */
+  function isSubscriberPlaylist(item) {
+    if (!item || !item.baseUrl) return false;
+    try { return new URL(item.baseUrl).pathname.replace(/\/+$/, '') === '/api/v1/subscribers/xtream'; }
+    catch (_) { return false; }
+  }
+
+  function applyMode() {
+    var select = qs('providerType');
+    if (!select) return;
+    var blofy = select.value === 'blofy';
+    var base = qs('baseUrl');
+    var name = qs('name');
+    var user = qs('username');
+    var pass = qs('password');
+    var hint = qs('blofySubscriberHint');
+    setHidden(fieldWrapper(base), blofy);
+    if (hint) hint.style.display = blofy ? 'block' : 'none';
+    if (!blofy) {
+      if (user) user.required = false;
+      if (pass) pass.required = false;
+      return;
+    }
+    // The page's own typeUi() hides these for anything that is not "xtream"; a subscriber
+    // list needs exactly these two fields, so undo both the class and the inline style.
+    [user, pass].forEach(function (input) {
+      var wrapper = fieldWrapper(input);
+      if (!wrapper) return;
+      setHidden(wrapper, false);
+      wrapper.classList.remove('hidden');
+    });
+    if (name && !name.value.trim()) name.value = 'مشتركين BLOFY';
+    if (base) base.value = '';
+    if (user) { user.placeholder = 'اسم المستخدم'; user.required = true; }
+    if (pass) { pass.placeholder = 'كلمة المرور'; pass.required = true; }
+  }
+
   function addSubscriberOption() {
     var select = qs('providerType');
     if (!select || select.querySelector('option[value="blofy"]')) return;
@@ -79,34 +116,43 @@ export function injectSubscriberPortalUi(html) {
     var grid = select.closest('.form-grid');
     if (grid) grid.appendChild(badge);
 
-    function applyMode() {
-      var blofy = select.value === 'blofy';
-      var base = qs('baseUrl');
-      var name = qs('name');
-      var user = qs('username');
-      var pass = qs('password');
-      var hint = qs('blofySubscriberHint');
-      setHidden(fieldWrapper(base), blofy);
-      if (blofy) {
-        setHidden(fieldWrapper(user), false);
-        setHidden(fieldWrapper(pass), false);
-        if (fieldWrapper(user)) fieldWrapper(user).classList.remove('hidden');
-        if (fieldWrapper(pass)) fieldWrapper(pass).classList.remove('hidden');
-      }
-      if (hint) hint.style.display = blofy ? 'block' : 'none';
-      if (blofy) {
-        if (name && !name.value.trim()) name.value = 'مشتركين BLOFY';
-        if (base) base.value = '';
-        if (user) { user.placeholder = 'اسم المستخدم'; user.required = true; }
-        if (pass) { pass.placeholder = 'كلمة المرور'; pass.required = true; }
-        status('أدخل اسم المستخدم وكلمة المرور ثم اضغط حفظ.', false);
-      } else {
-        if (user) user.required = false;
-        if (pass) pass.required = false;
-      }
-    }
     select.addEventListener('change', function () { requestAnimationFrame(applyMode); });
     applyMode();
+  }
+
+  /** The page rebuilds the form through these globals, so the subscriber mode has to
+   *  travel with them instead of racing them from a change listener. */
+  function installFormOverrides() {
+    if (window.blofySubscriberOverrides) return;
+    var originalTypeUi = window.typeUi;
+    var originalEdit = window.edit;
+    if (typeof originalTypeUi !== 'function' || typeof originalEdit !== 'function') return;
+    window.blofySubscriberOverrides = true;
+
+    window.typeUi = function () {
+      var node = qs('providerType');
+      // The original clears username/password whenever the type is not "xtream",
+      // which would wipe what the subscriber was in the middle of typing.
+      if (!node || node.value !== 'blofy') originalTypeUi.apply(this, arguments);
+      applyMode();
+    };
+    // The select captured the original function by reference when the page wired it up,
+    // so the override only reaches it by re-pointing the handler.
+    var select = qs('providerType');
+    if (select) select.onchange = window.typeUi;
+
+    window.edit = function (item) {
+      originalEdit.apply(this, arguments);
+      if (!isSubscriberPlaylist(item)) return;
+      var select = qs('providerType');
+      if (select) select.value = 'blofy';
+      // What is stored is a session token, not the subscriber's own credentials:
+      // showing it would print an unreadable blob into the username box.
+      dispatchValue(qs('username'), '');
+      dispatchValue(qs('password'), '');
+      applyMode();
+      status('اكتب اسم المستخدم وكلمة المرور من جديد لتحديث الاشتراك.', false);
+    };
   }
 
   async function createSubscriberSession() {
@@ -176,6 +222,7 @@ export function injectSubscriberPortalUi(html) {
   function install() {
     installAuthCapture();
     addSubscriberOption();
+    installFormOverrides();
     installSaveInterceptor();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
