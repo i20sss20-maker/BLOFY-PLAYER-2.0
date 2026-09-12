@@ -17,11 +17,15 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +39,7 @@ class AppUpdateActivity : AppCompatActivity() {
     private lateinit var action: Button
     private var ready = false
     private var checkingPackage = false
+    private var awaitingInstallPermission = false
     private val version by lazy { intent.getIntExtra(AppUpdateWorker.VERSION, 0) }
     private val manager by lazy { WorkManager.getInstance(this) }
 
@@ -96,11 +101,25 @@ class AppUpdateActivity : AppCompatActivity() {
         download(ExistingWorkPolicy.KEEP)
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (awaitingInstallPermission && Build.VERSION.SDK_INT >= 26 && packageManager.canRequestPackageInstalls()) {
+            awaitingInstallPermission = false
+            if (ready) install()
+        }
+    }
+
     private fun download(policy: ExistingWorkPolicy) {
         ready = false
-        val request = OneTimeWorkRequestBuilder<AppUpdateWorker>().setInputData(workDataOf(
-            AppUpdateWorker.VERSION to version, AppUpdateWorker.URL to intent.getStringExtra(AppUpdateWorker.URL)
-        )).build()
+        val request = OneTimeWorkRequestBuilder<AppUpdateWorker>()
+            .setInputData(workDataOf(
+                AppUpdateWorker.VERSION to version, AppUpdateWorker.URL to intent.getStringExtra(AppUpdateWorker.URL)
+            ))
+            // Let WorkManager hold the download until the network is back instead of failing right away,
+            // and space out automatic retries so a flaky connection doesn't hammer the server.
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
+            .build()
         manager.enqueueUniqueWork(AppUpdateWorker.workName(version), policy, request)
     }
 
@@ -108,8 +127,7 @@ class AppUpdateActivity : AppCompatActivity() {
         if (checkingPackage) return
         if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
             status.text = getString(R.string.update_allow_installs)
-            try { startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))) }
-            catch (_: ActivityNotFoundException) { status.text = getString(R.string.update_installer_missing) }
+            requestInstallPermission()
             return
         }
         checkingPackage = true
@@ -126,7 +144,27 @@ class AppUpdateActivity : AppCompatActivity() {
                 startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
             } catch (_: ActivityNotFoundException) { status.text = getString(R.string.update_installer_missing) }
-            catch (_: SecurityException) { status.text = getString(R.string.update_allow_installs) }
+            catch (_: SecurityException) {
+                status.text = getString(R.string.update_allow_installs)
+                requestInstallPermission()
+            }
+        }
+    }
+
+    /** Sends the user to grant the "install unknown apps" permission, then auto-resumes install() in onResume(). */
+    private fun requestInstallPermission() {
+        awaitingInstallPermission = true
+        try {
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+        } catch (_: ActivityNotFoundException) {
+            // Many Android TV boxes / OEM firmwares don't implement the dedicated unknown-sources
+            // screen. Fall back to the per-app details screen, where the same toggle normally lives.
+            try {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            } catch (_: ActivityNotFoundException) {
+                awaitingInstallPermission = false
+                status.text = getString(R.string.update_installer_missing)
+            }
         }
     }
 
