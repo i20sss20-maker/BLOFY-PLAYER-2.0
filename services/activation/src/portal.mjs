@@ -22,6 +22,7 @@ function open(value) {
   const key = keyFromEnv();
   if (!key) throw new Error('playlist_encryption_key_missing');
   const payload = Buffer.from(value, 'base64url');
+  if (payload.length < 29) throw new Error('invalid_sealed_value');
   const iv = payload.subarray(0, 12);
   const tag = payload.subarray(12, 28);
   const ciphertext = payload.subarray(28);
@@ -129,8 +130,6 @@ function isUnsafeHost(host) {
   const ipv4 = parseIpv4(normalized);
   if (ipv4) return isUnsafeIpv4(ipv4);
   if (normalized.includes(':')) return isUnsafeIpv6(normalized);
-
-  // Single-label names resolve only through local DNS/search domains.
   return !normalized.includes('.');
 }
 
@@ -160,7 +159,6 @@ export function createPortalHandlers({
   warnRejected = (error) => console.warn('[portal/playlists] rejected', { error })
 }) {
   function rejectPlaylist(res, error) {
-    // Only pass the allowlisted error code to diagnostics: never the request body.
     warnRejected(error);
     return json(res, 400, { error });
   }
@@ -180,17 +178,27 @@ export function createPortalHandlers({
       `SELECT id,name,provider_type,base_url_enc,username_enc,password_enc,active,revision,updated_at
        FROM device_playlists WHERE device_id=$1 ORDER BY active DESC, updated_at DESC`, [auth.deviceId]
     );
-    return json(res, 200, { items: result.rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      providerType: row.provider_type,
-      baseUrl: open(row.base_url_enc),
-      username: open(row.username_enc),
-      password: open(row.password_enc),
-      active: row.active,
-      revision: Number(row.revision),
-      updatedAt: new Date(row.updated_at).getTime()
-    })) });
+    const items = [];
+    let skippedCorrupt = 0;
+    for (const row of result.rows) {
+      try {
+        items.push({
+          id: row.id,
+          name: row.name,
+          providerType: row.provider_type,
+          baseUrl: open(row.base_url_enc),
+          username: open(row.username_enc),
+          password: open(row.password_enc),
+          active: row.active,
+          revision: Number(row.revision),
+          updatedAt: new Date(row.updated_at).getTime()
+        });
+      } catch (_) {
+        skippedCorrupt += 1;
+        warnRejected('corrupt_playlist_row');
+      }
+    }
+    return json(res, 200, { items, skippedCorrupt });
   }
 
   async function upsert(req, res) {
@@ -201,13 +209,15 @@ export function createPortalHandlers({
     const name = cleanText(body.name, 128) || 'BLOFY Playlist';
     const providerType = cleanText(body.providerType, 16).toLowerCase();
     const baseUrl = cleanText(body.baseUrl, 2048);
-    const username = cleanText(body.username, 256);
+    const subscriber = /\/api\/v1\/subscribers\/xtream\/?$/.test(baseUrl);
+    const username = cleanText(body.username, subscriber ? 4096 : 256);
     const password = cleanText(body.password, 256);
     const active = body.active !== false;
     if (!validType(providerType)) return rejectPlaylist(res, 'invalid_playlist');
     const urlError = playlistUrlValidation(baseUrl);
     if (urlError) return rejectPlaylist(res, urlError);
     if (providerType === 'xtream' && (!username || !password)) return rejectPlaylist(res, 'xtream_credentials_required');
+    if (subscriber && String(body.username || '').trim().length > 4096) return rejectPlaylist(res, 'invalid_playlist');
 
     const client = await pool.connect();
     try {
