@@ -96,6 +96,38 @@ try {
     assert.equal((await b.consumeLogin('192.0.2.25')).allowed, true);
     assert.equal((await aPool.query('SELECT COUNT(*)::integer AS count FROM admin_login_limits')).rows[0].count, 2);
   });
+  await test('retry-after uses current database time when an older transaction waits behind a newer one', async () => {
+    const clockKey = crypto.randomBytes(32);
+    let delayNext = false, signalBegan, releaseOlder;
+    const began = new Promise(resolve => { signalBegan = resolve; });
+    const resume = new Promise(resolve => { releaseOlder = resolve; });
+    const delayedPool = { query: (...args) => aPool.query(...args), connect: async () => {
+      const client = await aPool.connect();
+      return { release: error => client.release(error), query: async (...args) => {
+        const result = await client.query(...args);
+        if (args[0] === 'BEGIN' && delayNext) {
+          delayNext = false;
+          await client.query('SELECT NOW()');
+          signalBegan();
+          await resume;
+        }
+        return result;
+      } };
+    } };
+    const older = createAdminSessionStore({ key: clockKey, pool: delayedPool });
+    const newer = createAdminSessionStore({ key: clockKey, pool: bPool });
+    await older.active('warmup');
+    delayNext = true;
+    const pending = older.consumeLogin('same-client');
+    try {
+      await began;
+      await bPool.query('SELECT pg_sleep(0.02)');
+      assert.equal((await newer.consumeLogin('same-client')).allowed, true);
+    } finally { releaseOlder(); }
+    const result = await pending;
+    assert.equal(result.allowed, true);
+    assert.ok(result.retryAfterSeconds > 0 && result.retryAfterSeconds <= 900);
+  });
   await test('revocation persists, isolates other sessions and stores neither cookies nor raw nonces', async () => {
     const first = crypto.randomBytes(16).toString('base64url'), second = crypto.randomBytes(16).toString('base64url');
     await a.create(first, Date.now() + 3600000); await b.create(second, Date.now() + 3600000);
