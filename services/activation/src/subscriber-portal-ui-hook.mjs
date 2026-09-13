@@ -330,16 +330,27 @@ http.createServer = function patchedPortalCreateServer(listener) {
     };
 
     res.end = function interceptedEnd(chunk, encoding, callback) {
+      if (typeof chunk === 'function') { callback = chunk; chunk = undefined; }
+      if (typeof encoding === 'function') { callback = encoding; encoding = undefined; }
       const body = chunk == null ? '' : Buffer.isBuffer(chunk) ? chunk.toString(encoding || 'utf8') : String(chunk);
       const modified = injectSubscriberPortalUi(body, { allowRenewal: pathname !== '/connect' });
-      if (wroteHead) {
-        for (const key of Object.keys(headers)) {
-          if (key.toLowerCase() === 'content-length') delete headers[key];
-        }
-        headers['content-length'] = Buffer.byteLength(modified);
-        if (statusMessage) originalWriteHead(statusCode, statusMessage, headers);
-        else originalWriteHead(statusCode, headers);
+      // end() may invoke writeHead implicitly. Restore the real method before
+      // flushing so setHeader()+end() cannot emit body bytes without HTTP headers.
+      res.writeHead = originalWriteHead;
+      if (!wroteHead) {
+        statusCode = res.statusCode;
+        statusMessage = res.statusMessage;
       }
+      // This buffered response now has a known UTF-8 length; do not leave stale
+      // lengths or combine Content-Length with Transfer-Encoding.
+      res.removeHeader('content-length');
+      res.removeHeader('transfer-encoding');
+      for (const key of Object.keys(headers)) {
+        if (['content-length', 'transfer-encoding'].includes(key.toLowerCase())) delete headers[key];
+      }
+      headers['content-length'] = Buffer.byteLength(modified);
+      if (statusMessage) originalWriteHead(statusCode, statusMessage, headers);
+      else originalWriteHead(statusCode, headers);
       return originalEnd(modified, 'utf8', callback);
     };
 
