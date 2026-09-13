@@ -61,7 +61,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon --no-build-cache --max-workers=2 -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL=https://blofy-security-review.invalid -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$BLOFY_REVIEW_AAR" testDebugUnitTest :app:lintRelease :app:assembleRelease :app:assembleReleaseAndroidTest
+          gradle --no-daemon --no-build-cache --max-workers=2 -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL=https://blofy-security-review.invalid -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$BLOFY_REVIEW_AAR" testDebugUnitTest :app:lintRelease :app:assembleRelease :app:assembleReleaseAndroidTest :app:stageR8TestL8Evidence
           tools="$ANDROID_HOME/build-tools/35.0.0"
           "$tools/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
           "$tools/zipalign" -c -P 16 4 app/build/outputs/apk/release/app-release.apk

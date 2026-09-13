@@ -1,4 +1,5 @@
 import java.net.URI
+import com.android.build.gradle.internal.tasks.L8DexDesugarLibTask
 
 plugins {
     id("com.android.application")
@@ -78,6 +79,17 @@ android {
 
 baselineProfile {
     automaticGenerationDuringBuild = false
+}
+
+if (securityR8Enabled) {
+    // L8 can rename its own classes outside j$. Identify the disposable test
+    // runtime by its producer's exact bytes, never by guessed package prefixes.
+    // This copies evidence only; neither L8 output nor the target is modified.
+    tasks.register<Sync>("stageR8TestL8Evidence") {
+        from(tasks.named<L8DexDesugarLibTask>("l8DexDesugarLibReleaseAndroidTest")
+            .flatMap { it.desugarLibDex })
+        into(rootProject.layout.buildDirectory.dir("r8-review/private/test-l8"))
+    }
 }
 
 dependencies {

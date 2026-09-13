@@ -70,6 +70,41 @@ def completed_cases(output):
     return cases
 
 
+def partition_test_dex(entries, l8_outputs):
+    """Remove only byte-identical outputs of the dedicated test L8 producer.
+
+    L8 obfuscates some classes outside j$. A prefix is not provenance. Conversely,
+    even an all-j$ DEX cannot be removed unless the L8 producer emitted those bytes.
+    Merged test/L8 DEX and missing, duplicate or unmatched evidence fail closed.
+    """
+    assert l8_outputs, 'Missing test L8 producer evidence'
+    fingerprints = {}
+    for data in l8_outputs:
+        classes = dex_classes(data)
+        assert classes and any(c.startswith('Lj$/') for c in classes), 'Not an L8 runtime'
+        assert not any(c.startswith('Ltv/blofy/') for c in classes), 'L8 evidence contains app/test code'
+        digest = hashlib.sha256(data).hexdigest()
+        assert digest not in fingerprints, 'Duplicate test L8 producer evidence'
+        fingerprints[digest] = data
+    removed, retained, matched = [], [], set()
+    for name, data in entries:
+        digest = hashlib.sha256(data).hexdigest()
+        classes = dex_classes(data)
+        if digest in fingerprints:
+            assert data == fingerprints[digest], 'Test L8 bytes differ'
+            assert digest not in matched, 'Duplicate L8 DEX in test APK'
+            matched.add(digest)
+            removed.append({'entry': name, 'classes': len(classes), 'sha256': digest})
+        else:
+            assert not any(c.startswith('Lj$/') for c in classes), 'Mixed or unproven L8 DEX cannot safely be removed'
+            retained.append((name, data))
+    assert matched == set(fingerprints), 'Test APK does not match every L8 producer output'
+    assert retained, 'No test DEX retained'
+    assert any('L' + CLASS.replace('.', '/') + ';' in dex_classes(data)
+               for _, data in retained), 'Runtime contract test class missing'
+    return removed, retained
+
+
 def all_passed(output, cases):
     return (len(cases) == 6 and {c['test'] for c in cases} == EXPECTED and
             all(c['class'] == CLASS and c['status'] == 0 for c in cases) and
@@ -109,18 +144,13 @@ def main():
     with tempfile.TemporaryDirectory(prefix='blofy-r8-test-', dir=os.environ['RUNNER_TEMP']) as work:
         work = Path(work)
         unsigned, aligned, ready = [work / name for name in ['test-unsigned.apk','test-aligned.apk','test-ready.apk']]
-        removed, retained = [], []
         with zipfile.ZipFile(tests[0]) as source, zipfile.ZipFile(unsigned, 'w') as output:
             dex_entries = sorted((n for n in source.namelist() if re.fullmatch(r'classes(?:[0-9]+)?\.dex', n)),
                                  key=lambda n: int(re.search(r'([0-9]+)', n)[1]) if re.search(r'([0-9]+)', n) else 1)
-            for name in dex_entries:
-                data = source.read(name); classes = dex_classes(data)
-                backport = {c for c in classes if c.startswith('Lj$/')}
-                if backport:
-                    assert backport == classes, 'Mixed DEX cannot safely be removed'
-                    removed.append({'entry': name, 'classes': len(classes)})
-                else: retained.append((name, data))
-            assert removed and retained, 'Expected isolated duplicate L8 DEX and retained tests'
+            l8_outputs = [p.read_bytes() for p in sorted(
+                Path('build/r8-review/private/test-l8').rglob('*.dex'))]
+            removed, retained = partition_test_dex(
+                [(name, source.read(name)) for name in dex_entries], l8_outputs)
             for info in source.infolist():
                 if info.filename in dex_entries: continue
                 if re.fullmatch(r'META-INF/(?:MANIFEST\.MF|[^/]+\.(?:SF|RSA|DSA|EC))', info.filename, re.I): continue
@@ -137,7 +167,8 @@ def main():
             for i, (_, data) in enumerate(retained, 1):
                 assert checked.read('classes'+(str(i) if i>1 else '')+'.dex') == data
         summary['instrumentation_harness'] = {'shared_L8_from_unchanged_app': True,
-            'removed_test_only_backport_dex': removed, 'test_code_dex_unchanged': True}
+            'removed_test_only_backport_dex': removed, 'test_code_dex_unchanged': True,
+            'removed_dex_match_test_L8_producer': True}
         adb = Path(os.environ['ANDROID_HOME']) / 'platform-tools/adb'
         command(adb, '-s', 'emulator-5554', 'install', '--no-incremental', '-r', '-t', app)
         command(adb, '-s', 'emulator-5554', 'install', '--no-incremental', '-r', '-t', ready)
