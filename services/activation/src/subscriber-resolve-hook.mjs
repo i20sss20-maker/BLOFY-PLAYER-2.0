@@ -1,3 +1,4 @@
+import { databaseOptions } from './database-options.mjs';
 import http from 'node:http';
 import pg from 'pg';
 import { createSubscriberResolveHandler } from './subscriber-resolve.mjs';
@@ -5,8 +6,7 @@ import { createSubscriberResolveHandler } from './subscriber-resolve.mjs';
 // Add the Android sync endpoint missing from the website branch. Do not alter the
 // existing portal, subscriber session creation or any media/proxy playback route.
 const pool = process.env.DATABASE_URL ? new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
+  ...databaseOptions(process.env.DATABASE_URL),
   max: 2, connectionTimeoutMillis: 4000, idleTimeoutMillis: 10000, statement_timeout: 6000
 }) : null;
 pool?.on('error', () => console.error('subscriber_resolve_database_unavailable'));

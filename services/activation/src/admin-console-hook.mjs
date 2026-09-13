@@ -1,3 +1,4 @@
+import { databaseOptions } from './database-options.mjs';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -11,8 +12,7 @@ import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 import { servePublicDownloads } from './public-downloads.mjs';
 import { createDeviceAdmin } from './device-admin.mjs';
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL,
-  ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
+const pool = new pg.Pool({ ...databaseOptions(process.env.DATABASE_URL),
   max: 2, connectionTimeoutMillis: 4000, idleTimeoutMillis: 10000, statement_timeout: 10000 });
 pool.on('error', error => console.error('admin database error:', safeErrorSummary(error)));
 const token = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();

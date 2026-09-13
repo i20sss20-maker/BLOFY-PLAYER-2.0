@@ -1,4 +1,6 @@
+import { databaseOptions } from './database-options.mjs';
 import http from 'node:http';
+import { subscriberSessionValid } from './subscriber-session-validity.mjs';
 import crypto from 'node:crypto';
 import { Readable, Transform } from 'node:stream';
 import pg from 'pg';
@@ -22,8 +24,7 @@ const encryptionKey = /^[a-fA-F0-9]{64}$/.test(PLAYLIST_ENCRYPTION_KEY)
 const activationCredentials = encryptionKey ? createActivationCredentialCodec(PLAYLIST_ENCRYPTION_KEY) : null;
 const pool = DATABASE_URL
   ? new Pool({
-      connectionString: DATABASE_URL,
-      ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false }
+      ...databaseOptions(DATABASE_URL)
     })
   : null;
 
@@ -284,7 +285,7 @@ async function createSubscriberSession(req, res) {
   }
 
   const expiresAt = Date.now() + Math.max(60 * 60 * 1000, Math.min(SESSION_TTL_MS, 90 * 24 * 60 * 60 * 1000));
-  const token = sealSession({ u: username, p: password, d: deviceId, exp: expiresAt });
+  const token = sealSession({ u: username, p: password, d: deviceId, exp: expiresAt, sv: authorization.sessionVersion });
   // Released Android clients explicitly request the direct contract. The website
   // still receives opaque credentials; no playback/proxy handler changes here.
   return sendJson(res, 200, {
@@ -302,7 +303,7 @@ async function createSubscriberSession(req, res) {
 async function proxyPlayerApi(req, res, requestUrl) {
   const token = requestUrl.searchParams.get('username') || '';
   const session = openSession(token);
-  if (!session) return sendJson(res, 401, { error: 'subscriber_session_expired' });
+  if (!session || !await subscriberSessionValid(pool, session)) return sendJson(res, 401, { error: 'subscriber_session_expired' });
   const upstream = new URL(`${subscriberHost}/player_api.php`);
   upstream.searchParams.set('username', session.u);
   upstream.searchParams.set('password', session.p);
@@ -319,7 +320,7 @@ async function proxyStream(req, res, requestUrl) {
   const [, kind, encodedToken, tail] = match;
   const token = decodeURIComponent(encodedToken);
   const session = openSession(token);
-  if (!session) return sendJson(res, 401, { error: 'subscriber_session_expired' });
+  if (!session || !await subscriberSessionValid(pool, session)) return sendJson(res, 401, { error: 'subscriber_session_expired' });
   const target = `${subscriberHost}/${kind}/${encodeURIComponent(session.u)}/${encodeURIComponent(session.p)}/${tail}${requestUrl.search}`;
   await pipeUpstream(req, res, target, token);
   return true;
@@ -330,7 +331,7 @@ async function proxySignedUrl(req, res, requestUrl) {
   if (!match) return false;
   const token = decodeURIComponent(match[1]);
   const session = openSession(token);
-  if (!session) return sendJson(res, 401, { error: 'subscriber_session_expired' });
+  if (!session || !await subscriberSessionValid(pool, session)) return sendJson(res, 401, { error: 'subscriber_session_expired' });
   const target = verifiedTarget(token, match[2], match[3]);
   if (!target) return sendJson(res, 403, { error: 'invalid_proxy_target' });
   await pipeUpstream(req, res, target, token);
@@ -342,7 +343,7 @@ async function proxyRaw(req, res, requestUrl) {
   if (!match) return false;
   const token = decodeURIComponent(match[1]);
   const session = openSession(token);
-  if (!session) return sendJson(res, 401, { error: 'subscriber_session_expired' });
+  if (!session || !await subscriberSessionValid(pool, session)) return sendJson(res, 401, { error: 'subscriber_session_expired' });
   const path = match[2] || '/';
   await pipeUpstream(req, res, upstreamUrl(path, requestUrl.search), token);
   return true;

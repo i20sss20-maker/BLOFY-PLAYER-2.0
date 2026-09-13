@@ -1,3 +1,4 @@
+import { databaseOptions } from './database-options.mjs';
 import http from 'node:http';
 import pg from 'pg';
 import { createDeviceInsightsHandler } from './admin-device-insights.mjs';
@@ -5,8 +6,7 @@ import { createDeviceInsightsHandler } from './admin-device-insights.mjs';
 // Keep the existing read-only HTML/JSON inventory available alongside the
 // new interactive management view. Both adapters require admin authentication.
 const pool = process.env.DATABASE_URL ? new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
+  ...databaseOptions(process.env.DATABASE_URL),
   max: 2, connectionTimeoutMillis: 4000, idleTimeoutMillis: 10000, statement_timeout: 6000
 }) : null;
 pool?.on('error', () => console.warn('device_insights_database_unavailable'));

@@ -5,7 +5,7 @@ import {
 
 // Session creation must enforce the same persistent PIN budget as activation and
 // playlist access. An alternate login route must not become an unlimited PIN oracle.
-export function createSubscriberSessionAuthorizer({ pool, keyHex, now = Date.now, env = process.env }) {
+export function createSubscriberSessionAuthorizer({ pool, keyHex, now = Date.now, env = process.env, requireActive = true }) {
   const codec = createActivationCredentialCodec(keyHex);
   const windowMs = Number(env.BLOFY_AUTH_RATE_WINDOW_MS || 60_000);
   const ips = createFixedWindowLimiter({ limit: Number(env.BLOFY_AUTH_IP_RATE_LIMIT || 60), windowMs });
@@ -37,11 +37,11 @@ export function createSubscriberSessionAuthorizer({ pool, keyHex, now = Date.now
         return denied;
       }
       const expiry = row.expires_at == null ? null : new Date(row.expires_at).getTime();
-      const allowed = ['trial', 'active'].includes(row.status) &&
+      const allowed = !requireActive || ['trial', 'active'].includes(row.status) &&
         (expiry === null || Number.isFinite(expiry) && expiry > now());
       // A legitimate poll must not reset the wrong-PIN budget.
       await client.query('COMMIT');
-      return allowed ? { allowed: true } : denied;
+      return allowed ? { allowed: true, sessionVersion: Number(row.session_version || 0) } : denied;
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
