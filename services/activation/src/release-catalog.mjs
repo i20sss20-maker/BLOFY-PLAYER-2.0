@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { publishApprovedRc0742 } from './approved-release-rc0742.mjs';
+import { publishApprovedRc0744 } from './approved-release-rc0744.mjs';
 import { sanitizeVersionCode, sanitizeVersionName, sanitizeReleaseNotes } from './release-metadata.mjs';
 
 export class ReleaseError extends Error {
@@ -68,7 +69,11 @@ export function createReleaseCatalog(pool, configured = null) {
       await client.query('SELECT pg_advisory_xact_lock(718420640)');
       await client.query(SCHEMA);
       const state = (await client.query('SELECT * FROM app_release_selection WHERE singleton=TRUE FOR UPDATE')).rows[0];
-      if (state.initialized) { await publishApprovedRc0742(client); return; }
+      if (state.initialized) {
+        await publishApprovedRc0742(client);
+        await publishApprovedRc0744(client);
+        return;
+      }
       const legacy = await client.query("SELECT to_regclass('app_releases') AS name");
       const oldRows = legacy.rows[0]?.name ? (await client.query('SELECT * FROM app_releases ORDER BY version_code DESC')).rows : [];
       const candidates = [];
@@ -87,6 +92,7 @@ export function createReleaseCatalog(pool, configured = null) {
       // Mark migration even when empty. Deleted versions must never reappear on a cold start.
       await client.query('UPDATE app_release_selection SET primary_id=$1,initialized=TRUE WHERE singleton=TRUE', [first]);
       await publishApprovedRc0742(client);
+      await publishApprovedRc0744(client);
     }).catch(error => { initialized = null; throw error; });
     return initialized;
   }
