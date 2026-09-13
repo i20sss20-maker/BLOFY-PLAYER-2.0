@@ -8,6 +8,7 @@ import re
 import tempfile
 import zipfile
 from audit_published_apk import audit
+from build_play_device_apks import build_play_device_apks
 from probe_android_page_size import probe_android_page_size
 from run_r8_instrumentation import command, completed_cases, partition_test_dex
 
@@ -86,7 +87,10 @@ def main():
     checks=[]
     with tempfile.TemporaryDirectory(dir=run,prefix='play-review-') as temp:
         temp=Path(temp)
-        with zipfile.ZipFile(run/'blofy-play.apks') as archive:
+        apks=temp/'blofy-play.apks'
+        device=build_play_device_apks(command,adb,sdk=sdk,run=run,
+            aab=output/'BLOFY-PLAYER-rc07.46-play.aab',output=apks,signing=os.environ)
+        with zipfile.ZipFile(apks) as archive:
             for info in archive.infolist():
                 if not info.filename.endswith('.apk'): continue
                 path=temp/Path(info.filename).name;path.write_bytes(archive.read(info))
@@ -96,7 +100,7 @@ def main():
                 assert re.search(r'Signer #1 certificate SHA-256 digest: ([a-fA-F0-9]+)',signature)[1].lower()==CERT
                 command(build/'zipalign','-c','-P','16','4',path)
         assert any(check['libraries'] for check in checks),'No native split inspected'
-        command('java','-jar',run/'bundletool.jar','install-apks','--apks='+str(run/'blofy-play.apks'),'--adb='+str(sdk/'platform-tools/adb'),'--device-id=emulator-5554',timeout=180)
+        command('java','-jar',run/'bundletool.jar','install-apks','--apks='+str(apks),'--adb='+str(sdk/'platform-tools/adb'),'--device-id=emulator-5554',timeout=180)
         uid=re.search(r'uid:(\d+)',adb('shell','pm','list','packages','-U',PACKAGE))[1]
         for binary in ['iptables','ip6tables']:
             adb('shell',binary,'-I','OUTPUT','1','-m','owner','--uid-owner',uid,'-j','REJECT')
@@ -121,6 +125,7 @@ def main():
         crashes=adb('logcat','-b','crash','-d')
         cases=require_play_runtime_evidence(result,crashes)
         report={'commit':os.environ['GITHUB_SHA'],'page_size':page_size,'page_size_probe':'android-bionic-native','api':35,'abi':'x86_64',
+            'device_split_generation':device,
             'aab_sha256':hashlib.sha256((output/'BLOFY-PLAYER-rc07.46-play.aab').read_bytes()).hexdigest(),
             'split_signatures_verified':True,'original_ffmpeg_loaded':True,'encrypted_room_roundtrip':True,
             'installer_permission_absent':True,'network_blocked_before_first_launch':True,'tests':cases,
