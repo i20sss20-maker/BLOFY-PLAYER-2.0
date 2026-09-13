@@ -2,7 +2,8 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { Readable, Transform } from 'node:stream';
 import pg from 'pg';
-import { createActivationCredentialCodec, isAuthLocked } from './auth-protection.mjs';
+import { createActivationCredentialCodec } from './auth-protection.mjs';
+import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';
 
 const { Pool } = pg;
 const SUBSCRIBER_HOST_RAW = String(process.env.BLOFY_SUBSCRIBER_HOST || '').trim();
@@ -65,26 +66,8 @@ async function readJson(req) {
   return body ? JSON.parse(body) : {};
 }
 
-function validIdentity(deviceId, activationCode) {
-  return /^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) && /^\d{6}$/.test(activationCode);
-}
-
-function normalizeDeviceStatus(row) {
-  const expiresAt = row?.expires_at ? new Date(row.expires_at).getTime() : null;
-  if ((row?.status === 'trial' || row?.status === 'active') && expiresAt && expiresAt <= Date.now()) return 'expired';
-  return row?.status;
-}
-
-async function authorizedDevice(deviceId, activationCode) {
-  if (!available() || !validIdentity(deviceId, activationCode)) return false;
-  const result = await pool.query(
-    'SELECT device_id,activation_code,status,expires_at,auth_locked_until FROM devices WHERE device_id=$1 LIMIT 1',
-    [deviceId]
-  );
-  const row = result.rows[0];
-  if (!row || isAuthLocked(row) || !activationCredentials.matches(row, activationCode)) return false;
-  return ['trial', 'active'].includes(normalizeDeviceStatus(row));
-}
+const authorizeSession = pool && encryptionKey
+  ? createSubscriberSessionAuthorizer({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY }) : null;
 
 function sealSession(payload) {
   const iv = crypto.randomBytes(12);
@@ -277,8 +260,10 @@ async function createSubscriberSession(req, res) {
   if (!username || !password || username.length > MAX_LOGIN_USERNAME || password.length > MAX_LOGIN_PASSWORD) {
     return sendJson(res, 400, { error: 'invalid_subscriber_credentials' });
   }
-  if (!await authorizedDevice(deviceId, activationCode)) {
-    return sendJson(res, 403, { error: 'unauthorized_device' });
+  const authorization = await authorizeSession(req, deviceId, activationCode);
+  if (!authorization.allowed) {
+    return sendJson(res, authorization.status, { error: authorization.error },
+      authorization.retryAfterSeconds ? { 'retry-after': String(authorization.retryAfterSeconds) } : {});
   }
 
   const authUrl = new URL(`${subscriberHost}/player_api.php`);
