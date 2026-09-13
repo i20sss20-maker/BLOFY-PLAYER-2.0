@@ -57,10 +57,11 @@ class MovieDetailsActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER
                 setPadding(dp(10), dp(10), dp(10), dp(10))
                 background = cardBackground()
+                elevation = dp(8).toFloat()
             }
             val poster = ImageView(this@MovieDetailsActivity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(0xFF15101F.toInt())
+                setBackgroundColor(0xFFF0EEF4.toInt())
             }
             posterCard.addView(poster, LinearLayout.LayoutParams(dp(285), dp(425)))
             ArtworkLoader.load(poster, stream.icon)
@@ -69,12 +70,13 @@ class MovieDetailsActivity : AppCompatActivity() {
             val info = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_VERTICAL or Gravity.END
+                setPadding(dp(12), dp(8), dp(12), dp(8))
             }
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.name
                 textSize = 38f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
+                setTextColor(TEXT_PRIMARY)
                 gravity = Gravity.END
             })
             info.addView(TextView(this@MovieDetailsActivity).apply {
@@ -87,7 +89,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                     stream.extension?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
                 }.joinToString("  •  ")
                 textSize = 16f
-                setTextColor(0xFFC6A8E7.toInt())
+                setTextColor(PURPLE_SOFT)
                 gravity = Gravity.END
                 setPadding(0, dp(8), 0, dp(18))
             })
@@ -95,7 +97,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 text = stream.plot?.takeIf { it.isNotBlank() } ?: "استمتع بالمشاهدة على BLOFY PLAYER"
                 textSize = 17f
                 maxLines = 6
-                setTextColor(0xFFE0DCE5.toInt())
+                setTextColor(TEXT_SECONDARY)
                 gravity = Gravity.END
                 setLineSpacing(0f, 1.18f)
                 setPadding(0, 0, 0, dp(24))
@@ -107,7 +109,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 val percent = ((resumeMs * 100L) / durationMs).coerceIn(1, 99)
                 info.addView(TextView(this@MovieDetailsActivity).apply {
                     text = "متابعة المشاهدة  •  $percent%"
-                    textSize = 15f; setTextColor(0xFFBCA8D7.toInt()); gravity = Gravity.END
+                    textSize = 15f; setTextColor(PURPLE_SOFT); gravity = Gravity.END
                     setPadding(0, 0, 0, dp(12))
                 })
             }
@@ -117,7 +119,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.END
             }
-            val play = actionButton(if (resumeMs > 30_000L) "▶ استئناف" else "▶ شاهد الآن") { openPlayer(provider, stream, url, resumeMs) }
+            val play = actionButton(if (resumeMs > 30_000L) "▶ استئناف" else "▶ شاهد الآن", true) { openPlayer(provider, stream, url, resumeMs) }
             row.addView(play, LinearLayout.LayoutParams(dp(195), dp(74)).apply { marginStart = dp(10) })
             if (resumeMs > 30_000L) row.addView(actionButton("من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
 
@@ -156,21 +158,30 @@ class MovieDetailsActivity : AppCompatActivity() {
         })
     }
 
-    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
+    private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
+        text = label; isAllCaps = false; textSize = 15f; isFocusable = true
+        setTextColor(if (primary) Color.WHITE else TEXT_PRIMARY)
+        background = buttonBackground(false, primary)
         setOnFocusChangeListener { view, focused ->
-            view.background = buttonBackground(focused)
-            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(100).start()
+            setTextColor(if (primary || focused) Color.WHITE else TEXT_PRIMARY)
+            view.background = buttonBackground(focused, primary)
+            view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).translationZ(if (focused) dp(10).toFloat() else dp(2).toFloat()).setDuration(85).start()
         }
         setOnClickListener { action() }
     }
 
-    private fun cardBackground() = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xD9181225.toInt()); setStroke(dp(1), 0x66533B68) }
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat(); setColor(if (focused) 0xFF6934A0.toInt() else 0xD91A1429.toInt())
-        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x66503A64)
+    private fun cardBackground() = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(Color.WHITE); setStroke(dp(1), 0xFFE0DCE7.toInt()) }
+    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply {
+        cornerRadius = dp(16).toFloat()
+        setColor(when { primary -> if (focused) 0xFF7A3ED2.toInt() else 0xFF662BB7.toInt(); focused -> 0xFF6F35C5.toInt(); else -> Color.WHITE })
+        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB58DE8.toInt() else 0xFFDAD5E1.toInt())
     }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    companion object { const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_CONTENT_KEY = "content_key" }
+    companion object {
+        const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_CONTENT_KEY = "content_key"
+        private val TEXT_PRIMARY = Color.rgb(28, 24, 34)
+        private val TEXT_SECONDARY = Color.rgb(78, 72, 86)
+        private val PURPLE_SOFT = Color.rgb(102, 54, 164)
+    }
 }
