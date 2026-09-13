@@ -76,6 +76,27 @@ object PortalPlaylistClient {
         }
     }
 
+    /** Retry only deletions the user already requested, without importing or uploading lists. */
+    suspend fun retryPendingDeletes(context: Context, baseUrl: String) = syncMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val endpoint = baseUrl.trim().trimEnd('/')
+            if (endpoint.isBlank() || PortalSyncBook.pending(context).isEmpty()) return@withContext
+            val auth = JSONObject().apply {
+                put("deviceId", DeviceIdentity.deviceId(context))
+                put("activationCode", DeviceIdentity.activationCode(context))
+            }
+            replayPendingDeletes(context, endpoint, auth)
+        }
+    }
+
+    private suspend fun replayPendingDeletes(context: Context, endpoint: String, auth: JSONObject) {
+        for (id in PortalSyncBook.pending(context)) {
+            try { deleteRemote(endpoint, auth, id); PortalSyncBook.acknowledgeDelete(context, id) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { }
+        }
+    }
+
     /** Test the same reconciliation with local HTTP and subscriber fixtures. */
     internal suspend fun syncWithResolver(
         context: Context, baseUrl: String, dao: BlofyDao, transport: OkHttpClient = listClient,
@@ -99,11 +120,7 @@ object PortalPlaylistClient {
             put("activationCode", DeviceIdentity.activationCode(context))
         }
         // Manual pull does not spend its deadline replaying queued write operations.
-        for (id in if (mode == SyncMode.PULL_ONLY) emptySet() else PortalSyncBook.pending(context)) {
-            try { deleteRemote(endpoint, auth, id); PortalSyncBook.acknowledgeDelete(context, id) }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { }
-        }
+        if (mode != SyncMode.PULL_ONLY) replayPendingDeletes(context, endpoint, auth)
         val pending = PortalSyncBook.pending(context)
         val snapshot = fetchRemote(endpoint, auth, transport)
         val remoteRows = snapshot.items.filterNot { it.id in pending || it.aliasIds.any(pending::contains) }

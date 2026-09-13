@@ -104,10 +104,11 @@ class SettingsActivity : AppCompatActivity() {
             gravity = Gravity.START
             setPadding(0, dp(6), 0, 0)
         })
-        header.addView(titleBox, LinearLayout.LayoutParams(0, dp(56), 1f))
+        header.addView(titleBox, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val back = settingButton(getString(R.string.back), true) { finish() }.apply { id = View.generateViewId() }
         header.addView(back, LinearLayout.LayoutParams(dp(98), dp(48)))
-        page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+        header.minimumHeight = dp(64)
+        page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
 
         status = TextView(this).apply {
             textSize = 12f

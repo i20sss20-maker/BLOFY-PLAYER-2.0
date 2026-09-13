@@ -366,6 +366,7 @@ class LoginActivity : AppCompatActivity() {
             }
             // Enter uses the playlist the user selected locally. Website imports belong only
             // to the explicit refresh action, never to activation or an empty catalog.
+            runSuspendCatching { PortalPlaylistClient.retryPendingDeletes(applicationContext, endpoint) }
             status.text = "جاري تجهيز ${localProvider.name}"
             openCatalogLoading(localProvider.id)
         }.onFailure {
