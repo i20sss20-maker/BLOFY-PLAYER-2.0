@@ -792,7 +792,7 @@ class HomeActivity : AppCompatActivity() {
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, "side_home")
         }
         setOnClickListener {
-            findViewById<View>(android.R.id.content)
+            this@HomeActivity.findViewById<View>(android.R.id.content)
                 .findViewWithTag<ScrollView>("blofy_home_feed_scroll")?.scrollTo(0, 0)
             heroPrimary?.post { heroPrimary?.requestFocus() }
         }

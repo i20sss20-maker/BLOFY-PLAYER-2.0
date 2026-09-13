@@ -298,7 +298,7 @@ class LoginLocalEntryRegressionTest {
         }
         val panel = content.findViewWithTag<ViewGroup>("blofy_login_activation_panel")
         val panelBounds = bounds(panel)
-        listOf("deviceView", "codeView", "status", "qrView").forEach { name ->
+        listOf("deviceView", "codeView", "status", "qrView", "trialView").forEach { name ->
             val rect = bounds(field<View>(name))
             assertTrue("$name is clipped: $rect in $panelBounds", panelBounds.contains(rect))
             assertTrue("$name must have visible dimensions", rect.width() > 0 && rect.height() > 0)

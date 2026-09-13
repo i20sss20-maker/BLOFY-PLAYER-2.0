@@ -31,6 +31,7 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.ActivationCheckResponse
+import tv.blofy.player.core.identity.ActivationDisplayState
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationPortalUrl
 import tv.blofy.player.core.identity.ActivationRemoteClient
@@ -58,6 +59,9 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var codeView: TextView
     private lateinit var qrMessage: TextView
     private lateinit var qrView: ImageView
+    private lateinit var trialView: ActivationStatusView
+    private var trialSnapshot: ActivationDisplayState.Snapshot? = null
+    private var trialTicker: Job? = null
     private lateinit var addPlaylist: Button
     private lateinit var connectButton: Button
     private lateinit var refreshCodeButton: Button
@@ -122,14 +126,16 @@ class LoginActivity : AppCompatActivity() {
         }
         activation.addView(loginText(R.string.login_link_tv, 19f, true).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(-1, dp(28)))
         activation.addView(loginText(R.string.login_scan_hint, 12f).apply {
+            visibility = if (resources.configuration.screenHeightDp <= 600) View.GONE else View.VISIBLE
             gravity = Gravity.CENTER
             maxLines = 2
         }, LinearLayout.LayoutParams(-1, dp(36)))
-        val qrSize = (resources.configuration.screenHeightDp - 360).coerceIn(112, 180)
+        val qrSize = (resources.configuration.screenHeightDp - 420).coerceIn(112, 180)
         activation.addView(qrPanel(), LinearLayout.LayoutParams(dp(qrSize), dp(qrSize)).apply {
             topMargin = dp(8)
             bottomMargin = dp(8)
         })
+        activation.addView(trialView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         val identity = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -238,6 +244,7 @@ class LoginActivity : AppCompatActivity() {
         deviceView.background = fieldBackground(); root.addView(deviceView, LinearLayout.LayoutParams(-1, dp(54)))
         codeView.background = premiumFieldBackground(true); root.addView(codeView, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(8) })
         root.addView(qrPanel(), LinearLayout.LayoutParams(dp(180), dp(180)).apply { topMargin = dp(12) })
+        root.addView(trialView, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         status.background = statusBackground(); root.addView(status, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
         root.addView(loginText(R.string.login_your_playlists, 18f, true), LinearLayout.LayoutParams(-1, dp(40)))
         playlistRow = LinearLayout(this).apply {
@@ -272,6 +279,7 @@ class LoginActivity : AppCompatActivity() {
             setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.CENTER
         }
+        trialView = ActivationStatusView(this)
         qrView = ImageView(this).apply {
             contentDescription = getString(R.string.login_qr_description)
             visibility = View.INVISIBLE
@@ -557,6 +565,7 @@ class LoginActivity : AppCompatActivity() {
         status.text = if (active == null) "في انتظار إضافة قائمة" else "● جاهز • ${active.name}"
         val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
         renderIdentity(identity.deviceId, identity.activationCode)
+        bindTrialStatus(identity)
         if (!fromWebsite) return
         val endpoint = activationEndpoint
         if (endpoint.isBlank()) { status.setText(R.string.refresh_site_missing); return }
@@ -566,6 +575,7 @@ class LoginActivity : AppCompatActivity() {
         catch (error: Exception) { throw PortalRefreshFailure("AUTH", cause = error) }
         val updatedIdentity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
         renderIdentity(updatedIdentity.deviceId, updatedIdentity.activationCode)
+        bindTrialStatus(updatedIdentity)
         status.text = activationLabel(remote)
         if (!remote.canUse()) return
         val sync = PortalPlaylistClient.sync(applicationContext, endpoint, dao, PortalPlaylistClient.SyncMode.PULL_ONLY)
@@ -631,6 +641,11 @@ class LoginActivity : AppCompatActivity() {
         if (updated != current) PortalPlaylistClient.mergeProviderProfile(applicationContext, dao, current, remoteId, updated)
     }
 
+    private fun bindTrialStatus(identity: tv.blofy.player.data.local.ActivationEntity) {
+        trialSnapshot = ActivationDisplayState.read(applicationContext, identity)
+        trialView.render(trialSnapshot)
+    }
+
     private fun activationLabel(remote: ActivationCheckResponse) = when (remote.state()) {
         ActivationCheckResponse.State.TRIAL -> "● الفترة التجريبية فعالة"
         ActivationCheckResponse.State.ACTIVE -> "● الجهاز مفعل وجاهز"
@@ -644,10 +659,18 @@ class LoginActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (::status.isInitialized) requestIdentityRefresh()
+        trialTicker?.cancel()
+        trialTicker = lifecycleScope.launch {
+            while (true) {
+                if (::trialView.isInitialized) trialView.render(trialSnapshot)
+                delay(30_000L)
+            }
+        }
     }
 
     override fun onPause() {
         identityJob?.cancel()
+        trialTicker?.cancel()
         super.onPause()
     }
 

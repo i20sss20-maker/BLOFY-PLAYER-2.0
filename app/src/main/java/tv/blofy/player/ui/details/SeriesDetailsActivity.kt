@@ -77,7 +77,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 letterSpacing = .12f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleBright)
-                gravity = Gravity.END
+                gravity = Gravity.START
             })
 
             val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
@@ -95,7 +95,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 textSize = if (metadata?.logoUrl.isNullOrBlank()) 28f else 18f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
-                gravity = Gravity.END
+                gravity = Gravity.START
                 maxLines = 2
                 includeFontPadding = false
                 alpha = if (metadata?.logoUrl.isNullOrBlank()) 1f else .9f
@@ -120,7 +120,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 textSize = 13.5f
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(0xFFE8D8FA.toInt())
-                gravity = Gravity.END
+                gravity = Gravity.START
                 setPadding(0, dp(7), 0, dp(10))
             })
 
@@ -129,33 +129,27 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 textSize = 13f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleSoft)
-                gravity = Gravity.END
+                gravity = Gravity.START
                 setPadding(0, 0, 0, dp(3))
             })
-            panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = metadata?.overview?.takeIf(String::isNotBlank)
-                    ?: stream.plot?.takeIf(String::isNotBlank)
-                    ?: getString(R.string.details_series_no_description)
+            val overviewView = TextView(this@SeriesDetailsActivity).apply {
                 textSize = 15f
                 typeface = BlofyTvDesign.BodyTypeface
                 maxLines = 7
                 setTextColor(BlofyTvDesign.TextSecondary)
-                gravity = Gravity.END
+                gravity = Gravity.START
                 setLineSpacing(0f, 1.16f)
                 setPadding(0, 0, 0, dp(8))
-            })
-
-            if (!metadata?.crew.isNullOrEmpty()) {
-                panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                    text = metadata?.crew.orEmpty().joinToString("   •   ") { "${it.job}: ${it.name}" }
-                    textSize = 11.5f
-                    typeface = BlofyTvDesign.MediumTypeface
-                    setTextColor(BlofyTvDesign.TextMuted)
-                    gravity = Gravity.END
-                    maxLines = 2
-                    setPadding(0, 0, 0, dp(7))
-                })
             }
+            panel.addView(overviewView)
+            val crewView = TextView(this@SeriesDetailsActivity).apply {
+                textSize = 11.5f
+                typeface = BlofyTvDesign.MediumTypeface
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = Gravity.START
+                setPadding(0, 0, 0, dp(7))
+            }
+            panel.addView(crewView)
 
             resume?.let { currentResume ->
                 val progress = if (currentResume.durationMs > 0) {
@@ -170,7 +164,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     textSize = 12.5f
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.Mint)
-                    gravity = Gravity.END
+                    gravity = Gravity.START
                 })
                 if (currentResume.durationMs > 0) {
                     panel.addView(ProgressBar(this@SeriesDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -187,7 +181,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val actions = LinearLayout(this@SeriesDetailsActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutDirection = resources.configuration.layoutDirection
-                gravity = Gravity.END
+                gravity = Gravity.START
             }
             var primary: Button? = null
             resume?.let { currentResume ->
@@ -226,26 +220,12 @@ class SeriesDetailsActivity : AppCompatActivity() {
             actions.addView(favoriteButton, LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)))
             layout.attachActions(actions)
 
-            if (!metadata?.cast.isNullOrEmpty()) {
-                panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                    text = getString(R.string.details_cast)
-                    textSize = 16f
-                    typeface = BlofyTvDesign.HeadingTypeface
-                    setTextColor(Color.WHITE)
-                    gravity = Gravity.END
-                    setPadding(0, dp(14), 0, dp(5))
-                })
-                panel.addView(CastStrip.build(this@SeriesDetailsActivity, metadata?.cast.orEmpty()), LinearLayout.LayoutParams(-1, dp(180)))
-            } else {
-                panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                    text = getString(R.string.details_cast_unavailable)
-                    textSize = 12f
-                    typeface = BlofyTvDesign.BodyTypeface
-                    setTextColor(BlofyTvDesign.TextMuted)
-                    gravity = Gravity.END
-                    setPadding(0, dp(12), 0, dp(4))
-                })
+            val castContainer = LinearLayout(this@SeriesDetailsActivity).apply {
+                orientation = LinearLayout.VERTICAL
             }
+            panel.addView(castContainer, LinearLayout.LayoutParams(-1, -2))
+            ProviderDetailsBinding(this@SeriesDetailsActivity, overviewView, crewView,
+                castContainer, provider, stream).start(metadata)
 
             if (layout.isTv) primary?.requestFocus()
         }

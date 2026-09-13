@@ -104,7 +104,7 @@ def main():
         assert uid()==original_uid
         after=adb('shell','dumpsys','package',PACKAGE)
         assert re.search(r'firstInstallTime=(.+)',after)[1]==first
-        assert re.search(r'versionCode=2000054\b',after)
+        assert re.search(r'versionCode=2000055\b',after)
         for binary in ['iptables','ip6tables']:
             adb('shell',binary,'-C','OUTPUT','-m','owner','--uid-owner',original_uid,'-j','REJECT')
         instrument('tv.blofy.player.security.SignedUpgradeVerifyTest','upgradedReleaseReadsExistingEncryptedData')
@@ -128,7 +128,7 @@ def main():
         crashes=adb('logcat','-b','crash','-d')
         assert PACKAGE not in crashes, 'Target process crash recorded'
         assert hashlib.sha256(new.read_bytes()).hexdigest()==new_hash
-        report={'commit':os.environ['GITHUB_SHA'],'old_version_code':2000053,'new_version_code':2000054,
+        report={'commit':os.environ['GITHUB_SHA'],'old_version_code':2000053,'new_version_code':2000055,
                 'certificate_sha256':CERT,'apk_sha256':new_hash,'android_api':35,'abi':'x86_64',
                 'in_place_upgrade':True,'same_uid_and_first_install_time':True,
                 'identity_pin_encrypted_playlist_favorite_lock_resume_retained':True,

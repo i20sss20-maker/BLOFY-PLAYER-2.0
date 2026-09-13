@@ -53,7 +53,8 @@ class ActivationManager(
             )
         )
         if (response.canUse()) rotatePendingCode(api, current)
-        applyRemoteStatus(response.canUse(), response.expiresAt)
+        val updated = applyRemoteStatus(response.canUse(), response.expiresAt)
+        ActivationDisplayState.record(context, updated, response)
         return response
     }
 

@@ -55,7 +55,7 @@ class CommercialUiRegressionTest {
                     val url = fixtureArtwork(index)
                     StreamEntity("$id:$kind:$index", id, "$index", "category", kind,
                         listOf("رحلة إلى المجهول", "خلف الأفق", "ليالي المدينة", "أثر المطر", "الطريق الأخير")[(index - 1) % 5],
-                        icon = url, backdrop = url, year = "2026", rating = "8.4", genre = "مغامرات • دراما",
+                        icon = url, backdrop = url, addedAt = 2_000_000_000_000L - index + if (kind == "movie") 100 else 0, year = "2026", rating = "8.4", genre = "مغامرات • دراما",
                         plot = "رحلة تجمع أصدقاء قدامى وتكشف حكايات لم تكتمل، بين البحر والمدينة. " + if (index == 2) "تفاصيل طويلة للمشاهدة. ".repeat(40) else "",
                         directSource = "https://example.test/sample.mp4", duration = "01:45:00")
                 })
@@ -63,6 +63,7 @@ class CommercialUiRegressionTest {
         }
         CatalogSyncState.markCatalogCommitted(context, id)
         singleton.set(null, db)
+        runBlocking { tv.blofy.player.data.preparation.FullCatalogPreparer.prepare(context, id) {} }
     }
 
     @After fun cleanup() {

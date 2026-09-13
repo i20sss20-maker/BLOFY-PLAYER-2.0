@@ -19,7 +19,7 @@ class SignedUpgradeVerifyTest {
         assumeTrue(InstrumentationRegistry.getArguments().getString("signedUpgradeReview") == "true")
         val c = InstrumentationRegistry.getInstrumentation().targetContext
         assertEquals("tv.blofy.player.v2", c.packageName)
-        assertEquals(2000054, c.packageManager.getPackageInfo(c.packageName, 0).versionCode)
+        assertEquals(2000055, c.packageManager.getPackageInfo(c.packageName, 0).versionCode)
         assertEquals(0, c.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE)
         val original = c.getSharedPreferences("blofy_signed_upgrade_review", Context.MODE_PRIVATE)
         assertEquals("rc42-data-retained", original.getString("sentinel", null))
