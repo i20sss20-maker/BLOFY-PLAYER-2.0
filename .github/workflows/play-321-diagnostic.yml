@@ -19,9 +19,9 @@ jobs:
           set -euo pipefail
           umask 077
           gh api repos/i20sss20-maker/BLOFY-PLAYER-2.0/actions/jobs/103808495607 > "$RUNNER_TEMP/job.json"
-          gh api repos/i20sss20-maker/BLOFY-PLAYER-2.0/actions/jobs/103808495607/logs > "$RUNNER_TEMP/job.log"
+          gh api --allow-escape-sequences repos/i20sss20-maker/BLOFY-PLAYER-2.0/actions/jobs/103808495607/logs > "$RUNNER_TEMP/job.log"
           python3 - <<'PY'
-          import hashlib,json,os,pathlib
+          import hashlib,json,os,pathlib,re
           root=pathlib.Path(os.environ['RUNNER_TEMP'])
           job=json.loads((root/'job.json').read_text())
           assert job['run_id']==34788584787
@@ -31,6 +31,7 @@ jobs:
           marker='BLOFY_PLAY_RUNTIME_FAILURE '
           found=[]
           for line in raw.decode('utf-8',errors='replace').splitlines():
+              line=re.sub(r'\x1b\[[0-9;]*[A-Za-z]','',line)
               if marker not in line: continue
               value=line.split(marker,1)[1]
               if not value.startswith('{'): continue
