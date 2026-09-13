@@ -78,6 +78,36 @@ class ProviderDetailsRepositoryTest {
         assertEquals(listOf("O'Connor", "Actor Two"), result?.cast?.map { it.name })
     }
 
+    @Test fun richerActorsAndNestedImagesSurviveDuplicatePlainNames() {
+        val result = XtreamMetadataFallback.parseResponse(provider, stream(), mapOf(
+            "cast" to "Actor One", "rating_5based" to "4.2",
+            "data" to mapOf("info" to mapOf(
+                "actors" to listOf(mapOf("name" to "Actor One", "role" to "Captain", "photo" to "/actor.jpg")),
+                "images" to mapOf("posters" to listOf(mapOf("file_path" to "/poster.jpg")),
+                    "backdrops" to listOf(mapOf("file_path" to "/backdrop.jpg"))),
+                "credits" to mapOf("crew" to listOf(mapOf("name" to "Director", "job" to "Director", "profile_path" to "/director.jpg")))
+            ))
+        ), "movie")!!
+        assertEquals(8.4, result.rating!!, 0.001)
+        assertEquals(1, result.cast.size)
+        assertEquals("Captain", result.cast.single().character)
+        assertEquals(server.url("/actor.jpg").toString(), result.cast.single().profileUrl)
+        assertEquals(server.url("/poster.jpg").toString(), result.posterUrl)
+        assertEquals(server.url("/backdrop.jpg").toString(), result.backdropUrl)
+        assertEquals(server.url("/director.jpg").toString(), result.crew.single().profileUrl)
+    }
+
+    @Test fun partialRefreshRetainsRatingArtworkAndRichActorFields() = runBlocking(Dispatchers.IO) {
+        server.enqueue(MockResponse().setBody("""{"info":{"rating":8.3,"cover":"https://example.test/poster.jpg","cast":[{"name":"Actor","role":"Captain","photo":"https://example.test/actor.jpg"}]}}"""))
+        val saved = ProviderDetailsRepository.refresh(context, provider, stream()).metadata!!
+        server.enqueue(MockResponse().setBody("""{"info":{"cast":"Actor","description":"New story"}}"""))
+        val updated = ProviderDetailsRepository.refresh(context, provider, stream(), force = true).metadata!!
+        assertEquals(saved.rating, updated.rating)
+        assertEquals(saved.posterUrl, updated.posterUrl)
+        assertEquals(saved.cast, updated.cast)
+        assertEquals("New story", updated.overview)
+    }
+
     @Test fun absentCastIsEmptyAndUnsupportedListsMakeNoProviderRequest() = runBlocking(Dispatchers.IO) {
         assertNull(XtreamMetadataFallback.parseResponse(provider, stream(), mapOf("info" to emptyMap<String, Any>()), "movie")?.cast?.firstOrNull())
         assertFalse(ProviderDetailsRepository.refresh(context, provider.copy(providerType = "m3u"), stream()).failed)

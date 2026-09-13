@@ -15,6 +15,9 @@ adb shell am instrument -w -r -e class "$classes" -e expected_kind "$kind" tv.bl
 adb pull /sdcard/Android/data/tv.blofy.player.v2/files/ui-refinement ui-evidence/ || true
 adb pull /sdcard/Android/data/tv.blofy.player.v2/files/rc37-ui ui-evidence/ || true
 adb logcat -b crash -d > ui-evidence/crashes.txt
+for evidence in ui-evidence/ui-refinement/settings-gfxinfo.txt ui-evidence/ui-refinement/settings-memory.txt; do
+  if [[ -f "$evidence" ]]; then cat "$evidence"; fi
+done
 # Bounded synthetic-screen evidence is also readable through the Actions log API.
 python3 - <<'PYSCREEN'
 import base64,pathlib

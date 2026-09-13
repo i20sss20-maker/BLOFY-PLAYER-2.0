@@ -184,6 +184,23 @@ class LoginLocalEntryRegressionTest {
         assertEquals(0, server.requestCount)
     }
 
+    @Test fun emptyCatalogEntryChecksActivationWithoutImportingWebsitePlaylists() {
+        runBlocking(Dispatchers.IO) { db.dao().clearProviderStreams(provider.id) }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) = MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"status":"active"}""")
+        }
+        launch()
+        connect()
+        val opened = shadowOf(activity).nextStartedActivity
+        assertEquals(tv.blofy.player.ui.login.CatalogLoadingActivity::class.java.name, opened?.component?.className)
+        assertEquals(provider.id, opened?.getStringExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID))
+        assertEquals(1, server.requestCount)
+        assertEquals("/api/v1/activation/check", server.takeRequest().path)
+        assertEquals(listOf(provider.id), runBlocking(Dispatchers.IO) { db.dao().providerSnapshotStored().map { it.id } })
+    }
+
     @Test fun firstInstallEnterOpensRegistrationWithoutWaitingForActivation() {
         runBlocking(Dispatchers.IO) { db.clearAllTables() }
         app.getSharedPreferences("blofy_device_identity", Application.MODE_PRIVATE).edit().clear().commit()

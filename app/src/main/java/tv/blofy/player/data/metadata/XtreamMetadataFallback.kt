@@ -1,6 +1,7 @@
 package tv.blofy.player.data.metadata
 
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import androidx.core.text.HtmlCompat
 import com.google.gson.Gson
 import kotlinx.coroutines.withTimeout
@@ -44,10 +45,7 @@ object XtreamMetadataFallback {
         }.getOrNull() ?: return null
 
         val root = withTimeout(8_000L) { XtreamClient.api.objectResponse(url) }
-        if (root.isEmpty()) return null
-        check(root.keys.any { it.equals("info", true) || it.equals("movie_data", true) ||
-            it.equals("data", true) || it.equals("plot", true) || it.equals("description", true) ||
-            it.equals("overview", true) || it.equals("actors", true) || it.equals("cast", true) }) { "Provider returned no details" }
+        check(root.isNotEmpty()) { "Provider returned no details" }
         return parseResponse(provider, stream, root, kind)
     }
 
@@ -56,7 +54,7 @@ object XtreamMetadataFallback {
         val source = linkedMapOf<String, Any?>()
         // Some panels put fields on the root, others use info/movie_data. Blank fields
         // in info must not erase useful values supplied elsewhere in the same response.
-        listOf(payload, map(payload["movie_data"]), map(payload["info"])).forEach { fields ->
+        listOf(root, map(root["movie_data"]), map(root["info"]), payload, map(payload["movie_data"]), map(payload["info"])).forEach { fields ->
             fields.forEach { (key, value) ->
                 if (value != null && (value !is String || (value.isNotBlank() && !value.equals("null", true))) && value != emptyList<Any>())
                     source[key.lowercase(java.util.Locale.ROOT)] = value
@@ -68,26 +66,42 @@ object XtreamMetadataFallback {
         val plot = cleanText(text(source, "plot", "description", "overview", "synopsis")).ifBlank { stream.plot.orEmpty() }.ifBlank { null }
         val genreText = text(source, "genre", "genres").ifBlank { stream.genre.orEmpty() }
         val genres = splitValues(genreText)
-        val cast = castValues(source).take(14)
+        val cast = castValues(source).map { it.copy(profileUrl = imageUrl(it.profileUrl, provider)) }
         val crew = buildList {
+            val credits = map(source["credits"])
+            listOf(source["crew"], credits["crew"]).forEach { raw ->
+                (raw as? List<*>)?.forEach { item ->
+                    val row = map(item)
+                    val name = cleanText(text(row, "name"))
+                    if (name.isNotBlank()) add(ProviderMetadata.Credit(name,
+                        cleanText(text(row, "job", "department")),
+                        imageUrl(text(row, "profile_url", "profile_path", "image", "photo"), provider)))
+                }
+            }
             splitValues(text(source, "director")).take(3).forEach { add(ProviderMetadata.Credit(it, "المخرج")) }
             splitValues(text(source, "writer", "writers")).take(3).forEach { add(ProviderMetadata.Credit(it, "الكاتب")) }
         }.distinctBy { it.name to it.job }
 
-        val rating = number(source["rating"] ?: source["rating_5based"] ?: stream.rating)
+        val rating = number(source["rating"])?.takeIf { it <= 10 }
+            ?: number(source["rating_5based"])?.takeIf { it <= 5 }?.times(2)
+            ?: number(source["vote_average"])?.takeIf { it <= 10 }
+            ?: number(stream.rating)?.takeIf { it <= 10 }
         val releaseDate = text(source, "releasedate", "release_date", "releaseDate", "first_air_date")
             .ifBlank { stream.releaseDate.orEmpty() }.ifBlank { null }
         val durationMinutes = durationMinutes(source, stream)
-        val poster = text(source, "movie_image", "cover", "cover_big", "stream_icon")
-            .ifBlank { stream.icon.orEmpty() }.ifBlank { null }
-        val backdrop = firstBackdrop(source["backdrop_path"] ?: source["backdrop"])
+        val images = map(source["images"])
+        val poster = imageUrl(text(source, "movie_image", "cover", "cover_big", "stream_icon", "poster_path"), provider)
+            ?: imageUrl(firstBackdrop(images["posters"]), provider) ?: stream.icon?.takeIf(String::isNotBlank)
+        val backdrop = imageUrl(firstBackdrop(source["backdrop_path"] ?: source["backdrop"] ?: images["backdrops"]), provider)
             ?: stream.backdrop?.takeIf(String::isNotBlank)
+        val logo = imageUrl(text(source, "logo", "logo_url", "logo_path"), provider)
+            ?: imageUrl(firstBackdrop(images["logos"]), provider)
         val country = splitValues(text(source, "country", "production_countries"))
         val language = text(source, "language", "original_language").ifBlank { null }
         val status = text(source, "status").ifBlank { null }
 
         val hasUsefulData = cast.isNotEmpty() || crew.isNotEmpty() || !plot.isNullOrBlank() ||
-            genres.isNotEmpty() || !poster.isNullOrBlank() || !backdrop.isNullOrBlank()
+            genres.isNotEmpty() || rating != null || !poster.isNullOrBlank() || !backdrop.isNullOrBlank() || logo != null
         if (!hasUsefulData) return null
 
         return ProviderMetadata.Metadata(
@@ -100,7 +114,7 @@ object XtreamMetadataFallback {
             genres = genres,
             posterUrl = poster,
             backdropUrl = backdrop,
-            logoUrl = null,
+            logoUrl = logo,
             trailerUrl = text(source, "youtube_trailer", "trailer").ifBlank { null },
             cast = cast,
             crew = crew,
@@ -112,10 +126,16 @@ object XtreamMetadataFallback {
     }
 
     internal fun castValues(source: Map<String, Any?>): List<ProviderMetadata.Person> {
-        return listOf("cast", "actors", "actor").flatMap { key ->
-            people(source[key])
-        }.distinctBy { it.name.lowercase(java.util.Locale.ROOT) }.take(14)
+        return mergePeople(listOf("cast", "actors", "actor").flatMap { people(source[it]) } +
+            people(map(source["credits"])["cast"]))
     }
+
+    internal fun mergePeople(people: List<ProviderMetadata.Person>): List<ProviderMetadata.Person> =
+        people.groupBy { it.name.trim().lowercase(java.util.Locale.ROOT) }.values.map { entries ->
+            entries.first().copy(
+                character = entries.firstNotNullOfOrNull { it.character?.takeIf(String::isNotBlank) },
+                profileUrl = entries.firstNotNullOfOrNull { it.profileUrl?.takeIf(String::isNotBlank) })
+        }.take(14)
 
     private fun people(raw: Any?): List<ProviderMetadata.Person> = when (raw) {
         is List<*> -> raw.flatMap(::people)
@@ -127,7 +147,7 @@ object XtreamMetadataFallback {
                 name = name,
                 character = cleanText(text(row, "character", "role")).takeIf(String::isNotBlank),
                 profileUrl = text(row, "profile_url", "profile", "profile_path", "image", "photo")
-                    .takeIf { it.startsWith("http://") || it.startsWith("https://") }
+                    .takeIf(String::isNotBlank)
             ))
         }
         is String -> {
@@ -196,9 +216,20 @@ object XtreamMetadataFallback {
         }
     }
 
+    private fun imageUrl(raw: String?, provider: ProviderEntity): String? {
+        val value = raw?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) } ?: return null
+        val parsed = value.toHttpUrlOrNull() ?: provider.baseUrl.toHttpUrlOrNull()?.resolve(value)
+        return parsed?.takeIf { it.username.isEmpty() && it.password.isEmpty() }?.toString()
+    }
+
     private fun firstBackdrop(value: Any?): String? = when (value) {
-        is String -> value.trim().takeIf(String::isNotBlank)
-        is List<*> -> value.asSequence().mapNotNull { it?.toString()?.trim() }.firstOrNull(String::isNotBlank)
+        is String -> {
+            val trimmed = value.trim()
+            if (trimmed.startsWith("[")) firstBackdrop(runCatching { Gson().fromJson(trimmed, List::class.java) }.getOrNull())
+            else trimmed.takeIf(String::isNotBlank)
+        }
+        is List<*> -> value.firstNotNullOfOrNull(::firstBackdrop)
+        is Map<*, *> -> text(map(value), "url", "file_path", "path").takeIf(String::isNotBlank)
         else -> null
     }
 }

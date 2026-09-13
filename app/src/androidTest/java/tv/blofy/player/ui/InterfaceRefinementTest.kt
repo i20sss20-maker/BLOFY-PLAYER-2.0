@@ -98,8 +98,20 @@ class InterfaceRefinementTest {
                 StreamEntity("$id:$kind:7", id, "7", "1", kind, "عنوان تجريبي")
             })
         }
+        val detailRequests = java.util.concurrent.atomic.AtomicInteger()
+        val imageBytes = java.io.ByteArrayOutputStream().also { output ->
+            Bitmap.createBitmap(48, 72, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFF7853A8.toInt()) }
+                .compress(Bitmap.CompressFormat.PNG, 100, output)
+        }.toByteArray()
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                if (request.path?.startsWith("/art/") == true) return MockResponse()
+                    .setHeader("Content-Type", "image/png").setBody(okio.Buffer().write(imageBytes))
+                detailRequests.incrementAndGet()
+                return MockResponse().setBody("""{"info":{"plot":"وصف تجريبي من السيرفر","rating_5based":4.2,"cover":"${server.url("/art/poster.png")}","cast":"ممثل تجريبي،ممثلة تجريبية","actors":[{"name":"ممثل تجريبي","character":"الدور الأول","photo":"${server.url("/art/actor.png")}"}]}}""")
+            }
+        }
         for (kind in listOf("movie", "series")) {
-            server.enqueue(MockResponse().setBody("""{"info":{"plot":"وصف تجريبي من السيرفر","cast":[{"name":"ممثل تجريبي","character":"الدور الأول"},"ممثلة تجريبية"]}}"""))
             val type = if (kind == "movie") MovieDetailsActivity::class.java else SeriesDetailsActivity::class.java
             repeat(2) { opening ->
                 ActivityScenario.launch<android.app.Activity>(Intent(context, type)
@@ -107,15 +119,18 @@ class InterfaceRefinementTest {
                     await { scenario.onActivity { activity ->
                         val root = activity.window.decorView
                         assertEquals("وصف تجريبي من السيرفر", root.findViewWithTag<TextView>("blofy_details_overview")?.text?.toString())
+                        assertTrue(root.findViewWithTag<TextView>("blofy_details_stats").text.contains("8.4/10"))
                         val actor = root.findViewWithTag<View>("blofy_cast_ممثل تجريبي")
                         assertNotNull(actor)
+                        assertTrue(descendants(actor).filterIsInstance<android.widget.ImageView>()
+                            .any { image -> (image.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.let { it.width == 48 && it.height == 72 } == true })
                         actor.requestFocus()
                     } }
                     if (opening == 0) screenshot("details-$kind-cast")
                 }
             }
         }
-        assertEquals("Only one provider request per title", 2, server.requestCount)
+        assertEquals("Only one provider detail request per title", 2, detailRequests.get())
     }
 
     @Test fun settingsCardsWrapTextAndKeepDirectionalFocus() {
@@ -123,6 +138,9 @@ class InterfaceRefinementTest {
             await { scenario.onActivity { activity ->
                 val grids = descendants(activity.window.decorView).filterIsInstance<GridLayout>()
                 assertTrue(grids.size >= 5)
+                val subtitle = descendants(activity.window.decorView).filterIsInstance<TextView>()
+                    .first { it.text.toString() == activity.getString(R.string.settings_subtitle) }
+                assertTrue("Settings subtitle must not be clipped", subtitle.height >= (subtitle.layout?.height ?: 0))
                 grids.forEach { grid ->
                     for (i in 0 until grid.childCount) {
                         val card = grid.getChildAt(i) as ViewGroup
@@ -140,6 +158,7 @@ class InterfaceRefinementTest {
                 card.requestFocus()
             } }
             screenshot("settings-cards")
+            instrumentation.uiAutomation.executeShellCommand("dumpsys gfxinfo ${context.packageName} reset").close()
             repeat(14) { instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN) }
             scenario.onActivity { activity ->
                 val focused = activity.currentFocus!!
@@ -148,6 +167,13 @@ class InterfaceRefinementTest {
                 assertTrue(visible.height() > 0)
             }
             screenshot("settings-cards-bottom")
+            for ((name, command) in listOf("settings-gfxinfo" to "dumpsys gfxinfo ${context.packageName}",
+                "settings-memory" to "dumpsys meminfo ${context.packageName}")) {
+                val output = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                    instrumentation.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
+                File(context.getExternalFilesDir("ui-refinement"), "$name.txt").writeText(output)
+                android.util.Log.i("BLOFY_UI_PERFORMANCE", "$name: $output")
+            }
         }
     }
 

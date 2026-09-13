@@ -364,14 +364,11 @@ class LoginActivity : AppCompatActivity() {
                 openHome()
                 return@onSuccess
             }
-            val portalSync = runSuspendCatching { PortalPlaylistClient.sync(applicationContext, endpoint, dao) }.getOrNull()
-            renderPortalPlaylists(portalSync?.providers ?: withContext(Dispatchers.IO) { dao.allProvidersStored().first() })
-            val activeProvider = portalSync?.activeProvider ?: dao.providers().first().firstOrNull()
-            if (activeProvider == null) { openPlaylistManagement(); return@onSuccess }
-            val ready = hasCachedCatalog(dao, activeProvider.id)
-            val changed = portalSync?.changedProviderIds?.contains(activeProvider.id) == true
-            if (changed || !ready) { status.text = "جاري تجهيز ${activeProvider.name}"; openCatalogLoading(activeProvider.id); return@onSuccess }
-            openHome()
+            // Enter uses the playlist the user selected locally. Website imports belong only
+            // to the explicit refresh action, never to activation or an empty catalog.
+            runSuspendCatching { PortalPlaylistClient.retryPendingDeletes(applicationContext, endpoint) }
+            status.text = "جاري تجهيز ${localProvider.name}"
+            openCatalogLoading(localProvider.id)
         }.onFailure {
             val cached = withContext(Dispatchers.IO) { dao.activation() }
             val provider = dao.providers().first().firstOrNull()
@@ -624,7 +621,18 @@ class LoginActivity : AppCompatActivity() {
             return
         }
         if (lastQrUrl == url && qrView.drawable != null) return
-        val bitmap = withContext(Dispatchers.Default) { createQr(url) }
+        val bitmap = try {
+            withContext(Dispatchers.Default) { createQr(url) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            lastQrUrl = null
+            qrView.setImageDrawable(null)
+            qrView.visibility = View.INVISIBLE
+            qrMessage.setText(R.string.login_qr_unavailable)
+            qrMessage.visibility = View.VISIBLE
+            return
+        }
         if (deviceView.text.toString() != deviceId || codeView.text.toString() != activationCode ||
             ActivationPortalUrl.create(activationEndpoint, deviceId, activationCode) != url) return
         qrView.setImageBitmap(bitmap)

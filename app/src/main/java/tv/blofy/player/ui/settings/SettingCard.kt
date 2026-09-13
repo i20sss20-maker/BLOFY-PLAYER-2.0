@@ -14,9 +14,9 @@ import tv.blofy.player.ui.common.CinemaStyle
 
 /** One focus target with separate, wrapping title/value/description areas. */
 internal class SettingCard(context: Context) : LinearLayout(context) {
-    private val titleView = label(15f, true)
+    private val titleView = label(16f, true)
     private val valueView = label(13f, true).apply { setTextColor(CinemaStyle.Accent) }
-    private val hintView = label(11.5f, false).apply { setTextColor(CinemaStyle.Muted) }
+    private val hintView = label(12f, false).apply { setTextColor(CinemaStyle.Muted) }
     private val indicator = label(16f, true)
 
     init {
@@ -24,7 +24,7 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
         layoutDirection = resources.configuration.layoutDirection
         gravity = Gravity.TOP
         setPadding(dp(16), dp(14), dp(16), dp(14))
-        minimumHeight = dp(126)
+        minimumHeight = dp(116)
         isFocusable = true
         isFocusableInTouchMode = DeviceClass.isTv(context)
         isClickable = true
@@ -33,7 +33,12 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
         heading.addView(titleView, LayoutParams(0, -2, 1f))
         heading.addView(indicator, LayoutParams(dp(24), -2).apply { marginStart = dp(8) })
         addView(heading, LayoutParams(-1, -2))
-        addView(valueView, LayoutParams(-1, -2).apply { topMargin = dp(9) })
+        valueView.setPadding(dp(10), dp(5), dp(10), dp(5))
+        valueView.background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(8).toFloat()
+            setColor(0xFF261936.toInt())
+        }
+        addView(valueView, LayoutParams(-2, -2).apply { topMargin = dp(9) })
         addView(hintView, LayoutParams(-1, -2).apply { topMargin = dp(5) })
         background = CinemaStyle.surface(context, radiusDp = 16)
         setOnFocusChangeListener { _, focused ->

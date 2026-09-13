@@ -105,6 +105,20 @@ class PortalManualRefreshRegressionTest {
         PortalPlaylistClient.sync(RuntimeEnvironment.getApplication(), server.url("/").toString(), dao, PortalPlaylistClient.SyncMode.PULL_ONLY)
     }
 
+    @Test fun retryingAnOfflineDeletionDoesNotFetchOrUploadAnyPlaylist() = runBlocking {
+        val app = RuntimeEnvironment.getApplication()
+        PortalSyncBook.queueDelete(app, "deleted-id", setOf("local-id"))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+        PortalPlaylistClient.retryPendingDeletes(app, server.url("/").toString())
+        assertEquals(1, server.requestCount)
+        val request = server.takeRequest()
+        assertEquals("DELETE", request.method)
+        assertEquals("/api/v1/portal/playlists/deleted-id", request.path)
+        assertTrue(PortalSyncBook.pending(app).isEmpty())
+        PortalPlaylistClient.retryPendingDeletes(app, server.url("/").toString())
+        assertEquals(1, server.requestCount)
+    }
+
     @Test fun pullsRenameWithoutInvalidatingTheContentCatalog() {
         rows["one"] = provider("one", "Old name")
         reply(provider("one", "Living room"))

@@ -26,7 +26,8 @@ internal class ProviderDetailsBinding(
     private val crew: TextView,
     private val cast: LinearLayout,
     private val provider: ProviderEntity,
-    private val stream: StreamEntity
+    private val stream: StreamEntity,
+    private val onMetadata: (ProviderMetadata.Metadata?) -> Unit = {}
 ) {
     private var job: Job? = null
     private val feedback = Button(activity).apply {
@@ -58,14 +59,18 @@ internal class ProviderDetailsBinding(
     }
 
     private fun render(metadata: ProviderMetadata.Metadata?) {
+        onMetadata(metadata)
         overview.tag = "blofy_details_overview"
         overview.text = metadata?.overview?.takeIf(String::isNotBlank) ?: stream.plot?.takeIf(String::isNotBlank)
             ?: activity.getString(if (stream.kind == "series") R.string.details_series_no_description else R.string.details_movie_no_description)
         crew.text = metadata?.crew.orEmpty().joinToString("   •   ") { "${it.job}: ${it.name}" }
         crew.visibility = if (crew.text.isEmpty()) View.GONE else View.VISIBLE
         // A refresh must not remove the focused actor while the user is navigating the strip.
-        val people = metadata?.cast.orEmpty()
+        val people = metadata?.cast.orEmpty() + metadata?.crew.orEmpty()
+            .filter { !it.profileUrl.isNullOrBlank() && metadata?.cast.orEmpty().none { person -> person.name == it.name } }
+            .map { ProviderMetadata.Person(it.name.hashCode(), it.name, it.job, it.profileUrl) }
         if (cast.tag != people) {
+            val focusedTag = cast.findFocus()?.tag
             cast.removeAllViews()
             cast.tag = people
             cast.addView(TextView(activity).apply {
@@ -78,6 +83,7 @@ internal class ProviderDetailsBinding(
             }, LinearLayout.LayoutParams(-1, -2))
             if (people.isNotEmpty()) cast.addView(CastStrip.build(activity, people), LinearLayout.LayoutParams(-1, dp(224)))
             cast.addView(feedback, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
+            if (focusedTag != null) cast.findViewWithTag<View>(focusedTag)?.requestFocus()
         }
     }
     private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).toInt()
