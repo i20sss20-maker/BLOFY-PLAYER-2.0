@@ -1,6 +1,6 @@
 # مسودة وصف المتجر
 
-لا تُنشر قبل حسم الرخصة والدعم وإغلاق موانع الجاهزية. لا تتضمن ادعاء حماية كاملة أو مزامنة سحابية تعمل حاليًا.
+مسودة جاهزة للمراجعة مع بناء Play بنظام الاستهلاك فقط. تُرفق بلقطات النسخة الفعلية وبيانات الدعم قبل نشرها؛ لا تعدّ رفعًا إلى المتجر.
 
 ## العربية
 
@@ -21,7 +21,7 @@ BLOFY PLAYER يساعدك على تنظيم وتشغيل مصادر الوسائ
 التطبيق مشغّل وسائط ولا يتضمن قنوات أو أفلامًا أو اشتراك محتوى. تحتاج إلى إضافة مصدر تملك حق الوصول إليه.
 قد تختلف جودة التشغيل والبيانات والصور المتاحة بحسب المصدر والجهاز والاتصال.
 
-تُضاف هنا شروط رخصة المشغل والتجربة والتكلفة بعد اعتمادها وتطابقها مع نموذج الدفع النهائي.
+تتوفر تجربة مجانية حسب المدة المعروضة في شاشة التفعيل. يلزم ترخيص صالح للمشغّل بعد انتهائها. لا تتضمن نسخة Google Play شراء ترخيص داخل التطبيق؛ يمكن استعادة رخصة موجودة باستخدام رمز الاستعادة الذي حفظته مسبقًا. رخصة المشغّل لا تشمل المحتوى.
 
 ## English
 
@@ -42,4 +42,4 @@ BLOFY PLAYER organizes and plays media sources you add on Android phones and TVs
 This media player does not include channels, movies or a content subscription. Add only sources you are authorized to access.
 Playback and available metadata depend on your provider, device and connection.
 
-Insert the approved player-license, trial and pricing disclosures before publishing.
+A free trial is available for the period shown on the activation screen. A valid player license is required after it ends. The Google Play version has no in-app license purchase flow. An existing license can be restored using a recovery code saved beforehand. A player license does not include content.

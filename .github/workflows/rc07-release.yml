@@ -281,7 +281,17 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: python3 tools/verify_play_bundle.py
-      - name: Retain verified Play upload bundle for the owner
+      - name: Encrypt the verified Play bundle for owner delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          # AAB contains the R8 mapping. Public repository artifacts must not expose it.
+          tar -czf "$RUNNER_TEMP/blofy-play-owner.tar.gz" -C play-upload BLOFY-PLAYER-rc07.46-play.aab play-bundle-verification.json play-split-alignment.json
+          node tools/release_vault.mjs seal "$RUNNER_TEMP/blofy-play-owner.tar.gz" "$RUNNER_TEMP/blofy-public-certificate.pem" play-upload/BLOFY-PLAYER-rc07.46-play-owner.vault.json
+          EXPECTED_CERT_SHA256="59cb2e6729db6ec6cbe900020493c34e6586688126c40d85b347055a64cd1a75" node tools/release_vault.mjs seal "$RUNNER_TEMP/blofy-play-owner.tar.gz" tools/release-delivery/rc0746-recipient.pem play-upload/BLOFY-PLAYER-rc07.46-play-delivery.vault.json
+          rm -f play-upload/BLOFY-PLAYER-rc07.46-play.aab "$RUNNER_TEMP/blofy-play-owner.tar.gz"
+      - name: Retain encrypted Play bundle and verification evidence
         uses: actions/upload-artifact@v4
         with:
           name: BLOFY-Google-Play-rc0746-${{ github.sha }}
@@ -323,7 +333,8 @@ jobs:
       - name: Remove signing material
         if: always()
         run: |
-          rm -f "$RUNNER_TEMP/play-store-password" "$RUNNER_TEMP/play-key-password" "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64" "$RUNNER_TEMP/blofy-public-certificate.pem" "$RUNNER_TEMP/blofy-maintenance-private.tar.gz"
+          rm -f "$RUNNER_TEMP/play-store-password" "$RUNNER_TEMP/play-key-password" "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64" "$RUNNER_TEMP/blofy-public-certificate.pem" "$RUNNER_TEMP/blofy-maintenance-private.tar.gz" "$RUNNER_TEMP/blofy-play-owner.tar.gz"
+          rm -f play-upload/*.aab
           rm -f app/build/outputs/mapping/release/mapping.txt app/build/outputs/bundle/release/app-release.aab
           rm -f app/build/outputs/apk/androidTest/release/*.apk
 
