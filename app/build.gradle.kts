@@ -1,4 +1,5 @@
 import java.net.URI
+import com.android.build.gradle.internal.tasks.L8DexDesugarLibTask
 
 plugins {
     id("com.android.application")
@@ -7,6 +8,9 @@ plugins {
     id("androidx.baselineprofile")
 }
 
+// Staged name obfuscation. Existing release jobs remain unchanged until acceptance.
+val securityR8Enabled = providers.gradleProperty("BLOFY_SECURITY_R8")
+    .map { it.toBooleanStrict() }.orElse(false).get()
 val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val buildSha = providers.gradleProperty("BLOFY_BUILD_SHA")
@@ -26,6 +30,8 @@ val releaseKeyPassword = releaseSetting("BLOFY_RELEASE_KEY_PASSWORD")
 android {
     namespace = "tv.blofy.player"
     compileSdk = 36
+    // Exercise the actual non-debuggable obfuscated target in the isolated R8 CI job.
+    testBuildType = if (securityR8Enabled) "release" else "debug"
     defaultConfig {
         applicationId = "tv.blofy.player.v2"
         minSdk = 23
@@ -52,7 +58,10 @@ android {
         getByName("release") {
             isDebuggable = false
             isJniDebuggable = false
-            isMinifyEnabled = false
+            isMinifyEnabled = securityR8Enabled
+            if (securityR8Enabled) {
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-security.pro")
+            }
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")
         }
@@ -70,6 +79,17 @@ android {
 
 baselineProfile {
     automaticGenerationDuringBuild = false
+}
+
+if (securityR8Enabled) {
+    // L8 can rename its own classes outside j$. Identify the disposable test
+    // runtime by its producer's exact bytes, never by guessed package prefixes.
+    // This copies evidence only; neither L8 output nor the target is modified.
+    tasks.register<Sync>("stageR8TestL8Evidence") {
+        from(tasks.named<L8DexDesugarLibTask>("l8DexDesugarLibReleaseAndroidTest")
+            .flatMap { it.desugarLibDex })
+        into(rootProject.layout.buildDirectory.dir("r8-review/private/test-l8"))
+    }
 }
 
 dependencies {
