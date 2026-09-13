@@ -30,7 +30,7 @@ import tv.blofy.player.data.local.StreamEntity
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class, qualifiers = "w960dp-h540dp-land-mdpi")
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class, qualifiers = "w960dp-h540dp-land-mdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class LibraryScrollRegressionTest {
     private lateinit var db: BlofyDatabase

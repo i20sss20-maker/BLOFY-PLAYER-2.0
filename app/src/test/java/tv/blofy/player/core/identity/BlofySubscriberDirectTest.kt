@@ -10,7 +10,7 @@ import org.robolectric.annotation.Config
 import tv.blofy.player.data.local.ProviderEntity
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class BlofySubscriberDirectTest {
     private val endpoint = "https://app.example.test"
     private fun payload(host: String = "https://origin.example.test:8443/provider") = JSONObject().apply {

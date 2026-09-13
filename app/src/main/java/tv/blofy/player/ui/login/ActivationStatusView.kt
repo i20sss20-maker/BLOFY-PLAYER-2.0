@@ -52,7 +52,7 @@ internal class ActivationStatusView(context: Context) : LinearLayout(context) {
         })
         detail.text = when {
             blocked -> context.getString(R.string.trial_contact_support)
-            expired -> context.getString(R.string.trial_renew_qr)
+            expired -> context.getString(if (tv.blofy.player.BuildConfig.IS_GOOGLE_PLAY) R.string.play_license_expired else R.string.trial_renew_qr)
             snapshot?.state in listOf(State.TRIAL, State.ACTIVE) && remaining != null -> {
                 val days = remaining / 1440L
                 val hours = (remaining % 1440L) / 60L

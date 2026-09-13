@@ -81,7 +81,7 @@ class ProviderSecretCipherTest {
             requestedCreation += create
             throw GeneralSecurityException("temporarily unavailable")
         }
-        assertEquals(mixed, unavailable.seal(mixed))
+        assertThrows(ProviderSecretUnavailableException::class.java) { unavailable.seal(mixed) }
         assertEquals(listOf(false), requestedCreation)
         assertEquals(original, ProviderSecretCipher { aesKey }.open(mixed))
     }
@@ -94,9 +94,16 @@ class ProviderSecretCipherTest {
         assertEquals(original, codec.open(migrated))
     }
 
-    @Test fun failedEncryptionKeepsOriginalCredentialsInsteadOfPartialWrites() {
+    @Test fun failedEncryptionRejectsNewPlaintextAndPartialWrites() {
         val invalidKey = SecretKeySpec(ByteArray(15), "AES")
-        assertEquals(original, ProviderSecretCipher { invalidKey }.seal(original))
+        assertThrows(ProviderSecretUnavailableException::class.java) {
+            ProviderSecretCipher { invalidKey }.seal(original)
+        }
+        val sealed = ProviderSecretCipher { aesKey }.seal(original)
+        assertThrows(ProviderSecretUnavailableException::class.java) {
+            ProviderSecretCipher { invalidKey }.sealForUpdate(original.copy(password = "changed"), sealed)
+        }
+        assertEquals(original, ProviderSecretCipher { aesKey }.open(sealed))
     }
 
     @Test fun emptyM3uCredentialsStayEmpty() {

@@ -15,6 +15,7 @@ class AppUpdateLifecycle : Application.ActivityLifecycleCallbacks {
     private var checkScheduled = false
 
     override fun onActivityResumed(activity: Activity) {
+        if (tv.blofy.player.BuildConfig.IS_GOOGLE_PLAY) return
         if (checkedThisProcess || checkScheduled || activity !is HomeActivity) return
         checkScheduled = true
         activity.lifecycleScope.launch {

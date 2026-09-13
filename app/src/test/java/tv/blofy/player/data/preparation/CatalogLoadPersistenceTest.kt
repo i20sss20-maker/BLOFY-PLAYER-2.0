@@ -33,7 +33,7 @@ import tv.blofy.player.data.metadata.ProviderMetadataCache
 import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class CatalogLoadPersistenceTest {
     @get:Rule internal val databaseIsolation = DatabaseIsolationRule()
     private val app get() = RuntimeEnvironment.getApplication()

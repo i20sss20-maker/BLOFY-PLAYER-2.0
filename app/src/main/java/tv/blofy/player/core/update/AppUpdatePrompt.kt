@@ -19,6 +19,13 @@ object AppUpdatePrompt {
     private val processCheckStarted = AtomicBoolean(false)
 
     fun check(activity: AppCompatActivity, force: Boolean = false) {
+        if (BuildConfig.IS_GOOGLE_PLAY) {
+            if (force) runCatching {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(
+                    "https://play.google.com/store/apps/details?id=${BuildConfig.APPLICATION_ID}")))
+            }.onFailure { Toast.makeText(activity, "Google Play is unavailable", Toast.LENGTH_SHORT).show() }
+            return
+        }
         if (!force && !processCheckStarted.compareAndSet(false, true)) return
         activity.lifecycleScope.launch {
             val release = AppReleaseRepository.check(activity, force)

@@ -18,7 +18,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.WatchStateEntity
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class HomeWatchHistoryTest {
     private lateinit var db: BlofyDatabase
 

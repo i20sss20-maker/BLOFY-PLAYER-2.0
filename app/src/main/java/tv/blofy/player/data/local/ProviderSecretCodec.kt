@@ -102,11 +102,10 @@ internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
                 password = sealValue(provider.password, secretKey),
                 subscriberToken = sealValue(provider.subscriberToken, secretKey),
             )
-        } catch (_: Exception) {
-            // Compatibility policy: keep the *entire original row* on defective TV firmware.
-            // This is a plaintext fallback, not successful encryption. Do not erase credentials
-            // or publish a new partially encrypted row when any encryption operation fails.
-            provider
+        } catch (error: Exception) {
+            // Abort the Room transaction before any plaintext or partial ciphertext is written.
+            // Existing rows and the Keystore alias remain untouched and can be retried later.
+            throw ProviderSecretUnavailableException(error)
         }
     }
 
@@ -167,3 +166,7 @@ internal class ProviderSecretCipher(private val key: (Boolean) -> SecretKey) {
 }
 
 private const val PROVIDER_SECRET_PREFIX = "BLOFYENC1:"
+
+class ProviderSecretUnavailableException(cause: Throwable) : GeneralSecurityException(
+    "تعذر حفظ بيانات الاشتراك بأمان. أعد تشغيل الجهاز ثم حاول مرة أخرى. لم تُحذف بياناتك.", cause
+)
