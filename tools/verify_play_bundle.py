@@ -8,6 +8,7 @@ import re
 import tempfile
 import zipfile
 from audit_published_apk import audit
+from probe_android_page_size import probe_android_page_size
 from run_r8_instrumentation import command, completed_cases, partition_test_dex
 
 PACKAGE='tv.blofy.player.v2'
@@ -18,7 +19,7 @@ def main():
     run=Path(os.environ['RUNNER_TEMP']); output=Path('play-upload');output.mkdir(exist_ok=True)
     def adb(*args,timeout=120): return command(sdk/'platform-tools/adb','-s','emulator-5554',*args,timeout=timeout)
     assert adb('shell','getprop','ro.kernel.qemu').strip()=='1'
-    assert adb('shell','getconf','PAGE_SIZE').strip()=='16384','16 KB emulator required; do not substitute a 4 KB result'
+    page_size=probe_android_page_size(adb,command,sdk=sdk,ndk_version=os.environ['ANDROID_NDK_VERSION'],run=run)
     adb('root');adb('wait-for-device');assert adb('shell','id','-u').strip()=='0'
     assert 'package:'+PACKAGE not in adb('shell','pm','list','packages',PACKAGE).splitlines()
     checks=[]
@@ -62,7 +63,7 @@ def main():
             case['status']==0 and case['class']=='tv.blofy.player.security.PlayBundleSmokeTest' for case in cases),result[-12000:]
         assert re.search(r'^INSTRUMENTATION_CODE: -1\s*$',result,re.M)
         assert PACKAGE not in adb('logcat','-b','crash','-d')
-        report={'commit':os.environ['GITHUB_SHA'],'page_size':16384,'api':35,'abi':'x86_64',
+        report={'commit':os.environ['GITHUB_SHA'],'page_size':page_size,'page_size_probe':'android-bionic-native','api':35,'abi':'x86_64',
             'aab_sha256':hashlib.sha256((output/'BLOFY-PLAYER-rc07.46-play.aab').read_bytes()).hexdigest(),
             'split_signatures_verified':True,'original_ffmpeg_loaded':True,'encrypted_room_roundtrip':True,
             'installer_permission_absent':True,'network_blocked_before_first_launch':True,'tests':cases,
