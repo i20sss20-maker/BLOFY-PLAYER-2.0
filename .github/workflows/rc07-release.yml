@@ -6,6 +6,9 @@ on:
     branches: [rc07-runtime-recovery]
     paths:
       - .github/workflows/rc07-release.yml
+      - tools/verify_play_bundle.py
+      - tools/probe_android_page_size.py
+      - tools/r8_tests/**
 
 permissions:
   contents: read
