@@ -1,0 +1,30 @@
+{
+  "reviewed_at": "2026-09-13",
+  "source": "npm audit --omit=dev --json",
+  "scope": "Fresh lock resolution of production package.json in an isolated directory; not proof of the deployed dependency tree",
+  "vulnerabilities": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "packages": {
+    "node_modules/pg": "8.23.0",
+    "node_modules/pg-cloudflare": "1.4.0",
+    "node_modules/pg-connection-string": "2.14.0",
+    "node_modules/pg-int8": "1.0.1",
+    "node_modules/pg-pool": "3.14.0",
+    "node_modules/pg-protocol": "1.16.0",
+    "node_modules/pg-types": "2.2.0",
+    "node_modules/pgpass": "1.0.5",
+    "node_modules/postgres-array": "2.0.0",
+    "node_modules/postgres-bytea": "1.0.1",
+    "node_modules/postgres-date": "1.0.7",
+    "node_modules/postgres-interval": "1.2.0",
+    "node_modules/split2": "4.2.0",
+    "node_modules/xtend": "4.0.2"
+  },
+  "lock_sha256": "841adccbea64750cfaedddce3a1877054d6e7bd312c64a7444c3d8805d60a3ac"
+}
