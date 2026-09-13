@@ -126,7 +126,7 @@ class LoginActivity : AppCompatActivity() {
         }
         activation.addView(loginText(R.string.login_link_tv, 19f, true).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(-1, dp(28)))
         activation.addView(loginText(R.string.login_scan_hint, 12f).apply {
-            visibility = if (resources.configuration.screenHeightDp < 540) View.GONE else View.VISIBLE
+            visibility = if (resources.configuration.screenHeightDp <= 600) View.GONE else View.VISIBLE
             gravity = Gravity.CENTER
             maxLines = 2
         }, LinearLayout.LayoutParams(-1, dp(36)))

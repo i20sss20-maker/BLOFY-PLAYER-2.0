@@ -44,7 +44,7 @@ internal class ActivationStatusView(context: Context) : LinearLayout(context) {
         title.setTextColor(if (expired || blocked) 0xFFFFCCA0.toInt() else CinemaStyle.Accent)
         title.text = context.getString(when {
             blocked -> R.string.trial_blocked
-            expired && snapshot?.state == State.TRIAL -> R.string.trial_ended
+            expired && snapshot?.trial == true -> R.string.trial_ended
             expired -> R.string.activation_ended
             snapshot?.state == State.TRIAL -> R.string.trial_remaining
             snapshot?.state == State.ACTIVE -> R.string.activation_active

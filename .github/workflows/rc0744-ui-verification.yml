@@ -51,6 +51,7 @@ jobs:
           api-level: ${{ matrix.api }}
           arch: ${{ matrix.arch }}
           target: ${{ matrix.target }}
+          profile: ${{ matrix.kind == 'tv' && 'tv_1080p' || 'pixel_2' }}
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: bash tools/verify_rc0744_ui.sh ${{ matrix.kind }}

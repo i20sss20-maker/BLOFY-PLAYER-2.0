@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.GridLayout
 import android.widget.TextView
 import android.widget.ScrollView
 import tv.blofy.player.ui.common.CinemaStyle
@@ -65,10 +66,25 @@ class CommercialSettingsActivity : AppCompatActivity() {
             CommercialRuntime.clearAutomaticSafeMode(this)
             render()
         }
-        val back = actionButton("رجوع") { finish() }
-        listOf(imageButton, safeButton, refresh, clearAuto, back).forEach { button ->
-            page.addView(button, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        val grid = GridLayout(this).apply {
+            columnCount = if (resources.configuration.screenWidthDp >= 700) 2 else 1
+            layoutDirection = resources.configuration.layoutDirection
         }
+        listOf(imageButton, safeButton, refresh, clearAuto).forEachIndexed { index, button ->
+            button.id = View.generateViewId()
+            grid.addView(button, GridLayout.LayoutParams().apply {
+                rowSpec = GridLayout.spec(index / grid.columnCount, GridLayout.FILL)
+                columnSpec = GridLayout.spec(index % grid.columnCount, 1f)
+                width = 0; height = -2
+                setMargins(dp(5), dp(5), dp(5), dp(5))
+            })
+        }
+        page.addView(grid, LinearLayout.LayoutParams(-1, -2))
+        page.addView(Button(this).apply {
+            text = getString(tv.blofy.player.R.string.back)
+            CinemaStyle.styleButton(this)
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(18) })
         setContentView(ScrollView(this).apply {
             isFillViewport = true
             isVerticalScrollBarEnabled = false

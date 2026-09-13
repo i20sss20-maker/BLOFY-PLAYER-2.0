@@ -22,3 +22,15 @@ test -f ui-evidence/ui-refinement/settings-cards.png
 test -f ui-evidence/ui-refinement/trial-expired.png
 test -f ui-evidence/ui-refinement/details-movie-cast.png
 test -f ui-evidence/ui-refinement/details-series-cast.png
+
+# Bounded synthetic-screen evidence is also readable through the Actions log API.
+python3 - <<'PYSCREEN'
+import base64,pathlib
+for folder,names in [('ui-refinement',['settings-cards','trial-active','trial-expired','details-movie-cast']),('rc37-ui',['exit-stay'])]:
+ for name in names:
+  image=pathlib.Path('ui-evidence')/folder/(name+'.png')
+  if image.is_file():
+   data=image.read_bytes()
+   assert len(data) < 2_000_000
+   print('BLOFY_SCREEN '+name+' '+base64.b64encode(data).decode())
+PYSCREEN

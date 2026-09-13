@@ -41,6 +41,9 @@ class InterfaceRefinementTest {
     private val id = "refinement-${System.nanoTime()}"
 
     @Before fun setup() {
+        instrumentation.runOnMainSync {
+            androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(androidx.core.os.LocaleListCompat.forLanguageTags("ar"))
+        }
         previous = singleton.get(null)
         db = Room.inMemoryDatabaseBuilder(context, BlofyDatabase::class.java).build()
         singleton.set(null, db)

@@ -51,5 +51,9 @@ class ActivationStatusViewTest {
         assertEquals(State.ACTIVE, ActivationDisplayState.read(context, identity.copy(deviceId = "other-device")).state)
         assertEquals(State.ACTIVE, ActivationDisplayState.read(context, identity.copy(expiresAt = null)).state)
         assertTrue(identity.activated)
+        ActivationDisplayState.record(context, identity, ActivationCheckResponse("expired", identity.expiresAt))
+        val view = ActivationStatusView(context)
+        view.render(ActivationDisplayState.read(context, identity))
+        assertEquals(context.getString(R.string.trial_ended), title(view))
     }
 }

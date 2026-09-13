@@ -106,7 +106,7 @@ class SettingsActivity : AppCompatActivity() {
         })
         header.addView(titleBox, LinearLayout.LayoutParams(0, dp(56), 1f))
         val back = settingButton(getString(R.string.back), true) { finish() }.apply { id = View.generateViewId() }
-        header.addView(back, LinearLayout.LayoutParams(dp(98), dp(CinemaStyle.ActionHeight)))
+        header.addView(back, LinearLayout.LayoutParams(dp(98), dp(48)))
         page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
 
         status = TextView(this).apply {
