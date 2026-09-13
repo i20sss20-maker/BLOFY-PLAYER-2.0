@@ -1,7 +1,6 @@
 package tv.blofy.player.core.identity
 
 import android.app.Application
-import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -9,6 +8,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import tv.blofy.player.core.cloud.ProfileCloudClient
 
@@ -33,7 +33,7 @@ class ActivationRedirectSecurityTest {
     }
 
     @Test fun profileHeadersNeverReachARedirectDestination() = runBlocking {
-        val app = ApplicationProvider.getApplicationContext<Application>()
+        val app = RuntimeEnvironment.getApplication()
         MockWebServer().use { service -> MockWebServer().use { other ->
             service.start(); other.start()
             service.enqueue(MockResponse().setResponseCode(302).setHeader("Location", other.url("/capture")))
