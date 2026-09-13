@@ -137,6 +137,12 @@ jobs:
         env:
           BLOFY_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
         run: node --test test/approved-release-rc0744.test.mjs test/approved-release-rc0745.test.mjs
+      - name: Subscriber session PIN protection with concurrent PostgreSQL workers
+        env:
+          BLOFY_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: node --test test/subscriber-session-auth.test.mjs
+      - name: Existing Android and website subscriber session contracts
+        run: node test/subscriber-session-contract-runtime.mjs
       - name: Start activation service
         run: |
           npm start > /tmp/blofy-activation.log 2>&1 &
