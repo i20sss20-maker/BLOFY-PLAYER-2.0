@@ -60,6 +60,12 @@ test('commercial services: isolated PostgreSQL and actual HTTP contracts',async 
     await request('/api/v1/activation/check',auth(ids[3],{trialScope:crypto.createHash('sha256').update('other-test-scope').digest('hex')}));
     const claim=(await pool.query('SELECT scope_hash FROM device_trial_claims LIMIT 1')).rows[0];
     assert.notEqual(claim.scope_hash,scope);
+    const legacy='BLOFY-OLDX-OLDX', legacyScope=crypto.createHash('sha256').update('legacy-paid').digest('hex');
+    await request('/api/v1/activation/check',auth(legacy));
+    await pool.query("UPDATE devices SET status='active',trial_started_at=NOW()-INTERVAL '60 days',expires_at=NOW()+INTERVAL '1 year' WHERE device_id=$1",[legacy]);
+    await request('/api/v1/activation/check',auth(legacy,{trialScope:legacyScope}));
+    const reinstall=await request('/api/v1/activation/check',auth('BLOFY-NEWX-NEWX',{trialScope:legacyScope}));
+    assert.equal(reinstall.body.status,'expired','An upgraded paid device must not grant its paid expiry as a new trial');
   });
   let token;
   await t.test('old proxy tokens stop after block, and stay revoked after unblock',async()=>{

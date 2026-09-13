@@ -3,7 +3,7 @@ import http from 'node:http';
 import { servePrivacyPage } from './privacy-pages.mjs';
 import { createCommercialHandlers } from './commercial-handlers.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
-import { registerDeviceTrial } from './trial-registration.mjs';
+import { registerDeviceTrial, bindExistingTrial } from './trial-registration.mjs';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
@@ -307,6 +307,7 @@ async function activationCheck(req, res) {
       return json(res, 403, { status: 'blocked', serverTime: Date.now(), message: 'unauthorized_device' });
     }
 
+    await bindExistingTrial(client, row, body.trialScope, TRIAL_DAYS, PLAYLIST_ENCRYPTION_KEY);
     const status = normalizeStatus(row);
     if (status === 'expired' && row.status !== 'blocked') {
       await client.query("UPDATE devices SET status='expired', updated_at=NOW() WHERE device_id=$1", [deviceId]);

@@ -1,5 +1,19 @@
 import crypto from 'node:crypto';
 
+export async function bindExistingTrial(client, row, trialScope, trialDays, keyHex) {
+  if (!/^[a-f0-9]{64}$/.test(String(trialScope || '')) || row.data_deleted_at) return;
+  const hash=crypto.createHmac('sha256',Buffer.from(keyHex,'hex')).update('blofy-trial-v1:'+trialScope).digest('hex');
+  const started=row.trial_started_at || row.created_at;
+  if (!started) return;
+  const days=Number.isFinite(trialDays) && trialDays>0 ? Math.min(trialDays,30) : 7;
+  // Paid renewals must never become a new long free trial after reinstalling.
+  const expiry=row.status==='trial' && row.expires_at ? row.expires_at : new Date(new Date(started).getTime()+days*86400000);
+  await client.query(`INSERT INTO device_trial_claims(scope_hash,first_device_id,started_at,expires_at)
+    VALUES($1,$2,$3,$4) ON CONFLICT(scope_hash) DO UPDATE SET
+      started_at=LEAST(device_trial_claims.started_at,EXCLUDED.started_at),
+      expires_at=LEAST(device_trial_claims.expires_at,EXCLUDED.expires_at)`,[hash,row.device_id,started,expiry]);
+}
+
 /** The Android-scoped digest reduces reinstall abuse; it is not remote attestation. */
 export async function registerDeviceTrial(client, { deviceId, proof, appVersion, platform, trialScope, trialDays, keyHex, requireScope = true }) {
   const days = Number.isFinite(trialDays) && trialDays > 0 ? Math.min(trialDays, 30) : 7;

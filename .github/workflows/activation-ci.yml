@@ -48,6 +48,16 @@ jobs:
           agent-browser screenshot downloads-evidence/downloads-phone.png
           agent-browser eval "if(document.documentElement.scrollWidth > innerWidth) throw new Error('Phone horizontal overflow'); 'Phone layout verified'"
           agent-browser errors
+          agent-browser open http://127.0.0.1:8127/privacy
+          agent-browser snapshot -i
+          agent-browser eval "if(document.documentElement.scrollWidth > innerWidth) throw new Error('Privacy page overflow'); 'Privacy layout verified'"
+          agent-browser screenshot downloads-evidence/privacy-phone.png
+          agent-browser eval "document.querySelector('[name=deviceId]').value='BLOFY-TEST-TEST'; document.querySelector('[name=activationCode]').value='123456'; document.querySelector('[name=message]').value='استفسار خصوصية تجريبي'; document.getElementById('privacy-form').requestSubmit(document.querySelector('button[value=support]'))"
+          agent-browser eval "new Promise((resolve,reject)=>{let n=0;let t=setInterval(()=>{if(document.getElementById('result').textContent.includes('وصل استفسارك')){clearInterval(t);resolve('Privacy request delivered to isolated fixture');}else if(++n>50){clearInterval(t);reject(new Error('Privacy request failed'));}},100);})"
+          agent-browser set viewport 1280 720
+          agent-browser snapshot -i
+          agent-browser screenshot downloads-evidence/privacy-desktop.png
+          agent-browser errors
           agent-browser close
           python3 - <<'PYSCREEN'
           import base64,pathlib
