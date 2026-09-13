@@ -54,7 +54,10 @@ object PortalPlaylistClient {
 
     private val syncMutex = Mutex()
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Activation credentials must never follow redirects to another endpoint.
     private val client = OkHttpClient.Builder()
+        .followRedirects(false)
+        .followSslRedirects(false)
         .callTimeout(12, TimeUnit.SECONDS)
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS)
