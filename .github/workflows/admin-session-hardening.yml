@@ -1,0 +1,46 @@
+name: BLOFY Admin Session Hardening
+on:
+  push:
+    branches: [main, security/admin-session-hardening]
+    paths:
+      - services/activation/**
+      - .github/workflows/admin-session-hardening.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: blofy_test
+          POSTGRES_PASSWORD: local_test_only
+          POSTGRES_DB: blofy_admin_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      BLOFY_TEST_DATABASE_URL: postgresql://blofy_test:local_test_only@127.0.0.1:5432/blofy_admin_test
+    defaults:
+      run:
+        working-directory: services/activation
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Syntax validation
+        run: |
+          npm run check
+          node --check src/admin-session-hook.mjs
+          node --check test/admin-session-hardening.test.mjs
+      - name: Full service unit and isolated PostgreSQL tests
+        run: npm test
+      - name: Authenticated admin and public update integration
+        run: node test/admin-release-runtime.mjs
+      - name: Device administration integration
+        run: node test/device-admin-runtime.mjs
