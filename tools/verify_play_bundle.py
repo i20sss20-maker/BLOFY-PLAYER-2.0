@@ -13,6 +13,67 @@ from run_r8_instrumentation import command, completed_cases, partition_test_dex
 
 PACKAGE='tv.blofy.player.v2'
 CERT='c3b98cccd2f0c86809014acd9368bf61c7004cfd419cd867b71fef10bfa6255e'
+
+PLAY_CLASS = 'tv.blofy.player.security.PlayBundleSmokeTest'
+PLAY_CASES = frozenset({
+    'installerAbsentAndOriginalFfmpegLoads',
+    'androidKeystoreAndRoomStoreOnlyEncryptedCredentials',
+    'loginAndPrivacyOpenWithNetworkBlocked',
+})
+
+
+def crash_structure(output):
+    """Expose code locations, never arbitrary exception messages or fixture values.
+
+    The original, unfiltered buffer is used by the publication gate. This summary
+    is diagnostic only; sanitizing it cannot make a failed gate pass.
+    """
+    identifier = r'[A-Za-z_$][A-Za-z0-9_$]*'
+    qualified = identifier + r'(?:\.' + identifier + r')+'
+    # Match only exception/error type identifiers, not their free-form messages.
+    exceptions = re.findall(r'\b(' + qualified + r'(?:Exception|Error))\b', output)
+    frames = re.findall(
+        r'\bat (' + qualified + r'(?:\.<(?:init|clinit)>)?'
+        r'\((?:[A-Za-z0-9_$.-]+\.(?:java|kt)(?::[0-9]+)?|Native Method|Unknown Source(?::[0-9]+)?|SourceFile:[0-9]+)\))',
+        output)
+    signals = re.findall(r'\bsignal ([0-9]+) \((SIG[A-Z0-9]+)\)', output)
+    native_libraries = re.findall(r'/(lib[A-Za-z0-9_.+-]+\.so)\b', output)
+    native_offsets = re.findall(r'#([0-9]{2})\s+pc\s+([0-9a-fA-F]{8,16})\b', output)
+    return {
+        'target_mentioned': PACKAGE in output,
+        'buffer_sha256': hashlib.sha256(output.encode('utf-8')).hexdigest(),
+        'exception_types': list(dict.fromkeys(exceptions))[:32],
+        'java_frames': frames[:96],
+        'native_signals': signals[:16],
+        'native_libraries': list(dict.fromkeys(native_libraries))[:32],
+        'native_offsets': native_offsets[:96],
+        'free_form_messages_omitted': True,
+    }
+
+
+def require_play_runtime_evidence(result, crashes):
+    """Fail on the same raw crash-buffer predicate, even after all three tests pass."""
+    cases = completed_cases(result)
+    cases_ok = (len(cases) == 3 and {c['test'] for c in cases} == PLAY_CASES and
+                all(c['status'] == 0 and c['class'] == PLAY_CLASS for c in cases))
+    terminal_codes = re.findall(r'^INSTRUMENTATION_CODE: (-?[0-9]+)\s*$', result, re.M)
+    runner_ok = (terminal_codes == ['-1'] and 'INSTRUMENTATION_FAILED' not in result
+                 and 'Process crashed' not in result)
+    crashed = PACKAGE in crashes  # Never apply a sanitizer/filter before this gate.
+    if not cases_ok or not runner_ok or crashed:
+        diagnostic = {
+            'all_three_cases_passed': cases_ok,
+            'runner_completed_cleanly': runner_ok,
+            'raw_target_crash_detected': crashed,
+            'crash_structure': crash_structure(crashes),
+            'instrumentation_structure': crash_structure(result),
+            'publication_allowed': False,
+        }
+        print('BLOFY_PLAY_RUNTIME_FAILURE ' + json.dumps(diagnostic, sort_keys=True), flush=True)
+        raise AssertionError('Play runtime evidence rejected; see structural diagnostics above')
+    print('BLOFY_PLAY_RUNTIME_PASS: all three cases, clean runner and empty target crash history', flush=True)
+    return cases
+
 def main():
     assert os.environ['GITHUB_REF']=='refs/heads/rc07-runtime-recovery'
     sdk=Path(os.environ['ANDROID_HOME']); build=sdk/('build-tools/'+os.environ['ANDROID_BUILD_TOOLS_VERSION'])
@@ -57,12 +118,8 @@ def main():
         adb('logcat','-b','crash','-c')
         result=adb('shell','am','instrument','-w','-r','-e','playBundleReview','true','-e','class',
             'tv.blofy.player.security.PlayBundleSmokeTest',PACKAGE+'.test/androidx.test.runner.AndroidJUnitRunner',timeout=240)
-        cases=completed_cases(result)
-        expected={'installerAbsentAndOriginalFfmpegLoads','androidKeystoreAndRoomStoreOnlyEncryptedCredentials','loginAndPrivacyOpenWithNetworkBlocked'}
-        assert len(cases)==3 and {case['test'] for case in cases}==expected and all(
-            case['status']==0 and case['class']=='tv.blofy.player.security.PlayBundleSmokeTest' for case in cases),result[-12000:]
-        assert re.search(r'^INSTRUMENTATION_CODE: -1\s*$',result,re.M)
-        assert PACKAGE not in adb('logcat','-b','crash','-d')
+        crashes=adb('logcat','-b','crash','-d')
+        cases=require_play_runtime_evidence(result,crashes)
         report={'commit':os.environ['GITHUB_SHA'],'page_size':page_size,'page_size_probe':'android-bionic-native','api':35,'abi':'x86_64',
             'aab_sha256':hashlib.sha256((output/'BLOFY-PLAYER-rc07.46-play.aab').read_bytes()).hexdigest(),
             'split_signatures_verified':True,'original_ffmpeg_loaded':True,'encrypted_room_roundtrip':True,
