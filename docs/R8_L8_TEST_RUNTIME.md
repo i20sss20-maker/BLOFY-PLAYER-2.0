@@ -1,0 +1,9 @@
+# Minified instrumentation runtime correction
+
+Run 34735413353 built and verified an actual non-debuggable R8 target, renamed 811 of 1391 mapped app classes, and passed 546 JVM cases. All four FFmpeg native hashes matched the same-source unminified build. Its Android instrumentation did NOT pass: the test APK's independently shrunken j$ runtime shadowed the target's runtime (missing Objects.requireNonNull and DesugarCollections.synchronizedMap), causing three failures and a process crash.
+
+This correction preserves the entire target APK and every test-code DEX byte. It removes only DEX files consisting exclusively of j$ backport classes from the disposable instrumentation carrier, then aligns and signs that carrier with the same disposable CI identity. Mixed DEX files fail closed rather than removing test code. The app supplies its existing Java backport implementation. The underlying duplicate-classpath problem and single-app runtime approach are described at https://slackhq.github.io/keeper/#core-library-desugaring-l8-support . No new Gradle plugin or production dependency is installed.
+
+The runner validates packages, signatures, unchanged target APK hash and unchanged retained test DEX. It executes the original six assertions via adb on the isolated emulator, requires six distinct named successes and rejects skips, assumptions, failures, wrong classes, duplicates and process crashes. An explicit r8Review argument prevents these Release-only tests from failing ordinary Debug test suites; zero skipped tests remain mandatory in this job.
+
+This is a test-harness correction, not a claim that a failing target has been repaired. Actual follow-up run results determine success. No customer APK, mapping, production key, provider account, application source, player or website is modified or published by it.

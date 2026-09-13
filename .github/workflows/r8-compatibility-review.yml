@@ -68,12 +68,13 @@ jobs:
           "$tools/aapt" dump badging app/build/outputs/apk/release/app-release.apk > "$RUNNER_TEMP/r8-badging.txt"
           ! grep -Fq application-debuggable "$RUNNER_TEMP/r8-badging.txt"
           python3 tools/r8_review_summary.py
+          python3 -m unittest discover -s tools/r8_tests -v
       - name: Enable KVM for the isolated emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Exercise the non-debuggable R8 target on Android
+      - name: Exercise unchanged non-debuggable R8 target with shared application L8 runtime
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 35
@@ -81,22 +82,19 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: gradle --no-daemon --no-build-cache --max-workers=2 -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL=https://blofy-security-review.invalid -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$BLOFY_REVIEW_AAR" -Pandroid.testInstrumentationRunnerArguments.class=tv.blofy.player.security.R8RuntimeContractTest :app:connectedReleaseAndroidTest
+          script: python3 tools/run_r8_instrumentation.py
       - name: Confirm all six actual-target tests completed without skips
         shell: bash
         run: |
           python3 - <<'PY'
-          import json,pathlib,xml.etree.ElementTree as ET
-          files=list(pathlib.Path('app/build/outputs/androidTest-results/connected').rglob('*.xml'))
-          tests=[]
-          for f in files:
-              tests.extend(ET.parse(f).getroot().iter('testcase'))
-          selected=[t for t in tests if 'R8RuntimeContractTest' in t.get('classname','')]
-          assert len(selected)==6, 'Expected all six instrumentation cases'
-          assert not any(t.find(tag) is not None for t in selected for tag in ['failure','error','skipped'])
+          import json,pathlib
           p=pathlib.Path('build/r8-review/public/summary.json')
-          s=json.loads(p.read_text());s['runtime_validation']={'android_api':35,'abi':'x86_64','tests':6,'failures':0,'skips':0}
-          p.write_text(json.dumps(s,indent=2));print(json.dumps(s,indent=2))
+          s=json.loads(p.read_text());v=s['runtime_validation']
+          assert v['all_six_passed_without_skips'] is True
+          assert len(v['completed_cases']) == 6
+          assert all(t['status']==0 for t in v['completed_cases'])
+          assert s['instrumentation_harness']['test_code_dex_unchanged'] is True
+          print(json.dumps(s,indent=2))
           PY
       - name: Upload aggregate evidence only, never APKs, signing keys or mapping files
         if: always()

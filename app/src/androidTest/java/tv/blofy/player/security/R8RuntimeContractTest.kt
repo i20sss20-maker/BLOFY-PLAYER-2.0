@@ -9,6 +9,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import tv.blofy.player.BuildConfig
@@ -24,6 +26,14 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 class R8RuntimeContractTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+    @Before fun onlyExplicitIsolatedReview() {
+        // Ordinary Debug/production-target test suites do not run these Release-only checks.
+        // The review runner supplies this argument and requires six passes, with zero skips.
+        assumeTrue(InstrumentationRegistry.getArguments().getString("r8Review") == "true")
+        assertEquals("https://blofy-security-review.invalid", BuildConfig.ACTIVATION_BASE_URL)
+        assertFalse(BuildConfig.DEBUG)
+    }
 
     @Test fun activationJsonNamesSurviveObfuscation() {
         assertFalse("R8 target must be non-debuggable", BuildConfig.DEBUG)
