@@ -8,9 +8,11 @@ const items = [
 ];
 http.createServer(async (req, res) => {
   const path = new URL(req.url, 'http://localhost').pathname;
-  if (path.endsWith('.css')) {
-    res.setHeader('Content-Type', 'text/css');
-    res.end(await readFile(new URL('../web/release-manager.css', import.meta.url)));
+  const assets = { '/premium.css': 'text/css', '/release-manager.css': 'text/css',
+    '/blofy-logo.png': 'image/png', '/IBMPlexSansArabic-Regular.ttf': 'font/ttf', '/IBMPlexSansArabic-Medium.ttf': 'font/ttf' };
+  if (assets[path]) {
+    res.setHeader('Content-Type', assets[path]);
+    res.end(await readFile(new URL('../web' + path, import.meta.url)));
   } else {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.end(renderPublicDownloads(items));
