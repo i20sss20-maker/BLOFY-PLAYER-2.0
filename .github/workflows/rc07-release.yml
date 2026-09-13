@@ -8,6 +8,7 @@ on:
       - .github/workflows/rc07-release.yml
       - tools/verify_play_bundle.py
       - tools/probe_android_page_size.py
+      - tools/build_play_device_apks.py
       - tools/r8_tests/**
 
 permissions:
@@ -263,13 +264,8 @@ jobs:
           jarsigner -verify play-upload/BLOFY-PLAYER-rc07.46-play.aab
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar -o "$RUNNER_TEMP/bundletool.jar"
           echo "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29  $RUNNER_TEMP/bundletool.jar" | sha256sum --check
-          printf '%s' "$BLOFY_RELEASE_STORE_PASSWORD" > "$RUNNER_TEMP/play-store-password"
-          printf '%s' "$BLOFY_RELEASE_KEY_PASSWORD" > "$RUNNER_TEMP/play-key-password"
-          printf '%s' '{"supportedAbis":["x86_64"],"supportedLocales":["ar","en"],"screenDensity":420,"sdkVersion":35}' > "$RUNNER_TEMP/play-device.json"
           java -jar "$RUNNER_TEMP/bundletool.jar" validate --bundle=play-upload/BLOFY-PLAYER-rc07.46-play.aab
-          java -jar "$RUNNER_TEMP/bundletool.jar" build-apks --bundle=play-upload/BLOFY-PLAYER-rc07.46-play.aab --output="$RUNNER_TEMP/blofy-play.apks" --device-spec="$RUNNER_TEMP/play-device.json" --ks="$BLOFY_RELEASE_KEYSTORE_PATH" --ks-key-alias="$BLOFY_RELEASE_KEY_ALIAS" --ks-pass=file:"$RUNNER_TEMP/play-store-password" --key-pass=file:"$RUNNER_TEMP/play-key-password"
-          rm -f "$RUNNER_TEMP/play-store-password" "$RUNNER_TEMP/play-key-password"
-      - name: Verify generated Play splits and FFmpeg on a 16 KB emulator
+      - name: Generate device-matched Play splits and verify FFmpeg on a 16 KB emulator
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         env:
           BLOFY_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/blofy-production.keystore
@@ -292,7 +288,7 @@ jobs:
           # AAB contains the R8 mapping. Public repository artifacts must not expose it.
           tar -czf "$RUNNER_TEMP/blofy-play-owner.tar.gz" -C play-upload BLOFY-PLAYER-rc07.46-play.aab play-bundle-verification.json play-split-alignment.json
           node tools/release_vault.mjs seal "$RUNNER_TEMP/blofy-play-owner.tar.gz" "$RUNNER_TEMP/blofy-public-certificate.pem" play-upload/BLOFY-PLAYER-rc07.46-play-owner.vault.json
-          EXPECTED_CERT_SHA256="59cb2e6729db6ec6cbe900020493c34e6586688126c40d85b347055a64cd1a75" node tools/release_vault.mjs seal "$RUNNER_TEMP/blofy-play-owner.tar.gz" tools/release-delivery/rc0746-recipient.pem play-upload/BLOFY-PLAYER-rc07.46-play-delivery.vault.json
+          EXPECTED_CERT_SHA256="084b67c8588da608f86db29b6aa38d9e899a3b9c2f7f8ed5b465326f14b3b32d" node tools/release_vault.mjs seal "$RUNNER_TEMP/blofy-play-owner.tar.gz" tools/release-delivery/rc0746-session-recipient.pem play-upload/BLOFY-PLAYER-rc07.46-play-delivery.vault.json
           rm -f play-upload/BLOFY-PLAYER-rc07.46-play.aab "$RUNNER_TEMP/blofy-play-owner.tar.gz"
       - name: Retain encrypted Play bundle and verification evidence
         uses: actions/upload-artifact@v4
