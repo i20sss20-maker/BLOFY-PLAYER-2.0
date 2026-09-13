@@ -1,4 +1,4 @@
-# rc07.43 signed R8 candidate
+# rc07.43 signed R8 test release
 
 The owner requested continuation after PR #59 passed 546 JVM and six actual-R8
 runtime cases. That opt-in preparation is integrated into `rc07-runtime-recovery`.
@@ -6,6 +6,30 @@ This candidate enables the same name-obfuscation rules in the existing signed
 release workflow, with version `2.0.0-rc07.43` / `2000054`. Shrinking and
 optimization stay disabled. Application runtime source, player engines, native
 configuration, theme, website and customer update selection are unchanged.
+
+## Verified result
+
+[Signed run 34739711821](https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/actions/runs/34739711821)
+completed successfully for source `23c7c74b12ec3a453505243be727ecae82c7e0a5` and
+published [the optional rc07.43 test release](https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/tag/v2.0.0-rc07.43).
+Both named upgrade cases passed without skips. The new actual signed app recovered
+the old identity, PIN, encrypted provider credentials, favorite, lock and resume
+position without uninstalling or clearing app data. Its standalone Login resumed
+and the same process stayed alive for another five seconds with no recorded crash.
+All application traffic remained blocked on the API 35 x86_64 emulator.
+
+The original signing certificate matched, 811 of 1391 mapped app classes were
+renamed, all four FFmpeg libraries matched the released rc07.42 bytes, and the
+encrypted AAB/mapping archive passed exact decryption round-trip verification.
+The uploaded APK is 16,619,120 bytes; GitHub's asset digest equals both CI reports:
+`9a9a26e227f54fd35cd7722bfe538175b9074d55fe8094164b4228949b2f50ed`.
+Public assets include the aggregate protection/upgrade reports and encrypted
+maintenance archive; no plaintext AAB, mapping or test APK was published.
+
+The same source passed [Android CI 34739712841](https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/actions/runs/34739712841)
+and [FFmpeg CI 34739712766](https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/actions/runs/34739712766).
+Physical receiver and real-provider playback validation remain before a primary
+rollout. The separate inherited activation-service failures are recorded below.
 
 The production environment, allowed release branch and pinned signing certificate
 remain mandatory. Publication still creates an optional GitHub prerelease, not a
@@ -65,8 +89,8 @@ All plaintext maintenance inputs and signing intermediates are removed from CI
 after the job, including failure paths.
 
 Local validation before CI: seven generated-key encryption/tampering tests and
-22 evidence/provenance tests pass. Actual signed-build and emulator results must
-be recorded from their completed run, not inferred from these local tests.
+22 evidence/provenance tests passed and passed again in the signed workflow.
+The completed signed-build and emulator evidence is linked above.
 
 ## CI lineage and separate website status
 
@@ -100,4 +124,5 @@ server login limits, individual session revocation, MFA, old deployment exposure
 and the previously deferred history audit. None is claimed solved by this release.
 
 References: [Android App Bundle metadata](https://developer.android.com/guide/app-bundle/app-bundle-format),
-[Node.js cryptography](https://nodejs.org/api/crypto.html).
+[Node.js cryptography](https://nodejs.org/api/crypto.html),
+[Android activity-manager launch options](https://developer.android.com/tools/adb#am).
