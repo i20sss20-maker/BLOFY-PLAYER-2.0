@@ -7,6 +7,7 @@ import android.graphics.Color
 import tv.blofy.player.ui.common.CinemaStyle
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.view.Gravity
 import android.widget.Button
 import android.widget.ImageView
@@ -71,16 +72,14 @@ class MovieDetailsActivity : AppCompatActivity() {
             })
 
             val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
-            metadata?.logoUrl?.takeIf(String::isNotBlank)?.let { logoUrl ->
-                val logo = ImageView(this@MovieDetailsActivity).apply {
-                    scaleType = ImageView.ScaleType.FIT_END
-                    adjustViewBounds = true
-                    contentDescription = title
-                }
-                info.addView(logo, layout.logoParams())
-                ArtworkLoader.load(logo, logoUrl)
+            val logo = ImageView(this@MovieDetailsActivity).apply {
+                scaleType = ImageView.ScaleType.FIT_END
+                adjustViewBounds = true
+                contentDescription = title
+                visibility = View.GONE
             }
-            info.addView(TextView(this@MovieDetailsActivity).apply {
+            info.addView(logo, layout.logoParams())
+            val titleView = TextView(this@MovieDetailsActivity).apply {
                 text = title
                 textSize = if (metadata?.logoUrl.isNullOrBlank()) 28f else 18f
                 typeface = BlofyTvDesign.HeadingTypeface
@@ -89,10 +88,10 @@ class MovieDetailsActivity : AppCompatActivity() {
                 maxLines = 2
                 includeFontPadding = false
                 alpha = if (metadata?.logoUrl.isNullOrBlank()) 1f else .9f
-            })
+            }
+            info.addView(titleView)
 
-            info.addView(TextView(this@MovieDetailsActivity).apply {
-                text = buildList {
+            fun metadataStats(metadata: tv.blofy.player.data.metadata.ProviderMetadata.Metadata?) = buildList {
                     add(getString(R.string.details_movie_type))
                     addAll(ContentPresentation.of(stream).badges)
                     (metadata?.releaseDate?.take(4) ?: stream.year)?.takeIf(String::isNotBlank)?.let(::add)
@@ -107,12 +106,16 @@ class MovieDetailsActivity : AppCompatActivity() {
                     metadata?.originalLanguage?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
                     stream.extension?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
                 }.joinToString("   •   ")
+            val statsView = TextView(this@MovieDetailsActivity).apply {
+                tag = "blofy_details_stats"
+                text = metadataStats(metadata)
                 textSize = 13.5f
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(0xFFE8D8FA.toInt())
                 gravity = contentGravity
                 setPadding(0, dp(7), 0, dp(10))
-            })
+            }
+            info.addView(statsView)
 
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = getString(R.string.details_story)
@@ -192,7 +195,16 @@ class MovieDetailsActivity : AppCompatActivity() {
             }
             info.addView(castContainer, LinearLayout.LayoutParams(-1, -2))
             ProviderDetailsBinding(this@MovieDetailsActivity, overviewView, crewView,
-                castContainer, provider, stream).start(metadata)
+                castContainer, provider, stream) { updated ->
+                    statsView.text = metadataStats(updated)
+                    titleView.text = ContentPresentation.title(updated?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
+                    ArtworkLoader.loadPriority(backdrop, listOf(updated?.backdropUrl, stream.backdrop, stream.icon))
+                    ArtworkLoader.loadPriority(poster, listOf(updated?.posterUrl, stream.icon, stream.backdrop))
+                    val logoUrl = updated?.logoUrl
+                    logo.visibility = if (logoUrl.isNullOrBlank()) View.GONE else View.VISIBLE
+                    if (!logoUrl.isNullOrBlank()) ArtworkLoader.load(logo, logoUrl)
+                    titleView.textSize = if (logoUrl.isNullOrBlank()) 28f else 18f
+                }.start(metadata)
 
             if (layout.isTv) play.requestFocus()
         }

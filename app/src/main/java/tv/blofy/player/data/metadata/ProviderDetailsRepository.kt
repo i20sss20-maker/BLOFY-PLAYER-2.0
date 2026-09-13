@@ -27,8 +27,20 @@ internal object ProviderDetailsRepository {
                 // A partial provider response must not discard useful cached cast or story.
                 val merged = fetched?.let {
                     it.copy(overview = it.overview?.takeIf(String::isNotBlank) ?: cached?.overview,
-                        cast = it.cast.ifEmpty { cached?.cast.orEmpty() },
-                        crew = it.crew.ifEmpty { cached?.crew.orEmpty() })
+                        cast = XtreamMetadataFallback.mergePeople(it.cast + cached?.cast.orEmpty()),
+                        crew = it.crew.ifEmpty { cached?.crew.orEmpty() },
+                        rating = it.rating ?: cached?.rating,
+                        posterUrl = it.posterUrl ?: cached?.posterUrl,
+                        backdropUrl = it.backdropUrl ?: cached?.backdropUrl,
+                        logoUrl = it.logoUrl ?: cached?.logoUrl,
+                        trailerUrl = it.trailerUrl ?: cached?.trailerUrl,
+                        releaseDate = it.releaseDate ?: cached?.releaseDate,
+                        runtimeMinutes = it.runtimeMinutes ?: cached?.runtimeMinutes,
+                        genres = it.genres.ifEmpty { cached?.genres.orEmpty() },
+                        countries = it.countries.ifEmpty { cached?.countries.orEmpty() },
+                        networks = it.networks.ifEmpty { cached?.networks.orEmpty() },
+                        originalLanguage = it.originalLanguage ?: cached?.originalLanguage,
+                        status = it.status ?: cached?.status)
                 } ?: cached
                 ProviderMetadataCache.write(context, provider.id, stream.key, merged)
                 ProviderMetadataCache.markDetailFetched(context, stream.key, provider.id)

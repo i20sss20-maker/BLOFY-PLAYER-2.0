@@ -149,7 +149,7 @@ class PlaylistActivity : AppCompatActivity() {
                     startActivity(Intent(this@PlaylistActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)); finish()
                 } else finish()
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { status.text = "تعذر تجهيز السيرفر • ${error.message ?: "خطأ اتصال"}"; busy = false }
+            catch (_: Exception) { status.text = "تعذر تجهيز السيرفر • تحقق من البيانات والاتصال ثم حاول مرة أخرى"; busy = false }
         }
 
         fun action(label: String, primary: Boolean, connectAfter: Boolean) = Button(this).apply {
@@ -165,6 +165,9 @@ class PlaylistActivity : AppCompatActivity() {
         setContentView(root); name.requestFocus()
 
         if (editingProviderId != null) lifecycleScope.launch {
+            saveConnect.isEnabled = false
+            saveOnly.isEnabled = false
+            try {
             val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: return@launch
             if (BlofySubscriberClient.isManaged(provider)) {
                 startActivity(Intent(this@PlaylistActivity, BlofySubscriberActivity::class.java).putExtra(EXTRA_PROVIDER_ID, provider.id))
@@ -173,6 +176,13 @@ class PlaylistActivity : AppCompatActivity() {
             }
             name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password)
             status.text = if (provider.providerType.equals("xtream", true)) "XTREAM • ${provider.name}" else "هذه القائمة قديمة وغير مدعومة • أدخل بيانات Xtream"
+            saveConnect.isEnabled = true
+            saveOnly.isEnabled = true
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status.text = "تعذر قراءة بيانات القائمة • أعد فتح الصفحة للمحاولة"
+            }
         }
     }
 

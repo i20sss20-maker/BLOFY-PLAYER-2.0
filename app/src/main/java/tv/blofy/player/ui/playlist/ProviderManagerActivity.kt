@@ -138,7 +138,15 @@ class ProviderManagerActivity : AppCompatActivity() {
         setContentView(root)
 
         lifecycleScope.launch {
-            BlofyDatabase.get(applicationContext).dao().allProviders().collect { render(it) }
+            try {
+                // Rendering labels does not require decrypting every saved provider on TV hardware.
+                val dao = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
+                dao.allProvidersStored().collect { render(it) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status.text = "تعذر قراءة القوائم المحفوظة • أعد فتح الصفحة للمحاولة"
+            }
         }
     }
 

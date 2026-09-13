@@ -259,7 +259,7 @@ class SettingsActivity : AppCompatActivity() {
         grid = GridLayout(this).apply {
             val available = resources.configuration.screenWidthDp - if (isTv()) 72 else 36
             val preferredWidth = (250 * resources.configuration.fontScale.coerceAtLeast(1f)).toInt()
-            columnCount = (available / preferredWidth).coerceIn(1, if (isTv()) 3 else 2)
+            columnCount = (available / preferredWidth).coerceIn(1, 2)
             layoutDirection = uiDirection
             alignmentMode = GridLayout.ALIGN_BOUNDS
             clipChildren = false
