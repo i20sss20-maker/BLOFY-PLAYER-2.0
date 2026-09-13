@@ -1,0 +1,64 @@
+name: BLOFY rc07.44 interface verification
+on:
+  pull_request:
+    branches: [rc07-runtime-recovery]
+    paths: ['app/**', '.github/workflows/rc0744-ui-verification.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rc0744-ui-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  interface:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kind: tv
+            api: 31
+            target: android-tv
+            arch: x86
+          - kind: phone
+            api: 35
+            target: google_apis
+            arch: x86_64
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install compile SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Build isolated UI fixtures
+        run: gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL=https://example.test assembleDebug assembleDebugAndroidTest
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify actual phone or TV controls and provider detail flows
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: ${{ matrix.api }}
+          arch: ${{ matrix.arch }}
+          target: ${{ matrix.target }}
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash tools/verify_rc0744_ui.sh ${{ matrix.kind }}
+      - name: Retain UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc0744-ui-${{ matrix.kind }}-${{ github.sha }}
+          path: ui-evidence/
+          if-no-files-found: error
+          retention-days: 14

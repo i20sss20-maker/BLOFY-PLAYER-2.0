@@ -26,10 +26,10 @@
     <string name="movies">Movies</string>
     <string name="series">Series</string>
     <string name="live_tv">Live TV</string>
-    <string name="exit_title">Exit BLOFY</string>
-    <string name="exit_message">Do you want to exit the app?</string>
-    <string name="exit_confirm">Exit</string>
-    <string name="exit_stay">Stay</string>
+    <string name="exit_title">Leave BLOFY?</string>
+    <string name="exit_message">You can come back and continue watching anytime.</string>
+    <string name="exit_confirm">Yes, exit</string>
+    <string name="exit_stay">No, stay</string>
     <string name="yes">Yes</string>
     <string name="no">No</string>
     <string name="back">Back</string>

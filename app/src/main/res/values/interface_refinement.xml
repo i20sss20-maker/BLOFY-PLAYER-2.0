@@ -1,0 +1,16 @@
+<resources>
+    <string name="trial_remaining">Free trial remaining</string>
+    <string name="trial_time_remaining">%1$d days · %2$d hours · %3$d min</string>
+    <string name="trial_ended">Your free trial has ended</string>
+    <string name="activation_ended">Your activation has expired</string>
+    <string name="trial_renew_qr">Renew using the QR code or the website</string>
+    <string name="activation_active">Your activation is active</string>
+    <string name="activation_no_expiry">No expiry date</string>
+    <string name="trial_blocked">Activation suspended</string>
+    <string name="trial_contact_support">Contact support through the website</string>
+    <string name="trial_status_unknown">Trial and activation status</string>
+    <string name="trial_refresh_status">Refresh from the website to see the remaining time</string>
+    <string name="details_metadata_loading">Loading cast and description…</string>
+    <string name="details_metadata_retry">Could not update details · Try again</string>
+    <string name="setting_cycle_hint">Press to change</string>
+</resources>

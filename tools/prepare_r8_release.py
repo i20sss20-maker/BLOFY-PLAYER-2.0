@@ -28,7 +28,7 @@ def main():
             data=current.read(name)
             assert data==previous.read(name), f'Production FFmpeg bytes changed for {abi}'
             hashes[abi]=hashlib.sha256(data).hexdigest()
-    report={'commit':os.environ['GITHUB_SHA'],'version':'2.0.0-rc07.43','version_code':2000054,
+    report={'commit':os.environ['GITHUB_SHA'],'version':'2.0.0-rc07.44','version_code':2000055,
             'renamed_app_classes':renamed,'mapped_app_classes':len(pairs),
             'native_bytes_equal_released_rc0742':True,'native_sha256':hashes,
             'apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),

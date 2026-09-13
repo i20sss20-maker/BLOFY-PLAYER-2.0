@@ -122,7 +122,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 gravity = contentGravity
                 setPadding(0, 0, 0, dp(3))
             })
-            info.addView(TextView(this@MovieDetailsActivity).apply {
+            val overviewView = TextView(this@MovieDetailsActivity).apply {
                 text = metadata?.overview?.takeIf(String::isNotBlank)
                     ?: stream.plot?.takeIf(String::isNotBlank)
                     ?: getString(R.string.details_movie_no_description)
@@ -133,19 +133,18 @@ class MovieDetailsActivity : AppCompatActivity() {
                 gravity = contentGravity
                 setLineSpacing(0f, 1.16f)
                 setPadding(0, 0, 0, dp(9))
-            })
-
-            if (!metadata?.crew.isNullOrEmpty()) {
-                info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = metadata?.crew.orEmpty().joinToString("   •   ") { "${it.job}: ${it.name}" }
-                    textSize = 11.5f
-                    typeface = BlofyTvDesign.MediumTypeface
-                    setTextColor(BlofyTvDesign.TextMuted)
-                    gravity = contentGravity
-                    maxLines = 2
-                    setPadding(0, 0, 0, dp(8))
-                })
             }
+            info.addView(overviewView)
+
+            val crewView = TextView(this@MovieDetailsActivity).apply {
+                textSize = 11.5f
+                typeface = BlofyTvDesign.MediumTypeface
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = contentGravity
+                setPadding(0, 0, 0, dp(8))
+            }
+            info.addView(crewView)
+
 
             val resumeMs = watch?.positionMs ?: 0L
             val durationMs = watch?.durationMs ?: 0L
@@ -188,26 +187,12 @@ class MovieDetailsActivity : AppCompatActivity() {
             actions.addView(favoriteButton, LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)))
             layout.attachActions(actions)
 
-            if (!metadata?.cast.isNullOrEmpty()) {
-                info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = getString(R.string.details_cast)
-                    textSize = 16f
-                    typeface = BlofyTvDesign.HeadingTypeface
-                    setTextColor(Color.WHITE)
-                    gravity = contentGravity
-                    setPadding(0, dp(14), 0, dp(5))
-                })
-                info.addView(CastStrip.build(this@MovieDetailsActivity, metadata?.cast.orEmpty()), LinearLayout.LayoutParams(-1, dp(184)))
-            } else {
-                info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = getString(R.string.details_cast_unavailable)
-                    textSize = 12f
-                    typeface = BlofyTvDesign.BodyTypeface
-                    setTextColor(BlofyTvDesign.TextMuted)
-                    gravity = contentGravity
-                    setPadding(0, dp(12), 0, dp(4))
-                })
+            val castContainer = LinearLayout(this@MovieDetailsActivity).apply {
+                orientation = LinearLayout.VERTICAL
             }
+            info.addView(castContainer, LinearLayout.LayoutParams(-1, -2))
+            ProviderDetailsBinding(this@MovieDetailsActivity, overviewView, crewView,
+                castContainer, provider, stream).start(metadata)
 
             if (layout.isTv) play.requestFocus()
         }

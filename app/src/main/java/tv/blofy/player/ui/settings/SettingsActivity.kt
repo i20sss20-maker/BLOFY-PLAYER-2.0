@@ -5,12 +5,7 @@ import tv.blofy.player.ui.common.CinemaStyle
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Bundle
-import android.text.SpannableString
-import android.text.Spanned
-import android.text.style.RelativeSizeSpan
-import android.text.style.StyleSpan
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -47,8 +42,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var grid: GridLayout
     private val cardRows = mutableListOf<List<View>>()
     private val sections = mutableListOf<GridLayout>()
-    private lateinit var storageCard: Button
-    private lateinit var refreshCard: Button
+    private lateinit var storageCard: SettingCard
+    private lateinit var refreshCard: SettingCard
     private val prefs by lazy { getSharedPreferences(RuntimeSettings.PREFS, MODE_PRIVATE) }
     private val isRtl: Boolean get() = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
     private val uiDirection: Int get() = if (isRtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
@@ -195,56 +190,41 @@ class SettingsActivity : AppCompatActivity() {
         scroll.post { sections.firstOrNull()?.getChildAt(0)?.requestFocus() }
     }
 
-    private fun cycleSetting(title: String, key: String, values: Array<String>, labels: Array<String>): Button {
+    private fun cycleSetting(title: String, key: String, values: Array<String>, labels: Array<String>): SettingCard {
         fun currentIndex() = values.indexOf(prefs.getString(key, values[0])).let { if (it < 0) 0 else it }
-        lateinit var button: Button
-        button = settingButton("", false) {
-            val next = (currentIndex() + 1) % values.size
-            prefs.edit().putString(key, values[next]).apply()
-            button.text = settingLabel(title, labels[next], preferenceHint(key))
-            status.text = getString(R.string.setting_saved)
+        return SettingCard(this).apply {
+            tag = "setting_$key"
+            bind(title, labels[currentIndex()], preferenceHint(key), cycle = true)
+            setOnClickListener {
+                val next = (currentIndex() + 1) % values.size
+                prefs.edit().putString(key, values[next]).apply()
+                bind(title, labels[next], preferenceHint(key), cycle = true)
+                status.text = getString(R.string.setting_saved)
+            }
         }
-        button.text = settingLabel(title, labels[currentIndex()], preferenceHint(key))
-        return button
     }
 
-    private fun actionCard(title: String, subtitle: String, action: () -> Unit): Button =
-        settingButton("", false, action).apply { text = settingLabel(title, subtitle) }
-
-    private fun settingLabel(rawTitle: String, subtitle: String, hint: String = ""): SpannableString {
-        val title = rawTitle.replace(Regex("^[^\\p{L}\\p{N}]+"), "")
-        val value = "$title\n$subtitle" + if (hint.isBlank()) "" else "\n$hint"
-        val styled = SpannableString(value)
-        styled.setSpan(StyleSpan(Typeface.BOLD), 0, title.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        val start = title.length + 1
-        if (start < value.length) {
-            styled.setSpan(RelativeSizeSpan(.82f), start, value.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    private fun actionCard(title: String, subtitle: String, action: () -> Unit): SettingCard =
+        SettingCard(this).apply {
+            bind(title, subtitle)
+            setOnClickListener { action() }
         }
-        return styled
-    }
 
     private fun settingButton(label: String, compact: Boolean, action: () -> Unit): Button = Button(this).apply {
         text = label
         CinemaStyle.styleButton(this)
-        if (!compact) {
-            setSingleLine(false)
-            maxLines = 4
-            textSize = 13.5f
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            textAlignment = View.TEXT_ALIGNMENT_VIEW_START
-            setPadding(dp(16), dp(8), dp(16), dp(8))
-            setLineSpacing(dp(2).toFloat(), 1f)
-        }
         setOnClickListener { action() }
     }
 
-    private fun addCard(button: Button) {
-        button.id = View.generateViewId()
-        grid.addView(button, GridLayout.LayoutParams().apply {
-            columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+    private fun addCard(card: SettingCard) {
+        card.id = View.generateViewId()
+        val position = grid.childCount
+        grid.addView(card, GridLayout.LayoutParams().apply {
+            rowSpec = GridLayout.spec(position / grid.columnCount, GridLayout.FILL)
+            columnSpec = GridLayout.spec(position % grid.columnCount, 1f)
             width = 0
-            height = dp(102)
-            setMargins(dp(5), dp(5), dp(5), dp(5))
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+            setMargins(dp(6), dp(6), dp(6), dp(6))
         })
     }
 
@@ -277,7 +257,9 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(dp(5), dp(18), dp(5), dp(8))
         })
         grid = GridLayout(this).apply {
-            columnCount = if (isTv()) 3 else if (resources.configuration.screenWidthDp >= 500) 2 else 1
+            val available = resources.configuration.screenWidthDp - if (isTv()) 72 else 36
+            val preferredWidth = (250 * resources.configuration.fontScale.coerceAtLeast(1f)).toInt()
+            columnCount = (available / preferredWidth).coerceIn(1, if (isTv()) 3 else 2)
             layoutDirection = uiDirection
             alignmentMode = GridLayout.ALIGN_BOUNDS
             clipChildren = false
@@ -329,7 +311,7 @@ class SettingsActivity : AppCompatActivity() {
             if (last > 0L) getString(R.string.setting_status_saved_at, formatSyncTime(last))
             else getString(R.string.setting_status_saved)
         }
-        if (::refreshCard.isInitialized) refreshCard.text = settingLabel(getString(R.string.setting_refresh_content), syncSubtitle())
+        if (::refreshCard.isInitialized) refreshCard.bind(getString(R.string.setting_refresh_content), syncSubtitle())
     }
 
     private fun syncSubtitle(): String {
@@ -351,7 +333,7 @@ class SettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val stats = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext) }
             if (!isFinishing && ::storageCard.isInitialized) {
-                storageCard.text = settingLabel(
+                storageCard.bind(
                     getString(R.string.setting_storage_local),
                     getString(R.string.setting_storage_used, LocalStorageManager.format(applicationContext, stats.totalBytes))
                 )

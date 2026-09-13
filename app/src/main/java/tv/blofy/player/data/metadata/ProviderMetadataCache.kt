@@ -13,7 +13,7 @@ import com.google.gson.Gson
  */
 object ProviderMetadataCache {
     private const val DB_NAME = "blofy-provider-metadata.db"
-    private const val DB_VERSION = 1
+    private const val DB_VERSION = 2
     private const val TABLE = "content_metadata"
     private val gson = Gson()
     @Volatile private var helper: Helper? = null
@@ -58,6 +58,20 @@ object ProviderMetadataCache {
     fun clearProvider(context: Context, providerId: String) {
         if (providerId.isBlank()) return
         helper(context).writableDatabase.delete(TABLE, "provider_id = ?", arrayOf(providerId))
+        helper(context).writableDatabase.delete("detail_fetches", "provider_id = ?", arrayOf(providerId))
+    }
+
+    fun lastDetailFetch(context: Context, contentKey: String): Long =
+        helper(context).readableDatabase.rawQuery(
+            "SELECT fetched_at FROM detail_fetches WHERE content_key = ?", arrayOf(contentKey)
+        ).use { if (it.moveToFirst()) it.getLong(0) else 0L }
+
+    fun markDetailFetched(context: Context, contentKey: String, providerId: String) {
+        helper(context).writableDatabase.insertWithOnConflict("detail_fetches", null, ContentValues().apply {
+            put("content_key", contentKey)
+            put("provider_id", providerId)
+            put("fetched_at", System.currentTimeMillis())
+        }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
     private fun helper(context: Context): Helper = helper ?: synchronized(this) {
@@ -74,10 +88,15 @@ object ProviderMetadataCache {
                     "updated_at INTEGER NOT NULL)"
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS index_content_metadata_provider_id ON $TABLE(provider_id)")
+            createFetchTable(db)
+        }
+
+        private fun createFetchTable(db: SQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS detail_fetches (content_key TEXT PRIMARY KEY NOT NULL, provider_id TEXT NOT NULL, fetched_at INTEGER NOT NULL)")
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            if (oldVersion < 1) onCreate(db)
+            if (oldVersion < 2) createFetchTable(db)
         }
     }
 }

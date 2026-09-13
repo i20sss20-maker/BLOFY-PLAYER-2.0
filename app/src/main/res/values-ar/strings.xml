@@ -26,10 +26,10 @@
     <string name="movies">الأفلام</string>
     <string name="series">المسلسلات</string>
     <string name="live_tv">البث المباشر</string>
-    <string name="exit_title">الخروج من BLOFY</string>
-    <string name="exit_message">هل تريد الخروج من التطبيق؟</string>
-    <string name="exit_confirm">خروج</string>
-    <string name="exit_stay">البقاء</string>
+    <string name="exit_title">تبي تطلع من BLOFY؟</string>
+    <string name="exit_message">تقدر ترجع وتكمل مشاهدتك في أي وقت.</string>
+    <string name="exit_confirm">نعم، خروج</string>
+    <string name="exit_stay">لا، أبقى</string>
     <string name="yes">نعم</string>
     <string name="no">لا</string>
     <string name="back">رجوع</string>

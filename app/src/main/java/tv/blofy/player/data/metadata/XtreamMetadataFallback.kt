@@ -1,14 +1,17 @@
 package tv.blofy.player.data.metadata
 
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import androidx.core.text.HtmlCompat
+import com.google.gson.Gson
+import kotlinx.coroutines.withTimeout
 import tv.blofy.player.BlofyApp
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
 
 /**
- * Provider-only metadata. UI reads are local-only; network fetches are exposed only to the
- * background preload worker so opening a movie/series page never starts another provider request.
+ * Provider-only metadata. Cached data renders first; a bounded detail request enriches
+ * the open title without scanning the catalog or delaying playback controls.
  */
 object XtreamMetadataFallback {
     suspend fun movie(provider: ProviderEntity, stream: StreamEntity): ProviderMetadata.Metadata? =
@@ -40,18 +43,29 @@ object XtreamMetadataFallback {
                 .build().toString()
         }.getOrNull() ?: return null
 
-        val root = runCatching { XtreamClient.api.objectResponse(url) }.getOrNull() ?: return null
+        val root = withTimeout(8_000L) { XtreamClient.api.objectResponse(url) }
+        if (root.isEmpty()) return null
+        check(root.keys.any { it.equals("info", true) || it.equals("movie_data", true) ||
+            it.equals("data", true) || it.equals("plot", true) || it.equals("description", true) ||
+            it.equals("overview", true) || it.equals("actors", true) || it.equals("cast", true) }) { "Provider returned no details" }
         return parseResponse(provider, stream, root, kind)
     }
 
     internal fun parseResponse(provider: ProviderEntity, stream: StreamEntity, root: Map<String, Any?>, kind: String): ProviderMetadata.Metadata? {
-        val info = map(root["info"])
-        val movieData = map(root["movie_data"])
-        val source = LinkedHashMap<String, Any?>().apply { putAll(movieData); putAll(info) }
+        val payload = map(root["data"]).ifEmpty { root }
+        val source = linkedMapOf<String, Any?>()
+        // Some panels put fields on the root, others use info/movie_data. Blank fields
+        // in info must not erase useful values supplied elsewhere in the same response.
+        listOf(payload, map(payload["movie_data"]), map(payload["info"])).forEach { fields ->
+            fields.forEach { (key, value) ->
+                if (value != null && (value !is String || (value.isNotBlank() && !value.equals("null", true))) && value != emptyList<Any>())
+                    source[key.lowercase(java.util.Locale.ROOT)] = value
+            }
+        }
         if (source.isEmpty()) return null
 
         val title = text(source, "name", "title", "o_name").ifBlank { stream.name }
-        val plot = text(source, "plot", "description").ifBlank { stream.plot.orEmpty() }.ifBlank { null }
+        val plot = cleanText(text(source, "plot", "description", "overview", "synopsis")).ifBlank { stream.plot.orEmpty() }.ifBlank { null }
         val genreText = text(source, "genre", "genres").ifBlank { stream.genre.orEmpty() }
         val genres = splitValues(genreText)
         val cast = castValues(source).take(14)
@@ -97,34 +111,36 @@ object XtreamMetadataFallback {
         )
     }
 
-    private fun castValues(source: Map<String, Any?>): List<ProviderMetadata.Person> {
-        val raw = source.entries.firstOrNull { it.key.equals("actors", true) || it.key.equals("cast", true) || it.key.equals("actor", true) }?.value
-        val structured = when (raw) {
-            is List<*> -> raw.mapNotNull { item ->
-                val row = item as? Map<*, *> ?: return@mapNotNull null
-                val name = row.entries.firstOrNull { it.key?.toString()?.equals("name", true) == true || it.key?.toString()?.equals("actor", true) == true }
-                    ?.value?.toString()?.trim().orEmpty()
-                if (name.isBlank()) return@mapNotNull null
-                val character = row.entries.firstOrNull { it.key?.toString()?.equals("character", true) == true || it.key?.toString()?.equals("role", true) == true }
-                    ?.value?.toString()?.trim()?.takeIf(String::isNotBlank)
-                val profile = row.entries.firstOrNull {
-                    val key = it.key?.toString().orEmpty()
-                    key.equals("profile", true) || key.equals("profile_url", true) || key.equals("image", true) || key.equals("photo", true)
-                }?.value?.toString()?.trim()?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
-                ProviderMetadata.Person(-kotlin.math.abs(name.hashCode()).coerceAtLeast(1), name, character, profile)
-            }
-            else -> emptyList()
-        }
-        if (structured.isNotEmpty()) return structured.distinctBy { it.name.lowercase() }
+    internal fun castValues(source: Map<String, Any?>): List<ProviderMetadata.Person> {
+        return listOf("cast", "actors", "actor").flatMap { key ->
+            people(source[key])
+        }.distinctBy { it.name.lowercase(java.util.Locale.ROOT) }.take(14)
+    }
 
-        return splitValues(text(source, "actors", "cast", "actor")).mapIndexed { index, name ->
-            ProviderMetadata.Person(
-                id = -kotlin.math.abs((name + index).hashCode()).coerceAtLeast(1),
+    private fun people(raw: Any?): List<ProviderMetadata.Person> = when (raw) {
+        is List<*> -> raw.flatMap(::people)
+        is Map<*, *> -> {
+            val row = map(raw)
+            val name = cleanText(text(row, "name", "actor", "actor_name"))
+            if (name.isBlank()) emptyList() else listOf(ProviderMetadata.Person(
+                id = -(name.hashCode().toLong().let { kotlin.math.abs(it) } % Int.MAX_VALUE).toInt().coerceAtLeast(1),
                 name = name,
-                character = null,
-                profileUrl = null
-            )
+                character = cleanText(text(row, "character", "role")).takeIf(String::isNotBlank),
+                profileUrl = text(row, "profile_url", "profile", "profile_path", "image", "photo")
+                    .takeIf { it.startsWith("http://") || it.startsWith("https://") }
+            ))
         }
+        is String -> {
+            val value = raw.trim()
+            if (value.startsWith("[") || value.startsWith("{")) {
+                val decoded = runCatching { Gson().fromJson(value, Any::class.java) }.getOrNull()
+                if (decoded is List<*> || decoded is Map<*, *>) people(decoded) else emptyList()
+            } else splitValues(value).map { name ->
+                ProviderMetadata.Person(-(kotlin.math.abs(name.hashCode().toLong()) % Int.MAX_VALUE)
+                    .toInt().coerceAtLeast(1), name, null, null)
+            }
+        }
+        else -> emptyList()
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -151,20 +167,15 @@ object XtreamMetadataFallback {
         return ""
     }
 
+    private fun cleanText(value: String): String = HtmlCompat.fromHtml(value, HtmlCompat.FROM_HTML_MODE_LEGACY)
+        .toString().replace('\u00a0', ' ').trim()
+
     private fun splitValues(value: String): List<String> = value
-        .replace("[", "")
-        .replace("]", "")
-        .replace("\"", "")
-        .replace("'", "")
-        .replace("|", ",")
-        .replace(";", ",")
-        .replace(" • ", ",")
-        .replace(" / ", ",")
-        .replace(Regex("\\s{2,}"), " ")
-        .split(',')
-        .map { it.trim() }
-        .filter { it.length >= 2 && !it.equals("null", true) }
-        .distinctBy { it.lowercase() }
+        .replace(" • ", ",").replace(" / ", ",")
+        .split(Regex("[,،;|\\r\\n]+"))
+        .map { cleanText(it).trim().trim('"') }
+        .filter { it.isNotBlank() && !it.equals("null", true) }
+        .distinctBy { it.lowercase(java.util.Locale.ROOT) }
 
     private fun number(value: Any?): Double? = when (value) {
         is Number -> value.toDouble().takeIf { it > 0.0 }
