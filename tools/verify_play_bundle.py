@@ -10,6 +10,7 @@ import zipfile
 from audit_published_apk import audit
 from build_play_device_apks import build_play_device_apks
 from probe_android_page_size import probe_android_page_size
+from play_crash_identity import target_crashes_after_test
 from run_r8_instrumentation import command, completed_cases, partition_test_dex
 
 PACKAGE='tv.blofy.player.v2'
@@ -52,20 +53,21 @@ def crash_structure(output):
     }
 
 
-def require_play_runtime_evidence(result, crashes):
-    """Fail on the same raw crash-buffer predicate, even after all three tests pass."""
+def require_play_runtime_evidence(result, crashes=""):
+    """Reject app, child and unattributed target crashes after successful cases."""
     cases = completed_cases(result)
     cases_ok = (len(cases) == 3 and {c['test'] for c in cases} == PLAY_CASES and
                 all(c['status'] == 0 and c['class'] == PLAY_CLASS for c in cases))
     terminal_codes = re.findall(r'^INSTRUMENTATION_CODE: (-?[0-9]+)\s*$', result, re.M)
     runner_ok = (terminal_codes == ['-1'] and 'INSTRUMENTATION_FAILED' not in result
                  and 'Process crashed' not in result)
-    crashed = PACKAGE in crashes  # Never apply a sanitizer/filter before this gate.
+    crashed = PACKAGE in crashes and bool(target_crashes_after_test(crashes))
     if not cases_ok or not runner_ok or crashed:
         diagnostic = {
             'all_three_cases_passed': cases_ok,
             'runner_completed_cleanly': runner_ok,
             'raw_target_crash_detected': crashed,
+            'crash_identity_policy': 'app-children-and-unattributed-target',
             'crash_structure': crash_structure(crashes),
             'instrumentation_structure': crash_structure(result),
             'publication_allowed': False,
@@ -122,10 +124,11 @@ def main():
         adb('logcat','-b','crash','-c')
         result=adb('shell','am','instrument','-w','-r','-e','playBundleReview','true','-e','class',
             'tv.blofy.player.security.PlayBundleSmokeTest',PACKAGE+'.test/androidx.test.runner.AndroidJUnitRunner',timeout=240)
-        crashes=adb('logcat','-b','crash','-d')
+        crashes=adb('logcat','-b','crash','-d','-v','raw')
         cases=require_play_runtime_evidence(result,crashes)
         report={'commit':os.environ['GITHUB_SHA'],'page_size':page_size,'page_size_probe':'android-bionic-native','api':35,'abi':'x86_64',
             'device_split_generation':device,
+            'crash_identity_policy':'app-children-and-unattributed-target',
             'aab_sha256':hashlib.sha256((output/'BLOFY-PLAYER-rc07.46-play.aab').read_bytes()).hexdigest(),
             'split_signatures_verified':True,'original_ffmpeg_loaded':True,'encrypted_room_roundtrip':True,
             'installer_permission_absent':True,'network_blocked_before_first_launch':True,'tests':cases,
