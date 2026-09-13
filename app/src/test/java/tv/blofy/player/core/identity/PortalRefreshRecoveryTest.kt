@@ -150,6 +150,15 @@ class PortalRefreshRecoveryTest {
         assertEquals(1, server.requestCount); assertEquals("POST", server.takeRequest().method)
         assertTrue("gone" in PortalSyncBook.pending(app))
     }
+    @Test fun missingProviderTypeCannotLookLikeAConfirmedDeletion() {
+        val saved = local("keep"); rows[saved.id] = saved
+        PortalSyncBook.bind(app, "keep", "keep")
+        enqueue(JSONObject())
+        val result = pull()
+        assertEquals(1, result.deferredCount)
+        assertEquals(listOf("keep"), result.providers.map { it.id })
+        assertEquals(saved, rows["keep"])
+    }
     @Test fun feedbackNeverDisplaysRawSecretsOrRequestUrls() {
         val secret = "123456 password=private https://provider.example/user/pw"
         for (error in listOf(Exception(secret), PortalRefreshFailure("AUTH", cause = Exception(secret)))) {

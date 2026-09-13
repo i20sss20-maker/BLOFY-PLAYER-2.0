@@ -156,9 +156,9 @@ object BlofySubscriberClient {
                 val items = JSONObject(response.body?.string().orEmpty()).optJSONArray("items")
                 check(items != null) { "استجابة BLOFY غير مكتملة" }
                 for (index in 0 until items.length()) {
-                    val row = items.getJSONObject(index)
+                    val row = items.optJSONObject(index) ?: continue
                     val token = row.optString("sessionToken")
-                    check(token in batch) { "استجابة BLOFY غير مكتملة" }
+                    if (token !in batch) continue
                     if (row.has("error")) continue
                     // Keep valid accounts when another account response is incomplete.
                     runCatching { parseDirectSession(row) }.getOrNull()?.let { resolved[token] = it }

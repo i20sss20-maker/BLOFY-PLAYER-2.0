@@ -487,7 +487,10 @@ object PortalPlaylistClient {
             allIds += aliases
             if (id.isNotBlank() && !seen.add(id)) { duplicates += id; deferred++; continue }
             val type = (row.opt("providerType") as? String).orEmpty().lowercase()
-            if (type != "xtream") continue
+            if (type != "xtream") {
+                if (type != "m3u" || id.isBlank()) deferred++
+                continue
+            }
             val url = (row.opt("baseUrl") as? String).orEmpty().trim()
             val username = (row.opt("username") as? String).orEmpty()
             val password = (row.opt("password") as? String).orEmpty()
