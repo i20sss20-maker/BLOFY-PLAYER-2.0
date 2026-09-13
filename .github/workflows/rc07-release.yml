@@ -17,8 +17,8 @@ concurrency:
 env:
   PRODUCTION_ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
-  EXPECTED_VERSION_CODE: "2000053"
-  EXPECTED_VERSION_NAME: 2.0.0-rc07.42
+  EXPECTED_VERSION_CODE: "2000054"
+  EXPECTED_VERSION_NAME: 2.0.0-rc07.43
   EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
   MEDIA3_VERSION: "1.6.1"
   FFMPEG_DECODERS: ac3 eac3 dca truehd aac mp3 opus vorbis flac
@@ -30,7 +30,7 @@ jobs:
   signed-release:
     permissions:
       contents: write
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[signed rc07.42]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[signed rc07.43]')
     name: Verify + FFmpeg + signed APK/AAB
     runs-on: ubuntu-latest
     timeout-minutes: 150
@@ -47,7 +47,7 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Validate rc07.42 and signing inputs
+      - name: Validate rc07.43 and signing inputs
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
@@ -60,8 +60,8 @@ jobs:
           for value in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
           done
-          grep -Fq 'versionCode = 2000053' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.42"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000054' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.43"' app/build.gradle.kts
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
 
       - name: Install Android native and signing toolchain
@@ -102,6 +102,21 @@ jobs:
           assert p.get('ok') is True and p.get('database')=='ready' and p.get('playlistEncryption')=='ready'
           PY
 
+      - name: Verify maintenance encryption and upgrade evidence regressions
+        run: |
+          node --test tools/r8_tests/release_vault.test.mjs
+          python3 -m unittest discover -s tools/r8_tests -v
+
+      - name: Download the pinned original signed upgrade baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download v2.0.0-rc07.42 --pattern BLOFY-PLAYER-2.0-rc07.42-signed.apk --dir "$RUNNER_TEMP/upgrade-baseline"
+          cp "$RUNNER_TEMP/upgrade-baseline/BLOFY-PLAYER-2.0-rc07.42-signed.apk" "$RUNNER_TEMP/blofy-upgrade-old.apk"
+          echo "ded52c0abc0408e592feed82b5bafd214f4de9f1ad083b003330eab9f721dd58  $RUNNER_TEMP/blofy-upgrade-old.apk" | sha256sum --check
+
       - name: Build Media3 FFmpeg decoder
         shell: bash
         env:
@@ -127,7 +142,7 @@ jobs:
         run: |
           set -euo pipefail
           aar="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-$MEDIA3_VERSION.aar"
-          gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" testDebugUnitTest
+          gradle --no-daemon --max-workers=2 -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" testDebugUnitTest
 
       - name: Lint release
         shell: bash
@@ -140,7 +155,7 @@ jobs:
         run: |
           set -euo pipefail
           aar="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-$MEDIA3_VERSION.aar"
-          gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" lintRelease
+          gradle --no-daemon --max-workers=2 -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" lintRelease
 
       - name: Build signed APK and AAB
         shell: bash
@@ -153,17 +168,16 @@ jobs:
         run: |
           set -euo pipefail
           aar="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-$MEDIA3_VERSION.aar"
-          gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" assembleRelease bundleRelease
+          gradle --no-daemon --max-workers=2 -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" assembleRelease bundleRelease :app:assembleReleaseAndroidTest :app:stageR8TestL8Evidence
 
       - name: Verify package version signature alignment and FFmpeg ABIs
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release
-          cp app/build/outputs/apk/release/app-release.apk release/BLOFY-PLAYER-2.0-rc07.42-signed.apk
-          cp app/build/outputs/bundle/release/app-release.aab release/BLOFY-PLAYER-2.0-rc07.42-signed.aab
+          cp app/build/outputs/apk/release/app-release.apk release/BLOFY-PLAYER-2.0-rc07.43-signed.apk
           tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
-          apk="release/BLOFY-PLAYER-2.0-rc07.42-signed.apk"
+          apk="release/BLOFY-PLAYER-2.0-rc07.43-signed.apk"
           "$tools/aapt" dump badging "$apk" | tee release/apk-badging.txt
           if grep -Fq "application-debuggable" release/apk-badging.txt; then echo "::error::Release APK must not be debuggable"; exit 1; fi
           grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$EXPECTED_VERSION_CODE' versionName='$EXPECTED_VERSION_NAME'" release/apk-badging.txt
@@ -171,16 +185,66 @@ jobs:
           "$tools/apksigner" verify --verbose --print-certs "$apk" | tee release/apk-signature.txt
           actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
           [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
-          jarsigner -verify -certs release/BLOFY-PLAYER-2.0-rc07.42-signed.aab | tee release/aab-signature.txt
+          jarsigner -verify -certs app/build/outputs/bundle/release/app-release.aab | tee release/aab-signature.txt
           unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
             grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/apk-files.txt"
           done
-          (cd release && sha256sum BLOFY-PLAYER-2.0-rc07.42-signed.apk BLOFY-PLAYER-2.0-rc07.42-signed.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
+
+      - name: Verify R8 and encrypt AAB and mapping to the original signing certificate
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 tools/prepare_r8_release.py
+          keytool -exportcert -rfc -keystore "$RUNNER_TEMP/blofy-production.keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" > "$RUNNER_TEMP/blofy-public-certificate.pem"
+          node tools/release_vault.mjs seal "$RUNNER_TEMP/blofy-maintenance-private.tar.gz" "$RUNNER_TEMP/blofy-public-certificate.pem" release/BLOFY-PLAYER-2.0-rc07.43-maintenance.vault.json
+          openssl pkcs12 -in "$RUNNER_TEMP/blofy-production.keystore" -nocerts -nodes -passin env:ANDROID_KEYSTORE_PASSWORD | node tools/release_vault.mjs verify release/BLOFY-PLAYER-2.0-rc07.43-maintenance.vault.json "$RUNNER_TEMP/blofy-maintenance-private.tar.gz"
+
+      - name: Enable KVM for offline signed upgrade validation
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Upgrade original signed rc07.42 to actual R8 release with app networking blocked
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        env:
+          BLOFY_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/blofy-production.keystore
+          BLOFY_RELEASE_STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          BLOFY_RELEASE_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          BLOFY_RELEASE_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: python3 tools/run_signed_upgrade.py
+
+      - name: Fail closed before uploading or publishing customer artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYVERIFY'
+          import json,pathlib
+          root=pathlib.Path('release')
+          expected={'BLOFY-PLAYER-2.0-rc07.43-signed.apk','BLOFY-PLAYER-2.0-rc07.43-maintenance.vault.json','apk-badging.txt','apk-signature.txt','aab-signature.txt','release-protection.json','upgrade-verification.json'}
+          assert {p.name for p in root.iterdir()}==expected, 'Unexpected public release content'
+          assert all(p.is_file() and not p.is_symlink() for p in root.iterdir())
+          evidence=json.loads((root/'upgrade-verification.json').read_text())
+          assert evidence['in_place_upgrade'] and evidence['seed_and_verify_cases_passed_without_skips']
+          assert evidence['new_application_decrypts_old_keystore_credentials']
+          assert evidence['app_network_blocked_ipv4_ipv6_before_first_launch']
+          PYVERIFY
+          (cd release && sha256sum *.apk *.vault.json > SHA256SUMS && sha256sum --check SHA256SUMS)
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc07.42-signed-${{ github.sha }}
+          name: BLOFY-PLAYER-2.0-rc07.43-signed-${{ github.sha }}
           path: release/
           if-no-files-found: error
           retention-days: 30
@@ -188,7 +252,7 @@ jobs:
       - name: Upload FFmpeg source and relink materials
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc07.42-ffmpeg-sources-${{ github.sha }}
+          name: BLOFY-PLAYER-2.0-rc07.43-ffmpeg-sources-${{ github.sha }}
           path: build/ffmpeg-native/compliance/
           if-no-files-found: error
           retention-days: 30
@@ -201,7 +265,7 @@ jobs:
           set -euo pipefail
           tag="v$EXPECTED_VERSION_NAME"
           tar -czf "release/BLOFY-PLAYER-$EXPECTED_VERSION_NAME-ffmpeg-sources.tar.gz" -C build/ffmpeg-native compliance
-          printf '%s\n' 'BLOFY rc07.42: repair manual website playlist refresh in Login and Playlist Manager. Retry transient list reads once; isolate invalid or unresolved lists; preserve saved playlists on incomplete replies; report full or partial refresh and safe diagnostic codes. Includes rc07.41 activation and network feedback fixes.' 'Media3, FFmpeg configuration, stream URLs and visual theme are unchanged. Install over an earlier compatible BLOFY version without clearing data. This is a test release pending receiver validation; the website primary version is not changed by this build.' > "$RUNNER_TEMP/release-notes.txt"
+          printf '%s\n' 'BLOFY rc07.43: enable tested R8 name obfuscation with the original production signature. Verify in-place upgrade from rc07.42, encrypted playlist credentials, device identity, favorites and resume state on an offline emulator. AAB and R8 mapping are retained only in the encrypted maintenance archive; the APK remains directly installable.' 'Media3, FFmpeg configuration, stream URLs and visual theme are unchanged. Install over an earlier compatible BLOFY version without clearing data. This is a test release pending receiver validation; the website primary version is not changed by this build.' > "$RUNNER_TEMP/release-notes.txt"
           if gh release view "$tag" >/dev/null 2>&1; then
             [[ "$(gh release view "$tag" --json targetCommitish --jq .targetCommitish)" == "$GITHUB_SHA" ]] || { echo 'Existing release targets another commit'; exit 1; }
             gh release upload "$tag" release/* --clobber
@@ -211,6 +275,9 @@ jobs:
 
       - name: Remove signing material
         if: always()
-        run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
+        run: |
+          rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64" "$RUNNER_TEMP/blofy-public-certificate.pem" "$RUNNER_TEMP/blofy-maintenance-private.tar.gz"
+          rm -f app/build/outputs/mapping/release/mapping.txt app/build/outputs/bundle/release/app-release.aab
+          rm -f app/build/outputs/apk/androidTest/release/*.apk
 
-# rc07.42 signed test release: manual website playlist recovery; preserve the public primary until receiver validation
+# rc07.43 signed R8 test release: preserve original branch/certificate guards and public primary until receiver validation
