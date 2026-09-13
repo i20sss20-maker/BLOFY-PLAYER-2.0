@@ -1,0 +1,55 @@
+name: BLOFY Play 321 structural diagnostic
+on:
+  push:
+    branches: [diagnostic/play-runtime-321]
+    paths: [.github/workflows/play-321-diagnostic.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Extract existing structural evidence without rebuilding or reading production secrets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          gh api repos/i20sss20-maker/BLOFY-PLAYER-2.0/actions/jobs/103808495607 > "$RUNNER_TEMP/job.json"
+          gh api repos/i20sss20-maker/BLOFY-PLAYER-2.0/actions/jobs/103808495607/logs > "$RUNNER_TEMP/job.log"
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          job=json.loads((root/'job.json').read_text())
+          assert job['run_id']==34788584787
+          assert job['head_sha']=='3538a3f8275e031828ac2da2a6b2f61b0f78021f'
+          assert job['conclusion']=='failure'
+          raw=(root/'job.log').read_bytes()
+          marker='BLOFY_PLAY_RUNTIME_FAILURE '
+          found=[]
+          for line in raw.decode('utf-8',errors='replace').splitlines():
+              if marker not in line: continue
+              value=line.split(marker,1)[1]
+              if not value.startswith('{'): continue
+              data=json.loads(value)
+              assert data.get('publication_allowed') is False
+              assert len(value)<65536
+              for key in ('crash_structure','instrumentation_structure'):
+                  assert data[key].get('free_form_messages_omitted') is True
+              found.append(data)
+          assert len(found)==1, 'Expected exactly one bounded structural diagnostic'
+          report={'run_id':job['run_id'],'job_id':job['id'],'commit':job['head_sha'],
+                  'source_log_sha256':hashlib.sha256(raw).hexdigest(),'diagnostic':found[0]}
+          (root/'play-321-diagnostic.json').write_text(json.dumps(report,indent=2))
+          print(json.dumps(report,indent=2))
+          PY
+          rm -f "$RUNNER_TEMP/job.log" "$RUNNER_TEMP/job.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-Play-321-structural-evidence
+          path: ${{ runner.temp }}/play-321-diagnostic.json
+          retention-days: 3
+          if-no-files-found: error
