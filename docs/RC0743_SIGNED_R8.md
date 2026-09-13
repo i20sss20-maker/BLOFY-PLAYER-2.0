@@ -68,6 +68,33 @@ Local validation before CI: seven generated-key encryption/tampering tests and
 22 evidence/provenance tests pass. Actual signed-build and emulator results must
 be recorded from their completed run, not inferred from these local tests.
 
+## CI lineage and separate website status
+
+PR #60 passed [Android CI 34738677639](https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/actions/runs/34738677639),
+including compilation of both upgrade fixtures, and
+[FFmpeg CI 34738677637](https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/actions/runs/34738677637).
+The initial signed candidate source is `0f92505009011c7807ffe1f84be5b13c0c829ae9`.
+
+[Initial signed run 34738929126](https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/actions/runs/34738929126)
+passed signing, lint, both named upgrade cases, exact four-ABI native parity,
+811/1391 mapped app class renames and maintenance-encryption round-trip. It failed
+the subsequent standalone-process check and published no release or artifact.
+The runner now separates instrumentation teardown with a cold `am start -S -W`,
+requires Login to be resumed and the same process to survive another five seconds,
+and captures crash/exit/activity diagnostics on failure. The cause of the initial
+missing process is not established from its insufficient diagnostics; no passing
+standalone-start result is inferred from the two passing instrumentation cases.
+
+The Android branch has four inherited subscriber-UI contract failures in
+[Activation CI 34738677658](https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/actions/runs/34738677658)
+(131 of 135 unit tests pass). Commit `bf47cf1` restored the v1 UI injection while
+retaining v4 selector/save/renewal tests. All activation service bytes remain
+identical to rc07.42 source `63ce6db`; those tests are not disabled or relaxed.
+This Android branch must not be deployed as the website. The separately deployed
+website source `c68daaf` passed
+[Activation CI 34735215650](https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/actions/runs/34735215650)
+and its subscriber/admin session suites.
+
 Remaining protection work: source visibility and download separation, persistent
 server login limits, individual session revocation, MFA, old deployment exposure
 and the previously deferred history audit. None is claimed solved by this release.

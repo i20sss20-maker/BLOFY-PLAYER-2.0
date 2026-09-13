@@ -72,10 +72,14 @@ def main():
             adb('shell',binary,'-I','OUTPUT','1','-m','owner','--uid-owner',original_uid,'-j','REJECT')
             adb('shell',binary,'-C','OUTPUT','-m','owner','--uid-owner',original_uid,'-j','REJECT')
         assert 'Success' in adb('install','--no-incremental','-t',ready)
-        def launch():
+        def launch(cold=False):
             component=adb('shell','cmd','package','resolve-activity','--brief',PACKAGE).strip().splitlines()[-1]
             assert component.startswith(PACKAGE+'/')
-            result=adb('shell','am','start','-W','-n',component)
+            # Separate instrumentation process teardown from the standalone launch.
+            # The liveness, resumed-Login and crash checks below still must all pass.
+            options=['-S'] if cold else []
+            result=adb('shell','am','start','-W',*options,'-n',component)
+            print(result.strip())
             assert 'Status: ok' in result, 'Login did not launch'
         def instrument(cls,test):
             output=adb('shell','am','instrument','-w','-r','-e','signedUpgradeReview','true','-e','class',cls,
@@ -83,6 +87,7 @@ def main():
             if not one_pass(output,cls,test):
                 print(output[-12000:])  # Only generated offline fixtures.
                 raise AssertionError('Signed upgrade runtime case failed')
+            print('PASS: '+cls+'#'+test)
         adb('logcat','-b','crash','-c')
         launch()
         # Bounded wait for the actual old Login to create its database and identity.
@@ -103,8 +108,23 @@ def main():
         for binary in ['iptables','ip6tables']:
             adb('shell',binary,'-C','OUTPUT','-m','owner','--uid-owner',original_uid,'-j','REJECT')
         instrument('tv.blofy.player.security.SignedUpgradeVerifyTest','upgradedReleaseReadsExistingEncryptedData')
-        launch()
-        assert adb('shell','pidof',PACKAGE).strip()
+        assert PACKAGE not in adb('logcat','-b','crash','-d'), 'Target crashed during upgrade tests'
+        launch(cold=True)
+        process=adb('shell','pidof',PACKAGE).strip()
+        assert process, 'Standalone app process missing'
+        login=False
+        for _ in range(20):
+            assert adb('shell','pidof',PACKAGE).strip()==process, 'Standalone process died or restarted'
+            activities=adb('shell','dumpsys','activity','activities')
+            login=any(('mResumedActivity' in line or 'topResumedActivity' in line)
+                      and PACKAGE+'/' in line and 'LoginActivity' in line
+                      for line in activities.splitlines())
+            if login: break
+            time.sleep(.25)
+        assert login, 'Standalone Login was not resumed'
+        for _ in range(10):
+            time.sleep(.5)
+            assert adb('shell','pidof',PACKAGE).strip()==process, 'Standalone process died or restarted'
         crashes=adb('logcat','-b','crash','-d')
         assert PACKAGE not in crashes, 'Target process crash recorded'
         assert hashlib.sha256(new.read_bytes()).hexdigest()==new_hash
@@ -113,6 +133,7 @@ def main():
                 'in_place_upgrade':True,'same_uid_and_first_install_time':True,
                 'identity_pin_encrypted_playlist_favorite_lock_resume_retained':True,
                 'new_application_decrypts_old_keystore_credentials':True,'login_launch_passed':True,
+                'standalone_login_resumed_and_pid_stable_5_seconds':True,
                 'app_network_blocked_ipv4_ipv6_before_first_launch':True,'no_app_uninstall_or_clear':True,
                 'seed_and_verify_cases_passed_without_skips':True,'retained_test_dex_unchanged':True,
                 'removed_dex_match_test_L8_producer':removed,
@@ -121,4 +142,19 @@ def main():
         print(json.dumps(report,indent=2))
 
 
-if __name__=='__main__': main()
+if __name__=='__main__':
+    try:
+        main()
+    except Exception:
+        # The emulator contains only isolated generated fixtures. Preserve the cause of a
+        # failed liveness check before the action destroys the emulator; never publish it.
+        sdk=Path(os.environ['ANDROID_HOME'])
+        for args in [('logcat','-b','crash','-d'),
+                     ('shell','dumpsys','activity','exit-info',PACKAGE),
+                     ('shell','dumpsys','activity','activities')]:
+            try:
+                print('Offline emulator failure diagnostics: '+' '.join(args))
+                print(command(sdk/'platform-tools/adb','-s','emulator-5554',*args)[-16000:])
+            except Exception as diagnostic_error:
+                print(type(diagnostic_error).__name__)
+        raise
