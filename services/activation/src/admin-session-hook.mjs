@@ -1,18 +1,18 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { createAdminSessionStore } from './admin-session-store.mjs';
 
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
 const ADMIN_USERNAME = String(process.env.BLOFY_ADMIN_USERNAME || '').trim();
 const ADMIN_PASSWORD = String(process.env.BLOFY_ADMIN_PASSWORD || '').trim();
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const COOKIE = 'blofy_admin_session';
-const MAX_LOGIN_CLIENTS = 2000;
 // Domain-separated sessions are invalidated when any admin credential changes.
 // This intentionally requires one new admin login on deployment; device activation is unrelated.
 const SESSION_KEY = crypto.createHmac('sha256', ADMIN_TOKEN)
-  .update(JSON.stringify(['blofy-admin-session-v2', ADMIN_USERNAME, ADMIN_PASSWORD])).digest();
-const loginAttempts = new Map();
+  .update(JSON.stringify(['blofy-admin-session-v3', ADMIN_USERNAME, ADMIN_PASSWORD])).digest();
+const sessionStore = createAdminSessionStore({ key: SESSION_KEY });
 
 function json(res, status, body, headers = {}) {
   const payload = JSON.stringify(body);
@@ -39,43 +39,39 @@ async function readJson(req) {
   return body;
 }
 function clientKey(req) {
-  return String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim().slice(0,128);
-}
-function rateAllowed(req) {
-  const now=Date.now(), key=clientKey(req);
-  if (loginAttempts.size >= MAX_LOGIN_CLIENTS) {
-    for (const [k,v] of loginAttempts) if (v.resetAt<=now) loginAttempts.delete(k);
-  }
-  const old=loginAttempts.get(key);
-  // Do not evict active counters: that would let a new key reset its failure budget.
-  if (!old && loginAttempts.size >= MAX_LOGIN_CLIENTS) return false;
-  const state=!old || old.resetAt<=now ? {count:0,resetAt:now+15*60*1000} : old;
-  state.count = Math.min(state.count + 1, 13); loginAttempts.set(key,state);
-  return state.count <= 12;
+  // Trust the platform's overwritten client header only inside a Vercel deployment.
+  const forwarded = process.env.VERCEL_ENV && (req.headers['x-vercel-forwarded-for'] || req.headers['x-forwarded-for']);
+  return String(forwarded || req.socket?.remoteAddress || 'unknown').split(',')[0].trim().slice(0,128);
 }
 function sign(payload) {
   return crypto.createHmac('sha256', SESSION_KEY).update(payload).digest('base64url');
 }
-function makeSession() {
+async function makeSession() {
   const issued=Date.now(), expires=issued+SESSION_TTL_MS;
   const nonce=crypto.randomBytes(16).toString('base64url');
-  const payload=Buffer.from(JSON.stringify({v:2,u:ADMIN_USERNAME,i:issued,e:expires,n:nonce})).toString('base64url');
+  const payload=Buffer.from(JSON.stringify({v:3,u:ADMIN_USERNAME,i:issued,e:expires,n:nonce})).toString('base64url');
+  await sessionStore.create(nonce, expires);
   return `${payload}.${sign(payload)}`;
 }
 function parseCookies(req) {
   const out=Object.create(null); String(req.headers.cookie||'').split(';').forEach(part=>{const i=part.indexOf('='); if(i>0) out[part.slice(0,i).trim()]=part.slice(i+1).trim();}); return out;
 }
-function validSession(req) {
+function sessionClaims(req) {
   if (!ADMIN_TOKEN || !ADMIN_USERNAME || !ADMIN_PASSWORD) return false;
   const raw=parseCookies(req)[COOKIE]; if(!raw || raw.length>2048) return false;
   const dot=raw.lastIndexOf('.'); if(dot<1) return false;
   const payload=raw.slice(0,dot), sig=raw.slice(dot+1); if(!safeEqual(sig,sign(payload))) return false;
   try {
     const data=JSON.parse(Buffer.from(payload,'base64url').toString('utf8')), now=Date.now();
-    return data?.v===2 && data.u===ADMIN_USERNAME && Number.isSafeInteger(data.i) && Number.isSafeInteger(data.e) &&
+    const valid = data?.v===3 && data.u===ADMIN_USERNAME && Number.isSafeInteger(data.i) && Number.isSafeInteger(data.e) &&
       data.i<=now+30_000 && data.e-data.i===SESSION_TTL_MS && data.e>now &&
       typeof data.n==='string' && /^[A-Za-z0-9_-]{22}$/.test(data.n);
+    return valid ? data : false;
   } catch { return false; }
+}
+async function validSession(req) {
+  const claims = sessionClaims(req);
+  return !!claims && await sessionStore.active(claims.n);
 }
 function sameOrigin(req) {
   try {
@@ -107,22 +103,28 @@ http.createServer = function patchedAdminSessionCreateServer(listener) {
     try {
     let url; try{url=new URL(req.url||'/','http://localhost')}catch{return listener(req,res)}
     if (req.method==='GET' && ['/Admin','/Admin/','/admin/'].includes(url.pathname)) { res.writeHead(302,{'location':'/admin','cache-control':'no-store'}); res.end(); return; }
-    if (req.method==='GET' && url.pathname==='/admin') return html(res, validSession(req)?await dashboardPage():await loginPage());
+    if (req.method==='GET' && url.pathname==='/admin') return html(res, await validSession(req)?await dashboardPage():await loginPage());
+    if (!url.pathname.startsWith('/api/v1/admin/')) return listener(req,res);
     if (!['GET','HEAD'].includes(req.method) && url.pathname.startsWith('/api/v1/admin/')) {
       const origin = req.headers.origin;
       if (origin !== undefined && !sameOrigin(req)) return json(res,403,{error:'invalid_origin'});
       // An arbitrary Authorization header must not exempt an authenticated cookie from CSRF checks.
-      if (validSession(req) && !origin && !validAdminBearer(req)) return json(res,403,{error:'invalid_origin'});
+      if (sessionClaims(req) && !origin && !validAdminBearer(req)) return json(res,403,{error:'invalid_origin'});
     }
     if (req.method==='POST' && url.pathname==='/api/v1/admin/session/login') {
-      if (!rateAllowed(req)) return json(res,429,{error:'rate_limited'});
       if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_TOKEN) return json(res,503,{error:'admin_login_not_configured'});
+      const rate = await sessionStore.consumeLogin(clientKey(req));
+      if (!rate.allowed) return json(res,429,{error:'rate_limited'},{'retry-after':String(rate.retryAfterSeconds)});
       const body=await readJson(req).catch(()=>({}));
       if(!safeEqual(String(body.username||''),ADMIN_USERNAME) || !safeEqual(String(body.password||''),ADMIN_PASSWORD)) return json(res,401,{error:'invalid_credentials'});
-      return json(res,200,{ok:true},{'set-cookie':cookie(makeSession(),Math.floor(SESSION_TTL_MS/1000))});
+      return json(res,200,{ok:true},{'set-cookie':cookie(await makeSession(),Math.floor(SESSION_TTL_MS/1000))});
     }
-    if (req.method==='POST' && url.pathname==='/api/v1/admin/session/logout') return json(res,200,{ok:true},{'set-cookie':cookie('',0)});
-    if (url.pathname.startsWith('/api/v1/admin/') && validSession(req)) req.headers.authorization=`Bearer ${ADMIN_TOKEN}`;
+    if (req.method==='POST' && url.pathname==='/api/v1/admin/session/logout') {
+      const claims = sessionClaims(req);
+      if (claims) await sessionStore.revoke(claims.n);
+      return json(res,200,{ok:true},{'set-cookie':cookie('',0)});
+    }
+    if (!validAdminBearer(req) && await validSession(req)) req.headers.authorization=`Bearer ${ADMIN_TOKEN}`;
     return listener(req,res);
     } catch {
       if (!res.headersSent && !res.writableEnded) return json(res,503,{error:'admin_unavailable'});
