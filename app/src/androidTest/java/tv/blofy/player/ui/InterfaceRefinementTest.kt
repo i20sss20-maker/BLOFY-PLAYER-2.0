@@ -99,7 +99,7 @@ class InterfaceRefinementTest {
             })
         }
         for (kind in listOf("movie", "series")) {
-            server.enqueue(MockResponse().setBody("""{"info":{"plot":"وصف تجريبي من السيرفر","cast":[{"name":"ممثل تجريبي","character":"الدور الأول"},"ممثلة تجريبية"]}}"""))
+            server.enqueue(MockResponse().setBody("""{"info":{"plot":"وصف تجريبي من السيرفر","rating_5based":4.2,"cast":[{"name":"ممثل تجريبي","character":"الدور الأول"},"ممثلة تجريبية"]}}"""))
             val type = if (kind == "movie") MovieDetailsActivity::class.java else SeriesDetailsActivity::class.java
             repeat(2) { opening ->
                 ActivityScenario.launch<android.app.Activity>(Intent(context, type)
@@ -107,6 +107,7 @@ class InterfaceRefinementTest {
                     await { scenario.onActivity { activity ->
                         val root = activity.window.decorView
                         assertEquals("وصف تجريبي من السيرفر", root.findViewWithTag<TextView>("blofy_details_overview")?.text?.toString())
+                        assertTrue(root.findViewWithTag<TextView>("blofy_details_stats").text.contains("8.4/10"))
                         val actor = root.findViewWithTag<View>("blofy_cast_ممثل تجريبي")
                         assertNotNull(actor)
                         actor.requestFocus()
@@ -140,6 +141,7 @@ class InterfaceRefinementTest {
                 card.requestFocus()
             } }
             screenshot("settings-cards")
+            instrumentation.uiAutomation.executeShellCommand("dumpsys gfxinfo ${context.packageName} reset").close()
             repeat(14) { instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN) }
             scenario.onActivity { activity ->
                 val focused = activity.currentFocus!!
@@ -148,6 +150,13 @@ class InterfaceRefinementTest {
                 assertTrue(visible.height() > 0)
             }
             screenshot("settings-cards-bottom")
+            for ((name, command) in listOf("settings-gfxinfo" to "dumpsys gfxinfo ${context.packageName}",
+                "settings-memory" to "dumpsys meminfo ${context.packageName}")) {
+                val output = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                    instrumentation.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
+                File(context.getExternalFilesDir("ui-refinement"), "$name.txt").writeText(output)
+                android.util.Log.i("BLOFY_UI_PERFORMANCE", "$name: $output")
+            }
         }
     }
 

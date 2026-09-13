@@ -168,16 +168,19 @@ class PlaylistActivity : AppCompatActivity() {
             saveConnect.isEnabled = false
             saveOnly.isEnabled = false
             try {
-            val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: return@launch
-            if (BlofySubscriberClient.isManaged(provider)) {
-                startActivity(Intent(this@PlaylistActivity, BlofySubscriberActivity::class.java).putExtra(EXTRA_PROVIDER_ID, provider.id))
-                finish()
-                return@launch
-            }
-            name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password)
-            status.text = if (provider.providerType.equals("xtream", true)) "XTREAM • ${provider.name}" else "هذه القائمة قديمة وغير مدعومة • أدخل بيانات Xtream"
-            saveConnect.isEnabled = true
-            saveOnly.isEnabled = true
+                val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: run {
+                    status.text = "القائمة غير موجودة • ارجع إلى القوائم المحفوظة"
+                    return@launch
+                }
+                if (BlofySubscriberClient.isManaged(provider)) {
+                    startActivity(Intent(this@PlaylistActivity, BlofySubscriberActivity::class.java).putExtra(EXTRA_PROVIDER_ID, provider.id))
+                    finish()
+                    return@launch
+                }
+                name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password)
+                status.text = if (provider.providerType.equals("xtream", true)) "XTREAM • ${provider.name}" else "هذه القائمة قديمة وغير مدعومة • أدخل بيانات Xtream"
+                saveConnect.isEnabled = true
+                saveOnly.isEnabled = true
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

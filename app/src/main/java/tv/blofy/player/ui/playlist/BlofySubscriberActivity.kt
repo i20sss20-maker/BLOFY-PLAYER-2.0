@@ -124,9 +124,6 @@ class BlofySubscriberActivity : AppCompatActivity() {
         val playlistName = field("اسم القائمة (اختياري)")
         panel.addView(playlistName, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 66)))
         val editingId = intent.getStringExtra(PlaylistActivity.EXTRA_PROVIDER_ID)
-        if (editingId != null) lifecycleScope.launch {
-            BlofyDatabase.get(applicationContext).dao().providerStored(editingId)?.let { playlistName.setText(it.name) }
-        }
         panel.addView(label("اسم المستخدم"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val username = field("أدخل اسم المستخدم")
         panel.addView(username, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 66)))
@@ -143,6 +140,16 @@ class BlofySubscriberActivity : AppCompatActivity() {
             setPadding(dp(8), dp(12), dp(8), dp(2))
         }
         panel.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        if (editingId != null) lifecycleScope.launch {
+            try {
+                val saved = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().providerStored(editingId) }
+                if (playlistName.text.isNullOrBlank()) saved?.let { playlistName.setText(it.name) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status.text = "تعذر قراءة اسم القائمة المحفوظ • يمكنك إدخال الاسم"
+            }
+        }
 
         lateinit var login: Button
         var submitting = false
