@@ -14,6 +14,52 @@ on:
   workflow_dispatch:
 
 jobs:
+  downloads-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Render Downloader layout on desktop and phone
+        env:
+          AGENT_BROWSER_EXECUTABLE_PATH: /usr/bin/google-chrome
+          AGENT_BROWSER_ARGS: --no-sandbox
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/blofy-browser" --ignore-scripts=false --no-audit --no-fund agent-browser@0.37.1
+          export PATH="$RUNNER_TEMP/blofy-browser/node_modules/.bin:$PATH"
+          node services/activation/test/downloads-browser-fixture.mjs &
+          mkdir -p downloads-evidence
+          agent-browser open http://127.0.0.1:8127/downloads
+          agent-browser eval "document.fonts.ready.then(() => 'Fonts ready')"
+          agent-browser set viewport 1280 720
+          agent-browser snapshot -i
+          agent-browser eval "document.getElementById('download-primary').focus()"
+          agent-browser screenshot downloads-evidence/downloads-tv.png
+          agent-browser eval "if(document.documentElement.scrollWidth > innerWidth) throw new Error('Horizontal overflow'); if(document.getElementById('download-primary').getBoundingClientRect().height < 54) throw new Error('Small download target'); if(document.querySelector('.previous-releases').open) throw new Error('Older versions must start collapsed'); 'TV layout verified'"
+          agent-browser click '.previous-releases summary'
+          agent-browser snapshot -i
+          agent-browser set viewport 390 844
+          agent-browser open http://127.0.0.1:8127/downloads
+          agent-browser screenshot downloads-evidence/downloads-phone.png
+          agent-browser eval "if(document.documentElement.scrollWidth > innerWidth) throw new Error('Phone horizontal overflow'); 'Phone layout verified'"
+          agent-browser errors
+          agent-browser close
+          python3 - <<'PYSCREEN'
+          import base64,pathlib
+          for p in pathlib.Path('downloads-evidence').glob('*.png'):
+              print('BLOFY_WEB_SCREEN '+p.stem+' '+base64.b64encode(p.read_bytes()).decode())
+          PYSCREEN
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: downloads-browser-${{ github.sha }}
+          path: downloads-evidence/
+          retention-days: 14
   admin-session-persistence:
     runs-on: ubuntu-latest
     timeout-minutes: 8
