@@ -18,7 +18,7 @@ import tv.blofy.player.data.CatalogSearchIndex
 import tv.blofy.player.data.ContentRepository
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class SearchIndexMigrationTest {
     private val app get() = RuntimeEnvironment.getApplication()
     private val databaseName = "search-index-migration-regression.db"

@@ -19,7 +19,7 @@ import org.robolectric.annotation.Config
 import tv.blofy.player.data.discardStagedCatalogSafely
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class CatalogRefreshPersistenceTest {
     private lateinit var db: BlofyDatabase
     private val original = ProviderEntity("saved", "Saved", "https://fixture.example.test", "u", "p")

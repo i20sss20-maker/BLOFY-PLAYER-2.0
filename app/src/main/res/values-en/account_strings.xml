@@ -1,0 +1,33 @@
+<resources>
+    <string name="account_title">License and privacy</string>
+    <string name="privacy_policy">Privacy policy and data deletion</string>
+    <string name="privacy_summary">We use an installation ID and a digest of the Android ID to manage activation and the trial period. We do not use your phone number or IMEI. Read the privacy policy for data and deletion details.</string>
+    <string name="privacy_diagnostics">Share playback diagnostics to improve stability (optional)</string>
+    <string name="license_recovery_title">License recovery</string>
+    <string name="license_recovery_hint">Save a recovery key outside this device before uninstalling. It transfers your paid license only; playlists and passwords are not imported automatically.</string>
+    <string name="license_create_key">Create recovery key</string>
+    <string name="license_create_warning">Any previous recovery key will stop working. Save the new key before leaving this screen.</string>
+    <string name="license_enter_key">Recovery key</string>
+    <string name="license_restore">Restore license on this device</string>
+    <string name="license_restore_warning">The remaining license period will move to this device and the previous device will be deactivated. Continue?</string>
+    <string name="license_invalid_key">The key is invalid or used, or the license is expired or blocked.</string>
+    <string name="license_restored">License restored. Return to Login and refresh the status.</string>
+    <string name="license_paid_required">A current paid license is required to create a recovery key.</string>
+    <string name="license_same_device">This license already belongs to this device.</string>
+    <string name="license_already_active">This device already has a valid license; it was not replaced.</string>
+    <string name="license_keep_key">Keep this key somewhere safe and do not share it. It will not be displayed again.</string>
+    <string name="license_key_created">Recovery key created. Save it outside this device.</string>
+    <string name="account_revoke_sessions">Revoke existing website sessions</string>
+    <string name="account_revoke_warning">New requests using existing website sessions will be rejected. Your direct content-provider credentials will not change. Continue?</string>
+    <string name="account_sessions_revoked">Existing website sessions revoked.</string>
+    <string name="privacy_delete_title">Delete my data and revoke activation</string>
+    <string name="privacy_delete_warning">This revokes this device and its recovery key and deletes its playlists, cloud profiles, diagnostics and local app data. A minimal anti-abuse record and required transaction records remain. Your account with your content provider is not deleted. This cannot be undone.</string>
+    <string name="privacy_deleted">Service data deleted. Clearing local app data.</string>
+    <string name="account_wait">Processing your request…</string>
+    <string name="account_failed">Unable to complete the request. Check your connection and try again.</string>
+    <string name="account_auth_failed">Device verification failed or the attempt limit was reached. Try again later.</string>
+    <string name="account_browser_unavailable">Open /privacy on the BLOFY website using another browser.</string>
+    <string name="account_back">Back</string>
+    <string name="account_copy">Copy</string>
+    <string name="play_license_expired">The period has ended. You can restore a valid license from License and privacy.</string>
+</resources>

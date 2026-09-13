@@ -1,0 +1,33 @@
+<resources>
+    <string name="account_title">Licence et confidentialité</string>
+    <string name="privacy_policy">Politique de confidentialité et suppression des données</string>
+    <string name="privacy_summary">Nous utilisons un identifiant d’installation et une empreinte de l’identifiant Android pour gérer l’activation et la période d’essai. Nous n’utilisons ni numéro de téléphone ni IMEI. Consultez la politique de confidentialité pour les données et leur suppression.</string>
+    <string name="privacy_diagnostics">Partager les diagnostics de lecture pour améliorer la stabilité (facultatif)</string>
+    <string name="license_recovery_title">Récupération de licence</string>
+    <string name="license_recovery_hint">Conservez une clé de récupération hors de cet appareil avant de désinstaller. Elle transfère uniquement la licence payante ; les listes et mots de passe ne sont pas importés automatiquement.</string>
+    <string name="license_create_key">Créer une clé de récupération</string>
+    <string name="license_create_warning">Toute ancienne clé de récupération sera invalidée. Enregistrez la nouvelle clé avant de quitter cet écran.</string>
+    <string name="license_enter_key">Clé de récupération</string>
+    <string name="license_restore">Restaurer la licence sur cet appareil</string>
+    <string name="license_restore_warning">La durée restante de la licence sera transférée sur cet appareil et l’ancien appareil sera désactivé. Continuer ?</string>
+    <string name="license_invalid_key">La clé est invalide ou déjà utilisée, ou la licence est expirée ou bloquée.</string>
+    <string name="license_restored">Licence restaurée. Revenez à la connexion et actualisez le statut.</string>
+    <string name="license_paid_required">Une licence payante valide est nécessaire pour créer une clé de récupération.</string>
+    <string name="license_same_device">Cette licence appartient déjà à cet appareil.</string>
+    <string name="license_already_active">Cet appareil possède déjà une licence valide ; elle n’a pas été remplacée.</string>
+    <string name="license_keep_key">Conservez cette clé en lieu sûr sans la partager. Elle ne sera plus affichée.</string>
+    <string name="license_key_created">Clé de récupération créée. Conservez-la hors de cet appareil.</string>
+    <string name="account_revoke_sessions">Révoquer les sessions actuelles du site</string>
+    <string name="account_revoke_warning">Les nouvelles requêtes utilisant les sessions actuelles du site seront refusées. Vos identifiants directs auprès du fournisseur de contenu ne changeront pas. Continuer ?</string>
+    <string name="account_sessions_revoked">Les sessions actuelles du site ont été révoquées.</string>
+    <string name="privacy_delete_title">Supprimer mes données et révoquer l’activation</string>
+    <string name="privacy_delete_warning">Cette action révoque cet appareil et sa clé de récupération et supprime ses listes, profils cloud, diagnostics et données locales. Un enregistrement minimal contre les abus et les données de transaction nécessaires sont conservés. Votre compte auprès du fournisseur de contenu n’est pas supprimé. Cette action est irréversible.</string>
+    <string name="privacy_deleted">Données du service supprimées. Suppression des données locales de l’application.</string>
+    <string name="account_wait">Traitement de la demande…</string>
+    <string name="account_failed">Impossible de terminer la demande. Vérifiez votre connexion et réessayez.</string>
+    <string name="account_auth_failed">Vérification de l’appareil impossible ou limite de tentatives atteinte. Réessayez plus tard.</string>
+    <string name="account_browser_unavailable">Ouvrez /privacy sur le site BLOFY avec un autre navigateur.</string>
+    <string name="account_back">Retour</string>
+    <string name="account_copy">Copier</string>
+    <string name="play_license_expired">La période est terminée. Vous pouvez restaurer une licence valide dans Licence et confidentialité.</string>
+</resources>

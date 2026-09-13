@@ -167,6 +167,9 @@ class SettingsActivity : AppCompatActivity() {
         })
         refreshCard = actionCard(getString(R.string.setting_refresh_content), syncSubtitle()) { refreshLibrary() }
         addCard(refreshCard)
+        addCard(actionCard(getString(R.string.account_title), getString(R.string.privacy_policy)) {
+            startActivity(Intent(this, tv.blofy.player.ui.account.AccountActivity::class.java))
+        })
         addSection(page, copy("التطبيق", "App"))
         addCard(actionCard(getString(R.string.update_check), getString(R.string.update_check_hint)) {
             tv.blofy.player.core.update.AppUpdatePrompt.check(this, force = true)

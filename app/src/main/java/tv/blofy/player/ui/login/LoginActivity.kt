@@ -108,6 +108,7 @@ class LoginActivity : AppCompatActivity() {
             textSize = 12f
         }
         header.addView(refreshCodeButton, LinearLayout.LayoutParams(dp(196), dp(44)).apply { marginStart = dp(16) })
+        header.addView(accountButton(), LinearLayout.LayoutParams(dp(176), dp(44)).apply { marginStart = dp(8) })
         root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
 
         val workspace = LinearLayout(this).apply {
@@ -258,11 +259,16 @@ class LoginActivity : AppCompatActivity() {
         root.addView(addPlaylist, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(12) })
         root.addView(connectButton, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(10) })
         root.addView(refreshCodeButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
+        root.addView(accountButton(), LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
         return ScrollView(this).apply {
             isFillViewport = true
             addView(root, FrameLayout.LayoutParams(-1, -2))
         }
     }
+
+    private fun accountButton() = actionButton(getString(R.string.account_title)) {
+        startActivity(Intent(this, tv.blofy.player.ui.account.AccountActivity::class.java))
+    }.apply { textSize = 12f; tag = "blofy_account_entry" }
 
     private fun createIdentityViews(phone: Boolean) {
         deviceView = TextView(this).apply {

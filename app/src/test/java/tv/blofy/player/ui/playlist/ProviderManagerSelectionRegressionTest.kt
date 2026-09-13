@@ -33,7 +33,7 @@ import tv.blofy.player.ui.home.HomeActivity
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class, qualifiers = "w1280dp-h720dp-land")
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class, qualifiers = "w1280dp-h720dp-land")
 @LooperMode(LooperMode.Mode.PAUSED)
 class ProviderManagerSelectionRegressionTest {
     private lateinit var db: BlofyDatabase

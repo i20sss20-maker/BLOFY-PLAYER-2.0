@@ -1,0 +1,33 @@
+<resources>
+    <string name="account_title">Lisans ve gizlilik</string>
+    <string name="privacy_policy">Gizlilik politikası ve veri silme</string>
+    <string name="privacy_summary">Etkinleştirmeyi ve deneme süresini yönetmek için kurulum kimliği ile Android kimliğinin özetini kullanırız. Telefon numaranızı veya IMEI bilgilerinizi kullanmayız. Veri ve silme ayrıntıları için gizlilik politikasını okuyun.</string>
+    <string name="privacy_diagnostics">Kararlılığı iyileştirmek için oynatma tanılarını paylaş (isteğe bağlı)</string>
+    <string name="license_recovery_title">Lisans kurtarma</string>
+    <string name="license_recovery_hint">Uygulamayı kaldırmadan önce kurtarma anahtarını bu cihazın dışında saklayın. Yalnızca ücretli lisansınızı aktarır; listeler ve parolalar otomatik olarak içe aktarılmaz.</string>
+    <string name="license_create_key">Kurtarma anahtarı oluştur</string>
+    <string name="license_create_warning">Önceki kurtarma anahtarları geçersiz olacaktır. Bu ekrandan ayrılmadan önce yeni anahtarı kaydedin.</string>
+    <string name="license_enter_key">Kurtarma anahtarı</string>
+    <string name="license_restore">Lisansı bu cihaza geri yükle</string>
+    <string name="license_restore_warning">Kalan lisans süresi bu cihaza aktarılacak ve önceki cihaz devre dışı bırakılacaktır. Devam edilsin mi?</string>
+    <string name="license_invalid_key">Anahtar geçersiz veya kullanılmış ya da lisansın süresi dolmuş veya engellenmiş.</string>
+    <string name="license_restored">Lisans geri yüklendi. Giriş ekranına dönüp durumu yenileyin.</string>
+    <string name="license_paid_required">Kurtarma anahtarı oluşturmak için geçerli bir ücretli lisans gerekir.</string>
+    <string name="license_same_device">Bu lisans zaten bu cihaza ait.</string>
+    <string name="license_already_active">Bu cihazın zaten geçerli bir lisansı var; değiştirilmedi.</string>
+    <string name="license_keep_key">Bu anahtarı güvenli bir yerde saklayın ve paylaşmayın. Bir daha gösterilmeyecektir.</string>
+    <string name="license_key_created">Kurtarma anahtarı oluşturuldu. Bu cihazın dışında saklayın.</string>
+    <string name="account_revoke_sessions">Mevcut web sitesi oturumlarını iptal et</string>
+    <string name="account_revoke_warning">Mevcut web sitesi oturumlarını kullanan yeni istekler reddedilecektir. İçerik sağlayıcınızdaki doğrudan giriş bilgileriniz değişmez. Devam edilsin mi?</string>
+    <string name="account_sessions_revoked">Mevcut web sitesi oturumları iptal edildi.</string>
+    <string name="privacy_delete_title">Verilerimi sil ve etkinleştirmeyi iptal et</string>
+    <string name="privacy_delete_warning">Bu işlem cihazı ve kurtarma anahtarını iptal eder; listeleri, bulut profillerini, tanıları ve yerel uygulama verilerini siler. Kötüye kullanımı önleyen asgari kayıt ve gerekli işlem kayıtları saklanır. İçerik sağlayıcınızdaki hesabınız silinmez. Bu işlem geri alınamaz.</string>
+    <string name="privacy_deleted">Hizmet verileri silindi. Yerel uygulama verileri temizleniyor.</string>
+    <string name="account_wait">İsteğiniz işleniyor…</string>
+    <string name="account_failed">İstek tamamlanamadı. Bağlantınızı kontrol edip tekrar deneyin.</string>
+    <string name="account_auth_failed">Cihaz doğrulaması başarısız oldu veya deneme sınırına ulaşıldı. Daha sonra tekrar deneyin.</string>
+    <string name="account_browser_unavailable">Başka bir tarayıcıyla BLOFY sitesindeki /privacy sayfasını açın.</string>
+    <string name="account_back">Geri</string>
+    <string name="account_copy">Kopyala</string>
+    <string name="play_license_expired">Süre sona erdi. Lisans ve gizlilik bölümünden geçerli bir lisansı geri yükleyebilirsiniz.</string>
+</resources>

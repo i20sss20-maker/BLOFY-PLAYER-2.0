@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
 
 /** Synthetic lists against a local server; no production credentials. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class PortalRefreshRecoveryTest {
     private val app get() = RuntimeEnvironment.getApplication()
     private lateinit var server: MockWebServer

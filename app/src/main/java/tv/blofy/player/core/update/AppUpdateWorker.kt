@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit
  */
 class AppUpdateWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        if (BuildConfig.IS_GOOGLE_PLAY) return@withContext Result.failure()
         val version = inputData.getInt(VERSION, 0)
         val url = inputData.getString(URL).orEmpty()
         if (version <= BuildConfig.VERSION_CODE || !safeUrl(url)) return@withContext Result.failure()

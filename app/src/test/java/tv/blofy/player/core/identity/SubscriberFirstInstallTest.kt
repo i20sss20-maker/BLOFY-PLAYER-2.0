@@ -16,7 +16,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import java.io.IOException
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [23, 28], application = Application::class)
+@Config(sdk = [23, 28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class SubscriberFirstInstallTest {
     private val app get() = RuntimeEnvironment.getApplication()
     private lateinit var db: BlofyDatabase

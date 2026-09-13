@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** Actual screen/Room regressions; every provider and catalog row is local test data. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class, qualifiers = "w1280dp-h720dp-land")
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class, qualifiers = "w1280dp-h720dp-land")
 @LooperMode(LooperMode.Mode.PAUSED)
 class LibraryScreensRegressionTest {
     private val app get() = RuntimeEnvironment.getApplication()

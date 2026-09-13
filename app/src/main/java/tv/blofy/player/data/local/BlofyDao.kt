@@ -73,7 +73,8 @@ interface BlofyDao {
             if (ProviderSecretCodec.needsSealing(stored)) {
                 // Seal only plaintext fields. Decrypting first could erase an existing encrypted
                 // field if Keystore is temporarily unavailable on a partially migrated row.
-                val hardened = ProviderSecretCodec.seal(stored)
+                val hardened = try { ProviderSecretCodec.seal(stored) }
+                    catch (_: ProviderSecretUnavailableException) { return@forEach }
                 if (hardened != stored) upsertProviderStored(hardened)
             }
         }

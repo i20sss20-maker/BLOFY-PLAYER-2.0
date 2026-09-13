@@ -22,10 +22,22 @@ class ProviderSecretMigrationTest {
     )
 
     @Before fun setup() {
+        java.security.Security.removeProvider("AndroidKeyStore")
         db = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), BlofyDatabase::class.java).build()
     }
 
     @After fun close() { db.close() }
+
+    @Test fun failedNewSecretWriteRollsBackAndPreservesExistingSelection(): Unit = runBlocking(Dispatchers.IO) {
+        val dao = db.dao()
+        dao.upsertProviderStored(provider.copy(enabled = true))
+        try {
+            dao.saveAndActivateProvider(provider.copy(id = "new-provider", password = "new-secret"))
+            fail("Saving new plaintext without a Keystore must fail")
+        } catch (_: ProviderSecretUnavailableException) { }
+        assertNull(dao.providerStored("new-provider"))
+        assertEquals(provider.copy(enabled = true), dao.providerStored(provider.id))
+    }
 
     @Test fun migrationPreservesUnreadableCiphertextInAMixedLegacyRow(): Unit = runBlocking(Dispatchers.IO) {
         val dao = db.dao()

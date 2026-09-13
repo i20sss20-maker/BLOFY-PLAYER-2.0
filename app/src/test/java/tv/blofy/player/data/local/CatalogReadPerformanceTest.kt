@@ -15,7 +15,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class CatalogReadPerformanceTest {
     private val app get() = RuntimeEnvironment.getApplication()
     private val name = "catalog-read-performance.db"

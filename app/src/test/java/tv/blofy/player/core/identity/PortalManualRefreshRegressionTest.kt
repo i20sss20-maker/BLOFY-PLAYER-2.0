@@ -27,7 +27,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class PortalManualRefreshRegressionTest {
     private lateinit var server: MockWebServer
     private val rows = linkedMapOf<String, ProviderEntity>()

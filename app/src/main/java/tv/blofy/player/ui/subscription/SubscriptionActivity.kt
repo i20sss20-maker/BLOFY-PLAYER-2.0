@@ -53,7 +53,7 @@ class SubscriptionActivity : AppCompatActivity() {
             gravity = Gravity.START
         })
         content.addView(TextView(this).apply {
-            text = "إدارة الباقة والتجديد والأجهزة المسموحة"
+            text = if (BuildConfig.IS_GOOGLE_PLAY) "حالة التفعيل والأجهزة المسموحة" else "إدارة الباقة والتجديد والأجهزة المسموحة"
             textSize = 14f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -94,7 +94,8 @@ class SubscriptionActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    SubscriptionClient.status(applicationContext, endpoint) to SubscriptionClient.plans(endpoint)
+                    SubscriptionClient.status(applicationContext, endpoint) to
+                        if (BuildConfig.IS_GOOGLE_PLAY) emptyList() else SubscriptionClient.plans(endpoint)
                 }
                 render(result.first, result.second)
             } catch (cancelled: CancellationException) {
@@ -118,7 +119,12 @@ class SubscriptionActivity : AppCompatActivity() {
                 current.expiresAt?.let { append(" • حتى ${formatDate(it)}") }
                 current.maxDevices?.let { append(" • $it جهاز") }
             }
-        } else "لا توجد باقة مفعّلة • اختر الباقة المناسبة"
+        } else "لا توجد باقة مفعّلة"
+
+        content.addView(actionButton(getString(R.string.license_recovery_title)) {
+            startActivity(Intent(this, tv.blofy.player.ui.account.AccountActivity::class.java))
+        }, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(12) })
+        if (BuildConfig.IS_GOOGLE_PLAY) return
 
         if (plans.isEmpty()) {
             content.addView(messageCard("لا توجد باقات متاحة حالياً."))

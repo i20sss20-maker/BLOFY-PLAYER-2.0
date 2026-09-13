@@ -34,10 +34,12 @@ object PlaybackDiagnosticsUploader {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     fun enqueue(context: Context, metric: PlaybackMetric) {
+        if (!tv.blofy.player.core.privacy.PrivacyPreferences.diagnosticsEnabled(context)) return
         val baseUrl = BuildConfig.ACTIVATION_BASE_URL.trim().trimEnd('/')
         if (baseUrl.isBlank()) return
         val appContext = context.applicationContext
         executor.execute {
+            if (!tv.blofy.player.core.privacy.PrivacyPreferences.diagnosticsEnabled(appContext)) return@execute
             runCatching {
                 val payload = JSONObject().apply {
                     put("deviceId", DeviceIdentity.deviceId(appContext))

@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 import tv.blofy.player.data.CatalogSyncState
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class CatalogLoadRecoveryTest {
     private val app get() = RuntimeEnvironment.getApplication()
     private val databaseName = "catalog-load-recovery-regression.db"

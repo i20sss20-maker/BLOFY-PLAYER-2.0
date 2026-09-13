@@ -24,7 +24,7 @@ import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import tv.blofy.player.ui.player.PlayerActivity
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class RootExitConfirmationRegressionTest {
     private lateinit var controller: ActivityController<ExitTestActivity>
     private lateinit var activity: ExitTestActivity

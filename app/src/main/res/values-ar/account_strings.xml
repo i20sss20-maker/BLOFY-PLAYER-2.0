@@ -1,0 +1,33 @@
+<resources>
+    <string name="account_title">الرخصة والخصوصية</string>
+    <string name="privacy_policy">سياسة الخصوصية وطلب حذف البيانات</string>
+    <string name="privacy_summary">نستخدم رقم التثبيت وبصمة مشتقة من معرّف Android لإدارة التفعيل ومدة التجربة. لا نستخدم رقم الهاتف أو IMEI. تفاصيل البيانات والحذف موضحة في سياسة الخصوصية.</string>
+    <string name="privacy_diagnostics">مشاركة تشخيص التشغيل لتحسين الاستقرار (اختياري)</string>
+    <string name="license_recovery_title">استعادة الرخصة</string>
+    <string name="license_recovery_hint">احفظ رمز الاستعادة خارج الجهاز قبل حذف التطبيق. ينقل الرخصة المدفوعة فقط؛ قوائمك وكلمات مرورك لا تُنقل تلقائيًا.</string>
+    <string name="license_create_key">إنشاء رمز احتياطي</string>
+    <string name="license_create_warning">سيُلغى أي رمز احتياطي سابق. احفظ الرمز الجديد قبل مغادرة الشاشة.</string>
+    <string name="license_enter_key">رمز الاستعادة</string>
+    <string name="license_restore">استعادة الرخصة على هذا الجهاز</string>
+    <string name="license_restore_warning">ستُنقل المدة المتبقية إلى هذا الجهاز ويُوقف تفعيل الجهاز السابق. هل تريد المتابعة؟</string>
+    <string name="license_invalid_key">الرمز غير صالح أو مستخدم، أو الرخصة منتهية/محظورة.</string>
+    <string name="license_restored">تمت استعادة الرخصة. ارجع إلى الدخول وحدّث الحالة.</string>
+    <string name="license_paid_required">إنشاء رمز الاستعادة متاح للرخصة المدفوعة السارية.</string>
+    <string name="license_same_device">الرخصة موجودة على هذا الجهاز بالفعل.</string>
+    <string name="license_already_active">هذا الجهاز لديه رخصة سارية؛ لم تُستبدل.</string>
+    <string name="license_keep_key">احفظ هذا الرمز في مكان آمن ولا تشاركه. لن يُعرض مرة أخرى.</string>
+    <string name="license_key_created">تم إنشاء الرمز الاحتياطي. احفظه خارج الجهاز.</string>
+    <string name="account_revoke_sessions">إلغاء جلسات الموقع القديمة</string>
+    <string name="account_revoke_warning">ستُرفض الطلبات الجديدة من جلسات الموقع القديمة. بيانات دخول مزود المحتوى المباشرة لا تتغير. متابعة؟</string>
+    <string name="account_sessions_revoked">تم إلغاء جلسات الموقع القديمة.</string>
+    <string name="privacy_delete_title">حذف بياناتي وإلغاء التفعيل</string>
+    <string name="privacy_delete_warning">سيُلغى تفعيل هذا الجهاز ورمز استعادته، وتُحذف قوائمه وملفاته السحابية والتشخيص وبيانات التطبيق المحلية. يبقى سجل محدود لمنع التحايل وسجلات المعاملات اللازمة. لا تُحذف بيانات حسابك عند مزود المحتوى. هذا الإجراء لا يمكن التراجع عنه.</string>
+    <string name="privacy_deleted">حُذفت بيانات الخدمة. جارٍ مسح بيانات التطبيق.</string>
+    <string name="account_wait">جاري تنفيذ الطلب…</string>
+    <string name="account_failed">تعذر تنفيذ الطلب. تحقق من الاتصال وحاول مرة أخرى.</string>
+    <string name="account_auth_failed">تعذر التحقق من الجهاز أو تجاوزت المحاولات المسموحة. حاول لاحقًا.</string>
+    <string name="account_browser_unavailable">افتح صفحة /privacy في موقع BLOFY من متصفح آخر.</string>
+    <string name="account_back">رجوع</string>
+    <string name="account_copy">نسخ</string>
+    <string name="play_license_expired">انتهت المدة. يمكنك استعادة رخصة سارية من صفحة الرخصة والخصوصية.</string>
+</resources>
