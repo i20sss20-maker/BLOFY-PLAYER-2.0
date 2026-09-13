@@ -41,7 +41,7 @@ class MovieDetailsActivity : AppCompatActivity() {
         }
 
         val uiDirection = resources.configuration.layoutDirection
-        val contentGravity = Gravity.END
+        val contentGravity = Gravity.START
         val layout = DetailsLayout(this)
         val backdrop = layout.backdrop
         val poster = layout.poster

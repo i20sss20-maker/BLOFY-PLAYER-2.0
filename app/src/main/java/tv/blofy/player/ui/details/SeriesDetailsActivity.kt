@@ -77,7 +77,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 letterSpacing = .12f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleBright)
-                gravity = Gravity.END
+                gravity = Gravity.START
             })
 
             val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
@@ -95,7 +95,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 textSize = if (metadata?.logoUrl.isNullOrBlank()) 28f else 18f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
-                gravity = Gravity.END
+                gravity = Gravity.START
                 maxLines = 2
                 includeFontPadding = false
                 alpha = if (metadata?.logoUrl.isNullOrBlank()) 1f else .9f
@@ -120,7 +120,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 textSize = 13.5f
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(0xFFE8D8FA.toInt())
-                gravity = Gravity.END
+                gravity = Gravity.START
                 setPadding(0, dp(7), 0, dp(10))
             })
 
@@ -129,7 +129,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 textSize = 13f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleSoft)
-                gravity = Gravity.END
+                gravity = Gravity.START
                 setPadding(0, 0, 0, dp(3))
             })
             val overviewView = TextView(this@SeriesDetailsActivity).apply {
@@ -137,7 +137,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 typeface = BlofyTvDesign.BodyTypeface
                 maxLines = 7
                 setTextColor(BlofyTvDesign.TextSecondary)
-                gravity = Gravity.END
+                gravity = Gravity.START
                 setLineSpacing(0f, 1.16f)
                 setPadding(0, 0, 0, dp(8))
             }
@@ -146,7 +146,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 textSize = 11.5f
                 typeface = BlofyTvDesign.MediumTypeface
                 setTextColor(BlofyTvDesign.TextMuted)
-                gravity = Gravity.END
+                gravity = Gravity.START
                 setPadding(0, 0, 0, dp(7))
             }
             panel.addView(crewView)
@@ -164,7 +164,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     textSize = 12.5f
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.Mint)
-                    gravity = Gravity.END
+                    gravity = Gravity.START
                 })
                 if (currentResume.durationMs > 0) {
                     panel.addView(ProgressBar(this@SeriesDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -181,7 +181,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val actions = LinearLayout(this@SeriesDetailsActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutDirection = resources.configuration.layoutDirection
-                gravity = Gravity.END
+                gravity = Gravity.START
             }
             var primary: Button? = null
             resume?.let { currentResume ->

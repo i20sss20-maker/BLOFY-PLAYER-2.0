@@ -22,7 +22,7 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
         layoutDirection = resources.configuration.layoutDirection
-        gravity = Gravity.CENTER_VERTICAL
+        gravity = Gravity.TOP
         setPadding(dp(16), dp(14), dp(16), dp(14))
         minimumHeight = dp(126)
         isFocusable = true

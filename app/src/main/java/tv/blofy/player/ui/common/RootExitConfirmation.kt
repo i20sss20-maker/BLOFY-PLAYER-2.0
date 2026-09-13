@@ -97,7 +97,7 @@ class RootExitConfirmationDialog : DialogFragment() {
         }
         body.addView(choices, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(22) })
         return AlertDialog.Builder(context)
-            .setView(body, 0, 0, 0, 0)
+            .setView(body)
             .setPositiveButton(R.string.exit_confirm) { _, _ -> activity?.finishAffinity() }
             .setNegativeButton(R.string.exit_stay, null)
             .create()
