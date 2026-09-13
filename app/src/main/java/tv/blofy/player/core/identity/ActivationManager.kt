@@ -94,7 +94,6 @@ class ActivationManager(
     }
 
     fun cachedCanUse(state: ActivationEntity, nowMs: Long = System.currentTimeMillis()): Boolean {
-        if (!state.activated) return false
-        return state.expiresAt == null || state.expiresAt > nowMs
+        return ActivationLease.allows(state, nowMs)
     }
 }

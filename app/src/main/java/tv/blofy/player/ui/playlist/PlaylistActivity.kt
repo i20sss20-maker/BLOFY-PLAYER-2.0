@@ -149,6 +149,7 @@ class PlaylistActivity : AppCompatActivity() {
                     startActivity(Intent(this@PlaylistActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)); finish()
                 } else finish()
             } catch (cancelled: CancellationException) { throw cancelled }
+            catch (secure: tv.blofy.player.data.local.ProviderSecretUnavailableException) { status.text = secure.message; busy = false }
             catch (_: Exception) { status.text = "تعذر تجهيز السيرفر • تحقق من البيانات والاتصال ثم حاول مرة أخرى"; busy = false }
         }
 
