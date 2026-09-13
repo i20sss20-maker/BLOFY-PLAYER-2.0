@@ -45,8 +45,9 @@ class PortalRefreshRecoveryTest {
             else -> error("Unexpected DAO method ${method.name}")
         }
     } as BlofyDao
-    private val transport = OkHttpClient.Builder().dns { listOf(InetAddress.getByName("127.0.0.1")) }
-        .callTimeout(2, TimeUnit.SECONDS).followRedirects(false).build()
+    private val transport = OkHttpClient.Builder().dns(object : okhttp3.Dns {
+        override fun lookup(hostname: String): List<InetAddress> = listOf(InetAddress.getByName("127.0.0.1"))
+    }).callTimeout(2, TimeUnit.SECONDS).followRedirects(false).build()
     private val endpoint get() = server.url("/").newBuilder().host("portal.example").build().toString()
     private fun local(id: String) = ProviderEntity(id, id, "https://provider.example", "user", "secret")
     private fun row(id: String, proxy: Boolean = false, token: String = "token") = JSONObject().apply {
