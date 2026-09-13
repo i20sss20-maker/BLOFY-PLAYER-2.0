@@ -26,6 +26,7 @@ export function injectSubscriberPortalUi(html) {
 <script>
 (function () {
   var editingSubscriberId = null;
+  var editorGeneration = 0;
   var whatsappNumber = ${whatsappNumber};
 
   function qs(id) { return document.getElementById(id); }
@@ -126,6 +127,7 @@ export function injectSubscriberPortalUi(html) {
     window.blofySubscriberOverridesV5 = true;
 
     typeUi = function () {
+      editorGeneration++;
       var select = qs('providerType');
       if (!select || select.value === 'xtream') originalTypeUi.apply(this, arguments);
       applyMode();
@@ -134,6 +136,7 @@ export function injectSubscriberPortalUi(html) {
     if (select) select.onchange = typeUi;
 
     if (originalClearEditor) clearEditor = function () {
+      editorGeneration++;
       editingSubscriberId = null;
       originalClearEditor.apply(this, arguments);
       configureProviderOptions();
@@ -142,6 +145,7 @@ export function injectSubscriberPortalUi(html) {
     };
     if (originalOpenEditor) {
       openEditor = function () {
+        editorGeneration++;
         editingSubscriberId = null;
         originalOpenEditor.apply(this, arguments);
         configureProviderOptions();
@@ -150,6 +154,7 @@ export function injectSubscriberPortalUi(html) {
       if (qs('newBtn')) qs('newBtn').onclick = openEditor;
     }
     edit = function (item) {
+      editorGeneration++;
       originalEdit.apply(this, arguments);
       configureProviderOptions();
       if (!isSubscriberPlaylist(item)) { editingSubscriberId = null; applyMode(); return; }
@@ -162,8 +167,7 @@ export function injectSubscriberPortalUi(html) {
       status('اكتب اسم المستخدم وكلمة المرور من جديد لتحديث اشتراك BLOFY.', false);
     };
   }
-  async function createSubscriberSession() {
-    var state = deviceAuth();
+  async function createSubscriberSession(state) {
     var username = String(qs('username') && qs('username').value || '').trim();
     var password = String(qs('password') && qs('password').value || '');
     if (!username || !password) throw new Error('أدخل اسم المستخدم وكلمة المرور');
@@ -190,28 +194,51 @@ export function injectSubscriberPortalUi(html) {
     if (!button || button.dataset.blofyBusy === '1') return;
     button.dataset.blofyBusy = '1';
     button.disabled = true;
+    // Capture the selected device and editor before either asynchronous request.
+    var saved = {
+      auth: deviceAuth(), authReference: typeof auth !== 'undefined' && auth,
+      generation: editorGeneration, id: editingSubscriberId || undefined,
+      name: String(qs('name') && qs('name').value || '').trim(),
+      active: !qs('active') || qs('active').checked
+    };
+    function sameDevice() {
+      var current = deviceAuth();
+      return saved.authReference === (typeof auth !== 'undefined' && auth) &&
+        saved.auth.deviceId === current.deviceId && saved.auth.activationCode === current.activationCode;
+    }
+    function stillCurrent() { return sameDevice() && saved.generation === editorGeneration; }
     status('جاري التحقق من اشتراك BLOFY…', false);
     try {
-      var session = await createSubscriberSession();
-      var state = deviceAuth();
+      var session = await createSubscriberSession(saved.auth);
+      if (!stillCurrent()) return;
       var response = await fetch('/api/v1/portal/playlists', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          deviceId: state.deviceId, activationCode: state.activationCode,
-          id: editingSubscriberId || undefined,
-          name: String(qs('name') && qs('name').value || '').trim() || session.providerName || 'مشتركين BLOFY',
+          deviceId: saved.auth.deviceId, activationCode: saved.auth.activationCode,
+          id: saved.id,
+          name: saved.name || session.providerName || 'مشتركين BLOFY',
           providerType: 'xtream', baseUrl: session.baseUrl, username: session.username, password: session.password,
-          active: !qs('active') || qs('active').checked
+          active: saved.active
         })
       });
-      var payload = {};
-      try { payload = await response.json(); } catch (_) {}
-      if (!response.ok) throw new Error(payload.error || 'تعذر حفظ اشتراك BLOFY');
+      if (!response.ok) throw new Error('تعذر حفظ اشتراك BLOFY. حاول مرة أخرى.');
+      // A completed old write must not close, clear or refresh a newer editor.
+      if (!stillCurrent()) return;
       status('تم حفظ اشتراك BLOFY بنجاح.', false);
       editingSubscriberId = null;
       if (qs('editor')) qs('editor').classList.add('hidden');
       if (typeof clearEditor === 'function') clearEditor();
-      if (typeof load === 'function') await load();
+      var refreshGeneration = editorGeneration;
+      if (typeof load === 'function') {
+        try { await load(); }
+        catch (_) {
+          if (sameDevice() && refreshGeneration === editorGeneration) {
+            status('تم الحفظ، لكن تعذر تحديث العرض. حدّث الصفحة لعرض القائمة.', true);
+          }
+        }
+      }
+    } catch (error) {
+      if (stillCurrent()) status(error && error.message ? error.message : 'تعذر الحفظ', true);
     } finally {
       button.disabled = false;
       button.dataset.blofyBusy = '0';
@@ -226,8 +253,7 @@ export function injectSubscriberPortalUi(html) {
       if (select.value !== 'blofy') return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      try { await saveSubscriber(); }
-      catch (error) { status(error && error.message ? error.message : 'تعذر الحفظ', true); }
+      await saveSubscriber();
     }, true);
   }
   function installRenewalUi() {

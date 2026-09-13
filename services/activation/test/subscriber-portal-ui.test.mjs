@@ -45,7 +45,7 @@ test('subscriber edit never exposes stored opaque credentials', () => {
 
 test('subscriber save uses a fresh secure session and writes directly to the portal endpoint', () => {
   const html = injected();
-  assert.match(html, /createSubscriberSession\(\)/);
+  assert.match(html, /createSubscriberSession\(saved\.auth\)/);
   assert.match(html, /providerType: 'xtream'/);
   assert.match(html, /baseUrl: session\.baseUrl/);
   assert.match(html, /username: session\.username/);

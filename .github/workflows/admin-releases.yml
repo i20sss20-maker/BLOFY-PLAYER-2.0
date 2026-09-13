@@ -1,7 +1,7 @@
 name: BLOFY Admin Releases
 on:
   push:
-    branches: [main, fix/admin-release-management, fix/downloader-releases-ssr]
+    branches: [main, fix/admin-release-management, fix/downloader-releases-ssr, fix/portal-rc0742-publish]
     paths: ['services/activation/**', '.github/workflows/admin-releases.yml']
   workflow_dispatch:
 permissions:
@@ -39,6 +39,6 @@ jobs:
           node --check src/public-downloads.mjs
           node --check web/release-manager.js
       - name: Release catalogue tests with PostgreSQL
-        run: node --test test/release-catalog.test.mjs test/public-downloads.test.mjs
+        run: node --test test/release-catalog.test.mjs test/public-downloads.test.mjs test/approved-release-rc0742.test.mjs test/subscriber-portal-ui.test.mjs test/portal-save-generation.test.mjs
       - name: Authenticated admin and public update integration
         run: node test/admin-release-runtime.mjs
