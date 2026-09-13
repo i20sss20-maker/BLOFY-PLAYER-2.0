@@ -1,0 +1,5 @@
+<resources>
+    <string name="player_toggle_controls">Oynatma kontrollerini göster veya gizle</string>
+    <string name="player_seek_position">Oynatma konumu</string>
+    <string name="login_saved_playlists_failed">Kayıtlı listeler okunamadı. Tekrar deneyin; kayıtlı verileriniz silinmedi.</string>
+</resources>

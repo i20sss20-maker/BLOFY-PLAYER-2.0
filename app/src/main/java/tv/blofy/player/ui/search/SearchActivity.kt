@@ -1,5 +1,8 @@
 package tv.blofy.player.ui.search
 
+import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.ContentPresentation
+
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -52,7 +55,7 @@ class SearchActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(44), dp(30), dp(44), dp(32))
             background = AppCompatResources.getDrawable(this@SearchActivity, R.drawable.blofy_home_background)
         }
@@ -61,8 +64,8 @@ class SearchActivity : AppCompatActivity() {
             textSize = 11.5f
             letterSpacing = .13f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(BlofyTvDesign.PurpleBright)
-            gravity = Gravity.RIGHT
+            setTextColor(CinemaStyle.Muted)
+            gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
             text = when (scopeKind) {
@@ -71,17 +74,17 @@ class SearchActivity : AppCompatActivity() {
                 KIND_MOVIE -> "بحث الأفلام"
                 else -> "ابحث في كل شيء"
             }
-            textSize = 31f
+            textSize = 26f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(3), 0, dp(4))
         })
         hint = TextView(this).apply {
             text = emptyHint()
             textSize = 13f
             setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, 0, 0, dp(12))
         }
         root.addView(hint)
@@ -93,7 +96,7 @@ class SearchActivity : AppCompatActivity() {
                 KIND_MOVIE -> "اكتب اسم الفيلم"
                 else -> "اكتب اسم المحتوى"
             }
-            textSize = 18f
+            textSize = 16f
             setTextColor(Color.WHITE)
             setHintTextColor(BlofyTvDesign.TextMuted)
             background = searchField(false)
@@ -183,7 +186,7 @@ class SearchActivity : AppCompatActivity() {
         onFirstFocusable: (View) -> Unit
     ): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = resources.configuration.layoutDirection
         setPadding(dp(14), dp(12), dp(14), dp(10))
         background = BlofyTvDesign.glassSurface(dp(18).toFloat())
 
@@ -193,7 +196,7 @@ class SearchActivity : AppCompatActivity() {
             textSize = 19f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setPadding(dp(4), 0, dp(4), dp(8))
         }, LinearLayout.LayoutParams(-1, dp(42)))
 
@@ -202,7 +205,7 @@ class SearchActivity : AppCompatActivity() {
                 text = "لا توجد نتائج"
                 textSize = 13f
                 setTextColor(BlofyTvDesign.TextMuted)
-                gravity = Gravity.RIGHT
+                gravity = Gravity.START
                 setPadding(dp(8), dp(6), dp(8), dp(10))
             })
         } else {
@@ -223,7 +226,7 @@ class SearchActivity : AppCompatActivity() {
 
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), dp(7), dp(16), dp(7))
             isFocusable = true
@@ -238,20 +241,20 @@ class SearchActivity : AppCompatActivity() {
             addView(art, LinearLayout.LayoutParams(dp(58), dp(68)).apply { marginStart = dp(14) })
             ArtworkLoader.load(art, stream.icon ?: stream.backdrop)
 
-            val copy = LinearLayout(this@SearchActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT }
+            val copy = LinearLayout(this@SearchActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START }
             copy.addView(TextView(this@SearchActivity).apply {
-                text = (if (stream.locked) "🔒  " else "") + stream.name
-                textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 1; gravity = Gravity.RIGHT
+                text = (if (stream.locked) "🔒  " else "") + ContentPresentation.of(stream).title
+                textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 1; gravity = Gravity.START
                 ellipsize = android.text.TextUtils.TruncateAt.END
             })
             copy.addView(TextView(this@SearchActivity).apply {
-                text = metadata.joinToString("   •   "); textSize = 11.5f; setTextColor(BlofyTvDesign.TextMuted); maxLines = 1; gravity = Gravity.RIGHT
+                text = metadata.joinToString("   •   "); textSize = 11.5f; setTextColor(BlofyTvDesign.TextMuted); maxLines = 1; gravity = Gravity.START
             })
             addView(copy, LinearLayout.LayoutParams(0, -1, 1f))
 
             val badge = TextView(this@SearchActivity).apply {
-                text = kindLabel(stream.kind); textSize = 10.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.CENTER
-                background = GradientDrawable().apply { cornerRadius = dp(11).toFloat(); setColor(0x66382252); setStroke(dp(1), 0x995F3D82.toInt()) }
+                text = kindLabel(stream.kind); textSize = 10.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(CinemaStyle.Muted); gravity = Gravity.CENTER
+                background = CinemaStyle.surface(this@SearchActivity, radiusDp = 6)
             }
             addView(badge, LinearLayout.LayoutParams(dp(74), dp(34)).apply { marginStart = dp(6) })
 
@@ -287,7 +290,7 @@ class SearchActivity : AppCompatActivity() {
                     putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(PlayerActivity.EXTRA_KIND, KIND_LIVE); putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
                     putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType); putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
                     putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine); putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream)); putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId); putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
+                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream)); putStringArrayListExtra(PlayerActivity.EXTRA_FALLBACK_URLS, ArrayList(ContentUrlResolver.recoveryUrls(stream))); putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId); putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
                 })
             }
         }
@@ -309,15 +312,8 @@ class SearchActivity : AppCompatActivity() {
 
     private fun kindLabel(kind: String) = when (kind) { KIND_LIVE -> "LIVE"; KIND_MOVIE -> "MOVIE"; KIND_SERIES -> "SERIES"; else -> kind.uppercase() }
 
-    private fun searchField(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF332044.toInt(), 0xFF21152E.toInt()) else intArrayOf(0xFF21172F.toInt(), 0xFF17101F.toInt())
-    ).apply { cornerRadius = dp(20).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.PurpleBright else 0xFF513D67.toInt()) }
-
-    private fun rowBackground(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF713EC0.toInt(), 0xFF3A2358.toInt()) else intArrayOf(0xE6241A36.toInt(), 0xE6191222.toInt())
-    ).apply { cornerRadius = dp(16).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.PurpleBright else 0xFF49375E.toInt()) }
+    private fun searchField(focused: Boolean) = CinemaStyle.surface(this, focused)
+    private fun rowBackground(focused: Boolean) = CinemaStyle.surface(this, focused)
 
     private fun showMessage(message: String) {
         results.removeAllViews()

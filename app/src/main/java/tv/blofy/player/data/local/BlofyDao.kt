@@ -6,22 +6,61 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import tv.blofy.player.core.text.ArabicSearchNormalizer
 import tv.blofy.player.data.CatalogRefreshIntegrityPolicy
 
 @Dao
 interface BlofyDao {
+
+    /** Replace transport credentials and cached proxy links atomically, retaining IDs and history. */
+    @Transaction suspend fun migrateSubscriberConnection(expected: ProviderEntity, direct: ProviderEntity): Boolean {
+        val current = provider(expected.id) ?: return false
+        if (!sameCatalogSource(current, expected) || current.subscriberToken.isNotEmpty() ||
+            direct.id != current.id || direct.subscriberToken != expected.username) return false
+        val proxyPrefix = expected.baseUrl.trimEnd('/') + "/"
+        rewriteSubscriberStreamUrls(current.id, proxyPrefix, proxyPrefix + "raw/", direct.baseUrl.trimEnd('/'))
+        rewriteSubscriberEpisodeUrls(current.id, proxyPrefix, proxyPrefix + "raw/", direct.baseUrl.trimEnd('/'))
+        upsertProvider(current.copy(baseUrl = direct.baseUrl, username = direct.username,
+            password = direct.password, subscriberToken = direct.subscriberToken))
+        return true
+    }
+
+    @Query("""
+        UPDATE streams SET
+            icon = CASE WHEN substr(icon, 1, length(:rawPrefix)) = :rawPrefix AND instr(substr(icon, length(:rawPrefix) + 1), '/') > 0 THEN :directBase || substr(icon, length(:rawPrefix) + instr(substr(icon, length(:rawPrefix) + 1), '/')) WHEN substr(icon, 1, length(:proxyPrefix)) = :proxyPrefix THEN NULL ELSE icon END,
+            backdrop = CASE WHEN substr(backdrop, 1, length(:rawPrefix)) = :rawPrefix AND instr(substr(backdrop, length(:rawPrefix) + 1), '/') > 0 THEN :directBase || substr(backdrop, length(:rawPrefix) + instr(substr(backdrop, length(:rawPrefix) + 1), '/')) WHEN substr(backdrop, 1, length(:proxyPrefix)) = :proxyPrefix THEN NULL ELSE backdrop END,
+            directSource = CASE WHEN substr(directSource, 1, length(:rawPrefix)) = :rawPrefix AND instr(substr(directSource, length(:rawPrefix) + 1), '/') > 0 THEN :directBase || substr(directSource, length(:rawPrefix) + instr(substr(directSource, length(:rawPrefix) + 1), '/')) WHEN substr(directSource, 1, length(:proxyPrefix)) = :proxyPrefix THEN NULL ELSE directSource END
+        WHERE providerId = :providerId AND
+            (substr(icon, 1, length(:proxyPrefix)) = :proxyPrefix OR
+             substr(backdrop, 1, length(:proxyPrefix)) = :proxyPrefix OR
+             substr(directSource, 1, length(:proxyPrefix)) = :proxyPrefix)
+    """)
+    suspend fun rewriteSubscriberStreamUrls(providerId: String, proxyPrefix: String, rawPrefix: String, directBase: String)
+
+    @Query("""
+        UPDATE episodes SET directSource = CASE WHEN substr(directSource, 1, length(:rawPrefix)) = :rawPrefix AND instr(substr(directSource, length(:rawPrefix) + 1), '/') > 0 THEN :directBase || substr(directSource, length(:rawPrefix) + instr(substr(directSource, length(:rawPrefix) + 1), '/')) WHEN substr(directSource, 1, length(:proxyPrefix)) = :proxyPrefix THEN NULL ELSE directSource END
+        WHERE providerId = :providerId AND substr(directSource, 1, length(:proxyPrefix)) = :proxyPrefix
+    """)
+    suspend fun rewriteSubscriberEpisodeUrls(providerId: String, proxyPrefix: String, rawPrefix: String, directBase: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertProviderStored(provider: ProviderEntity)
     @Transaction suspend fun upsertProvider(provider: ProviderEntity) =
         upsertProviderStored(ProviderSecretCodec.sealForUpdate(provider, providerStored(provider.id)))
 
     @Query("SELECT * FROM providers WHERE enabled = 1 ORDER BY updatedAt DESC") fun providersStored(): Flow<List<ProviderEntity>>
-    fun providers(): Flow<List<ProviderEntity>> = providersStored().map { rows -> rows.map(ProviderSecretCodec::open) }
+    fun providers(): Flow<List<ProviderEntity>> = providersStored()
+        .map { rows -> rows.map(ProviderSecretCodec::open) }.flowOn(Dispatchers.IO)
 
     @Query("SELECT * FROM providers ORDER BY updatedAt DESC") fun allProvidersStored(): Flow<List<ProviderEntity>>
-    fun allProviders(): Flow<List<ProviderEntity>> = allProvidersStored().map { rows -> rows.map(ProviderSecretCodec::open) }
+    fun allProviders(): Flow<List<ProviderEntity>> = allProvidersStored()
+        .map { rows -> rows.map(ProviderSecretCodec::open) }.flowOn(Dispatchers.IO)
+
+    @Query("SELECT id FROM providers WHERE enabled = 1 ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun activeProviderId(): String?
 
     @Query("SELECT * FROM providers WHERE id = :providerId LIMIT 1") suspend fun providerStored(providerId: String): ProviderEntity?
     suspend fun provider(providerId: String): ProviderEntity? = providerStored(providerId)?.let(ProviderSecretCodec::open)
@@ -49,6 +88,58 @@ interface BlofyDao {
         upsertProvider(provider.copy(enabled = true))
         disableAllProviders()
         activateProvider(provider.id, provider.updatedAt)
+    }
+
+    @Transaction suspend fun activateExistingProvider(providerId: String) {
+        val current = checkNotNull(providerStored(providerId)) { "Provider no longer exists" }
+        disableAllProviders()
+        activateProvider(providerId, current.updatedAt)
+    }
+
+    @Transaction suspend fun activateImportedProvider(
+        expectedSource: ProviderEntity,
+        updatedAt: Long = System.currentTimeMillis()
+    ) {
+        val current = checkNotNull(provider(expectedSource.id)) { "Provider no longer exists" }
+        check(sameCatalogSource(current, expectedSource)) { "Provider source changed during import" }
+        saveAndActivateProvider(current.copy(enabled = true, updatedAt = maxOf(current.updatedAt, updatedAt)))
+    }
+
+    @Transaction suspend fun mergeProviderProfileIfSourceUnchanged(
+        expected: ProviderEntity,
+        updated: ProviderEntity
+    ): Boolean {
+        val current = provider(expected.id) ?: return false
+        if (expected.id != updated.id || !sameCatalogSource(current, expected)) return false
+        // Network profile results may arrive after a selection, rename or preference edit.
+        // Apply each default only while that field still has the value seen by the request.
+        val merged = current.copy(
+            liveFormat = if (current.liveFormat == expected.liveFormat) updated.liveFormat else current.liveFormat,
+            preferredTransport = if (current.preferredTransport == expected.preferredTransport) updated.preferredTransport else current.preferredTransport,
+            preferredEngine = if (current.preferredEngine == expected.preferredEngine) updated.preferredEngine else current.preferredEngine,
+            allowCrossProtocolRedirects = if (current.allowCrossProtocolRedirects == expected.allowCrossProtocolRedirects) updated.allowCrossProtocolRedirects else current.allowCrossProtocolRedirects
+        )
+        if (merged != current) upsertProvider(merged)
+        return true
+    }
+
+    @Transaction suspend fun discardUncommittedCatalogIfSourceUnchanged(
+        expectedSource: ProviderEntity,
+        completedSections: Set<String> = emptySet(),
+        canDiscard: () -> Boolean = { true }
+    ): Boolean {
+        val current = provider(expectedSource.id) ?: return false
+        if (!sameCatalogSource(current, expectedSource) || current.updatedAt != expectedSource.updatedAt || !canDiscard()) return false
+        if (completedSections.isEmpty()) clearProviderCatalog(expectedSource.id)
+        else for (kind in listOf("live", "movie", "series")) {
+            if (kind !in completedSections) {
+                clearSearchIndex(expectedSource.id, kind)
+                clearStreams(expectedSource.id, kind)
+                clearCategories(expectedSource.id, kind)
+                if (kind == "series") clearProviderEpisodes(expectedSource.id)
+            }
+        }
+        return true
     }
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId") suspend fun allCategoriesForProvider(providerId: String): List<CategoryEntity>
@@ -80,16 +171,41 @@ interface BlofyDao {
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun catalogCountAll(providerId: String, kind: String): Int
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId") suspend fun catalogCountInCategory(providerId: String, kind: String, categoryId: String): Int
 
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
+    @Query("SELECT * FROM streams INDEXED BY index_streams_providerId_kind WHERE providerId = :providerId AND kind = :kind AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
     suspend fun catalogPageAfterAll(providerId: String, kind: String, afterRowId: Long, limit: Int): List<StreamEntity>
 
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
+    @Query("SELECT * FROM streams INDEXED BY index_streams_providerId_kind_categoryId WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
     suspend fun catalogPageAfterInCategory(providerId: String, kind: String, categoryId: String, afterRowId: Long, limit: Int): List<StreamEntity>
 
     @Query("SELECT rowid FROM streams WHERE `key` = :contentKey LIMIT 1")
     suspend fun streamRowId(contentKey: String): Long?
 
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind IN ('movie','series') ORDER BY COALESCE(addedAt, 0) DESC, name LIMIT :limit") suspend fun latestHomeStreams(providerId: String, limit: Int = 14): List<StreamEntity>
+    // Each covering-index seek reads at most `limit` keys. Merge only those four small sets,
+    // then load the selected rows. Keep the existing NULL-as-zero date and name ordering.
+    @Query("""
+        WITH candidates AS (
+            SELECT * FROM (SELECT `key`, name, addedAt FROM streams INDEXED BY index_streams_home_page
+                WHERE providerId = :providerId AND kind = 'movie' AND addedAt IS NOT NULL
+                ORDER BY addedAt DESC, name, `key` LIMIT :limit)
+            UNION ALL
+            SELECT * FROM (SELECT `key`, name, addedAt FROM streams INDEXED BY index_streams_home_page
+                WHERE providerId = :providerId AND kind = 'series' AND addedAt IS NOT NULL
+                ORDER BY addedAt DESC, name, `key` LIMIT :limit)
+            UNION ALL
+            SELECT * FROM (SELECT `key`, name, addedAt FROM streams INDEXED BY index_streams_home_page
+                WHERE providerId = :providerId AND kind = 'movie' AND addedAt IS NULL
+                ORDER BY name, `key` LIMIT :limit)
+            UNION ALL
+            SELECT * FROM (SELECT `key`, name, addedAt FROM streams INDEXED BY index_streams_home_page
+                WHERE providerId = :providerId AND kind = 'series' AND addedAt IS NULL
+                ORDER BY name, `key` LIMIT :limit)
+        )
+        SELECT streams.* FROM streams INNER JOIN (
+            SELECT `key` FROM candidates ORDER BY COALESCE(addedAt, 0) DESC, name, `key` LIMIT :limit
+        ) AS selected ON streams.`key` = selected.`key`
+        ORDER BY COALESCE(streams.addedAt, 0) DESC, streams.name, streams.`key`
+    """)
+    suspend fun latestHomeStreams(providerId: String, limit: Int = 14): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (name LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' OR year LIKE '%' || :query || '%') ORDER BY name LIMIT :limit") suspend fun searchCatalog(providerId: String, kind: String, query: String, limit: Int = 300): List<StreamEntity>
 
     @Query("SELECT * FROM streams WHERE `key` = :contentKey LIMIT 1") suspend fun stream(contentKey: String): StreamEntity?
@@ -166,7 +282,25 @@ interface BlofyDao {
 
     /** Same-source refreshes must validate the durable candidate before replacing known-good rows. */
     @Transaction
-    suspend fun promoteStagedRefresh(stagedProviderId: String, targetProvider: ProviderEntity) {
+    suspend fun promoteStagedRefresh(
+        stagedProviderId: String,
+        targetProvider: ProviderEntity,
+        activateTarget: Boolean = true,
+        expectedSource: ProviderEntity? = null
+    ) {
+        val current = provider(targetProvider.id)
+        if (expectedSource != null) {
+            check(expectedSource.id == targetProvider.id) { "Catalog target changed" }
+            checkNotNull(current) { "Provider no longer exists" }
+            check(sameCatalogSource(current, expectedSource)) { "Provider source changed during refresh" }
+        }
+        val target = if (expectedSource != null && current != null) current.copy(
+            baseUrl = targetProvider.baseUrl,
+            username = targetProvider.username,
+            password = targetProvider.password,
+            providerType = targetProvider.providerType,
+            updatedAt = maxOf(current.updatedAt, targetProvider.updatedAt)
+        ) else targetProvider
         val previous = CatalogRefreshIntegrityPolicy.Counts(
             live = catalogCountAll(targetProvider.id, "live"),
             movies = catalogCountAll(targetProvider.id, "movie"),
@@ -178,24 +312,91 @@ interface BlofyDao {
             series = catalogCountAll(stagedProviderId, "series")
         )
         check(CatalogRefreshIntegrityPolicy.accepts(previous, candidate)) { "Incomplete catalog refresh" }
-        promoteStagedCatalog(stagedProviderId, targetProvider)
+        val sameSource = current?.let { sameCatalogSource(it, target) } == true
+        promoteStagedCatalog(stagedProviderId, target, activateTarget, preserveEpisodes = sameSource)
     }
 
+    /** A completed background request must not undo a later selection, edit or removal. */
     @Transaction
-    suspend fun promoteStagedCatalog(stagedProviderId: String, targetProvider: ProviderEntity) {
+    suspend fun promoteStagedBackgroundRefresh(
+        stagedProviderId: String,
+        expectedProvider: ProviderEntity,
+        refreshedProvider: ProviderEntity
+    ) {
+        check(expectedProvider.id == refreshedProvider.id) { "Catalog target changed" }
+        val current = checkNotNull(provider(expectedProvider.id)) { "Provider no longer exists" }
+        check(sameCatalogSource(current, expectedProvider)) { "Provider source changed during refresh" }
+        val target = current.copy(
+            baseUrl = refreshedProvider.baseUrl,
+            username = refreshedProvider.username,
+            password = refreshedProvider.password,
+            providerType = refreshedProvider.providerType,
+            updatedAt = maxOf(current.updatedAt, refreshedProvider.updatedAt)
+        )
+        promoteStagedRefresh(stagedProviderId, target, activateTarget = false)
+    }
+
+    /** Only an explicitly requested account replacement may legitimately have a smaller catalog. */
+    @Transaction
+    suspend fun promoteExplicitSourceReplacement(
+        stagedProviderId: String,
+        targetProvider: ProviderEntity,
+        expectedSource: ProviderEntity
+    ) {
+        check(expectedSource.id == targetProvider.id && stagedProviderId != targetProvider.id) { "Catalog target changed" }
+        val current = checkNotNull(provider(expectedSource.id)) { "Provider no longer exists" }
+        check(sameCatalogSource(current, expectedSource)) { "Provider source changed during replacement" }
+        check(!sameCatalogSource(current, targetProvider)) { "Replacement source is unchanged" }
+        val candidate = CatalogRefreshIntegrityPolicy.Counts(
+            live = catalogCountAll(stagedProviderId, "live"),
+            movies = catalogCountAll(stagedProviderId, "movie"),
+            series = catalogCountAll(stagedProviderId, "series")
+        )
+        check(candidate.total > 0) { "Replacement catalog is empty" }
+        val target = current.copy(
+            baseUrl = targetProvider.baseUrl,
+            username = targetProvider.username,
+            password = targetProvider.password,
+            providerType = targetProvider.providerType,
+            updatedAt = maxOf(current.updatedAt, targetProvider.updatedAt)
+        )
+        promoteStagedCatalog(stagedProviderId, target, activateTarget = true, preserveEpisodes = false)
+    }
+
+    @Query("""DELETE FROM episodes WHERE providerId = :targetProviderId AND (
+        NOT EXISTS (SELECT 1 FROM streams WHERE streams.`key` =
+            :targetProviderId || ':series:' || episodes.seriesId)
+        OR EXISTS (SELECT 1 FROM episodes AS staged WHERE staged.`key` =
+            :stagedProviderId || ':episode:' || episodes.remoteId))""")
+    suspend fun pruneRetainedEpisodes(targetProviderId: String, stagedProviderId: String)
+
+    @Transaction
+    suspend fun promoteStagedCatalog(
+        stagedProviderId: String,
+        targetProvider: ProviderEntity,
+        activateTarget: Boolean = true,
+        preserveEpisodes: Boolean = false
+    ) {
         inheritStagedCategoryFlags(stagedProviderId, targetProvider.id)
         inheritStagedStreamFlags(stagedProviderId, targetProvider.id)
-        clearProviderCatalog(targetProvider.id)
+        clearProviderCategories(targetProvider.id)
+        clearProviderStreams(targetProvider.id)
+        clearProviderEpg(targetProvider.id)
+        clearSearchIndex(targetProvider.id)
+        if (!preserveEpisodes) clearProviderEpisodes(targetProvider.id)
         promoteStagedCategoriesInPlace(stagedProviderId, targetProvider.id)
         promoteStagedStreamsInPlace(stagedProviderId, targetProvider.id)
+        if (preserveEpisodes) pruneRetainedEpisodes(targetProvider.id, stagedProviderId)
         promoteStagedEpisodesInPlace(stagedProviderId, targetProvider.id)
         // The staged sync already built FTS section-by-section while data was arriving. Re-key the
         // staged FTS rows atomically instead of rebuilding the entire 100k–200k item index here.
         promoteStagedSearchIndexInPlace(stagedProviderId, targetProvider.id)
         clearProviderEpg(stagedProviderId)
-        upsertProvider(targetProvider.copy(enabled = true))
-        disableAllProviders()
-        activateProvider(targetProvider.id, targetProvider.updatedAt)
+        upsertProvider(targetProvider.copy(enabled = activateTarget || targetProvider.enabled))
+        if (activateTarget) {
+            disableAllProviders()
+            activateProvider(targetProvider.id, targetProvider.updatedAt)
+        }
         deleteProvider(stagedProviderId)
     }
 
@@ -320,6 +521,11 @@ interface BlofyDao {
 
     @Query("DELETE FROM epg WHERE providerId = :providerId AND streamId = :streamId") suspend fun clearEpg(providerId: String, streamId: String)
 }
+
+private fun sameCatalogSource(first: ProviderEntity, second: ProviderEntity): Boolean =
+    first.providerType.equals(second.providerType, ignoreCase = true) &&
+        first.baseUrl.trimEnd('/') == second.baseUrl.trimEnd('/') &&
+        first.username == second.username && first.password == second.password
 
 private fun searchRow(stream: StreamEntity) = StreamSearchFtsEntity(
     contentKey = stream.key,

@@ -1,5 +1,7 @@
 package tv.blofy.player.ui.settings
 
+import tv.blofy.player.ui.common.CinemaStyle
+
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
@@ -38,8 +40,10 @@ class SettingsActivity : AppCompatActivity() {
     private var provider: ProviderEntity? = null
     private lateinit var status: TextView
     private lateinit var grid: GridLayout
-    private lateinit var storageCard: Button
-    private lateinit var refreshCard: Button
+    private val cardRows = mutableListOf<List<View>>()
+    private val sections = mutableListOf<GridLayout>()
+    private lateinit var storageCard: SettingCard
+    private lateinit var refreshCard: SettingCard
     private val prefs by lazy { getSharedPreferences(RuntimeSettings.PREFS, MODE_PRIVATE) }
     private val isRtl: Boolean get() = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
     private val uiDirection: Int get() = if (isRtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
@@ -61,6 +65,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun buildPage() {
+        cardRows.clear()
+        sections.clear()
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             layoutDirection = uiDirection
@@ -70,7 +76,7 @@ class SettingsActivity : AppCompatActivity() {
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = uiDirection
-            setPadding(dp(46), dp(30), dp(46), dp(34))
+            setPadding(dp(if (isTv()) 36 else 18), dp(22), dp(if (isTv()) 36 else 18), dp(24))
             clipChildren = false
             clipToPadding = false
         }
@@ -82,58 +88,56 @@ class SettingsActivity : AppCompatActivity() {
         }
         val titleBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             layoutDirection = uiDirection
         }
         titleBox.addView(TextView(this).apply {
             text = getString(R.string.settings_title)
             BlofyTvDesign.applyTitle(this)
-            gravity = Gravity.END
+            textSize = 26f
+            gravity = Gravity.START
         })
         titleBox.addView(TextView(this).apply {
             text = getString(R.string.settings_subtitle)
             BlofyTvDesign.applyCaption(this)
-            textSize = 14f
-            gravity = Gravity.END
+            textSize = 12f
+            gravity = Gravity.START
             setPadding(0, dp(6), 0, 0)
         })
-        header.addView(titleBox, LinearLayout.LayoutParams(0, dp(80), 1f))
-        val back = settingButton("↩  ${getString(R.string.back)}", true) { finish() }.apply { id = View.generateViewId() }
-        header.addView(back, LinearLayout.LayoutParams(dp(156), dp(54)))
-        page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(88)))
+        header.addView(titleBox, LinearLayout.LayoutParams(0, dp(56), 1f))
+        val back = settingButton(getString(R.string.back), true) { finish() }.apply { id = View.generateViewId() }
+        header.addView(back, LinearLayout.LayoutParams(dp(98), dp(48)))
+        page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
 
         status = TextView(this).apply {
-            textSize = 13.5f
+            textSize = 12f
             typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.PurpleSoft)
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(10), dp(16), dp(10))
-            background = BlofyTvDesign.badge(dp(14).toFloat())
+            setTextColor(CinemaStyle.Muted)
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            setPadding(dp(14), 0, dp(14), 0)
+            background = CinemaStyle.surface(this@SettingsActivity)
         }
         updateSyncStatus()
-        page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { bottomMargin = dp(18) })
+        page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)).apply { bottomMargin = dp(12) })
 
-        grid = GridLayout(this).apply {
-            columnCount = if (isTv()) 3 else 2
-            layoutDirection = uiDirection
-            alignmentMode = GridLayout.ALIGN_BOUNDS
-            useDefaultMargins = false
-            clipChildren = false
-            clipToPadding = false
-        }
-
+        addSection(page, copy("الصورة والصوت", "Picture and sound"))
         addCard(cycleSetting(getString(R.string.setting_aspect), RuntimeSettings.KEY_ASPECT,
             arrayOf("fit", "zoom", "fill"),
             arrayOf(getString(R.string.setting_aspect_fit), getString(R.string.setting_aspect_zoom), getString(R.string.setting_aspect_fill))))
         addCard(cycleSetting(getString(R.string.setting_audio_output), RuntimeSettings.KEY_AUDIO_OUTPUT,
             arrayOf("auto", "stereo"),
             arrayOf(getString(R.string.setting_audio_auto), getString(R.string.setting_audio_stereo))))
+        addCard(actionCard(copy("جودة الصور والأداء", "Artwork and performance"), copy("وضوح البوسترات وخفة الواجهة", "Poster quality and a lighter interface")) {
+            startActivity(Intent(this, CommercialSettingsActivity::class.java))
+        })
+        addSection(page, getString(R.string.settings_subtitles))
         addCard(cycleSetting(getString(R.string.setting_subtitle_language), RuntimeSettings.KEY_SUBTITLE_LANGUAGE,
             arrayOf("ar", "auto", "off"),
             arrayOf(getString(R.string.setting_subtitle_ar_first), getString(R.string.setting_auto), getString(R.string.setting_off))))
         addCard(cycleSetting(getString(R.string.setting_subtitle_size), RuntimeSettings.KEY_SUBTITLE_SIZE,
             arrayOf("small", "medium", "large"),
             arrayOf(getString(R.string.setting_small), getString(R.string.setting_medium), getString(R.string.setting_large))))
+        addSection(page, copy("تجربة المشاهدة", "Watching preferences"))
         addCard(cycleSetting(getString(R.string.setting_live_preview), RuntimeSettings.KEY_AUTOPLAY_LIVE,
             arrayOf("on", "off"),
             arrayOf(getString(R.string.setting_auto), getString(R.string.setting_manual))))
@@ -143,10 +147,18 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting(getString(R.string.setting_next_episode), RuntimeSettings.KEY_AUTO_NEXT,
             arrayOf("ask", "on", "off"),
             arrayOf(getString(R.string.setting_ask_me), getString(R.string.setting_auto), getString(R.string.setting_off))))
+        addSection(page, copy("المظهر واللغة", "Appearance and language"))
         addCard(cycleSetting(getString(R.string.setting_motion), RuntimeSettings.KEY_MOTION,
             arrayOf("smooth", "reduced"),
             arrayOf(getString(R.string.setting_smooth), getString(R.string.setting_reduced))))
         addCard(actionCard(getString(R.string.setting_app_language), currentLanguageLabel()) { chooseLanguage() })
+        addSection(page, copy("المكتبة والحساب", "Library and account"))
+        addCard(actionCard(copy("باقتي", "My plan"), copy("مدة التفعيل والأجهزة المسموحة", "Activation period and allowed devices")) {
+            startActivity(Intent(this, tv.blofy.player.ui.subscription.SubscriptionActivity::class.java))
+        }.apply { tag = "blofy_subscription_entry" })
+        addCard(actionCard(copy("حالة الاشتراك", "Subscription status"), copy("صلاحية المحتوى والاتصالات الحالية", "Content validity and active connections")) {
+            startActivity(Intent(this, tv.blofy.player.ui.subscription.ConnectionStatusActivity::class.java))
+        })
         addCard(actionCard(getString(R.string.setting_playlists), getString(R.string.setting_playlists_subtitle)) {
             startActivity(Intent(this, LoginActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -154,86 +166,123 @@ class SettingsActivity : AppCompatActivity() {
         })
         refreshCard = actionCard(getString(R.string.setting_refresh_content), syncSubtitle()) { refreshLibrary() }
         addCard(refreshCard)
+        addSection(page, copy("التطبيق", "App"))
+        addCard(actionCard(getString(R.string.update_check), getString(R.string.update_check_hint)) {
+            tv.blofy.player.core.update.AppUpdatePrompt.check(this, force = true)
+        })
         storageCard = actionCard(getString(R.string.setting_storage_local), getString(R.string.setting_storage_calculating)) { showStorageManager() }
         addCard(storageCard)
-        addCard(actionCard(getString(R.string.setting_system_status), getString(R.string.setting_system_status_subtitle)) {
+        addCard(actionCard(copy("حول BLOFY", "About BLOFY"), copy("الإصدار والمكتبة والمساحة", "Version, library and storage")) {
             startActivity(Intent(this, SystemStatusActivity::class.java))
         })
         addCard(actionCard(getString(R.string.setting_restore), getString(R.string.setting_restore_subtitle)) { restoreDefaults() })
 
         linkFocus(back)
-        page.addView(grid, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         page.addView(TextView(this).apply {
             text = "BLOFY PLAYER 2.0"
             BlofyTvDesign.applyCaption(this)
+            letterSpacing = .08f
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(16) })
         scroll.addView(page)
         setContentView(scroll)
         updateStorageCard()
-        grid.post { if (grid.childCount > 0) grid.getChildAt(0).requestFocus() }
+        scroll.post { sections.firstOrNull()?.getChildAt(0)?.requestFocus() }
     }
 
-    private fun cycleSetting(title: String, key: String, values: Array<String>, labels: Array<String>): Button {
+    private fun cycleSetting(title: String, key: String, values: Array<String>, labels: Array<String>): SettingCard {
         fun currentIndex() = values.indexOf(prefs.getString(key, values[0])).let { if (it < 0) 0 else it }
-        lateinit var button: Button
-        button = settingButton("", false) {
-            val next = (currentIndex() + 1) % values.size
-            prefs.edit().putString(key, values[next]).apply()
-            button.text = "$title\n${labels[next]}"
-            status.text = getString(R.string.setting_saved)
+        return SettingCard(this).apply {
+            tag = "setting_$key"
+            bind(title, labels[currentIndex()], preferenceHint(key), cycle = true)
+            setOnClickListener {
+                val next = (currentIndex() + 1) % values.size
+                prefs.edit().putString(key, values[next]).apply()
+                bind(title, labels[next], preferenceHint(key), cycle = true)
+                status.text = getString(R.string.setting_saved)
+            }
         }
-        button.text = "$title\n${labels[currentIndex()]}"
-        return button
     }
 
-    private fun actionCard(title: String, subtitle: String, action: () -> Unit): Button =
-        settingButton("$title\n$subtitle", false, action)
+    private fun actionCard(title: String, subtitle: String, action: () -> Unit): SettingCard =
+        SettingCard(this).apply {
+            bind(title, subtitle)
+            setOnClickListener { action() }
+        }
 
     private fun settingButton(label: String, compact: Boolean, action: () -> Unit): Button = Button(this).apply {
         text = label
-        isAllCaps = false
-        textSize = if (compact) 15f else 14.5f
-        typeface = BlofyTvDesign.BodyTypeface
-        setTextColor(Color.WHITE)
-        gravity = Gravity.CENTER
-        includeFontPadding = false
-        letterSpacing = 0.005f
-        BlofyTvDesign.installTvFocus(this, dp(if (compact) 18 else 21).toFloat(), if (compact) 1.02f else 1.018f, false)
+        CinemaStyle.styleButton(this)
         setOnClickListener { action() }
     }
 
-    private fun addCard(button: Button) {
-        button.id = View.generateViewId()
-        grid.addView(button, GridLayout.LayoutParams().apply {
-            columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+    private fun addCard(card: SettingCard) {
+        card.id = View.generateViewId()
+        val position = grid.childCount
+        grid.addView(card, GridLayout.LayoutParams().apply {
+            rowSpec = GridLayout.spec(position / grid.columnCount, GridLayout.FILL)
+            columnSpec = GridLayout.spec(position % grid.columnCount, 1f)
             width = 0
-            height = dp(100)
-            setMargins(dp(8), dp(8), dp(8), dp(8))
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+            setMargins(dp(6), dp(6), dp(6), dp(6))
         })
     }
 
     private fun linkFocus(back: Button) {
-        val columns = grid.columnCount
-        val count = grid.childCount
-        if (count == 0) return
-        back.nextFocusDownId = grid.getChildAt(0).id
-        for (i in 0 until count) {
-            val item = grid.getChildAt(i)
-            val col = i % columns
-            item.nextFocusUpId = if (i - columns >= 0) grid.getChildAt(i - columns).id else back.id
-            item.nextFocusDownId = if (i + columns < count) grid.getChildAt(i + columns).id else item.id
-            val visualLeft = if (col + 1 < columns && i + 1 < count) grid.getChildAt(i + 1).id else item.id
-            val visualRight = if (col > 0) grid.getChildAt(i - 1).id else item.id
-            if (isRtl) {
-                item.nextFocusLeftId = visualLeft
-                item.nextFocusRightId = visualRight
-            } else {
-                item.nextFocusLeftId = visualRight
-                item.nextFocusRightId = visualLeft
+        sections.forEach { section ->
+            cardRows.addAll((0 until section.childCount).map(section::getChildAt).chunked(section.columnCount))
+        }
+        back.nextFocusDownId = cardRows.firstOrNull()?.firstOrNull()?.id ?: back.id
+        cardRows.forEachIndexed { rowIndex, row ->
+            row.forEachIndexed { col, item ->
+                val previous = cardRows.getOrNull(rowIndex - 1)
+                val next = cardRows.getOrNull(rowIndex + 1)
+                item.nextFocusUpId = previous?.get(col.coerceAtMost(previous.lastIndex))?.id ?: back.id
+                item.nextFocusDownId = next?.get(col.coerceAtMost(next.lastIndex))?.id ?: item.id
+                val forward = row.getOrNull(col + 1)?.id ?: item.id
+                val backward = row.getOrNull(col - 1)?.id ?: item.id
+                item.nextFocusLeftId = if (isRtl) forward else backward
+                item.nextFocusRightId = if (isRtl) backward else forward
             }
         }
     }
+
+    private fun addSection(page: LinearLayout, title: String) {
+        page.addView(TextView(this).apply {
+            text = title
+            textSize = 17f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(CinemaStyle.White)
+            gravity = Gravity.START
+            setPadding(dp(5), dp(18), dp(5), dp(8))
+        })
+        grid = GridLayout(this).apply {
+            val available = resources.configuration.screenWidthDp - if (isTv()) 72 else 36
+            val preferredWidth = (250 * resources.configuration.fontScale.coerceAtLeast(1f)).toInt()
+            columnCount = (available / preferredWidth).coerceIn(1, if (isTv()) 3 else 2)
+            layoutDirection = uiDirection
+            alignmentMode = GridLayout.ALIGN_BOUNDS
+            clipChildren = false
+            clipToPadding = false
+        }
+        sections.add(grid)
+        page.addView(grid, LinearLayout.LayoutParams(-1, -2))
+    }
+
+    private fun preferenceHint(key: String): String = when (key) {
+        RuntimeSettings.KEY_ASPECT -> copy("طريقة عرض الفيديو على الشاشة", "How video fits your screen")
+        RuntimeSettings.KEY_AUDIO_OUTPUT -> copy("اختر الصوت المناسب لسماعاتك", "Match sound to your speakers")
+        RuntimeSettings.KEY_SUBTITLE_LANGUAGE -> copy("تُستخدم عند توفر الترجمة بالمحتوى", "Used when subtitles are available")
+        RuntimeSettings.KEY_SUBTITLE_SIZE -> copy("حجم نص الترجمة أثناء المشاهدة", "Subtitle text size during playback")
+        RuntimeSettings.KEY_AUTOPLAY_LIVE -> copy("تشغيل القناة عند تحديدها", "Play a channel when highlighted")
+        RuntimeSettings.KEY_RESUME_PROMPT -> copy("السؤال قبل متابعة آخر نقطة", "Ask before resuming your progress")
+        RuntimeSettings.KEY_AUTO_NEXT -> copy("ما يحدث عند انتهاء الحلقة", "What happens when an episode ends")
+        RuntimeSettings.KEY_MOTION -> copy("حركة الانتقال بين عناصر الواجهة", "Animations as you browse")
+        else -> ""
+    }
+
+    private fun copy(arabic: String, english: String) =
+        if (androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") arabic else english
 
     private fun restoreDefaults() {
         prefs.edit().clear().apply()
@@ -262,7 +311,7 @@ class SettingsActivity : AppCompatActivity() {
             if (last > 0L) getString(R.string.setting_status_saved_at, formatSyncTime(last))
             else getString(R.string.setting_status_saved)
         }
-        if (::refreshCard.isInitialized) refreshCard.text = "${getString(R.string.setting_refresh_content)}\n${syncSubtitle()}"
+        if (::refreshCard.isInitialized) refreshCard.bind(getString(R.string.setting_refresh_content), syncSubtitle())
     }
 
     private fun syncSubtitle(): String {
@@ -284,8 +333,10 @@ class SettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val stats = withContext(Dispatchers.IO) { LocalStorageManager.stats(applicationContext) }
             if (!isFinishing && ::storageCard.isInitialized) {
-                storageCard.text = "${getString(R.string.setting_storage_local)}\n" +
+                storageCard.bind(
+                    getString(R.string.setting_storage_local),
                     getString(R.string.setting_storage_used, LocalStorageManager.format(applicationContext, stats.totalBytes))
+                )
             }
         }
     }

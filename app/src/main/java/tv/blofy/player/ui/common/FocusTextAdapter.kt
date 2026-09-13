@@ -1,7 +1,5 @@
 package tv.blofy.player.ui.common
 
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -30,11 +28,7 @@ class FocusTextAdapter<T : Any>(
     init { setHasStableIds(itemKey != null) }
 
     fun submit(newItems: List<T>) {
-        // Room/Flow may re-emit an identical category list while another catalog table changes.
-        // Do not feed that identical list back through AsyncListDiffer: even a no-op diff can cause
-        // a TV RecyclerView layout/focus pass and make a long category list jump to the top.
         if (sameVisibleList(newItems)) return
-
         val owned = attached?.hasFocus() == true
         val previousKey = focusedKey
         val previousPosition = focusedPosition
@@ -100,24 +94,24 @@ class FocusTextAdapter<T : Any>(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val context = parent.context
         val view = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 12.8f)
+            textSize = TvUiTuning.sp(context, 13f)
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(TvUiTuning.dp(context, 12), 0, TvUiTuning.dp(context, 12), 0)
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            layoutDirection = context.resources.configuration.layoutDirection
+            setPadding(TvUiTuning.dp(context, 16), 0, TvUiTuning.dp(context, 16), 0)
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
-            background = itemBackground(false)
+            background = CinemaStyle.surface(context, filledFocus = true)
         }
-        view.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TvUiTuning.dp(context, 52)).apply {
-            bottomMargin = TvUiTuning.dp(context, 5)
-            marginStart = TvUiTuning.dp(context, 2)
-            marginEnd = TvUiTuning.dp(context, 2)
+        view.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TvUiTuning.dp(context, 46)).apply {
+            bottomMargin = TvUiTuning.dp(context, 6)
+            marginStart = TvUiTuning.dp(context, 3)
+            marginEnd = TvUiTuning.dp(context, 3)
         }
         return Holder(view).also { holder ->
             view.setOnFocusChangeListener { focusedView, focused ->
@@ -125,10 +119,10 @@ class FocusTextAdapter<T : Any>(
                 focusedView.animate().cancel()
                 focusedView.scaleX = 1f
                 focusedView.scaleY = 1f
-                focusedView.translationZ = if (focused) 4f else 0f
+                focusedView.translationZ = if (focused) TvUiTuning.dp(context, 4).toFloat() else 0f
                 text.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
-                text.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
-                focusedView.background = itemBackground(focused)
+                text.setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
+                focusedView.background = CinemaStyle.surface(context, focused, filledFocus = true)
                 if (focused) {
                     restorePending = false
                     val position = holder.bindingAdapterPosition
@@ -149,7 +143,7 @@ class FocusTextAdapter<T : Any>(
             holder.text.typeface = BlofyTvDesign.MediumTypeface
             holder.text.setTextColor(BlofyTvDesign.TextSecondary)
         }
-        holder.text.background = itemBackground(holder.text.hasFocus())
+        holder.text.background = CinemaStyle.surface(holder.text.context, holder.text.hasFocus(), filledFocus = true)
         holder.text.setOnClickListener { onClick(item) }
         holder.text.setOnLongClickListener { onLongClick?.invoke(item); onLongClick != null }
         if (restorePending && position == focusedPosition) {
@@ -186,11 +180,4 @@ class FocusTextAdapter<T : Any>(
         }
     }
 
-    private fun itemBackground(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF593381.toInt(), 0xFF291A37.toInt()) else intArrayOf(0xE61B1622.toInt(), 0xEE121019.toInt())
-    ).apply {
-        cornerRadius = 13f
-        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF342A3F.toInt())
-    }
 }

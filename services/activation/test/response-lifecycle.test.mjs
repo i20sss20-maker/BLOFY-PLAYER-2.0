@@ -4,12 +4,12 @@ import vm from 'node:vm';
 import test from 'node:test';
 
 async function handler(dependencies = {}) {
-  const source = await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8');
+  const source = (await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8')).replace(/\r\n/g,'\n');
   const begin = source.indexOf('const server = http.createServer(') + 'const server = http.createServer('.length;
   const end = source.indexOf('\n\nasync function start()', begin);
   const callback = source.slice(begin, end).trim().replace(/\);$/, '');
   return vm.runInNewContext(`(${callback})`, {
-    URL, console: { error() {} }, safeErrorSummary: () => ({}), RateLimitError: class extends Error {},
+    URL, experience:{async handle(){return false;}}, console: { error() {} }, safeErrorSummary: () => ({}), RateLimitError: class extends Error {},
     json() { throw new Error('attempted a second HTTP response'); }, ...dependencies
   });
 }

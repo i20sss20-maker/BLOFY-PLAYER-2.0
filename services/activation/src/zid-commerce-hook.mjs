@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { recordAudit } from './audit.mjs';
 import crypto from 'node:crypto';
 import pg from 'pg';
 import { createActivationCredentialCodec, createDeviceAuthenticator, sendDeviceAuthRateLimit } from './auth-protection.mjs';
@@ -263,6 +264,7 @@ async function adminGrant(req, res) {
     await client.query(`INSERT INTO device_subscriptions(id,device_id,plan_key,starts_at,expires_at,status) VALUES($1,$2,$3,$4,$5,'active')`, [crypto.randomUUID(), deviceId, plan.plan_key, new Date(start), expiresAt]);
     const effectiveExpiry = device.rows[0].status === 'active' && device.rows[0].expires_at == null ? null : expiresAt;
     await client.query("UPDATE devices SET status='active',expires_at=$2,updated_at=NOW() WHERE device_id=$1 AND status!='blocked'", [deviceId, effectiveExpiry]);
+    await recordAudit(client,deviceId,'subscription_granted',{planKey,expiresAt:effectiveExpiry?.getTime()});
     await client.query('COMMIT'); return json(res, 200, { ok: true, expiresAt: effectiveExpiry?.getTime() || null });
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; } finally { client.release(); }
 }

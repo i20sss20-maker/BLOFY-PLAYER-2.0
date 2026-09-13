@@ -11,13 +11,32 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 
 class ContentUrlResolverTest {
+    @Test fun tokenizedHiddenHostHasOriginCanonicalAndAlternateRoutes() {
+        val provider = ProviderEntity(id = "routes", name = "provider", baseUrl = "https://panel.example:8443", username = "user", password = "pass")
+        val stream = StreamEntity(key = "routes:live:7", providerId = "routes", remoteId = "7", categoryId = null,
+            kind = "live", name = "Channel", directSource = "https://cdn.example/tokenized/play?token=a%2Fb&edge=4")
+        val route = ContentUrlResolver.liveRoute(provider, xtreamProfile, stream)
+        assertEquals("https://cdn.example/tokenized/play?token=a%2Fb&edge=4", route.primaryUrl)
+        assertEquals(listOf(
+            "https://panel.example:8443/tokenized/play?token=a%2Fb&edge=4",
+            "https://panel.example:8443/live/user/pass/7.ts",
+            "https://panel.example:8443/live/user/pass/7.m3u8",
+        ), route.fallbackUrls)
+    }
+
+    @Test fun canonicalLiveGetsAlternateFormatWithoutDuplicatePrimary() {
+        val provider = ProviderEntity(id = "plain-routes", name = "provider", baseUrl = "https://panel.example", username = "u", password = "p")
+        val stream = StreamEntity(key = "plain-routes:live:7", providerId = "plain-routes", remoteId = "7", categoryId = null, kind = "live", name = "Channel")
+        assertEquals(listOf("https://panel.example/live/u/p/7.m3u8"), ContentUrlResolver.liveRoute(provider, xtreamProfile, stream).fallbackUrls)
+    }
+
     private val xtreamProfile = ProviderProfile(
         providerKey = "xtream-under-test",
         providerKind = ProviderKind.XTREAM
     )
 
     @Test
-    fun hiddenPublicDirectSourceIsPrimaryPlaybackRouteWithProviderOriginFallback() {
+    fun hiddenPublicDirectSourceIsPrimaryPlaybackRouteWithCanonicalXtreamFallback() {
         val provider = ProviderEntity(
             id = "p1",
             name = "provider",
@@ -48,7 +67,7 @@ class ContentUrlResolverTest {
     }
 
     @Test
-    fun hiddenHostFallbackPreservesNonCanonicalPathQueryAndUsesProviderOrigin() {
+    fun hiddenHostFallbackUsesCanonicalXtreamBeforeProviderOriginPathRewrite() {
         val provider = ProviderEntity(
             id = "hidden-path",
             name = "provider",
@@ -72,7 +91,7 @@ class ContentUrlResolverTest {
             ContentUrlResolver.movie(provider, stream)
         )
         assertEquals(
-            "http://panel.example.com:8080/tokenized/media/77?token=abc&edge=4",
+            "http://panel.example.com:8080/movie/user/pass/77.mkv",
             ContentUrlResolver.movieFallback(provider, stream)
         )
     }

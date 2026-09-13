@@ -15,6 +15,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.StreamSearchFtsEntity
 import tv.blofy.player.data.remote.XtreamApi
 import tv.blofy.player.data.remote.XtreamIdentifier
+import tv.blofy.player.data.remote.readCatalog
 import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.InputStreamReader
@@ -33,6 +34,8 @@ class PlaylistManager(
 ) {
     suspend fun syncAll(
         provider: ProviderEntity,
+        completedSections: Set<String> = emptySet(),
+        onSectionComplete: suspend (String) -> Unit = {},
         onProgress: suspend (PlaylistSyncProgress) -> Unit = {}
     ): PlaylistSyncResult {
         require(provider.providerType.equals("xtream", true)) { "Xtream provider required" }
@@ -43,21 +46,24 @@ class PlaylistManager(
             listOf(
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3))
-                    freshItemCount += syncLive(provider) { percent ->
+                    freshItemCount += if ("live" in completedSections) dao.catalogCountAll(provider.id, "live") else syncLive(provider) { percent ->
                         onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
                     }
+                    onSectionComplete("live")
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
-                    freshItemCount += syncVod(provider) { percent ->
+                    freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(provider) { percent ->
                         onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
                     }
+                    onSectionComplete("movie")
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
-                    freshItemCount += syncSeries(provider) { percent ->
+                    freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(provider) { percent ->
                         onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
                     }
+                    onSectionComplete("series")
                 }
             )
         )
@@ -282,7 +288,7 @@ class PlaylistManager(
         )
         if (!accepted) {
             if (direct) clearDirectSection(providerId, kind)
-            return
+            throw IllegalStateException("Incomplete $kind catalog section")
         }
         if (!direct) dao.replaceCatalog(providerId, kind, categoryRows, parsed.items)
     }
@@ -307,9 +313,8 @@ class PlaylistManager(
         val batch = ArrayList<T>(DIRECT_STREAM_BATCH)
         var sourceCount = 0
         var itemCount = 0
-        val body = api.streamingResponse(url)
-        val declaredBytes = body.contentLength()
-        body.use { responseBody ->
+        api.streamingCall(url).readCatalog { responseBody ->
+            val declaredBytes = responseBody.contentLength()
             val counting = CountingInputStream(responseBody.byteStream())
             JsonReader(InputStreamReader(counting, Charsets.UTF_8)).use { reader ->
                 reader.beginArray()

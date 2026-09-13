@@ -1,0 +1,5 @@
+<resources>
+    <string name="player_offline">Connection lost · Your progress is saved. Select to retry.</string>
+    <string name="player_retry_error">Unable to play · Select to retry from your position.</string>
+    <string name="player_reconnecting">Reconnecting…</string>
+</resources>

@@ -49,6 +49,12 @@ object DeviceClass {
         return if (androidLowRam || constrainedHeap) MemoryTier.LOW else MemoryTier.NORMAL
     }
 
-    fun isLowMemory(context: Context): Boolean = memoryTier(context) == MemoryTier.LOW
+    fun lightModeEnabled(context: Context): Boolean = context.getSharedPreferences("blofy_display", Context.MODE_PRIVATE).getBoolean("light_mode", false)
+
+    fun setLightMode(context: Context, enabled: Boolean) {
+        context.getSharedPreferences("blofy_display", Context.MODE_PRIVATE).edit().putBoolean("light_mode", enabled).apply()
+    }
+
+    fun isLowMemory(context: Context): Boolean = lightModeEnabled(context) || memoryTier(context) == MemoryTier.LOW
     fun isTv(context: Context): Boolean = detect(context) == Kind.TV
 }

@@ -54,7 +54,7 @@ class SearchIndexMigrationTest {
         // v9 and v10 share all durable catalog tables. Restore only the schema version so Room
         // executes the published 9 -> 10 migration, which deliberately drops/recreates FTS.
         SQLiteDatabase.openDatabase(app.getDatabasePath(databaseName).absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
-            .use { it.version = 9 }
+            .use { restoreV11Providers(it); it.version = 9 }
         db = openDatabase()
         val dao = db.dao()
         assertFalse(dao.hasSearchIndex(provider.id))

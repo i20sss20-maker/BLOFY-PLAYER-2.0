@@ -15,7 +15,7 @@ class LiveRouteParityRegressionTest {
         providerKind = ProviderKind.XTREAM
     )
 
-    @Test fun hiddenPublicHostProducesOneSharedPrimaryAndProviderFallbackPair() {
+    @Test fun hiddenPublicHostProducesOneSharedPrimaryAndCanonicalXtreamFallbackPair() {
         val provider = ProviderEntity(
             id = "provider",
             name = "provider",
@@ -35,7 +35,7 @@ class LiveRouteParityRegressionTest {
 
         val route = ContentUrlResolver.liveRoute(provider, profile, stream)
         assertEquals("http://cf.tstor8k.xyz:9090/live/user/pass/100.ts?token=a1", route.primaryUrl)
-        assertEquals("http://panel.example.com:8080/live/user/pass/100.ts?token=a1", route.fallbackUrl)
+        assertEquals("http://panel.example.com:8080/live/user/pass/100.ts", route.fallbackUrl)
         assertNotEquals(route.primaryUrl, route.fallbackUrl)
         assertEquals(route.primaryUrl, ContentUrlResolver.live(provider, profile, stream))
         assertEquals(route.fallbackUrl, ContentUrlResolver.liveFallback(provider, profile, stream))

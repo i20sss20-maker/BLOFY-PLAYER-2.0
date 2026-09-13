@@ -7,10 +7,15 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.LinearSnapHelper
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.core.device.DeviceClass
+import java.util.WeakHashMap
 import kotlin.math.roundToInt
 
 /** Shared ergonomics: adaptive sizing, deterministic focus and lightweight snapping. */
 object TvUiTuning {
+    // RecyclerView can detach and reattach the same child many times. Keep weak bookkeeping so
+    // focus/layout callbacks are installed once per View instead of stacking on every attachment.
+    private val tunedChildren = WeakHashMap<View, Boolean>()
+
     fun scale(context: Context): Float {
         val configuration = context.resources.configuration
         val widthDp = configuration.screenWidthDp.takeIf { it > 0 } ?: configuration.smallestScreenWidthDp
@@ -57,6 +62,7 @@ object TvUiTuning {
                 // a pointer device even when the primary input is a DPAD remote. On touch devices
                 // this remains harmless: click/tap handling is unchanged.
                 view.isFocusableInTouchMode = true
+                if (tunedChildren.put(view, true) != null) return
                 view.addOnLayoutChangeListener { child, _, _, _, _, _, _, _, _ ->
                     if (child.hasFocus()) keepVisible(recycler, child, edge)
                 }

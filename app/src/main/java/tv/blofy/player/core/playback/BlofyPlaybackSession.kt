@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import tv.blofy.player.core.diagnostics.PlaybackDiagnostics
 import tv.blofy.player.core.diagnostics.PlaybackDiagnosticsUploader
 import tv.blofy.player.core.diagnostics.PlaybackMetric
+import tv.blofy.player.core.diagnostics.PlaybackFailureDetails
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
 
@@ -25,8 +26,11 @@ class BlofyPlaybackSession(
     context: Context,
     private val profile: ProviderProfile,
     private val contentKind: String = "unknown",
+    private val playerFactory: (Context, ProviderProfile) -> ExoPlayer = ::createPlaybackPlayer,
     private val onTerminalError: ((String) -> Unit)? = null
 ) {
+    private var closing = false
+    private var resumeFallbackUrls: List<String> = emptyList()
     private var metric: PlaybackMetric? = null
     private var firstFrameRecorded = false
     private var playStartedAtMs = 0L
@@ -43,19 +47,13 @@ class BlofyPlaybackSession(
 
     private val liveStallWatchdog = object : Runnable {
         override fun run() {
-            if (!contentKind.isLiveContent()) return
+            if (closing || !contentKind.isLiveContent()) return
             checkLiveStall()
             retryHandler.postDelayed(this, LIVE_STALL_WATCHDOG_INTERVAL_MS)
         }
     }
 
-    private val renderersFactory = DefaultRenderersFactory(appContext)
-        .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
-
-    val player: ExoPlayer = ExoPlayer.Builder(appContext)
-        .setRenderersFactory(renderersFactory)
-        .setMediaSourceFactory(DefaultMediaSourceFactory(TransportFactory.create(appContext, profile)))
-        .build()
+    val player: ExoPlayer = playerFactory(appContext, profile)
         .apply {
             setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
@@ -63,6 +61,7 @@ class BlofyPlaybackSession(
             )
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (closing) return
                     if (playbackState == Player.STATE_BUFFERING) metric?.let { metric = PlaybackDiagnostics.buffering(it) }
                     if (playbackState == Player.STATE_READY) {
                         resetLiveStallTimer(keepPosition = true)
@@ -75,12 +74,14 @@ class BlofyPlaybackSession(
                     newPosition: Player.PositionInfo,
                     reason: Int
                 ) {
+                    if (closing) return
                     if (reason == Player.DISCONTINUITY_REASON_SEEK && !contentKind.isLiveContent()) {
                         scheduleSeekRecovery(newPosition.positionMs.coerceAtLeast(0L))
                     }
                 }
 
                 override fun onRenderedFirstFrame() {
+                    if (closing) return
                     automaticRetries = 0
                     if (!firstFrameRecorded) {
                         metric?.let {
@@ -104,20 +105,27 @@ class BlofyPlaybackSession(
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
+                    metric?.let {
+                        val details = PlaybackFailureDetails.describe(error,
+                            phase = if (closing) "release" else "playback",
+                            videoFormat = videoFormat)
+                        val updated = PlaybackDiagnostics.error(it, error.errorCodeName, details)
+                        metric = updated
+                        PlaybackDiagnosticsUploader.enqueue(appContext, updated)
+                    }
+                    // Media3 can synchronously report a timeout while detaching a surface or
+                    // releasing. It must never restart this session or penalize the provider.
+                    if (closing) return
                     val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
                     if (failedUrl.isNotBlank()) {
                         PlaybackIntelligence.recordFailure(appContext, profile.providerKey, contentKind, failedUrl)
-                    }
-                    metric?.let {
-                        val updated = PlaybackDiagnostics.error(it, error.errorCodeName, error.message)
-                        metric = updated
-                        PlaybackDiagnosticsUploader.enqueue(appContext, updated)
                     }
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
                         automaticRetries++
                         retryHandler.post { retrySameUrl() }
                     } else if (failedUrl.isNotBlank()) {
                         retryHandler.post {
+                            if (closing) return@post
                             // A configured provider-origin fallback exists specifically to escape an
                             // unreachable direct/hidden host. Try that route before changing .ts/.m3u8
                             // on the same failed origin; otherwise a dead hidden hostname costs another
@@ -133,7 +141,7 @@ class BlofyPlaybackSession(
                             } else {
                                 null
                             }
-                            if (alternateUrl != null) {
+                            if (alternateUrl != null && !fallbackState.wasAttempted(alternateUrl)) {
                                 alternateLiveFormatAttempted = true
                                 playInternalFallback(alternateUrl)
                             } else {
@@ -145,7 +153,8 @@ class BlofyPlaybackSession(
             })
         }
 
-    fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null) {
+    fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null, fallbackUrls: List<String> = emptyList()) {
+        if (closing) return
         retryHandler.removeCallbacksAndMessages(null)
         seekRecoveryGeneration++
         automaticRetries = 0
@@ -154,7 +163,8 @@ class BlofyPlaybackSession(
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
         val preferredUrl = PlaybackIntelligence.preferredUrl(appContext, profile, contentKind, url)
-        fallbackState.begin(preferredUrl, fallbackUrl)
+        resumeFallbackUrls = (listOf(url) + fallbackUrls + listOfNotNull(fallbackUrl)).distinct()
+        fallbackState.begin(preferredUrl, fallbackUrl, listOf(url) + fallbackUrls)
         firstFrameRecorded = false
         playStartedAtMs = SystemClock.elapsedRealtime()
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, preferredUrl)
@@ -167,6 +177,7 @@ class BlofyPlaybackSession(
     }
 
     fun retrySameUrl() {
+        if (closing) return
         val item = player.currentMediaItem ?: return
         val position = player.currentPosition.coerceAtLeast(0L)
         resetLiveStallTimer(keepPosition = false)
@@ -181,7 +192,7 @@ class BlofyPlaybackSession(
     private fun scheduleSeekRecovery(targetMs: Long) {
         val generation = ++seekRecoveryGeneration
         retryHandler.postDelayed({
-            if (generation != seekRecoveryGeneration || contentKind.isLiveContent()) return@postDelayed
+            if (closing || generation != seekRecoveryGeneration || contentKind.isLiveContent()) return@postDelayed
             if (player.currentMediaItem == null || !player.playWhenReady) return@postDelayed
             if (player.playbackState == Player.STATE_BUFFERING) {
                 automaticRetries = 0
@@ -191,6 +202,7 @@ class BlofyPlaybackSession(
     }
 
     private fun checkLiveStall() {
+        if (closing) return
         if (!contentKind.isLiveContent() || player.currentMediaItem == null || !player.playWhenReady) {
             resetLiveStallTimer(keepPosition = false)
             return
@@ -233,7 +245,16 @@ class BlofyPlaybackSession(
         ) {
             liveStallRecoveries++
             lastLiveStallRecoveryAtMs = now
-            retrySameUrl()
+            val configuredFallback = fallbackState.nextConfiguredUrl()
+            if (configuredFallback != null) {
+                // A hidden/public-looking provider alias can hang in buffering without producing
+                // onPlayerError. Reuse the already configured provider-origin fallback here rather
+                // than retrying the same dead origin and leaving the TV on a black screen.
+                fallbackState.markConfiguredUrlAttempted(configuredFallback)
+                playInternalFallback(configuredFallback)
+            } else {
+                retrySameUrl()
+            }
         }
     }
 
@@ -243,8 +264,11 @@ class BlofyPlaybackSession(
     }
 
     private fun playInternalFallback(url: String) {
+        if (closing) return
         fallbackState.markUrlAttempted(url)
         automaticRetries = MAX_AUTOMATIC_RETRIES
+        // A new route needs its own stall window, not the old host's one-minute cooldown.
+        lastLiveStallRecoveryAtMs = 0L
         firstFrameRecorded = false
         playStartedAtMs = SystemClock.elapsedRealtime()
         resetLiveStallTimer(keepPosition = false)
@@ -261,12 +285,30 @@ class BlofyPlaybackSession(
         }
         .build()
 
-    fun isStarted(): Boolean = player.playbackState == Player.STATE_READY && player.playWhenReady
+    fun isStarted(): Boolean = !closing && player.playbackState == Player.STATE_READY && player.playWhenReady
 
-    fun release() {
+    /** In-memory state only: stream URLs must never be persisted to diagnostics or saved bundles. */
+    fun resumeState(): PlaybackResumeState? {
+        if (closing) return null
+        val url = player.currentMediaItem?.localConfiguration?.uri?.toString() ?: return null
+        return PlaybackResumeState(url,
+            if (contentKind.isLiveContent()) 0L else player.currentPosition.coerceAtLeast(0L),
+            player.playWhenReady, resumeFallbackUrls, player.trackSelectionParameters)
+    }
+
+    fun release(detachOutput: () -> Unit = {}) {
+        if (closing) return
+        closing = true
         seekRecoveryGeneration++
         retryHandler.removeCallbacksAndMessages(null)
-        player.release()
+        try {
+            // release() removes Media3's surface callbacks. Clearing PlayerView afterwards
+            // avoids a separate, blocking surface-detach timeout on a stalled decoder.
+            player.release()
+        } finally {
+            try { detachOutput() }
+            finally { retryHandler.removeCallbacksAndMessages(null) }
+        }
     }
 
     private companion object {
@@ -281,6 +323,14 @@ class BlofyPlaybackSession(
 
     private fun String.isLiveContent(): Boolean = this == "live" || this == "live_preview"
 }
+
+@OptIn(markerClass = [UnstableApi::class])
+private fun createPlaybackPlayer(context: Context, profile: ProviderProfile): ExoPlayer =
+    ExoPlayer.Builder(context)
+        .setRenderersFactory(DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER))
+        .setMediaSourceFactory(DefaultMediaSourceFactory(TransportFactory.create(context, profile)))
+        .build()
 
 @OptIn(markerClass = [UnstableApi::class])
 internal fun prepareFallbackItem(player: Player, item: MediaItem, live: Boolean) {

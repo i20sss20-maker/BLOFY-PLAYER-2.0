@@ -1,0 +1,23 @@
+name: Dispatch rc07.24 Signed Release
+
+on:
+  push:
+    branches: [rc07-runtime-recovery]
+    paths:
+      - .github/workflows/dispatch-rc0724-release.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch signed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run rc07-release.yml --repo "$GITHUB_REPOSITORY" --ref rc07-runtime-recovery
+
+# trigger verified rc07.24 release

@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import tv.blofy.player.R
@@ -22,29 +23,36 @@ internal object CastStrip {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             clipToPadding = false
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = context.resources.configuration.layoutDirection
+            setPadding(dp(2), dp(2), dp(2), dp(2))
         }
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(0, dp(4), 0, dp(4))
+            layoutDirection = context.resources.configuration.layoutDirection
+            setPadding(0, dp(5), 0, dp(7))
             clipChildren = false
+            clipToPadding = false
         }
-        people.take(12).forEach { person ->
+        people.take(14).forEach { person ->
             val card = LinearLayout(context).apply {
+                tag = "blofy_cast_${person.name}"
+                contentDescription = listOfNotNull(person.name, person.character).joinToString(". ")
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
                 isFocusable = true
                 isFocusableInTouchMode = true
                 isClickable = true
-                setPadding(dp(5), dp(5), dp(5), dp(7))
-                background = background(false, dp(14))
+                setPadding(dp(6), dp(6), dp(6), dp(8))
+                background = BlofyTvDesign.glassSurface(dp(17).toFloat(), false)
+                elevation = dp(2).toFloat()
                 setOnFocusChangeListener { view, focused ->
-                    view.background = background(focused, dp(14))
                     view.animate().cancel()
-                    view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f)
-                        .translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(65).start()
+                    view.background = BlofyTvDesign.glassSurface(dp(17).toFloat(), focused)
+                    view.scaleX = if (focused) 1.01f else 1f
+                    view.scaleY = if (focused) 1.01f else 1f
+                    view.translationZ = if (focused) dp(6).toFloat() else 0f
+                    view.alpha = if (focused) 1f else .96f
                 }
                 setOnClickListener {
                     context.startActivity(Intent(context, PersonDetailsActivity::class.java).apply {
@@ -57,42 +65,51 @@ internal object CastStrip {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setImageResource(R.drawable.blofy_logo)
                 background = GradientDrawable().apply {
-                    cornerRadius = dp(12).toFloat()
-                    setColor(0xFF181020.toInt())
+                    cornerRadius = dp(13).toFloat()
+                    setColor(BlofyTvDesign.Surface)
+                    setStroke(dp(1), BlofyTvDesign.Divider)
                 }
                 clipToOutline = true
             }
-            card.addView(image, LinearLayout.LayoutParams(dp(92), dp(112)))
+            val portrait = FrameLayout(context).apply {
+                background = BlofyTvDesign.glassSurface(dp(13).toFloat(), false)
+                addView(TextView(context).apply {
+                    text = person.name.split(' ').filter(String::isNotBlank).take(2).map { it.take(1) }.joinToString(" ")
+                    textSize = 30f
+                    typeface = BlofyTvDesign.HeadingTypeface
+                    setTextColor(BlofyTvDesign.PurpleSoft)
+                    gravity = Gravity.CENTER
+                }, FrameLayout.LayoutParams(-1, -1))
+                if (!person.profileUrl.isNullOrBlank()) addView(image, FrameLayout.LayoutParams(-1, -1))
+            }
+            card.addView(portrait, LinearLayout.LayoutParams(dp(94), dp(112)))
             person.profileUrl?.let { ArtworkLoader.load(image, it) }
             card.addView(TextView(context).apply {
                 text = person.name
-                textSize = 12.5f
+                textSize = 12.4f
                 typeface = BlofyTvDesign.LabelTypeface
                 setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
-                maxLines = 1
+                maxLines = 2
                 ellipsize = android.text.TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(dp(112), dp(26)))
+                includeFontPadding = false
+            }, LinearLayout.LayoutParams(dp(114), dp(38)).apply { topMargin = dp(5) })
             card.addView(TextView(context).apply {
                 text = person.character.orEmpty()
-                textSize = 10.5f
-                typeface = BlofyTvDesign.BodyTypeface
+                textSize = 10.3f
+                typeface = BlofyTvDesign.MediumTypeface
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.CENTER
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(dp(112), dp(22)))
-            row.addView(card, LinearLayout.LayoutParams(dp(122), dp(176)).apply { marginStart = dp(8); marginEnd = dp(3) })
+                includeFontPadding = false
+            }, LinearLayout.LayoutParams(dp(114), dp(21)))
+            row.addView(card, LinearLayout.LayoutParams(dp(126), dp(204)).apply {
+                marginStart = dp(8)
+                marginEnd = dp(3)
+            })
         }
         scroll.addView(row)
         return scroll
-    }
-
-    private fun background(focused: Boolean, radius: Int) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF563179.toInt(), 0xFF24162E.toInt()) else intArrayOf(0xD91D1527.toInt(), 0xE6130E1B.toInt())
-    ).apply {
-        cornerRadius = radius.toFloat()
-        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF3A2A48.toInt())
     }
 }

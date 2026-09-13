@@ -20,6 +20,23 @@ import javax.crypto.spec.SecretKeySpec
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
 class ProviderSecretCipherTest {
+    @Test fun subscriberEnvelopeIsEncryptedAndParticipatesInCacheIdentity() {
+        val codec = ProviderSecretCipher { aesKey }
+        val managed = original.copy(subscriberToken = "first-session-token")
+        val sealed = codec.seal(managed)
+        assertTrue(sealed.subscriberToken.startsWith("BLOFYENC1:"))
+        assertEquals(managed, codec.open(sealed))
+        val renewed = codec.seal(managed.copy(subscriberToken = "second-session-token"))
+        val sameOtherFields = sealed.copy(subscriberToken = renewed.subscriberToken)
+        assertEquals("second-session-token", codec.open(sameOtherFields).subscriberToken)
+        val broken = sealed.copy(subscriberToken = "BLOFYENC1:invalid")
+        val opened = codec.open(broken)
+        assertEquals("", opened.subscriberToken)
+        assertEquals("", opened.username)
+        assertEquals("", opened.password)
+        assertEquals("", opened.baseUrl)
+        assertEquals(sealed.subscriberToken, codec.sealForUpdate(opened, sealed).subscriberToken)
+    }
     private val aesKey = SecretKeySpec(ByteArray(32) { (it + 1).toByte() }, "AES")
     private val original = ProviderEntity(
         "secret-test", "Library", "https://example.test:8443/api?q=a%2Fb&lang=ar",
@@ -159,6 +176,41 @@ class ProviderSecretCipherTest {
             fail("Expected a missing-key failure")
         } catch (_: GeneralSecurityException) { }
         assertEquals(0, creates.get())
+    }
+
+    @Test fun navigationReadsReuseSuccessfulDecryptButKeepCurrentMetadataAndCredentials() {
+        val calls = AtomicInteger()
+        val writer = ProviderSecretCipher { aesKey }
+        val stored = writer.seal(original)
+        val reader = ProviderSecretCipher { calls.incrementAndGet(); aesKey }
+        repeat(100) { index ->
+            assertEquals(original.copy(name = "Name $index", enabled = index % 2 == 0),
+                reader.open(stored.copy(name = "Name $index", enabled = index % 2 == 0)))
+        }
+        assertEquals("Repeated navigation must not call hardware Keystore again", 1, calls.get())
+        val replacement = original.copy(password = "replacement")
+        assertEquals(replacement, reader.open(writer.seal(replacement)))
+        assertEquals(2, calls.get())
+    }
+
+    @Test fun decryptedProviderCacheIsBoundedAndFailedReadsAreNotRemembered() {
+        val writer = ProviderSecretCipher { aesKey }
+        val stored = (0..16).map { writer.seal(original.copy(username = "user$it")) }
+        val calls = AtomicInteger()
+        var available = true
+        val reader = ProviderSecretCipher {
+            calls.incrementAndGet()
+            if (!available) throw GeneralSecurityException("Temporary failure")
+            aesKey
+        }
+        stored.forEach { reader.open(it) }
+        reader.open(stored.first())
+        assertEquals("The oldest of 17 entries should be evicted", 18, calls.get())
+        val newStored = writer.seal(original.copy(password = "changed"))
+        available = false
+        assertEquals("", reader.open(newStored).password)
+        available = true
+        assertEquals("changed", reader.open(newStored).password)
     }
 
     @Test fun simultaneousFirstWritesCreateExactlyOneKey() {

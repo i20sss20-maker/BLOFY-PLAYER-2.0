@@ -1,7 +1,7 @@
 <resources>
-    <color name="blofy_black">#07070D</color>
-    <color name="blofy_surface">#12101D</color>
-    <color name="blofy_surface_alt">#1B162A</color>
+    <color name="blofy_black">#170D29</color>
+    <color name="blofy_surface">#2A1943</color>
+    <color name="blofy_surface_alt">#36214F</color>
     <color name="blofy_purple">#8B37FF</color>
     <color name="blofy_purple_soft">#C387FF</color>
     <color name="blofy_white">#FFFFFF</color>

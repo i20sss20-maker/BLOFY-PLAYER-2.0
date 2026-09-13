@@ -24,6 +24,10 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.identity.ActivationManager
+import tv.blofy.player.core.identity.ActivationRemoteClient
+import tv.blofy.player.core.identity.PortalRefreshFeedback
+import tv.blofy.player.core.identity.PortalRefreshFailure
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
@@ -34,11 +38,13 @@ import tv.blofy.player.ui.login.CatalogLoadingActivity
 import java.util.UUID
 
 class ProviderManagerActivity : AppCompatActivity() {
+    internal var activationEndpoint: String = BuildConfig.ACTIVATION_BASE_URL.trim()
     private lateinit var list: LinearLayout
     private lateinit var status: TextView
     private lateinit var addButton: Button
     private lateinit var websiteRefreshButton: Button
     private var refreshingFromWebsite = false
+    private var changingProvider = false
     private val focusButtons = linkedMapOf<String, Button>()
     private val isTv by lazy { DeviceClass.isTv(this) }
 
@@ -137,8 +143,8 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun refreshFromWebsite() {
-        if (refreshingFromWebsite) return
-        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+        if (refreshingFromWebsite || changingProvider) return
+        val endpoint = activationEndpoint
         if (endpoint.isBlank()) {
             status.text = "خدمة تحديث القوائم غير مهيأة"
             return
@@ -149,22 +155,29 @@ class ProviderManagerActivity : AppCompatActivity() {
         status.text = "جاري جلب القوائم وبياناتها من الموقع..."
         lifecycleScope.launch {
             try {
-                val result = withTimeout(20_000L) {
+                val result = withTimeout(40_000L) {
                     withContext(Dispatchers.IO) {
                         val dao = BlofyDatabase.get(applicationContext).dao()
+                        val activation = ActivationManager(applicationContext, dao)
+                        if (!activation.cachedCanUse(activation.ensureIdentity())) {
+                            val checked = try {
+                                activation.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
+                            } catch (cancelled: CancellationException) { throw cancelled }
+                            catch (error: Exception) { throw PortalRefreshFailure("AUTH", cause = error) }
+                            if (!checked.canUse()) throw PortalRefreshFailure("AUTH", 403)
+                        }
                         val synced = PortalPlaylistClient.sync(applicationContext, endpoint, dao, PortalPlaylistClient.SyncMode.PULL_ONLY)
                         synced.changedProviderIds.forEach { CatalogSyncState.markPending(applicationContext, it) }
-                        synced.activeProvider?.takeIf { it.providerType.equals("xtream", true) }?.let { dao.saveAndActivateProvider(it) }
                         synced
                     }
                 }
-                status.text = "تم التحديث من الموقع • ${result.remoteCount} قائمة"
-            } catch (_: TimeoutCancellationException) {
-                status.text = "انتهت مهلة التحديث • قوائمك محفوظة، حاول مرة أخرى"
+                status.text = PortalRefreshFeedback.result(this@ProviderManagerActivity, result)
+            } catch (error: TimeoutCancellationException) {
+                status.text = PortalRefreshFeedback.failure(this@ProviderManagerActivity, error)
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                status.text = "تعذر التحديث من الموقع • تحقق من الاتصال أو ربط الجهاز"
+            } catch (error: Exception) {
+                status.text = PortalRefreshFeedback.failure(this@ProviderManagerActivity, error)
             } finally {
                 refreshingFromWebsite = false
                 if (!isFinishing && !isDestroyed) {
@@ -241,34 +254,43 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun restoreFocus() {
-        if (!isTv || refreshingFromWebsite) return
+        if (!isTv || refreshingFromWebsite || changingProvider) return
         val key = FocusMemory.restore(this, SCREEN_KEY)
         val target = key?.let(focusButtons::get)
             ?: focusButtons.entries.firstOrNull { it.key.endsWith(":connect") }?.value
             ?: focusButtons["subscriber"]
             ?: addButton
-        target.post { if (!isFinishing && !refreshingFromWebsite) target.requestFocus() }
+        target.post { if (!isFinishing && !refreshingFromWebsite && !changingProvider) target.requestFocus() }
     }
 
     private fun connect(provider: ProviderEntity) {
+        if (changingProvider || refreshingFromWebsite) return
         if (!provider.providerType.equals("xtream", true) && !isBlofySubscriber(provider)) {
             status.text = "هذه القائمة قديمة وغير مدعومة • استخدم Xtream"
             return
         }
+        changingProvider = true
+        focusButtons.values.forEach { it.isEnabled = false }
         status.text = "جاري فتح ${provider.name}..."
         lifecycleScope.launch {
-            val dao = BlofyDatabase.get(applicationContext).dao()
-            withContext(Dispatchers.IO) {
-                dao.disableAllProviders()
-                dao.activateProvider(provider.id)
-            }
-            val cached = withContext(Dispatchers.IO) {
-                CatalogSyncState.isFullyReady(applicationContext, provider.id) && dao.hasStreamsForProvider(provider.id)
-            }
-            if (cached) {
-                startActivity(Intent(this@ProviderManagerActivity, HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
-            } else {
-                startActivity(Intent(this@ProviderManagerActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
+            try {
+                val dao = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
+                val selected = PortalPlaylistClient.selectProvider(applicationContext, activationEndpoint, provider, dao)
+                val cached = withContext(Dispatchers.IO) {
+                    CatalogSyncState.isEntryReady(applicationContext, selected.id) && dao.hasStreamsForProvider(selected.id)
+                }
+                if (cached) {
+                    startActivity(Intent(this@ProviderManagerActivity, HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                } else {
+                    startActivity(Intent(this@ProviderManagerActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, selected.id))
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status.text = "تعذر فتح القائمة • حاول مرة أخرى"
+            } finally {
+                changingProvider = false
+                focusButtons.values.forEach { it.isEnabled = !refreshingFromWebsite }
             }
         }
     }
@@ -286,7 +308,7 @@ class ProviderManagerActivity : AppCompatActivity() {
 
     private fun isBlofySubscriber(provider: ProviderEntity): Boolean {
         val stableId = UUID.nameUUIDFromBytes("blofy-subscriber".toByteArray()).toString()
-        return provider.id == stableId ||
+        return tv.blofy.player.core.identity.BlofySubscriberClient.isManaged(provider) || provider.id == stableId ||
             provider.name.equals("مشتركين BLOFY", ignoreCase = true) ||
             provider.baseUrl.contains("/subscribers/", ignoreCase = true) ||
             provider.baseUrl.contains("/subscriber/", ignoreCase = true)
@@ -304,15 +326,28 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun remove(provider: ProviderEntity) {
+        if (changingProvider || refreshingFromWebsite) return
+        changingProvider = true
+        focusButtons.values.forEach { it.isEnabled = false }
         lifecycleScope.launch {
-            val dao = BlofyDatabase.get(applicationContext).dao()
-            val synced = PortalPlaylistClient.removeProvider(applicationContext, BuildConfig.ACTIVATION_BASE_URL, provider, dao)
-            if (provider.enabled) {
-                val next = tv.blofy.player.core.identity.PortalSyncBook.visible(applicationContext, dao.allProviders().first())
-                    .firstOrNull { it.providerType.equals("xtream", true) || isBlofySubscriber(it) }
-                if (next != null) dao.activateProvider(next.id)
+            try {
+                val dao = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
+                val wasActive = withContext(Dispatchers.IO) { dao.provider(provider.id)?.enabled == true }
+                val synced = PortalPlaylistClient.removeProvider(applicationContext, activationEndpoint, provider, dao)
+                if (wasActive) {
+                    val next = tv.blofy.player.core.identity.PortalSyncBook.visible(applicationContext, dao.allProviders().first())
+                        .firstOrNull { it.providerType.equals("xtream", true) || isBlofySubscriber(it) }
+                    if (next != null) PortalPlaylistClient.selectProvider(applicationContext, activationEndpoint, next, dao)
+                }
+                status.text = if (synced) "تم حذف القائمة من الجهاز والموقع" else "تم إخفاء القائمة • سيُستكمل حذفها من الموقع عند الاتصال"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status.text = "تعذر حذف القائمة • حاول مرة أخرى"
+            } finally {
+                changingProvider = false
+                focusButtons.values.forEach { it.isEnabled = !refreshingFromWebsite }
             }
-            status.text = if (synced) "تم حذف القائمة من الجهاز والموقع" else "تم إخفاء القائمة • سيُستكمل حذفها من الموقع عند الاتصال"
         }
     }
 
@@ -324,11 +359,11 @@ class ProviderManagerActivity : AppCompatActivity() {
         typeface = BlofyTvDesign.BodyTypeface
         setTextColor(Color.WHITE)
         stateListAnimator = null
-        isEnabled = !refreshingFromWebsite
+        isEnabled = !refreshingFromWebsite && !changingProvider
         BlofyTvDesign.installTvFocus(this, dp(17).toFloat(), 1.04f, primary) {
             if (isTv) FocusMemory.save(this@ProviderManagerActivity, SCREEN_KEY, key)
         }
-        setOnClickListener { if (!refreshingFromWebsite) action() }
+        setOnClickListener { if (!refreshingFromWebsite && !changingProvider) action() }
         focusButtons[key] = this
     }
 

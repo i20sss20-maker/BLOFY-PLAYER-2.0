@@ -8,7 +8,10 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.GridLayout
 import android.widget.TextView
+import android.widget.ScrollView
+import tv.blofy.player.ui.common.CinemaStyle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -17,56 +20,77 @@ import tv.blofy.player.core.commercial.CommercialRuntime
 
 class CommercialSettingsActivity : AppCompatActivity() {
     private lateinit var status: TextView
-    private lateinit var imageButton: Button
-    private lateinit var safeButton: Button
+    private lateinit var imageButton: SettingCard
+    private lateinit var safeButton: SettingCard
     private val prefs by lazy { getSharedPreferences("blofy_player_settings", MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(48), dp(36), dp(48), dp(36))
-            setBackgroundColor(0xFF090711.toInt())
+            setPadding(dp(28), dp(24), dp(28), dp(24))
+            setBackgroundColor(CinemaStyle.Background)
         }
         page.addView(TextView(this).apply {
-            text = "BLOFY COMMERCIAL STABILITY"
+            text = "BLOFY"
             textSize = 12f
             letterSpacing = .12f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(0xFFB574FF.toInt())
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         }, LinearLayout.LayoutParams(-1, dp(30)))
         page.addView(TextView(this).apply {
-            text = "الأداء والاستقرار"
+            text = "جودة الصور والأداء"
             textSize = 31f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         }, LinearLayout.LayoutParams(-1, dp(58)))
 
         status = TextView(this).apply {
             textSize = 13f
             setTextColor(0xFFD9CBE8.toInt())
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setPadding(dp(18), 0, dp(18), 0)
             background = card(false)
         }
-        page.addView(status, LinearLayout.LayoutParams(-1, dp(62)).apply { bottomMargin = dp(18) })
+        page.addView(status, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
+        status.setPadding(dp(18), dp(16), dp(18), dp(16))
 
         imageButton = actionButton("") { cycleImageMode() }
         safeButton = actionButton("") { toggleSafeMode() }
-        val refresh = actionButton("↻  تحديث إعدادات BLOFY\nFeature Flags + Rollout") { refreshRemote() }
-        val clearAuto = actionButton("✓  إعادة الوضع التلقائي\nمسح Safe Mode التلقائي") {
+        val refresh = actionButton("تحديث نمط العرض\nتطبيق أحدث تفضيلات الجودة والأداء") { refreshRemote() }
+        val clearAuto = actionButton("استعادة توازن الأداء\nالرجوع لإعدادات العرض المناسبة للجهاز") {
             CommercialRuntime.clearAutomaticSafeMode(this)
             render()
         }
-        val back = actionButton("↩  رجوع") { finish() }
-        listOf(imageButton, safeButton, refresh, clearAuto, back).forEach { button ->
-            page.addView(button, LinearLayout.LayoutParams(-1, dp(78)).apply { bottomMargin = dp(10) })
+        val grid = GridLayout(this).apply {
+            columnCount = if (resources.configuration.screenWidthDp >= 700) 2 else 1
+            layoutDirection = resources.configuration.layoutDirection
         }
-        setContentView(page)
+        listOf(imageButton, safeButton, refresh, clearAuto).forEachIndexed { index, button ->
+            button.id = View.generateViewId()
+            grid.addView(button, GridLayout.LayoutParams().apply {
+                rowSpec = GridLayout.spec(index / grid.columnCount, GridLayout.FILL)
+                columnSpec = GridLayout.spec(index % grid.columnCount, 1f)
+                width = 0; height = -2
+                setMargins(dp(5), dp(5), dp(5), dp(5))
+            })
+        }
+        page.addView(grid, LinearLayout.LayoutParams(-1, -2))
+        page.addView(Button(this).apply {
+            text = getString(tv.blofy.player.R.string.back)
+            CinemaStyle.styleButton(this)
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(18) })
+        setContentView(ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            setBackgroundColor(CinemaStyle.Background)
+            addView(page)
+        })
         render()
         imageButton.requestFocus()
     }
@@ -90,7 +114,7 @@ class CommercialSettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshRemote() {
-        status.text = "جاري تحديث إعدادات BLOFY..."
+        status.text = "جاري تحديث نمط العرض..."
         lifecycleScope.launch {
             CommercialConfigRepository.refresh(this@CommercialSettingsActivity, force = true)
             render()
@@ -104,44 +128,23 @@ class CommercialSettingsActivity : AppCompatActivity() {
             CommercialRuntime.ImageMode.BALANCED -> "متوازن"
             CommercialRuntime.ImageMode.HIGH -> "عالي الجودة"
         }
-        imageButton.text = "▣  جودة الصور\n$image"
+        imageButton.bind("جودة البوسترات والخلفيات", image, "اختر توازنًا مناسبًا لسرعة الجهاز والإنترنت", cycle = true)
         val userSafe = getSharedPreferences("blofy_commercial_runtime", MODE_PRIVATE)
             .getBoolean("user_safe_mode", false)
-        safeButton.text = "◈  Safe Mode\n${if (userSafe) "مفعل يدويًا" else "تلقائي حسب الجهاز"}"
-        val config = CommercialConfigRepository.current(this)
+        safeButton.bind("سلاسة الواجهة", if (userSafe) "خفيفة" else "تلقائية", "تقليل المؤثرات على الأجهزة الأضعف عند الحاجة", cycle = true)
         status.text = buildString {
-            append(if (snapshot.safeMode) "Safe Mode نشط" else "الوضع الكامل نشط")
-            snapshot.reason?.let { append(" • $it") }
-            append(" • Config r${config.revision}")
-            append(" • الصور: $image")
+            append(if (snapshot.safeMode) "تم تفعيل عرض أخف لزيادة السلاسة" else "تجربة العرض الكاملة تعمل الآن")
+            append("\nجودة الفيديو تعتمد على المحتوى نفسه، وهذه الخيارات تخص شكل الواجهة.")
         }
     }
 
-    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label
-        isAllCaps = false
-        textSize = 15f
-        typeface = Typeface.DEFAULT_BOLD
-        setTextColor(Color.WHITE)
-        gravity = Gravity.CENTER
-        isFocusable = true
-        background = card(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = card(focused)
-            view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.018f else 1f).scaleY(if (focused) 1.018f else 1f).setDuration(70).start()
-        }
+    private fun actionButton(label: String, action: () -> Unit) = SettingCard(this).apply {
+        val parts = label.split('\n', limit = 2)
+        bind(parts.first(), parts.getOrElse(1) { "" })
         setOnClickListener { action() }
     }
 
-    private fun card(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF6638A2.toInt(), 0xFF35204C.toInt())
-        else intArrayOf(0xFF241831.toInt(), 0xFF17101F.toInt())
-    ).apply {
-        cornerRadius = dp(18).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFC897FF.toInt() else 0xFF513A68.toInt())
-    }
+    private fun card(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }

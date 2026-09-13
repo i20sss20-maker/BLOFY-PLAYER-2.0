@@ -1,0 +1,41 @@
+name: Apply rc07.24 Runtime Fixes
+
+on:
+  push:
+    branches: [rc07-runtime-recovery]
+    paths:
+      - .github/workflows/runtime-fix-rc0724.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rc07-runtime-recovery
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply focused runtime fixes
+        run: python3 tools/apply_rc0724_runtime.py
+      - name: Verify runtime patch
+        run: python3 tools/check_rc0724_runtime.py
+      - name: Commit runtime fixes
+        shell: bash
+        run: |
+          git checkout -- .github/workflows/rc07-release.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/tv/blofy/player/core/playback/ContentUrlResolver.kt \
+                  app/src/main/java/tv/blofy/player/core/identity/DeviceIdentity.kt \
+                  app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt \
+                  app/src/main/java/tv/blofy/player/ui/login/SplashActivity.kt \
+                  app/src/main/java/tv/blofy/player/ui/browser/ContentBrowserActivity.kt \
+                  app/build.gradle.kts tools/check_rc0724_runtime.py
+          git commit -m "fix: rc07.24 playback and catalog responsiveness"
+          git push origin HEAD:rc07-runtime-recovery
