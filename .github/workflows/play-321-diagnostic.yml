@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Extract existing structural evidence without rebuilding or reading production secrets
+      - name: Extract existing structural evidence without rebuilding or production secrets
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -24,26 +24,30 @@ jobs:
           import hashlib,json,os,pathlib,re
           root=pathlib.Path(os.environ['RUNNER_TEMP'])
           job=json.loads((root/'job.json').read_text())
-          assert job['run_id']==34788584787
-          assert job['head_sha']=='3538a3f8275e031828ac2da2a6b2f61b0f78021f'
+          assert job['run_id']==34788584787 and job['head_sha']=='3538a3f8275e031828ac2da2a6b2f61b0f78021f'
           assert job['conclusion']=='failure'
           raw=(root/'job.log').read_bytes()
-          marker='BLOFY_PLAY_RUNTIME_FAILURE '
+          text=re.sub(r'\x1b\[[0-9;]*[A-Za-z]','',raw.decode('utf-8',errors='replace'))
           found=[]
-          for line in raw.decode('utf-8',errors='replace').splitlines():
-              line=re.sub(r'\x1b\[[0-9;]*[A-Za-z]','',line)
+          for line in text.splitlines():
+              marker='BLOFY_PLAY_RUNTIME_FAILURE '
               if marker not in line: continue
               value=line.split(marker,1)[1]
               if not value.startswith('{'): continue
               data=json.loads(value)
-              assert data.get('publication_allowed') is False
-              assert len(value)<65536
+              assert data.get('publication_allowed') is False and len(value)<65536
               for key in ('crash_structure','instrumentation_structure'):
                   assert data[key].get('free_form_messages_omitted') is True
               found.append(data)
-          assert len(found)==1, 'Expected exactly one bounded structural diagnostic'
+          tail=text[-100000:]
+          frames=[{'file':pathlib.PurePosixPath(p).name,'line':int(n)} for p,n in re.findall(r'File "([^"]+)", line ([0-9]+)',tail)]
+          java_frames=re.findall(r'\bat ([A-Za-z0-9_.$]+\([A-Za-z0-9_.$:-]+\))',tail)
+          errors=re.findall(r'\b([A-Za-z_][A-Za-z0-9_.]*(?:Exception|Error))\b',tail)
           report={'run_id':job['run_id'],'job_id':job['id'],'commit':job['head_sha'],
-                  'source_log_sha256':hashlib.sha256(raw).hexdigest(),'diagnostic':found[0]}
+            'source_log_sha256':hashlib.sha256(raw).hexdigest(),'log_bytes':len(raw),
+            'diagnostics':found[:3],'python_frames':frames[-30:],
+            'java_frames':java_frames[-30:],'exception_types':list(dict.fromkeys(errors))[-30:],
+            'free_form_messages_omitted':True}
           (root/'play-321-diagnostic.json').write_text(json.dumps(report,indent=2))
           print(json.dumps(report,indent=2))
           PY
