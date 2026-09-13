@@ -116,6 +116,24 @@ assert.deepEqual(
 );
 assert.ok(Number.isFinite(playlist?.updatedAt));
 
+// A valid second device must never receive or change the first device's playlist,
+// including when a client reuses a deterministic playlist UUID.
+const otherIdentity = { deviceId: `BLOFY-E2E-OTHER-${suffix}`, activationCode: String(crypto.randomInt(100_000, 1_000_000)) };
+const otherActivation = await request('/api/v1/activation/check', { body: { ...otherIdentity, appVersion: 'e2e-contract', platform: 'ci' } });
+assert.equal(otherActivation.response.status, 200);
+const otherList = await request('/api/v1/portal/playlists/list', { body: otherIdentity });
+assert.equal(otherList.response.status, 200);
+assert.deepEqual(otherList.json.items, []);
+const crossDeviceSave = await request('/api/v1/portal/playlists', { body: {
+  ...otherIdentity, id: playlistId, name: 'Must not replace', providerType: 'xtream',
+  baseUrl: 'https://provider.example.test', username: 'other-user', password: 'other-password', active: true
+} });
+assert.equal(crossDeviceSave.response.status, 404);
+const crossDeviceDelete = await request(`/api/v1/portal/playlists/${playlistId}`, { method: 'DELETE', body: otherIdentity });
+assert.equal(crossDeviceDelete.response.status, 404);
+const unchanged = await request('/api/v1/portal/playlists/list', { body: identity });
+assert.deepEqual(unchanged.json.items.find(item => item.id === playlistId), playlist);
+
 const removed = await request(`/api/v1/portal/playlists/${encodeURIComponent(playlistId)}`, {
   method: 'DELETE',
   body: identity
