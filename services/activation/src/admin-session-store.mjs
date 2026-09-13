@@ -72,7 +72,7 @@ export function createAdminSessionStore({ key, pool: suppliedPool } = {}) {
       ON CONFLICT (scope,key_hash) DO UPDATE SET
         attempts=CASE WHEN current.expires_at<=NOW() THEN 1 ELSE LEAST(current.attempts+1,$3::integer+1) END,
         expires_at=CASE WHEN current.expires_at<=NOW() THEN EXCLUDED.expires_at ELSE current.expires_at END
-      RETURNING attempts, GREATEST(1,CEIL(EXTRACT(EPOCH FROM (expires_at-NOW()))))::integer AS retry_after
+      RETURNING attempts, GREATEST(1,CEIL(EXTRACT(EPOCH FROM (expires_at-clock_timestamp()))))::integer AS retry_after
     `, [scope, keyHash, limit, WINDOW_MS]);
     return { allowed: rows[0].attempts <= limit, retryAfterSeconds: rows[0].retry_after };
   }

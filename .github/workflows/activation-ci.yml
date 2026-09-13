@@ -87,6 +87,10 @@ jobs:
         run: npm run check
       - name: Unit tests
         run: npm test
+      - name: Approved rc07.44 publication with real PostgreSQL
+        env:
+          BLOFY_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: node --test test/approved-release-rc0744.test.mjs
       - name: Start activation service
         run: |
           npm start > /tmp/blofy-activation.log 2>&1 &
