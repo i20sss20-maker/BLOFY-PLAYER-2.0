@@ -50,7 +50,10 @@ object SubscriptionClient {
     )
 
     private val json = "application/json; charset=utf-8".toMediaType()
+    // Activation credentials must never follow redirects to another endpoint.
     private val client = OkHttpClient.Builder()
+        .followRedirects(false)
+        .followSslRedirects(false)
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)
