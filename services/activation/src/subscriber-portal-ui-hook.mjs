@@ -1,17 +1,14 @@
 import http from 'node:http';
 
-const PORTAL_PATHS = new Set(['/', '/portal']);
+const PORTAL_PATHS = new Set(['/', '/portal', '/connect']);
 const WHATSAPP_NUMBER = String(process.env.BLOFY_RENEWAL_WHATSAPP || '').replace(/\D/g, '');
 
-export function injectSubscriberPortalUi(html) {
+export function injectSubscriberPortalUi(html, { allowRenewal = true } = {}) {
   const source = String(html || '');
   if (!source.includes('</body>') || source.includes('data-blofy-subscriber-ui="5"')) return source;
 
   const whatsappNumber = JSON.stringify(WHATSAPP_NUMBER);
-  const injection = String.raw`
-<style data-blofy-subscriber-ui="5">
-  #blofySubscriberHint{grid-column:1/-1!important;border-radius:13px!important;margin-top:2px!important;padding:11px 13px!important;background:rgba(139,55,255,.09)!important;border:1px solid var(--line-accent,rgba(164,97,255,.34))!important;color:#d9c4ff!important;line-height:1.65!important}
-  #blofyRenewBtn{min-height:48px;padding:0 18px;border:1px solid rgba(82,223,154,.30);border-radius:15px;background:rgba(82,223,154,.10);color:#9ff1cb;font-weight:800;cursor:pointer}
+  const renewalStyles = String.raw`  #blofyRenewBtn{min-height:48px;padding:0 18px;border:1px solid rgba(82,223,154,.30);border-radius:15px;background:rgba(82,223,154,.10);color:#9ff1cb;font-weight:800;cursor:pointer}
   #blofyRenewBtn:hover{background:rgba(82,223,154,.16)}
   .blofy-renew-modal{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.72);backdrop-filter:blur(8px)}
   .blofy-renew-modal.hidden{display:none!important}
@@ -21,13 +18,44 @@ export function injectSubscriberPortalUi(html) {
   .blofy-renew-option{min-height:62px;border:1px solid var(--line,rgba(184,140,255,.19));border-radius:14px;background:#100d18;color:#fff;font-weight:800;cursor:pointer;display:grid;place-items:center;gap:3px}
   .blofy-renew-option:hover{border-color:var(--accent,#8b37ff);background:#171122}.blofy-renew-option small{color:#9ff1cb;font-size:12px;font-weight:900}
   .blofy-renew-close{width:100%;min-height:46px;margin-top:12px;border:1px solid var(--line,rgba(184,140,255,.19));border-radius:13px;background:transparent;color:#c8c1cf;font-weight:800;cursor:pointer}
-  @media(max-width:640px){.blofy-renew-options{grid-template-columns:1fr}.dashboard-head .actions{gap:8px}#blofyRenewBtn{flex:1}}
+  @media(max-width:640px){.blofy-renew-options{grid-template-columns:1fr}.dashboard-head .actions{gap:8px}#blofyRenewBtn{flex:1}}`;
+  const renewalScript = String.raw`
+  var whatsappNumber = ${whatsappNumber};
+  function installRenewalUi() {
+    var actions = document.querySelector('.dashboard-head .actions');
+    if (!actions || qs('blofyRenewBtn')) return;
+    var button = document.createElement('button');
+    button.id = 'blofyRenewBtn'; button.type = 'button'; button.textContent = '↻ تجديد الاشتراك';
+    actions.insertBefore(button, actions.firstChild);
+    var modal = document.createElement('div');
+    modal.id = 'blofyRenewModal'; modal.className = 'blofy-renew-modal hidden';
+    modal.innerHTML = '<div class="blofy-renew-card" role="dialog" aria-modal="true"><h3>تجديد BLOFY PLAYER</h3><p>اختر مدة التجديد وسيتم فتح واتساب برسالة جاهزة تحتوي على رقم جهازك والمدة والسعر.</p><div class="blofy-renew-options"><button class="blofy-renew-option" data-plan="3 شهور" data-price="10 ريال"><span>3 شهور</span><small>10 ريال</small></button><button class="blofy-renew-option" data-plan="6 شهور" data-price="18 ريال"><span>6 شهور</span><small>18 ريال</small></button><button class="blofy-renew-option" data-plan="سنة" data-price="25 ريال"><span>سنة</span><small>25 ريال</small></button><button class="blofy-renew-option" data-plan="مدى الحياة" data-price="40 ريال"><span>مدى الحياة</span><small>40 ريال</small></button></div><button class="blofy-renew-close" type="button">إلغاء</button></div>';
+    document.body.appendChild(modal);
+    button.onclick = function () { modal.classList.remove('hidden'); };
+    modal.querySelector('.blofy-renew-close').onclick = function () { modal.classList.add('hidden'); };
+    modal.addEventListener('click', function (event) { if (event.target === modal) modal.classList.add('hidden'); });
+    modal.querySelectorAll('[data-plan]').forEach(function (planButton) {
+      planButton.addEventListener('click', function () {
+        var state = deviceAuth();
+        var deviceId = state.deviceId || String(qs('deviceLabel') && qs('deviceLabel').textContent || '').trim() || 'غير معروف';
+        var plan = planButton.getAttribute('data-plan');
+        var price = planButton.getAttribute('data-price');
+        if (!whatsappNumber) { alert('رقم واتساب التجديد غير مضاف بعد.'); return; }
+        var message = 'السلام عليكم، أحتاج تجديد اشتراك BLOFY PLAYER.\n\nرقم جهازي: ' + deviceId + '\nمدة التجديد المطلوبة: ' + plan + '\nالسعر: ' + price + '\n\nأرجو تأكيد التجديد.';
+        window.open('https://wa.me/' + whatsappNumber + '?text=' + encodeURIComponent(message), '_blank', 'noopener');
+      });
+    });
+  }
+`;
+  const injection = String.raw`
+<style data-blofy-subscriber-ui="5">
+  #blofySubscriberHint{grid-column:1/-1!important;border-radius:13px!important;margin-top:2px!important;padding:11px 13px!important;background:rgba(139,55,255,.09)!important;border:1px solid var(--line-accent,rgba(164,97,255,.34))!important;color:#d9c4ff!important;line-height:1.65!important}
+${allowRenewal ? renewalStyles : ''}
 </style>
 <script>
 (function () {
   var editingSubscriberId = null;
   var editorGeneration = 0;
-  var whatsappNumber = ${whatsappNumber};
 
   function qs(id) { return document.getElementById(id); }
   function fieldWrapper(input) { return input && input.closest ? input.closest('.field') : null; }
@@ -256,37 +284,13 @@ export function injectSubscriberPortalUi(html) {
       await saveSubscriber();
     }, true);
   }
-  function installRenewalUi() {
-    var actions = document.querySelector('.dashboard-head .actions');
-    if (!actions || qs('blofyRenewBtn')) return;
-    var button = document.createElement('button');
-    button.id = 'blofyRenewBtn'; button.type = 'button'; button.textContent = '↻ تجديد الاشتراك';
-    actions.insertBefore(button, actions.firstChild);
-    var modal = document.createElement('div');
-    modal.id = 'blofyRenewModal'; modal.className = 'blofy-renew-modal hidden';
-    modal.innerHTML = '<div class="blofy-renew-card" role="dialog" aria-modal="true"><h3>تجديد BLOFY PLAYER</h3><p>اختر مدة التجديد وسيتم فتح واتساب برسالة جاهزة تحتوي على رقم جهازك والمدة والسعر.</p><div class="blofy-renew-options"><button class="blofy-renew-option" data-plan="3 شهور" data-price="10 ريال"><span>3 شهور</span><small>10 ريال</small></button><button class="blofy-renew-option" data-plan="6 شهور" data-price="18 ريال"><span>6 شهور</span><small>18 ريال</small></button><button class="blofy-renew-option" data-plan="سنة" data-price="25 ريال"><span>سنة</span><small>25 ريال</small></button><button class="blofy-renew-option" data-plan="مدى الحياة" data-price="40 ريال"><span>مدى الحياة</span><small>40 ريال</small></button></div><button class="blofy-renew-close" type="button">إلغاء</button></div>';
-    document.body.appendChild(modal);
-    button.onclick = function () { modal.classList.remove('hidden'); };
-    modal.querySelector('.blofy-renew-close').onclick = function () { modal.classList.add('hidden'); };
-    modal.addEventListener('click', function (event) { if (event.target === modal) modal.classList.add('hidden'); });
-    modal.querySelectorAll('[data-plan]').forEach(function (planButton) {
-      planButton.addEventListener('click', function () {
-        var state = deviceAuth();
-        var deviceId = state.deviceId || String(qs('deviceLabel') && qs('deviceLabel').textContent || '').trim() || 'غير معروف';
-        var plan = planButton.getAttribute('data-plan');
-        var price = planButton.getAttribute('data-price');
-        if (!whatsappNumber) { alert('رقم واتساب التجديد غير مضاف بعد.'); return; }
-        var message = 'السلام عليكم، أحتاج تجديد اشتراك BLOFY PLAYER.\n\nرقم جهازي: ' + deviceId + '\nمدة التجديد المطلوبة: ' + plan + '\nالسعر: ' + price + '\n\nأرجو تأكيد التجديد.';
-        window.open('https://wa.me/' + whatsappNumber + '?text=' + encodeURIComponent(message), '_blank', 'noopener');
-      });
-    });
-  }
+${allowRenewal ? renewalScript : ''}
   function install() {
     installOptionalName();
     configureProviderOptions();
     installFormOverrides();
     installSaveInterceptor();
-    installRenewalUi();
+${allowRenewal ? '    installRenewalUi();' : ''}
     applyMode();
   }
 
@@ -327,7 +331,7 @@ http.createServer = function patchedPortalCreateServer(listener) {
 
     res.end = function interceptedEnd(chunk, encoding, callback) {
       const body = chunk == null ? '' : Buffer.isBuffer(chunk) ? chunk.toString(encoding || 'utf8') : String(chunk);
-      const modified = injectSubscriberPortalUi(body);
+      const modified = injectSubscriberPortalUi(body, { allowRenewal: pathname !== '/connect' });
       if (wroteHead) {
         for (const key of Object.keys(headers)) {
           if (key.toLowerCase() === 'content-length') delete headers[key];

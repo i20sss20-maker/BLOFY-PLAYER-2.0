@@ -54,6 +54,17 @@ test('commercial services: isolated PostgreSQL and actual HTTP contracts',async 
     assert.equal(first.body.status,'trial');assert.equal(second.body.expiresAt,first.body.expiresAt);
     const absent=await request('/api/v1/activation/check',auth('BLOFY-NONE-NONE'));
     assert.equal(absent.body.status,'expired');
+    const delayedScope=crypto.createHash('sha256').update('qr-before-app').digest('hex');
+    const invalid=await request('/api/v1/activation/check',{deviceId:'BLOFY-NONE-NONE',activationCode:'111111',trialScope:delayedScope});
+    assert.equal(invalid.status,403);
+    const completed=await request('/api/v1/activation/check',auth('BLOFY-NONE-NONE',{trialScope:delayedScope}));
+    assert.equal(completed.body.status,'trial','An authenticated app can complete a pending QR registration');
+    const delayedReinstall=await request('/api/v1/activation/check',auth('BLOFY-NEXT-NEXT',{trialScope:delayedScope}));
+    assert.equal(delayedReinstall.body.expiresAt,completed.body.expiresAt);
+    await request('/api/v1/activation/check',auth('BLOFY-DENY-DENY'));
+    await pool.query("UPDATE devices SET status='blocked' WHERE device_id='BLOFY-DENY-DENY'");
+    await pool.query("UPDATE devices SET status='expired' WHERE device_id='BLOFY-DENY-DENY'");
+    assert.equal((await request('/api/v1/activation/check',auth('BLOFY-DENY-DENY',{trialScope:delayedScope}))).body.status,'expired');
     await pool.query("UPDATE device_trial_claims SET expires_at=NOW()-INTERVAL '1 second'");
     const third=await request('/api/v1/activation/check',auth(ids[2],{trialScope:scope}));
     assert.equal(third.body.status,'expired');
@@ -107,7 +118,8 @@ test('commercial services: isolated PostgreSQL and actual HTTP contracts',async 
     assert.equal((await fetch(origin+'/api/v1/subscriptions/plans')).status,200);
     assert.equal((await request('/api/v1/subscriptions/status',auth(recoveredId))).body.active,true);
     const page=await fetch(origin+'/privacy');assert.equal(page.status,200);assert.match(await page.text(),/privacy-form/);
-    const connect=await (await fetch(origin+'/connect')).text();assert.doesNotMatch(connect,/blofyRenewBtn|href="\/"/);
+    const connect=await (await fetch(origin+'/connect')).text();assert.doesNotMatch(connect,/blofyRenewBtn|wa\.me|data-plan|href="\/"/);
+    assert.match(connect,/مشتركين BLOFY/);assert.match(connect,/\/api\/v1\/subscribers\/session/);
     const support=await request('/api/v1/privacy/support',auth(recoveredId,{message:'استفسار تجريبي معزول عن الخصوصية'}));
     assert.equal(support.status,201);
     assert.equal((await pool.query('SELECT COUNT(*)::int AS n FROM support_tickets WHERE device_id=$1',[recoveredId])).rows[0].n,1);

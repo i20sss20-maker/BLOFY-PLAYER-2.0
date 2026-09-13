@@ -23,6 +23,7 @@ ALTER TABLE devices ADD COLUMN IF NOT EXISTS previous_activation_code_proof TEXT
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS activation_rotated_at TIMESTAMPTZ;
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS data_deleted_at TIMESTAMPTZ;
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS trial_registration_pending BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_devices_auth_locked_until ON devices(auth_locked_until)
   WHERE auth_locked_until IS NOT NULL;
 
@@ -71,6 +72,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_device_playlists_one_active ON device_play
 
 CREATE OR REPLACE FUNCTION blofy_revoke_changed_device_sessions() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  IF NEW.status IN ('active','blocked') THEN NEW.trial_registration_pending := FALSE; END IF;
   IF (NEW.status='blocked' AND OLD.status IS DISTINCT FROM NEW.status)
      OR OLD.activation_code IS DISTINCT FROM NEW.activation_code THEN
     NEW.session_version := GREATEST(NEW.session_version, OLD.session_version + 1);

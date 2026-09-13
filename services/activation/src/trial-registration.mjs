@@ -1,5 +1,18 @@
 import crypto from 'node:crypto';
 
+/** A QR/web request may register the ID before the app submits its trial scope. */
+export async function completePendingTrial(client, row, trialScope, keyHex) {
+  if (!row.trial_registration_pending || row.status !== 'expired' || row.data_deleted_at ||
+      !/^[a-f0-9]{64}$/.test(String(trialScope || ''))) return row;
+  const hash=crypto.createHmac('sha256',Buffer.from(keyHex,'hex')).update('blofy-trial-v1:'+trialScope).digest('hex');
+  const claim=(await client.query('SELECT started_at,expires_at FROM device_trial_claims WHERE scope_hash=$1 FOR UPDATE',[hash])).rows[0];
+  if (!claim) return row;
+  const status=new Date(claim.expires_at).getTime()>Date.now()?'trial':'expired';
+  return (await client.query(`UPDATE devices SET status=$2,trial_started_at=$3,expires_at=$4,
+    trial_registration_pending=FALSE,updated_at=NOW() WHERE device_id=$1 RETURNING *`,
+    [row.device_id,status,claim.started_at,claim.expires_at])).rows[0];
+}
+
 export async function bindExistingTrial(client, row, trialScope, trialDays, keyHex) {
   if (!/^[a-f0-9]{64}$/.test(String(trialScope || '')) || row.data_deleted_at) return;
   const hash=crypto.createHmac('sha256',Buffer.from(keyHex,'hex')).update('blofy-trial-v1:'+trialScope).digest('hex');
@@ -30,7 +43,7 @@ export async function registerDeviceTrial(client, { deviceId, proof, appVersion,
     startedAt = claim.started_at; expiresAt = claim.expires_at;
     status = new Date(expiresAt).getTime() > Date.now() ? 'trial' : 'expired';
   }
-  return (await client.query(`INSERT INTO devices(device_id,activation_code,status,trial_started_at,expires_at,last_seen_at,last_app_version,last_platform)
-    VALUES($1,$2,$3,$4,$5,NOW(),$6,$7) RETURNING *`,
-  [deviceId, proof, status, validScope || !requireScope ? startedAt : null, expiresAt, appVersion, platform])).rows[0];
+  return (await client.query(`INSERT INTO devices(device_id,activation_code,status,trial_started_at,expires_at,last_seen_at,last_app_version,last_platform,trial_registration_pending)
+    VALUES($1,$2,$3,$4,$5,NOW(),$6,$7,$8) RETURNING *`,
+  [deviceId, proof, status, validScope || !requireScope ? startedAt : null, expiresAt, appVersion, platform, !validScope && requireScope])).rows[0];
 }

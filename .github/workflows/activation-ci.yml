@@ -58,6 +58,24 @@ jobs:
           agent-browser snapshot -i
           agent-browser screenshot downloads-evidence/privacy-desktop.png
           agent-browser errors
+          agent-browser open http://127.0.0.1:8127/connect
+          agent-browser snapshot -i
+          agent-browser fill '#deviceId' 'BLOFY-TEST-TEST'
+          agent-browser fill '#activationCode' '123456'
+          agent-browser click '#loginBtn'
+          agent-browser wait '#newBtn'
+          agent-browser snapshot -i
+          agent-browser click '#newBtn'
+          agent-browser select '#providerType' 'blofy'
+          agent-browser snapshot -i
+          agent-browser eval "if(document.getElementById('blofyRenewBtn')||document.querySelector('[data-plan]')||document.querySelector('a[href=\"/\"]'))throw new Error('Play portal exposes purchasing navigation'); if(getComputedStyle(document.getElementById('username').closest('.field')).display==='none'||getComputedStyle(document.getElementById('password').closest('.field')).display==='none')throw new Error('Subscriber credentials hidden'); 'Play subscriber form available'"
+          agent-browser fill '#name' 'Play QA'
+          agent-browser fill '#username' 'fixture-user'
+          agent-browser fill '#password' 'fixture-password'
+          agent-browser click '#saveBtn'
+          agent-browser wait --text 'Play QA'
+          agent-browser screenshot downloads-evidence/play-connect-saved.png
+          agent-browser errors
           agent-browser close
           python3 - <<'PYSCREEN'
           import base64,pathlib
