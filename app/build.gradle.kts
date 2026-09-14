@@ -16,6 +16,10 @@ val buildShaEscaped = buildSha.replace("\\", "\\\\").replace("\"", "\\\"")
 val ffmpegAarPath = providers.gradleProperty("BLOFY_FFMPEG_AAR").orElse("").get().trim()
 val ffmpegAar = ffmpegAarPath.takeIf { it.isNotBlank() }?.let { file(it) }
 if (ffmpegAar != null) check(ffmpegAar.exists() && ffmpegAar.isFile) { "BLOFY_FFMPEG_AAR points to a missing file: ${ffmpegAar.absolutePath}" }
+val playDistribution = providers.gradleProperty("BLOFY_PLAY_DISTRIBUTION")
+    .map { it.equals("true", ignoreCase = true) }
+    .orElse(false)
+    .get()
 
 fun releaseSetting(name: String) = providers.environmentVariable(name).orElse(providers.gradleProperty(name))
 val releaseKeystorePath = releaseSetting("BLOFY_RELEASE_KEYSTORE_PATH")
@@ -36,6 +40,7 @@ android {
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
         buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
+        buildConfigField("boolean", "PLAY_DISTRIBUTION", playDistribution.toString())
     }
     signingConfigs {
         create("release") {
