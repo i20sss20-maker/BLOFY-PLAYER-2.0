@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { publishApprovedRc0747 } from './approved-release-rc0747.mjs';
 
 // One explicit owner-approved publication. Never follow GitHub "latest" automatically.
 export const APPROVED_RC0746 = Object.freeze({
@@ -13,6 +14,7 @@ export const APPROVED_RC0746 = Object.freeze({
 
 export const RC0746_PUBLICATION_ACTION = 'publish_rc0746_20260914';
 const previousUrl = 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.45/BLOFY-PLAYER-2.0-rc07.45-signed.apk';
+const shouldPublishRc0747 = () => process.env.BLOFY_ENABLE_RC0747_PUBLICATION === 'true';
 
 /**
  * Publish rc07.46 only when production is still exactly on the observed rc07.45
@@ -24,7 +26,10 @@ export async function publishApprovedRc0746(client, environment = process.env.VE
 
   const state = (await client.query('SELECT * FROM app_release_selection WHERE singleton=TRUE FOR UPDATE')).rows[0];
   const done = await client.query('SELECT 1 FROM app_release_audit WHERE action=$1 LIMIT 1', [RC0746_PUBLICATION_ACTION]);
-  if (done.rows.length) return 'already-recorded';
+  if (done.rows.length) {
+    if (shouldPublishRc0747()) await publishApprovedRc0747(client, environment);
+    return 'already-recorded';
+  }
 
   const current = state?.primary_id
     ? (await client.query('SELECT * FROM app_release_catalog WHERE id=$1', [state.primary_id])).rows[0]
@@ -74,5 +79,7 @@ export async function publishApprovedRc0746(client, environment = process.env.VE
   }
 
   await client.query('UPDATE app_release_selection SET primary_id=$1,revision=revision+1 WHERE singleton=TRUE', [target.id]);
-  return record('published', target.id);
+  const outcome = await record('published', target.id);
+  if (shouldPublishRc0747()) await publishApprovedRc0747(client, environment);
+  return outcome;
 }
