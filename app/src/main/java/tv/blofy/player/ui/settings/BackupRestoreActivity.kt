@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
+import java.io.Reader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,7 +50,7 @@ class BackupRestoreActivity : AppCompatActivity() {
             status.text = "جاري فحص ملف النسخة..."
             runCatching {
                 withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    contentResolver.openInputStream(uri)?.bufferedReader()?.use(::readBoundedBackup)
                         ?: error("cannot_read_backup_file")
                 }
             }.onSuccess(::confirmRestore)
@@ -106,12 +107,24 @@ class BackupRestoreActivity : AppCompatActivity() {
         setContentView(root)
     }
 
+    private fun readBoundedBackup(reader: Reader): String {
+        val out = StringBuilder()
+        val buffer = CharArray(8192)
+        while (true) {
+            val count = reader.read(buffer)
+            if (count < 0) break
+            if (out.length + count > MAX_BACKUP_CHARS) error("backup_too_large")
+            out.append(buffer, 0, count)
+        }
+        return out.toString()
+    }
+
     private fun confirmRestore(json: String) {
         if (isFinishing || isDestroyed) return
         status.text = "الملف جاهز • أكد الاستعادة للمتابعة"
         AlertDialog.Builder(this)
             .setTitle("تأكيد الاستعادة")
-            .setMessage("سيتم استبدال المفضلة وسجل المشاهدة وترتيب الفئات وإعدادات BLOFY المحفوظة لهذا السيرفر. بيانات الدخول وPIN لن تتغير.")
+            .setMessage("سيتم تطبيق المفضلة وسجل المشاهدة وترتيب الفئات وإعدادات BLOFY المحفوظة لهذا السيرفر. بيانات الدخول وPIN لن تتغير.")
             .setPositiveButton("استعادة") { _, _ -> restore(json) }
             .setNegativeButton("إلغاء") { _, _ -> status.text = "تم إلغاء الاستعادة" }
             .show()
@@ -134,6 +147,7 @@ class BackupRestoreActivity : AppCompatActivity() {
         "no_active_provider" -> "لا يوجد سيرفر نشط حاليًا"
         "unsupported_backup" -> "ملف النسخة غير مدعوم"
         "backup_different_server" -> "هذه النسخة تخص سيرفرًا مختلفًا"
+        "backup_too_large" -> "ملف النسخة أكبر من الحد المسموح"
         "cannot_open_backup_file" -> "تعذر إنشاء ملف النسخة"
         "cannot_read_backup_file" -> "تعذر قراءة ملف النسخة"
         else -> "تعذر تنفيذ العملية • تأكد من الملف وحاول مرة أخرى"
@@ -148,4 +162,8 @@ class BackupRestoreActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val MAX_BACKUP_CHARS = 8 * 1024 * 1024
+    }
 }
