@@ -1,0 +1,17 @@
+<resources>
+    <string name="update_title">تحديث BLOFY</string>
+    <string name="update_preparing">جارٍ تجهيز التحديث…</string>
+    <string name="update_downloading">جارٍ تنزيل التحديث…</string>
+    <string name="update_cancel">إلغاء التنزيل</string>
+    <string name="update_leave_hint">تقدر ترجع للتطبيق أثناء التنزيل. عند التثبيت يطلب أندرويد تأكيدك.</string>
+    <string name="update_ready">التحديث جاهز. يبقى حسابك وسجل مشاهدتك محفوظًا.</string>
+    <string name="update_install">تثبيت التحديث</string>
+    <string name="update_invalid">تعذر التحقق من سلامة التحديث. نزّله مرة أخرى.</string>
+    <string name="update_failed">توقف التنزيل. تأكد من الاتصال والمساحة المتاحة ثم أعد المحاولة.</string>
+    <string name="update_retry">إعادة التنزيل</string>
+    <string name="update_progress">جارٍ التنزيل • %1$d%%</string>
+    <string name="update_allow_installs">اسمح لبلوڤي بتثبيت التحديثات من الإعدادات، ثم ارجع واضغط تثبيت التحديث.</string>
+    <string name="update_installer_missing">افتح إعدادات جهازك للسماح بتثبيت التطبيقات، ثم أعد المحاولة.</string>
+    <string name="update_check">البحث عن تحديث</string>
+    <string name="update_check_hint">تنزيل أحدث إصدار من بلوفي وتثبيته</string>
+</resources>

@@ -95,6 +95,7 @@ object DiagnosticsSanitizer {
 
     fun sanitizeContentKind(value: String): String {
         val clean = value.trim().lowercase(Locale.ROOT)
+        if (clean == "live_preview") return "live"
         return clean.takeIf { it in contentKinds } ?: "unknown"
     }
 

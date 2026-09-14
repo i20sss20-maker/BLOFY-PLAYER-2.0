@@ -75,4 +75,21 @@ class HomeRowOrderTest {
         assertEquals("uhd", HomeRowOrder.shelfKey("4k"))
         assertEquals("latest", HomeRowOrder.shelfKey("latest"))
     }
+
+    @Test fun personalShelvesPrecedeRankingsAndPromotionsWithoutLosingProfileOrder() {
+        val feed = LinearLayout(context)
+        val hero = View(context)
+        val ranking = TextView(context).apply { text = "TOP 10" }
+        val promotion = View(context)
+        val latest = row("latest", "Recently added")
+        val resume = row("continue_watching", "Continue watching")
+        val watchlist = row("watchlist", "My list")
+        listOf(hero, ranking, promotion, latest, resume, watchlist).forEach(feed::addView)
+        repeat(3) { HomeRowOrder.apply(feed, listOf("continue_watching", "latest", "watchlist")) }
+        assertEquals(listOf(hero, resume, latest, watchlist, ranking, promotion),
+            (0 until feed.childCount).map(feed::getChildAt))
+        HomeRowOrder.apply(feed, listOf("watchlist", "latest"))
+        assertSame(watchlist, feed.getChildAt(1))
+        assertEquals(View.GONE, resume.visibility)
+    }
 }

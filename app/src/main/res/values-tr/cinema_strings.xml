@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cinema_episode_title">Bölüm %1$d</string>
+    <string name="cinema_episode_completed">✓ İzlendi</string>
+    <string name="cinema_episode_resume">Devam %1$d%%</string>
+    <string name="cinema_episode_play">▶ Oynat</string>
+</resources>

@@ -300,6 +300,6 @@ object ProfileLibraryStore {
         "uhd",
     )
 
-    val DEFAULT_HOME_ROWS = ALL_HOME_ROWS
+    val DEFAULT_HOME_ROWS = listOf("continue_watching", "latest", "watchlist", "recent_channels", "top_rated", "arabic", "uhd")
     private val SETTING_KEY = Regex("[A-Za-z0-9._-]{1,64}")
 }

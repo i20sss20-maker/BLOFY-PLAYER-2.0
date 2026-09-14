@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_pause">Pause</string>
+    <string name="player_play">Lire</string>
+    <string name="player_seek_back">−10 s</string>
+    <string name="player_seek_forward">+10 s</string>
+</resources>

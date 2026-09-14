@@ -65,6 +65,6 @@ class SplashActivity : AppCompatActivity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
-        private const val MINIMUM_SPLASH_MS = 320L
+        private const val MINIMUM_SPLASH_MS = 60L
     }
 }

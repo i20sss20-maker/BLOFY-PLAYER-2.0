@@ -49,11 +49,13 @@ class ActivationManager(
             ActivationCheckRequest(
                 deviceId = current.deviceId,
                 activationCode = current.activationCode,
-                appVersion = appVersion
+                appVersion = appVersion,
+                trialScope = TrialIdentity.scope(context)
             )
         )
         if (response.canUse()) rotatePendingCode(api, current)
-        applyRemoteStatus(response.canUse(), response.expiresAt)
+        val updated = applyRemoteStatus(response.canUse(), response.expiresAt)
+        ActivationDisplayState.record(context, updated, response)
         return response
     }
 
@@ -92,7 +94,6 @@ class ActivationManager(
     }
 
     fun cachedCanUse(state: ActivationEntity, nowMs: Long = System.currentTimeMillis()): Boolean {
-        if (!state.activated) return false
-        return state.expiresAt == null || state.expiresAt > nowMs
+        return ActivationLease.allows(state, nowMs)
     }
 }

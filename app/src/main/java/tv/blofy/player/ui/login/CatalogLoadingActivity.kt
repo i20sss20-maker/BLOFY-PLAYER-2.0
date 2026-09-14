@@ -17,19 +17,17 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import tv.blofy.player.data.preparation.CatalogLoadAttempt
+import tv.blofy.player.data.preparation.CatalogLoadPersistence
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
-import tv.blofy.player.core.identity.PortalSyncBook
-import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.CatalogSyncState
-import tv.blofy.player.data.FirstImportCheckpoint
+import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -42,10 +40,12 @@ import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
+import java.util.UUID
 
 class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var retryButton: Button
     private var loadJob: Job? = null
+    private var forceRefreshOnRetry = false
     private var displayedPercent = 0
     private lateinit var percent: TextView
     private lateinit var stage: TextView
@@ -67,15 +67,16 @@ class CatalogLoadingActivity : AppCompatActivity() {
             return
         }
         val forceRefresh = intent.getBooleanExtra(EXTRA_FORCE_REFRESH, false)
-        retryButton.setOnClickListener { startLoading(providerId, forceRefresh = false) }
+        retryButton.setOnClickListener { startLoading(providerId, forceRefreshOnRetry) }
         startLoading(providerId, forceRefresh)
     }
 
     private fun startLoading(providerId: String, forceRefresh: Boolean) {
         if (loadJob?.isActive == true) return
+        forceRefreshOnRetry = forceRefresh
         retryButton.visibility = View.GONE
         stage.setTextColor(BlofyTvDesign.TextPrimary)
-        displayedPercent = 0
+        displayedPercent = 0 // A retry is a new attempt; monotonicity holds within each attempt.
         render(1, getString(R.string.catalog_preflight))
         loadJob = lifecycleScope.launch {
             var preflight = true
@@ -83,26 +84,27 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 onTimeout = { fail(getString(if (preflight) R.string.catalog_preflight_timeout else R.string.catalog_prepare_failed)) },
                 onFailure = { fail(preparationMessage(it)) }
             ) {
-                // Room can legitimately need several seconds to cold-open/decrypt on low-end TV boxes,
-                // especially immediately after reinstall. Lifecycle cancellation already bounds this local
-                // operation; a 2.5s timeout made healthy devices fail at exactly 1% before Xtream started.
-                val dao = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
-                val hasCachedCatalog = withContext(Dispatchers.IO) { dao.hasCatalog(providerId) }
-                val entryReady = CatalogSyncState.isEntryReady(applicationContext, providerId)
-                preflight = false
-                val sourceChanged = PortalSyncBook.hasPendingSource(applicationContext, providerId)
-
-                if (hasCachedCatalog && entryReady) {
-                    FirstImportCheckpoint.clear(applicationContext, providerId)
-                    if (forceRefresh || sourceChanged) {
-                        CatalogRefreshWorker.enqueueNow(applicationContext, providerId)
+                CatalogLoadPersistence.withProviderLock(providerId) {
+                    PortalPlaylistClient.ensureSubscriberConnection(applicationContext, tv.blofy.player.BuildConfig.ACTIVATION_BASE_URL,
+                        BlofyDatabase.get(applicationContext).dao(), providerId)
+                    val hasCachedCatalog = withTimeout(20_000L) {
+                        withContext(Dispatchers.IO) {
+                            CatalogLoadPersistence.hasCommittedCatalog(applicationContext, BlofyDatabase.get(applicationContext).dao(), providerId)
+                        }
                     }
-                    openHome()
-                    return@run
+                    preflight = false
+                    val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
+                    if (!forceRefresh && CatalogSyncState.isEntryReady(applicationContext, providerId) && hasCachedCatalog) {
+                        openHome(providerId)
+                    } else if (!forceRefresh && catalogReady && hasCachedCatalog) {
+                        awaitEntryReadyCache(providerId)
+                        openHome(providerId)
+                    } else {
+                        // A manual refresh stages a replacement. Keep the old entry state until commit.
+                        if (!hasCachedCatalog) CatalogSyncState.markPending(applicationContext, providerId)
+                        sync(providerId, forceRefresh)
+                    }
                 }
-
-                CatalogSyncState.markPending(applicationContext, providerId)
-                sync(providerId)
             }
         }
     }
@@ -110,8 +112,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private fun preparationMessage(error: Throwable): String = when (error) {
         is FullCatalogPreparer.Incomplete -> error.message.orEmpty()
         is ArtworkLoader.StorageFull -> error.message.orEmpty()
-        else -> error.message?.takeIf { it.isNotBlank() }?.let { getString(R.string.catalog_first_failed, it) }
-            ?: getString(R.string.catalog_prepare_failed)
+        else -> getString(R.string.catalog_prepare_failed)
     }
 
     private fun buildUi() {
@@ -196,7 +197,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         } else {
             LinearLayout.LayoutParams(u(132), u(64))
         })
-        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(72)))
+        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(if (compact) 72 else 72)))
 
         stage = TextView(this).apply {
             text = getString(R.string.catalog_connecting)
@@ -275,104 +276,117 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun sync(providerId: String) {
+    private suspend fun sync(providerId: String, forceRefresh: Boolean) {
         val dao = BlofyDatabase.get(applicationContext).dao()
-        val sourceChanged = PortalSyncBook.hasPendingSource(applicationContext, providerId)
         val target = withTimeout(20_000L) {
-            withContext(Dispatchers.IO) {
-                if (sourceChanged) {
-                    checkNotNull(PortalPlaylistClient.pendingSource(applicationContext, dao, providerId)) {
-                        "Pending playlist source is unavailable"
-                    }
-                } else dao.provider(providerId)
-            }
+            withContext(Dispatchers.IO) { dao.provider(providerId) }
         } ?: return fail(getString(R.string.catalog_provider_not_found))
-
-        if (CatalogSyncState.isEntryReady(applicationContext, providerId)) {
-            FirstImportCheckpoint.clear(applicationContext, providerId)
-            if (sourceChanged) CatalogRefreshWorker.enqueueNow(applicationContext, providerId)
-            openHome()
-            return
-        }
-
-        val syncProvider: ProviderEntity = target.copy(enabled = true, updatedAt = System.currentTimeMillis())
-        val checkpoint = withTimeout(20_000L) {
+        val firstLoad = withTimeout(20_000L) {
             withContext(Dispatchers.IO) {
-                FirstImportCheckpoint.discardIncompleteSections(applicationContext, dao, syncProvider)
+                !CatalogSyncState.isReady(applicationContext, providerId) || !dao.hasStreamsForProvider(providerId)
             }
         }
-        var catalogCommitted = false
-        try {
-            render(5, getString(R.string.catalog_start_full))
-            PlaylistSyncPolicy.run {
-                val manager = PlaylistManager(XtreamClient.api, dao)
-                withContext(Dispatchers.IO) {
-                    if (!checkpoint.isCompleted("live")) {
-                        manager.syncLive(syncProvider) { value ->
-                            withContext(Dispatchers.Main.immediate) {
-                                renderProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, value))
-                            }
-                        }
-                        FirstImportCheckpoint.markCompleted(applicationContext, syncProvider, "live")
-                    } else {
-                        withContext(Dispatchers.Main.immediate) {
-                            renderProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, 30))
-                        }
-                    }
+        val pendingSource = if (firstLoad) null else withContext(Dispatchers.IO) {
+            PortalPlaylistClient.pendingSource(applicationContext, dao, providerId)
+        }
+        val source = pendingSource ?: target
+        val explicitSourceReplacement = CatalogLoadPersistence.isApprovedSourceReplacement(
+            forceRefresh, pendingSource, intent.getStringExtra(EXTRA_APPROVED_SOURCE_FINGERPRINT)
+        )
 
-                    if (!checkpoint.isCompleted("movie")) {
-                        manager.syncVod(syncProvider) { value ->
-                            withContext(Dispatchers.Main.immediate) {
-                                renderProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, value))
-                            }
-                        }
-                        FirstImportCheckpoint.markCompleted(applicationContext, syncProvider, "movie")
-                    } else {
-                        withContext(Dispatchers.Main.immediate) {
-                            renderProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, 88))
-                        }
-                    }
-
-                    if (!checkpoint.isCompleted("series")) {
-                        manager.syncSeries(syncProvider) { value ->
-                            withContext(Dispatchers.Main.immediate) {
-                                renderProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, value))
-                            }
-                        }
-                        FirstImportCheckpoint.markCompleted(applicationContext, syncProvider, "series")
-                    } else {
-                        withContext(Dispatchers.Main.immediate) {
-                            renderProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, 95))
-                        }
-                    }
-                }
+        // A staged refresh temporarily duplicates catalog rows. Clean disposable cache first and
+        // refuse the refresh if there is not enough disk headroom; the existing catalog stays safe.
+        if (!firstLoad) {
+            val storageReady = withContext(Dispatchers.IO) {
+                LocalStorageManager.prepareForCatalogRefresh(applicationContext)
             }
-            val freshItemCount = withContext(Dispatchers.IO) { dao.streamCountForProvider(providerId) }
-            check(freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
-            render(96, getString(R.string.catalog_finishing))
-            withContext(NonCancellable + Dispatchers.IO) {
-                val saved = target.copy(enabled = true, updatedAt = System.currentTimeMillis())
-                dao.saveAndActivateProvider(saved)
-                catalogCommitted = true
-                if (sourceChanged) {
-                    CatalogSyncState.markSourceReplaced(applicationContext, providerId)
-                } else {
-                    CatalogSyncState.markCatalogCommitted(applicationContext, providerId)
-                }
-                FirstImportCheckpoint.clear(applicationContext, providerId)
-            }
-
-            render(100, getString(R.string.catalog_complete))
-            delay(80L)
-            openHome()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Throwable) {
-            if (catalogCommitted) {
-                openHome()
+            if (!storageReady) {
+                render(30, getString(R.string.catalog_refresh_kept))
+                stage.setTextColor(BlofyTvDesign.Mint)
+                Toast.makeText(this, getString(R.string.storage_cleanup_message), Toast.LENGTH_LONG).show()
+                openHome(providerId)
                 return
             }
-            fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
+        }
+
+        val syncProvider: ProviderEntity = if (firstLoad) {
+            source.copy(enabled = true, updatedAt = System.currentTimeMillis())
+        } else {
+            source.copy(id = UUID.randomUUID().toString(), enabled = false)
+        }
+        val persistence = CatalogLoadPersistence(applicationContext, dao, target, syncProvider.id, firstLoad)
+        try {
+            render(5, getString(if (firstLoad) R.string.catalog_start_full else R.string.catalog_start_refresh))
+            persistence.prepareFirstImport()
+            val result = PlaylistSyncPolicy.run {
+                withContext(Dispatchers.IO) {
+                    PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider,
+                        completedSections = persistence.completedSections,
+                        onSectionComplete = persistence::sectionCompleted) { p ->
+                        withContext(Dispatchers.Main.immediate) { renderProgress(p) }
+                    }
+                }
+            }
+            check(result.freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
+            check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
+            render(30, getString(if (firstLoad) R.string.catalog_finishing else R.string.catalog_saving_refresh))
+            val commit: suspend () -> Unit = {
+                persistence.commit {
+                    if (firstLoad) {
+                        dao.activateImportedProvider(target)
+                    } else if (explicitSourceReplacement) {
+                        dao.promoteExplicitSourceReplacement(
+                            syncProvider.id, source.copy(enabled = true, updatedAt = System.currentTimeMillis()), target
+                        )
+                    } else {
+                        dao.promoteStagedRefresh(
+                            syncProvider.id, source.copy(enabled = true, updatedAt = System.currentTimeMillis()),
+                            expectedSource = target
+                        )
+                    }
+                }
+            }
+            if (pendingSource != null) PortalPlaylistClient.commitPendingSource(applicationContext, dao, pendingSource, commit)
+            else commit()
+            awaitEntryReadyCache(providerId)
+            render(100, getString(R.string.catalog_complete))
+            delay(120L)
+            openHome(providerId)
+        } catch (cancelled: CancellationException) {
+            persistence.discardIfUncommitted()
+            throw cancelled
+        } catch (error: Throwable) {
+            if (persistence.catalogCommitted) {
+                fail(preparationMessage(error))
+                return
+            }
+            persistence.discardIfUncommitted()
+            if (!firstLoad) {
+                render(30, getString(R.string.catalog_refresh_kept))
+                stage.setTextColor(BlofyTvDesign.Mint)
+                Toast.makeText(this, getString(R.string.catalog_kept_opening), Toast.LENGTH_SHORT).show()
+                if (!CatalogSyncState.isEntryReady(applicationContext, providerId)) awaitEntryReadyCache(providerId)
+                openHome(providerId)
+            } else {
+                fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
+            }
+        } finally {
+            if (persistence.catalogCommitted) forceRefreshOnRetry = false
+        }
+    }
+
+    private suspend fun awaitEntryReadyCache(providerId: String) {
+        FullCatalogPreparer.prepare(applicationContext, providerId) { update ->
+            val label = when (update.percent) {
+                in 0..31 -> getString(R.string.catalog_preflight)
+                in 32..54 -> getString(R.string.catalog_finishing)
+                in 55..81 -> getString(R.string.catalog_subtitle)
+                in 82..89 -> getString(R.string.catalog_finishing)
+                in 90..95 -> getString(R.string.catalog_preflight)
+                in 96..99 -> getString(R.string.catalog_preflight)
+                else -> getString(R.string.catalog_complete)
+            }
+            withContext(Dispatchers.Main.immediate) { render(update.percent, label) }
         }
     }
 
@@ -383,8 +397,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.MOVIES -> getString(R.string.catalog_stage_movies)
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
-        val mapped = 5 + (p.percent.coerceIn(0, 95) * 87 / 95)
-        render(mapped, label)
+        render((p.percent.coerceIn(0, 95) * 30 / 95), label)
     }
 
     private fun render(value: Int, label: String) {
@@ -394,16 +407,21 @@ class CatalogLoadingActivity : AppCompatActivity() {
         percent.text = "$safe%"
         stage.text = label
         serverStep.setTextColor(if (safe >= 5) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        contentStep.setTextColor(if (safe >= 92) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        prepareStep.setTextColor(if (safe >= 96) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        contentStep.setTextColor(if (safe >= 10) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        prepareStep.setTextColor(if (safe >= 30) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
         readyStep.setTextColor(if (safe >= 100) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
-        serverStep.text = "${if (safe >= 5) "✓" else "●"}  ${getString(R.string.catalog_step_server)}"
-        contentStep.text = "${if (safe >= 92) "✓" else "○"}  ${getString(R.string.catalog_step_content)}"
-        prepareStep.text = "${if (safe >= 96) "✓" else "○"}  ${getString(R.string.catalog_step_prepare)}"
+        serverStep.text = "${if (safe >= 10) "✓" else "●"}  ${getString(R.string.catalog_step_server)}"
+        contentStep.text = "${if (safe >= 30) "✓" else "○"}  ${getString(R.string.catalog_step_content)}"
+        prepareStep.text = "${if (safe >= 100) "✓" else "○"}  ${getString(R.string.catalog_step_prepare)}"
         readyStep.text = "${if (safe >= 100) "✓" else "○"}  ${getString(R.string.catalog_step_ready)}"
     }
 
-    private fun openHome() {
+    private suspend fun openHome(providerId: String) {
+        withContext(Dispatchers.IO) {
+            BlofyDatabase.get(applicationContext).dao().activateExistingProvider(providerId)
+        }
+        // CatalogEnrichmentLifecycle resumes durable enrichment after Home is interactive and
+        // storage is healthy. Starting it here would bypass its low-memory quiet period.
         startActivity(Intent(this, HomeActivity::class.java))
         finish()
     }
@@ -419,5 +437,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"
         const val EXTRA_FORCE_REFRESH = "force_refresh"
+        const val EXTRA_APPROVED_SOURCE_FINGERPRINT = "approved_source_fingerprint"
     }
 }

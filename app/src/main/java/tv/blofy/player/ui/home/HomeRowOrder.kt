@@ -28,7 +28,8 @@ internal object HomeRowOrder {
             views.forEach { if (it.visibility != visibility) it.visibility = visibility }
         }
         val unmanaged = current.filter { key(it) !in managedKeys }.toMutableList()
-        val quickIndex = unmanaged.indexOfFirst { key(it) == QUICK_SHORTCUTS }.takeIf { it >= 0 } ?: unmanaged.size
+        // Keep the hero first, then the profile shelves, ahead of promotional rows.
+        val quickIndex = minOf(1, unmanaged.size)
         val order = wantedRows.distinct() + groups.keys.filterNot { it in wantedRows }
         unmanaged.addAll(quickIndex, order.flatMap { groups[it].orEmpty() })
         HomeRowReconciler.apply(feed, unmanaged)

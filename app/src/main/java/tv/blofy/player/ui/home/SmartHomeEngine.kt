@@ -12,27 +12,12 @@ internal object SmartHomeEngine {
     )
 
     suspend fun build(dao: BlofyDao, providerId: String): Snapshot {
-        val states = dao.watchStates(providerId).sortedByDescending { it.updatedAt }
-
-        val watched = buildList {
-            for (state in states) {
-                dao.stream(state.contentKey)?.let { add(it) }
-            }
-        }
+        val history = HomeWatchHistory.load(dao, providerId, limit = 64, minimumResumeMs = 0L)
+        val watched = history.recentItems
         val scores = watched.groupingBy { it.kind }.eachCount()
         val preferred = scores.maxByOrNull { it.value }?.key ?: "movie"
 
-        val continueItems = buildList {
-            val seen = hashSetOf<String>()
-            for (state in states) {
-                if (state.completed || state.positionMs <= 0L) continue
-                val item = dao.stream(state.contentKey) ?: continue
-                if ((item.kind == "movie" || item.kind == "series") && seen.add(item.key)) {
-                    add(item)
-                    if (size >= 12) break
-                }
-            }
-        }
+        val continueItems = history.continueItems.take(12)
 
         val latest = dao.latestHomeStreams(providerId, 80)
         val favoriteGenres = watched.asSequence()

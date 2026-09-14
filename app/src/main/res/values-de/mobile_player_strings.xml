@@ -1,0 +1,5 @@
+<resources>
+    <string name="player_toggle_controls">Wiedergabesteuerung anzeigen oder ausblenden</string>
+    <string name="player_seek_position">Wiedergabeposition</string>
+    <string name="login_saved_playlists_failed">Gespeicherte Listen konnten nicht gelesen werden. Erneut versuchen; Ihre Daten wurden nicht gelöscht.</string>
+</resources>

@@ -24,6 +24,8 @@ import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CinemaStyle
+import android.widget.Button
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,7 +50,7 @@ class SystemStatusActivity : AppCompatActivity() {
         }
         root.addView(content)
         setContentView(root)
-        renderHeader("جاري قراءة حالة BLOFY...")
+        renderHeader("حول BLOFY")
         loadStatus()
     }
 
@@ -88,40 +90,29 @@ class SystemStatusActivity : AppCompatActivity() {
     private fun render(status: Snapshot) {
         content.removeAllViews()
         val total = status.live + status.movies + status.series
-        renderHeader(if (status.providerName != null && status.ready && total > 0) "BLOFY جاهز" else "حالة BLOFY")
-        addSection("النسخة والجهاز", listOf(
-            "النسخة" to "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-            "البناء" to BuildConfig.BUILD_SHA.take(12),
-            "نوع الجهاز" to DeviceClass.detect(this).name,
-            "FFmpeg" to if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "مدمج" else "غير مدمج",
-            "خدمة التفعيل" to if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) "غير مضبوطة" else "مضبوطة",
+        renderHeader("حول BLOFY")
+        addSection("التطبيق", listOf(
+            "الإصدار" to BuildConfig.VERSION_NAME,
             "حالة التفعيل" to status.activation
         ))
-        addSection("المكتبة المحلية", if (status.providerName == null) {
+        addSection("مكتبتك", if (status.providerName == null) {
             listOf("القائمة النشطة" to "لا توجد قائمة")
         } else {
             listOf(
                 "القائمة النشطة" to status.providerName,
-                "النوع" to status.providerType.orEmpty().uppercase(Locale.US),
                 "القنوات" to status.live.toString(),
                 "الأفلام" to status.movies.toString(),
                 "المسلسلات" to status.series.toString(),
-                "الحلقات المحفوظة" to status.episodes.toString(),
-                "تفاصيل المحتوى" to status.metadata.toString(),
-                "الإجمالي الأساسي" to total.toString(),
-                "الكاش الكامل" to if (status.fullyReady) "مكتمل 100٪" else if (status.ready) "جاري إكمال التفاصيل" else "يحتاج مزامنة",
+                "حالة المكتبة" to if (status.ready && total > 0) "جاهزة للتصفح" else "تحتاج تحديث المحتوى",
                 "آخر تحديث" to formatTime(status.updatedAt)
             )
         })
-        addSection("الخدمات والتخزين", listOf(
-            "بيانات المحتوى" to "من السيرفر فقط • بدون مصادر خارجية",
-            "قاعدة البيانات" to LocalStorageManager.format(this, status.storage.databaseBytes),
+        addSection("المساحة المستخدمة", listOf(
             "الملفات المؤقتة" to LocalStorageManager.format(this, status.storage.temporaryBytes),
-            "إجمالي مساحة BLOFY" to LocalStorageManager.format(this, status.storage.totalBytes),
-            "الخصوصية" to "لا تُعرض بيانات الدخول أو رابط السيرفر"
+            "إجمالي مساحة BLOFY" to LocalStorageManager.format(this, status.storage.totalBytes)
         ))
         content.addView(TextView(this).apply {
-            text = "هذه الصفحة تقرأ الحالة المحلية فقط ولا تعيد تحميل المحتوى ولا تختبر مسار التشغيل."
+            text = "BLOFY PLAYER • مكتبتك، بطريقتك"
             textSize = 11.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -132,8 +123,13 @@ class SystemStatusActivity : AppCompatActivity() {
 
     private fun renderHeader(textValue: String) {
         content.removeAllViews()
+        content.addView(Button(this).apply {
+            text = getString(R.string.back)
+            CinemaStyle.styleButton(this)
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(dp(110), dp(42)).apply { gravity = Gravity.LEFT; bottomMargin = dp(12) })
         content.addView(TextView(this).apply {
-            text = "BLOFY SYSTEM"
+            text = "BLOFY PLAYER"
             textSize = 11.5f
             letterSpacing = .13f
             typeface = Typeface.DEFAULT_BOLD
@@ -155,11 +151,7 @@ class SystemStatusActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(20), dp(16), dp(20), dp(16))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(18).toFloat()
-                setColor(0xE61A1325.toInt())
-                setStroke(dp(1), 0xFF49375E.toInt())
-            }
+            background = CinemaStyle.surface(this@SystemStatusActivity, radiusDp = 14)
         }
         panel.addView(TextView(this).apply {
             text = title

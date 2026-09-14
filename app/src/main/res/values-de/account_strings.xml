@@ -1,0 +1,33 @@
+<resources>
+    <string name="account_title">Lizenz und Datenschutz</string>
+    <string name="privacy_policy">Datenschutzerklärung und Datenlöschung</string>
+    <string name="privacy_summary">Wir verwenden eine Installationskennung und einen Hash der Android-ID zur Verwaltung der Aktivierung und Testdauer. Telefonnummer und IMEI werden dafür nicht verwendet. Einzelheiten zu Daten und Löschung stehen in der Datenschutzerklärung.</string>
+    <string name="privacy_diagnostics">Wiedergabediagnose zur Verbesserung der Stabilität teilen (optional)</string>
+    <string name="license_recovery_title">Lizenz wiederherstellen</string>
+    <string name="license_recovery_hint">Speichere vor der Deinstallation einen Wiederherstellungsschlüssel außerhalb dieses Geräts. Er überträgt nur die bezahlte Lizenz; Wiedergabelisten und Passwörter werden nicht automatisch importiert.</string>
+    <string name="license_create_key">Wiederherstellungsschlüssel erstellen</string>
+    <string name="license_create_warning">Ein bisheriger Wiederherstellungsschlüssel wird ungültig. Speichere den neuen Schlüssel, bevor du diese Seite verlässt.</string>
+    <string name="license_enter_key">Wiederherstellungsschlüssel</string>
+    <string name="license_restore">Lizenz auf diesem Gerät wiederherstellen</string>
+    <string name="license_restore_warning">Die verbleibende Lizenzdauer wird auf dieses Gerät übertragen und das vorherige Gerät deaktiviert. Fortfahren?</string>
+    <string name="license_invalid_key">Der Schlüssel ist ungültig oder bereits verwendet, oder die Lizenz ist abgelaufen oder gesperrt.</string>
+    <string name="license_restored">Lizenz wiederhergestellt. Kehre zur Anmeldung zurück und aktualisiere den Status.</string>
+    <string name="license_paid_required">Zum Erstellen eines Wiederherstellungsschlüssels ist eine gültige bezahlte Lizenz erforderlich.</string>
+    <string name="license_same_device">Diese Lizenz gehört bereits zu diesem Gerät.</string>
+    <string name="license_already_active">Dieses Gerät hat bereits eine gültige Lizenz; sie wurde nicht ersetzt.</string>
+    <string name="license_keep_key">Bewahre diesen Schlüssel sicher auf und teile ihn nicht. Er wird nicht erneut angezeigt.</string>
+    <string name="license_key_created">Wiederherstellungsschlüssel erstellt. Speichere ihn außerhalb dieses Geräts.</string>
+    <string name="account_revoke_sessions">Bestehende Website-Sitzungen widerrufen</string>
+    <string name="account_revoke_warning">Neue Anfragen mit bestehenden Website-Sitzungen werden abgelehnt. Deine direkten Zugangsdaten beim Inhaltsanbieter bleiben unverändert. Fortfahren?</string>
+    <string name="account_sessions_revoked">Bestehende Website-Sitzungen wurden widerrufen.</string>
+    <string name="privacy_delete_title">Meine Daten löschen und Aktivierung widerrufen</string>
+    <string name="privacy_delete_warning">Dies deaktiviert dieses Gerät und seinen Wiederherstellungsschlüssel und löscht Wiedergabelisten, Cloud-Profile, Diagnosen und lokale App-Daten. Ein minimaler Datensatz zur Missbrauchsprävention und erforderliche Transaktionsdaten bleiben erhalten. Dein Konto beim Inhaltsanbieter wird nicht gelöscht. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="privacy_deleted">Dienstdaten gelöscht. Lokale App-Daten werden gelöscht.</string>
+    <string name="account_wait">Anfrage wird verarbeitet…</string>
+    <string name="account_failed">Anfrage konnte nicht abgeschlossen werden. Prüfe die Verbindung und versuche es erneut.</string>
+    <string name="account_auth_failed">Geräteprüfung fehlgeschlagen oder Versuchslimit erreicht. Versuche es später erneut.</string>
+    <string name="account_browser_unavailable">Öffne /privacy auf der BLOFY-Website in einem anderen Browser.</string>
+    <string name="account_back">Zurück</string>
+    <string name="account_copy">Kopieren</string>
+    <string name="play_license_expired">Die Laufzeit ist abgelaufen. Unter Lizenz und Datenschutz kannst du eine gültige Lizenz wiederherstellen.</string>
+</resources>

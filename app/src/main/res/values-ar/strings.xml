@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">BLOFY PLAYER</string>
     <string name="settings_title">الإعدادات</string>
-    <string name="settings_subtitle">خيارات المشاهدة والقوائم والتخزين</string>
+    <string name="settings_subtitle">تحكم بالتشغيل والترجمة والحساب والتحديثات</string>
     <string name="settings_playback">التشغيل</string>
     <string name="settings_audio">الصوت</string>
     <string name="settings_subtitles">الترجمة</string>
@@ -26,8 +26,10 @@
     <string name="movies">الأفلام</string>
     <string name="series">المسلسلات</string>
     <string name="live_tv">البث المباشر</string>
-    <string name="exit_title">الخروج من BLOFY</string>
-    <string name="exit_message">هل تريد الخروج من التطبيق؟</string>
+    <string name="exit_title">تبي تطلع من BLOFY؟</string>
+    <string name="exit_message">تقدر ترجع وتكمل مشاهدتك في أي وقت.</string>
+    <string name="exit_confirm">نعم، خروج</string>
+    <string name="exit_stay">لا، أبقى</string>
     <string name="yes">نعم</string>
     <string name="no">لا</string>
     <string name="back">رجوع</string>
@@ -108,7 +110,7 @@
     <string name="setting_storage_local">💾 التخزين المحلي</string>
     <string name="setting_storage_calculating">جارٍ حساب المساحة…</string>
     <string name="setting_system_status">✓ حالة النظام</string>
-    <string name="setting_system_status_subtitle">معلومات النسخة والجهاز</string>
+    <string name="setting_system_status_subtitle">رقم الإصدار ومعلومات المكتبة</string>
     <string name="setting_restore">⟲ استعادة الإعدادات</string>
     <string name="setting_restore_subtitle">العودة للوضع الافتراضي</string>
     <string name="setting_restored">✓ تمت استعادة إعدادات المشاهدة الافتراضية</string>
@@ -128,4 +130,17 @@
     <string name="storage_cleaning">جاري تنظيف التخزين المحلي…</string>
     <string name="storage_cleaned">✓ تم تنظيف %1$s بدون حذف بياناتك</string>
     <string name="storage_clean_failed">تعذر تنظيف بعض الملفات — بياناتك لم تتأثر</string>
+    <string name="login_welcome_title">مرحبًا بك في BLOFY</string>
+    <string name="login_welcome_hint">مشاهدتك القادمة تبدأ هنا.</string>
+    <string name="login_link_tv">اربط تلفزيونك</string>
+    <string name="login_scan_hint">امسح الرمز بجوالك لإدارة هذا الجهاز.</string>
+    <string name="login_device_label">رقم الجهاز</string>
+    <string name="login_pairing_label">رمز الربط</string>
+    <string name="login_your_playlists">قوائمك</string>
+    <string name="login_playlists_hint">اختر قائمة محفوظة أو أضف اشتراكك لبدء المشاهدة.</string>
+    <string name="login_add_playlist">إضافة / إدارة</string>
+    <string name="login_remote_hint">تنقّل بالأسهم · اضغط OK للاختيار</string>
+    <string name="login_qr_description">رمز QR لربط الجهاز</string>
+    <string name="login_qr_loading">جاري إعداد رمز الربط…</string>
+    <string name="login_qr_unavailable">ربط الجهاز غير متاح في هذه النسخة. يمكنك إضافة قائمة مباشرة.</string>
 </resources>

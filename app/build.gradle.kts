@@ -1,4 +1,5 @@
 import java.net.URI
+import com.android.build.gradle.internal.tasks.L8DexDesugarLibTask
 
 plugins {
     id("com.android.application")
@@ -7,7 +8,13 @@ plugins {
     id("androidx.baselineprofile")
 }
 
+// Staged name obfuscation. Existing release jobs remain unchanged until acceptance.
+val securityR8Enabled = providers.gradleProperty("BLOFY_SECURITY_R8")
+    .map { it.toBooleanStrict() }.orElse(false).get()
 val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
+val distribution = providers.gradleProperty("BLOFY_DISTRIBUTION").orElse("website").get()
+check(distribution in setOf("website", "play")) { "BLOFY_DISTRIBUTION must be website or play" }
+val googlePlayBuild = distribution == "play"
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val buildSha = providers.gradleProperty("BLOFY_BUILD_SHA")
     .orElse(providers.environmentVariable("GITHUB_SHA"))
@@ -26,15 +33,19 @@ val releaseKeyPassword = releaseSetting("BLOFY_RELEASE_KEY_PASSWORD")
 android {
     namespace = "tv.blofy.player"
     compileSdk = 36
+    if (googlePlayBuild) sourceSets.getByName("main").manifest.srcFile("src/play/AndroidManifest.xml")
+    // Exercise the actual non-debuggable obfuscated target in the isolated R8 CI job.
+    testBuildType = if (securityR8Enabled) "release" else "debug"
     defaultConfig {
         applicationId = "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2000023
-        versionName = "2.0.0-rc07.15"
+        versionCode = 2000057
+        versionName = "2.0.0-rc07.46"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
+        buildConfigField("boolean", "IS_GOOGLE_PLAY", googlePlayBuild.toString())
         buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
     }
     signingConfigs {
@@ -52,7 +63,10 @@ android {
         getByName("release") {
             isDebuggable = false
             isJniDebuggable = false
-            isMinifyEnabled = false
+            isMinifyEnabled = securityR8Enabled
+            if (securityR8Enabled) {
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-security.pro")
+            }
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")
         }
@@ -65,11 +79,25 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
-    testOptions { unitTests.isIncludeAndroidResources = true }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all { it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+    }
 }
 
 baselineProfile {
     automaticGenerationDuringBuild = false
+}
+
+if (securityR8Enabled) {
+    // L8 can rename its own classes outside j$. Identify the disposable test
+    // runtime by its producer's exact bytes, never by guessed package prefixes.
+    // This copies evidence only; neither L8 output nor the target is modified.
+    tasks.register<Sync>("stageR8TestL8Evidence") {
+        from(tasks.named<L8DexDesugarLibTask>("l8DexDesugarLibReleaseAndroidTest")
+            .flatMap { it.desugarLibDex })
+        into(rootProject.layout.buildDirectory.dir("r8-review/private/test-l8"))
+    }
 }
 
 dependencies {
@@ -101,6 +129,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core-ktx:1.6.1")
     androidTestImplementation("androidx.test.ext:junit-ktx:1.2.1")
@@ -111,6 +140,7 @@ val validateReleaseConfiguration = tasks.register("validateReleaseConfiguration"
     group = "verification"
     description = "Fails closed when production endpoint or release signing inputs are missing."
     doLast {
+        check(!googlePlayBuild || securityR8Enabled) { "Google Play releases require BLOFY_SECURITY_R8=true" }
         val signingInputs = linkedMapOf(
             "BLOFY_RELEASE_KEYSTORE_PATH" to releaseKeystorePath.orNull,
             "BLOFY_RELEASE_STORE_PASSWORD" to releaseStorePassword.orNull,

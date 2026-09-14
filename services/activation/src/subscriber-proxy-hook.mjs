@@ -73,11 +73,11 @@ function sendJson(res, status, body, headers = {}) {
   res.end(payload);
 }
 
-async function readJson(req) {
+async function readJson(req, maxBytes = 16_384) {
   let body = '';
   for await (const chunk of req) {
     body += chunk;
-    if (body.length > 16_384) throw new Error('payload_too_large');
+    if (Buffer.byteLength(body) > maxBytes) throw new Error('payload_too_large');
   }
   return body ? JSON.parse(body) : {};
 }
@@ -138,7 +138,7 @@ function sealSession(payload) {
   return Buffer.concat([iv, tag, ciphertext]).toString('base64url');
 }
 
-function openSession(token) {
+function openSession(token, { allowExpired = false } = {}) {
   try {
     const packed = Buffer.from(String(token || ''), 'base64url');
     if (packed.length < 29) return null;
@@ -150,7 +150,7 @@ function openSession(token) {
     const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
     const payload = JSON.parse(plaintext);
     if (!payload || typeof payload.u !== 'string' || typeof payload.p !== 'string' || !validSessionDeviceId(payload.d)) return null;
-    if (!Number.isFinite(payload.exp) || payload.exp <= Date.now()) return null;
+    if (!Number.isFinite(payload.exp) || (!allowExpired && payload.exp <= Date.now())) return null;
     return payload;
   } catch {
     return null;
@@ -405,11 +405,41 @@ async function createSubscriberSession(req, res) {
     providerId: existing?.primary.id || playlistUuid(identity),
     providerName: 'مشتركين BLOFY',
     providerType: 'xtream',
-    baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`,
-    username: token,
-    password: 'blofy',
+    ...(body.delivery === 'direct' ? directConnection(token, { u: username, p: password }) : {
+      baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`,
+      username: token,
+      password: 'blofy'
+    }),
     expiresAt
   });
+}
+
+function directConnection(token, session) {
+  return { delivery: 'direct', baseUrl: subscriberHost, username: session.u, password: session.p, sessionToken: token };
+}
+
+/** Resolve only after device + PIN authentication. The portal keeps its opaque session rows,
+ * while opted-in Android clients receive the centrally managed connection over HTTPS.
+ * An expired, authenticated envelope can restore that SAME device's saved credentials;
+ * it is never accepted by legacy streaming endpoints without their normal expiry check.
+ */
+async function resolveSubscriberConnections(req, res) {
+  if (!available()) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
+  const body = await readJson(req, 100_000);
+  const tokens = body.sessionTokens;
+  if (!Array.isArray(tokens) || tokens.length < 1 || tokens.length > 20 ||
+      tokens.some(token => typeof token !== 'string' || !token || token.length > 4096)) {
+    return sendJson(res, 400, { error: 'invalid_subscriber_sessions' });
+  }
+  const deviceId = String(body.deviceId || '').trim();
+  const activationCode = String(body.activationCode || '').trim();
+  if (!await authorizedDevice(deviceId, activationCode, req)) return sendJson(res, 403, { error: 'unauthorized_device' });
+  const items = tokens.map(token => {
+    const session = openSession(token, { allowExpired: true });
+    if (!session || session.d !== deviceId) return { sessionToken: token, error: 'invalid_subscriber_session' };
+    return directConnection(token, session);
+  });
+  return sendJson(res, 200, { items });
 }
 
 async function proxyPlayerApi(req, res, requestUrl) {
@@ -471,12 +501,17 @@ async function handleSubscriberRequest(req, res) {
       hostConfigured: Boolean(subscriberHost),
       encryptionReady: Boolean(encryptionKey && activationCredentials),
       databaseReady: Boolean(pool),
-      deviceRecheckMs: SESSION_DEVICE_CHECK_MS
+      deviceRecheckMs: SESSION_DEVICE_CHECK_MS,
+      directConnections: true
     });
     return true;
   }
   if (req.method === 'POST' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/session`) {
     await createSubscriberSession(req, res);
+    return true;
+  }
+  if (req.method === 'POST' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/resolve`) {
+    await resolveSubscriberConnections(req, res);
     return true;
   }
   if (req.method === 'GET' && requestUrl.pathname === `${XTREAM_PREFIX}/player_api.php`) {

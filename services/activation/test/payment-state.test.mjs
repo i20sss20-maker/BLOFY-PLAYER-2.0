@@ -25,7 +25,7 @@ async function loadHook(filename, database) {
     ...dependencies,
   });
   return vm.runInContext(
-    source.replace(/^import .*;\n/gm, '').replace(/^export /gm, '') +
+    source.replace(/\r\n/g, '\n').replace(/^import .*;\n/gm, '').replace(/^export /gm, '') +
       '\n({ applyPaymentEvent: typeof applyPaymentEvent === "function" ? applyPaymentEvent : null, cleanupStalePaymentOrders: typeof cleanupStalePaymentOrders === "function" ? cleanupStalePaymentOrders : null })',
     context,
   );

@@ -197,3 +197,32 @@ CREATE TABLE IF NOT EXISTS coupon_redemptions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(code, order_id)
 );
+
+CREATE TABLE IF NOT EXISTS device_audit (
+  id BIGSERIAL PRIMARY KEY,
+  device_id TEXT REFERENCES devices(device_id) ON DELETE SET NULL,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_device_audit_created ON device_audit(device_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id UUID PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_device ON support_tickets(device_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS app_releases (
+  channel TEXT PRIMARY KEY CHECK(channel IN ('stable','testing')),
+  version_code INTEGER NOT NULL,
+  version_name TEXT NOT NULL,
+  download_url TEXT NOT NULL,
+  release_notes TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

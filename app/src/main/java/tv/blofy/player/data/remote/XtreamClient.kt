@@ -1,5 +1,6 @@
 package tv.blofy.player.data.remote
 
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -20,7 +21,13 @@ object XtreamClient {
             val request = original.newBuilder()
                 .header("User-Agent", original.header("User-Agent") ?: "BLOFY PLAYER/2.0 (Android TV)")
                 .header("Accept", original.header("Accept") ?: "application/json,text/plain,*/*")
-                .header("Accept-Encoding", original.header("Accept-Encoding") ?: "identity")
+                .apply {
+                    // Keep bulk-catalog compatibility; allow OkHttp's transparent gzip for
+                    // the small, user-selected series detail request.
+                    if (original.url.queryParameter("action") != "get_series_info") {
+                        header("Accept-Encoding", original.header("Accept-Encoding") ?: "identity")
+                    }
+                }
                 .build()
             val response = chain.proceed(request)
 
@@ -41,12 +48,23 @@ object XtreamClient {
         }
         .build()
 
-    val api: XtreamApi by lazy {
-        Retrofit.Builder()
+    val api: XtreamApi by lazy { createApi(okHttp) }
+
+    // A foreground episode request must not queue behind bulk catalogs/EPG requests
+    // or inherit their 90-second inactivity timeout (with no total deadline).
+    internal fun episodeClient(base: OkHttpClient = okHttp): OkHttpClient = base.newBuilder()
+        .dispatcher(Dispatcher())
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
+        .callTimeout(25, TimeUnit.SECONDS)
+        .build()
+
+    val episodeApi: XtreamApi by lazy { createApi(episodeClient()) }
+
+    internal fun createApi(client: OkHttpClient): XtreamApi = Retrofit.Builder()
             .baseUrl("https://localhost/")
-            .client(okHttp)
+            .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(XtreamApi::class.java)
-    }
 }

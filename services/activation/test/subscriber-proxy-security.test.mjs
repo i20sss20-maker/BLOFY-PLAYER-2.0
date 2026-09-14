@@ -52,10 +52,10 @@ function response() {
   res.bytes = () => Buffer.concat(chunks);
   return res;
 }
-async function fixture({ row, fetch: fetchStub, dependencies = {} } = {}) {
+async function fixture({ row, fetch: fetchStub, dependencies = {}, envOverride = {} } = {}) {
   row ||= { device_id: deviceId, activation_code: codec.proof(deviceId, '123456'), status: 'active', expires_at: null };
   const pool = devicePool(row, async (sql) => ({ rows: sql.startsWith('SELECT status,expires_at') ? [{ ...row }] : [] }));
-  const hooks = await loadHooks(['subscriber-proxy-hook.mjs'], { env, pool, dependencies: {
+  const hooks = await loadHooks(['subscriber-proxy-hook.mjs'], { env: { ...env, ...envOverride }, pool, dependencies: {
     ...playlistIdentity, Readable, pipeline, createLiteralByteReplace, AbortController, AbortSignal,
     fetch: fetchStub || (async () => { throw new Error('unexpected upstream request'); }), ...dependencies
   } });
@@ -84,6 +84,85 @@ test('new HLS target URLs hide provider origin and credentials while preserving 
   }
   assert.equal(hooks.fn('verifiedTarget')(token, encoded, parts.at(-1)), target);
   assert.equal(hooks.fn('openSession')(token).u, 'fixture-user');
+});
+
+test('direct login is explicit and preserves the portal identity and legacy session contract', async () => {
+  const hooks = await fixture({ fetch: async () => new Response(JSON.stringify({ user_info: { auth: 1, status: 'Active' } })) });
+  const body = { deviceId, activationCode: '123456', username: 'fixture-user', password: 'fixture-pass' };
+  const legacy = JSON.parse((await dispatch(hooks, request('/api/v1/subscribers/session', body))).bytes());
+  const directRes = await dispatch(hooks, request('/api/v1/subscribers/session', { ...body, delivery: 'direct' }));
+  const direct = JSON.parse(directRes.bytes());
+  assert.equal(directRes.status, 200);
+  assert.equal(directRes.headers['cache-control'], 'no-store');
+  assert.equal(direct.delivery, 'direct');
+  assert.equal(direct.baseUrl, origin);
+  assert.equal(direct.username, body.username);
+  assert.equal(direct.password, body.password);
+  assert.equal(direct.providerId, legacy.providerId);
+  assert.equal(legacy.baseUrl, `https://app.example.test${prefix}`);
+  assert.equal(legacy.password, 'blofy');
+  assert.equal(legacy.sessionToken, undefined);
+  assert.equal(hooks.fn('openSession')(direct.sessionToken).u, body.username);
+});
+
+test('device-authenticated resolution restores expired saved envelopes without upstream calls', async () => {
+  const hooks = await fixture();
+  const tokens = [legacySession(), legacySession(deviceId, Date.now() - 1)];
+  const res = await dispatch(hooks, request('/api/v1/subscribers/resolve', { deviceId, activationCode: '123456', sessionTokens: tokens }));
+  assert.equal(res.status, 200);
+  assert.equal(res.headers['cache-control'], 'no-store');
+  const items = JSON.parse(res.bytes()).items;
+  assert.deepEqual(items.map(x => x.sessionToken), tokens);
+  for (const item of items) {
+    assert.equal(item.baseUrl, origin);
+    assert.equal(item.username, 'fixture-user');
+    assert.equal(item.password, 'fixture-pass');
+    assert.equal(item.delivery, 'direct');
+  }
+  const denied = await dispatch(hooks, request(`${prefix}/live/${tokens[1]}/blofy/1.ts`));
+  assert.equal(denied.status, 401, 'expired tokens still cannot authorize legacy playback');
+});
+
+test('resolution denies another device, tampering, and missing or incorrect PIN without credentials', async () => {
+  const hooks = await fixture();
+  const foreign = legacySession('BLOFY-ANOTHER-DEVICE');
+  const token = legacySession();
+  for (const activationCode of ['', '999999']) {
+    const denied = await dispatch(hooks, request('/api/v1/subscribers/resolve', { deviceId, activationCode, sessionTokens: [token] }));
+    assert.equal(denied.status, 403);
+    assert.ok(!denied.bytes().includes('fixture-pass'));
+  }
+  const res = await dispatch(hooks, request('/api/v1/subscribers/resolve', { deviceId, activationCode: '123456', sessionTokens: [foreign, 'invalid-token'] }));
+  assert.equal(res.status, 200);
+  for (const row of JSON.parse(res.bytes()).items) {
+    assert.equal(row.error, 'invalid_subscriber_session');
+    assert.equal(row.baseUrl, undefined);
+    assert.equal(row.username, undefined);
+    assert.equal(row.password, undefined);
+  }
+});
+
+test('resolution enforces active device access, existing lockout and bounded batches', async () => {
+  for (const row of [
+    { device_id: deviceId, activation_code: codec.proof(deviceId, '123456'), status: 'blocked' },
+    { device_id: deviceId, activation_code: codec.proof(deviceId, '123456'), status: 'active', auth_locked_until: new Date(Date.now() + 60_000) }
+  ]) {
+    const hooks = await fixture({ row });
+    const res = await dispatch(hooks, request('/api/v1/subscribers/resolve', { deviceId, activationCode: '123456', sessionTokens: [legacySession()] }));
+    assert.equal(res.status, 403);
+  }
+  const hooks = await fixture();
+  for (const sessionTokens of [[], Array(21).fill('token'), ['x'.repeat(4097)], [42], 'token']) {
+    const res = await dispatch(hooks, request('/api/v1/subscribers/resolve', { deviceId, activationCode: '123456', sessionTokens }));
+    assert.equal(res.status, 400);
+  }
+});
+
+test('resolving a saved session reads the current centrally configured host', async () => {
+  const next = 'https://next.example.test:8443/provider';
+  const hooks = await fixture({ envOverride: { BLOFY_SUBSCRIBER_HOST: next } });
+  const res = await dispatch(hooks, request('/api/v1/subscribers/resolve', { deviceId, activationCode: '123456', sessionTokens: [legacySession()] }));
+  assert.equal(JSON.parse(res.bytes()).items[0].baseUrl, next);
 });
 
 test('v2 target rejects tampering, another session and downgrade attempts', async () => {

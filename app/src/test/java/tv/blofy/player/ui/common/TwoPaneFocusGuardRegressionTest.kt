@@ -204,7 +204,36 @@ class TwoPaneFocusGuardRegressionTest {
         assertFalse(categories.hasFocus())
     }
 
-    private class Rows(private val count: Int) : RecyclerView.Adapter<Row>() {
+    @Test fun okDuringOffscreenMoveClicksRequestedCategoryOnce() {
+        val clicks = mutableListOf<Int>()
+        categories.adapter = Rows(40) { clicks += it }
+        layout()
+        row(categories, 0).requestFocus()
+        TwoPaneFocusGuard.focusItem(categories, 29)
+        assertTrue(press(KeyEvent.KEYCODE_DPAD_CENTER))
+        assertTrue(press(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.ACTION_UP))
+        assertTrue(clicks.isEmpty())
+        layout()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(29), clicks)
+    }
+
+    @Test fun queuedOkDoesNotActivateAfterSwitchingPane() {
+        val clicks = mutableListOf<Int>()
+        categories.adapter = Rows(40) { clicks += it }
+        layout()
+        row(categories, 0).requestFocus()
+        TwoPaneFocusGuard.focusItem(categories, 29)
+        press(KeyEvent.KEYCODE_DPAD_CENTER)
+        press(KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertTrue(press(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.ACTION_UP))
+        layout()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(clicks.isEmpty())
+        assertTrue(content.hasFocus())
+    }
+
+    private class Rows(private val count: Int, private val click: (Int) -> Unit = {}) : RecyclerView.Adapter<Row>() {
         init { setHasStableIds(true) }
         override fun getItemId(position: Int) = position.toLong()
         override fun getItemCount() = count
@@ -213,7 +242,10 @@ class TwoPaneFocusGuardRegressionTest {
             isFocusableInTouchMode = true
             layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 100)
         })
-        override fun onBindViewHolder(holder: Row, position: Int) { (holder.itemView as TextView).text = "$position" }
+        override fun onBindViewHolder(holder: Row, position: Int) {
+            (holder.itemView as TextView).text = "$position"
+            holder.itemView.setOnClickListener { click(holder.bindingAdapterPosition) }
+        }
     }
     private class Row(view: View) : RecyclerView.ViewHolder(view)
 }

@@ -2,7 +2,6 @@ package tv.blofy.player.core.diagnostics
 
 import android.os.SystemClock
 import android.util.Log
-import java.util.concurrent.CopyOnWriteArrayList
 
 data class PlaybackMetric(
     val providerKey: String,
@@ -20,7 +19,8 @@ data class PlaybackMetric(
 
 object PlaybackDiagnostics {
     private const val TAG = "BLOFY_DIAG"
-    private val history = CopyOnWriteArrayList<PlaybackMetric>()
+    private const val MAX_HISTORY = 100
+    private val history = ArrayList<PlaybackMetric>(MAX_HISTORY)
 
     fun begin(providerKey: String, kind: String, url: String): PlaybackMetric {
         val metric = PlaybackMetric(
@@ -29,7 +29,10 @@ object PlaybackDiagnostics {
             url = DiagnosticsSanitizer.sanitizeUrl(url),
             startedAtElapsedMs = SystemClock.elapsedRealtime()
         )
-        history += metric
+        synchronized(history) {
+            if (history.size == MAX_HISTORY) history.removeAt(0)
+            history += metric
+        }
         Log.i(TAG, "begin provider=${metric.providerKey} kind=${metric.contentKind} url=${metric.url}")
         return metric
     }
@@ -57,12 +60,15 @@ object PlaybackDiagnostics {
         return updated
     }
 
-    fun snapshot(): List<PlaybackMetric> = history.takeLast(100)
+    fun snapshot(): List<PlaybackMetric> = synchronized(history) { history.toList() }
 
-    fun clear() = history.clear()
+    fun clear() = synchronized(history) { history.clear() }
 
     private fun replace(old: PlaybackMetric, new: PlaybackMetric) {
-        val index = history.indexOf(old)
-        if (index >= 0) history[index] = new else history += new
+        synchronized(history) {
+            val index = history.indexOf(old)
+            // Late events must not resurrect an evicted or explicitly cleared session.
+            if (index >= 0) history[index] = new
+        }
     }
 }

@@ -50,7 +50,10 @@ object SubscriptionClient {
     )
 
     private val json = "application/json; charset=utf-8".toMediaType()
+    // Activation credentials must never follow redirects to another endpoint.
     private val client = OkHttpClient.Builder()
+        .followRedirects(false)
+        .followSslRedirects(false)
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)
@@ -80,6 +83,7 @@ object SubscriptionClient {
     }
 
     suspend fun quote(context: Context, baseUrl: String, planKey: String, coupon: String?): Quote {
+        check(!tv.blofy.player.BuildConfig.IS_GOOGLE_PLAY) { "external_purchase_unavailable" }
         val root = postAuthenticated(context, endpoint(baseUrl, "/api/v1/subscriptions/quote"), JSONObject().apply {
             put("planKey", planKey)
             coupon?.trim()?.takeIf(String::isNotBlank)?.let { put("couponCode", it) }
@@ -96,6 +100,7 @@ object SubscriptionClient {
     }
 
     suspend fun createOrder(context: Context, baseUrl: String, planKey: String, coupon: String?): Order {
+        check(!tv.blofy.player.BuildConfig.IS_GOOGLE_PLAY) { "external_purchase_unavailable" }
         val root = postAuthenticated(context, endpoint(baseUrl, "/api/v1/subscriptions/orders"), JSONObject().apply {
             put("planKey", planKey)
             coupon?.trim()?.takeIf(String::isNotBlank)?.let { put("couponCode", it) }
@@ -111,6 +116,7 @@ object SubscriptionClient {
     }
 
     suspend fun checkoutUrl(context: Context, baseUrl: String, orderId: String): String {
+        check(!tv.blofy.player.BuildConfig.IS_GOOGLE_PLAY) { "external_purchase_unavailable" }
         val root = postAuthenticated(context, endpoint(baseUrl, "/api/v1/subscriptions/checkout"), JSONObject().apply {
             put("orderId", orderId)
         })

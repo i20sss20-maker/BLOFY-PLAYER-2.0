@@ -1,6 +1,7 @@
 package tv.blofy.player.data.local
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -17,7 +18,8 @@ data class ProviderEntity(
     val preferredEngine: String = "media3",
     val allowCrossProtocolRedirects: Boolean = true,
     val enabled: Boolean = true,
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "''") val subscriberToken: String = ""
 )
 
 @Entity(
@@ -47,7 +49,15 @@ data class CategoryEntity(
         Index(value = ["providerId", "kind", "categoryId", "name"]),
         Index(value = ["providerId", "kind", "name"]),
         Index(value = ["providerId", "name"]),
-        Index(value = ["providerId", "kind", "addedAt"])
+        Index(value = ["providerId", "kind", "addedAt"]),
+        // SQLite appends rowid to these indexes, matching catalog cursor order exactly.
+        Index(value = ["providerId", "kind"]),
+        Index(value = ["providerId", "kind", "categoryId"]),
+        Index(
+            name = "index_streams_home_page",
+            value = ["providerId", "kind", "addedAt", "name", "key"],
+            orders = [Index.Order.ASC, Index.Order.ASC, Index.Order.DESC, Index.Order.ASC, Index.Order.ASC]
+        )
     ]
 )
 data class StreamEntity(

@@ -2,7 +2,9 @@ name: Trigger BLOFY RC07 Signed Release
 
 on:
   push:
-    branches: [rc07-commercial-stability]
+    branches: [rc07-runtime-recovery]
+    paths:
+      - '.github/workflows/trigger-rc07-signed.yml'
 
 permissions:
   actions: write
@@ -15,4 +17,7 @@ jobs:
       - name: Dispatch signed release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run rc07-release.yml --repo i20sss20-maker/BLOFY-PLAYER-2.0 --ref rc07-commercial-stability
+        run: gh workflow run rc07-release.yml --repo i20sss20-maker/BLOFY-PLAYER-2.0 --ref rc07-runtime-recovery
+
+# Explicit trigger for the corrected rc07.41 candidate.
+# rc07-release.yml already handles its own tagged push; do not dispatch a duplicate for that path.

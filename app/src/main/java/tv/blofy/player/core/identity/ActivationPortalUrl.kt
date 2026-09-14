@@ -14,7 +14,7 @@ object ActivationPortalUrl {
 
         // The API and portal share the same production origin. Resolving `/` avoids
         // accidentally encoding an API path or stale query from the build setting.
-        val portal = activationEndpoint.resolve("/") ?: return null
+        val portal = activationEndpoint.resolve(if (tv.blofy.player.BuildConfig.IS_GOOGLE_PLAY) "/connect" else "/") ?: return null
         val activationFragment = buildString {
             append("deviceId=")
             append(normalizedDeviceId)

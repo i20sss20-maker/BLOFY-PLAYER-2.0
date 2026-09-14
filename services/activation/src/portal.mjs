@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { recordAudit } from './audit.mjs';
 import { groupPlaylists, playlistIdentity, playlistUuid } from './playlist-identity.mjs';
 
 function keyFromEnv() {
@@ -23,6 +24,7 @@ function open(value) {
   const key = keyFromEnv();
   if (!key) throw new Error('playlist_encryption_key_missing');
   const payload = Buffer.from(value, 'base64url');
+  if (payload.length < 29) throw new Error('invalid_sealed_value');
   const iv = payload.subarray(0, 12);
   const tag = payload.subarray(12, 28);
   const ciphertext = payload.subarray(28);
@@ -33,6 +35,23 @@ function open(value) {
 
 function cleanText(value, max = 256) { return String(value || '').trim().slice(0, max); }
 function validType(value) { return value === 'xtream' || value === 'm3u'; }
+
+function safePlaylistGroups(rows, deviceId, encryptionKey, warnRejected) {
+  const validRows = [];
+  const corruptIds = [];
+  for (const row of rows) {
+    try {
+      // Validate each encrypted row independently before grouping. One damaged legacy
+      // row must never make list/edit/delete fail for every other playlist on the device.
+      groupPlaylists([row], deviceId, encryptionKey);
+      validRows.push(row);
+    } catch (error) {
+      corruptIds.push(row.id);
+      warnRejected('corrupt_playlist_row');
+    }
+  }
+  return { groups: groupPlaylists(validRows, deviceId, encryptionKey), corruptIds };
+}
 
 function hasAuthorityUserInfo(candidate, parsed) {
   if (parsed.username || parsed.password) return true;
@@ -131,7 +150,6 @@ function isUnsafeHost(host) {
   if (ipv4) return isUnsafeIpv4(ipv4);
   if (normalized.includes(':')) return isUnsafeIpv6(normalized);
 
-  // Single-label names resolve only through local DNS/search domains.
   return !normalized.includes('.');
 }
 
@@ -161,7 +179,6 @@ export function createPortalHandlers({
   warnRejected = (error) => console.warn('[portal/playlists] rejected', { error })
 }) {
   function rejectPlaylist(res, error) {
-    // Only pass the allowlisted error code to diagnostics: never the request body.
     warnRejected(error);
     return json(res, 400, { error });
   }
@@ -181,18 +198,22 @@ export function createPortalHandlers({
       `SELECT id,name,provider_type,base_url_enc,username_enc,password_enc,active,revision,updated_at
        FROM device_playlists WHERE device_id=$1 ORDER BY active DESC, updated_at DESC`, [auth.deviceId]
     );
-    return json(res, 200, { items: groupPlaylists(result.rows, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY).map(({ primary: row, aliases }) => ({
-      id: row.id,
-      aliasIds: aliases,
-      name: row.name,
-      providerType: row.provider_type,
-      baseUrl: open(row.base_url_enc),
-      username: open(row.username_enc),
-      password: open(row.password_enc),
-      active: row.active,
-      revision: Number(row.revision),
-      updatedAt: new Date(row.updated_at).getTime()
-    })) });
+    const safe = safePlaylistGroups(result.rows, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY, warnRejected);
+    return json(res, 200, {
+      items: safe.groups.map(({ primary: row, aliases }) => ({
+        id: row.id,
+        aliasIds: aliases,
+        name: row.name,
+        providerType: row.provider_type,
+        baseUrl: open(row.base_url_enc),
+        username: open(row.username_enc),
+        password: open(row.password_enc),
+        active: row.active,
+        revision: Number(row.revision),
+        updatedAt: new Date(row.updated_at).getTime()
+      })),
+      skippedCorrupt: safe.corruptIds.length
+    });
   }
 
   async function upsert(req, res) {
@@ -203,22 +224,24 @@ export function createPortalHandlers({
     const name = cleanText(body.name, 128) || 'BLOFY Playlist';
     const providerType = cleanText(body.providerType, 16).toLowerCase();
     const baseUrl = cleanText(body.baseUrl, 2048);
-    const username = cleanText(body.username, 256);
+    const subscriber = /\/api\/v1\/subscribers\/xtream\/?$/.test(baseUrl);
+    const username = cleanText(body.username, subscriber ? 4096 : 256);
     const password = cleanText(body.password, 256);
     const active = body.active !== false;
     if (!validType(providerType)) return rejectPlaylist(res, 'invalid_playlist');
     const urlError = playlistUrlValidation(baseUrl);
     if (urlError) return rejectPlaylist(res, urlError);
     if (providerType === 'xtream' && (!username || !password)) return rejectPlaylist(res, 'xtream_credentials_required');
+    if (subscriber && String(body.username || '').trim().length > 4096) return rejectPlaylist(res, 'invalid_playlist');
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      // Serialize concurrent saves for this device before selecting an existing logical account.
       await client.query('SELECT device_id FROM devices WHERE device_id=$1 FOR UPDATE', [auth.deviceId]);
       const saved = await client.query('SELECT * FROM device_playlists WHERE device_id=$1', [auth.deviceId]);
       const identity = playlistIdentity({ providerType, baseUrl, username, password }, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY);
-      const match = groupPlaylists(saved.rows, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY).find(group => group.identity === identity);
+      const safe = safePlaylistGroups(saved.rows, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY, warnRejected);
+      const match = safe.groups.find(group => group.identity === identity);
       if (match) id = match.primary.id;
       else if (!body.id) id = playlistUuid(identity);
       if (active) await client.query('UPDATE device_playlists SET active=FALSE,updated_at=NOW() WHERE device_id=$1', [auth.deviceId]);
@@ -234,6 +257,7 @@ export function createPortalHandlers({
         [id, auth.deviceId, name, providerType, seal(baseUrl), seal(username), seal(password), active]
       );
       if (!result.rows[0]) { await client.query('ROLLBACK'); return json(res, 404, { error: 'playlist_not_found' }); }
+      await recordAudit(client,auth.deviceId,'playlist_saved',{playlistId:id},'device');
       await client.query('COMMIT');
       const row = result.rows[0];
       return json(res, 200, { id: row.id, active: row.active, revision: Number(row.revision), updatedAt: new Date(row.updated_at).getTime() });
@@ -252,14 +276,24 @@ export function createPortalHandlers({
       await client.query('BEGIN');
       await client.query('SELECT device_id FROM devices WHERE device_id=$1 FOR UPDATE', [auth.deviceId]);
       const existing = await client.query('SELECT * FROM device_playlists WHERE device_id=$1', [auth.deviceId]);
-      const group = groupPlaylists(existing.rows, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY)
-        .find(item => item.primary.id === id || item.aliases.includes(id));
-      if (!group) { await client.query('ROLLBACK'); return json(res, 404, { error: 'playlist_not_found' }); }
+      const safe = safePlaylistGroups(existing.rows, auth.deviceId, process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY, warnRejected);
+      const group = safe.groups.find(item => item.primary.id === id || item.aliases.includes(id));
+      if (!group) {
+        // A row with damaged encrypted fields cannot be rendered, but if the client still
+        // knows its exact UUID from an earlier session allow deleting that exact row safely.
+        const corruptMatch = safe.corruptIds.includes(id);
+        if (!corruptMatch) { await client.query('ROLLBACK'); return json(res, 404, { error: 'playlist_not_found' }); }
+        await client.query('DELETE FROM device_playlists WHERE device_id=$1 AND id=$2', [auth.deviceId, id]);
+        await recordAudit(client,auth.deviceId,'playlist_removed',{playlistId:id,corrupt:true},'device');
+        await client.query('COMMIT');
+        return json(res, 200, { deleted: true, deletedIds: [id] });
+      }
       const ids = [group.primary.id, ...group.aliases];
       await client.query('DELETE FROM device_playlists WHERE device_id=$1 AND id=ANY($2::uuid[])', [auth.deviceId, ids]);
       if (group.primary.active) {
         await client.query(`UPDATE device_playlists SET active=TRUE,updated_at=NOW() WHERE id=(SELECT id FROM device_playlists WHERE device_id=$1 ORDER BY updated_at DESC LIMIT 1)`, [auth.deviceId]);
       }
+      await recordAudit(client,auth.deviceId,'playlist_removed',{playlistId:group.primary.id},'device');
       await client.query('COMMIT');
       return json(res, 200, { deleted: true, deletedIds: ids });
     } catch (error) {

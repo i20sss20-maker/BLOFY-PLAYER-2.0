@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_pause">إيقاف مؤقت</string>
+    <string name="player_play">تشغيل</string>
+    <string name="player_seek_back">−10 ث</string>
+    <string name="player_seek_forward">+10 ث</string>
+</resources>

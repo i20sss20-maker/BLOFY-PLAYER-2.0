@@ -1,0 +1,20 @@
+<resources>
+    <string name="player_offline">Ligação perdida · Progresso guardado. Selecione para tentar novamente.</string>
+    <string name="player_retry_error">Não foi possível reproduzir · Tente novamente a partir desta posição.</string>
+    <string name="player_reconnecting">A restabelecer a ligação…</string>
+    <string name="update_title">Atualizar BLOFY</string>
+    <string name="update_preparing">A preparar a atualização…</string>
+    <string name="update_downloading">A transferir a atualização…</string>
+    <string name="update_cancel">Cancelar transferência</string>
+    <string name="update_leave_hint">Pode voltar durante a transferência. O Android pedirá confirmação antes de instalar.</string>
+    <string name="update_ready">Atualização pronta. A conta e o histórico serão mantidos.</string>
+    <string name="update_install">Instalar atualização</string>
+    <string name="update_invalid">Não foi possível verificar a atualização. Transfira novamente.</string>
+    <string name="update_failed">Transferência interrompida. Verifique a ligação e o espaço disponível e tente novamente.</string>
+    <string name="update_retry">Transferir novamente</string>
+    <string name="update_progress">A transferir · %1$d%%</string>
+    <string name="update_allow_installs">Autorize o BLOFY a instalar atualizações nas definições. Depois volte e selecione Instalar atualização.</string>
+    <string name="update_installer_missing">Autorize a instalação de aplicações nas definições do dispositivo e tente novamente.</string>
+    <string name="update_check">Procurar atualizações</string>
+    <string name="update_check_hint">Transferir e instalar a versão mais recente do BLOFY</string>
+</resources>

@@ -99,6 +99,7 @@ object CommercialRuntime {
     }
 
     fun reducedMotion(context: Context): Boolean {
+        if (tv.blofy.player.core.device.DeviceClass.lightModeEnabled(context)) return true
         if (safeMode(context)) return true
         return context.applicationContext
             .getSharedPreferences(PLAYER_PREFS, Context.MODE_PRIVATE)

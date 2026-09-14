@@ -9,13 +9,24 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.DeviceIdentity
-import java.util.concurrent.Executors
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
 object PlaybackDiagnosticsUploader {
     private const val TAG = "BLOFY_DIAG_UPLOAD"
-    private val executor = Executors.newSingleThreadExecutor()
+    // Telemetry is best-effort: a slow network must not retain an unbounded queue
+    // or run uploads on the caller (which can be the player/UI thread).
+    private val executor = createUploadExecutor()
+    internal fun createUploadExecutor() = ThreadPoolExecutor(
+        1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(16),
+        ThreadPoolExecutor.DiscardOldestPolicy()
+    )
+    // Activation credentials must never follow redirects to another endpoint.
     private val client = OkHttpClient.Builder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .callTimeout(8, TimeUnit.SECONDS)
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(6, TimeUnit.SECONDS)
         .writeTimeout(6, TimeUnit.SECONDS)
@@ -23,10 +34,12 @@ object PlaybackDiagnosticsUploader {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     fun enqueue(context: Context, metric: PlaybackMetric) {
+        if (!tv.blofy.player.core.privacy.PrivacyPreferences.diagnosticsEnabled(context)) return
         val baseUrl = BuildConfig.ACTIVATION_BASE_URL.trim().trimEnd('/')
         if (baseUrl.isBlank()) return
         val appContext = context.applicationContext
         executor.execute {
+            if (!tv.blofy.player.core.privacy.PrivacyPreferences.diagnosticsEnabled(appContext)) return@execute
             runCatching {
                 val payload = JSONObject().apply {
                     put("deviceId", DeviceIdentity.deviceId(appContext))

@@ -24,7 +24,7 @@ import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import tv.blofy.player.ui.player.PlayerActivity
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class)
 class RootExitConfirmationRegressionTest {
     private lateinit var controller: ActivityController<ExitTestActivity>
     private lateinit var activity: ExitTestActivity
@@ -51,11 +51,11 @@ class RootExitConfirmationRegressionTest {
         assertFalse(RootExitConfirmationLifecycle.isRootScreen(ExitTestActivity::class.java))
     }
 
-    @Test fun backShowsLocalizedYesNoAndDefaultsToNo() {
+    @Test fun backShowsCommercialExitChoicesAndDefaultsToStay() {
         val dialog = show()
         assertTrue(dialog.isShowing)
-        assertEquals(activity.getString(R.string.yes), dialog.getButton(DialogInterface.BUTTON_POSITIVE).text.toString())
-        assertEquals(activity.getString(R.string.no), dialog.getButton(DialogInterface.BUTTON_NEGATIVE).text.toString())
+        assertEquals(activity.getString(R.string.exit_confirm), dialog.getButton(DialogInterface.BUTTON_POSITIVE).text.toString())
+        assertEquals(activity.getString(R.string.exit_stay), dialog.getButton(DialogInterface.BUTTON_NEGATIVE).text.toString())
         assertTrue(dialog.getButton(DialogInterface.BUTTON_NEGATIVE).hasFocus())
         assertFalse(activity.isFinishing)
     }

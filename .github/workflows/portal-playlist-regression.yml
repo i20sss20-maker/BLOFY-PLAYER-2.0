@@ -1,0 +1,32 @@
+name: Portal playlist regression
+
+on:
+  push:
+    branches: ['fix/portal-playlists-20260912']
+    paths:
+      - 'services/**'
+      - '.github/workflows/portal-playlist-regression.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: services/activation/package-lock.json
+      - run: npm ci --prefix services/activation
+      - name: Capture source and public dependencies for offline verification
+        run: tar -czf portal-verification-source.tgz services .github/workflows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portal-verification-source
+          path: portal-verification-source.tgz
+          retention-days: 1
+      - run: npm run check --prefix services/activation
+      - run: npm test --prefix services/activation

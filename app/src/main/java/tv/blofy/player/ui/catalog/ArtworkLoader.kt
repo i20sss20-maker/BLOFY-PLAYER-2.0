@@ -42,7 +42,8 @@ object ArtworkLoader {
 
     private val main = Handler(Looper.getMainLooper())
     private val workerCount = adaptiveWorkerCount()
-    private val coordinatorPool = Executors.newFixedThreadPool(if (workerCount <= 4) 2 else 4)
+    private val coordinatorPool = Executors.newFixedThreadPool(if (workerCount <= 4) 2 else 4) as ThreadPoolExecutor
+    private val viewRequests = java.util.WeakHashMap<ImageView, FutureTask<Unit>>()
     private val backgroundPool = Executors.newFixedThreadPool(2)
     private val taskSequence = AtomicLong(0)
     private val taskQueue = PriorityBlockingQueue<Runnable>(64) { a, b ->
@@ -105,16 +106,17 @@ object ArtworkLoader {
         }
 
         val app = view.context.applicationContext
-        coordinatorPool.execute {
+        val task = FutureTask<Unit>(work@{
             var bitmap: Bitmap? = null
             var resolvedUrl: String? = null
             // Read ANY available local candidate before starting a network fallback.
             for (url in urls) {
+                if (Thread.currentThread().isInterrupted || view.tag != requestKey) return@work
                 bitmap = readPinned(app, url, target) ?: readDisk(app.cacheDir, url, target)
                 if (bitmap != null) { cache.put(cacheKey(url, target), bitmap); break }
             }
             for (url in if (bitmap == null) urls else emptyList()) {
-                if (view.tag != requestKey) return@execute
+                if (Thread.currentThread().isInterrupted || view.tag != requestKey) return@work
                 val key = cacheKey(url, target)
                 if (isNegative(key)) continue
                 bitmap = cache.get(key)?.takeIf { !it.isRecycled }
@@ -125,6 +127,7 @@ object ArtworkLoader {
                     }
                 if (bitmap != null) break
             }
+            if (Thread.currentThread().isInterrupted || view.tag != requestKey) return@work
             val result = bitmap
             main.post {
                 if (view.tag == requestKey) {
@@ -136,6 +139,12 @@ object ArtworkLoader {
                 resolvedUrl?.let { url ->
                     backgroundPool.execute { writeDisk(app.cacheDir, url, target, result) }
                 }
+            }
+        })
+        viewRequests[view] = task
+        coordinatorPool.execute {
+            try { task.run() } finally {
+                main.post { if (viewRequests[view] === task) viewRequests.remove(view) }
             }
         }
     }
@@ -192,6 +201,8 @@ object ArtworkLoader {
 
     fun cancel(view: ImageView) {
         view.animate().cancel()
+        // Cancel only this view's wait; a shared download may still serve another visible view.
+        viewRequests.remove(view)?.cancel(true)
         view.tag = null
     }
 
@@ -200,8 +211,9 @@ object ArtworkLoader {
         val target = target(app)
         urls.mapNotNull(::normalizeUrl).distinct().take(prefetchLimit(app)).forEach { url ->
             val key = cacheKey(url, target)
-            if (cache.get(key) != null || isPersisted(app, url) || diskFile(app.cacheDir, url, target).isFile || isNegative(key)) return@forEach
+            if (cache.get(key) != null || isNegative(key)) return@forEach
             backgroundPool.execute {
+                if (cache.get(key) != null || isPersisted(app, url) || diskFile(app.cacheDir, url, target).isFile || isNegative(key)) return@execute
                 val bmp = sharedDownload(url, Priority.PREFETCH, target).getOrNull()
                 if (bmp != null && !bmp.isRecycled) {
                     cache.put(key, bmp)
@@ -373,5 +385,8 @@ object ArtworkLoader {
         }
     }
 
-    private fun <T> FutureTask<T>.getOrNull(): T? = runCatching { get() }.getOrNull()
+    private fun <T> FutureTask<T>.getOrNull(): T? = try { get() }
+    catch (_: InterruptedException) { Thread.currentThread().interrupt(); null }
+    catch (_: java.util.concurrent.ExecutionException) { null }
+    catch (_: java.util.concurrent.CancellationException) { null }
 }

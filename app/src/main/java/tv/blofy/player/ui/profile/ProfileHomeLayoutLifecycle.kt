@@ -165,8 +165,12 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
             clipChildren = false
             clipToPadding = false
         }
+        val window = activity.resources.configuration
+        val width = tv.blofy.player.ui.home.HomeLayoutSpec(window.screenWidthDp, window.screenHeightDp,
+            tv.blofy.player.core.device.DeviceClass.isTv(activity)).posterWidth
+        val height = width * 3 / 2
         items.forEach { item ->
-            row.addView(card(activity, item), LinearLayout.LayoutParams(dp(activity, 154), dp(activity, 226)).apply {
+            row.addView(card(activity, item), LinearLayout.LayoutParams(dp(activity, width), dp(activity, height)).apply {
                 marginStart = dp(activity, 9)
                 marginEnd = dp(activity, 3)
             })
@@ -175,7 +179,7 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
 
         // The stable row reconciler places the complete shelf before quick shortcuts.
         feed.addView(title)
-        feed.addView(scroll, LinearLayout.LayoutParams(-1, dp(activity, 246)))
+        feed.addView(scroll, LinearLayout.LayoutParams(-1, dp(activity, height + 22)))
         watchlistStates[scroll] = state
         // Preserve the same title if its card was replaced; never select a removed title by index.
         focusedTag?.let { scroll.findViewWithTag<View>(it)?.requestFocus() }
@@ -232,7 +236,7 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
         if (focused) intArrayOf(0xFF9A55F0.toInt(), 0xFF522777.toInt()) else intArrayOf(0xFF2A1D39.toInt(), 0xFF17101F.toInt())
     ).apply {
         cornerRadius = dp(activity, 15).toFloat()
-        setStroke(dp(activity, if (focused) 3 else 1), if (focused) 0xFFE1C5FF.toInt() else 0xFF49365A.toInt())
+        setStroke(dp(activity, if (focused) 2 else 1), if (focused) Color.WHITE else 0x45FFFFFF)
     }
 
     private fun homeFeed(activity: HomeActivity): LinearLayout? = runCatching {

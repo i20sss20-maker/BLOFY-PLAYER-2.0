@@ -1,0 +1,16 @@
+<resources>
+    <string name="trial_remaining">المتبقي من التجربة المجانية</string>
+    <string name="trial_time_remaining">%1$d يوم · %2$d ساعة · %3$d دقيقة</string>
+    <string name="trial_ended">انتهت التجربة المجانية</string>
+    <string name="activation_ended">انتهت صلاحية التفعيل</string>
+    <string name="trial_renew_qr">جدّد من الباركود أو الموقع</string>
+    <string name="activation_active">التفعيل ساري</string>
+    <string name="activation_no_expiry">بدون تاريخ انتهاء</string>
+    <string name="trial_blocked">التفعيل موقوف</string>
+    <string name="trial_contact_support">تواصل مع الدعم من خلال الموقع</string>
+    <string name="trial_status_unknown">حالة التجربة والتفعيل</string>
+    <string name="trial_refresh_status">حدّث من الموقع لعرض المدة المتبقية</string>
+    <string name="details_metadata_loading">جاري تحميل الطاقم والوصف…</string>
+    <string name="details_metadata_retry">تعذر تحديث التفاصيل · أعد المحاولة</string>
+    <string name="setting_cycle_hint">اضغط للتغيير</string>
+</resources>

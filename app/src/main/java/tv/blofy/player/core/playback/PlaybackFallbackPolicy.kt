@@ -18,29 +18,26 @@ internal object PlaybackFallbackPolicy {
 }
 
 internal class PlaybackFallbackState {
-    private var fallbackUrl: String? = null
-    private var fallbackAttempted = false
+    private var fallbackUrls: List<String> = emptyList()
     private val attemptedUrls = linkedSetOf<String>()
 
-    fun begin(primaryUrl: String, fallbackUrl: String?) {
-        this.fallbackUrl = fallbackUrl
-        fallbackAttempted = false
+    fun begin(primaryUrl: String, fallbackUrl: String?, fallbackUrls: List<String> = emptyList()) {
+        this.fallbackUrls = (fallbackUrls + listOfNotNull(fallbackUrl)).map { it.trim() }.distinct()
         attemptedUrls.clear()
         attemptedUrls += primaryUrl
     }
 
-    fun nextConfiguredUrl(): String? = PlaybackFallbackPolicy.configuredUrl(
-        fallbackUrl = fallbackUrl,
-        fallbackAttempted = fallbackAttempted,
-        attemptedUrls = attemptedUrls
-    )
+    fun nextConfiguredUrl(): String? = fallbackUrls.firstNotNullOfOrNull {
+        PlaybackFallbackPolicy.configuredUrl(it, false, attemptedUrls)
+    }
+
+    fun wasAttempted(url: String): Boolean = url in attemptedUrls
 
     fun markUrlAttempted(url: String) {
         attemptedUrls += url
     }
 
     fun markConfiguredUrlAttempted(url: String) {
-        fallbackAttempted = true
         attemptedUrls += url
     }
 }

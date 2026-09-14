@@ -17,7 +17,9 @@ Configure these encrypted secrets in the `production` environment:
 - `BLOFY_ANDROID_KEY_ALIAS`: `blofy-release`.
 - `BLOFY_ANDROID_KEY_PASSWORD`: private-key password.
 
-Run **BLOFY RC07 Signed Release** (`.github/workflows/rc07-release.yml`) from `rc07-commercial-stability`. Pushes to that branch also dispatch the workflow automatically. The workflow pins the fingerprint above as `EXPECTED_CERT_SHA256` and rejects other branches. Keep this guard and the existing signing material intact.
+Run **BLOFY RC07 Signed Release** (`.github/workflows/rc07-release.yml`) from `rc07-runtime-recovery`. A workflow-file push with the exact current signed-release marker also triggers it. The workflow pins the fingerprint above as `EXPECTED_CERT_SHA256` and rejects other branches. Keep this guard and the existing signing material intact.
+
+Current R8 candidate preparation is rc07.43 / 2000054; see [RC0743_SIGNED_R8.md](RC0743_SIGNED_R8.md) for offline signed-upgrade gates, encrypted AAB/mapping retention, and the optional prerelease publication behavior. Historical acceptance below is not evidence that this candidate passed its new gates.
 
 The workflow fails closed unless the production endpoint, database, playlist encryption, FFmpeg bundle, four Android ABIs, 16 KB APK alignment, APK/AAB signatures, and certificate fingerprint all verify. Its output is an Actions artifact; it does not publish to Google Play.
 

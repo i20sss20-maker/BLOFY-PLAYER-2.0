@@ -1,0 +1,5 @@
+<resources>
+    <string name="player_toggle_controls">إظهار أو إخفاء أدوات التشغيل</string>
+    <string name="player_seek_position">موضع المشاهدة</string>
+    <string name="login_saved_playlists_failed">تعذر قراءة القوائم المحفوظة. أعد المحاولة؛ بياناتك المحفوظة لم تُحذف.</string>
+</resources>

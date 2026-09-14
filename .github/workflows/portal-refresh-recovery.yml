@@ -1,0 +1,78 @@
+name: BLOFY Portal Refresh Recovery
+on:
+  push:
+    branches: [fix/portal-refresh-recovery]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: portal-refresh-recovery
+  cancel-in-progress: true
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      source: ${{ steps.prepare.outputs.source }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: prepare
+        name: Prepare the reviewed test source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/fix/portal-refresh-recovery
+          if test -f tools/finalize_portal_refresh.py; then
+            python3 tools/finalize_portal_refresh.py
+            git diff --check
+            python3 - <<'PY'
+          import subprocess
+          allowed={
+            'app/src/main/java/tv/blofy/player/core/identity/PortalPlaylistClient.kt',
+            'app/src/main/java/tv/blofy/player/core/identity/BlofySubscriberClient.kt',
+            'app/src/test/java/tv/blofy/player/core/identity/PortalRefreshRecoveryTest.kt',
+            'app/build.gradle.kts', '.github/workflows/rc07-release.yml'}
+          assert set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()) <= allowed
+          PY
+            git rm tools/finalize_portal_refresh.py
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add app .github/workflows/rc07-release.yml
+            git commit -m 'fix(portal): finalize safe partial refresh and rc07.42 metadata'
+            git push origin HEAD:refs/heads/fix/portal-refresh-recovery
+          fi
+          echo "source=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git diff a0a781f51e65e1b66489dd26ec59e57a35f299bf --stat || true
+  verify:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Full Android tests, lint and install packages
+        run: >-
+          gradle --no-daemon --max-workers=2
+          -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app
+          testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portal-refresh-reports-${{ needs.prepare.outputs.source }}
+          path: |
+            app/build/test-results/
+            app/build/reports/
+          retention-days: 7

@@ -1,0 +1,111 @@
+name: BLOFY R8 Compatibility Review
+on:
+  push:
+    branches: [security/r8-compatibility-review]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blofy-r8-review-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx3072m
+      BLOFY_RELEASE_STORE_PASSWORD: isolated-test-only
+      BLOFY_RELEASE_KEY_ALIAS: isolated-review
+      BLOFY_RELEASE_KEY_PASSWORD: isolated-test-only
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '8.11.1'
+          cache-disabled: true
+      - name: Prepare isolated Android toolchain and disposable test signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses >/dev/null || true
+          "$sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+          keytool -genkeypair -keystore "$RUNNER_TEMP/blofy-r8-review.p12" -storetype PKCS12 -storepass "$BLOFY_RELEASE_STORE_PASSWORD" -keypass "$BLOFY_RELEASE_KEY_PASSWORD" -alias "$BLOFY_RELEASE_KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Isolated R8 Review, O=Local Testing' >/dev/null 2>&1
+          echo "BLOFY_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/blofy-r8-review.p12" >> "$GITHUB_ENV"
+      - name: Reuse digest-pinned existing Media3 FFmpeg build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api /repos/i20sss20-maker/BLOFY-PLAYER-2.0/actions/artifacts/10308545543/zip > "$RUNNER_TEMP/ffmpeg-aar.zip"
+          echo "44c05221eefaaf8a49cd9ed00ab953a6f663baa0e3c5115ce08ed128c213776a  $RUNNER_TEMP/ffmpeg-aar.zip" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/ffmpeg-aar"
+          unzip -q "$RUNNER_TEMP/ffmpeg-aar.zip" -d "$RUNNER_TEMP/ffmpeg-aar"
+          mapfile -t aars < <(find "$RUNNER_TEMP/ffmpeg-aar" -name '*.aar' -type f)
+          [[ "${#aars[@]}" == 1 ]]
+          echo "BLOFY_REVIEW_AAR=${aars[0]}" >> "$GITHUB_ENV"
+      - name: Build the same-source unmodified native baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --no-build-cache --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL=https://blofy-security-review.invalid -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$BLOFY_REVIEW_AAR" :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/blofy-review-unobfuscated.apk"
+      - name: Unit tests, release lint and actual obfuscated APK plus instrumentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --no-build-cache --max-workers=2 -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL=https://blofy-security-review.invalid -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$BLOFY_REVIEW_AAR" testDebugUnitTest :app:lintRelease :app:assembleRelease :app:assembleReleaseAndroidTest :app:stageR8TestL8Evidence
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+          "$tools/zipalign" -c -P 16 4 app/build/outputs/apk/release/app-release.apk
+          "$tools/aapt" dump badging app/build/outputs/apk/release/app-release.apk > "$RUNNER_TEMP/r8-badging.txt"
+          ! grep -Fq application-debuggable "$RUNNER_TEMP/r8-badging.txt"
+          python3 tools/r8_review_summary.py
+          python3 -m unittest discover -s tools/r8_tests -v
+      - name: Enable KVM for the isolated emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise unchanged non-debuggable R8 target with shared application L8 runtime
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: python3 tools/run_r8_instrumentation.py
+      - name: Confirm all six actual-target tests completed without skips
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('build/r8-review/public/summary.json')
+          s=json.loads(p.read_text());v=s['runtime_validation']
+          assert v['all_six_passed_without_skips'] is True
+          assert len(v['completed_cases']) == 6
+          assert all(t['status']==0 for t in v['completed_cases'])
+          assert s['instrumentation_harness']['test_code_dex_unchanged'] is True
+          print(json.dumps(s,indent=2))
+          PY
+      - name: Upload aggregate evidence only, never APKs, signing keys or mapping files
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: BLOFY-R8-review-summary-${{ github.sha }}
+          path: build/r8-review/public/summary.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Remove disposable key and private intermediate mapping
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/blofy-r8-review.p12" "$RUNNER_TEMP/blofy-review-unobfuscated.apk"
+          rm -f app/build/outputs/mapping/release/mapping.txt

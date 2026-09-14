@@ -60,6 +60,7 @@ class BlofyApp : Application() {
         CrashRecovery.install(this)
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
+        registerActivityLifecycleCallbacks(tv.blofy.player.core.identity.ActivationLeaseLifecycle())
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
         registerActivityLifecycleCallbacks(KidsContentGuard())

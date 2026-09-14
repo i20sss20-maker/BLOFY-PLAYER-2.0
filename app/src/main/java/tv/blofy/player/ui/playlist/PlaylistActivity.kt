@@ -25,6 +25,7 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.identity.BlofySubscriberClient
 import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
@@ -92,6 +93,7 @@ class PlaylistActivity : AppCompatActivity() {
         var busy = false
         suspend fun persist(connectAfter: Boolean) {
             val baseUrl = url.text.toString().trim(); val user = username.text.toString().trim(); val pass = password.text.toString()
+            val playlistName = name.text.toString().trim().ifBlank { "BLOFY Server" }
             val validation = PlaylistUrlPolicy.validate(baseUrl)
             if (validation == PlaylistUrlPolicy.Result.EMPTY) { status.text = "أدخل رابط السيرفر"; return }
             if (validation == PlaylistUrlPolicy.Result.INVALID) { status.text = "الرابط غير صحيح"; return }
@@ -110,7 +112,7 @@ class PlaylistActivity : AppCompatActivity() {
                     val type = "xtream"
                     val normalizedBaseUrl = baseUrl.trimEnd('/')
                     val id = existing?.id ?: UUID.nameUUIDFromBytes("$type|$normalizedBaseUrl|$user".toByteArray()).toString()
-                    val next = ProviderEntity(id, name.text.toString().trim().ifBlank { "BLOFY Server" }, normalizedBaseUrl, user, pass, type,
+                    val next = ProviderEntity(id, playlistName, normalizedBaseUrl, user, pass, type,
                         existing?.liveFormat ?: "ts", existing?.preferredTransport ?: "cronet", existing?.preferredEngine ?: "media3", existing?.allowCrossProtocolRedirects ?: true, true, System.currentTimeMillis())
                     val hasCatalog = dao.hasCatalog(id)
                     val cacheReady = hasCatalog && CatalogSyncState.isReady(applicationContext, id)
@@ -136,7 +138,7 @@ class PlaylistActivity : AppCompatActivity() {
                         } finally { if (!promoted) withContext(NonCancellable) { dao.discardStagedCatalog(staging.id) } }
                         CatalogSyncState.markReady(applicationContext, id)
                     } else {
-                        dao.upsertProvider(next); dao.disableAllProviders(); dao.activateProvider(id)
+                        dao.saveAndActivateProvider(next)
                         CatalogSyncState.markReady(applicationContext, id)
                     }
                     val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim(); if (endpoint.isNotBlank()) runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
@@ -147,7 +149,8 @@ class PlaylistActivity : AppCompatActivity() {
                     startActivity(Intent(this@PlaylistActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)); finish()
                 } else finish()
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { status.text = "تعذر تجهيز السيرفر • ${error.message ?: "خطأ اتصال"}"; busy = false }
+            catch (secure: tv.blofy.player.data.local.ProviderSecretUnavailableException) { status.text = secure.message; busy = false }
+            catch (_: Exception) { status.text = "تعذر تجهيز السيرفر • تحقق من البيانات والاتصال ثم حاول مرة أخرى"; busy = false }
         }
 
         fun action(label: String, primary: Boolean, connectAfter: Boolean) = Button(this).apply {
@@ -163,9 +166,27 @@ class PlaylistActivity : AppCompatActivity() {
         setContentView(root); name.requestFocus()
 
         if (editingProviderId != null) lifecycleScope.launch {
-            val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: return@launch
-            name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password)
-            status.text = if (provider.providerType.equals("xtream", true)) "XTREAM • ${provider.name}" else "هذه القائمة قديمة وغير مدعومة • أدخل بيانات Xtream"
+            saveConnect.isEnabled = false
+            saveOnly.isEnabled = false
+            try {
+                val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: run {
+                    status.text = "القائمة غير موجودة • ارجع إلى القوائم المحفوظة"
+                    return@launch
+                }
+                if (BlofySubscriberClient.isManaged(provider)) {
+                    startActivity(Intent(this@PlaylistActivity, BlofySubscriberActivity::class.java).putExtra(EXTRA_PROVIDER_ID, provider.id))
+                    finish()
+                    return@launch
+                }
+                name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password)
+                status.text = if (provider.providerType.equals("xtream", true)) "XTREAM • ${provider.name}" else "هذه القائمة قديمة وغير مدعومة • أدخل بيانات Xtream"
+                saveConnect.isEnabled = true
+                saveOnly.isEnabled = true
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status.text = "تعذر قراءة بيانات القائمة • أعد فتح الصفحة للمحاولة"
+            }
         }
     }
 

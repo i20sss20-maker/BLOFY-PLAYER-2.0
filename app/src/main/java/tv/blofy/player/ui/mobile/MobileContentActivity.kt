@@ -31,6 +31,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catchup.CatchupActivity
 import tv.blofy.player.ui.catalog.PosterStreamAdapter
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
@@ -75,7 +76,8 @@ class MobileContentActivity : AppCompatActivity() {
             setPadding(dp(4), dp(3), 0, dp(12))
         })
         categorySpinner = Spinner(this).apply { background = fieldBackground() }
-        root.addView(categorySpinner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)))
+        categorySpinner.contentDescription = getString(R.string.categories)
+        root.addView(categorySpinner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)))
 
         if (isPosterKind) {
             val widthDp = resources.configuration.screenWidthDp.takeIf { it > 0 } ?: 360
@@ -148,7 +150,8 @@ class MobileContentActivity : AppCompatActivity() {
         override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View = style(super.getDropDownView(position, convertView, parent))
         private fun style(view: View): View = view.apply {
             (this as? TextView)?.apply {
-                textSize = 16f
+                textSize = 14f
+                minHeight = dp(48)
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(BlofyTvDesign.TextPrimary)
                 gravity = Gravity.CENTER_VERTICAL or Gravity.START
@@ -180,7 +183,7 @@ class MobileContentActivity : AppCompatActivity() {
                     putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
                     putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
                     putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream))
+                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream)); putStringArrayListExtra(PlayerActivity.EXTRA_FALLBACK_URLS, ArrayList(ContentUrlResolver.recoveryUrls(stream)))
                     putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
                     putExtra(PlayerActivity.EXTRA_CATEGORY_ID, stream.categoryId)
                     putExtra(PlayerActivity.EXTRA_TITLE, stream.name)
@@ -197,10 +200,10 @@ class MobileContentActivity : AppCompatActivity() {
     }
 
     private fun fieldBackground() = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat(); setColor(0xFF21182F.toInt()); setStroke(dp(1), 0xFF503C65.toInt())
+        cornerRadius = dp(8).toFloat(); setColor(CinemaStyle.Surface)
     }
     private fun itemBackground() = GradientDrawable().apply {
-        cornerRadius = dp(15).toFloat(); setColor(0xFF21182F.toInt()); setStroke(dp(1), 0xFF463455.toInt())
+        cornerRadius = dp(8).toFloat(); setColor(CinemaStyle.Surface)
     }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 

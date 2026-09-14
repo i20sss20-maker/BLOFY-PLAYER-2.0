@@ -1,0 +1,5 @@
+<resources>
+    <string name="player_toggle_controls">Show or hide playback controls</string>
+    <string name="player_seek_position">Playback position</string>
+    <string name="login_saved_playlists_failed">Saved playlists could not be read. Retry; your saved data has not been removed.</string>
+</resources>

@@ -19,7 +19,8 @@ import {
   sanitizeDiagnosticMessage,
   sanitizeDiagnosticUrl
 } from './diagnostics-sanitizer.mjs';
-import { activationReleaseMetadata } from './release-metadata.mjs';
+import { activationReleaseMetadata, publishedAppRelease } from './release-metadata.mjs';
+import { createExperienceHandlers } from './experience-handlers.mjs';
 
 const { Pool } = pg;
 const PORT = Number(process.env.PORT || 8080);
@@ -141,7 +142,7 @@ async function verifyDeviceCredential(client, row, activationCode) {
   return true;
 }
 
-async function authorizedDevice(deviceId, activationCode, req) {
+async function authorizedDevice(deviceId, activationCode, req, requireActive = true) {
   consumeDeviceAuthAttempt(req, deviceId);
   if (!validIdentity(deviceId, activationCode)) return null;
   const client = await pool.connect();
@@ -155,7 +156,7 @@ async function authorizedDevice(deviceId, activationCode, req) {
     }
     await client.query('COMMIT');
     const status = normalizeStatus(row);
-    return status === 'trial' || status === 'active' ? row : null;
+    return !requireActive || status === 'trial' || status === 'active' ? row : null;
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
@@ -165,6 +166,8 @@ async function authorizedDevice(deviceId, activationCode, req) {
 }
 
 const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
+const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice,
+  authorizedAccountDevice: (id, code, req) => authorizedDevice(id, code, req, false) });
 
 async function initializeDatabase() {
   const schemaUrl = new URL('../schema.sql', import.meta.url);
@@ -177,11 +180,18 @@ async function initializeDatabase() {
 async function health(res) {
   try {
     await pool.query('SELECT 1');
+    // Publishing in admin becomes visible without a separate environment redeploy.
+    // Older databases may not yet have the release table; retain the configured fallback.
+    let app = RELEASE_METADATA.app;
+    try {
+      const published = await pool.query('SELECT channel, version_code, version_name, download_url, release_notes FROM app_releases');
+      app = publishedAppRelease(published.rows);
+    } catch { /* Metadata unavailability must not invalidate an otherwise healthy service. */ }
     return json(res, 200, {
       ok: true,
       database: 'ready',
       playlistEncryption: 'ready',
-      release: RELEASE_METADATA,
+      release: { ...RELEASE_METADATA, app },
       time: Date.now()
     });
   } catch (error) {
@@ -469,8 +479,13 @@ async function adminUpdate(req, res, deviceId) {
   }
 
   const result = await pool.query(
-    `UPDATE devices SET status=$2, expires_at=$3, updated_at=NOW() WHERE device_id=$1
-     RETURNING device_id,status,expires_at,updated_at`,
+    `WITH changed AS (
+       UPDATE devices SET status=$2, expires_at=$3, updated_at=NOW() WHERE device_id=$1
+       RETURNING device_id,status,expires_at,updated_at
+     ), logged AS (
+       INSERT INTO device_audit(device_id,actor,action,details)
+       SELECT device_id,'admin','activation_changed',jsonb_build_object('status',status,'expiresAt',expires_at) FROM changed
+     ) SELECT * FROM changed`,
     [deviceId, status, expiresAt]
   );
   if (!result.rows[0]) return json(res, 404, { error: 'device_not_found' });
@@ -598,6 +613,7 @@ const server = http.createServer(async (req, res) => {
   if (res.writableEnded || res.destroyed) return;
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
+    if (await experience.handle(req,res,requestUrl)) return;
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);

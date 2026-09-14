@@ -1,5 +1,6 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
 const ADMIN_USERNAME = String(process.env.BLOFY_ADMIN_USERNAME || '').trim();
@@ -57,19 +58,15 @@ function validSession(req) {
 function cookie(value,maxAgeSeconds) {
   return `${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
 }
-function loginPage(error='') {
-  return `<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BLOFY Admin</title><style>body{margin:0;background:#0c0712;color:#fff;font-family:system-ui;min-height:100vh;display:grid;place-items:center}.box{width:min(92vw,430px);background:#1a1125;border:1px solid #624180;border-radius:24px;padding:28px}input,button{width:100%;box-sizing:border-box;padding:14px;margin-top:10px;border-radius:13px;font-size:16px}input{background:#100a18;color:#fff;border:1px solid #48335b}button{background:#7c3fd0;color:#fff;border:0;font-weight:700}.err{color:#ff9eae}</style><div class="box"><h1>إدارة BLOFY</h1><p>دخول المشرف</p><input id="u" autocomplete="username" placeholder="اسم المستخدم"><input id="p" type="password" autocomplete="current-password" placeholder="كلمة المرور"><button onclick="go()">دخول</button><p id="m" class="err">${error}</p></div><script>async function go(){m.textContent='';const r=await fetch('/api/v1/admin/session/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:u.value,password:p.value})});if(r.ok)location='/admin';else m.textContent='بيانات الدخول غير صحيحة'}</script>`;
-}
-function dashboardPage() {
-  return `<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BLOFY Admin</title><style>body{margin:0;background:#0c0712;color:#fff;font-family:system-ui;padding:18px}.top{display:flex;gap:8px;flex-wrap:wrap;align-items:center}input,button,select{padding:11px;border-radius:10px;border:1px solid #49365d;background:#181020;color:#fff}button{background:#7440bd}.danger{background:#7a2437}.card{background:#181020;border:1px solid #392848;border-radius:16px;padding:14px;margin-top:14px}.wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:820px}td,th{border-bottom:1px solid #352642;padding:9px;text-align:right}.muted{color:#b8a8c6}</style><div class="top"><h1 style="margin-left:auto">BLOFY Admin</h1><button onclick="logout()" class="danger">خروج</button></div><div class="card"><div class="top"><input id="q" placeholder="بحث: جهاز / اسم / جوال / بريد"><button onclick="load()">بحث</button><input id="device" placeholder="رقم الجهاز"><input id="plan" placeholder="plan key"><button onclick="grant()">تمديد يدوي</button></div><p id="msg" class="muted"></p></div><div class="card wrap"><table><thead><tr><th>الجهاز</th><th>العميل</th><th>الجوال</th><th>البريد</th><th>الحالة</th><th>الخطة</th><th>الانتهاء</th><th>آخر ظهور</th></tr></thead><tbody id="rows"></tbody></table></div><script>async function api(url,opt={}){const r=await fetch(url,opt);if(r.status===401){location='/admin';throw 0}return r}async function load(){const r=await api('/api/v1/admin/users?q='+encodeURIComponent(q.value));const x=await r.json();rows.replaceChildren();for(const v of x.items||[]){const tr=document.createElement('tr');for(const value of [v.device_id,v.customer_name||'-',v.customer_phone||'-',v.customer_email||'-',v.status,v.plan_key||'-',v.expires_at?new Date(v.expires_at).toLocaleString('ar-SA'):'-',v.last_seen_at?new Date(v.last_seen_at).toLocaleString('ar-SA'):'-']){const td=document.createElement('td');td.textContent=String(value??'');tr.appendChild(td)}rows.appendChild(tr)}}async function grant(){msg.textContent='جاري التمديد...';const r=await api('/api/v1/admin/grant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({deviceId:device.value.trim(),planKey:plan.value.trim()})});const x=await r.json();msg.textContent=r.ok?'تم التمديد بنجاح':'تعذر التمديد: '+(x.error||'error');if(r.ok)load()}async function logout(){await fetch('/api/v1/admin/session/logout',{method:'POST'});location='/admin'}load()</script>`;
-}
+async function loginPage() { return readFile(new URL('../web/admin-login.html',import.meta.url),'utf8'); }
+async function dashboardPage() { return readFile(new URL('../web/admin.html',import.meta.url),'utf8'); }
 
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function patchedAdminSessionCreateServer(listener) {
   if (typeof listener !== 'function') return previousCreateServer(listener);
   return previousCreateServer(async (req,res)=>{
     let url; try{url=new URL(req.url||'/','http://localhost')}catch{return listener(req,res)}
-    if (req.method==='GET' && url.pathname==='/admin') return html(res, validSession(req)?dashboardPage():loginPage());
+    if (req.method==='GET' && url.pathname==='/admin') return html(res, validSession(req)?await dashboardPage():await loginPage());
     if (req.method==='POST' && url.pathname==='/api/v1/admin/session/login') {
       if (!rateAllowed(req)) return json(res,429,{error:'rate_limited'});
       if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_TOKEN) return json(res,503,{error:'admin_login_not_configured'});

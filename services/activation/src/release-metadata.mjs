@@ -67,3 +67,20 @@ export function activationReleaseMetadata(env = process.env) {
     app: appReleaseMetadata(env)
   };
 }
+
+/** Share the admin-published channel with existing clients that read /health. */
+export function publishedAppRelease(rows, env = process.env) {
+  const configured = appReleaseMetadata(env);
+  const channel = ['stable', 'testing'].includes(env.BLOFY_APP_UPDATE_CHANNEL)
+    ? env.BLOFY_APP_UPDATE_CHANNEL
+    : configured ? (/rc|beta|alpha/i.test(configured.versionName) ? 'testing' : 'stable')
+      : rows.some(row => row.channel === 'stable') ? 'stable' : 'testing';
+  const published = rows.filter(row => row.channel === channel).map(row => appReleaseMetadata({
+    BLOFY_APP_VERSION_CODE: row.version_code,
+    BLOFY_APP_VERSION_NAME: row.version_name,
+    BLOFY_APP_DOWNLOAD_URL: row.download_url,
+    BLOFY_APP_RELEASE_NOTES: row.release_notes,
+    BLOFY_APP_MIN_SUPPORTED_VERSION_CODE: configured?.minSupportedVersionCode || 1
+  })).filter(item => item?.downloadUrl).sort((a, b) => b.versionCode - a.versionCode)[0];
+  return published && (!configured || published.versionCode >= configured.versionCode) ? published : configured;
+}

@@ -22,7 +22,9 @@ object TransportFactory {
     fun create(context: Context, profile: ProviderProfile): DataSource.Factory {
         val appContext = context.applicationContext
         val upstreamHttp: HttpDataSource.Factory = when (profile.transport) {
-            TransportPreference.CRONET_FIRST -> createCronet(appContext, profile) ?: createHttp(profile)
+            TransportPreference.CRONET_FIRST -> createCronet(appContext, profile)?.let { cronet ->
+                if (profile.allowHttpFallback) HttpOpenFallbackFactory(cronet, createHttp(profile)) else cronet
+            } ?: createHttp(profile)
             TransportPreference.HTTP_FIRST -> createHttp(profile)
         }
         val upstream = DefaultDataSource.Factory(appContext, upstreamHttp)
@@ -34,6 +36,8 @@ object TransportFactory {
             val engine = getCronetEngine(context)
             val factory: CronetDataSource.Factory = CronetDataSource.Factory(engine, cronetExecutor)
                 .setUserAgent("BLOFY PLAYER/2.0")
+                .setConnectionTimeoutMs(profile.connectTimeoutMs)
+                .setReadTimeoutMs(profile.readTimeoutMs)
             factory.setDefaultRequestProperties(profile.headers)
             factory
         }.getOrNull()

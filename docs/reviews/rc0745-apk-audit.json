@@ -1,0 +1,115 @@
+{
+  "apk_sha256": "cc1af0210f0f5f24ddd1b30f04081ad69e3d969628c1e1b802b6d18717be5781",
+  "bytes": 16642586,
+  "libraries": [
+    {
+      "path": "lib/arm64-v8a/libffmpegJNI.so",
+      "bits": 64,
+      "loads": [
+        {
+          "alignment": 16384,
+          "offset": 0,
+          "address": 0,
+          "page_16kb": true
+        },
+        {
+          "alignment": 16384,
+          "offset": 1490352,
+          "address": 1506736,
+          "page_16kb": true
+        },
+        {
+          "alignment": 16384,
+          "offset": 1614056,
+          "address": 1646824,
+          "page_16kb": true
+        }
+      ],
+      "elf_16kb": true,
+      "stored_uncompressed": true,
+      "zip_16kb": true
+    },
+    {
+      "path": "lib/armeabi-v7a/libffmpegJNI.so",
+      "bits": 32,
+      "loads": [
+        {
+          "alignment": 16384,
+          "offset": 0,
+          "address": 0,
+          "page_16kb": true
+        },
+        {
+          "alignment": 16384,
+          "offset": 1409264,
+          "address": 1425648,
+          "page_16kb": true
+        },
+        {
+          "alignment": 16384,
+          "offset": 1502616,
+          "address": 1535384,
+          "page_16kb": true
+        }
+      ],
+      "elf_16kb": true,
+      "stored_uncompressed": true,
+      "zip_16kb": true
+    },
+    {
+      "path": "lib/x86/libffmpegJNI.so",
+      "bits": 32,
+      "loads": [
+        {
+          "alignment": 16384,
+          "offset": 0,
+          "address": 0,
+          "page_16kb": true
+        },
+        {
+          "alignment": 16384,
+          "offset": 1540128,
+          "address": 1556512,
+          "page_16kb": true
+        },
+        {
+          "alignment": 16384,
+          "offset": 1629916,
+          "address": 1662684,
+          "page_16kb": true
+        }
+      ],
+      "elf_16kb": true,
+      "stored_uncompressed": true,
+      "zip_16kb": true
+    },
+    {
+      "path": "lib/x86_64/libffmpegJNI.so",
+      "bits": 64,
+      "loads": [
+        {
+          "alignment": 16384,
+          "offset": 0,
+          "address": 0,
+          "page_16kb": true
+        },
+        {
+          "alignment": 16384,
+          "offset": 1588448,
+          "address": 1604832,
+          "page_16kb": true
+        },
+        {
+          "alignment": 16384,
+          "offset": 1713344,
+          "address": 1746112,
+          "page_16kb": true
+        }
+      ],
+      "elf_16kb": true,
+      "stored_uncompressed": true,
+      "zip_16kb": true
+    }
+  ],
+  "limits": "Static ELF/ZIP alignment only. Does not prove execution on a 16 KB device or AAB split alignment."
+}

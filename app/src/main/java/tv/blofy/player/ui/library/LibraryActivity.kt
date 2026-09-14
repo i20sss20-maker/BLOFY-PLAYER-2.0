@@ -1,11 +1,14 @@
 package tv.blofy.player.ui.library
 
+import tv.blofy.player.ui.common.ContentPresentation
+
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
@@ -59,7 +62,10 @@ class LibraryActivity : AppCompatActivity() {
             setPadding(0, 4, 0, 14)
         })
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(list)
+        root.addView(ScrollView(this).apply {
+            isFillViewport = true
+            addView(list)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         load(mode)
     }
@@ -102,7 +108,7 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
         val row = TextView(this).apply {
-            text = "${kindLabel(stream.kind)}   •   ${stream.name}"
+            text = "${kindLabel(stream.kind)}   •   ${ContentPresentation.of(stream).title}"
             textSize = 17f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -125,7 +131,7 @@ class LibraryActivity : AppCompatActivity() {
         val episode = entry.episode
         val seriesName = entry.parentSeries?.name?.takeIf(String::isNotBlank) ?: "مسلسل"
         val row = TextView(this).apply {
-            text = "$seriesName   •   الموسم ${episode.season}   •   الحلقة ${episode.episode}   •   ${episode.title}"
+            text = "${ContentPresentation.title(seriesName, "series")}   •   الموسم ${episode.season}   •   الحلقة ${episode.episode}   •   ${ContentPresentation.title(episode.title, "episode")}"
             textSize = 17f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -157,7 +163,7 @@ class LibraryActivity : AppCompatActivity() {
                     putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(PlayerActivity.EXTRA_KIND, "live"); putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
                     putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType); putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
                     putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine); putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
-                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream)); putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
+                    putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(stream)); putStringArrayListExtra(PlayerActivity.EXTRA_FALLBACK_URLS, ArrayList(ContentUrlResolver.recoveryUrls(stream))); putExtra(PlayerActivity.EXTRA_STREAM_ID, stream.remoteId)
                     putExtra(PlayerActivity.EXTRA_TITLE, stream.name); putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
                 })
             }
@@ -170,7 +176,7 @@ class LibraryActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_URL, url); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key); putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
             putExtra(PlayerActivity.EXTRA_KIND, "episode"); putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat); putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
             putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport); putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
-            putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects); putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode))
+            putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects); putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode)); putStringArrayListExtra(PlayerActivity.EXTRA_FALLBACK_URLS, ArrayList(ContentUrlResolver.recoveryUrls(episode)))
             putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs); putExtra(PlayerActivity.EXTRA_TITLE, "$seriesName • S${episode.season} E${episode.episode} • ${episode.title}")
             putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId); putExtra(PlayerActivity.EXTRA_SEASON, episode.season); putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
         })

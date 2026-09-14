@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-internal const val BLOFY_DATABASE_VERSION = 10
+internal const val BLOFY_DATABASE_VERSION = 12
 
 @Database(
     entities = [
@@ -235,6 +235,19 @@ abstract class BlofyDatabase : RoomDatabase() {
                     db.execSQL("DROP TABLE IF EXISTS `streams_fts`")
                     createSearchFts(db)
                 }
+            },
+            object : Migration(10, 11) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Index-only migration: retain catalog rowids, FTS, credentials and history.
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind` ON `streams` (`providerId`, `kind`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_categoryId` ON `streams` (`providerId`, `kind`, `categoryId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_home_page` ON `streams` (`providerId` ASC, `kind` ASC, `addedAt` DESC, `name` ASC, `key` ASC)")
+                }
+            },
+            object : Migration(11, 12) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `providers` ADD COLUMN `subscriberToken` TEXT NOT NULL DEFAULT ''")
+                }
             }
         )
 
@@ -243,7 +256,10 @@ abstract class BlofyDatabase : RoomDatabase() {
                 context.applicationContext,
                 BlofyDatabase::class.java,
                 "blofy-player-2.db"
-            ).addMigrations(*ALL_MIGRATIONS).build().also { instance = it }
+            // AUTOMATIC chooses a single connection on low-RAM receivers. A large catalog
+            // write then blocks even the tiny saved-playlist/activation reads on Login.
+            ).setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
+                .addMigrations(*ALL_MIGRATIONS).build().also { instance = it }
         }
     }
 }
