@@ -34,14 +34,13 @@ android {
     namespace = "tv.blofy.player"
     compileSdk = 36
     if (googlePlayBuild) sourceSets.getByName("main").manifest.srcFile("src/play/AndroidManifest.xml")
-    // Exercise the actual non-debuggable obfuscated target in the isolated R8 CI job.
     testBuildType = if (securityR8Enabled) "release" else "debug"
     defaultConfig {
         applicationId = "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2000057
-        versionName = "2.0.0-rc07.46"
+        versionCode = 2000060
+        versionName = "2.0.0-rc07.49"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
@@ -90,9 +89,6 @@ baselineProfile {
 }
 
 if (securityR8Enabled) {
-    // L8 can rename its own classes outside j$. Identify the disposable test
-    // runtime by its producer's exact bytes, never by guessed package prefixes.
-    // This copies evidence only; neither L8 output nor the target is modified.
     tasks.register<Sync>("stageR8TestL8Evidence") {
         from(tasks.named<L8DexDesugarLibTask>("l8DexDesugarLibReleaseAndroidTest")
             .flatMap { it.desugarLibDex })
