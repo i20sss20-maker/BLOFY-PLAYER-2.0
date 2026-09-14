@@ -14,13 +14,20 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Resilient artwork loader for large TV catalogs: memory + disk cache + multi-source fallback. */
 object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
-    private const val MAX_DISK_BYTES = 260L * 1024L * 1024L
+    private const val MAX_DISK_BYTES = 220L * 1024L * 1024L
+    private const val MEMORY_CACHE_KB = 20 * 1024
+    private const val DISK_TRIM_EVERY_WRITES = 24
     private val main = Handler(Looper.getMainLooper())
-    private val pool = Executors.newFixedThreadPool(8)
+
+    // Four workers are enough to keep a TV grid populated without saturating low-end Android boxes
+    // with simultaneous downloads + bitmap decodes. Eight workers caused avoidable CPU/RAM spikes.
+    private val pool = Executors.newFixedThreadPool(4)
+    private val diskWrites = AtomicInteger(0)
     private val placeholder = ColorDrawable(Color.rgb(24, 16, 34))
     private val client = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
@@ -30,7 +37,7 @@ object ArtworkLoader {
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
-    private val cache = object : LruCache<String, Bitmap>(42 * 1024) {
+    private val cache = object : LruCache<String, Bitmap>(MEMORY_CACHE_KB) {
         override fun sizeOf(key: String, value: Bitmap) = (value.byteCount / 1024).coerceAtLeast(1)
     }
 
@@ -52,7 +59,7 @@ object ArtworkLoader {
             var result: Bitmap? = null
             for (url in urls) {
                 result = cache.get(url)?.takeIf { !it.isRecycled }
-                    ?: readDisk(app.cacheDir, url)
+                    ?: readDisk(app.cacheDir, url)?.also { cache.put(url, it) }
                     ?: downloadWithRetry(url)?.also { bmp ->
                         cache.put(url, bmp)
                         writeDisk(app.cacheDir, url, bmp)
@@ -69,11 +76,12 @@ object ArtworkLoader {
     }
 
     fun prefetch(context: android.content.Context, urls: List<String?>) {
-        urls.mapNotNull(::normalizeUrl).distinct().take(24).forEach { url ->
+        urls.mapNotNull(::normalizeUrl).distinct().take(8).forEach { url ->
             if (cache.get(url) != null) return@forEach
             val app = context.applicationContext
             pool.execute {
-                val bmp = readDisk(app.cacheDir, url) ?: downloadWithRetry(url)?.also { writeDisk(app.cacheDir, url, it) }
+                val bmp = readDisk(app.cacheDir, url)?.also { cache.put(url, it) }
+                    ?: downloadWithRetry(url)?.also { writeDisk(app.cacheDir, url, it) }
                 if (bmp != null) cache.put(url, bmp)
             }
         }
@@ -121,7 +129,10 @@ object ArtworkLoader {
     private fun readDisk(cacheDir: File, url: String): Bitmap? {
         val file = diskFile(cacheDir, url)
         if (!file.isFile || file.length() <= 0L) return null
-        val bmp = BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 })
+        val bmp = BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply {
+            inPreferredConfig = Bitmap.Config.RGB_565
+            inSampleSize = 1
+        })
         if (bmp == null) file.delete() else file.setLastModified(System.currentTimeMillis())
         return bmp
     }
@@ -129,15 +140,20 @@ object ArtworkLoader {
     private fun writeDisk(cacheDir: File, url: String, bitmap: Bitmap) {
         val dir = File(cacheDir, "blofy_posters").apply { mkdirs() }
         val file = File(dir, hash(url) + ".jpg")
-        runCatching { file.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }; trimDisk(dir) }
+        runCatching {
+            file.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 86, it) }
+            if (diskWrites.incrementAndGet() % DISK_TRIM_EVERY_WRITES == 0) trimDisk(dir)
+        }
     }
 
     private fun trimDisk(dir: File) {
         val files = dir.listFiles()?.filter { it.isFile } ?: return
         var total = files.sumOf { it.length() }
-        files.sortedBy { it.lastModified() }.forEach { file ->
-            if (total <= MAX_DISK_BYTES) return
-            total -= file.length(); file.delete()
+        if (total <= MAX_DISK_BYTES) return
+        for (file in files.sortedBy { it.lastModified() }) {
+            if (total <= MAX_DISK_BYTES) break
+            val length = file.length()
+            if (file.delete()) total -= length
         }
     }
 
