@@ -435,8 +435,13 @@ interface BlofyDao {
         }
 
         val oldCategories = oldCategoriesList.associateBy { it.key }
+        val preservedCategories = categories.map { incoming ->
+            oldCategories[incoming.key]?.let { old ->
+                incoming.copy(orderIndex = old.orderIndex, hidden = old.hidden)
+            } ?: incoming
+        }
         val oldStreams = streamSnapshot(providerId, kind).associateBy { it.key }
-        val incomingCategoryKeys = categories.asSequence().map { it.key }.toHashSet()
+        val incomingCategoryKeys = preservedCategories.asSequence().map { it.key }.toHashSet()
         val incomingStreamKeys = streams.asSequence().map { it.key }.toHashSet()
 
         oldCategories.keys.filterNot(incomingCategoryKeys::contains)
@@ -446,7 +451,7 @@ interface BlofyDao {
             .chunked(SQLITE_BIND_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) deleteStreamsByKeys(it) }
 
-        categories.asSequence().filter { oldCategories[it.key] != it }
+        preservedCategories.asSequence().filter { oldCategories[it.key] != it }
             .chunked(CATALOG_INSERT_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) upsertCategories(it) }
         streams.asSequence().filter { oldStreams[it.key] != it }
