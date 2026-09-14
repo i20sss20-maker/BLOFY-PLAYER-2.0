@@ -28,6 +28,7 @@ class CategoryManagerActivity : AppCompatActivity() {
     private var providerId: String? = null
     private var currentKind = "live"
     private var currentItems: List<CategoryEntity> = emptyList()
+    private var loadGeneration = 0
     private val isTv by lazy { DeviceClass.isTv(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -93,25 +94,28 @@ class CategoryManagerActivity : AppCompatActivity() {
     }
 
     private fun loadCategories() {
+        val generation = ++loadGeneration
         val id = providerId ?: run {
             status.text = "لا يوجد سيرفر نشط"
             list.removeAllViews()
             return
         }
+        val kind = currentKind
         lifecycleScope.launch {
             val items = withContext(Dispatchers.IO) {
-                BlofyDatabase.get(applicationContext).dao().categorySnapshot(id, currentKind)
+                BlofyDatabase.get(applicationContext).dao().categorySnapshot(id, kind)
                     .sortedWith(compareBy<CategoryEntity> { it.orderIndex }.thenBy { it.name.lowercase() })
             }
+            if (generation != loadGeneration || kind != currentKind || isFinishing || isDestroyed) return@launch
             currentItems = items
-            render(items)
+            render(items, kind)
         }
     }
 
-    private fun render(items: List<CategoryEntity>) {
+    private fun render(items: List<CategoryEntity>, kind: String) {
         list.removeAllViews()
         val hidden = items.count { it.hidden }
-        status.text = "${kindLabel(currentKind)} • ${items.size} فئة • المخفية $hidden"
+        status.text = "${kindLabel(kind)} • ${items.size} فئة • المخفية $hidden"
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
                 text = "ما فيه فئات محفوظة لهذا القسم"
