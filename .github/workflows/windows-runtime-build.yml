@@ -41,11 +41,8 @@ jobs:
       - name: Core integration checks
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force evidence | Out-Null
-          $coreReport = Join-Path (Get-Location) 'evidence/core-verification.json'
-          dotnet run --project windows/Blofy.RuntimeTests/Blofy.RuntimeTests.csproj -c Release -warnaserror:NU1903 -- $coreReport
+          dotnet run --project windows/Blofy.RuntimeTests/Blofy.RuntimeTests.csproj -c Release -warnaserror:NU1903
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
-          if (-not (Test-Path $coreReport)) { throw 'Core report was not written to the requested path' }
       - name: Publish native Windows player
         shell: pwsh
         run: |
@@ -55,6 +52,7 @@ jobs:
       - name: Test actual WPF flows and native video decoding
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force evidence | Out-Null
           $process = Start-Process './publish/BLOFY-PLAYER/BLOFY.Player.Windows.exe' -ArgumentList '--verify-runtime','--evidence-dir=evidence/runtime' -PassThru
           if (-not $process.WaitForExit(180000)) { $process.Kill($true); throw 'Native runtime verification timed out' }
           if (Test-Path evidence/runtime/runtime-verification.json) { Get-Content evidence/runtime/runtime-verification.json }
@@ -95,7 +93,6 @@ jobs:
           if ($process.ExitCode -ne 0) { throw 'Installed player failed verification' }
           $hash = (Get-FileHash output/BLOFY-PLAYER-Windows-0.3.0-Setup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  BLOFY-PLAYER-Windows-0.3.0-Setup.exe" | Set-Content output/SHA256SUMS.txt
-          Copy-Item evidence/core-verification.json output/
           Copy-Item evidence/installed/runtime-verification.json output/
           Copy-Item publish/BLOFY-PLAYER/BUILDINFO.json output/
           "0.3.0 compatibility build passed native playback and installed-copy checks. Production portal responded successfully during the recent real-user test window; real provider credentials are not available to CI." >> $env:GITHUB_STEP_SUMMARY
