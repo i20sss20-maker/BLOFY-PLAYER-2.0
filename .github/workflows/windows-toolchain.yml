@@ -15,7 +15,7 @@ jobs:
       - name: Restore desktop compilation dependencies
         shell: bash
         run: |
-          mkdir -p work output
+          mkdir -p work output feed
           cat > work/Tools.csproj <<'EOF'
           <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><EnableWindowsTargeting>true</EnableWindowsTargeting><RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>true</SelfContained></PropertyGroup>
@@ -23,7 +23,8 @@ jobs:
           </Project>
           EOF
           dotnet restore work/Tools.csproj
-          tar -C "$HOME/.nuget/packages" -czf output/nuget-packages.tar.gz .
+          find "$HOME/.nuget/packages" -name '*.nupkg' -exec cp '{}' feed/ \;
+          tar -C feed -czf output/nuget-feed.tar.gz .
           sdkroot=$(dirname "$(readlink -f "$(command -v dotnet)")")
           mkdir -p sdk
           cp "$sdkroot/dotnet" sdk/
@@ -40,9 +41,16 @@ jobs:
             cp -a "$folder/10.0.9" "sdk/packs/$(basename "$folder")/"
           done
           tar -C sdk -czf output/dotnet-sdk.tar.gz .
-          cd output && sha256sum *.tar.gz > SHA256SUMS
+          ls -lh output
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Windows-offline-toolchain
-          path: output/
+          name: Windows-offline-SDK
+          path: output/dotnet-sdk.tar.gz
+          compression-level: 0
+          retention-days: 3
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Windows-offline-packages
+          path: output/nuget-feed.tar.gz
+          compression-level: 0
           retention-days: 3
