@@ -13,8 +13,10 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -46,6 +48,8 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var input: EditText
     private lateinit var results: LinearLayout
     private lateinit var hint: TextView
+    private lateinit var recentStrip: LinearLayout
+    private lateinit var recentScroll: HorizontalScrollView
     private val searchRunner by lazy { CatalogSearchRunner(lifecycleScope, ::runSearch) }
     private val scopeKind by lazy {
         intent.getStringExtra(EXTRA_KIND)?.lowercase()?.takeIf { it in SEARCH_ORDER }
@@ -85,9 +89,23 @@ class SearchActivity : AppCompatActivity() {
             textSize = 13f
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.START
-            setPadding(0, 0, 0, dp(12))
+            setPadding(0, 0, 0, dp(8))
         }
         root.addView(hint)
+
+        recentStrip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            layoutDirection = resources.configuration.layoutDirection
+            clipChildren = false
+        }
+        recentScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            isFillViewport = false
+            isFocusable = false
+            addView(recentStrip, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        }
+        root.addView(recentScroll, LinearLayout.LayoutParams(-1, dp(50)).apply { bottomMargin = dp(7) })
 
         input = EditText(this).apply {
             hint = when (scopeKind) {
@@ -106,7 +124,10 @@ class SearchActivity : AppCompatActivity() {
             isFocusable = true
             setOnFocusChangeListener { _, focused -> background = searchField(focused) }
             setOnEditorActionListener { _, _, _ ->
-                searchRunner.submit(text?.toString().orEmpty(), true)
+                val q = text?.toString().orEmpty()
+                RecentSearchStore.record(this@SearchActivity, q)
+                renderRecentSearches()
+                searchRunner.submit(q, true)
                 true
             }
             addTextChangedListener(object : TextWatcher {
@@ -117,8 +138,10 @@ class SearchActivity : AppCompatActivity() {
                     if (q.isBlank()) {
                         results.removeAllViews()
                         this@SearchActivity.hint.text = emptyHint()
+                        renderRecentSearches()
                         return
                     }
+                    recentScroll.visibility = View.GONE
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
@@ -140,7 +163,58 @@ class SearchActivity : AppCompatActivity() {
         root.addView(input, LinearLayout.LayoutParams(-1, dp(64)))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) })
         setContentView(root)
+        renderRecentSearches()
         input.requestFocus()
+    }
+
+    private fun renderRecentSearches() {
+        if (!::recentStrip.isInitialized) return
+        recentStrip.removeAllViews()
+        if (::input.isInitialized && input.text?.isNotBlank() == true) {
+            recentScroll.visibility = View.GONE
+            return
+        }
+        val items = RecentSearchStore.recent(this)
+        if (items.isEmpty()) {
+            recentScroll.visibility = View.GONE
+            return
+        }
+        recentScroll.visibility = View.VISIBLE
+        recentStrip.addView(TextView(this).apply {
+            text = "آخر البحث"
+            textSize = 12f
+            typeface = BlofyTvDesign.MediumTypeface
+            setTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(dp(86), dp(42)).apply { marginEnd = dp(6) })
+        items.take(6).forEach { query ->
+            recentStrip.addView(Button(this).apply {
+                text = query
+                textSize = 12f
+                isAllCaps = false
+                maxLines = 1
+                minWidth = 0
+                minimumWidth = 0
+                CinemaStyle.styleButton(this)
+                setOnClickListener {
+                    input.setText(query)
+                    input.setSelection(input.text?.length ?: 0)
+                    searchRunner.submit(query, true)
+                }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { marginEnd = dp(7) })
+        }
+        recentStrip.addView(Button(this).apply {
+            text = "مسح"
+            textSize = 11.5f
+            isAllCaps = false
+            minWidth = 0
+            minimumWidth = 0
+            CinemaStyle.styleButton(this)
+            setOnClickListener {
+                RecentSearchStore.clear(this@SearchActivity)
+                renderRecentSearches()
+            }
+        }, LinearLayout.LayoutParams(dp(76), dp(42)))
     }
 
     private suspend fun runSearch(query: String, moveFocus: Boolean) {
@@ -269,6 +343,7 @@ class SearchActivity : AppCompatActivity() {
     }
 
     private fun guardedOpen(providerId: String, format: String, stream: StreamEntity) {
+        RecentSearchStore.record(this, input.text?.toString().orEmpty())
         if (stream.locked) ParentalGate.requirePin(this) { openStream(providerId, format, stream) }
         else openStream(providerId, format, stream)
     }
