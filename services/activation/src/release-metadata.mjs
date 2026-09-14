@@ -4,6 +4,14 @@ const COMMIT_SHA_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
 const VERSION_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const MAX_ANDROID_VERSION_CODE = 2_100_000_000;
 
+const WEBSITE_RELEASE = Object.freeze({
+  versionCode: 2000058,
+  versionName: '2.0.0-rc07.47',
+  minSupportedVersionCode: 1,
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.47/BLOFY-PLAYER-2.0-rc07.47-signed.apk',
+  releaseNotes: 'BLOFY PLAYER 47 — تحسين البحث وعرض الأفلام والمسلسلات كبوسترات، تحسين استجابة الريموت وOK، تحسين تحميل بيانات وصور الطاقم عند توفرها من السيرفر، وتقليل الضغط الخلفي على أجهزة Android TV الضعيفة. يتضمن إصلاحات استقرار التحديث والقوائم مع الحفاظ على محركات التشغيل والثيم.'
+});
+
 export function sanitizeCommitSha(value) {
   const candidate = String(value || '').trim();
   return COMMIT_SHA_PATTERN.test(candidate) ? candidate.toLowerCase() : null;
@@ -41,7 +49,7 @@ export function sanitizeReleaseNotes(value) {
   return candidate.slice(0, 600);
 }
 
-export function appReleaseMetadata(env = process.env) {
+function configuredAppRelease(env) {
   const versionCode = sanitizeVersionCode(env.BLOFY_APP_VERSION_CODE);
   const versionName = sanitizeVersionName(env.BLOFY_APP_VERSION_NAME);
   if (versionCode == null || versionName == null) return null;
@@ -54,6 +62,14 @@ export function appReleaseMetadata(env = process.env) {
     downloadUrl: sanitizeHttpsUrl(env.BLOFY_APP_DOWNLOAD_URL),
     releaseNotes: sanitizeReleaseNotes(env.BLOFY_APP_RELEASE_NOTES)
   };
+}
+
+export function appReleaseMetadata(env = process.env) {
+  const configured = configuredAppRelease(env);
+  if (!configured || configured.versionCode < WEBSITE_RELEASE.versionCode) {
+    return { ...WEBSITE_RELEASE };
+  }
+  return configured;
 }
 
 export function activationReleaseMetadata(env = process.env) {
