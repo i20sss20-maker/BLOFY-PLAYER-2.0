@@ -5,11 +5,11 @@ const VERSION_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const MAX_ANDROID_VERSION_CODE = 2_100_000_000;
 
 const DEFAULT_APP_RELEASE = Object.freeze({
-  versionCode: 2000051,
-  versionName: '2.0.0-rc07.40',
+  versionCode: 2000058,
+  versionName: '2.0.0-rc07.47',
   minSupportedVersionCode: 1,
-  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.40/BLOFY-PLAYER-2.0-rc07.40-signed.apk',
-  releaseNotes: 'BLOFY PLAYER 40 - تحسين التحقق من حزمة التحديث. إذا تعذر التحديث من داخل إصدار 38 أو 39، حمّل APK من الموقع وثبّته فوق النسخة الحالية دون حذف التطبيق. التحديث اختياري.'
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.47/BLOFY-PLAYER-2.0-rc07.47-signed.apk',
+  releaseNotes: 'BLOFY PLAYER 47 — تحسين البحث وعرض الأفلام والمسلسلات كبوسترات، تحسين استجابة الريموت وOK، تحسين تحميل بيانات وصور الطاقم عند توفرها من السيرفر، وتقليل الضغط الخلفي على أجهزة Android TV الضعيفة. يتضمن إصلاحات استقرار التحديث والقوائم مع الحفاظ على محركات التشغيل والثيم.'
 });
 
 export function sanitizeCommitSha(value) {
@@ -50,7 +50,11 @@ export function sanitizeReleaseNotes(value) {
 }
 
 export function appReleaseMetadata(env = process.env) {
-  const versionCode = sanitizeVersionCode(env.BLOFY_APP_VERSION_CODE) || DEFAULT_APP_RELEASE.versionCode;
+  const configuredVersionCode = sanitizeVersionCode(env.BLOFY_APP_VERSION_CODE);
+  const useConfiguredRelease = configuredVersionCode != null && configuredVersionCode >= DEFAULT_APP_RELEASE.versionCode;
+
+  if (!useConfiguredRelease) return { ...DEFAULT_APP_RELEASE };
+
   const versionName = sanitizeVersionName(env.BLOFY_APP_VERSION_NAME) || DEFAULT_APP_RELEASE.versionName;
   const configuredMinimum = sanitizeVersionCode(env.BLOFY_APP_MIN_SUPPORTED_VERSION_CODE)
     || DEFAULT_APP_RELEASE.minSupportedVersionCode;
@@ -60,9 +64,9 @@ export function appReleaseMetadata(env = process.env) {
     || DEFAULT_APP_RELEASE.releaseNotes;
 
   return {
-    versionCode,
+    versionCode: configuredVersionCode,
     versionName,
-    minSupportedVersionCode: Math.min(configuredMinimum, versionCode),
+    minSupportedVersionCode: Math.min(configuredMinimum, configuredVersionCode),
     downloadUrl,
     releaseNotes
   };
