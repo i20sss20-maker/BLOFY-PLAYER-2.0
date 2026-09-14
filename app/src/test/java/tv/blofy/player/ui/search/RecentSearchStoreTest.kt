@@ -31,7 +31,6 @@ class RecentSearchStoreTest {
     fun record_normalizesWhitespace_andIgnoresTooShortQueries() {
         RecentSearchStore.record(context, "  Al   Hilal   match  ")
         RecentSearchStore.record(context, " a ")
-
         assertEquals(listOf("Al Hilal match"), RecentSearchStore.recent(context))
     }
 
@@ -40,14 +39,12 @@ class RecentSearchStoreTest {
         RecentSearchStore.record(context, "Movies")
         RecentSearchStore.record(context, "Series")
         RecentSearchStore.record(context, "movies")
-
         assertEquals(listOf("movies", "Series"), RecentSearchStore.recent(context))
     }
 
     @Test
     fun record_keepsOnlyEightMostRecentQueries() {
         (1..10).forEach { RecentSearchStore.record(context, "query $it") }
-
         assertEquals(
             listOf("query 10", "query 9", "query 8", "query 7", "query 6", "query 5", "query 4", "query 3"),
             RecentSearchStore.recent(context)
@@ -57,7 +54,6 @@ class RecentSearchStoreTest {
     @Test
     fun record_capsStoredQueryLengthAt120Characters() {
         RecentSearchStore.record(context, "x".repeat(160))
-
         val stored = RecentSearchStore.recent(context).single()
         assertEquals(120, stored.length)
         assertTrue(stored.all { it == 'x' })
@@ -67,9 +63,7 @@ class RecentSearchStoreTest {
     fun clear_removesAllRecentQueries() {
         RecentSearchStore.record(context, "live channels")
         RecentSearchStore.record(context, "new movies")
-
         RecentSearchStore.clear(context)
-
         assertTrue(RecentSearchStore.recent(context).isEmpty())
     }
 }
