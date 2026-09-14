@@ -1,0 +1,152 @@
+name: BLOFY RC07.51 Signed Smoke APK
+
+on:
+  push:
+    branches: [test/rc0751-signed-smoke]
+    paths: [.github/workflows/rc0751-signed-smoke.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  EXPECTED_APPLICATION_ID: tv.blofy.player.v2
+  EXPECTED_VERSION_CODE: "2000062"
+  EXPECTED_VERSION_NAME: 2.0.0-rc07.51
+  EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+  ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
+  UPDATE_BASE_URL: https://blofy-update-distribution-production.up.railway.app
+  FFMPEG_SOURCE_RUN: "34835126940"
+  FFMPEG_ARTIFACT: media3-ffmpeg-1.6.1-aar-de50599ec75951fe8500c74db2b7ddf309c2d953
+  ANDROID_BUILD_TOOLS_VERSION: 35.0.0
+
+jobs:
+  signed-smoke:
+    name: Production-signed rc07.51 smoke artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Install Android signing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses >/dev/null || true
+          "$sdkmanager" "platforms;android-36" "build-tools;$ANDROID_BUILD_TOOLS_VERSION"
+
+      - name: Validate exact rc07.51 source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionCode = 2000062' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.51"' app/build.gradle.kts
+          grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
+          test "$(git rev-parse HEAD^)" = "3d775f74eadaa9cb4dbea280b5dec420a1ec9ef1"
+          git diff --quiet 3d775f74eadaa9cb4dbea280b5dec420a1ec9ef1..HEAD -- app
+
+      - name: Download already-verified pinned FFmpeg AAR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          gh run download "$FFMPEG_SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$FFMPEG_ARTIFACT" --dir "$RUNNER_TEMP/ffmpeg"
+          aar="$(find "$RUNNER_TEMP/ffmpeg" -type f -name '*.aar' -print -quit)"
+          test -s "$aar"
+          echo "FFMPEG_AAR=$aar" >> "$GITHUB_ENV"
+          sha256sum "$aar" | tee "$RUNNER_TEMP/ffmpeg-aar.sha256"
+
+      - name: Decode and verify production signing certificate
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          for value in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS; do
+            [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
+          done
+          umask 077
+          keystore="$RUNNER_TEMP/blofy-production.keystore"
+          clean_b64="$RUNNER_TEMP/blofy-production.b64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' > "$clean_b64"
+          remainder=$(( $(wc -c < "$clean_b64") % 4 )); if [[ "$remainder" -ne 0 ]]; then printf '%*s' $((4 - remainder)) '' | tr ' ' '=' >> "$clean_b64"; fi
+          base64 --decode "$clean_b64" > "$keystore"
+          keytool -list -keystore "$keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          actual="$(keytool -exportcert -keystore "$keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')"
+          [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
+          echo "BLOFY_RELEASE_KEYSTORE_PATH=$keystore" >> "$GITHUB_ENV"
+
+      - name: Build production-signed rc07.51 APK
+        shell: bash
+        env:
+          BLOFY_RELEASE_STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          BLOFY_RELEASE_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          BLOFY_RELEASE_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2048m
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_SECURITY_R8=true \
+            -PBLOFY_ACTIVATION_BASE_URL="$ACTIVATION_BASE_URL" \
+            -PBLOFY_UPDATE_BASE_URL="$UPDATE_BASE_URL" \
+            -PBLOFY_BUILD_SHA="3d775f74eadaa9cb4dbea280b5dec420a1ec9ef1" \
+            -PBLOFY_FFMPEG_AAR="$FFMPEG_AAR" \
+            assembleRelease
+
+      - name: Verify signed APK identity, update compatibility and FFmpeg ABIs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
+          mkdir -p smoke
+          apk="smoke/BLOFY-PLAYER-2.0-rc07.51-signed-smoke.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          "$tools/aapt" dump badging "$apk" | tee smoke/apk-badging.txt
+          grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$EXPECTED_VERSION_CODE' versionName='$EXPECTED_VERSION_NAME'" smoke/apk-badging.txt
+          ! grep -Fq 'application-debuggable' smoke/apk-badging.txt
+          "$tools/zipalign" -c -P 16 -v 4 "$apk" > smoke/apk-alignment.txt
+          "$tools/apksigner" verify --verbose --print-certs "$apk" | tee smoke/apk-signature.txt
+          actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\.so$" "$RUNNER_TEMP/apk-files.txt"
+          done
+          mkdir -p "$RUNNER_TEMP/v50"
+          gh release download v2.0.0-rc07.50 --repo "$GITHUB_REPOSITORY" --pattern BLOFY-PLAYER-2.0-rc07.50-signed.apk --dir "$RUNNER_TEMP/v50"
+          old="$RUNNER_TEMP/v50/BLOFY-PLAYER-2.0-rc07.50-signed.apk"
+          "$tools/aapt" dump badging "$old" | head -n1 | tee smoke/v50-package.txt
+          grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='2000061' versionName='2.0.0-rc07.50'" smoke/v50-package.txt
+          old_cert="$("$tools/apksigner" verify --print-certs "$old" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          [[ "$old_cert" == "$actual" ]]
+          sha256sum "$apk" > smoke/SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-rc07.51-production-signed-smoke-${{ github.sha }}
+          path: smoke/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove signing material
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
