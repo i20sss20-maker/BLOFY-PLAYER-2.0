@@ -50,13 +50,17 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var hint: TextView
     private lateinit var recentStrip: LinearLayout
     private lateinit var recentScroll: HorizontalScrollView
+    private lateinit var filterStrip: LinearLayout
+    private val filterButtons = linkedMapOf<String, Button>()
     private val searchRunner by lazy { CatalogSearchRunner(lifecycleScope, ::runSearch) }
-    private val scopeKind by lazy {
+    private val initialKind by lazy {
         intent.getStringExtra(EXTRA_KIND)?.lowercase()?.takeIf { it in SEARCH_ORDER }
     }
+    private var activeKind: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        activeKind = initialKind
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
@@ -72,12 +76,7 @@ class SearchActivity : AppCompatActivity() {
             gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = when (scopeKind) {
-                KIND_LIVE -> "بحث البث المباشر"
-                KIND_SERIES -> "بحث المسلسلات"
-                KIND_MOVIE -> "بحث الأفلام"
-                else -> "ابحث في كل شيء"
-            }
+            text = "ابحث في كل شيء"
             textSize = 26f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
@@ -92,6 +91,32 @@ class SearchActivity : AppCompatActivity() {
             setPadding(0, 0, 0, dp(8))
         }
         root.addView(hint)
+
+        filterStrip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = resources.configuration.layoutDirection
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            clipChildren = false
+        }
+        listOf(
+            FILTER_ALL to "الكل",
+            KIND_LIVE to "مباشر",
+            KIND_MOVIE to "أفلام",
+            KIND_SERIES to "مسلسلات"
+        ).forEach { (key, label) ->
+            val button = Button(this).apply {
+                text = label
+                isAllCaps = false
+                textSize = 12.5f
+                minWidth = 0
+                minimumWidth = 0
+                setOnClickListener { selectFilter(key) }
+            }
+            filterButtons[key] = button
+            filterStrip.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(7) })
+        }
+        root.addView(filterStrip, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(6) })
+        refreshFilterStyle()
 
         recentStrip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -108,12 +133,7 @@ class SearchActivity : AppCompatActivity() {
         root.addView(recentScroll, LinearLayout.LayoutParams(-1, dp(50)).apply { bottomMargin = dp(7) })
 
         input = EditText(this).apply {
-            hint = when (scopeKind) {
-                KIND_LIVE -> "اكتب اسم القناة"
-                KIND_SERIES -> "اكتب اسم المسلسل"
-                KIND_MOVIE -> "اكتب اسم الفيلم"
-                else -> "اكتب اسم المحتوى"
-            }
+            hint = inputHint()
             textSize = 16f
             setTextColor(Color.WHITE)
             setHintTextColor(BlofyTvDesign.TextMuted)
@@ -165,6 +185,31 @@ class SearchActivity : AppCompatActivity() {
         setContentView(root)
         renderRecentSearches()
         input.requestFocus()
+    }
+
+    private fun selectFilter(key: String) {
+        activeKind = key.takeUnless { it == FILTER_ALL }
+        refreshFilterStyle()
+        if (::input.isInitialized) {
+            input.hint = inputHint()
+            val query = input.text?.toString().orEmpty()
+            hint.text = emptyHint()
+            if (query.isNotBlank()) searchRunner.submit(query, false)
+        }
+    }
+
+    private fun refreshFilterStyle() {
+        val selected = activeKind ?: FILTER_ALL
+        filterButtons.forEach { (key, button) ->
+            CinemaStyle.styleButton(button, key == selected)
+        }
+    }
+
+    private fun inputHint() = when (activeKind) {
+        KIND_LIVE -> "اكتب اسم القناة"
+        KIND_SERIES -> "اكتب اسم المسلسل"
+        KIND_MOVIE -> "اكتب اسم الفيلم"
+        else -> "اكتب اسم المحتوى"
     }
 
     private fun renderRecentSearches() {
@@ -224,9 +269,10 @@ class SearchActivity : AppCompatActivity() {
         val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
         if (provider == null) { showMessage("أضف قائمة تشغيل أولاً"); return }
         val repository = ContentRepository(dao)
+        val selectedKind = activeKind
 
         val sections = withContext(Dispatchers.IO) {
-            val wantedKinds = scopeKind?.let(::listOf) ?: SEARCH_ORDER
+            val wantedKinds = selectedKind?.let(::listOf) ?: SEARCH_ORDER
             coroutineScope {
                 wantedKinds.map { kind ->
                     kind to async { repository.searchKind(provider.id, kind, q, SECTION_LIMIT) }
@@ -234,10 +280,10 @@ class SearchActivity : AppCompatActivity() {
             }
         }
 
-        if (input.text?.toString()?.trim() != q) return
+        if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
         results.removeAllViews()
         val total = sections.sumOf { it.second.size }
-        hint.text = if (scopeKind == null) "$total نتيجة • البث ثم المسلسلات ثم الأفلام" else "$total نتيجة"
+        hint.text = if (selectedKind == null) "$total نتيجة • مباشر، أفلام ومسلسلات" else "$total نتيجة • ${sectionTitle(selectedKind)}"
         if (total == 0) { showMessage("ما لقينا نتائج مطابقة داخل باقتك"); return }
 
         var firstFocusable: View? = null
@@ -371,11 +417,11 @@ class SearchActivity : AppCompatActivity() {
         }
     }
 
-    private fun emptyHint() = when (scopeKind) {
+    private fun emptyHint() = when (activeKind) {
         KIND_LIVE -> "بحث محلي سريع داخل جميع القنوات"
         KIND_SERIES -> "بحث محلي سريع داخل جميع المسلسلات"
         KIND_MOVIE -> "بحث محلي سريع داخل جميع الأفلام"
-        else -> "البث المباشر، المسلسلات والأفلام من بحث واحد"
+        else -> "البث المباشر، الأفلام والمسلسلات من بحث واحد"
     }
 
     private fun sectionTitle(kind: String) = when (kind) {
@@ -403,6 +449,7 @@ class SearchActivity : AppCompatActivity() {
         const val KIND_LIVE = "live"
         const val KIND_SERIES = "series"
         const val KIND_MOVIE = "movie"
+        private const val FILTER_ALL = "all"
         private val SEARCH_ORDER = listOf(KIND_LIVE, KIND_SERIES, KIND_MOVIE)
         private const val SECTION_LIMIT = 120
     }
