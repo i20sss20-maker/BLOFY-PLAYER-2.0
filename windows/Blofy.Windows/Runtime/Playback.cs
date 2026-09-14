@@ -77,11 +77,11 @@ public sealed class Playback : IAsyncDisposable
         await Task.Run(() =>
         {
             LibVLCSharp.Shared.Core.Initialize(Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64"));
-            _vlc = new LibVLC("--no-video-title-show", "--no-osd", "--quiet");
+            _vlc = new LibVLC("--no-video-title-show", "--no-osd", "--quiet", "--http-reconnect", "--adaptive-logic=rate");
             _player = new VlcPlayer(_vlc) { EnableHardwareDecoding = prefs.Hardware, Volume = prefs.Volume };
         });
         Video.MediaPlayer = _player;
-        _player!.EncounteredError += (_, _) => Dispatch(() => { if (!_starting && !_disposed) Status?.Invoke("تعذر تشغيل هذا البث. يمكنك تجربة صيغة TS / HLS من الإعدادات"); });
+        _player!.EncounteredError += (_, _) => Dispatch(() => { if (!_starting && !_disposed) Status?.Invoke("المشغل فقد الاتصال بالبث؛ جاري تطبيق محاولة الاسترجاع عند الحاجة"); });
         _player.EndReached += (_, _) => Dispatch(() => { if (!_disposed) Ended?.Invoke(); });
     }
     private void Dispatch(Action action) { if (!_disposed && !_ui.HasShutdownStarted) _ui.BeginInvoke(action); }
@@ -108,14 +108,20 @@ public sealed class Playback : IAsyncDisposable
     }
     private async Task PlayUrl(Uri url, long resume, CancellationToken ct)
     {
-        var p = Provider!; var prefs = _preferences();
+        var p = Provider!; var item = Current!; var prefs = _preferences();
         await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
             using var media = new Media(_vlc!, url);
             media.AddOption(":network-caching=" + Math.Clamp(prefs.CacheMs, 200, 5000));
-            media.AddOption(":http-user-agent=" + Urls.Header(p.UserAgent));
-            if (p.Referer.Length > 0) media.AddOption(":http-referrer=" + Urls.Http(p.Referer).AbsoluteUri);
+            media.AddOption(":live-caching=" + Math.Clamp(prefs.CacheMs, 200, 5000));
+            media.AddOption(":file-caching=350");
+            media.AddOption(":http-reconnect=true");
+            media.AddOption(":http-continuous=true");
+            var userAgent = item.HeaderUserAgent.Length > 0 ? item.HeaderUserAgent : p.UserAgent;
+            media.AddOption(":http-user-agent=" + Urls.Header(string.IsNullOrWhiteSpace(userAgent) ? CompatibilityDefaults.UserAgent : userAgent));
+            var referer = item.HeaderReferer.Length > 0 ? item.HeaderReferer : p.Referer;
+            if (referer.Length > 0) media.AddOption(":http-referrer=" + Urls.Http(referer).AbsoluteUri);
             media.AddOption(":audio-language=" + Urls.Header(prefs.AudioLanguage));
             media.AddOption(":sub-language=" + Urls.Header(prefs.SubtitleLanguage));
             if (resume > 0) media.AddOption(":start-time=" + (resume / 1000.0).ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -143,7 +149,7 @@ public sealed class Playback : IAsyncDisposable
             if (!_drag && length > 0) _seek.Value = Math.Clamp(now * 1000.0 / length, 0, 1000);
             if (++_ticks % 4 == 0) UpdateTracks();
             if (_ticks % 10 == 0) await SavePosition();
-            if (IsLive && Provider?.Type == "xtream" && Current.Url.Length == 0 && _player.State != VLCState.Paused && !_fallback && Stopwatch.GetElapsedTime(_lastMotion) > TimeSpan.FromSeconds(18))
+            if (IsLive && Provider?.Type == "xtream" && Current.Url.Length == 0 && _player.State != VLCState.Paused && !_fallback && Stopwatch.GetElapsedTime(_lastMotion) > TimeSpan.FromSeconds(12))
             {
                 _fallback = true; long retryGeneration = _generation; await _serial.WaitAsync();
                 try
@@ -151,10 +157,14 @@ public sealed class Playback : IAsyncDisposable
                     if (_disposed || retryGeneration != _generation || !IsLive || Provider == null) return;
                     _starting = true; await Task.Run(() => _player.Stop());
                     string alt = Provider.LiveFormat == "ts" ? "m3u8" : "ts";
-                    Status?.Invoke("إعادة المحاولة بصيغة " + alt.ToUpperInvariant()); _lastMotion = Stopwatch.GetTimestamp();
+                    Status?.Invoke("البث تأخر؛ إعادة المحاولة تلقائيًا بصيغة " + alt.ToUpperInvariant()); _lastMotion = Stopwatch.GetTimestamp();
                     await PlayUrl(Urls.Stream(Provider, Current!, alt), 0, CancellationToken.None);
                 }
                 finally { _starting = false; _serial.Release(); }
+            }
+            else if (!IsLive && _player.State == VLCState.Error && Stopwatch.GetElapsedTime(_lastMotion) > TimeSpan.FromSeconds(8))
+            {
+                Status?.Invoke("تعذر استمرار الفيديو؛ جرّب تعطيل فك الترميز العتادي من الإعدادات لهذا الجهاز");
             }
         }
         catch (Exception ex) { Status?.Invoke(Urls.Error(ex)); }
