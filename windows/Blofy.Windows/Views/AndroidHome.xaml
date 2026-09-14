@@ -1,0 +1,67 @@
+<!-- HomeActivity.kt at dc0b0c84d7dd5973e8d0426f16793f14b9b06417.
+     Physical layout remains LTR; text and inner action order remain RTL. -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <SolidColorBrush x:Key="HomeSidebarBrush" Color="#EA120A1B"/>
+  <LinearGradientBrush x:Key="HomeHeroBrush" StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#F00B101C" Offset="0"/><GradientStop Color="#F0210C2E" Offset="1"/></LinearGradientBrush>
+  <LinearGradientBrush x:Key="HomePanelBrush" StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#E8191023" Offset="0"/><GradientStop Color="#EB120C1A" Offset="1"/></LinearGradientBrush>
+  <LinearGradientBrush x:Key="HomeStoryBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#201329" Offset="0"/><GradientStop Color="#100B17" Offset="1"/></LinearGradientBrush>
+  <LinearGradientBrush x:Key="HomeStoryFocusedBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#6B23C9" Offset="0"/><GradientStop Color="#29113C" Offset="1"/></LinearGradientBrush>
+  <LinearGradientBrush x:Key="HomeSelectedBrush" StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#5417B9" Offset="0"/><GradientStop Color="#B02DDF" Offset="1"/></LinearGradientBrush>
+  <LinearGradientBrush x:Key="HomePrimaryBrush" StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#681AE3" Offset="0"/><GradientStop Color="#B429E6" Offset="1"/></LinearGradientBrush>
+  <Style x:Key="HomeText" TargetType="TextBlock"><Setter Property="Foreground" Value="White"/><Setter Property="TextAlignment" Value="Right"/><Setter Property="FlowDirection" Value="RightToLeft"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+  <Style x:Key="HomeAction" TargetType="Button">
+    <Setter Property="Foreground" Value="White"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="Transparent"/><Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="FontSize" Value="16"/><Setter Property="FontWeight" Value="Bold"/><Setter Property="Padding" Value="15,0"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="VerticalContentAlignment" Value="Stretch"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+      <Border x:Name="Chrome" CornerRadius="15" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" RenderTransformOrigin="0.5,0.5">
+        <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+      </Border>
+      <ControlTemplate.Triggers>
+        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="Background" Value="#664B1A78"/><Setter TargetName="Chrome" Property="BorderBrush" Value="#AD66F0"/><Setter TargetName="Chrome" Property="RenderTransform"><Setter.Value><ScaleTransform ScaleX="1.035" ScaleY="1.035"/></Setter.Value></Setter></Trigger>
+        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#AD66F0"/></Trigger>
+        <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Chrome" Property="Opacity" Value="0.45"/></Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="HomeStory" TargetType="Button" BasedOn="{StaticResource HomeAction}">
+    <Setter Property="Background" Value="{StaticResource HomeStoryBrush}"/><Setter Property="BorderBrush" Value="#463053"/><Setter Property="Padding" Value="15,12"/>
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+      <Border x:Name="Chrome" CornerRadius="15" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" RenderTransformOrigin="0.5,0.5"><ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Bottom"/></Border>
+      <ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{StaticResource HomeStoryFocusedBrush}"/><Setter TargetName="Chrome" Property="BorderBrush" Value="#FF56D6"/><Setter TargetName="Chrome" Property="BorderThickness" Value="3"/><Setter TargetName="Chrome" Property="RenderTransform"><Setter.Value><ScaleTransform ScaleX="1.04" ScaleY="1.04"/></Setter.Value></Setter></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#FF56D6"/></Trigger></ControlTemplate.Triggers>
+    </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <DataTemplate x:Key="AndroidHomeView">
+    <Grid Margin="12,10" FlowDirection="LeftToRight" KeyboardNavigation.DirectionalNavigation="Contained">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="190"/></Grid.ColumnDefinitions>
+      <Grid Margin="0,0,12,0">
+        <Grid.RowDefinitions><RowDefinition Height="54"/><RowDefinition Height="1.55*"/><RowDefinition Height="0.72*"/><RowDefinition Height="38"/><RowDefinition Height="0.62*"/></Grid.RowDefinitions>
+        <TextBlock Text="اكتشف الآن" Style="{StaticResource HomeText}" FontSize="25" FontWeight="Bold"/>
+        <Border Grid.Row="1" Background="{StaticResource HomeHeroBrush}" BorderBrush="#4B2C63" BorderThickness="1" CornerRadius="22" Padding="38,20">
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="حلقة جديدة" Style="{StaticResource HomeText}" Foreground="#54E5C6" FontSize="13" FontWeight="Bold"/>
+            <TextBlock Text="أحدث محتواك" Style="{StaticResource HomeText}" FontSize="36" FontWeight="Bold" Margin="0,6,0,0"/>
+            <TextBlock Text="الأفلام والمسلسلات والقنوات في واجهة واحدة سريعة وواضحة." Style="{StaticResource HomeText}" FontSize="17" Foreground="#C8BCD4" Margin="0,8,0,18"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" FlowDirection="RightToLeft">
+              <Button Content="شاهد الآن" Width="180" Height="58" Margin="0,0,10,0" Style="{StaticResource HomeAction}" Background="{StaticResource HomePrimaryBrush}" BorderBrush="#CA6DFF" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Command="{Binding NavigateCommand}" CommandParameter="series"/>
+              <Button Content="التفاصيل" Width="160" Height="58" Style="{StaticResource HomeAction}" Background="#CC160F20" BorderBrush="#5B3B6B" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Command="{Binding NavigateCommand}" CommandParameter="movie"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+        <Grid Grid.Row="2" Margin="0,10"><Grid.ColumnDefinitions><ColumnDefinition Width="0.85*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions>
+          <Button Style="{StaticResource HomeAction}" Background="{StaticResource HomePanelBrush}" BorderBrush="#3E294B" Padding="24,16" Command="{Binding NavigateCommand}" CommandParameter="recent"><StackPanel VerticalAlignment="Center"><TextBlock Text="آخر قناة" Style="{StaticResource HomeText}" FontSize="19" FontWeight="Bold"/><TextBlock Text="ارجع مباشرةً للبث" Style="{StaticResource HomeText}" FontSize="13" Foreground="#B1A9BF" Margin="0,4,0,10"/><TextBlock Text="استمرار ▶" Style="{StaticResource HomeText}" FontSize="14" Foreground="#C387FF"/></StackPanel></Button>
+          <Button Grid.Column="2" Style="{StaticResource HomeAction}" Background="{StaticResource HomePanelBrush}" BorderBrush="#3E294B" Padding="24,16" Command="{Binding NavigateCommand}" CommandParameter="continue"><StackPanel VerticalAlignment="Center"><TextBlock Text="تابع المشاهدة" Style="{StaticResource HomeText}" FontSize="19" FontWeight="Bold"/><TextBlock Text="متابعة من آخر نقطة" Style="{StaticResource HomeText}" FontSize="13" Foreground="#B1A9BF" Margin="0,4,0,10"/><TextBlock Text="استمرار ▶" Style="{StaticResource HomeText}" FontSize="14" Foreground="#C387FF"/></StackPanel></Button>
+        </Grid>
+        <TextBlock Grid.Row="3" Text="قصص مختارة" Style="{StaticResource HomeText}" FontSize="18" FontWeight="Bold"/>
+        <ItemsControl Grid.Row="4" ItemsSource="{Binding Stories}" FlowDirection="RightToLeft"><ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate><Button Margin="6,0" Style="{StaticResource HomeStory}" Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding Key}"><StackPanel><TextBlock Text="{Binding Title}" Style="{StaticResource HomeText}" FontSize="15" FontWeight="Bold"/><TextBlock Text="{Binding Subtitle}" Style="{StaticResource HomeText}" FontSize="11" FontWeight="Normal" Foreground="#B1A9BF"/></StackPanel></Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+      </Grid>
+      <Border Grid.Column="1" Padding="14,12" Background="{StaticResource HomeSidebarBrush}" BorderBrush="#4B2C63" BorderThickness="1" CornerRadius="20">
+        <StackPanel>
+          <Image Source="{Binding Logo}" Width="120" Height="92" Stretch="Uniform" Margin="0,0,0,8"/>
+          <Border Height="64" Margin="0,0,0,5" CornerRadius="17" Background="{StaticResource HomeSelectedBrush}" BorderBrush="#CE75FF" BorderThickness="1"><Grid Margin="15,0"><Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="⌂" FontSize="22" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center"/><TextBlock Grid.Column="1" Text="الرئيسية" Style="{StaticResource HomeText}" FontSize="16" FontWeight="Bold"/></Grid></Border>
+          <ItemsControl ItemsSource="{Binding Navigation}"><ItemsControl.ItemTemplate><DataTemplate><Button Height="60" Margin="0,0,0,4" Style="{StaticResource HomeAction}" Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding Key}"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Icon}" Foreground="White" FontSize="22" VerticalAlignment="Center" HorizontalAlignment="Center"/><TextBlock Grid.Column="1" Text="{Binding Title}" Style="{StaticResource HomeText}" FontSize="16" FontWeight="Bold"/></Grid></Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+        </StackPanel>
+      </Border>
+    </Grid>
+  </DataTemplate>
+</ResourceDictionary>
