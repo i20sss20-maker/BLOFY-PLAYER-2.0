@@ -1,4 +1,4 @@
-name: BLOFY Website RC07.47 Release
+name: BLOFY Website Signed Release
 
 on:
   push:
@@ -9,12 +9,16 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: blofy-website-signed-release
+  cancel-in-progress: false
+
 env:
   PRODUCTION_ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
-  RELEASE_VERSION_CODE: "2000058"
-  RELEASE_VERSION_NAME: 2.0.0-rc07.47
-  RELEASE_TAG: v2.0.0-rc07.47
-  RELEASE_APK: BLOFY-PLAYER-2.0-rc07.47-signed.apk
+  RELEASE_VERSION_CODE: "2000059"
+  RELEASE_VERSION_NAME: 2.0.0-rc07.48
+  RELEASE_TAG: v2.0.0-rc07.48
+  RELEASE_APK: BLOFY-PLAYER-2.0-rc07.48-signed.apk
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
   EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
   MEDIA3_VERSION: "1.6.1"
@@ -25,6 +29,7 @@ env:
 
 jobs:
   publish-website-apk:
+    if: github.ref == 'refs/heads/rc07-commercial-stability'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     environment: production
@@ -37,6 +42,35 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
+
+      - name: Reject stale or already published website versions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 20 "$PRODUCTION_ACTIVATION_BASE_URL/health" > "$RUNNER_TEMP/website-health.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          code = int(os.environ['RELEASE_VERSION_CODE'])
+          name = os.environ['RELEASE_VERSION_NAME']
+          assert 0 < code <= 2100000000
+          assert re.fullmatch(r'2\.0\.0-rc07\.\d+', name)
+          assert os.environ['RELEASE_TAG'] == 'v' + name
+          assert os.environ['RELEASE_APK'] == 'BLOFY-PLAYER-' + name.replace('2.0.0-', '2.0-', 1) + '-signed.apk'
+          source = Path('services/activation/src/release-metadata.mjs').read_text()
+          published = int(re.search(r'versionCode:\s*(\d+)', source).group(1))
+          health = json.loads((Path(os.environ['RUNNER_TEMP'])/'website-health.json').read_text())
+          assert health['ok'] is True
+          live = int(health['release']['app']['versionCode'])
+          assert code > max(published, live), f'Refusing non-increasing release {code}; source={published}, live={live}'
+          print(f'Website version guard passed: {code} > {max(published, live)}')
+          PY
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Refusing to overwrite an existing release. Choose a new version.' >&2
+            exit 1
+          fi
 
       - name: Install Android native and signing toolchain
         shell: bash
@@ -65,30 +99,22 @@ jobs:
           actual="$(keytool -exportcert -keystore "$keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')"
           [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
 
-      - name: Stamp website version 47
+      - name: Stamp validated website version
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import os, re
           from pathlib import Path
-          p=Path('app/build.gradle.kts')
-          s=p.read_text()
-          import re
-          s,n1=re.subn(r'versionCode = \d+', 'versionCode = 2000058', s, count=1)
-          s,n2=re.subn(r'versionName = "[^"]+"', 'versionName = "2.0.0-rc07.47"', s, count=1)
-          assert n1==1 and n2==1
+          p = Path('app/build.gradle.kts')
+          s = p.read_text()
+          s, n1 = re.subn(r'versionCode = \d+', 'versionCode = ' + os.environ['RELEASE_VERSION_CODE'], s)
+          s, n2 = re.subn(r'versionName = "[^"]+"', 'versionName = "' + os.environ['RELEASE_VERSION_NAME'] + '"', s)
+          assert n1 == n2 == 1, 'Expected exactly one version definition'
           p.write_text(s)
           PY
-          grep -Fq 'versionCode = 2000058' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.47"' app/build.gradle.kts
 
-      - name: Verify production activation health
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 20 "$PRODUCTION_ACTIVATION_BASE_URL/health" >/dev/null
-
-      - name: Build Media3 FFmpeg decoder
+      - name: Build unchanged Media3 FFmpeg decoder
         shell: bash
         env:
           ENABLED_DECODERS: ${{ env.FFMPEG_DECODERS }}
@@ -101,7 +127,7 @@ jobs:
           aar="build/ffmpeg-native/media3-decoder-ffmpeg-$MEDIA3_VERSION.aar"
           test -s "$aar" && sha256sum --check "$aar.sha256"
 
-      - name: Test lint and build signed website APK
+      - name: Test lint and build signed website APK only
         shell: bash
         env:
           BLOFY_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/blofy-production.keystore
@@ -114,10 +140,11 @@ jobs:
           gradle --no-daemon \
             -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" \
             -PBLOFY_BUILD_SHA="$GITHUB_SHA" \
+            -PBLOFY_PLAY_DISTRIBUTION=false \
             -PBLOFY_FFMPEG_AAR="$aar" \
             testDebugUnitTest lintRelease assembleRelease
 
-      - name: Verify APK identity signature alignment and FFmpeg ABIs
+      - name: Verify website flags identity signature and packaged native libraries
         shell: bash
         run: |
           set -euo pipefail
@@ -127,34 +154,67 @@ jobs:
           apk="release/$RELEASE_APK"
           "$tools/aapt" dump badging "$apk" | tee release/apk-badging.txt
           grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$RELEASE_VERSION_CODE' versionName='$RELEASE_VERSION_NAME'" release/apk-badging.txt
-          "$tools/zipalign" -c -P 16 -v 4 "$apk"
+          ! grep -q '^application-debuggable' release/apk-badging.txt
+          "$tools/zipalign" -c -P 16 -v 4 "$apk" > release/apk-alignment.txt
           "$tools/apksigner" verify --verbose --print-certs "$apk" | tee release/apk-signature.txt
           actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
           [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
-          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
-          for abi in arm64-v8a armeabi-v7a x86 x86_64; do grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/apk-files.txt"; done
-          (cd release && sha256sum "$RELEASE_APK" > SHA256SUMS && sha256sum --check SHA256SUMS)
+          python3 - <<'PY'
+          import hashlib, json, os, re, zipfile
+          from pathlib import Path
+          configs = list(Path('app/build/generated/source/buildConfig/release').rglob('BuildConfig.java'))
+          assert len(configs) == 1, 'Missing or ambiguous release BuildConfig'
+          config = configs[0].read_text()
+          for flag, value in [('PLAY_DISTRIBUTION', 'false'), ('FFMPEG_EXTENSION_BUNDLED', 'true')]:
+              assert re.search(r'\b' + flag + r'\s*=\s*' + value + r'\s*;', config), flag
+          assert os.environ['GITHUB_SHA'] in config
+          apk_path = Path('release')/os.environ['RELEASE_APK']
+          aar_path = Path('build/ffmpeg-native')/('media3-decoder-ffmpeg-' + os.environ['MEDIA3_VERSION'] + '.aar')
+          abis = {'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'}
+          hashes = {}
+          with zipfile.ZipFile(aar_path) as aar, zipfile.ZipFile(apk_path) as apk:
+              entries = [n for n in aar.namelist() if n.startswith('jni/') and n.endswith('.so')]
+              assert entries and {n.split('/')[1] for n in entries} == abis
+              for entry in entries:
+                  packaged = 'lib/' + entry.removeprefix('jni/')
+                  expected = hashlib.sha256(aar.read(entry)).hexdigest()
+                  actual = hashlib.sha256(apk.read(packaged)).hexdigest()
+                  assert actual == expected, 'Native library changed or missing: ' + packaged
+                  hashes[packaged] = actual
+          report = {
+              'versionName': os.environ['RELEASE_VERSION_NAME'],
+              'versionCode': int(os.environ['RELEASE_VERSION_CODE']),
+              'sourceCommit': os.environ['GITHUB_SHA'], 'distribution': 'website',
+              'playDistribution': False, 'ffmpegBundled': True,
+              'certificateSha256': os.environ['EXPECTED_CERT_SHA256'],
+              'apkSha256': hashlib.sha256(apk_path.read_bytes()).hexdigest(),
+              'nativeLibraries': hashes,
+              'runtimeDeviceTested': False
+          }
+          Path('release/verification.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report, indent=2))
+          PY
+          tar -czf release/FFmpeg-source-and-relink.tar.gz -C build/ffmpeg-native compliance
+          (cd release && sha256sum "$RELEASE_APK" FFmpeg-source-and-relink.tar.gz > SHA256SUMS && sha256sum --check SHA256SUMS)
 
-      - name: Publish stable website download release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-rc07.48-website-verified-${{ github.sha }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish verified website APK without replacing older assets
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          notes='BLOFY PLAYER 47 — تحسين البحث وعرض الأفلام والمسلسلات كبوسترات، تحسين استجابة الريموت وOK، تحسين تحميل بيانات وصور الطاقم عند توفرها من السيرفر، وتقليل الضغط الخلفي على أجهزة Android TV الضعيفة. يتضمن إصلاحات استقرار التحديث والقوائم مع الحفاظ على محركات التشغيل والثيم.'
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "release/$RELEASE_APK" --clobber --repo "$GITHUB_REPOSITORY"
-            gh release edit "$RELEASE_TAG" --title "BLOFY PLAYER 47" --notes "$notes" --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$RELEASE_TAG" "release/$RELEASE_APK" --title "BLOFY PLAYER 47" --notes "$notes" --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
-          fi
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: BLOFY-PLAYER-2.0-rc07.47-website-signed-${{ github.sha }}
-          path: release/
-          if-no-files-found: error
-          retention-days: 30
+          head="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/rc07-commercial-stability" --jq .object.sha)"
+          [[ "$head" == "$GITHUB_SHA" ]] || { echo 'Branch advanced; refusing stale publication' >&2; exit 1; }
+          notes='BLOFY PLAYER 48 — إصدار الموقع فقط. تثبيت رقم الإصدار 2000059 والتحقق من شهادة الإنتاج وسلامة مكتبات FFmpeg المضمنة، مع بقاء التحديث المباشر فعالاً. يتضمن تحسينات البحث والريموت وصور الطاقم من الإصدار 47. الثيم ومحركات ومسارات التشغيل دون تغيير. نجحت اختبارات الوحدة وlint وفحوص الحزمة؛ لا يدّعي هذا البناء اختبار بث على جهاز فعلي.'
+          gh release create "$RELEASE_TAG" "release/$RELEASE_APK" release/SHA256SUMS release/verification.json release/FFmpeg-source-and-relink.tar.gz \
+            --title 'BLOFY PLAYER 48' --notes "$notes" --target "$GITHUB_SHA" --latest --repo "$GITHUB_REPOSITORY"
 
       - name: Remove signing material
         if: always()
