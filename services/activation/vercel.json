@@ -3,14 +3,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "src/bootstrap.mjs",
+      "src": "src/bootstrap-rc0749.mjs",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/src/bootstrap.mjs"
+      "dest": "/src/bootstrap-rc0749.mjs"
     }
   ]
 }
