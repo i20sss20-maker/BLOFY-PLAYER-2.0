@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import { APPROVED_RC0746 } from './approved-release-rc0746.mjs';
 
 // One explicit owner-approved publication. Never follow GitHub "latest" automatically.
 export const APPROVED_RC0747 = Object.freeze({
@@ -13,6 +12,11 @@ export const APPROVED_RC0747 = Object.freeze({
 });
 
 export const RC0747_PUBLICATION_ACTION = 'publish_rc0747_20260914';
+const APPROVED_RC0746_PRIMARY = Object.freeze({
+  versionCode: 2000057,
+  versionName: '2.0.0-rc07.46',
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.46/BLOFY-PLAYER-2.0-rc07.46-signed.apk'
+});
 
 /**
  * Publish rc07.47 only when production is still exactly on the approved rc07.46
@@ -48,8 +52,8 @@ export async function publishApprovedRc0747(client, environment = process.env.VE
     return record('already-primary', current.id);
   }
 
-  if (!current || Number(current.version_code) !== APPROVED_RC0746.versionCode ||
-      current.version_name !== APPROVED_RC0746.versionName || current.download_url !== APPROVED_RC0746.downloadUrl) {
+  if (!current || Number(current.version_code) !== APPROVED_RC0746_PRIMARY.versionCode ||
+      current.version_name !== APPROVED_RC0746_PRIMARY.versionName || current.download_url !== APPROVED_RC0746_PRIMARY.downloadUrl) {
     return record('skipped-selection-changed');
   }
 
