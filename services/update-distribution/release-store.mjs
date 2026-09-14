@@ -11,6 +11,14 @@ const DEFAULT_RELEASE = {
   minSupportedVersionCode: 1
 };
 
+const RC0750_RELEASE = {
+  versionCode: 2000061,
+  versionName: '2.0.0-rc07.50',
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.50/BLOFY-PLAYER-2.0-rc07.50-signed.apk',
+  releaseNotes: 'BLOFY PLAYER 50 — جسر فصل قناة التحديث الخارجي. التفعيل والبوابة يبقيان على Vercel كما هما، بينما فحص تحديث النسخة الخارجية يستخدم Railway. لم يتم تغيير Media3 أو FFmpeg أو fallback أو مسارات ومحركات التشغيل أو الثيم.',
+  minSupportedVersionCode: 1
+};
+
 let state;
 let writeChain = Promise.resolve();
 
@@ -43,7 +51,16 @@ async function save() {
   await writeChain;
 }
 
+function seedRc0750Once() {
+  if (state.releases.some((r) => r.versionCode === RC0750_RELEASE.versionCode)) return false;
+  state.releases.push(cleanRelease(RC0750_RELEASE));
+  state.releases.sort((a, b) => b.versionCode - a.versionCode);
+  state.activeVersionCode = RC0750_RELEASE.versionCode;
+  return true;
+}
+
 export async function initReleaseStore() {
+  let needsSave = false;
   try {
     const raw = JSON.parse(await fs.readFile(STORE_PATH, 'utf8'));
     const releases = Array.isArray(raw.releases) ? raw.releases.map(cleanRelease) : [];
@@ -55,8 +72,11 @@ export async function initReleaseStore() {
     };
   } catch {
     state = initialState();
-    await save();
+    needsSave = true;
   }
+
+  if (seedRc0750Once()) needsSave = true;
+  if (needsSave) await save();
 }
 
 export function getActiveRelease() {
