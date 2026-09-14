@@ -1,0 +1,147 @@
+<!-- Source: Android LoginActivity.kt at dc0b0c84d7dd5973e8d0426f16793f14b9b06417.
+     This is a view resource, not a completed app. Commands are provided by its view model.
+     Physical columns intentionally remain LTR: activation LEFT, playlists RIGHT. -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <LinearGradientBrush x:Key="LoginPanel" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#F0181023" Offset="0"/><GradientStop Color="#F40A0710" Offset="1"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="LoginPrimary" StartPoint="0,0" EndPoint="1,0">
+    <GradientStop Color="#6030A7" Offset="0"/><GradientStop Color="#8E3FA4" Offset="1"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="LoginPrimaryFocused" StartPoint="0,0" EndPoint="1,0">
+    <GradientStop Color="#7A32DA" Offset="0"/><GradientStop Color="#C85BC7" Offset="1"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="LoginStatus" StartPoint="0,0" EndPoint="1,0">
+    <GradientStop Color="#C81A1023" Offset="0"/><GradientStop Color="#C9110B18" Offset="1"/>
+  </LinearGradientBrush>
+  <Style x:Key="LoginText" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="White"/><Setter Property="TextAlignment" Value="Right"/>
+    <Setter Property="FlowDirection" Value="RightToLeft"/><Setter Property="TextWrapping" Value="Wrap"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style x:Key="LoginLabel" TargetType="TextBlock" BasedOn="{StaticResource LoginText}">
+    <Setter Property="Foreground" Value="#AA9AB8"/><Setter Property="FontSize" Value="12.5"/>
+    <Setter Property="Height" Value="28"/>
+  </Style>
+  <Style x:Key="LoginField" TargetType="Border">
+    <Setter Property="Background" Value="#CC0B0811"/><Setter Property="BorderBrush" Value="#392849"/>
+    <Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="14"/>
+  </Style>
+  <Style x:Key="LoginButton" TargetType="Button">
+    <Setter Property="Foreground" Value="White"/><Setter Property="Background" Value="#17111F"/>
+    <Setter Property="BorderBrush" Value="#4B365C"/><Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="FontSize" Value="14.5"/><Setter Property="Padding" Value="12,8"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    <Setter Property="Template">
+      <Setter.Value><ControlTemplate TargetType="Button">
+        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="15" RenderTransformOrigin="0.5,0.5">
+          <Border.RenderTransform><ScaleTransform/></Border.RenderTransform>
+          <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="False"/>
+        </Border>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsKeyboardFocused" Value="True">
+            <Setter TargetName="Chrome" Property="Background" Value="#48236B"/>
+            <Setter TargetName="Chrome" Property="BorderBrush" Value="#D7AAFF"/>
+            <Setter TargetName="Chrome" Property="BorderThickness" Value="2"/>
+            <Setter TargetName="Chrome" Property="RenderTransform"><Setter.Value><ScaleTransform ScaleX="1.025" ScaleY="1.025"/></Setter.Value></Setter>
+          </Trigger>
+          <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Chrome" Property="Opacity" Value="0.5"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value>
+    </Setter>
+  </Style>
+  <Style x:Key="LoginPrimaryButton" TargetType="Button" BasedOn="{StaticResource LoginButton}">
+    <Setter Property="FontSize" Value="15"/><Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="Background" Value="{StaticResource LoginPrimary}"/><Setter Property="BorderBrush" Value="#C98BE6"/>
+    <Setter Property="Template">
+      <Setter.Value><ControlTemplate TargetType="Button">
+        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="15" RenderTransformOrigin="0.5,0.5">
+          <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsKeyboardFocused" Value="True">
+            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource LoginPrimaryFocused}"/>
+            <Setter TargetName="Chrome" Property="BorderBrush" Value="White"/><Setter TargetName="Chrome" Property="BorderThickness" Value="2"/>
+            <Setter TargetName="Chrome" Property="RenderTransform"><Setter.Value><ScaleTransform ScaleX="1.03" ScaleY="1.03"/></Setter.Value></Setter>
+          </Trigger>
+          <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Chrome" Property="Opacity" Value="0.5"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value>
+    </Setter>
+  </Style>
+
+  <DataTemplate x:Key="AndroidLoginView">
+    <Grid Margin="42,16,42,18" FlowDirection="LeftToRight" KeyboardNavigation.TabNavigation="Cycle">
+      <Grid.RowDefinitions><RowDefinition Height="80"/><RowDefinition Height="*"/><RowDefinition Height="30"/></Grid.RowDefinitions>
+      <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="124"/></Grid.ColumnDefinitions>
+        <StackPanel Margin="0,0,12,0" VerticalAlignment="Center">
+          <TextBlock Text="BLOFY PLAYER" Style="{StaticResource LoginText}" FontSize="13" Foreground="#C987FF"/>
+          <TextBlock Text="جاهز للمشاهدة" Style="{StaticResource LoginText}" FontSize="30" FontWeight="Bold"/>
+          <TextBlock Text="فعّل الجهاز من اليسار، وأدر قوائمك واتصل بها من اليمين" Style="{StaticResource LoginText}" FontSize="14.5" Foreground="#C2B3D0"/>
+        </StackPanel>
+        <Image Grid.Column="1" Source="{Binding Logo}" Width="112" Height="70" Stretch="Uniform"
+               AutomationProperties.Name="BLOFY PLAYER"/>
+      </Grid>
+      <Grid Grid.Row="1" Margin="0,8,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="0.82*"/><ColumnDefinition Width="20"/><ColumnDefinition Width="1.18*"/></Grid.ColumnDefinitions>
+        <Border Padding="24,18" Background="{StaticResource LoginPanel}" CornerRadius="24" BorderBrush="#5F3B7B" BorderThickness="1">
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+            <StackPanel>
+              <TextBlock Text="تفعيل الجهاز" Style="{StaticResource LoginText}" TextAlignment="Center" FontSize="21" FontWeight="Bold"/>
+              <TextBlock Text="امسح QR أو استخدم رقم الجهاز والرمز" Style="{StaticResource LoginText}" TextAlignment="Center" FontSize="12.5" Foreground="#B9A9C8" Margin="0,4,0,10"/>
+              <Border Width="190" Height="190" Background="White" Padding="10" HorizontalAlignment="Center">
+                <Image Source="{Binding QrImage}" Stretch="Uniform" AutomationProperties.Name="رمز تفعيل BLOFY"/>
+              </Border>
+              <TextBlock Text="رقم الجهاز" Style="{StaticResource LoginLabel}" Margin="0,10,0,0"/>
+              <Border Style="{StaticResource LoginField}" Height="52" Padding="12,0">
+                <TextBlock Text="{Binding DeviceId}" Style="{StaticResource LoginText}" FlowDirection="LeftToRight" TextAlignment="Center" FontSize="18" FontWeight="Bold"/>
+              </Border>
+              <TextBlock Text="رمز الربط" Style="{StaticResource LoginLabel}" Margin="0,8,0,0"/>
+              <Border Style="{StaticResource LoginField}" Height="60">
+                <TextBlock Text="{Binding ActivationCode}" Style="{StaticResource LoginText}" FlowDirection="LeftToRight" TextAlignment="Center" FontSize="30"/>
+              </Border>
+              <Border Height="42" Margin="0,10,0,0" Background="{StaticResource LoginStatus}" CornerRadius="14" BorderBrush="#3D2A4B" BorderThickness="1" Padding="12,0">
+                <TextBlock Text="{Binding Status}" Style="{StaticResource LoginText}" TextAlignment="Center" FontSize="13" Foreground="#E9E0EF"/>
+              </Border>
+              <Button Content="↻  تحديث التفعيل" Style="{StaticResource LoginButton}" Height="54" Margin="0,10,0,0" Command="{Binding RefreshActivationCommand}"/>
+            </StackPanel>
+          </ScrollViewer>
+        </Border>
+        <Border Grid.Column="2" Padding="24,18" Background="{StaticResource LoginPanel}" CornerRadius="24" BorderBrush="#5F3B7B" BorderThickness="1">
+          <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="66"/></Grid.RowDefinitions>
+            <Grid>
+              <TextBlock Text="قوائم التشغيل" Style="{StaticResource LoginText}" FontSize="23" FontWeight="Bold"/>
+              <TextBlock Text="اتصال مباشر" FontSize="12.5" Foreground="#79E7C6" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+            </Grid>
+            <TextBlock Grid.Row="1" Text="اختر أي قائمة للاتصال، أو افتح إدارة القوائم للإضافة والتعديل" Style="{StaticResource LoginText}" FontSize="13.5" Foreground="#B9A9C8" Margin="0,0,0,10"/>
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+              <StackPanel>
+                <TextBlock Text="بعد إضافة القوائم ستظهر هنا، وكل قائمة يمكن تشغيلها مباشرة" Foreground="#B9A9C8" TextAlignment="Center" TextWrapping="Wrap" Height="70" Visibility="{Binding EmptyPlaylistsVisibility}"/>
+                <ItemsControl ItemsSource="{Binding Playlists}">
+                  <ItemsControl.ItemTemplate><DataTemplate>
+                    <Button Content="{Binding Name}" Style="{StaticResource LoginButton}" Height="70" Margin="0,0,0,8"
+                            Command="{Binding DataContext.ConnectPlaylistCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"/>
+                  </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </ScrollViewer>
+            <Grid Grid.Row="3" Margin="0,10,0,0">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <Button Content="▶  اتصال بالنشطة" Style="{StaticResource LoginButton}" Command="{Binding ConnectActiveCommand}"/>
+              <Button Grid.Column="2" Content="＋  إضافة / إدارة" Style="{StaticResource LoginPrimaryButton}" Command="{Binding ManagePlaylistsCommand}"/>
+            </Grid>
+          </Grid>
+        </Border>
+      </Grid>
+      <TextBlock Grid.Row="2" Text="🔒  بيانات القوائم محفوظة محليًا • الدخول التالي يستخدم الكاش الجاهز مباشرة" FontSize="12" Foreground="#9D91A9" TextAlignment="Center" VerticalAlignment="Center" Margin="0,4,0,0"/>
+    </Grid>
+  </DataTemplate>
+</ResourceDictionary>
