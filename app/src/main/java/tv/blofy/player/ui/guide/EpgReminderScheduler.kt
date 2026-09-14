@@ -29,6 +29,7 @@ object EpgReminderScheduler {
             .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
             .setInputData(
                 workDataOf(
+                    EpgReminderWorker.KEY_PROVIDER_ID to providerId,
                     EpgReminderWorker.KEY_PROGRAM_TITLE to program.title,
                     EpgReminderWorker.KEY_CHANNEL_NAME to channelName,
                     EpgReminderWorker.KEY_STREAM_ID to streamId,
