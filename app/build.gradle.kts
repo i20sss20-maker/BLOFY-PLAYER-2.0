@@ -12,10 +12,12 @@ plugins {
 val securityR8Enabled = providers.gradleProperty("BLOFY_SECURITY_R8")
     .map { it.toBooleanStrict() }.orElse(false).get()
 val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
+val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse(activationBaseUrl).get()
 val distribution = providers.gradleProperty("BLOFY_DISTRIBUTION").orElse("website").get()
 check(distribution in setOf("website", "play")) { "BLOFY_DISTRIBUTION must be website or play" }
 val googlePlayBuild = distribution == "play"
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+val updateBaseUrlEscaped = updateBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val buildSha = providers.gradleProperty("BLOFY_BUILD_SHA")
     .orElse(providers.environmentVariable("GITHUB_SHA"))
     .orElse("local").get().trim().ifBlank { "local" }
@@ -40,10 +42,11 @@ android {
         applicationId = "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2000060
-        versionName = "2.0.0-rc07.49"
+        versionCode = 2000061
+        versionName = "2.0.0-rc07.50"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
+        buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
         buildConfigField("boolean", "IS_GOOGLE_PLAY", googlePlayBuild.toString())
         buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
@@ -138,7 +141,7 @@ dependencies {
 
 val validateReleaseConfiguration = tasks.register("validateReleaseConfiguration") {
     group = "verification"
-    description = "Fails closed when production endpoint or release signing inputs are missing."
+    description = "Fails closed when production endpoints or release signing inputs are missing."
     doLast {
         check(!googlePlayBuild || securityR8Enabled) { "Google Play releases require BLOFY_SECURITY_R8=true" }
         val signingInputs = linkedMapOf(
@@ -154,6 +157,10 @@ val validateReleaseConfiguration = tasks.register("validateReleaseConfiguration"
         val endpointUri = runCatching { URI(activationBaseUrl.trim()) }.getOrNull()
         check(endpointUri != null && endpointUri.scheme.equals("https", true) && !endpointUri.host.isNullOrBlank() && endpointUri.userInfo == null && endpointUri.query == null && endpointUri.fragment == null) {
             "Release builds require BLOFY_ACTIVATION_BASE_URL to be a valid HTTPS base URL."
+        }
+        val updateEndpointUri = runCatching { URI(updateBaseUrl.trim()) }.getOrNull()
+        check(updateEndpointUri != null && updateEndpointUri.scheme.equals("https", true) && !updateEndpointUri.host.isNullOrBlank() && updateEndpointUri.userInfo == null && updateEndpointUri.query == null && updateEndpointUri.fragment == null) {
+            "Release builds require BLOFY_UPDATE_BASE_URL to be a valid HTTPS base URL."
         }
     }
 }
