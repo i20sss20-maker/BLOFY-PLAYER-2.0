@@ -1,4 +1,0 @@
-publish=2.0.0-rc07.48
-versionCode=2000059
-sha256=921d463f00b94d2d54a3b5064bd7981ee8557a9dcfa0b02be40a5913e929e5e3
-run=2
