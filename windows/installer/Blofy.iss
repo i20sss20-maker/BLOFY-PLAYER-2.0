@@ -7,7 +7,7 @@
 [Setup]
 AppId={{90B2CED1-4D79-4A61-83E7-E317B5473BA0}
 AppName=BLOFY PLAYER
-AppVersion=0.2.0
+AppVersion=0.3.0
 AppPublisher=BLOFY
 DefaultDirName={localappdata}\Programs\BLOFY PLAYER
 DefaultGroupName=BLOFY PLAYER
@@ -16,7 +16,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=BLOFY-PLAYER-Windows-0.2.0-Setup
+OutputBaseFilename=BLOFY-PLAYER-Windows-0.3.0-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
