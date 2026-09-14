@@ -39,7 +39,7 @@ public sealed class Playback : IAsyncDisposable
     private readonly ComboBox _audio = new() { MinWidth = 125, MaxWidth = 240, Margin = new Thickness(4) };
     private readonly ComboBox _subs = new() { MinWidth = 125, MaxWidth = 240, Margin = new Thickness(4) };
     private bool _drag, _trackUpdate, _disposed, _fallback, _starting;
-    private long _generation, _started, _lastMotion, _lastTime;
+    private long _generation, _lastMotion, _lastTime;
     private int _ticks;
     private string _trackSignature = "";
     public Playback(CatalogStore store, Func<PlaybackPreferences> preferences, Dispatcher dispatcher)
@@ -77,11 +77,11 @@ public sealed class Playback : IAsyncDisposable
         await Task.Run(() =>
         {
             LibVLCSharp.Shared.Core.Initialize(Path.Combine(AppContext.BaseDirectory, "libvlc", "win-x64"));
-            _vlc = new LibVLC("--no-video-title-show", "--no-osd", "--quiet", "--http-reconnect", "--adaptive-logic=rate");
+            _vlc = new LibVLC("--no-video-title-show", "--no-osd", "--quiet");
             _player = new VlcPlayer(_vlc) { EnableHardwareDecoding = prefs.Hardware, Volume = prefs.Volume };
         });
         Video.MediaPlayer = _player;
-        _player!.EncounteredError += (_, _) => Dispatch(() => { if (!_starting && !_disposed) Status?.Invoke("المشغل فقد الاتصال بالبث؛ جاري تطبيق محاولة الاسترجاع عند الحاجة"); });
+        _player!.EncounteredError += (_, _) => Dispatch(() => { if (!_starting && !_disposed) Status?.Invoke("تعذر تشغيل هذا المصدر؛ سيحاول التطبيق صيغة البث البديلة للبث المباشر"); });
         _player.EndReached += (_, _) => Dispatch(() => { if (!_disposed) Ended?.Invoke(); });
     }
     private void Dispatch(Action action) { if (!_disposed && !_ui.HasShutdownStarted) _ui.BeginInvoke(action); }
@@ -97,7 +97,7 @@ public sealed class Playback : IAsyncDisposable
             await Task.Run(() => _player!.Stop(), ct);
             ct.ThrowIfCancellationRequested(); if (_disposed || generation != _generation) return;
             Provider = provider; Current = entry; _fallback = false; _trackSignature = ""; _lastTime = 0;
-            _started = _lastMotion = Stopwatch.GetTimestamp();
+            _lastMotion = Stopwatch.GetTimestamp();
             Status?.Invoke("جاري التشغيل • " + entry.Name);
             await PlayUrl(Urls.Stream(provider, entry), resume, ct);
             if (entry.Kind == "live") await _store.SaveWatch(provider, entry, 0, 0);
@@ -114,10 +114,6 @@ public sealed class Playback : IAsyncDisposable
             ct.ThrowIfCancellationRequested();
             using var media = new Media(_vlc!, url);
             media.AddOption(":network-caching=" + Math.Clamp(prefs.CacheMs, 200, 5000));
-            media.AddOption(":live-caching=" + Math.Clamp(prefs.CacheMs, 200, 5000));
-            media.AddOption(":file-caching=350");
-            media.AddOption(":http-reconnect=true");
-            media.AddOption(":http-continuous=true");
             var userAgent = item.HeaderUserAgent.Length > 0 ? item.HeaderUserAgent : p.UserAgent;
             media.AddOption(":http-user-agent=" + Urls.Header(string.IsNullOrWhiteSpace(userAgent) ? CompatibilityDefaults.UserAgent : userAgent));
             var referer = item.HeaderReferer.Length > 0 ? item.HeaderReferer : p.Referer;
