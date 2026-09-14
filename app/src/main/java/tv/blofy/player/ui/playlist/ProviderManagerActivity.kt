@@ -35,6 +35,8 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
+import java.text.DateFormat
+import java.util.Date
 import java.util.UUID
 
 class ProviderManagerActivity : AppCompatActivity() {
@@ -45,6 +47,8 @@ class ProviderManagerActivity : AppCompatActivity() {
     private lateinit var websiteRefreshButton: Button
     private var refreshingFromWebsite = false
     private var changingProvider = false
+    private var summaryGeneration = 0
+    private val summaryViews = linkedMapOf<String, TextView>()
     private val focusButtons = linkedMapOf<String, Button>()
     private val isTv by lazy { DeviceClass.isTv(this) }
 
@@ -200,6 +204,8 @@ class ProviderManagerActivity : AppCompatActivity() {
     private fun render(allItems: List<ProviderEntity>) {
         val items = tv.blofy.player.core.identity.PortalSyncBook.visible(this, allItems)
             .filter { it.providerType.equals("xtream", true) || isBlofySubscriber(it) }
+        val generation = ++summaryGeneration
+        summaryViews.clear()
         focusButtons.keys.filter { it !in setOf("add", "subscriber", "website_refresh") }.toList().forEach { focusButtons.remove(it) }
         list.removeAllViews()
         if (items.isEmpty()) {
@@ -222,7 +228,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(18), dp(10), dp(18), dp(10))
+                setPadding(dp(18), dp(9), dp(18), dp(9))
                 background = if (provider.enabled) BlofyTvDesign.surface(dp(20).toFloat(), true) else BlofyTvDesign.surface(dp(20).toFloat(), false)
                 clipChildren = false
             }
@@ -250,16 +256,66 @@ class ProviderManagerActivity : AppCompatActivity() {
                 gravity = Gravity.RIGHT
                 setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
             })
-            row.addView(info, LinearLayout.LayoutParams(0, dp(66), 1f))
+            val summary = TextView(this).apply {
+                text = "قراءة حالة المكتبة..."
+                textSize = 11.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                gravity = Gravity.RIGHT
+                maxLines = 1
+                setTextColor(BlofyTvDesign.TextMuted)
+            }
+            info.addView(summary)
+            summaryViews[provider.id] = summary
+            row.addView(info, LinearLayout.LayoutParams(0, dp(76), 1f))
 
             row.addView(actionButton("${provider.id}:connect", "▶  اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(dp(140), dp(56)).apply { marginStart = dp(8) })
             row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(dp(116), dp(56)).apply { marginStart = dp(8) })
             row.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(dp(120), dp(56)).apply { marginStart = dp(8) })
             row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(dp(104), dp(56)))
-            list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(90)).apply { bottomMargin = dp(9) })
+            list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(100)).apply { bottomMargin = dp(9) })
         }
+        loadLocalSummaries(items, generation)
         restoreFocus()
     }
+
+    private fun loadLocalSummaries(items: List<ProviderEntity>, generation: Int) {
+        lifecycleScope.launch {
+            val summaries = try {
+                withContext(Dispatchers.IO) {
+                    val dao = BlofyDatabase.get(applicationContext).dao()
+                    items.map { provider ->
+                        ProviderSummary(
+                            id = provider.id,
+                            live = dao.catalogCountAll(provider.id, "live"),
+                            movies = dao.catalogCountAll(provider.id, "movie"),
+                            series = dao.catalogCountAll(provider.id, "series"),
+                            ready = CatalogSyncState.isEntryReady(applicationContext, provider.id),
+                            lastUpdatedAt = CatalogSyncState.lastUpdatedAt(applicationContext, provider.id)
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
+            }
+            if (generation != summaryGeneration || isFinishing || isDestroyed) return@launch
+            if (summaries.isEmpty()) {
+                summaryViews.values.forEach { it.text = "تعذر قراءة ملخص المكتبة" }
+                return@launch
+            }
+            summaries.forEach { summary ->
+                summaryViews[summary.id]?.text = buildString {
+                    append(if (summary.ready) "جاهز" else "يحتاج تحديث")
+                    append("  •  ${summary.live} قناة  •  ${summary.movies} فيلم  •  ${summary.series} مسلسل")
+                    if (summary.lastUpdatedAt > 0L) append("  •  ${formatShortTime(summary.lastUpdatedAt)}")
+                }
+            }
+        }
+    }
+
+    private fun formatShortTime(value: Long): String =
+        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(value))
 
     private fun restoreFocus() {
         if (!isTv || refreshingFromWebsite || changingProvider) return
@@ -376,6 +432,15 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private data class ProviderSummary(
+        val id: String,
+        val live: Int,
+        val movies: Int,
+        val series: Int,
+        val ready: Boolean,
+        val lastUpdatedAt: Long
+    )
 
     companion object { private const val SCREEN_KEY = "provider_manager" }
 }
