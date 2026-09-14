@@ -1,0 +1,53 @@
+name: BLOFY Windows Desktop
+on:
+  push:
+    branches: [windows/native-desktop]
+    paths: [windows/**, .github/workflows/windows-desktop.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Archive exact application and portal sources
+        run: git archive --format=zip --output=BLOFY-reference-source.zip HEAD
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: BLOFY-reference-source
+          path: BLOFY-reference-source.zip
+          retention-days: 7
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Test native desktop core
+        if: ${{ hashFiles('windows/Blofy.Windows.Tests/Blofy.Windows.Tests.csproj') != '' }}
+        run: dotnet test windows/Blofy.Windows.Tests/Blofy.Windows.Tests.csproj -c Release --logger "trx;LogFileName=windows-tests.trx"
+      - name: Publish native Windows x64 application
+        if: ${{ hashFiles('windows/Blofy.Windows/Blofy.Windows.csproj') != '' }}
+        run: dotnet publish windows/Blofy.Windows/Blofy.Windows.csproj -c Release -r win-x64 --self-contained true -o windows/out/app
+      - name: Package and smoke-test
+        if: ${{ hashFiles('windows/build/package.ps1') != '' }}
+        shell: pwsh
+        run: ./windows/build/package.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ hashFiles('windows/out/**') != '' }}
+        with:
+          name: BLOFY-PLAYER-Windows-x64
+          path: windows/out/
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: BLOFY-Windows-test-results
+          path: windows/**/TestResults/**
+          if-no-files-found: ignore
+          retention-days: 14
