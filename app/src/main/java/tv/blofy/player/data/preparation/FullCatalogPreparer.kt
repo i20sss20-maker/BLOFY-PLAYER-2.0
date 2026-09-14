@@ -77,9 +77,7 @@ object FullCatalogPreparer {
 
                 EntryPreparationPipeline.run(
                     home = { HomeSnapshotStore.rebuild(app, dao, provider) },
-                    search = {
-                        CatalogSearchIndex.ensureReady(app, dao, providerId)
-                    },
+                    search = { CatalogSearchIndex.ensureReady(app, dao, providerId) },
                     commit = {
                         ensureCurrentSource()
                         CatalogManifestStore.rebuild(app, dao, provider, entryVerified = true)
@@ -126,8 +124,13 @@ object FullCatalogPreparer {
         val dao = db.dao()
         val provider = dao.provider(providerId) ?: return
         val lowMemory = DeviceClass.isLowMemory(app)
-        val pageSize = if (lowMemory) 20 else 42
-        val concurrency = if (lowMemory) 1 else 3
+        // Deep metadata is intentionally lower priority than remote input and visible artwork.
+        // Cheap Android TV boxes are especially sensitive to concurrent JSON parsing + bitmap IO.
+        val pageSize = if (lowMemory) 16 else 32
+        val concurrency = if (lowMemory) 1 else 2
+        val groupYieldMs = if (lowMemory) 45L else 12L
+        val pageYieldMs = if (lowMemory) 120L else 35L
+
         suspend fun ensureSource() {
             currentCoroutineContext().ensureActive()
             val current = dao.provider(providerId)
@@ -166,6 +169,8 @@ object FullCatalogPreparer {
                                 allDetailsSaved = false
                                 if (kind == "series") allEpisodesSaved = false
                             }
+                            // Give UI rendering, remote dispatch and GC a scheduling window.
+                            delay(groupYieldMs)
                         }
                     }
                     for (stream in page) {
@@ -173,7 +178,7 @@ object FullCatalogPreparer {
                         val metadata = ProviderMetadataCache.read(app, stream.key)
                         val artwork = listOf(stream.icon, stream.backdrop, metadata?.posterUrl, metadata?.backdropUrl)
                             .filterNotNull().map(String::trim).filter { it.isNotBlank() && it != "null" }.distinct()
-                            .let { if (lowMemory) it.take(2) else it }
+                            .let { if (lowMemory) it.take(1) else it.take(2) }
                         for (raw in artwork) {
                             try { if (!ArtworkLoader.persist(app, resolve(provider, raw))) allImagesSaved = false }
                             catch (cancelled: CancellationException) { throw cancelled }
@@ -184,8 +189,7 @@ object FullCatalogPreparer {
                     val next = dao.streamRowId(page.last().key) ?: return
                     if (next <= after) return
                     after = next
-                    // Yield between pages on low-RAM boxes so UI, GC and remote input stay responsive.
-                    if (lowMemory) delay(25L)
+                    delay(pageYieldMs)
                 }
             }
             ensureSource()
