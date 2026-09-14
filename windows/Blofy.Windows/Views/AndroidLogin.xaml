@@ -16,7 +16,7 @@
     <GradientStop Color="#C81A1023" Offset="0"/><GradientStop Color="#C9110B18" Offset="1"/>
   </LinearGradientBrush>
   <Style x:Key="LoginText" TargetType="TextBlock">
-    <Setter Property="Foreground" Value="White"/><Setter Property="TextAlignment" Value="Right"/>
+    <Setter Property="Foreground" Value="White"/><Setter Property="TextAlignment" Value="Left"/>
     <Setter Property="FlowDirection" Value="RightToLeft"/><Setter Property="TextWrapping" Value="Wrap"/>
     <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>

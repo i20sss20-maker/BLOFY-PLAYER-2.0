@@ -150,8 +150,13 @@ public sealed partial class RuntimeWindow : Window
         _current = new Frame(route, view); _page.Content = view;
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
         {
-            if (_closing) return;
-            var first = MainWindow.Visuals<Control>(view).FirstOrDefault(c => c.Focusable && c.IsEnabled && c.IsVisible); first?.Focus();
+            if (_closing || !ReferenceEquals(_page.Content, view)) return;
+            Control? first = route == "login"
+                ? MainWindow.Visuals<Button>(view).FirstOrDefault(b => ReferenceEquals(b.Command, Login.ManagePlaylistsCommand))
+                : route == "home"
+                    ? MainWindow.Visuals<Button>(view).FirstOrDefault(b => b.DataContext is NavEntry n && n.Key == "live" && n.Icon.Length > 0)
+                    : MainWindow.Visuals<Control>(view).FirstOrDefault(c => c.Focusable && c.IsEnabled && c.IsVisible);
+            first?.Focus();
         }));
     }
     private async Task ReturnToLogin()
@@ -215,7 +220,7 @@ public sealed partial class RuntimeWindow : Window
     }
     private static SolidColorBrush Brush(string hex) => new((Color)ColorConverter.ConvertFromString(hex));
     private static LinearGradientBrush Gradient(string a, string b) => new((Color)ColorConverter.ConvertFromString(a), (Color)ColorConverter.ConvertFromString(b), new Point(0, 0), new Point(1, 1));
-    private static TextBlock Text(string value, double size = 16, string color = "#FFFFFF") => new() { Text = value, FontSize = size, Foreground = Brush(color), TextWrapping = TextWrapping.Wrap, FlowDirection = FlowDirection.RightToLeft, TextAlignment = TextAlignment.Right, Margin = new Thickness(0, 5, 0, 5) };
+    private static TextBlock Text(string value, double size = 16, string color = "#FFFFFF") => new() { Text = value, FontSize = size, Foreground = Brush(color), TextWrapping = TextWrapping.Wrap, FlowDirection = FlowDirection.RightToLeft, TextAlignment = TextAlignment.Left, Margin = new Thickness(0, 5, 0, 5) };
     private Button ActionButton(string title, Action action)
     {
         var b = new Button { Content = title, MinHeight = 46, Margin = new Thickness(4), Padding = new Thickness(16, 8, 16, 8), Style = (Style)FindResource("LoginButton") };
