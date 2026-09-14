@@ -1,14 +1,18 @@
 package tv.blofy.player.ui.guide
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -17,6 +21,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -41,6 +47,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
 import java.text.SimpleDateFormat
@@ -63,6 +70,7 @@ class LiveGuideActivity : AppCompatActivity() {
     private lateinit var nowTime: TextView
     private lateinit var nowDescription: TextView
     private lateinit var nextTitle: TextView
+    private lateinit var reminderButton: Button
     private lateinit var progress: ProgressBar
     private lateinit var countView: TextView
 
@@ -73,6 +81,8 @@ class LiveGuideActivity : AppCompatActivity() {
     private var guideJob: Job? = null
     private var epgRefreshJob: Job? = null
     private var selectedStream: StreamEntity? = null
+    private var nextProgram: EpgEntity? = null
+    private var pendingReminder: Pair<StreamEntity, EpgEntity>? = null
     private val dao by lazy { BlofyDatabase.get(applicationContext).dao() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -244,6 +254,15 @@ class LiveGuideActivity : AppCompatActivity() {
         }
         addView(nextTitle)
 
+        reminderButton = Button(this@LiveGuideActivity).apply {
+            text = "لا يوجد برنامج للتذكير"
+            isAllCaps = false
+            isEnabled = false
+            CinemaStyle.styleButton(this)
+            setOnClickListener { requestProgramReminder() }
+        }
+        addView(reminderButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(12) })
+
         addView(TextView(this@LiveGuideActivity).apply {
             text = "OK تشغيل القناة   •   ← القنوات   •   ← مرة أخرى للفئات   •   BACK رجوع"
             textSize = 11.8f
@@ -349,6 +368,7 @@ class LiveGuideActivity : AppCompatActivity() {
     private fun renderEpg(items: List<EpgEntity>, now: Long) {
         val current = items.firstOrNull { now in it.startMs until it.endMs } ?: items.firstOrNull()
         val next = current?.let { item -> items.firstOrNull { it.startMs >= item.endMs } }
+        nextProgram = next
         if (current == null) {
             nowTitle.text = "لا تتوفر معلومات البرنامج"
             nowTime.text = ""
@@ -366,15 +386,68 @@ class LiveGuideActivity : AppCompatActivity() {
         } else {
             "${time(next.startMs)}   ${next.title}"
         }
+        reminderButton.isEnabled = next != null && next.startMs > now
+        reminderButton.text = if (reminderButton.isEnabled) "ذكّرني قبل ${time(checkNotNull(next).startMs)}" else "لا يوجد برنامج للتذكير"
+    }
+
+    private fun requestProgramReminder() {
+        val stream = selectedStream ?: return
+        val program = nextProgram ?: return
+        if (program.startMs <= System.currentTimeMillis()) return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingReminder = stream to program
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_NOTIFICATION_PERMISSION
+            )
+            return
+        }
+        scheduleReminder(stream, program)
+    }
+
+    private fun scheduleReminder(stream: StreamEntity, program: EpgEntity) {
+        val scheduled = EpgReminderScheduler.schedule(
+            context = this,
+            providerId = provider.id,
+            streamId = stream.remoteId,
+            categoryId = selectedCategoryId,
+            channelName = stream.name,
+            program = program
+        )
+        if (scheduled) {
+            reminderButton.text = "تم ضبط التذكير • ${time(program.startMs)}"
+            Toast.makeText(this, "سيصلك تنبيه قبل البرنامج بخمس دقائق", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "تعذر ضبط التذكير لهذا البرنامج", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_NOTIFICATION_PERMISSION) return
+        val pending = pendingReminder
+        pendingReminder = null
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED && pending != null) {
+            scheduleReminder(pending.first, pending.second)
+        } else {
+            Toast.makeText(this, "فعّل الإشعارات لاستخدام تذكير البرامج", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun clearGuide() {
+        nextProgram = null
+        pendingReminder = null
         guideTitle.text = "اختر قناة"
         guideMeta.text = "الآن والتالي من دليل البرامج"
         nowTitle.text = "لا تتوفر معلومات البرنامج"
         nowTime.text = ""
         nowDescription.text = ""
         nextTitle.text = "لا تتوفر معلومات البرنامج التالي"
+        reminderButton.text = "لا يوجد برنامج للتذكير"
+        reminderButton.isEnabled = false
         progress.progress = 0
     }
 
@@ -464,6 +537,7 @@ class LiveGuideActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_CATEGORY_ID = "category_id"
         const val EXTRA_STREAM_ID = "stream_id"
+        private const val REQUEST_NOTIFICATION_PERMISSION = 22051
         private const val KIND_LIVE = "live"
         private const val ALL_CATEGORY_ID = "__all__"
     }
