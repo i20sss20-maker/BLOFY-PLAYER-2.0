@@ -42,8 +42,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force evidence | Out-Null
-          dotnet run --project windows/Blofy.RuntimeTests/Blofy.RuntimeTests.csproj -c Release -warnaserror:NU1903 -- evidence/core-verification.json
+          $coreReport = Join-Path (Get-Location) 'evidence/core-verification.json'
+          dotnet run --project windows/Blofy.RuntimeTests/Blofy.RuntimeTests.csproj -c Release -warnaserror:NU1903 -- $coreReport
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+          if (-not (Test-Path $coreReport)) { throw 'Core report was not written to the requested path' }
       - name: Publish native Windows player
         shell: pwsh
         run: |
