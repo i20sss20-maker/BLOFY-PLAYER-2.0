@@ -34,6 +34,7 @@
         <activity android:name=".ui.search.SearchActivity" android:exported="false" />
         <activity android:name=".ui.settings.CommercialSettingsActivity" android:exported="false" />
         <activity android:name=".ui.settings.BackupRestoreActivity" android:exported="false" />
+        <activity android:name=".ui.settings.CategoryManagerActivity" android:exported="false" />
         <activity android:name=".ui.settings.ParentalSettingsActivity" android:exported="false" />
         <activity android:name=".ui.settings.SystemStatusActivity" android:exported="false" />
         <activity android:name=".ui.settings.SettingsActivity" android:exported="false" />
