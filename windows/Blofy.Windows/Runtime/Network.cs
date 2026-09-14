@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -162,22 +163,18 @@ public sealed class ProviderClient : IDisposable
         using var response = await Get(p, Api(p, action), ct);
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         int order = 0;
-        try
+        await foreach (var row in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(stream, cancellationToken: ct))
         {
-            await foreach (var row in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(stream, cancellationToken: ct))
-            {
-                ct.ThrowIfCancellationRequested();
-                if (row.ValueKind != JsonValueKind.Object) continue;
-                var id = row.Str(kind == "series" ? "series_id" : "stream_id");
-                var title = row.Str("name", row.Str("title"));
-                if (id.Length == 0 || title.Length == 0) continue;
-                var direct = row.Str("direct_source");
-                if (direct.Length > 0) { try { _ = Urls.Http(direct); } catch { direct = ""; } }
-                yield return new Entry(id, title, kind, row.Str("category_id"), row.Str(kind == "series" ? "cover" : "stream_icon"), row.Str("container_extension", kind == "live" ? "ts" : "mp4"), direct, row.Str("rating", row.Str("rating_5based")), row.Str("year", row.Str("releaseDate")), row.Str("genre"), order++);
-                if (order > 2_000_000) throw new InvalidDataException("تجاوزت القائمة حد العناصر الآمن");
-            }
+            ct.ThrowIfCancellationRequested();
+            if (row.ValueKind != JsonValueKind.Object) continue;
+            var id = row.Str(kind == "series" ? "series_id" : "stream_id");
+            var title = row.Str("name", row.Str("title"));
+            if (id.Length == 0 || title.Length == 0) continue;
+            var direct = row.Str("direct_source");
+            if (direct.Length > 0) { try { _ = Urls.Http(direct); } catch { direct = ""; } }
+            yield return new Entry(id, title, kind, row.Str("category_id"), row.Str(kind == "series" ? "cover" : "stream_icon"), row.Str("container_extension", kind == "live" ? "ts" : "mp4"), direct, row.Str("rating", row.Str("rating_5based")), row.Str("year", row.Str("releaseDate")), row.Str("genre"), order++);
+            if (order > 2_000_000) throw new InvalidDataException("تجاوزت القائمة حد العناصر الآمن");
         }
-        catch (JsonException ex) { throw new JsonException("قسم " + kind + " رجع بيانات غير صالحة", ex); }
     }
     public async IAsyncEnumerable<Entry> M3u(Provider p, [EnumeratorCancellation] CancellationToken ct)
     {
