@@ -1,3 +1,4 @@
+import { databaseOptions } from './database-options.mjs';
 import crypto from 'node:crypto';
 import pg from 'pg';
 
@@ -34,8 +35,7 @@ export function createAdminSessionStore({ key, pool: suppliedPool } = {}) {
   function database() {
     if (!pool) {
       if (!process.env.DATABASE_URL) throw new Error('admin_database_required');
-      pool = new pg.Pool({ connectionString: process.env.DATABASE_URL,
-        ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
+      pool = new pg.Pool({ ...databaseOptions(process.env.DATABASE_URL),
         max: 2, connectionTimeoutMillis: 4000, idleTimeoutMillis: 10000,
         statement_timeout: 4000, lock_timeout: 2000, idle_in_transaction_session_timeout: 5000,
         allowExitOnIdle: true });

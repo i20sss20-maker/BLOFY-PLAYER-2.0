@@ -46,7 +46,7 @@ ${primary && !unavailable ? `<a id="download-primary" class="btn primary downloa
 <section id="install-phone" class="card section"><h3>جوال / تابلت أندرويد</h3><ol><li>حمّل ملف APK من الإصدار الذي تختاره أعلاه.</li><li>افتح الملف وامنح إذن التثبيت عند الطلب.</li><li>ثبّت التطبيق أو حدّث نسختك الحالية، ثم افتح BLOFY.</li></ol></section>
 <section id="install-computer" class="card section"><h3>كمبيوتر</h3><p>هذه نسخة أندرويد APK وليست برنامج ويندوز. تشغيلها على الكمبيوتر يحتاج محاكي أندرويد.</p></section>
 </section><div class="notice">تفعيل تطبيق BLOFY وصلاحية اشتراك البث منفصلان.</div></main>
-<footer class="foot"><a href="/">BLOFY PLAYER</a><a href="/portal">إدارة جهازك</a></footer></div></body></html>`;
+<footer class="foot"><a href="/">BLOFY PLAYER</a><a href="/privacy">الخصوصية وحذف البيانات</a><a href="/portal">إدارة جهازك</a></footer></div></body></html>`;
 }
 
 export async function servePublicDownloads(req, res, pathname, { list, onError = () => {}, timeoutMs = 8000 }) {

@@ -1,4 +1,9 @@
+import { databaseOptions } from './database-options.mjs';
 import http from 'node:http';
+import { servePrivacyPage } from './privacy-pages.mjs';
+import { createCommercialHandlers } from './commercial-handlers.mjs';
+import { createProfileCloudHandlers } from './profile-cloud.mjs';
+import { registerDeviceTrial, bindExistingTrial, completePendingTrial } from './trial-registration.mjs';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
@@ -42,8 +47,7 @@ if (!/^[a-fA-F0-9]{64}$/.test(PLAYLIST_ENCRYPTION_KEY)) {
 }
 
 const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false }
+  ...databaseOptions(DATABASE_URL)
 });
 
 const authIpLimiter = createFixedWindowLimiter({ limit: AUTH_IP_RATE_LIMIT, windowMs: AUTH_RATE_WINDOW_MS });
@@ -80,7 +84,7 @@ async function readJson(req) {
   let body = '';
   for await (const chunk of req) {
     body += chunk;
-    if (body.length > 32_768) throw new Error('payload_too_large');
+    if (Buffer.byteLength(body) > 96_000) throw new Error('payload_too_large');
   }
   return body ? JSON.parse(body) : {};
 }
@@ -165,11 +169,20 @@ async function authorizedDevice(deviceId, activationCode, req) {
 }
 
 const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
+const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson });
+const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
 
 async function initializeDatabase() {
   const schemaUrl = new URL('../schema.sql', import.meta.url);
   const schema = await readFile(schemaUrl, 'utf8');
-  await pool.query(schema);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(718420650)');
+    await client.query(schema);
+    await client.query('COMMIT');
+  } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { client.release(); }
   await pool.query('SELECT 1');
   console.log('BLOFY activation database ready');
 }
@@ -236,8 +249,9 @@ function hardenPortalCredentialInputs(html) {
   return output;
 }
 
-async function servePortal(res) {
-  const source = await readFile(new URL('../web/index.html', import.meta.url), 'utf8');
+async function servePortal(res, connectOnly = false) {
+  let source = await readFile(new URL('../web/index.html', import.meta.url), 'utf8');
+  if (connectOnly) source = source.replaceAll('href="/"', 'href="/connect"');
   const file = hardenPortalCredentialInputs(source);
   res.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
@@ -276,22 +290,25 @@ async function activationCheck(req, res) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['blofy-register:' + deviceId]);
     let result = await client.query('SELECT * FROM devices WHERE device_id = $1 FOR UPDATE', [deviceId]);
     let row = result.rows[0];
 
     if (!row) {
-      const expiresAt = new Date(Date.now() + TRIAL_DAYS * 86_400_000);
-      result = await client.query(
-        `INSERT INTO devices(device_id, activation_code, status, trial_started_at, expires_at, last_seen_at, last_app_version, last_platform)
-         VALUES($1,$2,'trial',NOW(),$3,NOW(),$4,$5) RETURNING *`,
-        [deviceId, activationCredentials.proof(deviceId, activationCode), expiresAt, appVersion, platform]
-      );
-      row = result.rows[0];
+      row = await registerDeviceTrial(client, {
+        deviceId, proof: activationCredentials.proof(deviceId, activationCode), appVersion, platform,
+        trialScope: body.trialScope, trialDays: TRIAL_DAYS, keyHex: PLAYLIST_ENCRYPTION_KEY,
+        // Existing registered devices keep their exact entitlement. Legacy new installs can
+        // opt into trials only in explicitly configured isolated compatibility tests.
+        requireScope: process.env.BLOFY_ALLOW_LEGACY_TRIAL !== 'true'
+      });
     } else if (!await verifyDeviceCredential(client, row, activationCode)) {
       await client.query('COMMIT');
       return json(res, 403, { status: 'blocked', serverTime: Date.now(), message: 'unauthorized_device' });
     }
 
+    await bindExistingTrial(client, row, body.trialScope, TRIAL_DAYS, PLAYLIST_ENCRYPTION_KEY);
+    row = await completePendingTrial(client, row, body.trialScope, PLAYLIST_ENCRYPTION_KEY);
     const status = normalizeStatus(row);
     if (status === 'expired' && row.status !== 'blocked') {
       await client.query("UPDATE devices SET status='expired', updated_at=NOW() WHERE device_id=$1", [deviceId]);
@@ -411,12 +428,18 @@ async function providerProfile(req, res) {
   });
 }
 
+let lastRetentionCleanup=0;
 async function playbackDiagnostic(req, res) {
   const body = await readJson(req);
   const deviceId = String(body.deviceId || '').trim();
   const activationCode = String(body.activationCode || '').trim();
   if (!validIdentity(deviceId, activationCode)) return json(res, 400, { error: 'invalid_device_identity' });
   if (!await authorizedDevice(deviceId, activationCode, req)) return json(res, 403, { error: 'unauthorized_device' });
+  if (Date.now()-lastRetentionCleanup>3600000) {
+    await pool.query("DELETE FROM playback_diagnostics WHERE id IN (SELECT id FROM playback_diagnostics WHERE created_at<NOW()-INTERVAL '30 days' LIMIT 500)");
+    await pool.query('DELETE FROM cloud_pair_codes WHERE expires_at<NOW() OR consumed_at IS NOT NULL');
+    lastRetentionCleanup=Date.now();
+  }
 
   const providerKey = pseudonymizeDiagnosticProviderKey(body.providerKey);
   const contentKind = sanitizeDiagnosticContentKind(body.contentKind);
@@ -597,9 +620,13 @@ async function adminProviderProfileUpdate(req, res, providerKey) {
 const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
+    if (await servePrivacyPage(req, res, requestUrl)) return;
+    if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
+    if (await commercial(req, res, requestUrl)) return;
+    if (await cloud(req, res)) return;
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/rotate') return await activationRotate(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/provider-profile') return await providerProfile(req, res);
