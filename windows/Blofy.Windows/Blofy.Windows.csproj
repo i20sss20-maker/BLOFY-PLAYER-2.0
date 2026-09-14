@@ -27,7 +27,7 @@
     <PackageReference Include="QRCoder" Version="1.8.0"/>
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Verification/generated.mp4.gz" LogicalName="Fixture.Mp4"/>
-    <EmbeddedResource Include="Verification/generated.ts.gz" LogicalName="Fixture.Ts"/>
+    <EmbeddedResource Include="Verification/generated.mp4.gz" LogicalName="Fixture.Mp4" WithCulture="false"/>
+    <EmbeddedResource Include="Verification/generated.ts.gz" LogicalName="Fixture.Ts" WithCulture="false"/>
   </ItemGroup>
 </Project>
