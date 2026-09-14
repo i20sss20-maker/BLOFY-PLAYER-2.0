@@ -26,6 +26,17 @@ internal class PosterStreamAdapter(
 
     fun submit(newItems: List<StreamEntity>) {
         val oldItems = items.toList()
+        items.clear()
+        items.addAll(newItems)
+
+        // DiffUtil is synchronous in this adapter. On giant provider catalogs it can monopolize the
+        // main thread and make DPAD/OK appear unresponsive. Prefer a single RecyclerView refresh for
+        // large lists; visible poster creation remains lazy.
+        if (maxOf(oldItems.size, newItems.size) > LARGE_LIST_DIFF_THRESHOLD) {
+            notifyDataSetChanged()
+            return
+        }
+
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize() = oldItems.size
             override fun getNewListSize() = newItems.size
@@ -34,8 +45,6 @@ internal class PosterStreamAdapter(
             override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
                 oldItems[oldItemPosition] == newItems[newItemPosition]
         }, false)
-        items.clear()
-        items.addAll(newItems)
         diff.dispatchUpdatesTo(this)
     }
 
@@ -110,8 +119,8 @@ internal class PosterStreamAdapter(
             text = value?.let { "★ $it" }.orEmpty()
         }
         ArtworkLoader.load(holder.image, item.icon ?: item.backdrop)
-        if (position % 4 == 0) {
-            val next = (position + 1 until minOf(items.size, position + 9)).map { index ->
+        if (position % PREFETCH_STRIDE == 0) {
+            val next = (position + 1 until minOf(items.size, position + PREFETCH_WINDOW + 1)).map { index ->
                 items[index].icon ?: items[index].backdrop
             }
             ArtworkLoader.prefetch(holder.itemView.context, next)
@@ -121,10 +130,10 @@ internal class PosterStreamAdapter(
             view.background = card(focused)
             view.animate().cancel()
             view.animate()
-                .scaleX(if (focused) 1.035f else 1f)
-                .scaleY(if (focused) 1.035f else 1f)
-                .translationZ(if (focused) 14f else 3f)
-                .setDuration(85)
+                .scaleX(if (focused) 1.03f else 1f)
+                .scaleY(if (focused) 1.03f else 1f)
+                .translationZ(if (focused) 12f else 2f)
+                .setDuration(75)
                 .start()
             if (focused) onFocus(item)
         }
@@ -133,6 +142,7 @@ internal class PosterStreamAdapter(
     override fun onViewRecycled(holder: Holder) {
         holder.image.tag = null
         holder.image.setImageDrawable(null)
+        holder.itemView.animate().cancel()
         super.onViewRecycled(holder)
     }
 
@@ -153,5 +163,11 @@ internal class PosterStreamAdapter(
     ).apply {
         cornerRadius = 20f
         setStroke(if (focused) 3 else 1, if (focused) 0xFFE0B5FF.toInt() else 0x554D376B)
+    }
+
+    private companion object {
+        const val LARGE_LIST_DIFF_THRESHOLD = 1_500
+        const val PREFETCH_STRIDE = 6
+        const val PREFETCH_WINDOW = 5
     }
 }
