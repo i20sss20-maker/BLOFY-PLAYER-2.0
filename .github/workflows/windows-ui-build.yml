@@ -1,0 +1,77 @@
+name: BLOFY Windows UI Review
+
+on:
+  push:
+    branches: [windows/native-desktop]
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows-ui-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-windows-ui:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Verify isolation and original Android logo
+        shell: pwsh
+        run: |
+          git diff --exit-code f71b5247af0cfee485790a59729b39aac16df3df HEAD -- app/
+          if ($LASTEXITCODE -ne 0) { throw 'Android source was changed by the Windows milestone' }
+          $logo = git hash-object app/src/main/res/drawable-nodpi/blofy_logo.png
+          if ($logo.Trim() -ne '8a84b6b7d65f494e13e26c687fe0a980a664e208') { throw 'Android logo differs from the approved reference' }
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.109'
+      - name: Publish Windows UI review (self-contained x64)
+        shell: pwsh
+        run: |
+          dotnet publish windows/Blofy.Windows/Blofy.Windows.csproj -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o publish/BLOFY-PLAYER-UI-Review
+          if ($LASTEXITCODE -ne 0) { throw 'Windows compilation failed' }
+      - name: Offline UI checks and screenshot evidence
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ui-evidence | Out-Null
+          $process = Start-Process -FilePath './publish/BLOFY-PLAYER-UI-Review/BLOFY.Player.Windows.exe' -ArgumentList '--verify-ui','--evidence-dir=ui-evidence' -PassThru
+          if (-not $process.WaitForExit(120000)) { $process.Kill($true); throw 'UI verification timed out' }
+          if (Test-Path ui-evidence/verification.json) { Get-Content ui-evidence/verification.json }
+          if ($process.ExitCode -ne 0) { throw "UI verification failed with exit code $($process.ExitCode)" }
+          $report = Get-Content ui-evidence/verification.json -Raw | ConvertFrom-Json
+          if (-not $report.passed) { throw 'UI verification did not pass' }
+          "### Windows UI review" >> $env:GITHUB_STEP_SUMMARY
+          "Passed checks: $($report.checks.Count)" >> $env:GITHUB_STEP_SUMMARY
+          "Scope: UI-only, synthetic fixtures, no playback/activation/Android screenshot comparison." >> $env:GITHUB_STEP_SUMMARY
+      - name: Package review build, not a commercial release
+        shell: pwsh
+        run: |
+          Copy-Item windows/README.md publish/BLOFY-PLAYER-UI-Review/READ-ME-FIRST.md
+          Copy-Item windows/ANDROID_PARITY.md publish/BLOFY-PLAYER-UI-Review/ANDROID_PARITY.md
+          Copy-Item ui-evidence/verification.json publish/BLOFY-PLAYER-UI-Review/verification.json
+          @{ commit = '${{ github.sha }}'; androidReference = 'dc0b0c84d7dd5973e8d0426f16793f14b9b06417'; uiOnly = $true; signed = $false } | ConvertTo-Json | Set-Content publish/BLOFY-PLAYER-UI-Review/BUILDINFO.json
+          Compress-Archive -Path publish/BLOFY-PLAYER-UI-Review/* -DestinationPath BLOFY-Windows-UI-Review-win-x64.zip
+      - name: Upload UI evidence (also on failure)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: BLOFY-Windows-UI-Evidence
+          path: ui-evidence/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload UI review build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: BLOFY-Windows-UI-Review-win-x64
+          path: BLOFY-Windows-UI-Review-win-x64.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
