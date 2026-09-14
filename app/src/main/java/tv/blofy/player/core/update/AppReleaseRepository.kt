@@ -10,7 +10,7 @@ import tv.blofy.player.BuildConfig
 import java.net.URI
 import java.util.concurrent.TimeUnit
 
-/** Reads public app release metadata from the activation service health endpoint. */
+/** Reads public app release metadata from the dedicated update service health endpoint. */
 object AppReleaseRepository {
     data class Release(
         val versionCode: Int,
@@ -65,7 +65,7 @@ object AppReleaseRepository {
                 return@withContext cached
             }
 
-            val base = BuildConfig.ACTIVATION_BASE_URL.trim().trimEnd('/')
+            val base = BuildConfig.UPDATE_BASE_URL.trim().trimEnd('/')
             if (!isSafeBaseUrl(base)) return@withContext usableStaleCache(cached, now)
 
             val request = Request.Builder()
