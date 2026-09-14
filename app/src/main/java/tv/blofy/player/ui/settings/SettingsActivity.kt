@@ -190,6 +190,9 @@ class SettingsActivity : AppCompatActivity() {
         addCard(actionCard(copy("تشخيص BLOFY", "BLOFY diagnostics"), copy("الجهاز والشبكة والمكتبة وتقرير الدعم", "Device, network, library and support report")) {
             startActivity(Intent(this, SystemStatusActivity::class.java))
         })
+        addCard(actionCard(copy("نسخ احتياطي واستعادة", "Backup and restore"), copy("المفضلة، السجل، الفئات والإعدادات بدون بيانات الدخول", "Favorites, history, categories and settings without credentials")) {
+            startActivity(Intent(this, BackupRestoreActivity::class.java))
+        })
         storageCard = actionCard(getString(R.string.setting_storage_local), getString(R.string.setting_storage_calculating)) { showStorageManager() }
         addCard(storageCard)
         addCard(actionCard(getString(R.string.setting_restore), getString(R.string.setting_restore_subtitle)) { restoreDefaults() })
