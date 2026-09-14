@@ -12,10 +12,6 @@ test('runtime portal subscriber bridge keeps the current BLOFY session contract'
     "select.value = 'xtream'",
     "dispatchValue(qs('baseUrl'), session.baseUrl)",
     "dispatchValue(qs('username'), session.username)",
-    "dispatchValue(qs('password'), session.password)",
-    'رقم جهاز',
-  ]) {
-    if (token === 'رقم جهاز') continue;
-    assert.ok(source.includes(token), `missing ${token}`);
-  }
+    "dispatchValue(qs('password'), session.password)"
+  ]) assert.ok(source.includes(token), `missing ${token}`);
 });
