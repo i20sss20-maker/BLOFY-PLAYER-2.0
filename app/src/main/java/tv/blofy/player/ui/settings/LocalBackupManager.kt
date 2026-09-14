@@ -12,6 +12,17 @@ import tv.blofy.player.ui.search.RecentSearchStore
 object LocalBackupManager {
     private const val SCHEMA = 1
 
+    private val allowedSettings = mapOf(
+        RuntimeSettings.KEY_MOTION to setOf("smooth", "reduced"),
+        RuntimeSettings.KEY_AUDIO_OUTPUT to setOf("auto", "stereo"),
+        RuntimeSettings.KEY_SUBTITLE_LANGUAGE to setOf("ar", "auto", "off"),
+        RuntimeSettings.KEY_SUBTITLE_SIZE to setOf("small", "medium", "large"),
+        RuntimeSettings.KEY_ASPECT to setOf("fit", "zoom", "fill"),
+        RuntimeSettings.KEY_AUTOPLAY_LIVE to setOf("on", "off"),
+        RuntimeSettings.KEY_RESUME_PROMPT to setOf("on", "off"),
+        RuntimeSettings.KEY_AUTO_NEXT to setOf("ask", "on", "off")
+    )
+
     data class RestoreResult(
         val categories: Int,
         val flags: Int,
@@ -66,10 +77,10 @@ object LocalBackupManager {
         root.put("watchStates", watch)
 
         val settings = JSONObject()
-        app.getSharedPreferences(RuntimeSettings.PREFS, Context.MODE_PRIVATE).all.forEach { (key, value) ->
-            when (value) {
-                is String, is Boolean, is Int, is Long, is Float -> settings.put(key, value)
-            }
+        val prefs = app.getSharedPreferences(RuntimeSettings.PREFS, Context.MODE_PRIVATE)
+        allowedSettings.forEach { (key, allowedValues) ->
+            val value = runCatching { prefs.getString(key, null) }.getOrNull()
+            if (value != null && value in allowedValues) settings.put(key, value)
         }
         root.put("settings", settings)
         root.put("recentSearches", JSONArray(RecentSearchStore.recent(app)))
@@ -132,14 +143,10 @@ object LocalBackupManager {
         val settings = root.optJSONObject("settings") ?: JSONObject()
         val editor = app.getSharedPreferences(RuntimeSettings.PREFS, Context.MODE_PRIVATE).edit()
         settings.keys().forEach { key ->
-            when (val value = settings.opt(key)) {
-                is String -> editor.putString(key, value)
-                is Boolean -> editor.putBoolean(key, value)
-                is Int -> editor.putInt(key, value)
-                is Long -> editor.putLong(key, value)
-                is Double -> editor.putFloat(key, value.toFloat())
-                else -> return@forEach
-            }
+            val allowedValues = allowedSettings[key] ?: return@forEach
+            val value = settings.opt(key) as? String ?: return@forEach
+            if (value !in allowedValues) return@forEach
+            editor.putString(key, value)
             restoredSettings++
         }
         editor.apply()
