@@ -12,6 +12,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -114,7 +115,6 @@ class SearchActivity : AppCompatActivity() {
                     if (q.isBlank()) {
                         results.removeAllViews()
                         this@SearchActivity.hint.text = emptyHint()
-                        return
                     }
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
@@ -152,7 +152,7 @@ class SearchActivity : AppCompatActivity() {
             val wantedKinds = scopeKind?.let(::listOf) ?: SEARCH_ORDER
             coroutineScope {
                 wantedKinds.map { kind ->
-                    kind to async { repository.searchKind(provider.id, kind, q, SECTION_LIMIT) }
+                    kind to async { repository.searchKind(provider.id, kind, q, SECTION_QUERY_LIMIT) }
                 }.map { (kind, deferred) -> kind to deferred.await().distinctBy { it.key } }
             }
         }
@@ -160,7 +160,7 @@ class SearchActivity : AppCompatActivity() {
         if (input.text?.toString()?.trim() != q) return
         results.removeAllViews()
         val total = sections.sumOf { it.second.size }
-        hint.text = if (scopeKind == null) "$total نتيجة • البث ثم المسلسلات ثم الأفلام" else "$total نتيجة"
+        hint.text = if (scopeKind == null) "$total نتيجة • القنوات قائمة، الأفلام والمسلسلات بوسترات" else "$total نتيجة"
         if (total == 0) { showMessage("ما لقينا نتائج مطابقة داخل باقتك"); return }
 
         var firstFocusable: View? = null
@@ -187,8 +187,10 @@ class SearchActivity : AppCompatActivity() {
         setPadding(dp(14), dp(12), dp(14), dp(10))
         background = BlofyTvDesign.glassSurface(dp(18).toFloat())
 
+        val visibleLimit = if (kind == KIND_LIVE) LIVE_DISPLAY_LIMIT else POSTER_DISPLAY_LIMIT
+        val visible = items.take(visibleLimit)
         addView(TextView(this@SearchActivity).apply {
-            val suffix = if (items.size >= SECTION_LIMIT) "+" else ""
+            val suffix = if (items.size > visible.size) "+" else ""
             text = "${sectionTitle(kind)}   •   ${items.size}$suffix"
             textSize = 19f
             typeface = BlofyTvDesign.HeadingTypeface
@@ -197,7 +199,7 @@ class SearchActivity : AppCompatActivity() {
             setPadding(dp(4), 0, dp(4), dp(8))
         }, LinearLayout.LayoutParams(-1, dp(42)))
 
-        if (items.isEmpty()) {
+        if (visible.isEmpty()) {
             addView(TextView(this@SearchActivity).apply {
                 text = "لا توجد نتائج"
                 textSize = 13f
@@ -205,39 +207,52 @@ class SearchActivity : AppCompatActivity() {
                 gravity = Gravity.RIGHT
                 setPadding(dp(8), dp(6), dp(8), dp(10))
             })
-        } else {
-            items.forEachIndexed { index, stream ->
-                val card = resultCard(stream) { guardedOpen(providerId, liveFormat, stream) }
+        } else if (kind == KIND_LIVE) {
+            visible.forEachIndexed { index, stream ->
+                val card = liveResultCard(stream) { guardedOpen(providerId, liveFormat, stream) }
                 if (index == 0) onFirstFocusable(card)
-                addView(card, LinearLayout.LayoutParams(-1, dp(84)).apply { bottomMargin = dp(7) })
+                addView(card, LinearLayout.LayoutParams(-1, dp(78)).apply { bottomMargin = dp(7) })
             }
+        } else {
+            val grid = GridLayout(this@SearchActivity).apply {
+                columnCount = POSTER_COLUMNS
+                alignmentMode = GridLayout.ALIGN_BOUNDS
+                useDefaultMargins = false
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                clipChildren = false
+                clipToPadding = false
+            }
+            visible.forEachIndexed { index, stream ->
+                val card = posterResultCard(stream) { guardedOpen(providerId, liveFormat, stream) }
+                if (index == 0) onFirstFocusable(card)
+                grid.addView(card, GridLayout.LayoutParams().apply {
+                    columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                    width = 0
+                    height = dp(250)
+                    setMargins(dp(5), dp(5), dp(5), dp(7))
+                })
+            }
+            addView(grid, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
     }
 
-    private fun resultCard(stream: StreamEntity, open: () -> Unit): LinearLayout {
+    private fun liveResultCard(stream: StreamEntity, open: () -> Unit): LinearLayout {
         val metadata = mutableListOf<String>()
-        metadata += kindLabel(stream.kind)
-        stream.year?.takeIf { it.isNotBlank() }?.let { metadata += it }
         stream.genre?.takeIf { it.isNotBlank() }?.substringBefore(',')?.let { metadata += it }
-        stream.rating?.takeIf { it.isNotBlank() }?.let { metadata += "★ $it" }
-
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(7), dp(16), dp(7))
+            setPadding(dp(10), dp(6), dp(16), dp(6))
             isFocusable = true
             isClickable = true
             background = rowBackground(false)
-            elevation = dp(1).toFloat()
-
             val art = ImageView(this@SearchActivity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0xFF17111F.toInt()) }
+                background = GradientDrawable().apply { cornerRadius = dp(10).toFloat(); setColor(0xFF17111F.toInt()) }
             }
-            addView(art, LinearLayout.LayoutParams(dp(58), dp(68)).apply { marginStart = dp(14) })
+            addView(art, LinearLayout.LayoutParams(dp(54), dp(62)).apply { marginStart = dp(14) })
             ArtworkLoader.load(art, stream.icon ?: stream.backdrop)
-
             val copy = LinearLayout(this@SearchActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT }
             copy.addView(TextView(this@SearchActivity).apply {
                 text = (if (stream.locked) "🔒  " else "") + stream.name
@@ -245,24 +260,62 @@ class SearchActivity : AppCompatActivity() {
                 ellipsize = android.text.TextUtils.TruncateAt.END
             })
             copy.addView(TextView(this@SearchActivity).apply {
-                text = metadata.joinToString("   •   "); textSize = 11.5f; setTextColor(BlofyTvDesign.TextMuted); maxLines = 1; gravity = Gravity.RIGHT
+                text = metadata.joinToString(" • "); textSize = 11.5f; setTextColor(BlofyTvDesign.TextMuted); maxLines = 1; gravity = Gravity.RIGHT
             })
             addView(copy, LinearLayout.LayoutParams(0, -1, 1f))
-
-            val badge = TextView(this@SearchActivity).apply {
-                text = kindLabel(stream.kind); textSize = 10.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.CENTER
-                background = GradientDrawable().apply { cornerRadius = dp(11).toFloat(); setColor(0x66382252); setStroke(dp(1), 0x995F3D82.toInt()) }
-            }
-            addView(badge, LinearLayout.LayoutParams(dp(74), dp(34)).apply { marginStart = dp(6) })
-
             setOnFocusChangeListener { view, focused ->
                 view.background = rowBackground(focused)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.01f else 1f).scaleY(if (focused) 1.01f else 1f)
-                    .translationZ(if (focused) dp(8).toFloat() else dp(1).toFloat()).setDuration(65).start()
+                view.animate().scaleX(if (focused) 1.01f else 1f).scaleY(if (focused) 1.01f else 1f).setDuration(60).start()
             }
             setOnClickListener { open() }
         }
+    }
+
+    private fun posterResultCard(stream: StreamEntity, open: () -> Unit): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        setPadding(dp(6), dp(6), dp(6), dp(8))
+        isFocusable = true
+        isClickable = true
+        background = posterBackground(false)
+
+        val art = ImageView(this@SearchActivity).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = GradientDrawable().apply { cornerRadius = dp(13).toFloat(); setColor(0xFF17111F.toInt()) }
+            clipToOutline = true
+        }
+        addView(art, LinearLayout.LayoutParams(-1, dp(170)))
+        ArtworkLoader.load(art, stream.icon ?: stream.backdrop)
+        addView(TextView(this@SearchActivity).apply {
+            text = (if (stream.locked) "🔒 " else "") + stream.name
+            textSize = 13.5f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.RIGHT
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(4), dp(7), dp(4), 0)
+        }, LinearLayout.LayoutParams(-1, dp(42)))
+        addView(TextView(this@SearchActivity).apply {
+            text = buildList {
+                stream.year?.takeIf(String::isNotBlank)?.let(::add)
+                stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
+            }.joinToString(" • ")
+            textSize = 10.5f
+            setTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.RIGHT
+            maxLines = 1
+            setPadding(dp(4), 0, dp(4), 0)
+        }, LinearLayout.LayoutParams(-1, dp(24)))
+        setOnFocusChangeListener { view, focused ->
+            view.background = posterBackground(focused)
+            view.animate().cancel()
+            view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f)
+                .translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(70).start()
+        }
+        setOnClickListener { open() }
     }
 
     private fun guardedOpen(providerId: String, format: String, stream: StreamEntity) {
@@ -307,8 +360,6 @@ class SearchActivity : AppCompatActivity() {
         else -> kind
     }
 
-    private fun kindLabel(kind: String) = when (kind) { KIND_LIVE -> "LIVE"; KIND_MOVIE -> "MOVIE"; KIND_SERIES -> "SERIES"; else -> kind.uppercase() }
-
     private fun searchField(focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) intArrayOf(0xFF332044.toInt(), 0xFF21152E.toInt()) else intArrayOf(0xFF21172F.toInt(), 0xFF17101F.toInt())
@@ -318,6 +369,11 @@ class SearchActivity : AppCompatActivity() {
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) intArrayOf(0xFF713EC0.toInt(), 0xFF3A2358.toInt()) else intArrayOf(0xE6241A36.toInt(), 0xE6191222.toInt())
     ).apply { cornerRadius = dp(16).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.PurpleBright else 0xFF49375E.toInt()) }
+
+    private fun posterBackground(focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        if (focused) intArrayOf(0xFF5D2498.toInt(), 0xFF241330.toInt()) else intArrayOf(0xE61D1627.toInt(), 0xEE100C16.toInt())
+    ).apply { cornerRadius = dp(16).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFE0B5FF.toInt() else 0x554D376B) }
 
     private fun showMessage(message: String) {
         results.removeAllViews()
@@ -333,6 +389,9 @@ class SearchActivity : AppCompatActivity() {
         const val KIND_SERIES = "series"
         const val KIND_MOVIE = "movie"
         private val SEARCH_ORDER = listOf(KIND_LIVE, KIND_SERIES, KIND_MOVIE)
-        private const val SECTION_LIMIT = 120
+        private const val SECTION_QUERY_LIMIT = 80
+        private const val LIVE_DISPLAY_LIMIT = 30
+        private const val POSTER_DISPLAY_LIMIT = 30
+        private const val POSTER_COLUMNS = 5
     }
 }

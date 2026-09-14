@@ -1,0 +1,59 @@
+name: BLOFY Google Play Preflight
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  play-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android API 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses >/dev/null || true
+          "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Verify Play policy guards are wired
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'buildConfigField("boolean", "PLAY_DISTRIBUTION"' app/build.gradle.kts
+          grep -Fq 'if (!BuildConfig.PLAY_DISTRIBUTION)' app/src/main/java/tv/blofy/player/BlofyApp.kt
+          grep -Fq 'registerActivityLifecycleCallbacks(AppUpdateLifecycle())' app/src/main/java/tv/blofy/player/BlofyApp.kt
+          grep -Fq 'registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())' app/src/main/java/tv/blofy/player/BlofyApp.kt
+      - name: Test lint and compile Play-distribution bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon \
+            -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app \
+            -PBLOFY_PLAY_DISTRIBUTION=true \
+            testDebugUnitTest lintDebug bundleDebug
+      - name: Verify Play flag is embedded
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -Fq 'PLAY_DISTRIBUTION = true' app/build/generated/source/buildConfig/debug || {
+            echo 'Play distribution flag was not generated as true' >&2
+            exit 1
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-google-play-preflight-${{ github.sha }}
+          path: app/build/outputs/bundle/debug/app-debug.aab
+          if-no-files-found: error
+          retention-days: 7

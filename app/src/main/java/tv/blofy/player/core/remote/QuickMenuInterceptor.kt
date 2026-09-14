@@ -36,17 +36,24 @@ class QuickMenuInterceptor : Application.ActivityLifecycleCallbacks {
                     if (event.repeatCount == 0) {
                         centerDownAt = event.eventTime
                         openedForPress = false
-                    } else if (!openedForPress && event.eventTime - centerDownAt >= LONG_PRESS_MS) {
+                        return original.dispatchKeyEvent(event)
+                    }
+
+                    // Cheap remotes often emit many repeated ENTER/DPad-center downs. Passing those
+                    // through can launch the same Activity twice or make the next screen fight for
+                    // focus. Keep repeats private; only convert a true hold into the quick menu.
+                    if (!openedForPress && event.eventTime - centerDownAt >= LONG_PRESS_MS) {
                         openedForPress = true
                         openContextMenu()
-                        return true
                     }
+                    return true
                 }
-            } else if (event.action == KeyEvent.ACTION_UP && isCenter(event.keyCode)) {
+            } else if (event.action == KeyEvent.ACTION_UP && isCenter(event.keyCode) && activity !is PlayerActivity) {
                 if (openedForPress) {
                     openedForPress = false
                     return true
                 }
+                return original.dispatchKeyEvent(event)
             }
             return original.dispatchKeyEvent(event)
         }
@@ -80,7 +87,8 @@ class QuickMenuInterceptor : Application.ActivityLifecycleCallbacks {
         private fun isCenter(code: Int) =
             code == KeyEvent.KEYCODE_DPAD_CENTER ||
                 code == KeyEvent.KEYCODE_ENTER ||
-                code == KeyEvent.KEYCODE_NUMPAD_ENTER
+                code == KeyEvent.KEYCODE_NUMPAD_ENTER ||
+                code == KeyEvent.KEYCODE_BUTTON_A
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit

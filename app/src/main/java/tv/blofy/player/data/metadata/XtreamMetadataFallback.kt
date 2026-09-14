@@ -54,7 +54,7 @@ object XtreamMetadataFallback {
         val plot = text(source, "plot", "description").ifBlank { stream.plot.orEmpty() }.ifBlank { null }
         val genreText = text(source, "genre", "genres").ifBlank { stream.genre.orEmpty() }
         val genres = splitValues(genreText)
-        val cast = castValues(source).take(14)
+        val cast = castValues(provider, source).take(14)
         val crew = buildList {
             splitValues(text(source, "director")).take(3).forEach { add(ProviderMetadata.Credit(it, "المخرج")) }
             splitValues(text(source, "writer", "writers")).take(3).forEach { add(ProviderMetadata.Credit(it, "الكاتب")) }
@@ -64,9 +64,9 @@ object XtreamMetadataFallback {
         val releaseDate = text(source, "releasedate", "release_date", "releaseDate", "first_air_date")
             .ifBlank { stream.releaseDate.orEmpty() }.ifBlank { null }
         val durationMinutes = durationMinutes(source, stream)
-        val poster = text(source, "movie_image", "cover", "cover_big", "stream_icon")
-            .ifBlank { stream.icon.orEmpty() }.ifBlank { null }
-        val backdrop = firstBackdrop(source["backdrop_path"] ?: source["backdrop"])
+        val poster = resolveArtwork(provider, text(source, "movie_image", "cover", "cover_big", "stream_icon"))
+            ?: stream.icon?.takeIf(String::isNotBlank)
+        val backdrop = resolveArtwork(provider, firstBackdrop(source["backdrop_path"] ?: source["backdrop"]).orEmpty())
             ?: stream.backdrop?.takeIf(String::isNotBlank)
         val country = splitValues(text(source, "country", "production_countries"))
         val language = text(source, "language", "original_language").ifBlank { null }
@@ -86,7 +86,7 @@ object XtreamMetadataFallback {
             genres = genres,
             posterUrl = poster,
             backdropUrl = backdrop,
-            logoUrl = null,
+            logoUrl = resolveArtwork(provider, text(source, "logo", "logo_url", "logo_path")),
             trailerUrl = text(source, "youtube_trailer", "trailer").ifBlank { null },
             cast = cast,
             crew = crew,
@@ -97,20 +97,28 @@ object XtreamMetadataFallback {
         )
     }
 
-    private fun castValues(source: Map<String, Any?>): List<ProviderMetadata.Person> {
-        val raw = source.entries.firstOrNull { it.key.equals("actors", true) || it.key.equals("cast", true) || it.key.equals("actor", true) }?.value
+    private fun castValues(provider: ProviderEntity, source: Map<String, Any?>): List<ProviderMetadata.Person> {
+        val raw = source.entries.firstOrNull {
+            it.key.equals("actors", true) || it.key.equals("cast", true) || it.key.equals("actor", true)
+        }?.value
         val structured = when (raw) {
             is List<*> -> raw.mapNotNull { item ->
                 val row = item as? Map<*, *> ?: return@mapNotNull null
-                val name = row.entries.firstOrNull { it.key?.toString()?.equals("name", true) == true || it.key?.toString()?.equals("actor", true) == true }
-                    ?.value?.toString()?.trim().orEmpty()
+                fun field(vararg names: String): String? = row.entries.firstOrNull { entry ->
+                    names.any { wanted -> entry.key?.toString()?.equals(wanted, true) == true }
+                }?.value?.toString()?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", true) }
+
+                val name = field("name", "actor", "original_name", "person_name").orEmpty()
                 if (name.isBlank()) return@mapNotNull null
-                val character = row.entries.firstOrNull { it.key?.toString()?.equals("character", true) == true || it.key?.toString()?.equals("role", true) == true }
-                    ?.value?.toString()?.trim()?.takeIf(String::isNotBlank)
-                val profile = row.entries.firstOrNull {
-                    val key = it.key?.toString().orEmpty()
-                    key.equals("profile", true) || key.equals("profile_url", true) || key.equals("image", true) || key.equals("photo", true)
-                }?.value?.toString()?.trim()?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+                val character = field("character", "role", "known_for_department")
+                val profile = resolveArtwork(
+                    provider,
+                    field(
+                        "profile", "profile_url", "profile_path", "profilePath",
+                        "image", "image_url", "imageUrl", "photo", "avatar",
+                        "thumbnail", "thumb", "poster"
+                    ).orEmpty()
+                )
                 ProviderMetadata.Person(-kotlin.math.abs(name.hashCode()).coerceAtLeast(1), name, character, profile)
             }
             else -> emptyList()
@@ -124,6 +132,22 @@ object XtreamMetadataFallback {
                 character = null,
                 profileUrl = null
             )
+        }
+    }
+
+    /** Accept provider-relative artwork as well as absolute HTTP(S) URLs. */
+    private fun resolveArtwork(provider: ProviderEntity, raw: String): String? {
+        val value = raw.trim().takeIf { it.isNotBlank() && !it.equals("null", true) } ?: return null
+        val absolute = runCatching { java.net.URI(value) }.getOrNull()
+        if (absolute != null && (absolute.scheme.equals("http", true) || absolute.scheme.equals("https", true)) && !absolute.host.isNullOrBlank()) {
+            return value
+        }
+        return runCatching {
+            java.net.URI(provider.baseUrl.trim().trimEnd('/') + "/").resolve(value).toString()
+        }.getOrNull()?.takeIf { resolved ->
+            runCatching { java.net.URI(resolved) }.getOrNull()?.let { uri ->
+                (uri.scheme.equals("http", true) || uri.scheme.equals("https", true)) && !uri.host.isNullOrBlank()
+            } == true
         }
     }
 
