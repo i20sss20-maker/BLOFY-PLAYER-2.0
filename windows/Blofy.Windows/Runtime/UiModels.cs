@@ -19,6 +19,13 @@ public sealed class RuntimeServices : IDisposable
     {
         Directory = directory; System.IO.Directory.CreateDirectory(directory);
         Vault = new SecretVault(directory); Users = new UserStore(directory, Vault);
+        // 0.2 stored the development UA in every provider. Upgrade it in place so an
+        // installed user gets the compatibility profile without deleting playlists or cache.
+        foreach (var provider in Users.Data.Providers.ToArray())
+        {
+            if (string.IsNullOrWhiteSpace(provider.UserAgent) || provider.UserAgent.StartsWith("BLOFY-PLAYER-Windows/", StringComparison.OrdinalIgnoreCase))
+                Users.Put(provider with { UserAgent = CompatibilityDefaults.UserAgent });
+        }
         Catalog = new CatalogStore(Path.Combine(directory, "catalog.sqlite"), Vault);
         Providers = new ProviderClient(); Portal = new PortalClient(endpoint);
     }
@@ -119,7 +126,9 @@ public sealed class Artwork : IDisposable
             try
             {
                 if (_cache.TryGetValue(url, out cached)) return cached;
-                using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.TryAddWithoutValidation("User-Agent", CompatibilityDefaults.UserAgent);
+                using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
                 if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength > 8_000_000) return null;
                 await using var stream = await response.Content.ReadAsStreamAsync(ct); using var output = new MemoryStream();
                 byte[] buffer = new byte[16384]; int count;
