@@ -30,6 +30,7 @@ jobs:
           gradle --no-daemon --max-workers=2 -PBLOFY_DISTRIBUTION=play -PBLOFY_ACTIVATION_BASE_URL=https://example.test lintDebug assembleDebug
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk > play-permissions.txt
           if grep -q REQUEST_INSTALL_PACKAGES play-permissions.txt; then echo 'Play APK contains the installer permission'; exit 1; fi
+          if ! grep -q POST_NOTIFICATIONS play-permissions.txt; then echo 'Play APK is missing the EPG reminder notification permission'; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
