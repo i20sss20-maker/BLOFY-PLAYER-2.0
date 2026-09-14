@@ -32,6 +32,25 @@ class FocusTextAdapter<T>(
         val oldItems = items.toList()
         val nextItems = newItems.toList()
         val keyOf = itemKey
+
+        items.clear()
+        items.addAll(nextItems)
+        focusedPosition = when {
+            previousKey != null && keyOf != null -> items.indexOfFirst { keyOf(it) == previousKey }
+            focusedPosition != RecyclerView.NO_POSITION && items.isNotEmpty() -> focusedPosition.coerceIn(0, items.lastIndex)
+            else -> RecyclerView.NO_POSITION
+        }
+        if (focusedPosition < 0) focusedPosition = RecyclerView.NO_POSITION
+        restorePending = listOwnedFocus && focusedPosition != RecyclerView.NO_POSITION
+
+        // DiffUtil is synchronous here. Running it for tens of thousands of channels can stall the
+        // Android TV UI thread long enough to make the remote feel frozen. Large catalog refreshes
+        // therefore use a bounded full refresh; RecyclerView still creates only visible rows.
+        if (maxOf(oldItems.size, nextItems.size) > LARGE_LIST_DIFF_THRESHOLD) {
+            notifyDataSetChanged()
+            return
+        }
+
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize(): Int = oldItems.size
             override fun getNewListSize(): Int = nextItems.size
@@ -45,16 +64,6 @@ class FocusTextAdapter<T>(
             override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
                 oldItems[oldItemPosition] == nextItems[newItemPosition]
         }, false)
-
-        items.clear()
-        items.addAll(nextItems)
-        focusedPosition = when {
-            previousKey != null && keyOf != null -> items.indexOfFirst { keyOf(it) == previousKey }
-            focusedPosition != RecyclerView.NO_POSITION && items.isNotEmpty() -> focusedPosition.coerceIn(0, items.lastIndex)
-            else -> RecyclerView.NO_POSITION
-        }
-        if (focusedPosition < 0) focusedPosition = RecyclerView.NO_POSITION
-        restorePending = listOwnedFocus && focusedPosition != RecyclerView.NO_POSITION
         diff.dispatchUpdatesTo(this)
     }
 
@@ -148,5 +157,6 @@ class FocusTextAdapter<T>(
 
     companion object {
         private val TEXT_IDLE = Color.rgb(232, 226, 239)
+        private const val LARGE_LIST_DIFF_THRESHOLD = 2_000
     }
 }
