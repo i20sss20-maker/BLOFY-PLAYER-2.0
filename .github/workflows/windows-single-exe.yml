@@ -1,0 +1,100 @@
+name: BLOFY Windows standalone EXE
+
+on:
+  push:
+    branches: [windows/native-desktop]
+    paths: ['.github/workflows/windows-single-exe.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: d4b6fc4626e4c2ddaa6aa587090339336ad8f017
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.109'
+      - name: Package the already verified UI milestone into one executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish windows/Blofy.Windows/Blofy.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -o publish
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone EXE compilation failed' }
+          New-Item -ItemType Directory -Force delivery,isolated,ui-evidence | Out-Null
+          Copy-Item publish/BLOFY.Player.Windows.exe isolated/BLOFY-Windows-UI-Review.exe
+          if ((Get-ChildItem isolated -File).Count -ne 1) { throw 'Isolated test folder must contain one EXE only' }
+          $exe = (Resolve-Path isolated/BLOFY-Windows-UI-Review.exe).Path
+          $evidence = (Resolve-Path ui-evidence).Path
+          $env:DOTNET_MULTILEVEL_LOOKUP = '0'
+          $process = Start-Process -FilePath $exe -WorkingDirectory (Resolve-Path isolated).Path -ArgumentList '--verify-ui',"--evidence-dir=$evidence" -PassThru
+          if (-not $process.WaitForExit(120000)) { $process.Kill($true); throw 'Standalone EXE verification timed out' }
+          if (Test-Path ui-evidence/verification.json) { Get-Content ui-evidence/verification.json }
+          if ($process.ExitCode -ne 0) { throw "Standalone EXE verification failed: $($process.ExitCode)" }
+          $report = Get-Content ui-evidence/verification.json -Raw | ConvertFrom-Json
+          if (-not $report.passed) { throw 'No passing verification report' }
+          Copy-Item $exe delivery/BLOFY-Windows-UI-Review.exe
+          Copy-Item ui-evidence/verification.json delivery/verification.json
+          $hash = (Get-FileHash delivery/BLOFY-Windows-UI-Review.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  BLOFY-Windows-UI-Review.exe" | Set-Content delivery/SHA256SUMS.txt -Encoding utf8
+          @{ sourceCommit = 'd4b6fc4626e4c2ddaa6aa587090339336ad8f017'; filename = 'BLOFY-Windows-UI-Review.exe'; bytes = (Get-Item $exe).Length; sha256 = $hash; standalone = $true; companionFilesInTestFolder = 0; passedChecks = $report.checks.Count; signed = $false; uiOnly = $true; playbackImplemented = $false; activationImplemented = $false } | ConvertTo-Json | Tee-Object -FilePath delivery/BUILDINFO.json
+      - name: Retain standalone executable
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: BLOFY-Windows-Standalone-EXE
+          path: delivery/
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain isolated test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: BLOFY-Windows-Standalone-EXE-Evidence
+          path: ui-evidence/
+          retention-days: 14
+          if-no-files-found: warn
+
+  deliver-unpublished-draft:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download the verified build from this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh run download '${{ github.run_id }}' --name BLOFY-Windows-Standalone-EXE --dir delivery
+      - name: Attach EXE to a draft only; do not publish or change latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd delivery
+          sha256sum --check SHA256SUMS.txt
+          cd ..
+          tag="windows-ui-exe-0.1.0-${{ github.run_id }}"
+          cat > notes.md <<'EOF'
+          # BLOFY Windows — EXE requested for UI review
+          This is an unpublished development build, NOT the complete Windows player and NOT a commercial release.
+          
+          نسخة مراجعة الواجهات فقط؛ لا تتضمن ربط السيرفرات أو التفعيل أو تشغيل الفيديو.
+          
+          One self-contained Windows x64 executable. Tested in a separate folder containing only the EXE. The original Android source and assets are unchanged. The executable is unsigned. See BUILDINFO.json, verification.json and SHA256SUMS.txt for exact evidence.
+          
+          Source: d4b6fc4626e4c2ddaa6aa587090339336ad8f017. Android parity has not yet been confirmed by a paired runtime comparison.
+          EOF
+          gh release create "$tag" delivery/BLOFY-Windows-UI-Review.exe delivery/SHA256SUMS.txt delivery/BUILDINFO.json delivery/verification.json --target d4b6fc4626e4c2ddaa6aa587090339336ad8f017 --title 'BLOFY Windows UI Review — Standalone EXE (draft)' --notes-file notes.md --draft --prerelease --latest=false
+          gh api "repos/$GH_REPO/releases?per_page=20" --jq ".[] | select(.tag_name == \"$tag\") | {id,tag_name,draft,prerelease,html_url,assets:[.assets[] | {id,name,size,digest,browser_download_url}]}" | tee delivery.json
+          echo 'Standalone EXE saved as an unpublished draft; no production release was published.' >> "$GITHUB_STEP_SUMMARY"
