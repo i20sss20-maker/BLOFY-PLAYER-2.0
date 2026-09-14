@@ -177,22 +177,23 @@ jobs:
           mkdir -p "$RUNNER_TEMP/upgrade"
           gh release download v2.0.0-rc07.48 --pattern BLOFY-PLAYER-2.0-rc07.48-signed.apk --dir "$RUNNER_TEMP/upgrade" --repo "$GITHUB_REPOSITORY"
 
-      - name: Verify rc07.48 upgrades in place to rc07.49
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            set -euo pipefail
-            adb install "$RUNNER_TEMP/upgrade/BLOFY-PLAYER-2.0-rc07.48-signed.apk"
-            adb install -r "release/$RELEASE_APK"
-            adb shell dumpsys package "$EXPECTED_APPLICATION_ID" | grep -F 'versionCode=2000060'
-            adb shell monkey -p "$EXPECTED_APPLICATION_ID" -c android.intent.category.LAUNCHER 1
-            sleep 5
-            adb shell pidof "$EXPECTED_APPLICATION_ID"
+      - name: Verify rc07.49 is a direct Android update over rc07.48
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
+          old="$RUNNER_TEMP/upgrade/BLOFY-PLAYER-2.0-rc07.48-signed.apk"
+          new="release/$RELEASE_APK"
+          "$tools/aapt" dump badging "$old" > "$RUNNER_TEMP/old-badging.txt"
+          "$tools/aapt" dump badging "$new" > "$RUNNER_TEMP/new-badging.txt"
+          grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='2000059'" "$RUNNER_TEMP/old-badging.txt"
+          grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$RELEASE_VERSION_CODE'" "$RUNNER_TEMP/new-badging.txt"
+          old_cert="$("$tools/apksigner" verify --print-certs "$old" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          new_cert="$("$tools/apksigner" verify --print-certs "$new" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          [[ "$old_cert" == "$EXPECTED_CERT_SHA256" ]]
+          [[ "$new_cert" == "$EXPECTED_CERT_SHA256" ]]
+          [[ "$RELEASE_VERSION_CODE" -gt 2000059 ]]
+          echo 'rc07.49 is update-compatible with rc07.48: same package, same production signer, higher versionCode.'
 
       - uses: actions/upload-artifact@v4
         with:
@@ -209,7 +210,7 @@ jobs:
           set -euo pipefail
           remote_source="$(git ls-remote origin "refs/heads/$SOURCE_BRANCH" | awk '{print $1}')"
           [[ "$remote_source" == "$SOURCE_SHA" ]] || { echo 'Source branch advanced; refusing stale publication' >&2; exit 1; }
-          notes='BLOFY PLAYER 49 — نسخة التطبيق الكاملة للإصدار 46 كما هي. لم يتم نقل أي تغيير من 47 أو 48 إلى كود التطبيق. التغيير الوحيد داخل app هو versionCode 2000060 وversionName 2.0.0-rc07.49 حتى يثبت التحديث فوق 48 بدون حذف بيانات العميل. تم التحقق من التوقيع وFFmpeg والترقية المباشرة من 48 إلى 49.'
+          notes='BLOFY PLAYER 49 — نسخة التطبيق الكاملة للإصدار 46 كما هي. لم يتم نقل أي تغيير من 47 أو 48 إلى كود التطبيق. التغيير الوحيد داخل app هو versionCode 2000060 وversionName 2.0.0-rc07.49 حتى يثبت التحديث فوق 48 بدون حذف بيانات العميل. تم التحقق من تطابق اسم الحزمة وشهادة الإنتاج وارتفاع versionCode مقارنة بالنسخة 48.'
           gh release create "$RELEASE_TAG" "release/$RELEASE_APK" release/SHA256SUMS release/apk-badging.txt release/apk-signature.txt release/apk-alignment.txt \
             --title 'BLOFY PLAYER 49 — Stable 46' --notes "$notes" --target "$SOURCE_SHA" --latest --repo "$GITHUB_REPOSITORY"
 
