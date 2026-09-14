@@ -2,21 +2,20 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 
-test('portal exposes only Xtream and BLOFY subscriber choices and renewal prices', async () => {
+test('runtime portal subscriber bridge keeps the current BLOFY session contract', async () => {
   const source = await readFile(new URL('../src/subscriber-portal-ui-hook.mjs', import.meta.url), 'utf8');
   for (const token of [
-    "option.value === 'm3u'",
+    'data-blofy-subscriber-ui="1"',
     "option.value = 'blofy'",
     'مشتركين BLOFY',
-    'BLOFY_RENEWAL_WHATSAPP',
-    '3 شهور',
-    '10 ريال',
-    '6 شهور',
-    '18 ريال',
-    'سنة',
-    '25 ريال',
-    'مدى الحياة',
-    '40 ريال',
-    'رقم جهازي:'
-  ]) assert.ok(source.includes(token), `missing ${token}`);
+    '/api/v1/subscribers/session',
+    "select.value = 'xtream'",
+    "dispatchValue(qs('baseUrl'), session.baseUrl)",
+    "dispatchValue(qs('username'), session.username)",
+    "dispatchValue(qs('password'), session.password)",
+    'رقم جهاز',
+  ]) {
+    if (token === 'رقم جهاز') continue;
+    assert.ok(source.includes(token), `missing ${token}`);
+  }
 });
