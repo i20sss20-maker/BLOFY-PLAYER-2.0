@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>BLOFY.Player.Windows</AssemblyName>
+    <RootNamespace>Blofy.Windows</RootNamespace>
+    <Version>0.1.0</Version>
+    <ApplicationTitle>BLOFY PLAYER</ApplicationTitle>
+    <Product>BLOFY PLAYER Windows UI Preview</Product>
+    <Description>Android-parity interface review build. Playback and activation are not implemented in this UI-only milestone.</Description>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="../../app/src/main/res/drawable-nodpi/blofy_logo.png" Link="Assets/blofy_logo.png" />
+  </ItemGroup>
+</Project>
