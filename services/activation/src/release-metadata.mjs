@@ -5,11 +5,11 @@ const VERSION_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const MAX_ANDROID_VERSION_CODE = 2_100_000_000;
 
 const DEFAULT_APP_RELEASE = Object.freeze({
-  versionCode: 2000058,
-  versionName: '2.0.0-rc07.47',
+  versionCode: 2000059,
+  versionName: '2.0.0-rc07.48',
   minSupportedVersionCode: 1,
-  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.47/BLOFY-PLAYER-2.0-rc07.47-signed.apk',
-  releaseNotes: 'BLOFY PLAYER 47 — تحسين البحث وعرض الأفلام والمسلسلات كبوسترات، تحسين استجابة الريموت وOK، تحسين تحميل بيانات وصور الطاقم عند توفرها من السيرفر، وتقليل الضغط الخلفي على أجهزة Android TV الضعيفة. يتضمن إصلاحات استقرار التحديث والقوائم مع الحفاظ على محركات التشغيل والثيم.'
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.48/BLOFY-PLAYER-2.0-rc07.48-signed.apk',
+  releaseNotes: 'BLOFY PLAYER 48 — إصدار الموقع فقط. تثبيت رقم الإصدار 2000059 والتحقق من شهادة الإنتاج وسلامة مكتبات FFmpeg المضمنة، مع بقاء التحديث المباشر فعالاً. يتضمن تحسينات البحث والريموت وصور الطاقم من الإصدار 47. الثيم ومحركات ومسارات التشغيل دون تغيير.'
 });
 
 export function sanitizeCommitSha(value) {
