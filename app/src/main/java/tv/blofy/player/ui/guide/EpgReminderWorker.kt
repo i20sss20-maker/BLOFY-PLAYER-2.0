@@ -25,6 +25,7 @@ class EpgReminderWorker(
             ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return Result.success()
 
+        val providerId = inputData.getString(KEY_PROVIDER_ID).orEmpty()
         val programTitle = inputData.getString(KEY_PROGRAM_TITLE)?.takeIf(String::isNotBlank) ?: return Result.failure()
         val channelName = inputData.getString(KEY_CHANNEL_NAME).orEmpty()
         val streamId = inputData.getString(KEY_STREAM_ID).orEmpty()
@@ -32,10 +33,11 @@ class EpgReminderWorker(
         val notificationId = inputData.getInt(KEY_NOTIFICATION_ID, programTitle.hashCode())
 
         ensureChannel()
-        val target = Intent(applicationContext, LiveGuideActivity::class.java).apply {
+        val target = Intent(applicationContext, EpgReminderOpenActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            if (streamId.isNotBlank()) putExtra(LiveGuideActivity.EXTRA_STREAM_ID, streamId)
-            if (!categoryId.isNullOrBlank()) putExtra(LiveGuideActivity.EXTRA_CATEGORY_ID, categoryId)
+            if (providerId.isNotBlank()) putExtra(EpgReminderOpenActivity.EXTRA_PROVIDER_ID, providerId)
+            if (streamId.isNotBlank()) putExtra(EpgReminderOpenActivity.EXTRA_STREAM_ID, streamId)
+            if (!categoryId.isNullOrBlank()) putExtra(EpgReminderOpenActivity.EXTRA_CATEGORY_ID, categoryId)
         }
         val pendingIntent = PendingIntent.getActivity(
             applicationContext,
@@ -75,6 +77,7 @@ class EpgReminderWorker(
 
     companion object {
         const val CHANNEL_ID = "blofy_epg_reminders"
+        const val KEY_PROVIDER_ID = "provider_id"
         const val KEY_PROGRAM_TITLE = "program_title"
         const val KEY_CHANNEL_NAME = "channel_name"
         const val KEY_STREAM_ID = "stream_id"
