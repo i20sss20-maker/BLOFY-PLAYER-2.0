@@ -59,7 +59,12 @@ class BlofyApp : Application() {
 
         CrashRecovery.install(this)
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
-        registerActivityLifecycleCallbacks(AppUpdateLifecycle())
+        // Google Play builds must not steer users to an external APK updater or external checkout
+        // for digital app functionality. Direct website builds retain those commercial flows.
+        if (!BuildConfig.PLAY_DISTRIBUTION) {
+            registerActivityLifecycleCallbacks(AppUpdateLifecycle())
+            registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
+        }
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
         registerActivityLifecycleCallbacks(KidsContentGuard())
@@ -67,7 +72,6 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(ProfileHomeLayoutLifecycle())
         registerActivityLifecycleCallbacks(CatalogSearchLifecycle())
         registerActivityLifecycleCallbacks(ProfileCloudLifecycle())
-        registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
         registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
 
