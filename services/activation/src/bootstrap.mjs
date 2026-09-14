@@ -1,3 +1,4 @@
+// Force Vercel function rebundle for BLOFY PLAYER rc07.49 release metadata.
 import './subscriber-proxy-hook.mjs';
 import './subscriber-portal-ui-hook.mjs';
 import './admin-session-hook.mjs';
