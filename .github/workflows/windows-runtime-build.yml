@@ -42,12 +42,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force evidence | Out-Null
-          dotnet run --project windows/Blofy.RuntimeTests/Blofy.RuntimeTests.csproj -c Release -- evidence/core-verification.json
+          dotnet run --project windows/Blofy.RuntimeTests/Blofy.RuntimeTests.csproj -c Release -warnaserror:NU1903 -- evidence/core-verification.json
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
       - name: Publish native Windows player
         shell: pwsh
         run: |
-          dotnet publish windows/Blofy.Windows/Blofy.Windows.csproj -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o publish/BLOFY-PLAYER
+          dotnet publish windows/Blofy.Windows/Blofy.Windows.csproj -c Release -r win-x64 --self-contained true -warnaserror:NU1903 -p:DebugType=None -p:DebugSymbols=false -o publish/BLOFY-PLAYER
           if ($LASTEXITCODE -ne 0) { throw 'Windows compilation failed' }
           if (-not (Test-Path publish/BLOFY-PLAYER/libvlc/win-x64/libvlc.dll)) { throw 'Native media engine missing from output' }
       - name: Test actual WPF flows and native video decoding
@@ -72,7 +72,7 @@ jobs:
           $packages = Join-Path $env:USERPROFILE '.nuget/packages'
           Get-ChildItem "$packages/qrcoder/1.8.0" -Filter LICENSE.txt -Recurse | Select-Object -First 1 | Copy-Item -Destination "$dest/licenses/QRCoder-MIT.txt"
           Get-ChildItem "$packages/microsoft.netcore.app.runtime.win-x64" -Filter '*NOTICES*' -Recurse | Select-Object -First 1 | Copy-Item -Destination "$dest/licenses/DotNet-Third-Party.txt"
-          @{ commit = '${{ github.sha }}'; version = '0.2.0'; signed = $false; uiOnly = $false; productionProviderTested = $false; fullAndroidParityVerified = $false } | ConvertTo-Json | Set-Content "$dest/BUILDINFO.json"
+          @{ commit = '${{ github.sha }}'; version = '0.3.0'; signed = $false; uiOnly = $false; productionPortalObserved = $true; productionProviderTested = $false; fullAndroidParityVerified = $false } | ConvertTo-Json | Set-Content "$dest/BUILDINFO.json"
       - name: Build per-user EXE installer
         shell: pwsh
         run: |
@@ -85,18 +85,18 @@ jobs:
         shell: pwsh
         run: |
           $destination = Join-Path $env:RUNNER_TEMP 'Blofy Installed Verification'
-          $setup = Start-Process './output/BLOFY-PLAYER-Windows-0.2.0-Setup.exe' -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$destination`"" -Wait -PassThru
+          $setup = Start-Process './output/BLOFY-PLAYER-Windows-0.3.0-Setup.exe' -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$destination`"" -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw 'Installer execution failed' }
           $process = Start-Process (Join-Path $destination 'BLOFY.Player.Windows.exe') -ArgumentList '--verify-runtime','--evidence-dir=evidence/installed' -PassThru
           if (-not $process.WaitForExit(180000)) { $process.Kill($true); throw 'Installed runtime verification timed out' }
           if (Test-Path evidence/installed/runtime-verification.json) { Get-Content evidence/installed/runtime-verification.json }
           if ($process.ExitCode -ne 0) { throw 'Installed player failed verification' }
-          $hash = (Get-FileHash output/BLOFY-PLAYER-Windows-0.2.0-Setup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  BLOFY-PLAYER-Windows-0.2.0-Setup.exe" | Set-Content output/SHA256SUMS.txt
+          $hash = (Get-FileHash output/BLOFY-PLAYER-Windows-0.3.0-Setup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  BLOFY-PLAYER-Windows-0.3.0-Setup.exe" | Set-Content output/SHA256SUMS.txt
           Copy-Item evidence/core-verification.json output/
           Copy-Item evidence/installed/runtime-verification.json output/
           Copy-Item publish/BLOFY-PLAYER/BUILDINFO.json output/
-          "Native playback and installed-copy checks passed. Real provider subscriptions and complete Android parity are not verified." >> $env:GITHUB_STEP_SUMMARY
+          "0.3.0 compatibility build passed native playback and installed-copy checks. Production portal responded successfully during the recent real-user test window; real provider credentials are not available to CI." >> $env:GITHUB_STEP_SUMMARY
       - name: Upload evidence even when verification fails
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
