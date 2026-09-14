@@ -1,0 +1,25 @@
+name: Windows source snapshot
+on:
+  push:
+    branches: [windows/native-desktop]
+    paths: [.github/workflows/windows-source-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Export tracked sources only
+        run: |
+          mkdir -p output
+          git archive --format=zip HEAD -o output/windows-source.zip
+          git archive --format=zip dc0b0c84d7dd5973e8d0426f16793f14b9b06417 app/src/main -o output/android-reference.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Windows-source-snapshot
+          path: output/
+          retention-days: 7
