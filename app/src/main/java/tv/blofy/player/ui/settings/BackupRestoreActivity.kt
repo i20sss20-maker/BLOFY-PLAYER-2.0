@@ -1,5 +1,6 @@
 package tv.blofy.player.ui.settings
 
+import android.app.AlertDialog
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
@@ -45,18 +46,14 @@ class BackupRestoreActivity : AppCompatActivity() {
     private val openBackup = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
         lifecycleScope.launch {
-            status.text = "جاري فحص واستعادة النسخة..."
+            status.text = "جاري فحص ملف النسخة..."
             runCatching {
-                val json = withContext(Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
                     contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                         ?: error("cannot_read_backup_file")
                 }
-                withContext(Dispatchers.IO) { LocalBackupManager.restoreJson(applicationContext, json) }
-            }.onSuccess { result ->
-                status.text = "تمت الاستعادة • ${result.categories} فئة • ${result.flags} مفضلة/قفل • ${result.watchStates} سجل مشاهدة • ${result.settings} إعداد"
-            }.onFailure {
-                status.text = backupError(it)
-            }
+            }.onSuccess(::confirmRestore)
+                .onFailure { status.text = backupError(it) }
         }
     }
 
@@ -107,6 +104,30 @@ class BackupRestoreActivity : AppCompatActivity() {
             openBackup.launch(arrayOf("application/json", "text/plain"))
         }, LinearLayout.LayoutParams(-1, dp(58)))
         setContentView(root)
+    }
+
+    private fun confirmRestore(json: String) {
+        if (isFinishing || isDestroyed) return
+        status.text = "الملف جاهز • أكد الاستعادة للمتابعة"
+        AlertDialog.Builder(this)
+            .setTitle("تأكيد الاستعادة")
+            .setMessage("سيتم استبدال المفضلة وسجل المشاهدة وترتيب الفئات وإعدادات BLOFY المحفوظة لهذا السيرفر. بيانات الدخول وPIN لن تتغير.")
+            .setPositiveButton("استعادة") { _, _ -> restore(json) }
+            .setNegativeButton("إلغاء") { _, _ -> status.text = "تم إلغاء الاستعادة" }
+            .show()
+    }
+
+    private fun restore(json: String) {
+        lifecycleScope.launch {
+            status.text = "جاري استعادة النسخة..."
+            runCatching {
+                withContext(Dispatchers.IO) { LocalBackupManager.restoreJson(applicationContext, json) }
+            }.onSuccess { result ->
+                status.text = "تمت الاستعادة • ${result.categories} فئة • ${result.flags} مفضلة/قفل • ${result.watchStates} سجل مشاهدة • ${result.settings} إعداد"
+            }.onFailure {
+                status.text = backupError(it)
+            }
+        }
     }
 
     private fun backupError(error: Throwable): String = when (error.message) {
