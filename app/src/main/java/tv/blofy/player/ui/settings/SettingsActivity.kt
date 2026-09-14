@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
@@ -31,7 +32,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.login.CatalogLoadingActivity
-import tv.blofy.player.ui.login.LoginActivity
+import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -121,69 +122,81 @@ class SettingsActivity : AppCompatActivity() {
         updateSyncStatus()
         page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)).apply { bottomMargin = dp(12) })
 
-        addSection(page, copy("الصورة والصوت", "Picture and sound"))
-        addCard(cycleSetting(getString(R.string.setting_aspect), RuntimeSettings.KEY_ASPECT,
-            arrayOf("fit", "zoom", "fill"),
-            arrayOf(getString(R.string.setting_aspect_fit), getString(R.string.setting_aspect_zoom), getString(R.string.setting_aspect_fill))))
-        addCard(cycleSetting(getString(R.string.setting_audio_output), RuntimeSettings.KEY_AUDIO_OUTPUT,
-            arrayOf("auto", "stereo"),
-            arrayOf(getString(R.string.setting_audio_auto), getString(R.string.setting_audio_stereo))))
-        addCard(actionCard(copy("جودة الصور والأداء", "Artwork and performance"), copy("وضوح البوسترات وخفة الواجهة", "Poster quality and a lighter interface")) {
-            startActivity(Intent(this, CommercialSettingsActivity::class.java))
-        })
-        addSection(page, getString(R.string.settings_subtitles))
-        addCard(cycleSetting(getString(R.string.setting_subtitle_language), RuntimeSettings.KEY_SUBTITLE_LANGUAGE,
-            arrayOf("ar", "auto", "off"),
-            arrayOf(getString(R.string.setting_subtitle_ar_first), getString(R.string.setting_auto), getString(R.string.setting_off))))
-        addCard(cycleSetting(getString(R.string.setting_subtitle_size), RuntimeSettings.KEY_SUBTITLE_SIZE,
-            arrayOf("small", "medium", "large"),
-            arrayOf(getString(R.string.setting_small), getString(R.string.setting_medium), getString(R.string.setting_large))))
-        addSection(page, copy("تجربة المشاهدة", "Watching preferences"))
-        addCard(cycleSetting(getString(R.string.setting_live_preview), RuntimeSettings.KEY_AUTOPLAY_LIVE,
-            arrayOf("on", "off"),
-            arrayOf(getString(R.string.setting_auto), getString(R.string.setting_manual))))
-        addCard(cycleSetting(getString(R.string.setting_resume), RuntimeSettings.KEY_RESUME_PROMPT,
-            arrayOf("on", "off"),
-            arrayOf(getString(R.string.setting_ask_me), getString(R.string.setting_play_directly))))
-        addCard(cycleSetting(getString(R.string.setting_next_episode), RuntimeSettings.KEY_AUTO_NEXT,
-            arrayOf("ask", "on", "off"),
-            arrayOf(getString(R.string.setting_ask_me), getString(R.string.setting_auto), getString(R.string.setting_off))))
-        addSection(page, copy("المظهر واللغة", "Appearance and language"))
+        addSection(page, copy("عام", "General"))
+        addCard(actionCard(getString(R.string.setting_app_language), currentLanguageLabel()) { chooseLanguage() })
         addCard(cycleSetting(getString(R.string.setting_motion), RuntimeSettings.KEY_MOTION,
             arrayOf("smooth", "reduced"),
             arrayOf(getString(R.string.setting_smooth), getString(R.string.setting_reduced))))
-        addCard(actionCard(getString(R.string.setting_app_language), currentLanguageLabel()) { chooseLanguage() })
-        addSection(page, copy("المكتبة والحساب", "Library and account"))
         addCard(actionCard(copy("باقتي", "My plan"), copy("مدة التفعيل والأجهزة المسموحة", "Activation period and allowed devices")) {
             startActivity(Intent(this, tv.blofy.player.ui.subscription.SubscriptionActivity::class.java))
         }.apply { tag = "blofy_subscription_entry" })
         addCard(actionCard(copy("حالة الاشتراك", "Subscription status"), copy("صلاحية المحتوى والاتصالات الحالية", "Content validity and active connections")) {
             startActivity(Intent(this, tv.blofy.player.ui.subscription.ConnectionStatusActivity::class.java))
         })
-        addCard(actionCard(getString(R.string.setting_playlists), getString(R.string.setting_playlists_subtitle)) {
-            startActivity(Intent(this, LoginActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            })
-        })
-        refreshCard = actionCard(getString(R.string.setting_refresh_content), syncSubtitle()) { refreshLibrary() }
-        addCard(refreshCard)
         addCard(actionCard(getString(R.string.account_title), getString(R.string.privacy_policy)) {
             startActivity(Intent(this, tv.blofy.player.ui.account.AccountActivity::class.java))
         })
-        addSection(page, copy("التطبيق", "App"))
+
+        addSection(page, copy("التشغيل", "Playback"))
+        addCard(cycleSetting(getString(R.string.setting_aspect), RuntimeSettings.KEY_ASPECT,
+            arrayOf("fit", "zoom", "fill"),
+            arrayOf(getString(R.string.setting_aspect_fit), getString(R.string.setting_aspect_zoom), getString(R.string.setting_aspect_fill))))
+        addCard(actionCard(copy("جودة الصور والأداء", "Artwork and performance"), copy("وضوح البوسترات وخفة الواجهة", "Poster quality and a lighter interface")) {
+            startActivity(Intent(this, CommercialSettingsActivity::class.java))
+        })
+
+        addSection(page, copy("البث المباشر", "Live TV"))
+        addCard(cycleSetting(getString(R.string.setting_live_preview), RuntimeSettings.KEY_AUTOPLAY_LIVE,
+            arrayOf("on", "off"),
+            arrayOf(getString(R.string.setting_auto), getString(R.string.setting_manual))))
+
+        addSection(page, copy("الأفلام والمسلسلات", "Movies and series"))
+        addCard(cycleSetting(getString(R.string.setting_resume), RuntimeSettings.KEY_RESUME_PROMPT,
+            arrayOf("on", "off"),
+            arrayOf(getString(R.string.setting_ask_me), getString(R.string.setting_play_directly))))
+        addCard(cycleSetting(getString(R.string.setting_next_episode), RuntimeSettings.KEY_AUTO_NEXT,
+            arrayOf("ask", "on", "off"),
+            arrayOf(getString(R.string.setting_ask_me), getString(R.string.setting_auto), getString(R.string.setting_off))))
+
+        addSection(page, copy("الترجمة والصوت", "Subtitles and audio"))
+        addCard(cycleSetting(getString(R.string.setting_audio_output), RuntimeSettings.KEY_AUDIO_OUTPUT,
+            arrayOf("auto", "stereo"),
+            arrayOf(getString(R.string.setting_audio_auto), getString(R.string.setting_audio_stereo))))
+        addCard(cycleSetting(getString(R.string.setting_subtitle_language), RuntimeSettings.KEY_SUBTITLE_LANGUAGE,
+            arrayOf("ar", "auto", "off"),
+            arrayOf(getString(R.string.setting_subtitle_ar_first), getString(R.string.setting_auto), getString(R.string.setting_off))))
+        addCard(cycleSetting(getString(R.string.setting_subtitle_size), RuntimeSettings.KEY_SUBTITLE_SIZE,
+            arrayOf("small", "medium", "large"),
+            arrayOf(getString(R.string.setting_small), getString(R.string.setting_medium), getString(R.string.setting_large))))
+
+        addSection(page, copy("القوائم والسيرفرات", "Playlists and servers"))
+        addCard(actionCard(copy("إدارة السيرفرات والقوائم", "Manage servers and playlists"), copy("تبديل، تعديل، مزامنة وحالة كل سيرفر", "Switch, edit, refresh and view each server status")) {
+            startActivity(Intent(this, ProviderManagerActivity::class.java))
+        })
+        refreshCard = actionCard(getString(R.string.setting_refresh_content), syncSubtitle()) { refreshLibrary() }
+        addCard(refreshCard)
+
+        addSection(page, copy("الحماية", "Security"))
+        addCard(actionCard(copy("الحماية الأبوية وPIN", "Parental control and PIN"), copy("تعيين أو تغيير رمز فتح المحتوى المقفل", "Set or change the PIN for locked content")) {
+            startActivity(Intent(this, ParentalSettingsActivity::class.java))
+        })
+
+        addSection(page, copy("التحديث", "Updates"))
         addCard(actionCard(getString(R.string.update_check), getString(R.string.update_check_hint)) {
             tv.blofy.player.core.update.AppUpdatePrompt.check(this, force = true)
         })
-        storageCard = actionCard(getString(R.string.setting_storage_local), getString(R.string.setting_storage_calculating)) { showStorageManager() }
-        addCard(storageCard)
-        addCard(actionCard(copy("حول BLOFY", "About BLOFY"), copy("الإصدار والمكتبة والمساحة", "Version, library and storage")) {
+
+        addSection(page, copy("حول التطبيق", "About app"))
+        addCard(actionCard(copy("تشخيص BLOFY", "BLOFY diagnostics"), copy("الجهاز والشبكة والمكتبة وتقرير الدعم", "Device, network, library and support report")) {
             startActivity(Intent(this, SystemStatusActivity::class.java))
         })
+        storageCard = actionCard(getString(R.string.setting_storage_local), getString(R.string.setting_storage_calculating)) { showStorageManager() }
+        addCard(storageCard)
         addCard(actionCard(getString(R.string.setting_restore), getString(R.string.setting_restore_subtitle)) { restoreDefaults() })
 
         linkFocus(back)
         page.addView(TextView(this).apply {
-            text = "BLOFY PLAYER 2.0"
+            text = "BLOFY PLAYER ${BuildConfig.VERSION_NAME}"
             BlofyTvDesign.applyCaption(this)
             letterSpacing = .08f
             gravity = Gravity.CENTER
