@@ -1,0 +1,115 @@
+name: BLOFY Windows functional build
+on:
+  push:
+    branches: [windows/native-desktop]
+    paths: ['windows/**', '.github/workflows/windows-runtime-build.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-runtime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify-package:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify Android and portal isolation
+        shell: pwsh
+        run: |
+          git diff --exit-code 4109e2aa3105a1e30765708483c09e5fa570760e HEAD -- app/ services/
+          if ($LASTEXITCODE -ne 0) { throw 'Android or production portal was modified' }
+          $logo = git hash-object app/src/main/res/drawable-nodpi/blofy_logo.png
+          if ($logo.Trim() -ne '8a84b6b7d65f494e13e26c687fe0a980a664e208') { throw 'Original logo changed' }
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.109'
+      - name: Create executable icon from the original logo
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          New-Item -ItemType Directory -Force windows/Blofy.Windows/Assets | Out-Null
+          $bmp = [System.Drawing.Bitmap]::new((Resolve-Path app/src/main/res/drawable-nodpi/blofy_logo.png))
+          $scaled = [System.Drawing.Bitmap]::new($bmp, 256, 256)
+          $icon = [System.Drawing.Icon]::FromHandle($scaled.GetHicon())
+          $stream = [IO.File]::Create((Join-Path (Get-Location) 'windows/Blofy.Windows/Assets/app.ico'))
+          $icon.Save($stream); $stream.Dispose(); $icon.Dispose(); $scaled.Dispose(); $bmp.Dispose()
+      - name: Core integration checks
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force evidence | Out-Null
+          dotnet run --project windows/Blofy.RuntimeTests/Blofy.RuntimeTests.csproj -c Release -- evidence/core-verification.json
+          if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+      - name: Publish native Windows player
+        shell: pwsh
+        run: |
+          dotnet publish windows/Blofy.Windows/Blofy.Windows.csproj -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o publish/BLOFY-PLAYER
+          if ($LASTEXITCODE -ne 0) { throw 'Windows compilation failed' }
+          if (-not (Test-Path publish/BLOFY-PLAYER/libvlc/win-x64/libvlc.dll)) { throw 'Native media engine missing from output' }
+      - name: Test actual WPF flows and native video decoding
+        shell: pwsh
+        run: |
+          $process = Start-Process './publish/BLOFY-PLAYER/BLOFY.Player.Windows.exe' -ArgumentList '--verify-runtime','--evidence-dir=evidence/runtime' -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill($true); throw 'Native runtime verification timed out' }
+          if (Test-Path evidence/runtime/runtime-verification.json) { Get-Content evidence/runtime/runtime-verification.json }
+          if ($process.ExitCode -ne 0) { throw "Runtime verification failed: $($process.ExitCode)" }
+          $report = Get-Content evidence/runtime/runtime-verification.json -Raw | ConvertFrom-Json
+          if (-not $report.passed) { throw 'Native runtime report did not pass' }
+      - name: Include third-party notices and build scope
+        shell: pwsh
+        run: |
+          $dest = 'publish/BLOFY-PLAYER'
+          Copy-Item windows/README.md "$dest/READ-ME.md"
+          Copy-Item windows/ANDROID_PARITY.md "$dest/ANDROID_PARITY.md"
+          Copy-Item windows/THIRD_PARTY_NOTICES.txt "$dest/THIRD_PARTY_NOTICES.txt"
+          New-Item -ItemType Directory -Force "$dest/licenses" | Out-Null
+          Copy-Item app/src/main/assets/open_source/ffmpeg/COPYING.LGPLv2.1 "$dest/licenses/LGPL-2.1.txt"
+          Copy-Item app/src/main/assets/open_source/androidx-media/LICENSE "$dest/licenses/Apache-2.0.txt"
+          $packages = Join-Path $env:USERPROFILE '.nuget/packages'
+          Get-ChildItem "$packages/qrcoder/1.8.0" -Filter LICENSE.txt -Recurse | Select-Object -First 1 | Copy-Item -Destination "$dest/licenses/QRCoder-MIT.txt"
+          Get-ChildItem "$packages/microsoft.netcore.app.runtime.win-x64" -Filter '*NOTICES*' -Recurse | Select-Object -First 1 | Copy-Item -Destination "$dest/licenses/DotNet-Third-Party.txt"
+          @{ commit = '${{ github.sha }}'; version = '0.2.0'; signed = $false; uiOnly = $false; productionProviderTested = $false; fullAndroidParityVerified = $false } | ConvertTo-Json | Set-Content "$dest/BUILDINFO.json"
+      - name: Build per-user EXE installer
+        shell: pwsh
+        run: |
+          $iscc = Get-ChildItem 'C:/Program Files (x86)' -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $iscc) { throw 'Inno Setup compiler is unavailable on this runner' }
+          New-Item -ItemType Directory -Force output | Out-Null
+          & $iscc "/DSourceDir=$((Resolve-Path publish/BLOFY-PLAYER).Path)" "/DOutputDir=$((Resolve-Path output).Path)" windows/installer/Blofy.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+      - name: Verify the installed copy, including its native dependencies
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'Blofy Installed Verification'
+          $setup = Start-Process './output/BLOFY-PLAYER-Windows-0.2.0-Setup.exe' -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$destination`"" -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw 'Installer execution failed' }
+          $process = Start-Process (Join-Path $destination 'BLOFY.Player.Windows.exe') -ArgumentList '--verify-runtime','--evidence-dir=evidence/installed' -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill($true); throw 'Installed runtime verification timed out' }
+          if (Test-Path evidence/installed/runtime-verification.json) { Get-Content evidence/installed/runtime-verification.json }
+          if ($process.ExitCode -ne 0) { throw 'Installed player failed verification' }
+          $hash = (Get-FileHash output/BLOFY-PLAYER-Windows-0.2.0-Setup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  BLOFY-PLAYER-Windows-0.2.0-Setup.exe" | Set-Content output/SHA256SUMS.txt
+          Copy-Item evidence/core-verification.json output/
+          Copy-Item evidence/installed/runtime-verification.json output/
+          Copy-Item publish/BLOFY-PLAYER/BUILDINFO.json output/
+          "Native playback and installed-copy checks passed. Real provider subscriptions and complete Android parity are not verified." >> $env:GITHUB_STEP_SUMMARY
+      - name: Upload evidence even when verification fails
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: BLOFY-Windows-Runtime-Evidence
+          path: evidence/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Upload tested installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: BLOFY-Windows-Functional-Installer
+          path: output/
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error

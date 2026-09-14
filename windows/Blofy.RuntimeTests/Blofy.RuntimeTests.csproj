@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+<ItemGroup><Compile Include="../Blofy.Windows/Runtime/Domain.cs" Link="Domain.cs"/><Compile Include="../Blofy.Windows/Runtime/Network.cs" Link="Network.cs"/><Compile Include="../Blofy.Windows/Runtime/Storage.cs" Link="Storage.cs"/><PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9"/><PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.9"/></ItemGroup>
+</Project>
