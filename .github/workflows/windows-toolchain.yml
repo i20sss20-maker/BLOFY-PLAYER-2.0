@@ -1,0 +1,48 @@
+name: Windows offline build tools
+on:
+  push:
+    branches: [windows/native-desktop]
+    paths: [.github/workflows/windows-toolchain.yml]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.109
+      - name: Restore desktop compilation dependencies
+        shell: bash
+        run: |
+          mkdir -p work output
+          cat > work/Tools.csproj <<'EOF'
+          <Project Sdk="Microsoft.NET.Sdk">
+          <PropertyGroup><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><EnableWindowsTargeting>true</EnableWindowsTargeting><RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>true</SelfContained></PropertyGroup>
+          <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App"/><PackageReference Include="LibVLCSharp.WPF" Version="3.10.1"/><PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1"/><PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9"/><PackageReference Include="QRCoder" Version="1.8.0"/><PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.9"/></ItemGroup>
+          </Project>
+          EOF
+          dotnet restore work/Tools.csproj
+          tar -C "$HOME/.nuget/packages" -czf output/nuget-packages.tar.gz .
+          sdkroot=$(dirname "$(readlink -f "$(command -v dotnet)")")
+          mkdir -p sdk
+          cp "$sdkroot/dotnet" sdk/
+          cp "$sdkroot/ThirdPartyNotices.txt" sdk/ || true
+          cp "$sdkroot/LICENSE.txt" sdk/ || true
+          mkdir -p sdk/sdk sdk/host/fxr sdk/shared/Microsoft.NETCore.App sdk/shared/Microsoft.AspNetCore.App sdk/packs
+          cp -a "$sdkroot/sdk/10.0.109" sdk/sdk/
+          cp -a "$sdkroot/host/fxr/10.0.9" sdk/host/fxr/
+          cp -a "$sdkroot/shared/Microsoft.NETCore.App/10.0.9" sdk/shared/Microsoft.NETCore.App/
+          cp -a "$sdkroot/shared/Microsoft.AspNetCore.App/10.0.9" sdk/shared/Microsoft.AspNetCore.App/
+          for folder in "$sdkroot"/packs/*; do
+            test -d "$folder/10.0.9" || continue
+            mkdir -p "sdk/packs/$(basename "$folder")"
+            cp -a "$folder/10.0.9" "sdk/packs/$(basename "$folder")/"
+          done
+          tar -C sdk -czf output/dotnet-sdk.tar.gz .
+          cd output && sha256sum *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Windows-offline-toolchain
+          path: output/
+          retention-days: 3
