@@ -8,11 +8,11 @@
     <Nullable>enable</Nullable>
     <AssemblyName>BLOFY.Player.Windows</AssemblyName>
     <RootNamespace>Blofy.Windows</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <ApplicationTitle>BLOFY PLAYER</ApplicationTitle>
     <ApplicationIcon Condition="Exists('Assets/app.ico')">Assets/app.ico</ApplicationIcon>
     <Product>BLOFY PLAYER Windows</Product>
-    <Description>BLOFY PLAYER Windows functional test build with native playback. Not a signed commercial release.</Description>
+    <Description>BLOFY PLAYER Windows compatibility test build with native playback. Not a signed commercial release.</Description>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
   <ItemGroup>
@@ -23,7 +23,7 @@
     <PackageReference Include="LibVLCSharp.WPF" Version="3.10.1"/>
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1"/>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9"/>
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.9"/>
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.13"/>
     <PackageReference Include="QRCoder" Version="1.8.0"/>
   </ItemGroup>
   <ItemGroup>
