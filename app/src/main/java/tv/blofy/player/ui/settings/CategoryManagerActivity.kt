@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -27,13 +28,14 @@ class CategoryManagerActivity : AppCompatActivity() {
     private var providerId: String? = null
     private var currentKind = "live"
     private var currentItems: List<CategoryEntity> = emptyList()
+    private val isTv by lazy { DeviceClass.isTv(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(34), dp(26), dp(34), dp(30))
+            setPadding(dp(if (isTv) 34 else 18), dp(if (isTv) 26 else 18), dp(if (isTv) 34 else 18), dp(24))
             background = AppCompatResources.getDrawable(this@CategoryManagerActivity, R.drawable.blofy_home_background)
         }
         root.addView(Button(this).apply {
@@ -43,7 +45,7 @@ class CategoryManagerActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(dp(110), dp(44)).apply { gravity = Gravity.LEFT; bottomMargin = dp(12) })
         root.addView(TextView(this).apply {
             text = "ترتيب الفئات"
-            textSize = 28f
+            textSize = if (isTv) 28f else 24f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.RIGHT
@@ -121,18 +123,23 @@ class CategoryManagerActivity : AppCompatActivity() {
             return
         }
         items.forEachIndexed { index, category ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(14), dp(8), dp(14), dp(8))
-                background = CinemaStyle.surface(this@CategoryManagerActivity)
-            }
-            val title = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            }
-            title.addView(TextView(this).apply {
+            list.addView(categoryCard(index, category), LinearLayout.LayoutParams(-1, if (isTv) dp(76) else LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(7)
+            })
+        }
+    }
+
+    private fun categoryCard(index: Int, category: CategoryEntity): LinearLayout = LinearLayout(this).apply {
+        orientation = if (isTv) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(14), dp(8), dp(14), dp(8))
+        background = CinemaStyle.surface(this@CategoryManagerActivity)
+
+        val title = LinearLayout(this@CategoryManagerActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            addView(TextView(this@CategoryManagerActivity).apply {
                 text = category.name
                 textSize = 15f
                 typeface = BlofyTvDesign.MediumTypeface
@@ -140,19 +147,36 @@ class CategoryManagerActivity : AppCompatActivity() {
                 gravity = Gravity.RIGHT
                 maxLines = 1
             })
-            title.addView(TextView(this).apply {
+            addView(TextView(this@CategoryManagerActivity).apply {
                 text = if (category.hidden) "مخفية" else "ظاهرة • ترتيب ${index + 1}"
                 textSize = 11.5f
                 setTextColor(if (category.hidden) 0xFFFFB0B8.toInt() else BlofyTvDesign.Mint)
                 gravity = Gravity.RIGHT
             })
-            row.addView(title, LinearLayout.LayoutParams(0, dp(58), 1f))
-            row.addView(smallButton(if (category.hidden) "إظهار" else "إخفاء") { toggleHidden(category) }, LinearLayout.LayoutParams(dp(86), dp(46)).apply { marginStart = dp(6) })
-            row.addView(smallButton("تثبيت") { move(index, 0) }, LinearLayout.LayoutParams(dp(82), dp(46)).apply { marginStart = dp(6) })
-            row.addView(smallButton("↑") { move(index, index - 1) }, LinearLayout.LayoutParams(dp(58), dp(46)).apply { marginStart = dp(6) })
-            row.addView(smallButton("↓") { move(index, index + 1) }, LinearLayout.LayoutParams(dp(58), dp(46)))
-            list.addView(row, LinearLayout.LayoutParams(-1, dp(76)).apply { bottomMargin = dp(7) })
         }
+        addView(title, if (isTv) LinearLayout.LayoutParams(0, dp(58), 1f) else LinearLayout.LayoutParams(-1, dp(54)))
+
+        val actions = LinearLayout(this@CategoryManagerActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            addView(smallButton(if (category.hidden) "إظهار" else "إخفاء") { toggleHidden(category) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
+                if (isTv) width = dp(86)
+                marginStart = dp(6)
+            })
+            addView(smallButton("تثبيت") { move(index, 0) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
+                if (isTv) width = dp(82)
+                marginStart = dp(6)
+            })
+            addView(smallButton("↑") { move(index, index - 1) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
+                if (isTv) width = dp(58)
+                marginStart = dp(6)
+            })
+            addView(smallButton("↓") { move(index, index + 1) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
+                if (isTv) width = dp(58)
+            })
+        }
+        addView(actions, if (isTv) LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(54)) else LinearLayout.LayoutParams(-1, dp(54)))
     }
 
     private fun toggleHidden(category: CategoryEntity) {
@@ -169,7 +193,7 @@ class CategoryManagerActivity : AppCompatActivity() {
         val reordered = currentItems.toMutableList().apply {
             val item = removeAt(from)
             add(target, item)
-        }.mapIndexed { index, category -> category.copy(orderIndex = index * 10) }
+        }.mapIndexed { position, category -> category.copy(orderIndex = position * 10) }
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
                 BlofyDatabase.get(applicationContext).dao().upsertCategories(reordered)
