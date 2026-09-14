@@ -8,6 +8,8 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using System.Windows.Interop;
+using System.Runtime.InteropServices;
 
 namespace Blofy.Windows.Runtime;
 
@@ -45,22 +47,26 @@ internal static class RuntimeVerification
             await window.LoadMoreAsync();
             Check(window.CurrentCatalog!.Entries.Count == 151, "Catalog scrolling can load beyond the first page");
             var movie = window.CurrentCatalog.Entries[0]; await window.OpenAsync(movie);
+            await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ApplicationIdle);
             Check(window.Route == "details" && window.Playback.Current == null, "Opening movie details does not autoplay");
             Check(MainWindow.Visuals<TextBlock>(window).Any(t => t.Text.Contains("Fixture Actor")), "Provider cast metadata reaches the actual details screen");
             Capture(window, Path.Combine(evidence, "runtime-details.png"));
             var play = MainWindow.Visuals<Button>(window).First(b => b.Content is string s && s.Contains("شاهد الآن"));
             play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             await Wait(() => window.IsFullscreen && window.Playback.Player is { IsPlaying: true, VoutCount: > 0 }, "Movie button decodes H.264 video through native LibVLC in fullscreen");
+            await Wait(() => window.Playback.Video.IsLoaded && window.Playback.Player!.Hwnd != IntPtr.Zero && IsChild(new WindowInteropHelper(window).Handle, window.Playback.Player.Hwnd), "Native movie output is attached inside the BLOFY window rather than a separate VLC window");
             Check(window.Playback.Player!.TakeSnapshot(0, Path.Combine(evidence, "decoded-movie.png"), 0, 0), "Native player produces a decoded-frame snapshot");
             await Wait(() => File.Exists(Path.Combine(evidence, "decoded-movie.png")), "Decoded video frame is written to the evidence directory");
             await Task.Delay(1100); await window.ExitFullscreen();
             Check((await services.Catalog.WatchState(provider, movie))?.Position > 0, "Exiting playback persists the measured native playback position");
             await window.Navigate("series"); var series = window.CurrentCatalog!.Entries[0]; await window.OpenAsync(series);
+            await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ApplicationIdle);
             Check(window.Route == "details", "Series API details open in the real Windows UI");
             var episodeButton = MainWindow.Visuals<Button>(window).First(b => b.Content is string s && s.Contains("الحلقة المحددة")); episodeButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             await Wait(() => window.Playback.Current is { Kind: "episode", Id: "101" } && window.Playback.Player is { IsPlaying: true, VoutCount: > 0 }, "Series button selects the numerically first episode and decodes its video");
             await window.ExitFullscreen(); await window.Navigate("live");
             await Wait(() => window.Playback.Current?.Kind == "live" && window.Playback.Player is { IsPlaying: true, VoutCount: > 0 }, "First channel starts a native MPEG-TS preview after categories load");
+            Check(window.Playback.Player!.Hwnd != IntPtr.Zero && IsChild(new WindowInteropHelper(window).Handle, window.Playback.Player.Hwnd), "Native live output is attached to the BLOFY preview surface");
             var player = window.Playback.Player; var stream = window.Playback.Current;
             window.EnterFullscreen(); await Task.Delay(350);
             Check(window.IsFullscreen && ReferenceEquals(player, window.Playback.Player) && window.Playback.Current == stream, "Live preview-to-fullscreen reuses one media player and stream session");
@@ -87,6 +93,10 @@ internal static class RuntimeVerification
             await window.ShutdownForVerification(); Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); try { Directory.Delete(data, true); } catch { }
         }
     }
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsChild(IntPtr parent, IntPtr child);
+
     private static void Capture(Window window, string path)
     {
         window.UpdateLayout(); var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32); bitmap.Render(window);
