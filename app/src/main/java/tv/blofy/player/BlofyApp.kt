@@ -14,6 +14,7 @@ import tv.blofy.player.core.commercial.CrashRecovery
 import tv.blofy.player.core.profile.KidsContentGuard
 import tv.blofy.player.core.remote.QuickMenuInterceptor
 import tv.blofy.player.core.update.AppUpdateLifecycle
+import tv.blofy.player.data.CatalogEnrichmentLifecycle
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.ResumeStateWriter
 import tv.blofy.player.data.local.BlofyDatabase
@@ -74,10 +75,10 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(ProfileCloudLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
         registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
+        registerActivityLifecycleCallbacks(CatalogEnrichmentLifecycle())
 
-        // Stability rule: Application-level callbacks must never own Login controls or start
-        // catalog/database maintenance on Activity resume. Login remains self-contained, while
-        // catalog refresh/preparation stays explicit (first import / user refresh / worker).
+        // Startup remains local and lightweight. Remote commercial configuration refresh is IO-only,
+        // while catalog enrichment starts only after Home is already visible and interactive.
         applicationScope.launch {
             runCatching { CommercialConfigRepository.refresh(this@BlofyApp) }
         }
