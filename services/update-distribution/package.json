@@ -1,0 +1,10 @@
+{
+  "name": "blofy-update-distribution",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs"
+  }
+}
