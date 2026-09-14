@@ -1,7 +1,7 @@
 name: BLOFY Google Play preparation checks
 on:
   pull_request:
-    branches: [rc07-runtime-recovery]
+    branches: [rc07-runtime-recovery, release/rc0750-railway-updater]
     paths: ['app/**', '.github/workflows/play-preparation-ci.yml']
   workflow_dispatch:
 permissions:
