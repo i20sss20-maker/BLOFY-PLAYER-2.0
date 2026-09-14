@@ -173,6 +173,9 @@ class SettingsActivity : AppCompatActivity() {
         addCard(actionCard(copy("إدارة السيرفرات والقوائم", "Manage servers and playlists"), copy("تبديل، تعديل، مزامنة وحالة كل سيرفر", "Switch, edit, refresh and view each server status")) {
             startActivity(Intent(this, ProviderManagerActivity::class.java))
         })
+        addCard(actionCard(copy("ترتيب وإخفاء الفئات", "Category order and visibility"), copy("البث والأفلام والمسلسلات لكل سيرفر", "Live, movies and series categories for the active server")) {
+            startActivity(Intent(this, CategoryManagerActivity::class.java))
+        })
         refreshCard = actionCard(getString(R.string.setting_refresh_content), syncSubtitle()) { refreshLibrary() }
         addCard(refreshCard)
 
