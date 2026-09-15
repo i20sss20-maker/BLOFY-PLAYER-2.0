@@ -4,6 +4,7 @@ on:
   push:
     branches: [infra/azure-staging]
     paths:
+      - '.github/workflows/azure-student-images.yml'
       - 'infra/azure/managed/image-build.trigger'
       - 'services/activation/**'
       - 'services/update-distribution/**'
@@ -12,6 +13,10 @@ on:
 permissions:
   contents: read
   id-token: write
+
+concurrency:
+  group: blofy-azure-student-images
+  cancel-in-progress: true
 
 env:
   AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
@@ -77,22 +82,63 @@ jobs:
           az containerapp update --resource-group "$AZURE_RG" --name blofy-releases --image "$REG/blofy/releases:$TAG" --only-show-errors >/dev/null
           az containerapp update --resource-group "$AZURE_RG" --name blofy-gateway --image "$REG/blofy/gateway:$TAG" --only-show-errors >/dev/null
 
+      - name: Report deployed revision state
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in blofy-activation blofy-releases blofy-gateway; do
+            echo "=== $app ==="
+            az containerapp show --resource-group "$AZURE_RG" --name "$app" \
+              --query '{latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,fqdn:properties.configuration.ingress.fqdn}' \
+              -o json || true
+            az containerapp revision list --resource-group "$AZURE_RG" --name "$app" \
+              --query '[].{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,replicas:properties.replicas}' \
+              -o table || true
+          done
+
       - name: Verify public gateway
         shell: bash
         run: |
           set -euo pipefail
+
+          dump_diagnostics() {
+            echo '--- BLOFY Azure diagnostics ---'
+            for app in blofy-activation blofy-releases blofy-gateway; do
+              echo "=== $app revision state ==="
+              az containerapp show --resource-group "$AZURE_RG" --name "$app" \
+                --query '{latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,fqdn:properties.configuration.ingress.fqdn}' \
+                -o json || true
+              az containerapp revision list --resource-group "$AZURE_RG" --name "$app" \
+                --query '[].{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,replicas:properties.replicas}' \
+                -o table || true
+              echo "=== $app recent console logs ==="
+              timeout 30s az containerapp logs show --resource-group "$AZURE_RG" --name "$app" --type console --tail 80 2>&1 || true
+            done
+          }
+
           FQDN="$(az containerapp show --resource-group "$AZURE_RG" --name blofy-gateway --query properties.configuration.ingress.fqdn -o tsv)"
           test -n "$FQDN"
           BASE="https://$FQDN"
+          echo "Gateway URL: $BASE"
+
+          ready=false
           for attempt in $(seq 1 36); do
-            if curl -fsS --max-time 10 "$BASE/health" >/tmp/blofy-health.json 2>/dev/null; then
+            code="$(curl -sS --max-time 10 -o /tmp/blofy-health.json -w '%{http_code}' "$BASE/health" || true)"
+            if [ "$code" = '200' ]; then
+              ready=true
               break
             fi
+            echo "health attempt $attempt/36 -> HTTP ${code:-curl-error}"
             sleep 5
-            if [ "$attempt" -eq 36 ]; then
-              echo 'Gateway health did not become ready in time.' >&2
-              exit 1
-            fi
           done
+
+          if [ "$ready" != true ]; then
+            echo 'Gateway health did not become ready in time.' >&2
+            [ -s /tmp/blofy-health.json ] && { echo 'Last health response:'; cat /tmp/blofy-health.json; echo; } || true
+            dump_diagnostics
+            exit 1
+          fi
+
           curl -fsS --max-time 10 "$BASE/release.json" >/tmp/blofy-release.json
+          curl -fsS --max-time 10 "$BASE/" >/tmp/blofy-home.html
           echo "BLOFY Azure gateway healthy: $BASE"
