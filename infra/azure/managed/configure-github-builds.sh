@@ -63,12 +63,33 @@ az role assignment create \
   --scope "$ACR_ID" \
   --only-show-errors >/dev/null 2>&1 || true
 
-SUBJECT="repo:${REPO_SLUG}:ref:refs/heads/${BRANCH}"
-if ! az identity federated-credential show \
+# This repository uses GitHub's immutable OIDC subject identifiers. Build the Azure
+# federated subject from the canonical owner/repository IDs so it exactly matches
+# the `sub` claim emitted by GitHub Actions.
+REPO_OWNER="$(gh api "repos/$REPO_SLUG" --jq '.owner.login')"
+OWNER_ID="$(gh api "repos/$REPO_SLUG" --jq '.owner.id')"
+REPO_NAME="$(gh api "repos/$REPO_SLUG" --jq '.name')"
+REPO_ID="$(gh api "repos/$REPO_SLUG" --jq '.id')"
+SUBJECT="repo:${REPO_OWNER}@${OWNER_ID}/${REPO_NAME}@${REPO_ID}:ref:refs/heads/${BRANCH}"
+CURRENT_SUBJECT="$(az identity federated-credential show \
   --resource-group "$RG" \
   --identity-name "$IDENTITY_NAME" \
-  --name "$FEDERATED_NAME" >/dev/null 2>&1; then
+  --name "$FEDERATED_NAME" \
+  --query subject -o tsv 2>/dev/null || true)"
+
+if [ -z "$CURRENT_SUBJECT" ]; then
+  printf 'Creating GitHub federated credential...\n'
   az identity federated-credential create \
+    --resource-group "$RG" \
+    --identity-name "$IDENTITY_NAME" \
+    --name "$FEDERATED_NAME" \
+    --issuer 'https://token.actions.githubusercontent.com' \
+    --subject "$SUBJECT" \
+    --audiences 'api://AzureADTokenExchange' \
+    --only-show-errors >/dev/null
+elif [ "$CURRENT_SUBJECT" != "$SUBJECT" ]; then
+  printf 'Updating GitHub federated credential to immutable repository IDs...\n'
+  az identity federated-credential update \
     --resource-group "$RG" \
     --identity-name "$IDENTITY_NAME" \
     --name "$FEDERATED_NAME" \
@@ -78,6 +99,7 @@ if ! az identity federated-credential show \
     --only-show-errors >/dev/null
 fi
 
+printf 'OIDC subject: %s\n' "$SUBJECT"
 printf 'Saving non-secret Azure IDs as GitHub Actions variables...\n'
 gh variable set AZURE_CLIENT_ID --repo "$REPO_SLUG" --body "$CLIENT_ID"
 gh variable set AZURE_TENANT_ID --repo "$REPO_SLUG" --body "$TENANT_ID"
