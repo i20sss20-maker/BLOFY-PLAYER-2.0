@@ -2,9 +2,14 @@
     encode zstd gzip
 
     header {
-        X-Content-Type-Options nosniff
-        X-Frame-Options DENY
-        Referrer-Policy no-referrer
+        # Start with a short HSTS window while Azure staging is evaluated. The BLOFY custom-domain
+        # profile upgrades this to one year after every required subdomain is HTTPS-ready.
+        Strict-Transport-Security "max-age=86400"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        Cross-Origin-Opener-Policy "same-origin"
         -Server
     }
 
