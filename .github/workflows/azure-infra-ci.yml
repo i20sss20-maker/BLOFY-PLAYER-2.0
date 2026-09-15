@@ -1,0 +1,60 @@
+name: BLOFY Azure Infrastructure CI
+
+on:
+  push:
+    branches: [infra/azure-staging]
+    paths:
+      - 'infra/azure/**'
+      - '.github/workflows/azure-infra-ci.yml'
+  pull_request:
+    paths:
+      - 'infra/azure/**'
+      - '.github/workflows/azure-infra-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Bicep syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          az bicep install
+          az bicep build --file infra/azure/main.bicep --stdout >/tmp/blofy-azure-arm.json
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/blofy-azure-arm.json', encoding='utf-8'))
+          assert p.get('$schema')
+          assert p.get('resources')
+          print('Bicep compiled:', len(p['resources']), 'resources')
+          PY
+
+      - name: Validate Docker Compose expansion
+        shell: bash
+        env:
+          AZURE_FQDN: blofy-ci.example.test
+          POSTGRES_DB: blofy
+          POSTGRES_USER: blofy
+          POSTGRES_PASSWORD: ci-only-password
+          BLOFY_ADMIN_TOKEN: ci-only-admin-token-long-enough-123456
+          BLOFY_PLAYLIST_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          BLOFY_TRIAL_DAYS: '7'
+        run: |
+          set -euo pipefail
+          docker compose -f infra/azure/docker-compose.yml config >/tmp/blofy-compose.yml
+          grep -Fq 'activation:' /tmp/blofy-compose.yml
+          grep -Fq 'postgres:' /tmp/blofy-compose.yml
+          grep -Fq 'caddy:' /tmp/blofy-compose.yml
+
+      - name: Check shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh -n infra/azure/init-env.sh
+          sh -n infra/azure/deploy.sh
