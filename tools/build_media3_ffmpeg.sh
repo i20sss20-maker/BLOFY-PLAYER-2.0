@@ -2,6 +2,10 @@
 set -euo pipefail
 
 # Temporary release-only CI wrapper: run the exact rc07.46 FFmpeg builder.
+# Pull-request checkouts are shallow, so fetch only the pinned tag when it is missing.
+if ! git rev-parse --verify --quiet refs/tags/v2.0.0-rc07.46 >/dev/null; then
+  git fetch --depth=1 origin refs/tags/v2.0.0-rc07.46:refs/tags/v2.0.0-rc07.46
+fi
 original="$RUNNER_TEMP/build_media3_ffmpeg-rc0746.sh"
 git show v2.0.0-rc07.46:tools/build_media3_ffmpeg.sh > "$original"
 chmod +x "$original"

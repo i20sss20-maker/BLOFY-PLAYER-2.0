@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.commercial.CommercialConfigRepository
 import tv.blofy.player.core.commercial.CrashRecovery
+import tv.blofy.player.core.identity.ActivationStartupRegistration
 import tv.blofy.player.core.profile.KidsContentGuard
 import tv.blofy.player.core.remote.QuickMenuInterceptor
 import tv.blofy.player.core.update.AppUpdateLifecycle
@@ -21,11 +22,15 @@ import tv.blofy.player.ui.catalog.CatalogPageMemory
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
+import tv.blofy.player.ui.login.StartupEntryLifecycle
+import tv.blofy.player.ui.player.LiveChannelOverlayLifecycle
+import tv.blofy.player.ui.player.PlayerReturnNavigationLifecycle
 import tv.blofy.player.ui.profile.ProfileCloudLifecycle
 import tv.blofy.player.ui.profile.ProfileHomeLayoutLifecycle
 import tv.blofy.player.ui.profile.ProfileSwitcherLifecycle
 import tv.blofy.player.ui.profile.ProfileUxLifecycle
 import tv.blofy.player.ui.search.CatalogSearchLifecycle
+import tv.blofy.player.ui.search.ScopedSearchRedirectLifecycle
 import tv.blofy.player.ui.settings.RuntimeSettingsLifecycle
 import tv.blofy.player.ui.subscription.SubscriptionEntryLifecycle
 
@@ -49,28 +54,50 @@ class BlofyApp : Application() {
         super.onCreate()
         current = this
 
+        // SettingsActivity stores the user's explicit language choice here. Reconcile AppCompat's
+        // process locale from that durable value on every cold start instead of treating an empty
+        // locale list as English and accidentally resetting a previously selected language.
         val settings = getSharedPreferences("blofy_player_settings", MODE_PRIVATE)
-        if (AppCompatDelegate.getApplicationLocales().isEmpty) {
-            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
-            if (!settings.contains("app_language_tag")) {
-                settings.edit().putString("app_language_tag", "en").putString("app_language", "English").apply()
-            }
+        val storedTag = settings.getString("app_language_tag", null)?.trim().orEmpty()
+        val resolvedTag = storedTag.ifBlank { "en" }
+        val currentTags = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+        if (currentTags != resolvedTag) {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(resolvedTag))
+        }
+        if (storedTag.isBlank()) {
+            settings.edit()
+                .putString("app_language_tag", "en")
+                .putString("app_language", "English")
+                .apply()
         }
 
         CrashRecovery.install(this)
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
         registerActivityLifecycleCallbacks(tv.blofy.player.core.identity.ActivationLeaseLifecycle())
+        registerActivityLifecycleCallbacks(StartupEntryLifecycle())
+        // Record the source screen before the Live overlay wraps the Player window. Playback keeps
+        // its existing BACK/HUD handling; this callback only restores the recorded source on finish.
+        registerActivityLifecycleCallbacks(PlayerReturnNavigationLifecycle())
+        registerActivityLifecycleCallbacks(LiveChannelOverlayLifecycle())
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
         registerActivityLifecycleCallbacks(KidsContentGuard())
         registerActivityLifecycleCallbacks(ProfileUxLifecycle())
         registerActivityLifecycleCallbacks(ProfileHomeLayoutLifecycle())
+        registerActivityLifecycleCallbacks(ScopedSearchRedirectLifecycle())
         registerActivityLifecycleCallbacks(CatalogSearchLifecycle())
         registerActivityLifecycleCallbacks(ProfileCloudLifecycle())
         registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
         registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
+
+        // Startup network work stays asynchronous. A fresh identity is registered immediately so
+        // the Device ID / pairing code shown on Login is already known by the server. Existing
+        // entitlement states do not re-register here.
+        applicationScope.launch {
+            ActivationStartupRegistration.registerIfNeeded(this@BlofyApp)
+        }
 
         // Stability rule: Application-level callbacks must never own Login controls or start
         // catalog/database maintenance on Activity resume. Login remains self-contained, while

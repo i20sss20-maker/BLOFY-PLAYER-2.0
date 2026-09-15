@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
+import tv.blofy.player.ui.home.HomeActivity
 
 class SplashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,12 +52,17 @@ class SplashActivity : AppCompatActivity() {
         root.addView(statusView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { topMargin = dp(8) })
         setContentView(root)
 
-        // Startup must never wait for Room, migrations, catalog recovery or the network.
-        // The login screen is interactive first; all data work happens after the UI is visible.
+        // Startup still never waits for Room, migrations, catalog recovery or the network.
+        // A successful Home visit leaves a tiny synchronous hint so returning users can skip Login.
         lifecycleScope.launch {
             delay(MINIMUM_SPLASH_MS)
             if (isFinishing || isDestroyed) return@launch
-            startActivity(Intent(this@SplashActivity, LoginActivity::class.java))
+            val destination = if (StartupEntryState.shouldOpenHome(this@SplashActivity)) {
+                HomeActivity::class.java
+            } else {
+                LoginActivity::class.java
+            }
+            startActivity(Intent(this@SplashActivity, destination))
             finish()
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
         }

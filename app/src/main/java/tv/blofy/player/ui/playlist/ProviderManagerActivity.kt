@@ -23,11 +23,11 @@ import kotlinx.coroutines.withTimeout
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
-import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationRemoteClient
-import tv.blofy.player.core.identity.PortalRefreshFeedback
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalRefreshFailure
+import tv.blofy.player.core.identity.PortalRefreshFeedback
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
@@ -35,6 +35,8 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
+import java.text.DateFormat
+import java.util.Date
 import java.util.UUID
 
 class ProviderManagerActivity : AppCompatActivity() {
@@ -45,6 +47,8 @@ class ProviderManagerActivity : AppCompatActivity() {
     private lateinit var websiteRefreshButton: Button
     private var refreshingFromWebsite = false
     private var changingProvider = false
+    private var summaryGeneration = 0
+    private val summaryViews = linkedMapOf<String, TextView>()
     private val focusButtons = linkedMapOf<String, Button>()
     private val isTv by lazy { DeviceClass.isTv(this) }
 
@@ -53,7 +57,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(58), dp(34), dp(58), dp(34))
+            setPadding(dp(if (isTv) 58 else 18), dp(if (isTv) 34 else 18), dp(if (isTv) 58 else 18), dp(if (isTv) 34 else 22))
             background = AppCompatResources.getDrawable(this@ProviderManagerActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -79,7 +83,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(TextView(this).apply {
             text = "اتصل مباشرة بالسيرفر المحفوظ أو عدّل بياناته"
-            textSize = 16f
+            textSize = if (isTv) 16f else 14f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.RIGHT
@@ -94,12 +98,12 @@ class ProviderManagerActivity : AppCompatActivity() {
             setPadding(dp(14), 0, dp(14), 0)
             background = BlofyTvDesign.badge(dp(14).toFloat())
         }
-        root.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
-            topMargin = dp(14); bottomMargin = dp(18)
+        root.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (isTv) 44 else 52)).apply {
+            topMargin = dp(14); bottomMargin = dp(14)
         })
 
         val actions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (isTv) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.RIGHT
             clipChildren = false
@@ -110,15 +114,23 @@ class ProviderManagerActivity : AppCompatActivity() {
         addButton = actionButton("add", "+  Xtream") {
             startActivity(Intent(this, PlaylistActivity::class.java).putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true))
         }
-        actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(310), dp(64)).apply { marginStart = dp(12) })
-        actions.addView(addButton, LinearLayout.LayoutParams(dp(270), dp(64)))
-        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(70)).apply {
-            bottomMargin = dp(18); gravity = Gravity.RIGHT
-        })
+        if (isTv) {
+            actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(310), dp(64)).apply { marginStart = dp(12) })
+            actions.addView(addButton, LinearLayout.LayoutParams(dp(270), dp(64)))
+            root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(70)).apply {
+                bottomMargin = dp(18); gravity = Gravity.RIGHT
+            })
+        } else {
+            actions.addView(subscriberButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)).apply { bottomMargin = dp(8) })
+            actions.addView(addButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)))
+            root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(16)
+            })
+        }
 
         root.addView(TextView(this).apply {
             text = "السيرفرات المحفوظة"
-            textSize = 20f
+            textSize = if (isTv) 20f else 18f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
@@ -139,7 +151,6 @@ class ProviderManagerActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                // Rendering labels does not require decrypting every saved provider on TV hardware.
                 val dao = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
                 dao.allProvidersStored().collect { render(it) }
             } catch (cancelled: CancellationException) {
@@ -200,6 +211,8 @@ class ProviderManagerActivity : AppCompatActivity() {
     private fun render(allItems: List<ProviderEntity>) {
         val items = tv.blofy.player.core.identity.PortalSyncBook.visible(this, allItems)
             .filter { it.providerType.equals("xtream", true) || isBlofySubscriber(it) }
+        val generation = ++summaryGeneration
+        summaryViews.clear()
         focusButtons.keys.filter { it !in setOf("add", "subscriber", "website_refresh") }.toList().forEach { focusButtons.remove(it) }
         list.removeAllViews()
         if (items.isEmpty()) {
@@ -219,10 +232,10 @@ class ProviderManagerActivity : AppCompatActivity() {
 
         items.forEach { provider ->
             val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
+                orientation = if (isTv) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(18), dp(10), dp(18), dp(10))
+                setPadding(dp(if (isTv) 18 else 14), dp(9), dp(if (isTv) 18 else 14), dp(9))
                 background = if (provider.enabled) BlofyTvDesign.surface(dp(20).toFloat(), true) else BlofyTvDesign.surface(dp(20).toFloat(), false)
                 clipChildren = false
             }
@@ -238,6 +251,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                 typeface = Typeface.create("sans-serif", Typeface.BOLD)
                 gravity = Gravity.RIGHT
                 setTextColor(Color.WHITE)
+                maxLines = 1
             })
             info.addView(TextView(this).apply {
                 text = buildString {
@@ -250,16 +264,82 @@ class ProviderManagerActivity : AppCompatActivity() {
                 gravity = Gravity.RIGHT
                 setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
             })
-            row.addView(info, LinearLayout.LayoutParams(0, dp(66), 1f))
+            val summary = TextView(this).apply {
+                text = "قراءة حالة المكتبة..."
+                textSize = 11.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                gravity = Gravity.RIGHT
+                maxLines = if (isTv) 1 else 2
+                setTextColor(BlofyTvDesign.TextMuted)
+            }
+            info.addView(summary)
+            summaryViews[provider.id] = summary
+            row.addView(info, if (isTv) LinearLayout.LayoutParams(0, dp(76), 1f)
+                else LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(82)))
 
-            row.addView(actionButton("${provider.id}:connect", "▶  اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(dp(140), dp(56)).apply { marginStart = dp(8) })
-            row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(dp(116), dp(56)).apply { marginStart = dp(8) })
-            row.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(dp(120), dp(56)).apply { marginStart = dp(8) })
-            row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(dp(104), dp(56)))
-            list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(90)).apply { bottomMargin = dp(9) })
+            if (isTv) {
+                row.addView(actionButton("${provider.id}:connect", "▶  اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(dp(140), dp(56)).apply { marginStart = dp(8) })
+                row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(dp(116), dp(56)).apply { marginStart = dp(8) })
+                row.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(dp(120), dp(56)).apply { marginStart = dp(8) })
+                row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(dp(104), dp(56)))
+            } else {
+                val rowActions = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutDirection = View.LAYOUT_DIRECTION_RTL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                rowActions.addView(actionButton("${provider.id}:connect", "اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(0, dp(50), 1.25f).apply { marginStart = dp(5) })
+                rowActions.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                rowActions.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                rowActions.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(0, dp(50), .85f))
+                row.addView(rowActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)))
+            }
+            list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (isTv) dp(100) else LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(9)
+            })
         }
+        loadLocalSummaries(items, generation)
         restoreFocus()
     }
+
+    private fun loadLocalSummaries(items: List<ProviderEntity>, generation: Int) {
+        lifecycleScope.launch {
+            val summaries = try {
+                withContext(Dispatchers.IO) {
+                    val dao = BlofyDatabase.get(applicationContext).dao()
+                    items.map { provider ->
+                        ProviderSummary(
+                            id = provider.id,
+                            live = dao.catalogCountAll(provider.id, "live"),
+                            movies = dao.catalogCountAll(provider.id, "movie"),
+                            series = dao.catalogCountAll(provider.id, "series"),
+                            ready = CatalogSyncState.isEntryReady(applicationContext, provider.id),
+                            lastUpdatedAt = CatalogSyncState.lastUpdatedAt(applicationContext, provider.id)
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
+            }
+            if (generation != summaryGeneration || isFinishing || isDestroyed) return@launch
+            if (summaries.isEmpty()) {
+                summaryViews.values.forEach { it.text = "تعذر قراءة ملخص المكتبة" }
+                return@launch
+            }
+            summaries.forEach { summary ->
+                summaryViews[summary.id]?.text = buildString {
+                    append(if (summary.ready) "جاهز" else "يحتاج تحديث")
+                    append("  •  ${summary.live} قناة  •  ${summary.movies} فيلم  •  ${summary.series} مسلسل")
+                    if (summary.lastUpdatedAt > 0L) append("  •  ${formatShortTime(summary.lastUpdatedAt)}")
+                }
+            }
+        }
+    }
+
+    private fun formatShortTime(value: Long): String =
+        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(value))
 
     private fun restoreFocus() {
         if (!isTv || refreshingFromWebsite || changingProvider) return
@@ -363,7 +443,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         id = View.generateViewId()
         text = label
         isAllCaps = false
-        textSize = 14f
+        textSize = if (isTv) 14f else 12.5f
         typeface = BlofyTvDesign.BodyTypeface
         setTextColor(Color.WHITE)
         stateListAnimator = null
@@ -376,6 +456,15 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private data class ProviderSummary(
+        val id: String,
+        val live: Int,
+        val movies: Int,
+        val series: Int,
+        val ready: Boolean,
+        val lastUpdatedAt: Long
+    )
 
     companion object { private const val SCREEN_KEY = "provider_manager" }
 }

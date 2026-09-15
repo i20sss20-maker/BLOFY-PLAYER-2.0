@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
@@ -11,6 +12,7 @@
         <activity android:name=".ui.subscription.ConnectionStatusActivity" android:exported="false" />
         <activity android:name=".ui.subscription.SubscriptionActivity" android:exported="false" />
         <activity android:name=".ui.guide.LiveGuideActivity" android:exported="false" />
+        <activity android:name=".ui.guide.EpgReminderOpenActivity" android:exported="false" />
         <activity android:name=".ui.quick.QuickMenuActivity" android:exported="false" />
         <activity android:name=".ui.profile.CloudSyncActivity" android:exported="false" />
         <activity android:name=".ui.profile.HomePersonalizationActivity" android:exported="false" />
@@ -28,6 +30,9 @@
         <activity android:name=".ui.library.LibraryActivity" android:exported="false" />
         <activity android:name=".ui.search.SearchActivity" android:exported="false" />
         <activity android:name=".ui.settings.CommercialSettingsActivity" android:exported="false" />
+        <activity android:name=".ui.settings.BackupRestoreActivity" android:exported="false" />
+        <activity android:name=".ui.settings.CategoryManagerActivity" android:exported="false" />
+        <activity android:name=".ui.settings.ParentalSettingsActivity" android:exported="false" />
         <activity android:name=".ui.settings.SystemStatusActivity" android:exported="false" />
         <activity android:name=".ui.settings.SettingsActivity" android:exported="false" />
         <activity android:name=".ui.series.EpisodesActivity" android:exported="false" />
