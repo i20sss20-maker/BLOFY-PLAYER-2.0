@@ -1,10 +1,7 @@
-targetScope = 'subscription'
-
-@description('Azure resource group used only for BLOFY staging.')
-param resourceGroupName string = 'rg-blofy-staging'
+targetScope = 'resourceGroup'
 
 @description('Start near Saudi Arabia. If the student VM SKU has no quota here, use westeurope.')
-param location string = 'uaenorth'
+param location string = resourceGroup().location
 
 param adminUsername string = 'blofyadmin'
 
@@ -23,20 +20,13 @@ param dnsLabelPrefix string
 @description('Restrict this to your current public IP/CIDR after first setup when possible.')
 param sshSourceCidr string = '0.0.0.0/0'
 
-resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
-  name: resourceGroupName
+resource nsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
+  name: 'nsg-blofy-staging'
   location: location
   tags: {
     app: 'BLOFY PLAYER'
     environment: 'staging'
-    owner: 'blofy'
   }
-}
-
-resource nsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
-  scope: rg
-  name: 'nsg-blofy-staging'
-  location: location
   properties: {
     securityRules: [
       {
@@ -83,9 +73,12 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
 }
 
 resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
-  scope: rg
   name: 'vnet-blofy-staging'
   location: location
+  tags: {
+    app: 'BLOFY PLAYER'
+    environment: 'staging'
+  }
   properties: {
     addressSpace: {
       addressPrefixes: [
@@ -107,9 +100,12 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
 }
 
 resource publicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
-  scope: rg
   name: 'pip-blofy-staging'
   location: location
+  tags: {
+    app: 'BLOFY PLAYER'
+    environment: 'staging'
+  }
   sku: {
     name: 'Standard'
   }
@@ -122,9 +118,12 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
 }
 
 resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
-  scope: rg
   name: 'nic-blofy-staging'
   location: location
+  tags: {
+    app: 'BLOFY PLAYER'
+    environment: 'staging'
+  }
   properties: {
     ipConfigurations: [
       {
@@ -146,9 +145,12 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
 var cloudInit = replace(loadTextContent('cloud-init.yml'), '__ADMIN_USERNAME__', adminUsername)
 
 resource vm 'Microsoft.Compute/virtualMachines@2024-11-01' = {
-  scope: rg
   name: 'vm-blofy-staging'
   location: location
+  tags: {
+    app: 'BLOFY PLAYER'
+    environment: 'staging'
+  }
   identity: {
     type: 'SystemAssigned'
   }
@@ -210,5 +212,5 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-11-01' = {
 output publicIpAddress string = publicIp.properties.ipAddress
 output fqdn string = publicIp.properties.dnsSettings.fqdn
 output sshCommand string = 'ssh ${adminUsername}@${publicIp.properties.dnsSettings.fqdn}'
-output resourceGroup string = rg.name
+output resourceGroup string = resourceGroup().name
 output vmName string = vm.name
