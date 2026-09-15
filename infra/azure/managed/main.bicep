@@ -158,6 +158,7 @@ resource environmentResource 'Microsoft.App/managedEnvironments@2026-01-01' = {
   location: location
   tags: tags
   properties: {
+    publicNetworkAccess: 'Enabled'
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
@@ -436,12 +437,12 @@ resource gateway 'Microsoft.App/containerApps@2026-01-01' = {
   properties: {
     managedEnvironmentId: environmentResource.id
     configuration: {
-      activeRevisionsMode: 'Single'
+      activeRevisionsMode: 'Multiple'
       ingress: {
         external: true
         allowInsecure: false
         targetPort: 8080
-        transport: 'http'
+        transport: 'auto'
       }
       registries: acrRegistry
     }
