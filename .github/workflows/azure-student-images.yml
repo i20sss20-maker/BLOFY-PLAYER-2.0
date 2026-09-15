@@ -1,0 +1,98 @@
+name: BLOFY Azure Student Images
+
+on:
+  push:
+    branches: [infra/azure-staging]
+    paths:
+      - 'infra/azure/managed/image-build.trigger'
+      - 'services/activation/**'
+      - 'services/update-distribution/**'
+      - 'infra/azure/managed/gateway/**'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve Azure Container Registry
+        id: azure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$AZURE_RG"
+          ACR="$(az acr list --resource-group "$AZURE_RG" --query '[0].name' -o tsv)"
+          test -n "$ACR"
+          LOGIN_SERVER="$(az acr show --name "$ACR" --query loginServer -o tsv)"
+          echo "acr=$ACR" >> "$GITHUB_OUTPUT"
+          echo "login_server=$LOGIN_SERVER" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to ACR without ACR Tasks
+        shell: bash
+        run: |
+          set -euo pipefail
+          az acr login --name '${{ steps.azure.outputs.acr }}'
+
+      - name: Build and push BLOFY images
+        shell: bash
+        run: |
+          set -euo pipefail
+          REG='${{ steps.azure.outputs.login_server }}'
+          TAG='${{ steps.azure.outputs.tag }}'
+
+          docker build -t "$REG/blofy/activation:$TAG" -f services/activation/Dockerfile services/activation
+          docker push "$REG/blofy/activation:$TAG"
+
+          docker build -t "$REG/blofy/releases:$TAG" -f services/update-distribution/Dockerfile services/update-distribution
+          docker push "$REG/blofy/releases:$TAG"
+
+          docker build -t "$REG/blofy/gateway:$TAG" -f infra/azure/managed/gateway/Dockerfile infra/azure/managed/gateway
+          docker push "$REG/blofy/gateway:$TAG"
+
+      - name: Deploy images to existing Container Apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          REG='${{ steps.azure.outputs.login_server }}'
+          TAG='${{ steps.azure.outputs.tag }}'
+
+          az containerapp update --resource-group "$AZURE_RG" --name blofy-activation --image "$REG/blofy/activation:$TAG" --only-show-errors >/dev/null
+          az containerapp update --resource-group "$AZURE_RG" --name blofy-releases --image "$REG/blofy/releases:$TAG" --only-show-errors >/dev/null
+          az containerapp update --resource-group "$AZURE_RG" --name blofy-gateway --image "$REG/blofy/gateway:$TAG" --only-show-errors >/dev/null
+
+      - name: Verify public gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          FQDN="$(az containerapp show --resource-group "$AZURE_RG" --name blofy-gateway --query properties.configuration.ingress.fqdn -o tsv)"
+          test -n "$FQDN"
+          BASE="https://$FQDN"
+          for attempt in $(seq 1 36); do
+            if curl -fsS --max-time 10 "$BASE/health" >/tmp/blofy-health.json 2>/dev/null; then
+              break
+            fi
+            sleep 5
+            if [ "$attempt" -eq 36 ]; then
+              echo 'Gateway health did not become ready in time.' >&2
+              exit 1
+            fi
+          done
+          curl -fsS --max-time 10 "$BASE/release.json" >/tmp/blofy-release.json
+          echo "BLOFY Azure gateway healthy: $BASE"
