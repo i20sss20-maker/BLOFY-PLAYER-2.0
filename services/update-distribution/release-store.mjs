@@ -65,6 +65,10 @@ function initialState() {
   return { activeVersionCode: DEFAULT_RELEASE.versionCode, releases: [cleanRelease(DEFAULT_RELEASE, 'public')] };
 }
 
+function cloneState(value = state) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 async function ensureTable() {
   await pool.query(`
     create table if not exists blofy_release_store (
@@ -84,54 +88,61 @@ async function persist(snapshot) {
   );
 }
 
-async function save() {
-  const snapshot = JSON.parse(JSON.stringify(state));
-  writeChain = writeChain.then(() => persist(snapshot));
-  await writeChain;
+async function save(nextState = state) {
+  const snapshot = cloneState(nextState);
+  const operation = writeChain.then(() => persist(snapshot));
+  writeChain = operation.catch(() => undefined);
+  await operation;
+  state = snapshot;
 }
 
 function seedRc0750Once() {
+  let changed = false;
   const existing = state.releases.find((r) => r.versionCode === RC0750_RELEASE.versionCode);
   if (existing) {
-    if (existing.stage !== 'public') existing.stage = 'public';
-    return false;
+    if (existing.stage !== 'public') {
+      existing.stage = 'public';
+      changed = true;
+    }
+  } else {
+    state.releases.push(cleanRelease(RC0750_RELEASE, 'public'));
+    changed = true;
   }
-  state.releases.push(cleanRelease(RC0750_RELEASE, 'public'));
+
   state.releases.sort((a, b) => b.versionCode - a.versionCode);
-  state.activeVersionCode = RC0750_RELEASE.versionCode;
-  return true;
+  const active = state.releases.find((r) => r.versionCode === state.activeVersionCode && r.stage === 'public');
+  if (!active || active.versionCode < RC0750_RELEASE.versionCode) {
+    state.activeVersionCode = RC0750_RELEASE.versionCode;
+    changed = true;
+  }
+  return changed;
 }
 
 export async function initReleaseStore() {
   await ensureTable();
   let needsSave = false;
-  try {
-    const result = await pool.query('select state from blofy_release_store where id = 1');
-    if (!result.rowCount) {
-      state = initialState();
-      needsSave = true;
-    } else {
-      const raw = result.rows[0].state;
-      const requested = Number(raw.activeVersionCode);
-      const releases = Array.isArray(raw.releases)
-        ? raw.releases.map((item) => cleanRelease(item, 'public'))
-        : [];
-      if (!releases.length) throw new Error('empty_release_store');
-      let active = releases.find((r) => r.versionCode === requested && r.stage === 'public');
-      if (!active) {
-        active = releases.find((r) => r.stage === 'public') || releases[0];
-        if (active.stage !== 'public') active.stage = 'public';
-        needsSave = true;
-      }
-      state = {
-        activeVersionCode: active.versionCode,
-        releases: releases.sort((a, b) => b.versionCode - a.versionCode)
-      };
-    }
-  } catch (error) {
-    console.error('Release store load failed:', error?.message || error);
+  const result = await pool.query('select state from blofy_release_store where id = 1');
+
+  if (!result.rowCount) {
     state = initialState();
     needsSave = true;
+  } else {
+    const raw = result.rows[0].state;
+    const requested = Number(raw.activeVersionCode);
+    const releases = Array.isArray(raw.releases)
+      ? raw.releases.map((item) => cleanRelease(item, 'public'))
+      : [];
+    if (!releases.length) throw new Error('empty_release_store');
+    let active = releases.find((r) => r.versionCode === requested && r.stage === 'public');
+    if (!active) {
+      active = releases.find((r) => r.stage === 'public');
+      if (!active) throw new Error('no_public_release');
+      needsSave = true;
+    }
+    state = {
+      activeVersionCode: active.versionCode,
+      releases: releases.sort((a, b) => b.versionCode - a.versionCode)
+    };
   }
 
   if (seedRc0750Once()) needsSave = true;
@@ -151,44 +162,48 @@ export function listReleases() {
 }
 
 export async function upsertRelease(raw) {
+  const next = cloneState();
   const requestedCode = Number(raw.versionCode);
-  const existing = state.releases.find((r) => r.versionCode === requestedCode);
+  const existing = next.releases.find((r) => r.versionCode === requestedCode);
   const release = cleanRelease({ ...raw, stage: existing?.stage || 'draft' }, existing?.stage || 'draft');
-  state.releases = state.releases.filter((r) => r.versionCode !== release.versionCode);
-  state.releases.push(release);
-  state.releases.sort((a, b) => b.versionCode - a.versionCode);
-  await save();
+  next.releases = next.releases.filter((r) => r.versionCode !== release.versionCode);
+  next.releases.push(release);
+  next.releases.sort((a, b) => b.versionCode - a.versionCode);
+  await save(next);
   return { ...release };
 }
 
 export async function promoteRelease(versionCode) {
+  const next = cloneState();
   const code = Number(versionCode);
-  const release = state.releases.find((r) => r.versionCode === code);
+  const release = next.releases.find((r) => r.versionCode === code);
   if (!release) throw new Error('release_not_found');
   if (release.stage === 'draft') release.stage = 'qa';
   else if (release.stage === 'qa') release.stage = 'public';
   else throw new Error('release_already_public');
-  await save();
+  await save(next);
   return { ...release };
 }
 
 export async function activateRelease(versionCode) {
+  const next = cloneState();
   const code = Number(versionCode);
-  const release = state.releases.find((r) => r.versionCode === code);
+  const release = next.releases.find((r) => r.versionCode === code);
   if (!release) throw new Error('release_not_found');
   if (release.stage !== 'public') throw new Error('release_must_be_public_before_activation');
-  state.activeVersionCode = code;
-  await save();
+  next.activeVersionCode = code;
+  await save(next);
   return getActiveRelease();
 }
 
 export async function deleteRelease(versionCode) {
+  const next = cloneState();
   const code = Number(versionCode);
-  if (code === state.activeVersionCode) throw new Error('cannot_delete_active_release');
-  const before = state.releases.length;
-  state.releases = state.releases.filter((r) => r.versionCode !== code);
-  if (state.releases.length === before) throw new Error('release_not_found');
-  await save();
+  if (code === next.activeVersionCode) throw new Error('cannot_delete_active_release');
+  const before = next.releases.length;
+  next.releases = next.releases.filter((r) => r.versionCode !== code);
+  if (next.releases.length === before) throw new Error('release_not_found');
+  await save(next);
 }
 
 export async function closeReleaseStore() {
