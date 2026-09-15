@@ -1,0 +1,16 @@
+{
+  "name": "blofy-update-distribution",
+  "private": true,
+  "version": "3.0.0-azure",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs && node --check admin-panel.mjs && node --check release-store.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.13.3"
+  }
+}
