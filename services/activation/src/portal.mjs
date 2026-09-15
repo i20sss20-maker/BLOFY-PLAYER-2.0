@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { authenticatePortalDevice } from './portal-pending-auth.mjs';
 
 function keyFromEnv() {
   const raw = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
@@ -166,8 +167,8 @@ export function createPortalHandlers({
   async function authenticate(req, body) {
     const deviceId = cleanText(body.deviceId, 64);
     const activationCode = cleanText(body.activationCode, 16);
-    const device = await authorizedDevice(deviceId, activationCode, req);
-    return device ? { deviceId, activationCode } : null;
+    const auth = await authenticatePortalDevice({ pool, authorizedDevice, deviceId, activationCode, req });
+    return auth ? { deviceId: auth.deviceId, activationCode: auth.activationCode } : null;
   }
 
   async function list(req, res) {
