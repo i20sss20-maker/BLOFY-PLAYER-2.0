@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { publishApprovedRc0747 } from './approved-release-rc0747.mjs';
+import { publishApprovedRc0749 } from './approved-release-rc0749.mjs';
 
 // One explicit owner-approved publication. Never follow GitHub "latest" automatically.
 export const APPROVED_RC0746 = Object.freeze({
@@ -16,6 +17,12 @@ export const RC0746_PUBLICATION_ACTION = 'publish_rc0746_20260914';
 const previousUrl = 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.45/BLOFY-PLAYER-2.0-rc07.45-signed.apk';
 const shouldPublishRc0747 = environment => environment === 'production' && process.env.VERCEL === '1';
 
+async function publishApprovedSuccessors(client, environment) {
+  if (!shouldPublishRc0747(environment)) return;
+  await publishApprovedRc0747(client, environment);
+  await publishApprovedRc0749(client, environment);
+}
+
 /**
  * Publish rc07.46 only when production is still exactly on the observed rc07.45
  * primary. A later administrator selection wins permanently. Audit and selection
@@ -27,7 +34,7 @@ export async function publishApprovedRc0746(client, environment = process.env.VE
   const state = (await client.query('SELECT * FROM app_release_selection WHERE singleton=TRUE FOR UPDATE')).rows[0];
   const done = await client.query('SELECT 1 FROM app_release_audit WHERE action=$1 LIMIT 1', [RC0746_PUBLICATION_ACTION]);
   if (done.rows.length) {
-    if (shouldPublishRc0747(environment)) await publishApprovedRc0747(client, environment);
+    await publishApprovedSuccessors(client, environment);
     return 'already-recorded';
   }
 
@@ -80,6 +87,6 @@ export async function publishApprovedRc0746(client, environment = process.env.VE
 
   await client.query('UPDATE app_release_selection SET primary_id=$1,revision=revision+1 WHERE singleton=TRUE', [target.id]);
   const outcome = await record('published', target.id);
-  if (shouldPublishRc0747(environment)) await publishApprovedRc0747(client, environment);
+  await publishApprovedSuccessors(client, environment);
   return outcome;
 }
