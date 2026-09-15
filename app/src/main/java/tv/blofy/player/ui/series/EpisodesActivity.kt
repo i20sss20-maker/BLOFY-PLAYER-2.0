@@ -63,11 +63,11 @@ class EpisodesActivity : AppCompatActivity() {
         }
         root.addView(TextView(this).apply {
             text = seriesName.ifBlank { "الحلقات" }
-            textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
+            textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.RIGHT
             setPadding(dp(8), 0, 0, dp(4))
         })
         status = TextView(this).apply {
-            text = "جاري تحميل الحلقات..."; textSize = 14f; setTextColor(SOFT); gravity = Gravity.RIGHT
+            text = "جاري تحميل الحلقات..."; textSize = 14f; setTextColor(PURPLE_SOFT); gravity = Gravity.RIGHT
             setPadding(dp(8), 0, 0, dp(12))
         }
         root.addView(status)
@@ -75,16 +75,16 @@ class EpisodesActivity : AppCompatActivity() {
         root.addView(retryButton, LinearLayout.LayoutParams(dp(250), dp(64)).apply { bottomMargin = dp(10); gravity = Gravity.RIGHT })
 
         val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_LTR }
-        episodeList = RecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@EpisodesActivity); itemAnimator = null; setHasFixedSize(true)
-            setPadding(dp(8), dp(8), dp(8), dp(8)); background = panelBackground()
-        }
         seasonList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@EpisodesActivity); itemAnimator = null; setHasFixedSize(true)
-            setPadding(dp(8), dp(8), dp(8), dp(8)); background = panelBackground()
+            setPadding(dp(8), dp(8), dp(8), dp(8)); background = panelBackground(true)
         }
-        body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(18) })
-        body.addView(seasonList, LinearLayout.LayoutParams(dp(260), LinearLayout.LayoutParams.MATCH_PARENT))
+        episodeList = RecyclerView(this).apply {
+            layoutManager = LinearLayoutManager(this@EpisodesActivity); itemAnimator = null; setHasFixedSize(true)
+            setPadding(dp(8), dp(8), dp(8), dp(8)); background = panelBackground(false)
+        }
+        body.addView(seasonList, LinearLayout.LayoutParams(dp(260), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(18) })
+        body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
@@ -120,11 +120,11 @@ class EpisodesActivity : AppCompatActivity() {
     private fun installTvFocusBridge() {
         if (!DeviceClass.isTv(this)) return
         seasonList.setOnKeyListener { _, keyCode, event ->
-            if (event.action != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_LEFT) return@setOnKeyListener false
+            if (event.action != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return@setOnKeyListener false
             focusEpisodeList()
         }
         episodeList.setOnKeyListener { _, keyCode, event ->
-            if (event.action != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return@setOnKeyListener false
+            if (event.action != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_LEFT) return@setOnKeyListener false
             focusSelectedSeason()
         }
     }
@@ -154,9 +154,7 @@ class EpisodesActivity : AppCompatActivity() {
     private suspend fun syncEpisodes(provider: ProviderEntity) {
         if (syncInProgress) return
         syncInProgress = true; loadState = EpisodeLoadState.LOADING; retryButton.visibility = View.GONE; updateStatus()
-        val result = runCatching {
-            withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncSeriesEpisodes(provider, seriesId) }
-        }
+        val result = runCatching { withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncSeriesEpisodes(provider, seriesId) } }
         result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
         syncInProgress = false
         loadState = result.fold(
@@ -184,10 +182,7 @@ class EpisodesActivity : AppCompatActivity() {
     }
 
     private suspend fun refreshWatchProgress() {
-        if (allEpisodes.isEmpty()) {
-            watchProgress.clear()
-            return
-        }
+        if (allEpisodes.isEmpty()) { watchProgress.clear(); return }
         val dao = BlofyDatabase.get(applicationContext).dao()
         val states = dao.watchStates(providerId).associateBy { it.contentKey }
         watchProgress.clear()
@@ -204,11 +199,7 @@ class EpisodesActivity : AppCompatActivity() {
 
     private fun episodeLabel(e: EpisodeEntity): String {
         val progress = watchProgress[e.key] ?: 0
-        val suffix = when {
-            progress >= 100 -> "  ✓ تمت المشاهدة"
-            progress > 0 -> "  •  استئناف $progress%"
-            else -> ""
-        }
+        val suffix = when { progress >= 100 -> "  ✓ تمت المشاهدة"; progress > 0 -> "  •  استئناف $progress%"; else -> "" }
         return "الحلقة ${e.episode}  •  ${e.title}$suffix"
     }
 
@@ -274,12 +265,18 @@ class EpisodesActivity : AppCompatActivity() {
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused); view.animate().scaleX(if (focused) 1.03f else 1f).scaleY(if (focused) 1.03f else 1f).setDuration(90).start() }
+        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(TEXT_PRIMARY); background = buttonBackground(false)
+        setOnFocusChangeListener { view, focused ->
+            setTextColor(if (focused) Color.WHITE else TEXT_PRIMARY)
+            view.background = buttonBackground(focused)
+            view.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f).translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(85).start()
+        }
         setOnClickListener { action() }
     }
-    private fun panelBackground() = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xD9141020.toInt()); setStroke(dp(1), 0x554A355F) }
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (focused) PURPLE else 0xC51B1528.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x554A355F) }
+    private fun panelBackground(emphasis: Boolean) = GradientDrawable().apply {
+        cornerRadius = dp(20).toFloat(); setColor(if (emphasis) 0xFFFCFBFE.toInt() else Color.WHITE); setStroke(dp(1), if (emphasis) 0xFFD7CBE7.toInt() else 0xFFE1DCE8.toInt())
+    }
+    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (focused) PURPLE else Color.WHITE); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB58DE8.toInt() else 0xFFDAD5E1.toInt()) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun seasonMemoryKey() = "episodes:$providerId:$seriesId:season"
     private fun episodeMemoryKey() = "episodes:$providerId:$seriesId:episode"
@@ -288,6 +285,6 @@ class EpisodesActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_SERIES_ID = "series_id"; const val EXTRA_SERIES_NAME = "series_name"
-        private val PURPLE = Color.rgb(126, 44, 255); private val SOFT = Color.rgb(195, 175, 220)
+        private val PURPLE = Color.rgb(105, 49, 190); private val PURPLE_SOFT = Color.rgb(102, 54, 164); private val TEXT_PRIMARY = Color.rgb(28, 24, 34)
     }
 }
