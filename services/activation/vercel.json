@@ -9,6 +9,20 @@
   ],
   "routes": [
     {
+      "src": "/downloads(.*)",
+      "status": 307,
+      "headers": {
+        "Location": "https://blofy-update-distribution-production.up.railway.app/"
+      }
+    },
+    {
+      "src": "/releases(.*)",
+      "status": 307,
+      "headers": {
+        "Location": "https://blofy-update-distribution-production.up.railway.app/"
+      }
+    },
+    {
       "src": "/(.*)",
       "dest": "/src/bootstrap-rc0749.mjs"
     }
