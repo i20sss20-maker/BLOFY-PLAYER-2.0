@@ -2,10 +2,12 @@
 set -euo pipefail
 
 RG="${BLOFY_AZURE_RG:-rg-blofy-player}"
-BRANCH="${BLOFY_GITHUB_BRANCH:-infra/azure-staging}"
+PRIMARY_BRANCH="${BLOFY_GITHUB_BRANCH:-main}"
+FALLBACK_BRANCH="${BLOFY_GITHUB_FALLBACK_BRANCH:-infra/azure-staging}"
 REPO_SLUG="${BLOFY_GITHUB_REPO_SLUG:-i20sss20-maker/BLOFY-PLAYER-2.0}"
 IDENTITY_NAME="${BLOFY_GITHUB_IDENTITY:-blofy-github-oidc}"
-FEDERATED_NAME="${BLOFY_GITHUB_FEDERATED_NAME:-blofy-infra-branch}"
+PRIMARY_FEDERATED_NAME="${BLOFY_GITHUB_FEDERATED_NAME:-blofy-main-branch}"
+FALLBACK_FEDERATED_NAME="${BLOFY_GITHUB_FALLBACK_FEDERATED_NAME:-blofy-infra-branch}"
 LEGACY_SP_NAME="${BLOFY_LEGACY_SP_NAME:-blofy-player-github-actions}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing command: $1" >&2; exit 1; }; }
@@ -63,58 +65,81 @@ az role assignment create \
   --scope "$ACR_ID" \
   --only-show-errors >/dev/null 2>&1 || true
 
-# This repository uses GitHub's immutable OIDC subject identifiers. Build the Azure
-# federated subject from the canonical owner/repository IDs so it exactly matches
-# the `sub` claim emitted by GitHub Actions.
+# GitHub Actions emits immutable owner/repository IDs in the OIDC subject.
 REPO_OWNER="$(gh api "repos/$REPO_SLUG" --jq '.owner.login')"
 OWNER_ID="$(gh api "repos/$REPO_SLUG" --jq '.owner.id')"
 REPO_NAME="$(gh api "repos/$REPO_SLUG" --jq '.name')"
 REPO_ID="$(gh api "repos/$REPO_SLUG" --jq '.id')"
-SUBJECT="repo:${REPO_OWNER}@${OWNER_ID}/${REPO_NAME}@${REPO_ID}:ref:refs/heads/${BRANCH}"
-CURRENT_SUBJECT="$(az identity federated-credential show \
-  --resource-group "$RG" \
-  --identity-name "$IDENTITY_NAME" \
-  --name "$FEDERATED_NAME" \
-  --query subject -o tsv 2>/dev/null || true)"
 
-if [ -z "$CURRENT_SUBJECT" ]; then
-  printf 'Creating GitHub federated credential...\n'
-  az identity federated-credential create \
+ensure_federated_credential() {
+  local credential_name="$1"
+  local branch="$2"
+  local subject="repo:${REPO_OWNER}@${OWNER_ID}/${REPO_NAME}@${REPO_ID}:ref:refs/heads/${branch}"
+  local current
+  current="$(az identity federated-credential show \
     --resource-group "$RG" \
     --identity-name "$IDENTITY_NAME" \
-    --name "$FEDERATED_NAME" \
-    --issuer 'https://token.actions.githubusercontent.com' \
-    --subject "$SUBJECT" \
-    --audiences 'api://AzureADTokenExchange' \
-    --only-show-errors >/dev/null
-elif [ "$CURRENT_SUBJECT" != "$SUBJECT" ]; then
-  printf 'Updating GitHub federated credential to immutable repository IDs...\n'
-  az identity federated-credential update \
-    --resource-group "$RG" \
-    --identity-name "$IDENTITY_NAME" \
-    --name "$FEDERATED_NAME" \
-    --issuer 'https://token.actions.githubusercontent.com' \
-    --subject "$SUBJECT" \
-    --audiences 'api://AzureADTokenExchange' \
-    --only-show-errors >/dev/null
+    --name "$credential_name" \
+    --query subject -o tsv 2>/dev/null || true)"
+
+  if [ -z "$current" ]; then
+    printf 'Creating GitHub federated credential %s for %s...\n' "$credential_name" "$branch"
+    az identity federated-credential create \
+      --resource-group "$RG" \
+      --identity-name "$IDENTITY_NAME" \
+      --name "$credential_name" \
+      --issuer 'https://token.actions.githubusercontent.com' \
+      --subject "$subject" \
+      --audiences 'api://AzureADTokenExchange' \
+      --only-show-errors >/dev/null
+  elif [ "$current" != "$subject" ]; then
+    printf 'Updating GitHub federated credential %s for %s...\n' "$credential_name" "$branch"
+    az identity federated-credential update \
+      --resource-group "$RG" \
+      --identity-name "$IDENTITY_NAME" \
+      --name "$credential_name" \
+      --issuer 'https://token.actions.githubusercontent.com' \
+      --subject "$subject" \
+      --audiences 'api://AzureADTokenExchange' \
+      --only-show-errors >/dev/null
+  fi
+
+  printf 'OIDC subject (%s): %s\n' "$credential_name" "$subject"
+}
+
+# Production deploys from main. Keep the staging subject as an independent rollback credential.
+ensure_federated_credential "$PRIMARY_FEDERATED_NAME" "$PRIMARY_BRANCH"
+if [ -n "$FALLBACK_BRANCH" ] && [ "$FALLBACK_BRANCH" != "$PRIMARY_BRANCH" ]; then
+  ensure_federated_credential "$FALLBACK_FEDERATED_NAME" "$FALLBACK_BRANCH"
 fi
 
-printf 'OIDC subject: %s\n' "$SUBJECT"
 printf 'Saving non-secret Azure IDs as GitHub Actions variables...\n'
 gh variable set AZURE_CLIENT_ID --repo "$REPO_SLUG" --body "$CLIENT_ID"
 gh variable set AZURE_TENANT_ID --repo "$REPO_SLUG" --body "$TENANT_ID"
 gh variable set AZURE_SUBSCRIPTION_ID --repo "$REPO_SLUG" --body "$SUBSCRIPTION_ID"
 gh variable set BLOFY_AZURE_RG --repo "$REPO_SLUG" --body "$RG"
 
+CURRENT_BRANCH="$(git branch --show-current)"
+if [ "$CURRENT_BRANCH" != "$PRIMARY_BRANCH" ]; then
+  cat <<EOF
+OIDC setup is complete, but the image-build trigger was not pushed because the current branch is:
+  $CURRENT_BRANCH
+Production deployments now originate from:
+  $PRIMARY_BRANCH
+Checkout $PRIMARY_BRANCH and run this script again if you need to trigger a build.
+EOF
+  exit 0
+fi
+
 printf 'Triggering GitHub-hosted image build without ACR Tasks...\n'
-git pull --ff-only origin "$BRANCH"
+git pull --ff-only origin "$PRIMARY_BRANCH"
 git config user.name 'BLOFY Azure Setup'
 git config user.email 'i20sss20-maker@users.noreply.github.com'
 printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > infra/azure/managed/image-build.trigger
 git add infra/azure/managed/image-build.trigger
 if ! git diff --cached --quiet; then
-  git commit -m 'ci(azure): trigger student image deployment' >/dev/null
-  git push origin "HEAD:$BRANCH"
+  git commit -m 'ci(azure): trigger production image deployment' >/dev/null
+  git push origin "HEAD:$PRIMARY_BRANCH"
 fi
 
 cat <<EOF
@@ -123,10 +148,12 @@ OIDC setup complete — no Azure password is stored in GitHub.
 GitHub-hosted runners will build and push BLOFY images to:
   $ACR_LOGIN
 
-The trigger commit was pushed to:
-  $BRANCH
+Production trigger branch:
+  $PRIMARY_BRANCH
+Rollback OIDC branch retained:
+  $FALLBACK_BRANCH
 
 Next: wait for the workflow named "BLOFY Azure Student Images" to finish, then run:
-  git pull --ff-only origin $BRANCH
+  git pull --ff-only origin $PRIMARY_BRANCH
   bash infra/azure/managed/verify-deployment.sh
 EOF
