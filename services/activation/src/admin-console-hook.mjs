@@ -55,6 +55,7 @@ const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin
 const deviceAdmin = createDeviceAdmin({ pool, json, readJson, requireAdmin, ensureAdmin });
 const assets = new Map([
   ['/premium.css', ['premium.css', 'text/css']], ['/experience.js', ['experience.js', 'text/javascript']],
+  ['/admin-device-contact.js', ['admin-device-contact.js', 'text/javascript']],
   ['/device-admin.css', ['device-admin.css', 'text/css']],
   ['/release-manager.js', ['release-manager.js', 'text/javascript']], ['/release-manager.css', ['release-manager.css', 'text/css']],
   ['/IBMPlexSansArabic-Regular.ttf', ['IBMPlexSansArabic-Regular.ttf', 'font/ttf']],
