@@ -98,3 +98,14 @@ jobs:
           sh -n infra/azure/deploy.sh
           bash -n infra/azure/managed/deploy.sh
           bash -n infra/azure/managed/security-audit.sh
+          bash -n infra/azure/managed/configure-github-builds.sh
+          bash -n infra/azure/managed/verify-deployment.sh
+
+      - name: Check student-subscription fallback contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'TasksOperationsNotAllowed' infra/azure/managed/deploy.sh
+          grep -Fq 'containerapp github-action add' infra/azure/managed/configure-github-builds.sh
+          grep -Fq 'AcrPush' infra/azure/managed/configure-github-builds.sh
+          grep -Fq 'infra/azure-staging' infra/azure/managed/configure-github-builds.sh
