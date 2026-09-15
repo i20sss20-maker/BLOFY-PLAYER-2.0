@@ -17,16 +17,7 @@ az account show >/dev/null
 az extension add --name containerapp --upgrade --only-show-errors >/dev/null
 
 printf 'Registering Azure resource providers required by BLOFY...\n'
-providers=(
-  Microsoft.App
-  Microsoft.DBforPostgreSQL
-  Microsoft.ContainerRegistry
-  Microsoft.KeyVault
-  Microsoft.OperationalInsights
-  Microsoft.ManagedIdentity
-  Microsoft.Network
-  Microsoft.Storage
-)
+providers=(Microsoft.App Microsoft.DBforPostgreSQL Microsoft.ContainerRegistry Microsoft.KeyVault Microsoft.OperationalInsights Microsoft.ManagedIdentity Microsoft.Network Microsoft.Storage)
 for provider in "${providers[@]}"; do
   state="$(az provider show --namespace "$provider" --query registrationState -o tsv 2>/dev/null || true)"
   if [ "$state" != 'Registered' ]; then
@@ -63,62 +54,37 @@ value() {
 
 ACR="$(value acrName)"
 ACR_LOGIN="$(value acrLoginServer)"
-KEY_VAULT="$(value keyVaultName)"
 GATEWAY_APP="$(value gatewayApp)"
 ACTIVATION_APP="$(value activationApp)"
 RELEASES_APP="$(value releasesApp)"
 
-printf 'Building BLOFY images in Azure Container Registry %s...\n' "$ACR"
-az acr build --registry "$ACR" --image "blofy/activation:$TAG" --file services/activation/Dockerfile services/activation
-az acr build --registry "$ACR" --image "blofy/releases:$TAG" --file services/update-distribution/Dockerfile services/update-distribution
-az acr build --registry "$ACR" --image "blofy/gateway:$TAG" --file infra/azure/managed/gateway/Dockerfile infra/azure/managed/gateway
+printf 'Trying Azure-native image build in ACR %s...\n' "$ACR"
+BUILD_LOG="$(mktemp)"
+if az acr build --registry "$ACR" --image "blofy/activation:$TAG" --file services/activation/Dockerfile services/activation 2>&1 | tee "$BUILD_LOG"; then
+  az acr build --registry "$ACR" --image "blofy/releases:$TAG" --file services/update-distribution/Dockerfile services/update-distribution
+  az acr build --registry "$ACR" --image "blofy/gateway:$TAG" --file infra/azure/managed/gateway/Dockerfile infra/azure/managed/gateway
 
-printf 'Switching Container Apps from bootstrap images to BLOFY images...\n'
-az containerapp update --resource-group "$RG" --name "$ACTIVATION_APP" --image "$ACR_LOGIN/blofy/activation:$TAG" --only-show-errors >/dev/null
-az containerapp update --resource-group "$RG" --name "$RELEASES_APP" --image "$ACR_LOGIN/blofy/releases:$TAG" --only-show-errors >/dev/null
-az containerapp update --resource-group "$RG" --name "$GATEWAY_APP" --image "$ACR_LOGIN/blofy/gateway:$TAG" --only-show-errors >/dev/null
+  printf 'Switching Container Apps from bootstrap images to BLOFY images...\n'
+  az containerapp update --resource-group "$RG" --name "$ACTIVATION_APP" --image "$ACR_LOGIN/blofy/activation:$TAG" --only-show-errors >/dev/null
+  az containerapp update --resource-group "$RG" --name "$RELEASES_APP" --image "$ACR_LOGIN/blofy/releases:$TAG" --only-show-errors >/dev/null
+  az containerapp update --resource-group "$RG" --name "$GATEWAY_APP" --image "$ACR_LOGIN/blofy/gateway:$TAG" --only-show-errors >/dev/null
+  rm -f "$BUILD_LOG"
+  bash infra/azure/managed/verify-deployment.sh
+  exit 0
+fi
 
-GATEWAY_FQDN="$(az containerapp show --resource-group "$RG" --name "$GATEWAY_APP" --query properties.configuration.ingress.fqdn -o tsv)"
-GATEWAY_URL="https://$GATEWAY_FQDN"
+if grep -q 'TasksOperationsNotAllowed' "$BUILD_LOG"; then
+  rm -f "$BUILD_LOG"
+  cat <<'EOF'
 
-printf 'Waiting for public gateway health...\n'
-for attempt in $(seq 1 36); do
-  if curl -fsS --max-time 10 "$GATEWAY_URL/health" >/tmp/blofy-health.json 2>/dev/null; then
-    break
-  fi
-  sleep 5
-  if [ "$attempt" -eq 36 ]; then
-    echo 'Gateway health did not become ready in time.' >&2
-    exit 1
-  fi
-done
-
-curl -fsS --max-time 10 "$GATEWAY_URL/release.json" >/tmp/blofy-release-health.json
-
-cat <<EOF
-
-BLOFY Azure managed deployment is healthy.
-
-Gateway (use this as the stable Azure base URL):
-$GATEWAY_URL
-
-Health:
-$GATEWAY_URL/health
-
-Release metadata:
-$GATEWAY_URL/release.json
-
-Release downloads:
-$GATEWAY_URL/downloads
-
-Release admin:
-$GATEWAY_URL/releases-admin
-Username: admin
-Password retrieval (run only in your private Cloud Shell):
-az keyvault secret show --vault-name "$KEY_VAULT" --name release-admin-password --query value -o tsv
-
-IMPORTANT:
-- Vercel/Railway have NOT been removed.
-- Do not publish a Google Play build until the Azure smoke-test checklist passes.
-- Generated passwords/tokens were sent directly into Azure Key Vault and were not written to disk by this script.
+ACR Tasks are blocked by this Azure for Students subscription.
+This does NOT require upgrading or paying. BLOFY will use GitHub-hosted runners to build the same images and push them into the existing Azure Container Registry.
 EOF
+  bash infra/azure/managed/configure-github-builds.sh
+  exit 0
+fi
+
+cat "$BUILD_LOG" >&2
+rm -f "$BUILD_LOG"
+echo 'ACR build failed for a reason other than the student-subscription ACR Tasks restriction.' >&2
+exit 1
