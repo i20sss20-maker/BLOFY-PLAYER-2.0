@@ -178,7 +178,6 @@ resource acr 'Microsoft.ContainerRegistry/registries@2025-04-01' = {
   tags: tags
   sku: {
     name: 'Standard'
-    tier: 'Standard'
   }
   properties: {
     adminUserEnabled: false
@@ -196,7 +195,7 @@ resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-11-30' 
 }
 
 resource keyVault 'Microsoft.KeyVault/vaults@2025-05-01' = {
-  name: 'blofykv${suffix}'
+  name: 'bpfy-${environment}-${suffix}'
   location: location
   tags: tags
   properties: {
