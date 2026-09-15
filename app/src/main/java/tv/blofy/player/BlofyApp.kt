@@ -21,6 +21,8 @@ import tv.blofy.player.ui.catalog.CatalogPageMemory
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
+import tv.blofy.player.ui.login.StartupEntryLifecycle
+import tv.blofy.player.ui.player.LiveChannelOverlayLifecycle
 import tv.blofy.player.ui.profile.ProfileCloudLifecycle
 import tv.blofy.player.ui.profile.ProfileHomeLayoutLifecycle
 import tv.blofy.player.ui.profile.ProfileSwitcherLifecycle
@@ -51,8 +53,10 @@ class BlofyApp : Application() {
 
         val settings = getSharedPreferences("blofy_player_settings", MODE_PRIVATE)
         if (AppCompatDelegate.getApplicationLocales().isEmpty) {
-            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
-            if (!settings.contains("app_language_tag")) {
+            val storedTag = settings.getString("app_language_tag", null)?.trim().orEmpty()
+            val resolvedTag = storedTag.ifBlank { "en" }
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(resolvedTag))
+            if (storedTag.isBlank()) {
                 settings.edit().putString("app_language_tag", "en").putString("app_language", "English").apply()
             }
         }
@@ -61,6 +65,8 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
         registerActivityLifecycleCallbacks(tv.blofy.player.core.identity.ActivationLeaseLifecycle())
+        registerActivityLifecycleCallbacks(StartupEntryLifecycle())
+        registerActivityLifecycleCallbacks(LiveChannelOverlayLifecycle())
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
         registerActivityLifecycleCallbacks(KidsContentGuard())
