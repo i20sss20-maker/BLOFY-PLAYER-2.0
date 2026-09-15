@@ -3,38 +3,30 @@ set -euo pipefail
 
 RG="${BLOFY_AZURE_RG:-rg-blofy-player}"
 BRANCH="${BLOFY_GITHUB_BRANCH:-infra/azure-staging}"
-REPO_URL="${BLOFY_GITHUB_REPO:-https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0}"
-SP_NAME="${BLOFY_GITHUB_SP_NAME:-blofy-player-github-actions}"
+REPO_SLUG="${BLOFY_GITHUB_REPO_SLUG:-i20sss20-maker/BLOFY-PLAYER-2.0}"
+IDENTITY_NAME="${BLOFY_GITHUB_IDENTITY:-blofy-github-oidc}"
+FEDERATED_NAME="${BLOFY_GITHUB_FEDERATED_NAME:-blofy-infra-branch}"
+LEGACY_SP_NAME="${BLOFY_LEGACY_SP_NAME:-blofy-player-github-actions}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing command: $1" >&2; exit 1; }; }
 need az
 need gh
-need python3
+need git
 
 az account show >/dev/null
-az extension add --name containerapp --upgrade --only-show-errors >/dev/null
-
 if ! gh auth status --hostname github.com >/dev/null 2>&1; then
   cat <<'EOF'
-GitHub CLI is not authenticated yet.
-Run this command first:
-
+GitHub CLI is not authenticated.
+Run:
   gh auth login --hostname github.com --git-protocol https --web --scopes workflow
-
-GitHub CLI will print a one-time device code and a github.com login URL. Complete that login, then run this script again.
+Then run this script again.
 EOF
   exit 2
 fi
 
-# Keep the GitHub token in memory only. Never echo it or persist it to disk.
-GITHUB_TOKEN_VALUE="$(gh auth token --hostname github.com)"
-if [ -z "$GITHUB_TOKEN_VALUE" ]; then
-  echo 'GitHub CLI did not return an authentication token.' >&2
-  exit 1
-fi
-trap 'unset GITHUB_TOKEN_VALUE SP_SECRET SP_JSON' EXIT
-
+printf 'Configuring passwordless GitHub → Azure OIDC deployment...\n'
 RG_ID="$(az group show --name "$RG" --query id -o tsv)"
+SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
 TENANT_ID="$(az account show --query tenantId -o tsv)"
 ACR="$(az acr list --resource-group "$RG" --query '[0].name' -o tsv)"
 if [ -z "$ACR" ]; then
@@ -44,70 +36,75 @@ fi
 ACR_ID="$(az acr show --name "$ACR" --query id -o tsv)"
 ACR_LOGIN="$(az acr show --name "$ACR" --query loginServer -o tsv)"
 
-printf 'Preparing a GitHub Actions deployment identity...\n'
-APP_ID="$(az ad sp list --display-name "$SP_NAME" --query '[0].appId' -o tsv 2>/dev/null || true)"
-if [ -z "$APP_ID" ]; then
-  SP_JSON="$(az ad sp create-for-rbac \
-    --name "$SP_NAME" \
-    --role Contributor \
-    --scopes "$RG_ID" \
-    --years 1 \
-    -o json)"
-  APP_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["appId"])' <<<"$SP_JSON")"
-  SP_SECRET="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])' <<<"$SP_JSON")"
-else
-  SP_JSON="$(az ad sp credential reset \
-    --id "$APP_ID" \
-    --append \
-    --display-name "blofy-container-build-$(date +%Y%m%d%H%M%S)" \
-    --years 1 \
-    -o json)"
-  SP_SECRET="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])' <<<"$SP_JSON")"
+# Clean up the earlier password-based service principal if it was created by a failed setup attempt.
+LEGACY_APP_ID="$(az ad sp list --display-name "$LEGACY_SP_NAME" --query '[0].appId' -o tsv 2>/dev/null || true)"
+if [ -n "$LEGACY_APP_ID" ]; then
+  printf 'Removing unused password-based deployment identity...\n'
+  az ad app delete --id "$LEGACY_APP_ID" >/dev/null 2>&1 || az ad sp delete --id "$LEGACY_APP_ID" >/dev/null 2>&1 || true
 fi
 
-# Contributor controls the Container Apps resource. AcrPush is the registry data-plane permission.
+if ! az identity show --resource-group "$RG" --name "$IDENTITY_NAME" >/dev/null 2>&1; then
+  az identity create --resource-group "$RG" --name "$IDENTITY_NAME" --location "$(az group show -n "$RG" --query location -o tsv)" --only-show-errors >/dev/null
+fi
+CLIENT_ID="$(az identity show --resource-group "$RG" --name "$IDENTITY_NAME" --query clientId -o tsv)"
+PRINCIPAL_ID="$(az identity show --resource-group "$RG" --name "$IDENTITY_NAME" --query principalId -o tsv)"
+
+# GitHub Actions may update the three Container Apps and push images, nothing broader than this resource group.
 az role assignment create \
-  --assignee "$APP_ID" \
+  --assignee-object-id "$PRINCIPAL_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role Contributor \
+  --scope "$RG_ID" \
+  --only-show-errors >/dev/null 2>&1 || true
+az role assignment create \
+  --assignee-object-id "$PRINCIPAL_ID" \
+  --assignee-principal-type ServicePrincipal \
   --role AcrPush \
   --scope "$ACR_ID" \
   --only-show-errors >/dev/null 2>&1 || true
 
-cat <<EOF
-
-Azure for Students blocks ACR Tasks on this subscription.
-BLOFY will use GitHub-hosted runners to build images and push them into:
-  $ACR_LOGIN
-EOF
-
-configure_app() {
-  local app="$1"
-  local context="$2"
-  printf '\nConfiguring GitHub build for %s...\n' "$app"
-  az containerapp github-action add \
+SUBJECT="repo:${REPO_SLUG}:ref:refs/heads/${BRANCH}"
+if ! az identity federated-credential show \
+  --resource-group "$RG" \
+  --identity-name "$IDENTITY_NAME" \
+  --name "$FEDERATED_NAME" >/dev/null 2>&1; then
+  az identity federated-credential create \
     --resource-group "$RG" \
-    --name "$app" \
-    --repo-url "$REPO_URL" \
-    --branch "$BRANCH" \
-    --context-path "$context" \
-    --registry-url "$ACR_LOGIN" \
-    --service-principal-client-id "$APP_ID" \
-    --service-principal-client-secret "$SP_SECRET" \
-    --service-principal-tenant-id "$TENANT_ID" \
-    --token "$GITHUB_TOKEN_VALUE" \
-    --only-show-errors
-}
+    --identity-name "$IDENTITY_NAME" \
+    --name "$FEDERATED_NAME" \
+    --issuer 'https://token.actions.githubusercontent.com' \
+    --subject "$SUBJECT" \
+    --audiences 'api://AzureADTokenExchange' \
+    --only-show-errors >/dev/null
+fi
 
-configure_app blofy-activation services/activation
-configure_app blofy-releases services/update-distribution
-configure_app blofy-gateway infra/azure/managed/gateway
+printf 'Saving non-secret Azure IDs as GitHub Actions variables...\n'
+gh variable set AZURE_CLIENT_ID --repo "$REPO_SLUG" --body "$CLIENT_ID"
+gh variable set AZURE_TENANT_ID --repo "$REPO_SLUG" --body "$TENANT_ID"
+gh variable set AZURE_SUBSCRIPTION_ID --repo "$REPO_SLUG" --body "$SUBSCRIPTION_ID"
+gh variable set BLOFY_AZURE_RG --repo "$REPO_SLUG" --body "$RG"
+
+printf 'Triggering GitHub-hosted image build without ACR Tasks...\n'
+git pull --ff-only origin "$BRANCH"
+git config user.name 'BLOFY Azure Setup'
+git config user.email 'i20sss20-maker@users.noreply.github.com'
+printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > infra/azure/managed/image-build.trigger
+git add infra/azure/managed/image-build.trigger
+if ! git diff --cached --quiet; then
+  git commit -m 'ci(azure): trigger student image deployment' >/dev/null
+  git push origin "HEAD:$BRANCH"
+fi
 
 cat <<EOF
 
-GitHub build workflows are configured.
-They build on GitHub-hosted runners (not ACR Tasks), push into:
+OIDC setup complete — no Azure password is stored in GitHub.
+GitHub-hosted runners will build and push BLOFY images to:
   $ACR_LOGIN
-and deploy to the existing Azure Container Apps.
 
-Next: wait for the three generated GitHub Actions runs to finish, then run:
+The trigger commit was pushed to:
+  $BRANCH
+
+Next: wait for the workflow named "BLOFY Azure Student Images" to finish, then run:
+  git pull --ff-only origin $BRANCH
   bash infra/azure/managed/verify-deployment.sh
 EOF
