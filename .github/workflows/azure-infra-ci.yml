@@ -2,7 +2,7 @@ name: BLOFY Azure Infrastructure CI
 
 on:
   push:
-    branches: [infra/azure-staging]
+    branches: [main]
     paths:
       - 'infra/azure/**'
       - 'services/update-distribution/**'
