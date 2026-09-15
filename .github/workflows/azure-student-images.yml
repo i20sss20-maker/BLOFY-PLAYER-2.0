@@ -2,7 +2,7 @@ name: BLOFY Azure Student Images
 
 on:
   push:
-    branches: [infra/azure-staging]
+    branches: [main]
     paths:
       - '.github/workflows/azure-student-images.yml'
       - 'infra/azure/managed/image-build.trigger'
