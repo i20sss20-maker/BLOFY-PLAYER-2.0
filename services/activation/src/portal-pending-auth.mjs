@@ -12,7 +12,10 @@ export function normalizePortalDeviceId(value) {
 }
 
 function validPortalIdentity(deviceId, activationCode) {
-  return /^BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(deviceId) && /^\d{6}$/.test(activationCode);
+  // Keep compatibility with older BLOFY IDs while still requiring the BLOFY namespace and a
+  // bounded safe alphabet. Current Android emits BLOFY-XXXX-XXXX; older commercial builds used
+  // longer suffixes, so the portal must not reject those already-issued identities.
+  return /^BLOFY-[A-Z0-9-]{4,32}$/.test(deviceId) && /^\d{6}$/.test(activationCode);
 }
 
 /**
