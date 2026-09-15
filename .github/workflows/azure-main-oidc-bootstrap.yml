@@ -1,0 +1,73 @@
+name: BLOFY Azure Main OIDC Bootstrap
+
+on:
+  push:
+    branches: [infra/azure-staging]
+    paths:
+      - '.github/workflows/azure-main-oidc-bootstrap.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+  AZURE_IDENTITY_NAME: blofy-github-oidc
+  MAIN_FEDERATED_NAME: blofy-main-branch
+
+jobs:
+  bootstrap-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login using existing staging OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Add main branch federated credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$AZURE_RG"
+
+          OWNER="$GITHUB_REPOSITORY_OWNER"
+          OWNER_ID="$(jq -r '.repository.owner.id' "$GITHUB_EVENT_PATH")"
+          REPO_NAME="$(jq -r '.repository.name' "$GITHUB_EVENT_PATH")"
+          REPO_ID="$(jq -r '.repository.id' "$GITHUB_EVENT_PATH")"
+          MAIN_SUBJECT="repo:${OWNER}@${OWNER_ID}/${REPO_NAME}@${REPO_ID}:ref:refs/heads/main"
+
+          EXISTING="$(az identity federated-credential show \
+            --resource-group "$AZURE_RG" \
+            --identity-name "$AZURE_IDENTITY_NAME" \
+            --name "$MAIN_FEDERATED_NAME" \
+            --query subject -o tsv 2>/dev/null || true)"
+
+          if [ -z "$EXISTING" ]; then
+            az identity federated-credential create \
+              --resource-group "$AZURE_RG" \
+              --identity-name "$AZURE_IDENTITY_NAME" \
+              --name "$MAIN_FEDERATED_NAME" \
+              --issuer 'https://token.actions.githubusercontent.com' \
+              --subject "$MAIN_SUBJECT" \
+              --audiences 'api://AzureADTokenExchange' \
+              --only-show-errors >/dev/null
+          elif [ "$EXISTING" != "$MAIN_SUBJECT" ]; then
+            echo "::error::Existing main federated credential has an unexpected subject: $EXISTING"
+            exit 1
+          fi
+
+          SUBJECTS="$(az identity federated-credential list \
+            --resource-group "$AZURE_RG" \
+            --identity-name "$AZURE_IDENTITY_NAME" \
+            --query '[].subject' -o tsv)"
+
+          printf '%s\n' "$SUBJECTS"
+          grep -Fq ':ref:refs/heads/infra/azure-staging' <<<"$SUBJECTS"
+          grep -Fq ':ref:refs/heads/main' <<<"$SUBJECTS"
+          echo 'Both staging and main OIDC subjects are present.'
