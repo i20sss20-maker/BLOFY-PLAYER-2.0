@@ -8,9 +8,31 @@ SP_NAME="${BLOFY_GITHUB_SP_NAME:-blofy-player-github-actions}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing command: $1" >&2; exit 1; }; }
 need az
+need gh
+need python3
 
 az account show >/dev/null
 az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+
+if ! gh auth status --hostname github.com >/dev/null 2>&1; then
+  cat <<'EOF'
+GitHub CLI is not authenticated yet.
+Run this command first:
+
+  gh auth login --hostname github.com --git-protocol https --web --scopes workflow
+
+GitHub CLI will print a one-time device code and a github.com login URL. Complete that login, then run this script again.
+EOF
+  exit 2
+fi
+
+# Keep the GitHub token in memory only. Never echo it or persist it to disk.
+GITHUB_TOKEN_VALUE="$(gh auth token --hostname github.com)"
+if [ -z "$GITHUB_TOKEN_VALUE" ]; then
+  echo 'GitHub CLI did not return an authentication token.' >&2
+  exit 1
+fi
+trap 'unset GITHUB_TOKEN_VALUE SP_SECRET SP_JSON' EXIT
 
 RG_ID="$(az group show --name "$RG" --query id -o tsv)"
 TENANT_ID="$(az account show --query tenantId -o tsv)"
@@ -37,7 +59,7 @@ else
   SP_JSON="$(az ad sp credential reset \
     --id "$APP_ID" \
     --append \
-    --display-name "blofy-container-build-$(date +%Y%m%d)" \
+    --display-name "blofy-container-build-$(date +%Y%m%d%H%M%S)" \
     --years 1 \
     -o json)"
   SP_SECRET="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])' <<<"$SP_JSON")"
@@ -50,11 +72,11 @@ az role assignment create \
   --scope "$ACR_ID" \
   --only-show-errors >/dev/null 2>&1 || true
 
-cat <<'EOF'
+cat <<EOF
 
-Azure for Students blocks ACR Tasks on this subscription, so BLOFY will use GitHub-hosted runners to build images and push them into the same Azure Container Registry.
-
-Azure CLI will now ask you to authorize GitHub. Follow the device/login prompt in the browser. This is a one-time connection for this setup.
+Azure for Students blocks ACR Tasks on this subscription.
+BLOFY will use GitHub-hosted runners to build images and push them into:
+  $ACR_LOGIN
 EOF
 
 configure_app() {
@@ -71,15 +93,13 @@ configure_app() {
     --service-principal-client-id "$APP_ID" \
     --service-principal-client-secret "$SP_SECRET" \
     --service-principal-tenant-id "$TENANT_ID" \
-    --login-with-github \
+    --token "$GITHUB_TOKEN_VALUE" \
     --only-show-errors
 }
 
 configure_app blofy-activation services/activation
 configure_app blofy-releases services/update-distribution
 configure_app blofy-gateway infra/azure/managed/gateway
-
-unset SP_SECRET SP_JSON
 
 cat <<EOF
 
