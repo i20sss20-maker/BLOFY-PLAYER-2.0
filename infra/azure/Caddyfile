@@ -1,0 +1,12 @@
+{$AZURE_FQDN} {
+    encode zstd gzip
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy no-referrer
+        -Server
+    }
+
+    reverse_proxy activation:8080
+}
