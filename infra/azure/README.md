@@ -34,10 +34,14 @@ cd blofy-azure
 mkdir -p ~/.ssh
 [ -f ~/.ssh/blofy_azure ] || ssh-keygen -t ed25519 -f ~/.ssh/blofy_azure -N ''
 
+RG="rg-blofy-staging"
+REGION="uaenorth"
 LABEL="blofy-staging-$RANDOM$RANDOM"
-az deployment sub create \
+
+az group create --name "$RG" --location "$REGION"
+az deployment group create \
+  --resource-group "$RG" \
   --name blofy-staging \
-  --location uaenorth \
   --template-file infra/azure/main.bicep \
   --parameters \
       dnsLabelPrefix="$LABEL" \
@@ -46,15 +50,20 @@ az deployment sub create \
 
 The deployment outputs the FQDN and SSH command.
 
-If `Standard_B2ats_v2` is unavailable, repeat the deployment with a VM SKU shown as free for the student subscription, for example:
+If `Standard_B2ats_v2` is unavailable, delete only the empty/failed staging resource group and repeat in a region/SKU shown as free for your student subscription, for example:
 
 ```bash
-az deployment sub create \
+az group delete --name "$RG" --yes --no-wait
+RG="rg-blofy-staging-we"
+REGION="westeurope"
+LABEL="blofy-staging-$RANDOM$RANDOM"
+az group create --name "$RG" --location "$REGION"
+az deployment group create \
+  --resource-group "$RG" \
   --name blofy-staging \
-  --location westeurope \
   --template-file infra/azure/main.bicep \
   --parameters \
-      location=westeurope \
+      location="$REGION" \
       vmSize=Standard_B1s \
       dnsLabelPrefix="$LABEL" \
       sshPublicKey="$(cat ~/.ssh/blofy_azure.pub)"
