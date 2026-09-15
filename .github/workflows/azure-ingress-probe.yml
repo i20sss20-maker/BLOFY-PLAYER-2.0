@@ -1,0 +1,80 @@
+name: BLOFY Azure Ingress Probe
+
+on:
+  push:
+    branches: [infra/azure-staging]
+    paths:
+      - '.github/workflows/azure-ingress-probe.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Probe Container Apps platform ingress
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          ENV_NAME="$(az containerapp env list --resource-group "$AZURE_RG" --query '[0].name' -o tsv)"
+          test -n "$ENV_NAME"
+          PROBE="blofy-ingress-probe"
+
+          az containerapp delete --resource-group "$AZURE_RG" --name "$PROBE" --yes --only-show-errors >/dev/null 2>&1 || true
+          az containerapp create \
+            --resource-group "$AZURE_RG" \
+            --name "$PROBE" \
+            --environment "$ENV_NAME" \
+            --image mcr.microsoft.com/azuredocs/containerapps-helloworld:latest \
+            --ingress external \
+            --target-port 80 \
+            --min-replicas 1 \
+            --max-replicas 1 \
+            --only-show-errors >/dev/null
+
+          FQDN="$(az containerapp show --resource-group "$AZURE_RG" --name "$PROBE" --query properties.configuration.ingress.fqdn -o tsv)"
+          echo "Probe FQDN: $FQDN"
+          az containerapp show --resource-group "$AZURE_RG" --name "$PROBE" \
+            --query '{external:properties.configuration.ingress.external,targetPort:properties.configuration.ingress.targetPort,latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,fqdn:properties.configuration.ingress.fqdn}' -o json
+
+          ok=false
+          for attempt in $(seq 1 24); do
+            code="$(curl -sS --max-time 10 -o /tmp/probe-body -w '%{http_code}' "https://$FQDN/" || true)"
+            echo "probe attempt $attempt/24 -> HTTP ${code:-curl-error}"
+            if [ "$code" = '200' ]; then
+              ok=true
+              break
+            fi
+            sleep 5
+          done
+
+          if [ "$ok" != true ]; then
+            echo 'Microsoft hello-world app also failed through Azure public ingress.' >&2
+            [ -s /tmp/probe-body ] && { echo 'Last platform response:'; head -80 /tmp/probe-body; } || true
+            exit 42
+          fi
+
+          echo 'Azure platform ingress probe passed.'
+
+      - name: Cleanup probe
+        if: always()
+        shell: bash
+        run: |
+          az containerapp delete --resource-group "$AZURE_RG" --name blofy-ingress-probe --yes --only-show-errors >/dev/null 2>&1 || true
