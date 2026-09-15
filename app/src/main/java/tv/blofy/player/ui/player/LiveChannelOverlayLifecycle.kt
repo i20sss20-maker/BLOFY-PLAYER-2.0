@@ -140,10 +140,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 recycledViewPool.setMaxRecycledViews(0, 28)
                 overScrollMode = View.OVER_SCROLL_NEVER
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
-                background = Color.TRANSPARENT
+                setBackgroundColor(Color.TRANSPARENT)
             }
-            lateinit var adapter: LiveChannelAdapter
-            adapter = LiveChannelAdapter(
+            val adapter = LiveChannelAdapter(
                 onClick = { channel -> selectChannel(channel) },
                 onFocus = {},
                 onLongClick = {},
