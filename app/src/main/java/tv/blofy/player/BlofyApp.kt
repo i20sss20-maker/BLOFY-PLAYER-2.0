@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import tv.blofy.player.core.commercial.CommercialConfigRepository
 import tv.blofy.player.core.commercial.CrashRecovery
+import tv.blofy.player.core.identity.ActivationStartupRegistration
 import tv.blofy.player.core.profile.KidsContentGuard
 import tv.blofy.player.core.remote.QuickMenuInterceptor
 import tv.blofy.player.core.update.AppUpdateLifecycle
@@ -84,6 +85,13 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
         registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
+
+        // Startup network work stays asynchronous. A fresh identity is registered immediately so
+        // the Device ID / pairing code shown on Login is already known by the server. Existing
+        // entitlement states do not re-register here.
+        applicationScope.launch {
+            ActivationStartupRegistration.registerIfNeeded(this@BlofyApp)
+        }
 
         // Stability rule: Application-level callbacks must never own Login controls or start
         // catalog/database maintenance on Activity resume. Login remains self-contained, while
