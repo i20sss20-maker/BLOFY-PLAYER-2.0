@@ -1,0 +1,44 @@
+name: BLOFY Azure Security Audit
+
+on:
+  push:
+    branches: [infra/azure-staging]
+    paths:
+      - '.github/workflows/azure-security-audit.yml'
+      - 'infra/azure/managed/security-audit.sh'
+      - 'infra/azure/managed/main.bicep'
+      - 'infra/azure/managed/gateway/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: blofy-azure-security-audit
+  cancel-in-progress: true
+
+env:
+  BLOFY_AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Container Apps CLI extension
+        shell: bash
+        run: az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+
+      - name: Run BLOFY Azure security baseline
+        shell: bash
+        run: bash infra/azure/managed/security-audit.sh
