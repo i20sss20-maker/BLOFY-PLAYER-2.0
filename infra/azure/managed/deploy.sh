@@ -10,9 +10,30 @@ need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing command: $1" >&2; ex
 need az
 need openssl
 need git
+need curl
+need python3
 
 az account show >/dev/null
 az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+
+printf 'Registering Azure resource providers required by BLOFY...\n'
+providers=(
+  Microsoft.App
+  Microsoft.DBforPostgreSQL
+  Microsoft.ContainerRegistry
+  Microsoft.KeyVault
+  Microsoft.OperationalInsights
+  Microsoft.ManagedIdentity
+  Microsoft.Network
+  Microsoft.Storage
+)
+for provider in "${providers[@]}"; do
+  state="$(az provider show --namespace "$provider" --query registrationState -o tsv 2>/dev/null || true)"
+  if [ "$state" != 'Registered' ]; then
+    printf '  registering %s...\n' "$provider"
+    az provider register --namespace "$provider" --wait --only-show-errors >/dev/null
+  fi
+done
 
 printf 'Creating/updating resource group %s in %s...\n' "$RG" "$LOCATION"
 az group create --name "$RG" --location "$LOCATION" --tags app='BLOFY PLAYER' managedBy=bicep >/dev/null
@@ -42,6 +63,7 @@ value() {
 
 ACR="$(value acrName)"
 ACR_LOGIN="$(value acrLoginServer)"
+KEY_VAULT="$(value keyVaultName)"
 GATEWAY_APP="$(value gatewayApp)"
 ACTIVATION_APP="$(value activationApp)"
 RELEASES_APP="$(value releasesApp)"
@@ -88,6 +110,12 @@ $GATEWAY_URL/release.json
 
 Release downloads:
 $GATEWAY_URL/downloads
+
+Release admin:
+$GATEWAY_URL/releases-admin
+Username: admin
+Password retrieval (run only in your private Cloud Shell):
+az keyvault secret show --vault-name "$KEY_VAULT" --name release-admin-password --query value -o tsv
 
 IMPORTANT:
 - Vercel/Railway have NOT been removed.
