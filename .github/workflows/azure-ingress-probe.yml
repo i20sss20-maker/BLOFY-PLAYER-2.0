@@ -27,8 +27,7 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Probe Container Apps platform ingress
-        id: probe
+      - name: Compare gateway with known-good ingress app
         shell: bash
         run: |
           set -euo pipefail
@@ -36,6 +35,10 @@ jobs:
           ENV_NAME="$(az containerapp env list --resource-group "$AZURE_RG" --query '[0].name' -o tsv)"
           test -n "$ENV_NAME"
           PROBE="blofy-ingress-probe"
+
+          echo '=== existing BLOFY gateway ==='
+          az containerapp show --resource-group "$AZURE_RG" --name blofy-gateway \
+            --query '{workloadProfileName:properties.workloadProfileName,external:properties.configuration.ingress.external,targetPort:properties.configuration.ingress.targetPort,transport:properties.configuration.ingress.transport,revisionMode:properties.configuration.activeRevisionsMode,minReplicas:properties.template.scale.minReplicas,maxReplicas:properties.template.scale.maxReplicas,fqdn:properties.configuration.ingress.fqdn}' -o json
 
           az containerapp delete --resource-group "$AZURE_RG" --name "$PROBE" --yes --only-show-errors >/dev/null 2>&1 || true
           az containerapp create \
@@ -45,15 +48,16 @@ jobs:
             --image mcr.microsoft.com/azuredocs/containerapps-helloworld:latest \
             --ingress external \
             --target-port 80 \
+            --workload-profile-name Consumption \
             --min-replicas 1 \
             --max-replicas 1 \
             --only-show-errors >/dev/null
 
-          FQDN="$(az containerapp show --resource-group "$AZURE_RG" --name "$PROBE" --query properties.configuration.ingress.fqdn -o tsv)"
-          echo "Probe FQDN: $FQDN"
+          echo '=== known-good Microsoft probe ==='
           az containerapp show --resource-group "$AZURE_RG" --name "$PROBE" \
-            --query '{external:properties.configuration.ingress.external,targetPort:properties.configuration.ingress.targetPort,latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,fqdn:properties.configuration.ingress.fqdn}' -o json
+            --query '{workloadProfileName:properties.workloadProfileName,external:properties.configuration.ingress.external,targetPort:properties.configuration.ingress.targetPort,transport:properties.configuration.ingress.transport,revisionMode:properties.configuration.activeRevisionsMode,minReplicas:properties.template.scale.minReplicas,maxReplicas:properties.template.scale.maxReplicas,fqdn:properties.configuration.ingress.fqdn}' -o json
 
+          FQDN="$(az containerapp show --resource-group "$AZURE_RG" --name "$PROBE" --query properties.configuration.ingress.fqdn -o tsv)"
           ok=false
           for attempt in $(seq 1 24); do
             code="$(curl -sS --max-time 10 -o /tmp/probe-body -w '%{http_code}' "https://$FQDN/" || true)"
@@ -66,12 +70,10 @@ jobs:
           done
 
           if [ "$ok" != true ]; then
-            echo 'Microsoft hello-world app also failed through Azure public ingress.' >&2
-            [ -s /tmp/probe-body ] && { echo 'Last platform response:'; head -80 /tmp/probe-body; } || true
+            echo 'Known-good Microsoft ingress probe failed unexpectedly.' >&2
             exit 42
           fi
-
-          echo 'Azure platform ingress probe passed.'
+          echo 'Azure profile comparison probe passed.'
 
       - name: Cleanup probe
         if: always()
