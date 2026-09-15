@@ -96,3 +96,5 @@ jobs:
           set -euo pipefail
           sh -n infra/azure/init-env.sh
           sh -n infra/azure/deploy.sh
+          bash -n infra/azure/managed/deploy.sh
+          bash -n infra/azure/managed/security-audit.sh
