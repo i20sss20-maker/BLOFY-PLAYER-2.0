@@ -52,6 +52,18 @@ jobs:
           grep -Fq 'postgres:' /tmp/blofy-compose.yml
           grep -Fq 'caddy:' /tmp/blofy-compose.yml
 
+      - name: Validate Caddy HTTPS configs
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -e AZURE_FQDN=blofy-ci.example.test \
+            -v "$PWD/infra/azure/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm \
+            -v "$PWD/infra/azure/Caddyfile.blofy:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+
       - name: Check shell scripts
         shell: bash
         run: |
