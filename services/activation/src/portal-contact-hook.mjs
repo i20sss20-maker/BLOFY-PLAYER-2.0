@@ -5,6 +5,7 @@ import {
   createActivationCredentialCodec,
   createFixedWindowLimiter,
   isAuthLocked,
+  nextAuthFailureState,
   requestClientKey
 } from './auth-protection.mjs';
 import { injectPortalContactUi, maskPortalPhone, normalizePortalPhone } from './portal-contact-core.mjs';
@@ -14,6 +15,9 @@ const STATUS_PATH = '/api/v1/portal/contact/status';
 const SAVE_PATH = '/api/v1/portal/contact';
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const KEY_HEX = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
+const AUTH_MAX_FAILURES = Number(process.env.BLOFY_AUTH_MAX_FAILURES || 5);
+const AUTH_FAILURE_WINDOW_MS = Number(process.env.BLOFY_AUTH_FAILURE_WINDOW_MS || 900_000);
+const AUTH_LOCK_MS = Number(process.env.BLOFY_AUTH_LOCK_MS || 900_000);
 const limiter = createFixedWindowLimiter({ limit: 20, windowMs: 60_000 });
 let pool;
 let codec;
@@ -97,11 +101,40 @@ async function authorize(req, body) {
   const rate = limiter.consume(requestClientKey(req) + ':' + deviceId.toUpperCase());
   if (!rate.allowed) throw Object.assign(new Error('rate_limited'), { status: 429, retryAfterSeconds: rate.retryAfterSeconds });
   if (!/^BLOFY-[A-Z0-9-]{4,32}$/i.test(deviceId) || !/^\d{6}$/.test(activationCode)) return null;
-  const db = database();
-  const result = await db.query('SELECT device_id,activation_code,status,expires_at,auth_locked_until FROM devices WHERE device_id=$1', [deviceId]);
-  const row = result.rows[0];
-  if (!row || isAuthLocked(row) || !credentials().matches(row, activationCode)) return null;
-  return ['active', 'trial'].includes(normalizedStatus(row)) ? { deviceId: row.device_id } : null;
+
+  const client = await database().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(`SELECT device_id,activation_code,status,expires_at,auth_locked_until,
+      auth_failed_attempts,last_auth_failure_at FROM devices WHERE device_id=$1 FOR UPDATE`, [deviceId]);
+    const row = result.rows[0];
+    if (!row || isAuthLocked(row)) {
+      await client.query('COMMIT');
+      return null;
+    }
+    const auth = credentials();
+    if (!auth.matches(row, activationCode)) {
+      const state = nextAuthFailureState(row, Date.now(), {
+        maxFailures: AUTH_MAX_FAILURES,
+        failureWindowMs: AUTH_FAILURE_WINDOW_MS,
+        lockMs: AUTH_LOCK_MS
+      });
+      await client.query(`UPDATE devices SET auth_failed_attempts=$2,last_auth_failure_at=$3,
+        auth_locked_until=$4,updated_at=NOW() WHERE device_id=$1`,
+        [deviceId, state.failedAttempts, state.lastFailureAt, state.lockedUntil]);
+      await client.query('COMMIT');
+      return null;
+    }
+    if (!auth.isProof(row.activation_code)) {
+      await client.query('UPDATE devices SET activation_code=$2,updated_at=NOW() WHERE device_id=$1',
+        [deviceId, auth.proof(deviceId, activationCode)]);
+    }
+    await client.query('COMMIT');
+    return ['active', 'trial'].includes(normalizedStatus(row)) ? { deviceId: row.device_id } : null;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
 }
 
 async function handleContactApi(req, res, pathname) {
