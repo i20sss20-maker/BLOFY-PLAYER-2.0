@@ -82,6 +82,14 @@ jobs:
           az containerapp update --resource-group "$AZURE_RG" --name blofy-releases --image "$REG/blofy/releases:$TAG" --only-show-errors >/dev/null
           az containerapp update --resource-group "$AZURE_RG" --name blofy-gateway --image "$REG/blofy/gateway:$TAG" --only-show-errors >/dev/null
 
+          for app in blofy-activation blofy-releases blofy-gateway; do
+            az containerapp ingress traffic set \
+              --resource-group "$AZURE_RG" \
+              --name "$app" \
+              --revision-weight latest=100 \
+              --only-show-errors >/dev/null
+          done
+
       - name: Report deployed revision state
         shell: bash
         run: |
@@ -89,7 +97,7 @@ jobs:
           for app in blofy-activation blofy-releases blofy-gateway; do
             echo "=== $app ==="
             az containerapp show --resource-group "$AZURE_RG" --name "$app" \
-              --query '{latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,fqdn:properties.configuration.ingress.fqdn}' \
+              --query '{latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,fqdn:properties.configuration.ingress.fqdn,traffic:properties.configuration.ingress.traffic}' \
               -o json || true
             az containerapp revision list --resource-group "$AZURE_RG" --name "$app" \
               --query '[].{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,replicas:properties.replicas}' \
@@ -106,7 +114,7 @@ jobs:
             for app in blofy-activation blofy-releases blofy-gateway; do
               echo "=== $app revision state ==="
               az containerapp show --resource-group "$AZURE_RG" --name "$app" \
-                --query '{latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,fqdn:properties.configuration.ingress.fqdn}' \
+                --query '{latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,fqdn:properties.configuration.ingress.fqdn,traffic:properties.configuration.ingress.traffic}' \
                 -o json || true
               az containerapp revision list --resource-group "$AZURE_RG" --name "$app" \
                 --query '[].{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,replicas:properties.replicas}' \
