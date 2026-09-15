@@ -24,11 +24,13 @@ import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
 import tv.blofy.player.ui.common.RootExitConfirmationLifecycle
 import tv.blofy.player.ui.login.StartupEntryLifecycle
 import tv.blofy.player.ui.player.LiveChannelOverlayLifecycle
+import tv.blofy.player.ui.player.PlayerReturnNavigationLifecycle
 import tv.blofy.player.ui.profile.ProfileCloudLifecycle
 import tv.blofy.player.ui.profile.ProfileHomeLayoutLifecycle
 import tv.blofy.player.ui.profile.ProfileSwitcherLifecycle
 import tv.blofy.player.ui.profile.ProfileUxLifecycle
 import tv.blofy.player.ui.search.CatalogSearchLifecycle
+import tv.blofy.player.ui.search.ScopedSearchRedirectLifecycle
 import tv.blofy.player.ui.settings.RuntimeSettingsLifecycle
 import tv.blofy.player.ui.subscription.SubscriptionEntryLifecycle
 
@@ -74,12 +76,16 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
         registerActivityLifecycleCallbacks(tv.blofy.player.core.identity.ActivationLeaseLifecycle())
         registerActivityLifecycleCallbacks(StartupEntryLifecycle())
+        // Record the source screen before the Live overlay wraps the Player window. Playback keeps
+        // its existing BACK/HUD handling; this callback only restores the recorded source on finish.
+        registerActivityLifecycleCallbacks(PlayerReturnNavigationLifecycle())
         registerActivityLifecycleCallbacks(LiveChannelOverlayLifecycle())
         registerActivityLifecycleCallbacks(RootExitConfirmationLifecycle())
         registerActivityLifecycleCallbacks(ProfileSwitcherLifecycle())
         registerActivityLifecycleCallbacks(KidsContentGuard())
         registerActivityLifecycleCallbacks(ProfileUxLifecycle())
         registerActivityLifecycleCallbacks(ProfileHomeLayoutLifecycle())
+        registerActivityLifecycleCallbacks(ScopedSearchRedirectLifecycle())
         registerActivityLifecycleCallbacks(CatalogSearchLifecycle())
         registerActivityLifecycleCallbacks(ProfileCloudLifecycle())
         registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
