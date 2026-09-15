@@ -6,7 +6,7 @@ This is the target Azure architecture to validate before Google Play production.
 
 Only `blofy-gateway` has external ingress.
 
-The generated Azure gateway URL becomes the stable base URL for the Android app until a custom domain is purchased. A future custom domain can point at the same gateway without forcing the installed app to stop using the Azure URL.
+The generated Azure gateway URL becomes the stable base URL for the Android app until a custom domain is purchased. A future custom domain can point at the same gateway without forcing the installed app to stop using the Azure URL. After Google Play publication, keep the gateway resource itself in place so its built-in Azure endpoint stays stable.
 
 Public routes:
 
