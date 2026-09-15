@@ -3,6 +3,7 @@ import { initReleaseStore, getActiveRelease } from './release-store.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
+const PUBLIC_ADMIN_PREFIX = `/${String(process.env.PUBLIC_ADMIN_PREFIX || '/admin').trim().replace(/^\/+|\/+$/g, '')}`;
 
 const securityHeaders = Object.freeze({
   'x-content-type-options': 'nosniff',
@@ -101,7 +102,7 @@ const server = http.createServer(async (req, res) => {
       if (!sameOrigin(req)) return sendJson(req, res, 403, { ok: false, error: 'origin_rejected' });
       const form = await readForm(req);
       const message = await handleAdminAction(form, pathname);
-      return redirect(res, `/admin?msg=${encodeURIComponent(message)}`);
+      return redirect(res, `${PUBLIC_ADMIN_PREFIX}?msg=${encodeURIComponent(message)}`);
     }
 
     if (!['GET', 'HEAD'].includes(method)) {
@@ -128,7 +129,7 @@ const server = http.createServer(async (req, res) => {
   } catch (error) {
     console.error('Request failed:', error?.message || error);
     if ((req.url || '').startsWith('/admin')) {
-      return redirect(res, `/admin?msg=${encodeURIComponent(`تعذر تنفيذ العملية: ${String(error?.message || 'internal_error').replaceAll('_', ' ')}`)}`);
+      return redirect(res, `${PUBLIC_ADMIN_PREFIX}?msg=${encodeURIComponent(`تعذر تنفيذ العملية: ${String(error?.message || 'internal_error').replaceAll('_', ' ')}`)}`);
     }
     return sendJson(req, res, 500, { ok: false, error: 'internal_error' });
   }
