@@ -12,26 +12,26 @@
 }
 
 # Canonical public website and customer portal.
-blofy.com {
+blofyplayer.com {
     import blofy_security
     reverse_proxy activation:8080
 }
 
 # Never split SEO/cookies between apex and www.
-www.blofy.com {
+www.blofyplayer.com {
     import blofy_security
-    redir https://blofy.com{uri} permanent
+    redir https://blofyplayer.com{uri} permanent
 }
 
 # Stable API hostname for Android/iOS. It intentionally reaches the same tested backend during
 # phase 1 so moving hosting providers later does not force another API rewrite in the apps.
-api.blofy.com {
+api.blofyplayer.com {
     import blofy_security
     reverse_proxy activation:8080
 }
 
 # Admin gets an isolated origin/cookie boundary. The application keeps its own admin/session auth.
-admin.blofy.com {
+admin.blofyplayer.com {
     import blofy_security
     @root path /
     redir @root /admin 302
@@ -40,7 +40,7 @@ admin.blofy.com {
 
 # Until the release service is moved from Railway to this Azure host, keep the official BLOFY
 # downloads hostname stable and redirect it to the already verified HTTPS release service.
-downloads.blofy.com {
+downloads.blofyplayer.com {
     import blofy_security
     redir https://blofy-update-distribution-production.up.railway.app{uri} 307
 }
