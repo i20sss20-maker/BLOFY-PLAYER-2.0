@@ -7,11 +7,13 @@ on:
       - 'infra/azure/**'
       - 'services/update-distribution/**'
       - '.github/workflows/azure-infra-ci.yml'
+      - '.github/workflows/azure-student-images.yml'
   pull_request:
     paths:
       - 'infra/azure/**'
       - 'services/update-distribution/**'
       - '.github/workflows/azure-infra-ci.yml'
+      - '.github/workflows/azure-student-images.yml'
 
 permissions:
   contents: read
@@ -101,11 +103,16 @@ jobs:
           bash -n infra/azure/managed/configure-github-builds.sh
           bash -n infra/azure/managed/verify-deployment.sh
 
-      - name: Check student-subscription fallback contract
+      - name: Check student-subscription OIDC fallback contract
         shell: bash
         run: |
           set -euo pipefail
           grep -Fq 'TasksOperationsNotAllowed' infra/azure/managed/deploy.sh
-          grep -Fq 'containerapp github-action add' infra/azure/managed/configure-github-builds.sh
+          grep -Fq 'identity federated-credential create' infra/azure/managed/configure-github-builds.sh
           grep -Fq 'AcrPush' infra/azure/managed/configure-github-builds.sh
-          grep -Fq 'infra/azure-staging' infra/azure/managed/configure-github-builds.sh
+          grep -Fq 'gh variable set AZURE_CLIENT_ID' infra/azure/managed/configure-github-builds.sh
+          grep -Fq 'image-build.trigger' infra/azure/managed/configure-github-builds.sh
+          ! grep -Fq 'containerapp github-action add' infra/azure/managed/configure-github-builds.sh
+          grep -Fq 'id-token: write' .github/workflows/azure-student-images.yml
+          grep -Fq 'azure/login@v2' .github/workflows/azure-student-images.yml
+          grep -Fq 'az acr login' .github/workflows/azure-student-images.yml
