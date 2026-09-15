@@ -44,6 +44,14 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
         name: 'container-apps'
         properties: {
           addressPrefix: '10.60.0.0/27'
+          delegations: [
+            {
+              name: 'container-apps-environment'
+              properties: {
+                serviceName: 'Microsoft.App/environments'
+              }
+            }
+          ]
         }
       }
       {
@@ -164,12 +172,13 @@ resource environmentResource 'Microsoft.App/managedEnvironments@2026-01-01' = {
   }
 }
 
-resource acr 'Microsoft.ContainerRegistry/registries@2025-11-01' = {
+resource acr 'Microsoft.ContainerRegistry/registries@2025-04-01' = {
   name: 'blofy${environment}${suffix}'
   location: location
   tags: tags
   sku: {
     name: 'Standard'
+    tier: 'Standard'
   }
   properties: {
     adminUserEnabled: false
@@ -177,22 +186,6 @@ resource acr 'Microsoft.ContainerRegistry/registries@2025-11-01' = {
     dataEndpointEnabled: false
     networkRuleBypassOptions: 'AzureServices'
     publicNetworkAccess: 'Enabled'
-    policies: {
-      exportPolicy: {
-        status: 'disabled'
-      }
-      quarantinePolicy: {
-        status: 'disabled'
-      }
-      retentionPolicy: {
-        days: 7
-        status: 'enabled'
-      }
-      trustPolicy: {
-        status: 'disabled'
-        type: 'Notary'
-      }
-    }
   }
 }
 
@@ -203,7 +196,7 @@ resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-11-30' 
 }
 
 resource keyVault 'Microsoft.KeyVault/vaults@2025-05-01' = {
-  name: 'blofy-${environment}-kv-${suffix}'
+  name: 'blofykv${suffix}'
   location: location
   tags: tags
   properties: {
