@@ -5,10 +5,12 @@ on:
     branches: [infra/azure-staging]
     paths:
       - 'infra/azure/**'
+      - 'services/update-distribution/**'
       - '.github/workflows/azure-infra-ci.yml'
   pull_request:
     paths:
       - 'infra/azure/**'
+      - 'services/update-distribution/**'
       - '.github/workflows/azure-infra-ci.yml'
 
 permissions:
@@ -17,7 +19,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -26,16 +28,19 @@ jobs:
         run: |
           set -euo pipefail
           az bicep install
-          az bicep build --file infra/azure/main.bicep --stdout >/tmp/blofy-azure-arm.json
-          python3 - <<'PY'
-          import json
-          p=json.load(open('/tmp/blofy-azure-arm.json', encoding='utf-8'))
+          for template in infra/azure/main.bicep infra/azure/managed/main.bicep; do
+            output="/tmp/$(basename "$(dirname "$template")")-$(basename "$template").json"
+            az bicep build --file "$template" --stdout >"$output"
+            python3 - "$output" <<'PY'
+          import json, sys
+          p=json.load(open(sys.argv[1], encoding='utf-8'))
           assert p.get('$schema')
           assert p.get('resources')
-          print('Bicep compiled:', len(p['resources']), 'resources')
+          print(sys.argv[1], 'compiled:', len(p['resources']), 'resources')
           PY
+          done
 
-      - name: Validate Docker Compose expansion
+      - name: Validate legacy Docker Compose expansion
         shell: bash
         env:
           AZURE_FQDN: blofy-ci.example.test
@@ -52,7 +57,7 @@ jobs:
           grep -Fq 'postgres:' /tmp/blofy-compose.yml
           grep -Fq 'caddy:' /tmp/blofy-compose.yml
 
-      - name: Validate Caddy HTTPS configs
+      - name: Validate Caddy configs
         shell: bash
         run: |
           set -euo pipefail
@@ -63,6 +68,27 @@ jobs:
           docker run --rm \
             -v "$PWD/infra/azure/Caddyfile.blofy:/etc/caddy/Caddyfile:ro" \
             caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm \
+            -e PORT=8080 \
+            -e ACTIVATION_URL=http://blofy-activation \
+            -e RELEASE_URL=http://blofy-releases \
+            -v "$PWD/infra/azure/managed/gateway/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+
+      - name: Check Azure release service
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd services/update-distribution
+          npm install --ignore-scripts
+          npm run check
+          docker build -t blofy-release-ci .
+
+      - name: Build managed gateway image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -t blofy-gateway-ci infra/azure/managed/gateway
 
       - name: Check shell scripts
         shell: bash
