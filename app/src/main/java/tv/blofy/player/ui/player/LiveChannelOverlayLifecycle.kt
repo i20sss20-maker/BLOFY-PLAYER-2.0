@@ -3,28 +3,40 @@ package tv.blofy.player.ui.player
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.Application
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.core.os.ConfigurationCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.ui.PlayerView
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.ui.browser.LiveChannelAdapter
+import tv.blofy.player.ui.common.BlofyTvDesign
 import java.util.WeakHashMap
 
 /**
- * TV channel browser layered over the existing PlayerActivity window. It deliberately does not
- * start another Activity or player, so the current live session keeps rendering while the list is
- * open. Selecting a row uses PlayerActivity's existing numeric zapping path.
+ * TV channel browser layered over the existing PlayerActivity window. It never starts another
+ * Activity or another player, so the current live session and video surface stay alive while the
+ * channel list is open. A channel selection reuses PlayerActivity's existing numeric zapping path.
  */
 class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
     private val bindings = WeakHashMap<PlayerActivity, LiveWindowCallback>()
@@ -41,8 +53,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
     override fun onActivityPaused(activity: Activity) {
         if (activity !is PlayerActivity) return
         val wrapped = bindings.remove(activity) ?: return
-        wrapped.dialog?.dismiss()
-        wrapped.dialog = null
+        wrapped.close()
         if (activity.window.callback === wrapped) activity.window.callback = wrapped.delegate
     }
 
@@ -56,19 +67,34 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         private val activity: PlayerActivity,
         val delegate: Window.Callback,
     ) : Window.Callback by delegate {
-        var dialog: AlertDialog? = null
+        private var dialog: AlertDialog? = null
         private var loading = false
+        private var displayedChannels: List<StreamEntity> = emptyList()
+        private var currentChannelKey: String? = null
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-            val ok = event.action == KeyEvent.ACTION_DOWN &&
-                (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)
-            // PlayerActivity gives focus back to PlayerView whenever its HUD is hidden. Intercept
-            // only in that state so OK on subtitle/audio/quality controls keeps its old behavior.
-            if (ok && activity.currentFocus is PlayerView) {
+            if (event.action != KeyEvent.ACTION_DOWN) return delegate.dispatchKeyEvent(event)
+            if (dialog?.isShowing == true && event.keyCode == KeyEvent.KEYCODE_BACK) {
+                close()
+                return true
+            }
+            val ok = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                event.keyCode == KeyEvent.KEYCODE_ENTER ||
+                event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+            // PlayerActivity returns focus to PlayerView whenever its HUD is hidden. Intercept OK
+            // only then, so audio/subtitle/quality controls retain their established behavior.
+            if (ok && dialog?.isShowing != true && (activity.currentFocus is PlayerView || activity.currentFocus == null)) {
                 openChannelList()
                 return true
             }
             return delegate.dispatchKeyEvent(event)
+        }
+
+        fun close() {
+            dialog?.dismiss()
+            dialog = null
+            displayedChannels = emptyList()
+            currentChannelKey = null
         }
 
         private fun openChannelList() {
@@ -78,55 +104,139 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             if (providerId.isBlank()) return
             loading = true
             activity.lifecycleScope.launch {
-                val channels = withContext(Dispatchers.IO) {
+                val result = withContext(Dispatchers.IO) {
                     runCatching {
-                        BlofyDatabase.get(activity.applicationContext).dao()
-                            .streams(providerId, "live", categoryId).first()
-                    }.getOrDefault(emptyList())
+                        val dao = BlofyDatabase.get(activity.applicationContext).dao()
+                        val channels = dao.streams(providerId, "live", categoryId).first()
+                        val categoryName = categoryId?.let { id ->
+                            dao.categorySnapshot(providerId, "live").firstOrNull { it.remoteId == id }?.name
+                        }
+                        channels to categoryName
+                    }.getOrElse { emptyList<StreamEntity>() to null }
                 }
                 loading = false
                 if (activity.isFinishing || activity.isDestroyed) return@launch
+                val channels = result.first
                 if (channels.isEmpty()) {
                     Toast.makeText(activity, copy("لا توجد قنوات في هذه القائمة", "No channels in this list"), Toast.LENGTH_SHORT).show()
                     return@launch
                 }
-
-                val currentKey = RecentChannelStore.keys(activity, providerId).firstOrNull()
+                displayedChannels = channels
+                currentChannelKey = RecentChannelStore.keys(activity, providerId).firstOrNull()
                     ?: activity.intent.getStringExtra(PlayerActivity.EXTRA_CONTENT_KEY).orEmpty()
-                val checked = channels.indexOfFirst { it.key == currentKey }
-                val labels = channels.mapIndexed { index, channel -> "${index + 1}. ${channel.name}" }.toTypedArray()
-                val created = AlertDialog.Builder(activity)
-                    .setTitle(copy("البث المباشر", "Live channels"))
-                    .setSingleChoiceItems(labels, checked) { shown, which ->
-                        if (which == checked) {
-                            shown.dismiss()
-                            return@setSingleChoiceItems
-                        }
-                        val channelNumber = which + 1
-                        if (channelNumber > 9_999) {
-                            Toast.makeText(activity, copy("رقم القناة أكبر من حد التبديل الحالي", "Channel number is above the current zap limit"), Toast.LENGTH_SHORT).show()
-                            return@setSingleChoiceItems
-                        }
-                        shown.dismiss()
-                        dispatchChannelNumber(channelNumber)
-                    }
-                    .setNegativeButton(copy("إغلاق", "Close"), null)
-                    .setOnDismissListener { dialog = null }
-                    .create()
-                dialog = created
-                created.setOnShowListener {
-                    val window = created.window ?: return@setOnShowListener
-                    window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                    window.setDimAmount(0.22f)
-                    window.setGravity(Gravity.START or Gravity.CENTER_VERTICAL)
-                    window.decorView.layoutDirection = activity.resources.configuration.layoutDirection
-                    val width = (activity.resources.displayMetrics.widthPixels *
-                        if (DeviceClass.isTv(activity)) 0.52f else 0.92f).toInt()
-                    window.setLayout(width, WindowManager.LayoutParams.MATCH_PARENT)
-                    if (checked >= 0) created.listView.setSelection(checked)
-                }
-                created.show()
+                showDialog(result.second)
             }
+        }
+
+        private fun showDialog(categoryName: String?) {
+            val channels = displayedChannels
+            if (channels.isEmpty() || activity.isFinishing || activity.isDestroyed) return
+            val list = RecyclerView(activity).apply {
+                layoutManager = LinearLayoutManager(activity)
+                itemAnimator = null
+                clipToPadding = false
+                setPadding(dp(8), dp(8), dp(8), dp(16))
+                setItemViewCacheSize(20)
+                recycledViewPool.setMaxRecycledViews(0, 28)
+                overScrollMode = View.OVER_SCROLL_NEVER
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                background = Color.TRANSPARENT
+            }
+            lateinit var adapter: LiveChannelAdapter
+            adapter = LiveChannelAdapter(
+                onClick = { channel -> selectChannel(channel) },
+                onFocus = {},
+                onLongClick = {},
+                itemKey = { it.key }
+            )
+            adapter.submit(channels)
+            list.adapter = adapter
+
+            val header = TextView(activity).apply {
+                text = buildString {
+                    append(copy("البث المباشر", "Live channels"))
+                    if (!categoryName.isNullOrBlank()) append("  •  ").append(categoryName)
+                }
+                textSize = 21f
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(BlofyTvDesign.TextPrimary)
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setPadding(dp(16), dp(12), dp(16), dp(4))
+            }
+            val hint = TextView(activity).apply {
+                text = copy(
+                    "القناة الحالية تستمر بالخلفية • OK للتبديل • BACK للعودة لملء الشاشة",
+                    "Current channel keeps playing • OK to switch • BACK for fullscreen"
+                )
+                textSize = 11.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = Gravity.START
+                setPadding(dp(16), 0, dp(16), dp(8))
+            }
+            val panel = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutDirection = activity.resources.configuration.layoutDirection
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(22).toFloat()
+                    setColor(0xF216121E.toInt())
+                    setStroke(dp(1), 0x665D3A83)
+                }
+                addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+                addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
+                addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            }
+
+            val created = AlertDialog.Builder(activity)
+                .setView(panel)
+                .create()
+            created.setCanceledOnTouchOutside(false)
+            created.setOnDismissListener {
+                if (dialog === created) dialog = null
+                displayedChannels = emptyList()
+                currentChannelKey = null
+            }
+            dialog = created
+            created.setOnShowListener {
+                val window = created.window ?: return@setOnShowListener
+                window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                window.setDimAmount(0.12f)
+                window.setGravity(Gravity.START or Gravity.CENTER_VERTICAL)
+                window.decorView.layoutDirection = activity.resources.configuration.layoutDirection
+                window.setBackgroundDrawableResource(android.R.color.transparent)
+                val width = (activity.resources.displayMetrics.widthPixels *
+                    if (DeviceClass.isTv(activity)) 0.48f else 0.92f).toInt()
+                val height = (activity.resources.displayMetrics.heightPixels * 0.94f).toInt()
+                window.setLayout(width, height)
+                val current = currentChannelKey
+                val currentIndex = channels.indexOfFirst { it.key == current }.coerceAtLeast(0)
+                list.scrollToPosition(currentIndex)
+                list.post {
+                    list.findViewHolderForAdapterPosition(currentIndex)?.itemView?.requestFocus()
+                        ?: list.requestFocus()
+                }
+            }
+            created.show()
+        }
+
+        private fun selectChannel(channel: StreamEntity) {
+            if (channel.key == currentChannelKey) return
+            val which = displayedChannels.indexOfFirst { it.key == channel.key }
+            if (which < 0) return
+            val channelNumber = which + 1
+            if (channelNumber > 9_999) {
+                Toast.makeText(
+                    activity,
+                    copy("رقم القناة أكبر من حد التبديل الحالي", "Channel number is above the current zap limit"),
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
+            }
+            val switchAction = {
+                currentChannelKey = channel.key
+                dispatchChannelNumber(channelNumber)
+            }
+            if (channel.locked) ParentalGate.requirePin(activity, switchAction) else switchAction()
         }
 
         private fun dispatchChannelNumber(number: Int) {
@@ -147,6 +257,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
             }
         }
+
+        private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).toInt()
 
         private fun copy(arabic: String, english: String): String =
             if (ConfigurationCompat.getLocales(activity.resources.configuration)[0]?.language == "ar") arabic else english
