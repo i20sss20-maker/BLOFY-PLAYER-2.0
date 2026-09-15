@@ -1,6 +1,9 @@
 import {recordAudit} from './audit.mjs';
 
+const DAY_MS=24*60*60*1000;
+
 export const RENEWAL_OPTIONS=Object.freeze([
+  {key:'week',name:'أسبوع (7 أيام)',days:7},
   {key:'month',name:'شهر',months:1}, {key:'quarter',name:'3 أشهر',months:3},
   {key:'half-year',name:'6 أشهر',months:6}, {key:'year',name:'سنة',months:12},
   {key:'lifetime',name:'مدى الحياة',months:null}
@@ -16,6 +19,19 @@ export function addCalendarMonths(timestamp,months){
   const lastDay=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,0)).getUTCDate();
   date.setUTCDate(Math.min(day,lastDay));return date.getTime();
 }
+export function addExactDays(timestamp,days){
+  return timestamp+(days*DAY_MS);
+}
+function optionExpiry(startsAt,option){
+  if(option.months===null)return null;
+  if(Number.isInteger(option.days)&&option.days>0)return addExactDays(startsAt,option.days);
+  return addCalendarMonths(startsAt,option.months);
+}
+function optionDurationDays(option){
+  if(option.months===null)return null;
+  if(Number.isInteger(option.days)&&option.days>0)return option.days;
+  return option.months*30;
+}
 export function renewalPreview(device,duration,now=Date.now()){
   const option=optionFor(duration);
   if(!device)throw new RenewalError('device_not_found',404);
@@ -24,7 +40,7 @@ export function renewalPreview(device,duration,now=Date.now()){
   if(device.status==='active'&&previousExpiresAt===null)throw new RenewalError('already_lifetime',409);
   const startsAt=Math.max(now,Number.isFinite(previousExpiresAt)?previousExpiresAt:0);
   return {duration:option.key,name:option.name,previousExpiresAt,startsAt,
-    expiresAt:option.months===null?null:addCalendarMonths(startsAt,option.months)};
+    expiresAt:optionExpiry(startsAt,option)};
 }
 
 /** Uses the existing subscription ledger; manual options are never public purchasable plans. */
@@ -48,7 +64,7 @@ export async function renewDevice(pool,{deviceId,duration,requestId,expectedExpi
     // Reserved inactive plans keep foreign-key history consistent without adding free checkout products.
     await client.query(`INSERT INTO subscription_plans(plan_key,name,duration_days,price_minor,currency,active)
       VALUES($1,$2,$3,0,'SAR',FALSE) ON CONFLICT(plan_key) DO NOTHING`,
-      [planKey,'تمديد إداري · '+option.name,option.months===null?null:option.months*30]);
+      [planKey,'تمديد إداري · '+option.name,optionDurationDays(option)]);
     const expires=preview.expiresAt===null?null:new Date(preview.expiresAt);
     await client.query(`INSERT INTO device_subscriptions(id,device_id,plan_key,starts_at,expires_at,status)
       VALUES($1,$2,$3,$4,$5,'active')`,[requestId,deviceId,planKey,new Date(preview.startsAt),expires]);
