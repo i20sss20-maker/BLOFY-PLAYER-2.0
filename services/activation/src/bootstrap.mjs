@@ -1,4 +1,4 @@
-// Force Vercel function rebundle for BLOFY PLAYER rc07.49 release metadata.
+// Force Vercel production rebundle for BLOFY PLAYER portal contact release.
 import './subscriber-proxy-hook.mjs';
 import './portal-existing-device-login.mjs';
 import './subscriber-portal-ui-hook.mjs';
