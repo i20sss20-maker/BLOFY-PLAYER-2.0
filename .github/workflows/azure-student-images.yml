@@ -78,6 +78,17 @@ jobs:
           REG='${{ steps.azure.outputs.login_server }}'
           TAG='${{ steps.azure.outputs.tag }}'
 
+          # The environment must accept public traffic before an app-level
+          # external ingress can be reached from the internet. Internal BLOFY
+          # services remain internal; only the gateway has external ingress.
+          ENV_NAME="$(az containerapp env list --resource-group "$AZURE_RG" --query '[0].name' -o tsv)"
+          test -n "$ENV_NAME"
+          az containerapp env update \
+            --resource-group "$AZURE_RG" \
+            --name "$ENV_NAME" \
+            --public-network-access Enabled \
+            --only-show-errors >/dev/null
+
           # Re-assert public ingress explicitly. This changes ingress only and
           # does not create a revision.
           az containerapp ingress update \
