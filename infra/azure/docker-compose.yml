@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-blofy}
+      POSTGRES_USER: ${POSTGRES_USER:-blofy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=96MB
+      - -c
+      - max_connections=40
+      - -c
+      - effective_cache_size=256MB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-blofy} -d ${POSTGRES_DB:-blofy}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [blofy]
+
+  activation:
+    build:
+      context: ../..
+      dockerfile: infra/azure/Dockerfile.activation
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-blofy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blofy}
+      PGSSLMODE: disable
+      BLOFY_ADMIN_TOKEN: ${BLOFY_ADMIN_TOKEN:?BLOFY_ADMIN_TOKEN is required}
+      BLOFY_PLAYLIST_ENCRYPTION_KEY: ${BLOFY_PLAYLIST_ENCRYPTION_KEY:?BLOFY_PLAYLIST_ENCRYPTION_KEY is required}
+      BLOFY_TRIAL_DAYS: ${BLOFY_TRIAL_DAYS:-7}
+      NODE_ENV: production
+    expose:
+      - "8080"
+    networks: [blofy]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [activation]
+    environment:
+      AZURE_FQDN: ${AZURE_FQDN:?AZURE_FQDN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [blofy]
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  blofy:
+    driver: bridge
