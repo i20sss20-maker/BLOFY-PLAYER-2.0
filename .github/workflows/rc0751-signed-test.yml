@@ -1,3 +1,4 @@
+# QA rebuild trigger: navigation, scoped search, live overlay
 name: BLOFY rc07.51 Production-Signed Test
 
 on:
