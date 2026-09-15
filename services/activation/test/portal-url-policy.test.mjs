@@ -65,7 +65,7 @@ test('playlist URL policy rejects local, private and single-label endpoints', ()
 
 test('portal rejection exposes and logs only the validation code', async () => {
   const requestBody = {
-    deviceId: 'BLOFY-SECRET-DEVICE',
+    deviceId: 'BLOFY-SECR-ET12',
     activationCode: '123456',
     providerType: 'xtream',
     baseUrl: 'http://secret-user:secret-pass@192.168.1.10/list.m3u?token=secret-token',
@@ -77,7 +77,11 @@ test('portal rejection exposes and logs only the validation code', async () => {
   const handlers = createPortalHandlers({
     pool: { connect() { throw new Error('database_must_not_be_reached'); } },
     readJson: async () => requestBody,
-    authorizedDevice: async () => ({ status: 'active' }),
+    authorizedDevice: async (deviceId, activationCode) => (
+      deviceId === requestBody.deviceId && activationCode === requestBody.activationCode
+        ? { device_id: requestBody.deviceId, status: 'active' }
+        : null
+    ),
     warnRejected: (error) => warnings.push(error),
     json: (_res, status, body) => {
       response = { status, body };
