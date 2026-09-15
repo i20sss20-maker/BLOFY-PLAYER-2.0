@@ -1,0 +1,12 @@
+FROM node:20-alpine
+WORKDIR /app
+
+COPY services/activation/package.json ./package.json
+RUN npm install --omit=dev
+
+COPY services/activation/schema.sql ./schema.sql
+COPY services/activation/src ./src
+COPY services/activation/web ./web
+
+EXPOSE 8080
+CMD ["npm", "start"]
