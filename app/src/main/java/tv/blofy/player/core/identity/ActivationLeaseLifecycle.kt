@@ -18,6 +18,7 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.LoginActivity
+import tv.blofy.player.ui.login.StartupEntryState
 import tv.blofy.player.ui.player.PlayerActivity
 
 /** Recheck a displayed library/player without owning Login or doing catalog maintenance. */
@@ -48,6 +49,9 @@ class ActivationLeaseLifecycle : Application.ActivityLifecycleCallbacks {
                 } } catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { false } // A local storage failure must not crash the foreground activity or grant a lease.
                 if (!allowed && current === activity && !activity.isFinishing && !activity.isDestroyed) {
+                    // Do not let the next cold start jump back into Home after a blocked/expired
+                    // lease. Splash reads this hint synchronously and will return to Login instead.
+                    StartupEntryState.clear(activity.applicationContext)
                     activity.startActivity(Intent(activity, LoginActivity::class.java).addFlags(
                         Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
                     return@launch
