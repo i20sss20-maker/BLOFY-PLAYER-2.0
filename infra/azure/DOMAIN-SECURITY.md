@@ -1,6 +1,6 @@
-# BLOFY domain security baseline
+# BLOFY PLAYER domain security baseline
 
-Target brand domain: `blofy.com`.
+Target brand domain: `blofyplayer.com`.
 
 > Do not change public DNS until the domain is confirmed under BLOFY control and Azure staging has passed health checks.
 
@@ -8,13 +8,13 @@ Target brand domain: `blofy.com`.
 
 | Host | Purpose | Phase 1 target |
 | --- | --- | --- |
-| `blofy.com` | Public site + customer portal | Azure static public IP |
-| `www.blofy.com` | Compatibility only | Azure static public IP, then HTTPS redirect to apex |
-| `api.blofy.com` | Android/iOS API | Azure static public IP |
-| `admin.blofy.com` | Administration | Azure static public IP |
-| `downloads.blofy.com` | Release/download URL | Azure static public IP; Caddy temporarily redirects to verified Railway releases |
+| `blofyplayer.com` | Public site + customer portal | Azure static public IP |
+| `www.blofyplayer.com` | Compatibility only | Azure static public IP, then HTTPS redirect to apex |
+| `api.blofyplayer.com` | Android/iOS API | Azure static public IP |
+| `admin.blofyplayer.com` | Administration | Azure static public IP |
+| `downloads.blofyplayer.com` | Release/download URL | Azure static public IP; Caddy temporarily redirects to verified Railway releases |
 
-Do not create wildcard (`*.blofy.com`) DNS. Explicit records limit accidental exposure of future hostnames.
+Do not create wildcard (`*.blofyplayer.com`) DNS. Explicit records limit accidental exposure of future hostnames.
 
 ## DNS records after Azure acceptance
 
@@ -43,7 +43,7 @@ Enable all of these at the registrar before production cutover:
 - Auto-renew with a valid backup payment method.
 - WHOIS/contact privacy where supported.
 - Registry lock if the registrar offers it at a reasonable cost.
-- A recovery email outside `@blofy.com`; do not make domain recovery depend on the domain itself.
+- A recovery email outside `@blofyplayer.com`; do not make domain recovery depend on the domain itself.
 - Unique password stored in a password manager; never reuse the Azure/GitHub password.
 
 ## DNSSEC
@@ -63,7 +63,7 @@ Enable DNSSEC after authoritative DNS is finalized. Confirm the DS record is vis
 
 ## HTTPS baseline
 
-The `Caddyfile.blofy` profile enforces:
+The custom-domain Caddy profile enforces:
 
 - HTTP → HTTPS via Caddy automatic HTTPS.
 - HSTS for one year with subdomains after custom-domain cutover.
@@ -73,11 +73,11 @@ The `Caddyfile.blofy` profile enforces:
 - browser permission restrictions for camera/microphone/geolocation/payment/USB.
 - server fingerprint removal.
 
-Do not add HSTS preload until every BLOFY subdomain is permanently HTTPS-only and we explicitly decide the preload commitment is appropriate.
+Do not add HSTS preload until every BLOFY PLAYER subdomain is permanently HTTPS-only and we explicitly decide the preload commitment is appropriate.
 
 ## Admin exposure
 
-`admin.blofy.com` is a separate origin from the public site. Application-level admin authentication/session protection remains mandatory. Later production hardening can add Azure Front Door WAF or IP/identity-gated admin access if traffic/risk justifies the additional Azure cost.
+`admin.blofyplayer.com` is a separate origin from the public site. Application-level admin authentication/session protection remains mandatory. Later production hardening can add Azure Front Door WAF or IP/identity-gated admin access if traffic/risk justifies the additional Azure cost.
 
 ## Backups
 
@@ -91,12 +91,12 @@ Before switching production data from Vercel to Azure:
 
 ## Cutover rule
 
-Never point `blofy.com` at Azure merely because the VM is running. Cutover requires all of the following:
+Never point `blofyplayer.com` at Azure merely because the VM is running. Cutover requires all of the following:
 
 - `/health` is healthy over HTTPS.
 - Customer portal works.
 - Admin login and device management work.
-- Android RC build can activate and sync through `api.blofy.com`.
+- Android RC build can activate and sync through `api.blofyplayer.com`.
 - Database import/integrity checks pass.
 - Release/update flow is verified.
 - Rollback target (current Vercel/Railway endpoints) remains available during acceptance.
