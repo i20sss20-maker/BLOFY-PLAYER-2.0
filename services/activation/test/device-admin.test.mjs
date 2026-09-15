@@ -15,6 +15,11 @@ test('expiry is normalized without mutating row; block and lifetime stay distinc
  const stale={...row,status:'active',expires_at:new Date(now-100)};assert.equal(deviceView(stale,now).status,'expired');assert.equal(stale.status,'active');
  assert.equal(deviceView({...stale,status:'blocked'},now).status,'blocked');assert.equal(deviceView({...row,status:'active',expires_at:null},now).remainingDays,null);
 });
+test('portal-only pending registration is not presented as an expired entitlement',()=>{
+ const pending=deviceView({...row,status:'expired',expires_at:new Date(now-100),trial_registration_pending:true},now);
+ assert.equal(pending.status,'pending');assert.equal(pending.pending,true);assert.equal(pending.remainingDays,null);
+ assert.equal(deviceFilters(new URLSearchParams('filter=pending')).filter,'pending');
+});
 test('device view contains no pairing proof, playlist secrets, or invented hardware details',()=>{
  const x=deviceView({...row,activation_code:'SECRET',username_enc:'SECRET',password_enc:'SECRET',base_url_enc:'SECRET'},now);
  assert.ok(!JSON.stringify(x).includes('SECRET'));for(const key of ['model','ip','ram','activationCode'])assert.ok(!(key in x));
