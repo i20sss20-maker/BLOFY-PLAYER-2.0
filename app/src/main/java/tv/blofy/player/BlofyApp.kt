@@ -51,14 +51,21 @@ class BlofyApp : Application() {
         super.onCreate()
         current = this
 
+        // SettingsActivity stores the user's explicit language choice here. Reconcile AppCompat's
+        // process locale from that durable value on every cold start instead of treating an empty
+        // locale list as English and accidentally resetting a previously selected language.
         val settings = getSharedPreferences("blofy_player_settings", MODE_PRIVATE)
-        if (AppCompatDelegate.getApplicationLocales().isEmpty) {
-            val storedTag = settings.getString("app_language_tag", null)?.trim().orEmpty()
-            val resolvedTag = storedTag.ifBlank { "en" }
+        val storedTag = settings.getString("app_language_tag", null)?.trim().orEmpty()
+        val resolvedTag = storedTag.ifBlank { "en" }
+        val currentTags = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+        if (currentTags != resolvedTag) {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(resolvedTag))
-            if (storedTag.isBlank()) {
-                settings.edit().putString("app_language_tag", "en").putString("app_language", "English").apply()
-            }
+        }
+        if (storedTag.isBlank()) {
+            settings.edit()
+                .putString("app_language_tag", "en")
+                .putString("app_language", "English")
+                .apply()
         }
 
         CrashRecovery.install(this)
