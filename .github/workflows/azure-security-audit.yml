@@ -1,3 +1,4 @@
+# Re-audit after the production gateway revision was promoted successfully from main.
 name: BLOFY Azure Security Audit
 
 on:
