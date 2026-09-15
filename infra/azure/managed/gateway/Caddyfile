@@ -17,7 +17,7 @@
     }
 
     handle_path /releases-admin* {
-        uri replace / /admin
+        rewrite * /admin{uri}
         reverse_proxy {$RELEASE_URL}
     }
 
