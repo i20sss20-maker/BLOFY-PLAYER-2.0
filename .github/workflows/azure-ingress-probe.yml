@@ -27,7 +27,7 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Probe current BLOFY gateway image on a clean app
+      - name: Probe current BLOFY gateway image on port 80
         shell: bash
         run: |
           set -euo pipefail
@@ -42,11 +42,7 @@ jobs:
           REGISTRY_SERVER="${IMAGE%%/*}"
           PROBE="blofy-gateway-probe"
 
-          echo "Testing exact image: $IMAGE"
-          echo '=== existing gateway ==='
-          az containerapp show --resource-group "$AZURE_RG" --name blofy-gateway \
-            --query '{workloadProfileName:properties.workloadProfileName,external:properties.configuration.ingress.external,targetPort:properties.configuration.ingress.targetPort,transport:properties.configuration.ingress.transport,revisionMode:properties.configuration.activeRevisionsMode,minReplicas:properties.template.scale.minReplicas,maxReplicas:properties.template.scale.maxReplicas,fqdn:properties.configuration.ingress.fqdn,image:properties.template.containers[0].image}' -o json
-
+          echo "Testing exact image on port 80: $IMAGE"
           az containerapp delete --resource-group "$AZURE_RG" --name "$PROBE" --yes --only-show-errors >/dev/null 2>&1 || true
           az containerapp create \
             --resource-group "$AZURE_RG" \
@@ -58,22 +54,22 @@ jobs:
             --registry-server "$REGISTRY_SERVER" \
             --image "$IMAGE" \
             --ingress external \
-            --target-port 8080 \
+            --target-port 80 \
             --transport auto \
             --min-replicas 1 \
             --max-replicas 1 \
-            --env-vars PORT=8080 ACTIVATION_URL=http://blofy-activation RELEASE_URL=http://blofy-releases \
+            --env-vars PORT=80 ACTIVATION_URL=http://blofy-activation RELEASE_URL=http://blofy-releases \
             --only-show-errors >/dev/null
 
-          echo '=== clean BLOFY gateway probe ==='
+          echo '=== clean BLOFY gateway port-80 probe ==='
           az containerapp show --resource-group "$AZURE_RG" --name "$PROBE" \
             --query '{workloadProfileName:properties.workloadProfileName,external:properties.configuration.ingress.external,targetPort:properties.configuration.ingress.targetPort,transport:properties.configuration.ingress.transport,revisionMode:properties.configuration.activeRevisionsMode,minReplicas:properties.template.scale.minReplicas,maxReplicas:properties.template.scale.maxReplicas,fqdn:properties.configuration.ingress.fqdn,image:properties.template.containers[0].image}' -o json
 
           FQDN="$(az containerapp show --resource-group "$AZURE_RG" --name "$PROBE" --query properties.configuration.ingress.fqdn -o tsv)"
           ok=false
-          for attempt in $(seq 1 24); do
+          for attempt in $(seq 1 12); do
             code="$(curl -sS --max-time 10 -o /tmp/probe-body -w '%{http_code}' "https://$FQDN/health" || true)"
-            echo "gateway-image attempt $attempt/24 -> HTTP ${code:-curl-error}"
+            echo "gateway-port80 attempt $attempt/12 -> HTTP ${code:-curl-error}"
             if [ "$code" = '200' ]; then
               ok=true
               break
@@ -82,13 +78,13 @@ jobs:
           done
 
           if [ "$ok" != true ]; then
-            echo 'The same BLOFY gateway image failed even on a clean Container App.' >&2
+            echo 'BLOFY gateway image still failed on port 80.' >&2
             [ -s /tmp/probe-body ] && { echo 'Last response:'; head -80 /tmp/probe-body; } || true
             timeout 30s az containerapp logs show --resource-group "$AZURE_RG" --name "$PROBE" --type console --tail 80 2>&1 || true
             exit 42
           fi
 
-          echo 'The BLOFY gateway image works on a clean Container App.'
+          echo 'BLOFY gateway image works on port 80.'
 
       - name: Cleanup probe
         if: always()
