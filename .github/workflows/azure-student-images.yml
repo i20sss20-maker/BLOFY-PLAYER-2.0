@@ -78,9 +78,19 @@ jobs:
           REG='${{ steps.azure.outputs.login_server }}'
           TAG='${{ steps.azure.outputs.tag }}'
 
-          # Internal services remain in single-revision mode. The public gateway
-          # uses multiple-revision mode so its ingress always has an explicit
-          # 100% traffic target instead of an empty platform route.
+          # Re-assert public ingress explicitly. This changes ingress only and
+          # does not create a revision.
+          az containerapp ingress update \
+            --resource-group "$AZURE_RG" \
+            --name blofy-gateway \
+            --type external \
+            --target-port 8080 \
+            --transport auto \
+            --allow-insecure false \
+            --only-show-errors >/dev/null
+
+          # Internal services remain single revision. The public gateway uses
+          # multiple revision mode with an explicit latest=100 route.
           az containerapp revision set-mode \
             --resource-group "$AZURE_RG" \
             --name blofy-gateway \
@@ -101,10 +111,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ENV_NAME="$(az containerapp env list --resource-group "$AZURE_RG" --query '[0].name' -o tsv)"
+          echo '=== managed environment ==='
+          az containerapp env show --resource-group "$AZURE_RG" --name "$ENV_NAME" \
+            --query '{name:name,internal:properties.vnetConfiguration.internal,staticIp:properties.staticIp,defaultDomain:properties.defaultDomain,publicNetworkAccess:properties.publicNetworkAccess}' \
+            -o json || true
+
           for app in blofy-activation blofy-releases blofy-gateway; do
             echo "=== $app ==="
             az containerapp show --resource-group "$AZURE_RG" --name "$app" \
-              --query '{revisionMode:properties.configuration.activeRevisionsMode,latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,fqdn:properties.configuration.ingress.fqdn,traffic:properties.configuration.ingress.traffic}' \
+              --query '{revisionMode:properties.configuration.activeRevisionsMode,external:properties.configuration.ingress.external,targetPort:properties.configuration.ingress.targetPort,transport:properties.configuration.ingress.transport,latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,fqdn:properties.configuration.ingress.fqdn,traffic:properties.configuration.ingress.traffic}' \
               -o json || true
             az containerapp revision list --resource-group "$AZURE_RG" --name "$app" \
               --query '[].{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,replicas:properties.replicas}' \
@@ -118,10 +134,14 @@ jobs:
 
           dump_diagnostics() {
             echo '--- BLOFY Azure diagnostics ---'
+            ENV_NAME="$(az containerapp env list --resource-group "$AZURE_RG" --query '[0].name' -o tsv)"
+            az containerapp env show --resource-group "$AZURE_RG" --name "$ENV_NAME" \
+              --query '{name:name,internal:properties.vnetConfiguration.internal,staticIp:properties.staticIp,defaultDomain:properties.defaultDomain,publicNetworkAccess:properties.publicNetworkAccess}' \
+              -o json || true
             for app in blofy-activation blofy-releases blofy-gateway; do
               echo "=== $app revision state ==="
               az containerapp show --resource-group "$AZURE_RG" --name "$app" \
-                --query '{revisionMode:properties.configuration.activeRevisionsMode,latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,fqdn:properties.configuration.ingress.fqdn,traffic:properties.configuration.ingress.traffic}' \
+                --query '{revisionMode:properties.configuration.activeRevisionsMode,external:properties.configuration.ingress.external,targetPort:properties.configuration.ingress.targetPort,transport:properties.configuration.ingress.transport,latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,fqdn:properties.configuration.ingress.fqdn,traffic:properties.configuration.ingress.traffic}' \
                 -o json || true
               az containerapp revision list --resource-group "$AZURE_RG" --name "$app" \
                 --query '[].{name:name,active:properties.active,healthState:properties.healthState,provisioningState:properties.provisioningState,replicas:properties.replicas}' \
