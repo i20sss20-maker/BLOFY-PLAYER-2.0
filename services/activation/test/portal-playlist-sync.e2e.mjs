@@ -45,6 +45,7 @@ try {
   assert.equal(portal.response.status, 200);
   assert.match(portal.response.headers.get('content-type') || '', /^text\/html\b/);
   assert.match(portal.text, /\/api\/v1\/portal\/playlists\/list/);
+  assert.match(portal.text, /\/api\/v1\/portal\/contact\/status/);
 
   let identity = { deviceId, activationCode };
 
@@ -67,6 +68,38 @@ try {
     assert.equal(pending.last_platform, 'web');
     assert.equal(pending.last_app_version, 'web-portal');
     assert.ok(new Date(pending.expires_at).getTime() <= Date.now() + 5_000, 'pending web pairing must not grant future entitlement');
+  }
+
+  // Contact collection belongs to the same authenticated device and must work while pairing is
+  // pending, without granting a trial. The browser receives only a masked copy after save.
+  const contactBefore = await request('/api/v1/portal/contact/status', { body: identity });
+  assert.equal(contactBefore.response.status, 200);
+  assert.equal(contactBefore.json?.hasPhone, false);
+  assert.equal(contactBefore.json?.maskedPhone, '');
+
+  const badContact = await request('/api/v1/portal/contact/status', {
+    body: { deviceId, activationCode: activationCode === '000000' ? '999999' : '000000' }
+  });
+  assert.equal(badContact.response.status, 403);
+
+  const contactSave = await request('/api/v1/portal/contact', {
+    body: { ...identity, phone: '٠٥٥١٢٣٤٥٦٧' }
+  });
+  assert.equal(contactSave.response.status, 200);
+  assert.equal(contactSave.json?.ok, true);
+  assert.equal(contactSave.json?.maskedPhone, '+966••••4567');
+
+  const contactAfter = await request('/api/v1/portal/contact/status', { body: identity });
+  assert.equal(contactAfter.response.status, 200);
+  assert.equal(contactAfter.json?.hasPhone, true);
+  assert.equal(contactAfter.json?.maskedPhone, '+966••••4567');
+
+  if (db) {
+    const customer = (await db.query('SELECT customer_phone FROM device_customers WHERE device_id=$1', [deviceId])).rows[0];
+    assert.equal(customer?.customer_phone, '+966551234567');
+    const stillPending = (await db.query('SELECT status,trial_registration_pending FROM devices WHERE device_id=$1', [deviceId])).rows[0];
+    assert.equal(stillPending.status, 'expired');
+    assert.equal(stillPending.trial_registration_pending, true);
   }
 
   // Playlist management must already work while registration is pending so a customer can pair
@@ -96,7 +129,7 @@ try {
   assert.equal(noScope.json?.status, 'expired');
 
   // The real Android call supplies trialScope. It binds or reuses the scope clock and completes
-  // the same pending row rather than creating another device or losing the website playlist.
+  // the same pending row rather than creating another device or losing website data.
   const activation = await request('/api/v1/activation/check', {
     body: { ...identity, appVersion: 'e2e-contract', platform: 'android', trialScope }
   });
@@ -116,6 +149,8 @@ try {
     assert.ok(completed.trial_started_at);
     assert.ok(new Date(completed.expires_at).getTime() > Date.now());
     assert.equal(completed.last_platform, 'android');
+    const customer = (await db.query('SELECT customer_phone FROM device_customers WHERE device_id=$1', [deviceId])).rows[0];
+    assert.equal(customer?.customer_phone, '+966551234567');
   }
 
   // This is the exact endpoint and response shape consumed by PortalPlaylistClient.fetchRemote().
@@ -160,11 +195,16 @@ try {
 
   const oldCode = await request('/api/v1/portal/playlists/list', { body: identity });
   assert.equal(oldCode.response.status, 403);
+  const oldContact = await request('/api/v1/portal/contact/status', { body: identity });
+  assert.equal(oldContact.response.status, 403);
   identity = { deviceId, activationCode: rotatedActivationCode };
 
   const sync = await request('/api/v1/portal/playlists/list', { body: identity });
   assert.equal(sync.response.status, 200);
   assert.deepEqual(sync.json.items.find(item => item.id === playlistId), playlist);
+  const rotatedContact = await request('/api/v1/portal/contact/status', { body: identity });
+  assert.equal(rotatedContact.response.status, 200);
+  assert.equal(rotatedContact.json?.maskedPhone, '+966••••4567');
 
   // A valid second device must never receive or change the first device's playlist,
   // including when a client reuses a deterministic playlist UUID.
@@ -176,6 +216,9 @@ try {
   const otherList = await request('/api/v1/portal/playlists/list', { body: otherIdentity });
   assert.equal(otherList.response.status, 200);
   assert.deepEqual(otherList.json.items, []);
+  const otherContact = await request('/api/v1/portal/contact/status', { body: otherIdentity });
+  assert.equal(otherContact.response.status, 200);
+  assert.equal(otherContact.json?.hasPhone, false);
   const crossDeviceSave = await request('/api/v1/portal/playlists', { body: {
     ...otherIdentity, id: playlistId, name: 'Must not replace', providerType: 'xtream',
     baseUrl: 'https://provider.example.test', username: 'other-user', password: 'other-password', active: true
@@ -193,7 +236,7 @@ try {
   assert.equal(removed.response.status, 200);
   assert.deepEqual(removed.json, { deleted: true });
 
-  console.log('BLOFY portal pending pairing -> Android activation -> playlist sync E2E contract passed');
+  console.log('BLOFY portal pending pairing -> one-time phone -> Android activation -> playlist sync E2E contract passed');
 } finally {
   await db?.end().catch(() => {});
 }

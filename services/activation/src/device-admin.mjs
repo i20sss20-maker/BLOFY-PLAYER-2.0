@@ -10,19 +10,20 @@ export const DEVICE_ADMIN_SCHEMA = `CREATE TABLE IF NOT EXISTS device_admin_meta
 const millis = value => { const n = value == null ? NaN : new Date(value).getTime(); return Number.isFinite(n) ? n : null; };
 export function deviceView(row, now = Date.now()) {
   const expiresAt = millis(row.expires_at), firstSeenAt = millis(row.created_at), lastSeenAt = millis(row.last_seen_at);
-  const status = ['active', 'trial'].includes(row.status) && expiresAt != null && expiresAt <= now ? 'expired' : row.status;
+  const pending = row.trial_registration_pending === true && row.status === 'expired';
+  const status = pending ? 'pending' : (['active', 'trial'].includes(row.status) && expiresAt != null && expiresAt <= now ? 'expired' : row.status);
   return { deviceId: row.device_id, name: row.customer_name || '', phone: row.customer_phone || '', email: row.customer_email || '',
-    notes: row.notes || '', revision: Number(row.revision || 0), rawStatus: row.status, status, expiresAt,
+    notes: row.notes || '', revision: Number(row.revision || 0), rawStatus: row.status, status, pending, expiresAt,
     firstSeenAt, trialStartedAt: millis(row.trial_started_at), lastSeenAt,
     isNew: firstSeenAt != null && firstSeenAt <= now && now - firstSeenAt < 86400000,
     recentlySeen: lastSeenAt != null && lastSeenAt <= now && now - lastSeenAt < 600000,
-    remainingDays: expiresAt == null ? null : Math.max(0, Math.ceil((expiresAt - now) / 86400000)),
+    remainingDays: pending ? null : (expiresAt == null ? null : Math.max(0, Math.ceil((expiresAt - now) / 86400000))),
     clientVersion: row.last_app_version || null, platform: row.last_platform || null,
     playlistCount: Number(row.playlist_count || 0), activePlaylist: row.active_playlist || null,
     playlistUpdatedAt: millis(row.playlist_updated_at), authLockedUntil: millis(row.auth_locked_until) };
 }
 export function deviceFilters(params) {
-  const allowed = ['all','new24h','new7d','trial','active','expired','blocked','noPlaylists','recent','inactive7d','expiring7d'];
+  const allowed = ['all','new24h','new7d','pending','trial','active','expired','blocked','noPlaylists','recent','inactive7d','expiring7d'];
   const filter = params.get('filter') || 'all', sort = params.get('sort') || 'newest';
   if (!allowed.includes(filter) || !['newest','seen','expiry'].includes(sort)) throw new DeviceAdminError('invalid_filter');
   const page = Number(params.get('page') || 1);
@@ -41,9 +42,9 @@ export function validateDeviceProfile(body) {
 }
 const ID = /^BLOFY-[A-Z0-9-]{4,32}$/i;
 const ROOT = '/api/v1/admin/device-insights';
-const statusSql = `CASE WHEN d.status IN ('active','trial') AND d.expires_at<=NOW() THEN 'expired' ELSE d.status END`;
+const statusSql = `CASE WHEN d.trial_registration_pending=TRUE AND d.status='expired' THEN 'pending' WHEN d.status IN ('active','trial') AND d.expires_at<=NOW() THEN 'expired' ELSE d.status END`;
 const joins = `FROM devices d LEFT JOIN device_customers c ON c.device_id=d.device_id LEFT JOIN device_admin_metadata m ON m.device_id=d.device_id`;
-const columns = `d.device_id,d.status,d.created_at,d.trial_started_at,d.expires_at,d.last_seen_at,d.last_app_version,d.last_platform,d.auth_locked_until,
+const columns = `d.device_id,d.status,d.created_at,d.trial_started_at,d.expires_at,d.last_seen_at,d.last_app_version,d.last_platform,d.auth_locked_until,d.trial_registration_pending,
  c.customer_name,c.customer_email,c.customer_phone,m.notes,m.revision,
  (SELECT COUNT(*)::int FROM device_playlists p WHERE p.device_id=d.device_id) AS playlist_count,
  (SELECT p.name FROM device_playlists p WHERE p.device_id=d.device_id AND p.active=TRUE ORDER BY p.updated_at DESC LIMIT 1) AS active_playlist,
@@ -61,7 +62,7 @@ export function createDeviceAdmin({ pool, requireAdmin, readJson, json, ensureAd
   async function list(params) {
     const f = deviceFilters(params);
     const clause = { all:'TRUE', new24h:"d.created_at BETWEEN NOW()-INTERVAL '24 hours' AND NOW()", new7d:"d.created_at BETWEEN NOW()-INTERVAL '7 days' AND NOW()",
-      trial:`(${statusSql})='trial'`, active:`(${statusSql})='active'`, expired:`(${statusSql})='expired'`, blocked:"d.status='blocked'",
+      pending:`(${statusSql})='pending'`, trial:`(${statusSql})='trial'`, active:`(${statusSql})='active'`, expired:`(${statusSql})='expired'`, blocked:"d.status='blocked'",
       noPlaylists:'NOT EXISTS(SELECT 1 FROM device_playlists p WHERE p.device_id=d.device_id)', recent:"d.last_seen_at BETWEEN NOW()-INTERVAL '10 minutes' AND NOW()",
       expiring7d:"d.status IN ('active','trial') AND d.expires_at>NOW() AND d.expires_at<=NOW()+INTERVAL '7 days'",
       inactive7d:"(d.last_seen_at IS NULL OR d.last_seen_at<NOW()-INTERVAL '7 days')" }[f.filter];
