@@ -1,0 +1,31 @@
+:{$PORT:8080} {
+    encode zstd gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        Cross-Origin-Opener-Policy "same-origin"
+        -Server
+    }
+
+    @health path /health
+    header @health Content-Type "application/json; charset=utf-8"
+    respond @health "{\"ok\":true,\"service\":\"blofy-gateway\"}" 200
+
+    @releasePaths path /release.json /download/* /downloads /downloads/* /releases /releases/*
+    handle @releasePaths {
+        reverse_proxy {$RELEASE_URL}
+    }
+
+    handle_path /releases-admin* {
+        rewrite * /admin{uri}
+        reverse_proxy {$RELEASE_URL}
+    }
+
+    handle {
+        reverse_proxy {$ACTIVATION_URL}
+    }
+}

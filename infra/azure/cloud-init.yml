@@ -1,0 +1,64 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - git
+  - ca-certificates
+  - curl
+  - openssl
+  - fail2ban
+  - unattended-upgrades
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/90-blofy-hardening.conf
+    permissions: '0644'
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PubkeyAuthentication yes
+      X11Forwarding no
+      AllowAgentForwarding no
+      MaxAuthTries 3
+      LoginGraceTime 30
+      AllowUsers __ADMIN_USERNAME__
+  - path: /etc/fail2ban/jail.d/blofy-sshd.local
+    permissions: '0644'
+    content: |
+      [sshd]
+      enabled = true
+      maxretry = 4
+      findtime = 10m
+      bantime = 1h
+  - path: /etc/docker/daemon.json
+    permissions: '0644'
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        },
+        "live-restore": true,
+        "no-new-privileges": true
+      }
+
+runcmd:
+  - systemctl enable --now docker
+  - systemctl restart docker
+  - systemctl enable --now fail2ban
+  - systemctl enable unattended-upgrades
+  - systemctl restart ssh
+  - usermod -aG docker __ADMIN_USERNAME__
+  - mkdir -p /swap
+  - fallocate -l 2G /swap/blofy.swap || dd if=/dev/zero of=/swap/blofy.swap bs=1M count=2048
+  - chmod 600 /swap/blofy.swap
+  - mkswap /swap/blofy.swap
+  - swapon /swap/blofy.swap
+  - "grep -q '/swap/blofy.swap' /etc/fstab || echo '/swap/blofy.swap none swap sw 0 0' >> /etc/fstab"
+  - mkdir -p /opt/blofy
+  - git clone --depth 1 --branch infra/azure-staging https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0.git /opt/blofy/app
+  - chown -R __ADMIN_USERNAME__:__ADMIN_USERNAME__ /opt/blofy
+  - echo 'BLOFY Azure staging host prepared with key-only SSH, fail2ban and automatic security updates.' > /etc/motd
