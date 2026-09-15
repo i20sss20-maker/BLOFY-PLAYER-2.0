@@ -4,5 +4,6 @@ COPY package.json ./
 RUN npm install --omit=dev
 COPY schema.sql ./schema.sql
 COPY src ./src
+COPY web ./web
 EXPOSE 8080
 CMD ["npm","start"]
