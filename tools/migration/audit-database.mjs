@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
+import { databaseOptions } from '../../services/activation/src/database-options.mjs';
 
 const connectionString = String(process.env.DATABASE_URL || '').trim();
 if (!connectionString) {
@@ -7,27 +8,15 @@ if (!connectionString) {
   process.exit(2);
 }
 
-const sslMode = (() => {
-  try { return new URL(connectionString).searchParams.get('sslmode') || ''; }
-  catch { return ''; }
-})();
-const remote = (() => {
-  try {
-    const host = new URL(connectionString).hostname;
-    return !['localhost', '127.0.0.1', '::1'].includes(host);
-  } catch { return true; }
-})();
-
-const pool = new pg.Pool({
-  connectionString,
+const pool = new pg.Pool(databaseOptions(connectionString, {
   max: 1,
   connectionTimeoutMillis: 10_000,
   statement_timeout: 20_000,
-  ssl: remote && sslMode !== 'disable' ? { rejectUnauthorized: false } : undefined,
-});
+  lock_timeout: 5_000,
+  idle_in_transaction_session_timeout: 20_000,
+}));
 
 const quoteIdent = value => `"${String(value).replaceAll('"', '""')}"`;
-const stable = value => JSON.stringify(value, Object.keys(value).sort());
 
 try {
   const client = await pool.connect();
