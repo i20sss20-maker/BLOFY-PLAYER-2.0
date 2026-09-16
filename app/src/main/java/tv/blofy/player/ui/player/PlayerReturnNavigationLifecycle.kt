@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.OnBackPressedCallback
 import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -21,6 +22,20 @@ import java.util.WeakHashMap
 class PlayerReturnNavigationLifecycle : Application.ActivityLifecycleCallbacks {
     private val targets = WeakHashMap<PlayerActivity, ReturnTarget>()
     private var pendingSource: ReturnTarget? = null
+
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+        if (activity !is PlayerActivity) return
+        if (activity.intent.getStringExtra(PlayerActivity.EXTRA_KIND).orEmpty() != KIND_LIVE) return
+
+        // Some devices/remotes deliver BACK through Android's back dispatcher instead of a raw
+        // KEYCODE_BACK event. Bind that path to the exact same deterministic Live return route so
+        // fullscreen playback can never fall through to Home just because the input source differs.
+        activity.onBackPressedDispatcher.addCallback(activity, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                routeLiveToBrowser(activity)
+            }
+        })
+    }
 
     override fun onActivityResumed(activity: Activity) {
         if (activity is PlayerActivity) {
@@ -59,18 +74,7 @@ class PlayerReturnNavigationLifecycle : Application.ActivityLifecycleCallbacks {
         if (activity is PlayerActivity) targets.remove(activity)
     }
 
-    private fun rememberLiveContext(player: PlayerActivity) {
-        val providerId = player.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
-        if (providerId.isBlank()) return
-        val categoryId = player.intent.getStringExtra(PlayerActivity.EXTRA_CATEGORY_ID)
-        val channelKey = RecentChannelStore.keys(player, providerId).firstOrNull()
-            ?: player.intent.getStringExtra(PlayerActivity.EXTRA_CONTENT_KEY).orEmpty()
-        player.getSharedPreferences(BROWSER_STATE_PREFS, Activity.MODE_PRIVATE)
-            .edit()
-            .putString("$providerId:live:last_category", categoryId)
-            .putString("$providerId:live:last_stream", channelKey.takeIf { it.isNotBlank() })
-            .apply()
-    }
+    private fun rememberLiveContext(player: PlayerActivity) = rememberLiveContextStatic(player)
 
     private fun sourceFor(activity: Activity): ReturnTarget? = when (activity) {
         is ContentBrowserActivity -> {
@@ -162,7 +166,6 @@ class PlayerReturnNavigationLifecycle : Application.ActivityLifecycleCallbacks {
 
     private enum class Destination { LIVE, MOVIE_DETAILS, SERIES_DETAILS, EPISODES, SECTION_SEARCH }
 
-    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
     override fun onActivityStarted(activity: Activity) = Unit
     override fun onActivityStopped(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
@@ -173,5 +176,29 @@ class PlayerReturnNavigationLifecycle : Application.ActivityLifecycleCallbacks {
         private const val KIND_LIVE = "live"
         private const val KIND_MOVIE = "movie"
         private const val KIND_EPISODE = "episode"
+
+        internal fun routeLiveToBrowser(player: PlayerActivity) {
+            if (player.isFinishing || player.isDestroyed) return
+            rememberLiveContextStatic(player)
+            player.intent.putExtra(EXTRA_RETURN_ALREADY_ROUTED, true)
+            player.startActivity(Intent(player, ContentBrowserActivity::class.java).apply {
+                putExtra(ContentBrowserActivity.EXTRA_KIND, KIND_LIVE)
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            })
+            player.finish()
+        }
+
+        private fun rememberLiveContextStatic(player: PlayerActivity) {
+            val providerId = player.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
+            if (providerId.isBlank()) return
+            val categoryId = player.intent.getStringExtra(PlayerActivity.EXTRA_CATEGORY_ID)
+            val channelKey = RecentChannelStore.keys(player, providerId).firstOrNull()
+                ?: player.intent.getStringExtra(PlayerActivity.EXTRA_CONTENT_KEY).orEmpty()
+            player.getSharedPreferences(BROWSER_STATE_PREFS, Activity.MODE_PRIVATE)
+                .edit()
+                .putString("$providerId:live:last_category", categoryId)
+                .putString("$providerId:live:last_stream", channelKey.takeIf { it.isNotBlank() })
+                .apply()
+        }
     }
 }
