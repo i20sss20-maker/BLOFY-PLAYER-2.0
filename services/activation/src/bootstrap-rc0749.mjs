@@ -12,4 +12,5 @@ await import('./admin-session-hook.mjs');
 await import('./admin-device-insights-hook.mjs');
 await import('./admin-console-hook.mjs');
 await import('./subscriber-resolve-hook.mjs');
+await import('./azure-portal-luxe-hook.mjs');
 await import('./server.mjs');
