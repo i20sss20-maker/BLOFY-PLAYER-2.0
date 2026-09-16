@@ -22,7 +22,7 @@ const upstream=http.createServer((req,res)=>{
 upstream.listen(0,'127.0.0.1');await once(upstream,'listening');
 const host='http://127.0.0.1:'+upstream.address().port;
 const base='http://127.0.0.1:8095';
-const env={...process.env,DATABASE_URL:database,PGSSLMODE:'disable',PORT:'8095',BLOFY_ADMIN_TOKEN:'test-only-admin-session-contract-token',BLOFY_ADMIN_USERNAME:'session-ci',BLOFY_ADMIN_PASSWORD:'test-only-password',BLOFY_PLAYLIST_ENCRYPTION_KEY:'b'.repeat(64),BLOFY_SUBSCRIBER_HOST:host};
+const env={...process.env,DATABASE_URL:database,PGSSLMODE:'disable',PORT:'8095',BLOFY_ADMIN_TOKEN:'test-only-admin-session-contract-token',BLOFY_ADMIN_USERNAME:'session-ci',BLOFY_ADMIN_PASSWORD:'test-only-password',BLOFY_PLAYLIST_ENCRYPTION_KEY:'b'.repeat(64),BLOFY_SUBSCRIBER_HOST:host,BLOFY_ALLOW_LEGACY_TRIAL:'true'};
 const child=spawn(process.execPath,['src/bootstrap.mjs'],{env,stdio:['ignore','pipe','pipe']});let logs='';child.stdout.on('data',d=>logs+=d);child.stderr.on('data',d=>logs+=d);
 async function post(path,body){const res=await fetch(base+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(10000)});return{status:res.status,headers:res.headers,data:await res.json()};}
 function directContract(data){assert.equal(data.delivery,'direct');assert.equal(data.baseUrl,host);assert.equal(data.username,login.username);assert.equal(data.password,login.password);assert.match(data.sessionToken,/^[A-Za-z0-9_-]{1,4096}$/);assert.ok(data.expiresAt>Date.now());}
