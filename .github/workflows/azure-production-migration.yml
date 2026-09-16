@@ -17,7 +17,7 @@ concurrency:
 env:
   AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
   VERCEL_SOURCE_URL: https://blofy-player-2-0.vercel.app
-  EXPORT_CONFIG: services/activation/src/migration-export-config.mjs
+  EXPORT_CONFIG: ops/blofy-migration-export-window.json
 
 jobs:
   migrate:
@@ -77,7 +77,7 @@ jobs:
           echo "::add-mask::$(cat "$TOKEN_FILE")"
           echo "::add-mask::$(base64 -w0 "$PRIVATE")"
 
-      - name: Enable encrypted Vercel export window
+      - name: Enable encrypted Vercel export window without a Vercel rebuild
         env:
           GH_TOKEN: ${{ github.token }}
           EXPIRES_MS: ${{ steps.crypto.outputs.expires_ms }}
@@ -85,35 +85,36 @@ jobs:
         run: |
           set -euo pipefail
           PUBLIC="$RUNNER_TEMP/blofy-migration-public.pem"
-          TMP="$RUNNER_TEMP/migration-export-config.mjs"
-          {
-            echo '// Ephemeral PUBLIC key written by the guarded production migration workflow.'
-            echo '// The private key exists only in the workflow/Azure temporary secret and is never committed.'
-            echo 'export const MIGRATION_EXPORT_PUBLIC_KEY = `'
-            cat "$PUBLIC"
-            echo '`;'
-            echo "export const MIGRATION_EXPORT_EXPIRES_AT = $EXPIRES_MS;"
-          } > "$TMP"
+          TMP="$RUNNER_TEMP/blofy-migration-export-window.json"
+          python3 - "$PUBLIC" "$EXPIRES_MS" "$TMP" <<'PY'
+          import json,sys
+          public_path,expires,out=sys.argv[1:]
+          with open(public_path,encoding='utf-8') as handle:
+              public_key=handle.read()
+          with open(out,'w',encoding='utf-8') as handle:
+              json.dump({'publicKeyPem':public_key,'expiresAt':int(expires)},handle,separators=(',',':'))
+              handle.write('\n')
+          PY
           SHA="$(gh api "repos/$GITHUB_REPOSITORY/contents/$EXPORT_CONFIG?ref=main" --jq .sha)"
           CONTENT="$(base64 -w0 "$TMP")"
           gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$EXPORT_CONFIG" \
             -f message='ops(migration): open encrypted production export window' \
             -f content="$CONTENT" -f sha="$SHA" -f branch=main >/dev/null
 
-      - name: Wait for Vercel encrypted exporter
+      - name: Wait for Vercel runtime exporter to observe GitHub window
         env:
           FP: ${{ steps.crypto.outputs.fingerprint }}
         shell: bash
         run: |
           set -euo pipefail
-          for n in $(seq 1 90); do
-            STATUS="$(curl -fsS --max-time 10 "$VERCEL_SOURCE_URL/api/v1/internal/migration-export/status" 2>/dev/null || true)"
-            if jq -e --arg fp "$FP" '.enabled==true and .fingerprint==$fp and .protocol=="blofy-migration-v1"' <<<"$STATUS" >/dev/null 2>&1; then
+          for n in $(seq 1 60); do
+            STATUS="$(curl -fsS --max-time 12 "$VERCEL_SOURCE_URL/api/v1/internal/migration-export/status" 2>/dev/null || true)"
+            if jq -e --arg fp "$FP" '.enabled==true and .fingerprint==$fp and .protocol=="blofy-migration-v1" and .source=="github-main-runtime-window"' <<<"$STATUS" >/dev/null 2>&1; then
               exit 0
             fi
-            sleep 7
+            sleep 5
           done
-          echo 'Vercel encrypted exporter did not become ready.' >&2
+          echo 'Vercel encrypted exporter did not observe the runtime window.' >&2
           exit 1
 
       - name: Enable one-time Azure importer secret
@@ -226,20 +227,15 @@ jobs:
           az containerapp secret remove -g "$AZURE_RG" -n blofy-activation --secret-names \
             migration-private-key migration-import-token >/dev/null 2>&1
 
-      - name: Close Vercel export window
+      - name: Close Vercel export window without a Vercel rebuild
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set +e
-          TMP="$RUNNER_TEMP/migration-export-disabled.mjs"
-          cat > "$TMP" <<'EOF'
-          // Temporary migration export gate. Disabled after the production transfer.
-          // No private key or database credential is ever committed.
-          export const MIGRATION_EXPORT_PUBLIC_KEY = '';
-          export const MIGRATION_EXPORT_EXPIRES_AT = 0;
-          EOF
+          TMP="$RUNNER_TEMP/blofy-migration-export-disabled.json"
+          printf '{"publicKeyPem":"","expiresAt":0}\n' > "$TMP"
           SHA="$(gh api "repos/$GITHUB_REPOSITORY/contents/$EXPORT_CONFIG?ref=main" --jq .sha 2>/dev/null)"
           if [ -n "$SHA" ]; then
             CONTENT="$(base64 -w0 "$TMP")"
