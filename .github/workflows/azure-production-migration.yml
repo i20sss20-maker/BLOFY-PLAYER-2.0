@@ -146,7 +146,7 @@ jobs:
           jq -e '.protocol=="blofy-migration-envelope-v1" and (.data|type=="string") and (.data|length>0)' "$BUNDLE" >/dev/null
           echo "Encrypted snapshot bytes: $(wc -c < "$BUNDLE")"
 
-      - name: Validate real production migration without writes
+      - name: Validate real production migration without durable writes
         shell: bash
         run: |
           set -euo pipefail
@@ -157,10 +157,10 @@ jobs:
           curl -fsS --max-time 180 -X POST "$URL/api/v1/internal/migration-import/validate" \
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
             --data-binary "@$BUNDLE" -o "$OUT"
-          jq -e '.mode=="validated" and .source.database=="neondb" and
+          jq '{mode,source,sourceCounts,targetCountsBefore,keyCompatible,keyMigrationMode,schemaCompatible,schemaIssues}' "$OUT"
+          jq -e '.mode=="validated" and .source.database=="neondb" and .schemaCompatible==true and
             (.keyCompatible==true or .keyMigrationMode=="wrap-source-data-key")' "$OUT" >/dev/null
           jq -e '.sourceCounts.devices>=180 and .sourceCounts.device_playlists>=40 and .sourceCounts.playback_diagnostics>=1400' "$OUT" >/dev/null
-          jq '{mode,source,sourceCounts,targetCountsBefore,keyCompatible,keyMigrationMode}' "$OUT"
 
       - name: Apply source snapshot to Azure with transactional backup
         shell: bash
@@ -170,9 +170,14 @@ jobs:
           TOKEN="$(cat "$RUNNER_TEMP/blofy-migration-token")"
           BUNDLE="$RUNNER_TEMP/blofy-source-envelope.json"
           OUT="$RUNNER_TEMP/migration-result.json"
-          curl -fsS --max-time 300 -X POST "$URL/api/v1/internal/migration-import" \
+          HTTP_CODE="$(curl -sS --max-time 300 -X POST "$URL/api/v1/internal/migration-import" \
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-            --data-binary "@$BUNDLE" -o "$OUT"
+            --data-binary "@$BUNDLE" -o "$OUT" -w '%{http_code}')"
+          if [[ ! "$HTTP_CODE" =~ ^2 ]]; then
+            jq -r '"Azure migration apply rejected: " + (.error // "unknown")' "$OUT" >&2 2>/dev/null || \
+              echo "Azure migration apply rejected with HTTP $HTTP_CODE" >&2
+            exit 1
+          fi
           jq -e '.mode=="applied" or .mode=="already-applied"' "$OUT" >/dev/null
           if jq -e '.mode=="applied"' "$OUT" >/dev/null; then
             jq -e '.persistedDataKey==true and .restartRequired==true and
@@ -200,7 +205,7 @@ jobs:
           curl -fsS --max-time 180 -X POST "$URL/api/v1/internal/migration-import/validate" \
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
             --data-binary "@$BUNDLE" -o "$OUT"
-          jq -e '.mode=="validated" and .keyCompatible==true and .source.database=="neondb"' "$OUT" >/dev/null
+          jq -e '.mode=="validated" and .keyCompatible==true and .source.database=="neondb" and .schemaCompatible==true' "$OUT" >/dev/null
           echo 'Persisted production data key loaded successfully after Azure restart.'
 
       - name: Verify Azure public services after migration
