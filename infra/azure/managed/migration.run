@@ -1,2 +1,2 @@
 RUN=YES_COPY_BLOFY_PRODUCTION_TO_AZURE
-# retry after profile_cloud_snapshots created_at schema upgrade
+# retry after full schema rehearsal hardening
