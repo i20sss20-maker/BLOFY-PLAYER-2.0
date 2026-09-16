@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 import { createActivationCredentialCodec } from './auth-protection.mjs';
+import { createGooglePlayReviewHandler } from './google-play-review.mjs';
 import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';
 
 export class CommercialError extends Error {
@@ -15,6 +16,7 @@ const validActivationCode = value => /^\d{6}$/.test(String(value || ''));
 export function createCommercialHandlers({pool, keyHex, json, readJson, env = process.env}) {
   const auth = createSubscriberSessionAuthorizer({pool, keyHex, env, requireActive:false});
   const credentials = createActivationCredentialCodec(keyHex);
+  const googlePlayReview = createGooglePlayReviewHandler({pool,keyHex,json,readJson});
   const hash = value => crypto.createHmac('sha256', Buffer.from(keyHex,'hex')).update('blofy-recovery-v1:' + value).digest('hex');
   async function authorize(req, res, body) {
     const deviceId = String(body.deviceId || '').trim();
@@ -140,6 +142,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
   }
   return async function handle(req,res,url) {
     const path=url.pathname;
+    if (await googlePlayReview(req,res,url)) return true;
     if (req.method==='GET' && path==='/api/v1/subscriptions/plans') {
       // No prices or purchase flow are advertised until a real billing integration is configured.
       json(res,200,{items:[],purchasesAvailable:false}); return true;
