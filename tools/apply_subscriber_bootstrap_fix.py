@@ -1,0 +1,164 @@
+from pathlib import Path
+
+
+def once(path, old, new, label):
+    p = Path(path)
+    text = p.read_text(encoding='utf-8')
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f'{label}: expected 1 match, found {count}')
+    p.write_text(text.replace(old, new, 1), encoding='utf-8')
+    print('patched:', label)
+
+
+proxy = 'services/activation/src/subscriber-proxy-hook.mjs'
+once(proxy,
+     "import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';",
+     "import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';\nimport { discoverSubscriberHost, loadPersistedSubscriberHost, savePersistedSubscriberHost } from './subscriber-host-state.mjs';",
+     'subscriber state import')
+once(proxy,
+     "const SUBSCRIBER_HOST_RAW = String(process.env.BLOFY_SUBSCRIBER_HOST || '').trim();\nconst DATABASE_URL",
+     "const SUBSCRIBER_HOST_RAW = String(process.env.BLOFY_SUBSCRIBER_HOST || '').trim();\nconst SUBSCRIBER_BOOTSTRAP_URL_RAW = String(process.env.BLOFY_SUBSCRIBER_BOOTSTRAP_URL || '').trim();\nconst DATABASE_URL",
+     'bootstrap env')
+once(proxy,
+     "const subscriberHost = normalizeSubscriberHost(SUBSCRIBER_HOST_RAW);",
+     "let subscriberHost = normalizeSubscriberHost(SUBSCRIBER_HOST_RAW);\nconst subscriberBootstrapUrl = normalizeSubscriberHost(SUBSCRIBER_BOOTSTRAP_URL_RAW);",
+     'mutable subscriber host')
+once(proxy,
+     "function available() {\n  return Boolean(subscriberHost && encryptionKey && activationCredentials && pool);\n}",
+     """function baseReady() {
+  return Boolean(encryptionKey && activationCredentials && pool);
+}
+
+function bootstrapReady() {
+  return Boolean(subscriberBootstrapUrl && process.env.VERCEL !== '1');
+}
+
+async function restoreSubscriberHost() {
+  if (subscriberHost) return subscriberHost;
+  if (!pool || !encryptionKey) return null;
+  try {
+    const persisted = await loadPersistedSubscriberHost(pool, PLAYLIST_ENCRYPTION_KEY);
+    if (persisted) subscriberHost = persisted;
+  } catch {
+    return null;
+  }
+  return subscriberHost;
+}
+
+async function learnSubscriberHost(body) {
+  const existing = await restoreSubscriberHost();
+  if (existing) return existing;
+  if (!bootstrapReady()) return null;
+  const learned = await discoverSubscriberHost({
+    bootstrapBaseUrl: subscriberBootstrapUrl,
+    deviceId: String(body.deviceId || '').trim(),
+    activationCode: String(body.activationCode || '').trim(),
+    username: String(body.username || '').trim(),
+    password: String(body.password || '')
+  });
+  const persisted = await savePersistedSubscriberHost(pool, PLAYLIST_ENCRYPTION_KEY, learned);
+  subscriberHost = persisted;
+  return subscriberHost;
+}
+
+function available() {
+  return Boolean(baseReady() && (subscriberHost || bootstrapReady()));
+}""",
+     'subscriber readiness')
+once(proxy,
+     "async function createSubscriberSession(req, res) {\n  if (!available()) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });\n  const body = await readJson(req);",
+     "async function createSubscriberSession(req, res) {\n  if (!baseReady()) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });\n  const body = await readJson(req);",
+     'session base readiness')
+once(proxy,
+     """  if (!authorization.allowed) {
+    return sendJson(res, authorization.status, { error: authorization.error },
+      authorization.retryAfterSeconds ? { 'retry-after': String(authorization.retryAfterSeconds) } : {});
+  }
+
+  const authUrl = new URL(`${subscriberHost}/player_api.php`);""",
+     """  if (!authorization.allowed) {
+    return sendJson(res, authorization.status, { error: authorization.error },
+      authorization.retryAfterSeconds ? { 'retry-after': String(authorization.retryAfterSeconds) } : {});
+  }
+
+  let resolvedHost;
+  try {
+    resolvedHost = await learnSubscriberHost(body);
+  } catch (error) {
+    if (error?.message === 'subscriber_login_failed') {
+      return sendJson(res, 401, { error: 'subscriber_login_failed' });
+    }
+    return sendJson(res, 502, { error: 'subscriber_bootstrap_unavailable' });
+  }
+  if (!resolvedHost) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
+
+  const authUrl = new URL(`${resolvedHost}/player_api.php`);""",
+     'learn host after local authorization')
+once(proxy,
+     "delivery: 'direct', baseUrl: subscriberHost, username, password, sessionToken: token",
+     "delivery: 'direct', baseUrl: resolvedHost, username, password, sessionToken: token",
+     'direct learned host')
+once(proxy,
+     "async function proxyPlayerApi(req, res, requestUrl) {\n  const token = requestUrl.searchParams.get('username') || '';",
+     "async function proxyPlayerApi(req, res, requestUrl) {\n  const host = await restoreSubscriberHost();\n  if (!host) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });\n  const token = requestUrl.searchParams.get('username') || '';",
+     'restore host for player api')
+once(proxy,
+     "const upstream = new URL(`${subscriberHost}/player_api.php`);",
+     "const upstream = new URL(`${host}/player_api.php`);",
+     'player api host')
+once(proxy,
+     "async function proxyStream(req, res, requestUrl) {\n  const match = requestUrl.pathname.match",
+     "async function proxyStream(req, res, requestUrl) {\n  const host = await restoreSubscriberHost();\n  if (!host) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });\n  const match = requestUrl.pathname.match",
+     'restore host for stream')
+once(proxy,
+     "const target = `${subscriberHost}/${kind}/${encodeURIComponent(session.u)}/${encodeURIComponent(session.p)}/${tail}${requestUrl.search}`;",
+     "const target = `${host}/${kind}/${encodeURIComponent(session.u)}/${encodeURIComponent(session.p)}/${tail}${requestUrl.search}`;",
+     'stream learned host')
+once(proxy,
+     "async function proxySignedUrl(req, res, requestUrl) {\n  const match = requestUrl.pathname.match",
+     "async function proxySignedUrl(req, res, requestUrl) {\n  const host = await restoreSubscriberHost();\n  if (!host) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });\n  const match = requestUrl.pathname.match",
+     'restore host for signed url')
+once(proxy,
+     "async function proxyRaw(req, res, requestUrl) {\n  const match = requestUrl.pathname.match",
+     "async function proxyRaw(req, res, requestUrl) {\n  const host = await restoreSubscriberHost();\n  if (!host) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });\n  const match = requestUrl.pathname.match",
+     'restore host for raw')
+once(proxy,
+     """  if (req.method === 'GET' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/health`) {
+    return sendJson(res, available() ? 200 : 503, {
+      ok: available(),
+      hostConfigured: Boolean(subscriberHost),
+      encryptionReady: Boolean(encryptionKey && activationCredentials),
+      databaseReady: Boolean(pool)
+    });
+  }""",
+     """  if (req.method === 'GET' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/health`) {
+    const restoredHost = await restoreSubscriberHost();
+    const ready = Boolean(baseReady() && (restoredHost || bootstrapReady()));
+    return sendJson(res, ready ? 200 : 503, {
+      ok: ready,
+      hostConfigured: Boolean(restoredHost),
+      bootstrapReady: bootstrapReady(),
+      encryptionReady: Boolean(encryptionKey && activationCredentials),
+      databaseReady: Boolean(pool)
+    });
+  }""",
+     'bootstrap-aware health')
+
+package = 'services/activation/package.json'
+once(package,
+     'node --check src/subscriber-proxy-hook.mjs && node --check src/server.mjs',
+     'node --check src/subscriber-host-state.mjs && node --check src/subscriber-proxy-hook.mjs && node --check src/server.mjs',
+     'activation syntax check')
+
+bicep = 'infra/azure/managed/main.bicep'
+once(bicep,
+     "{ name: 'BLOFY_PLAYLIST_ENCRYPTION_KEY', secretRef: 'playlist-key' }\n            { name: 'BLOFY_TRIAL_DAYS', value: '7' }",
+     "{ name: 'BLOFY_PLAYLIST_ENCRYPTION_KEY', secretRef: 'playlist-key' }\n            { name: 'BLOFY_SUBSCRIBER_BOOTSTRAP_URL', value: 'https://blofy-player-2-0.vercel.app' }\n            { name: 'BLOFY_TRIAL_DAYS', value: '7' }",
+     'permanent Azure bootstrap env')
+
+deploy = '.github/workflows/azure-student-images.yml'
+once(deploy,
+     'az containerapp update --resource-group "$AZURE_RG" --name blofy-activation --image "$REG/blofy/activation:$TAG" --only-show-errors >/dev/null',
+     'az containerapp update --resource-group "$AZURE_RG" --name blofy-activation --image "$REG/blofy/activation:$TAG" --set-env-vars "BLOFY_SUBSCRIBER_BOOTSTRAP_URL=https://blofy-player-2-0.vercel.app" --min-replicas 1 --only-show-errors >/dev/null',
+     'runtime Azure bootstrap env')
