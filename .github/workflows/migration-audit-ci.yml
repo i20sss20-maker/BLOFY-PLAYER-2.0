@@ -1,0 +1,57 @@
+name: BLOFY Migration Audit CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/migration/**'
+      - '.github/workflows/migration-audit-ci.yml'
+  pull_request:
+    paths:
+      - 'tools/migration/**'
+      - '.github/workflows/migration-audit-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install migration audit dependencies
+        working-directory: tools/migration
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Syntax validation
+        run: |
+          node --check tools/migration/audit-database.mjs
+          node --check tools/migration/audit-legacy-json.mjs
+          node --check tools/migration/compare-audits.mjs
+      - name: Privacy-safe legacy fixture audit
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/blofy-migration-fixture"
+          cat > "$RUNNER_TEMP/blofy-migration-fixture/licenses.json" <<'JSON'
+          {"version":1,"devices":{"TEST-ONE":{"startedAt":1,"activatedUntil":0}},"codes":{"00000000":{"disabled":false}}}
+          JSON
+          cat > "$RUNNER_TEMP/blofy-migration-fixture/device-profiles.json" <<'JSON'
+          {"version":2,"devices":{"TEST-ONE":{"playlists":[],"defaultPlaylistId":""}},"aliases":{"BLOFY-TEST-TEST":"TEST-ONE"}}
+          JSON
+          node tools/migration/audit-legacy-json.mjs \
+            --licenses "$RUNNER_TEMP/blofy-migration-fixture/licenses.json" \
+            --profiles "$RUNNER_TEMP/blofy-migration-fixture/device-profiles.json" \
+            > "$RUNNER_TEMP/legacy-audit.json"
+          node -e "const r=require(process.env.RUNNER_TEMP+'/legacy-audit.json'); if(r.licenses.devices!==1||r.profiles.devices!==1||JSON.stringify(r).includes('TEST-ONE')) process.exit(1)"
+      - name: Compare matching safe fixtures
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/source.json" <<'JSON'
+          {"schemaFingerprint":"abc","tables":[{"schema":"public","table":"devices","rows":3}]}
+          JSON
+          cp "$RUNNER_TEMP/source.json" "$RUNNER_TEMP/target.json"
+          node tools/migration/compare-audits.mjs "$RUNNER_TEMP/source.json" "$RUNNER_TEMP/target.json" > "$RUNNER_TEMP/compare.json"
+          node -e "const r=require(process.env.RUNNER_TEMP+'/compare.json'); if(!r.readyForCutoverReview) process.exit(1)"
