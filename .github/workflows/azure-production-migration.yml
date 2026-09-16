@@ -80,7 +80,6 @@ jobs:
       - name: Enable encrypted Vercel export window
         env:
           GH_TOKEN: ${{ github.token }}
-          FP: ${{ steps.crypto.outputs.fingerprint }}
           EXPIRES_MS: ${{ steps.crypto.outputs.expires_ms }}
         shell: bash
         run: |
@@ -157,9 +156,10 @@ jobs:
           curl -fsS --max-time 180 -X POST "$URL/api/v1/internal/migration-import/validate" \
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
             --data-binary "@$BUNDLE" -o "$OUT"
-          jq -e '.mode=="validated" and .keyCompatible==true and .source.database=="neondb"' "$OUT" >/dev/null
+          jq -e '.mode=="validated" and .source.database=="neondb" and
+            (.keyCompatible==true or .keyMigrationMode=="wrap-source-data-key")' "$OUT" >/dev/null
           jq -e '.sourceCounts.devices>=180 and .sourceCounts.device_playlists>=40 and .sourceCounts.playback_diagnostics>=1400' "$OUT" >/dev/null
-          jq '{mode,source,sourceCounts,targetCountsBefore,keyCompatible}' "$OUT"
+          jq '{mode,source,sourceCounts,targetCountsBefore,keyCompatible,keyMigrationMode}' "$OUT"
 
       - name: Apply source snapshot to Azure with transactional backup
         shell: bash
@@ -174,9 +174,33 @@ jobs:
             --data-binary "@$BUNDLE" -o "$OUT"
           jq -e '.mode=="applied" or .mode=="already-applied"' "$OUT" >/dev/null
           if jq -e '.mode=="applied"' "$OUT" >/dev/null; then
-            jq -e '.sourceCounts.devices==.targetCountsAfter.devices and .sourceCounts.device_playlists==.targetCountsAfter.device_playlists and .sourceCounts.playback_diagnostics==.targetCountsAfter.playback_diagnostics' "$OUT" >/dev/null
+            jq -e '.persistedDataKey==true and .restartRequired==true and
+              .sourceCounts.devices==.targetCountsAfter.devices and
+              .sourceCounts.device_playlists==.targetCountsAfter.device_playlists and
+              .sourceCounts.playback_diagnostics==.targetCountsAfter.playback_diagnostics' "$OUT" >/dev/null
           fi
-          jq '{mode,bundleId,backupSchema,source,sourceCounts,targetCountsAfter,preservedTargetTables}' "$OUT"
+          jq '{mode,bundleId,backupSchema,source,sourceCounts,targetCountsAfter,keyCompatible,keyMigrationMode,persistedDataKey,restartRequired,preservedTargetTables}' "$OUT"
+
+      - name: Restart activation and prove migrated data key is active
+        shell: bash
+        run: |
+          set -euo pipefail
+          REV="$(az containerapp revision list -g "$AZURE_RG" -n blofy-activation --query '[?properties.active].name | [0]' -o tsv)"
+          test -n "$REV"
+          az containerapp revision restart -g "$AZURE_RG" -n blofy-activation --revision "$REV" >/dev/null
+          URL='${{ steps.azure.outputs.url }}'
+          for n in $(seq 1 60); do
+            if test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$URL/portal" 2>/dev/null || true)" = '200'; then break; fi
+            sleep 5
+          done
+          TOKEN="$(cat "$RUNNER_TEMP/blofy-migration-token")"
+          BUNDLE="$RUNNER_TEMP/blofy-source-envelope.json"
+          OUT="$RUNNER_TEMP/migration-post-restart-validation.json"
+          curl -fsS --max-time 180 -X POST "$URL/api/v1/internal/migration-import/validate" \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            --data-binary "@$BUNDLE" -o "$OUT"
+          jq -e '.mode=="validated" and .keyCompatible==true and .source.database=="neondb"' "$OUT" >/dev/null
+          echo 'Persisted production data key loaded successfully after Azure restart.'
 
       - name: Verify Azure public services after migration
         shell: bash
