@@ -12,12 +12,12 @@ permissions:
 
 env:
   AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
-  EXPECTED_ACTIVATION_TAG: '42954022c208'
+  EXPECTED_ACTIVATION_TAG: '6d2526695542'
 
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Azure login with OIDC
         uses: azure/login@v2
@@ -26,68 +26,33 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Wait for audited activation image
+      - name: Collect privacy-safe target audit
         shell: bash
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --only-show-errors >/dev/null
-          test -n "$AZURE_RG"
+          IMAGE="$(az containerapp show -g "$AZURE_RG" -n blofy-activation --query 'properties.template.containers[0].image' -o tsv)"
+          READY="$(az containerapp show -g "$AZURE_RG" -n blofy-activation --query 'properties.latestReadyRevisionName' -o tsv)"
+          LATEST="$(az containerapp show -g "$AZURE_RG" -n blofy-activation --query 'properties.latestRevisionName' -o tsv)"
+          [[ "$IMAGE" == *":$EXPECTED_ACTIVATION_TAG" ]]
+          [[ -n "$LATEST" && "$READY" == "$LATEST" ]]
 
-          for attempt in $(seq 1 48); do
-            IMAGE="$(az containerapp show -g "$AZURE_RG" -n blofy-activation --query 'properties.template.containers[0].image' -o tsv)"
-            READY="$(az containerapp show -g "$AZURE_RG" -n blofy-activation --query 'properties.latestReadyRevisionName' -o tsv)"
-            LATEST="$(az containerapp show -g "$AZURE_RG" -n blofy-activation --query 'properties.latestRevisionName' -o tsv)"
-            if [[ "$IMAGE" == *":$EXPECTED_ACTIVATION_TAG" && -n "$LATEST" && "$READY" == "$LATEST" ]]; then
-              echo "Audited activation image is ready: $EXPECTED_ACTIVATION_TAG"
-              break
-            fi
-            if [[ "$attempt" == 48 ]]; then
-              echo 'Expected activation image did not become ready in time.' >&2
-              echo "Observed image: ${IMAGE##*/}" >&2
-              exit 1
-            fi
-            sleep 5
-          done
+          OUT="$RUNNER_TEMP/activation-console.log"
+          set +e
+          timeout 35s az containerapp logs show \
+            -g "$AZURE_RG" \
+            -n blofy-activation \
+            --type console \
+            --tail 300 \
+            >"$OUT" 2>&1
+          set -e
 
-      - name: Wake internal activation replica
-        shell: bash
-        run: |
-          set -euo pipefail
-          FQDN="$(az containerapp show -g "$AZURE_RG" -n blofy-gateway --query 'properties.configuration.ingress.fqdn' -o tsv)"
-          test -n "$FQDN"
-          curl -fsS --max-time 20 "https://$FQDN/portal" >/dev/null || true
-          sleep 5
-
-      - name: Run privacy-safe Azure database audit
-        shell: bash
-        run: |
-          set -euo pipefail
-          OUT="$RUNNER_TEMP/azure-target-audit.txt"
-          ok=false
-          for attempt in $(seq 1 18); do
-            set +e
-            timeout 45s az containerapp exec \
-              -g "$AZURE_RG" \
-              -n blofy-activation \
-              --command "node src/azure-migration-audit-once.mjs" \
-              >"$OUT" 2>&1
-            rc=$?
-            set -e
-            if grep -q 'BLOFY_MIGRATION_AZURE_AUDIT_V1' "$OUT"; then
-              ok=true
-              break
-            fi
-            echo "Audit exec attempt $attempt/18 unavailable (rc=$rc); retrying without changing service state."
-            sleep 5
-          done
-
-          if [[ "$ok" != true ]]; then
-            echo 'Azure target audit command did not return its safe marker.' >&2
-            sed -E 's#(postgres(ql)?://)[^[:space:]]+#\1[REDACTED]#g' "$OUT" >&2 || true
+          LINE="$(grep 'BLOFY_MIGRATION_AZURE_AUDIT_V1' "$OUT" | tail -1 || true)"
+          if [[ -z "$LINE" ]]; then
+            echo 'Safe Azure audit marker not found in recent activation console logs.' >&2
             exit 1
           fi
-
-          grep 'BLOFY_MIGRATION_AZURE_AUDIT_V1' "$OUT" | tail -1
+          printf '%s\n' "$LINE"
 
       - name: Verify public gateway remains healthy
         shell: bash
