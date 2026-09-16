@@ -18,7 +18,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.os.ConfigurationCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +48,11 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityResumed(activity: Activity) {
         if (activity !is PlayerActivity || activity.intent.getStringExtra(PlayerActivity.EXTRA_KIND) != KIND_LIVE) return
-        if (bindings.containsKey(activity)) return
+
+        val existing = bindings[activity]
+        if (existing != null && activity.window.callback === existing) return
+        existing?.close()
+
         val original = activity.window.callback ?: return
         val wrapped = LiveWindowCallback(activity, original)
         activity.window.callback = wrapped
@@ -58,12 +61,20 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityPaused(activity: Activity) {
         if (activity !is PlayerActivity) return
+        // A temporary pause (guide, system overlay, focus hand-off) must not detach the callback.
+        // Detaching here created a race where BACK/OK could fall through to PlayerActivity and
+        // produce a different result after resume. Keep one live routing callback for the entire
+        // PlayerActivity lifetime; only dismiss the transient channel dialog while paused.
+        bindings[activity]?.close()
+    }
+
+    override fun onActivityDestroyed(activity: Activity) {
+        if (activity !is PlayerActivity) return
         val wrapped = bindings.remove(activity) ?: return
         wrapped.close()
         if (activity.window.callback === wrapped) activity.window.callback = wrapped.delegate
     }
 
-    override fun onActivityDestroyed(activity: Activity) = onActivityPaused(activity)
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
     override fun onActivityStarted(activity: Activity) = Unit
     override fun onActivityStopped(activity: Activity) = Unit
@@ -91,11 +102,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 return true
             }
 
-            // Use the same remote mapping as PlayerActivity so OK works consistently across TV,
-            // Android box and vendor remotes that do not emit the exact DPAD_CENTER key code.
-            if (routed.action == RemoteAction.OK && dialog?.isShowing != true &&
-                (activity.currentFocus is PlayerView || activity.currentFocus == null)
-            ) {
+            // Live fullscreen has one deterministic OK contract: one press opens the channel list.
+            // Do not depend on whichever hidden HUD control happened to own focus, otherwise the
+            // first OK can fall through to PlayerActivity and only the second press opens this list.
+            if (routed.action == RemoteAction.OK && dialog?.isShowing != true) {
                 openChannelList()
                 return true
             }
@@ -229,6 +239,20 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             }
 
+            val device = DeviceClass.detect(activity)
+            val widthRatio = when (device) {
+                DeviceClass.Kind.TV -> 0.24f
+                DeviceClass.Kind.TABLET -> 0.38f
+                DeviceClass.Kind.PHONE -> 0.78f
+            }
+            val heightRatio = when (device) {
+                DeviceClass.Kind.TV -> 0.58f
+                DeviceClass.Kind.TABLET -> 0.66f
+                DeviceClass.Kind.PHONE -> 0.76f
+            }
+            val width = (activity.resources.displayMetrics.widthPixels * widthRatio).toInt()
+            val height = (activity.resources.displayMetrics.heightPixels * heightRatio).toInt()
+
             val created = AlertDialog.Builder(activity)
                 .setView(panel)
                 .create()
@@ -239,27 +263,16 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 currentChannelKey = null
             }
             dialog = created
+
+            // Configure placement before show so there is no first-frame center position followed
+            // by a second layout pass on the left. LEFT is intentional and independent of Arabic
+            // RTL layout; only the panel contents follow the app's text direction.
+            created.window?.let { window ->
+                prepareWindow(window, width, height, reveal = false)
+            }
             created.setOnShowListener {
                 val window = created.window ?: return@setOnShowListener
-                window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                window.setDimAmount(0f)
-                window.setGravity(Gravity.START or Gravity.CENTER_VERTICAL)
-                window.decorView.layoutDirection = activity.resources.configuration.layoutDirection
-                window.setBackgroundDrawableResource(android.R.color.transparent)
-                val device = DeviceClass.detect(activity)
-                val widthRatio = when (device) {
-                    DeviceClass.Kind.TV -> 0.24f
-                    DeviceClass.Kind.TABLET -> 0.38f
-                    DeviceClass.Kind.PHONE -> 0.78f
-                }
-                val heightRatio = when (device) {
-                    DeviceClass.Kind.TV -> 0.58f
-                    DeviceClass.Kind.TABLET -> 0.66f
-                    DeviceClass.Kind.PHONE -> 0.76f
-                }
-                val width = (activity.resources.displayMetrics.widthPixels * widthRatio).toInt()
-                val height = (activity.resources.displayMetrics.heightPixels * heightRatio).toInt()
-                window.setLayout(width, height)
+                prepareWindow(window, width, height, reveal = true)
                 val current = currentChannelKey
                 val currentIndex = channels.indexOfFirst { it.key == current }.coerceAtLeast(0)
                 list.scrollToPosition(currentIndex)
@@ -269,6 +282,30 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 }
             }
             created.show()
+        }
+
+        private fun prepareWindow(window: Window, width: Int, height: Int, reveal: Boolean) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            window.setDimAmount(0f)
+            window.setWindowAnimations(0)
+            window.setBackgroundDrawableResource(android.R.color.transparent)
+            window.setGravity(PANEL_GRAVITY)
+            window.decorView.layoutDirection = activity.resources.configuration.layoutDirection
+            if (!reveal) window.decorView.alpha = 0f
+
+            val attributes = window.attributes
+            attributes.gravity = PANEL_GRAVITY
+            attributes.width = width
+            attributes.height = height
+            attributes.x = dp(10)
+            window.attributes = attributes
+            window.setLayout(width, height)
+
+            if (reveal) {
+                // Post one frame after final geometry is committed. The user never sees the
+                // AlertDialog's default centered geometry during its first open.
+                window.decorView.post { window.decorView.alpha = 1f }
+            }
         }
 
         private fun selectChannel(channel: StreamEntity) {
@@ -319,5 +356,6 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
     private companion object {
         const val KIND_LIVE = "live"
         const val BROWSER_STATE_PREFS = "blofy_browser_state"
+        const val PANEL_GRAVITY = Gravity.LEFT or Gravity.CENTER_VERTICAL
     }
 }
