@@ -1,0 +1,13 @@
+{
+  "name": "blofy-migration-audit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "audit:db": "node audit-database.mjs",
+    "audit:legacy": "node audit-legacy-json.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.3"
+  }
+}
