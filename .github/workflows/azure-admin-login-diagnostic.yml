@@ -18,6 +18,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Post-deploy validation: a deliberately wrong password must reach credential validation.
           BASE='https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io'
           STATUS="$(curl -sS -o /tmp/body.json -w '%{http_code}' \
             -X POST "$BASE/api/v1/admin/session/login" \
