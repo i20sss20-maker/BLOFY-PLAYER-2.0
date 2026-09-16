@@ -1,6 +1,8 @@
 package tv.blofy.player.core.identity
 
 import android.content.Context
+import android.provider.Settings
+import java.security.MessageDigest
 import java.security.SecureRandom
 
 object DeviceIdentity {
@@ -9,16 +11,22 @@ object DeviceIdentity {
     private const val ACTIVE_CODE = "activation_code"
     private const val PENDING_CODE = "pending_activation_code"
     private const val DEVICE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    private const val DEVICE_ID_NAMESPACE = "tv.blofy.player/device-id/v3"
+    private const val ACTIVATION_CODE_NAMESPACE = "tv.blofy.player/activation-code/v3"
+    private const val LEGACY_BROKEN_ANDROID_ID = "9774d56d682e549c"
     private val secureRandom = SecureRandom()
 
     /**
-     * Device IDs are installation-scoped, not derived from ANDROID_ID.
+     * Existing installations keep their already-issued BLOFY identity exactly as-is.
      *
-     * This is intentional: after the app is deleted its local activation credential is lost.
-     * Reusing the same deterministic Device ID with a newly generated activation code would
-     * collide with the old server row and permanently reject the fresh install. A fresh install
-     * now receives a fresh complete identity, while normal app updates keep the same ID because
-     * this value remains in SharedPreferences.
+     * Fresh installations derive their public Device ID and six-digit activation credential from
+     * Android's app-scoped system identity. This makes the BLOFY identity recoverable after an
+     * uninstall/reinstall on the same Android user/device with the same production signing key,
+     * instead of creating a new server device row every time the app is reinstalled.
+     *
+     * The raw Android identity is never sent to BLOFY services or displayed to the user. Only
+     * namespace-separated SHA-256 derivatives are used. Devices that cannot expose a trustworthy
+     * system identity fall back to the legacy random installation identity.
      */
     @Synchronized
     fun cachedIdentity(context: Context): Pair<String, String>? {
@@ -32,7 +40,8 @@ object DeviceIdentity {
     fun deviceId(context: Context): String {
         val preferences = preferences(context)
         preferences.getString(DEVICE_ID, null)?.takeIf(::validDeviceId)?.let { return it }
-        return generateDeviceId().also {
+        val generated = stableSystemIdentity(context)?.let(::deriveDeviceId) ?: generateDeviceId()
+        return generated.also {
             check(preferences.edit().putString(DEVICE_ID, it).commit()) {
                 "Unable to persist the device ID"
             }
@@ -43,7 +52,8 @@ object DeviceIdentity {
     fun activationCode(context: Context): String {
         val preferences = preferences(context)
         preferences.getString(ACTIVE_CODE, null)?.takeIf(::validActivationCode)?.let { return it }
-        return generateActivationCode().also {
+        val generated = stableSystemIdentity(context)?.let(::deriveActivationCode) ?: generateActivationCode()
+        return generated.also {
             check(preferences.edit().putString(ACTIVE_CODE, it).commit()) {
                 "Unable to persist the device activation code"
             }
@@ -69,8 +79,8 @@ object DeviceIdentity {
         }
         if (active == existingCode) return active
         if (active != null) {
-            // A consumer may have generated the new random code before Room
-            // finished loading the legacy identity. Preserve it as pending.
+            // A consumer may have generated the new code before Room finished loading the
+            // legacy identity. Preserve it as pending until the server authenticates rotation.
             val replacement = pending ?: active
             check(
                 preferences.edit()
@@ -121,6 +131,26 @@ object DeviceIdentity {
         }
     }
 
+    internal fun deriveDeviceId(systemIdentity: String): String {
+        val digest = digest(DEVICE_ID_NAMESPACE, systemIdentity)
+        val raw = buildString(8) {
+            repeat(8) { index ->
+                val alphabetIndex = (digest[index].toInt() and 0xff) % DEVICE_ALPHABET.length
+                append(DEVICE_ALPHABET[alphabetIndex])
+            }
+        }
+        return "BLOFY-${raw.take(4)}-${raw.drop(4)}"
+    }
+
+    internal fun deriveActivationCode(systemIdentity: String): String {
+        val digest = digest(ACTIVATION_CODE_NAMESPACE, systemIdentity)
+        var value = 0L
+        repeat(4) { index ->
+            value = (value shl 8) or (digest[index].toLong() and 0xffL)
+        }
+        return (100_000L + (value % 900_000L)).toString()
+    }
+
     internal fun generateDeviceId(nextInt: (Int) -> Int = secureRandom::nextInt): String {
         val raw = buildString(8) {
             repeat(8) { append(DEVICE_ALPHABET[nextInt(DEVICE_ALPHABET.length)]) }
@@ -130,6 +160,20 @@ object DeviceIdentity {
 
     internal fun generateActivationCode(nextInt: (Int) -> Int = secureRandom::nextInt): String =
         (100_000 + nextInt(900_000)).toString()
+
+    private fun stableSystemIdentity(context: Context): String? = runCatching {
+        Settings.Secure.getString(context.applicationContext.contentResolver, Settings.Secure.ANDROID_ID)
+    }.getOrNull()
+        ?.trim()
+        ?.takeIf { value ->
+            value.isNotEmpty() &&
+                !value.equals("null", ignoreCase = true) &&
+                !value.equals(LEGACY_BROKEN_ANDROID_ID, ignoreCase = true)
+        }
+
+    private fun digest(namespace: String, systemIdentity: String): ByteArray =
+        MessageDigest.getInstance("SHA-256")
+            .digest("$namespace:$systemIdentity".toByteArray(Charsets.UTF_8))
 
     private fun generateDifferentActivationCode(current: String): String {
         var candidate: String
