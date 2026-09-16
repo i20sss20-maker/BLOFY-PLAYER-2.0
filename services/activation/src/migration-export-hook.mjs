@@ -6,7 +6,7 @@ import { databaseOptions } from './database-options.mjs';
 
 const ROOT = '/api/v1/internal/migration-export';
 const WINDOW_URL = String(process.env.BLOFY_MIGRATION_EXPORT_WINDOW_URL ||
-  'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/activation/migration-export-window.json').trim();
+  'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/ops/blofy-migration-export-window.json').trim();
 const TABLES = [
   'devices','provider_profiles','device_trial_claims','device_customers','device_admin_metadata',
   'device_playlists','playback_diagnostics','profile_cloud_snapshots','cloud_pair_codes',
