@@ -118,5 +118,8 @@ CREATE TABLE IF NOT EXISTS cloud_pair_codes (
   source_device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
   source_profile_id TEXT NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
-  consumed_at TIMESTAMPTZ
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE cloud_pair_codes
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
