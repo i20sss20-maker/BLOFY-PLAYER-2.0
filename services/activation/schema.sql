@@ -105,9 +105,14 @@ CREATE TABLE IF NOT EXISTS profile_cloud_snapshots (
   profile_id TEXT NOT NULL,
   revision BIGINT NOT NULL DEFAULT 1,
   payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY(device_id,profile_id)
 );
+-- Upgrade older Azure/Vercel-compatible schemas in place before migration
+-- compatibility checks inspect the production source column set.
+ALTER TABLE profile_cloud_snapshots
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 CREATE TABLE IF NOT EXISTS cloud_pair_codes (
   code_hash TEXT PRIMARY KEY,
   source_device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
