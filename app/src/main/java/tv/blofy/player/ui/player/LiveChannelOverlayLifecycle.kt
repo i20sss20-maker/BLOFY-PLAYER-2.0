@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.remote.RemoteAction
+import tv.blofy.player.core.remote.RemoteKeyRouter
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.data.local.BlofyDatabase
@@ -78,8 +80,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (event.action != KeyEvent.ACTION_DOWN) return delegate.dispatchKeyEvent(event)
+            val routed = RemoteKeyRouter.route(event)
 
-            if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (routed.action == RemoteAction.BACK) {
                 if (dialog?.isShowing == true) {
                     close()
                 } else {
@@ -88,13 +91,11 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 return true
             }
 
-            val ok = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
-                event.keyCode == KeyEvent.KEYCODE_ENTER ||
-                event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
-            // PlayerActivity returns focus to PlayerView whenever its HUD is hidden. Intercept OK
-            // only in that fullscreen state so the existing audio/subtitle/quality HUD keeps its
-            // established behavior when it is intentionally visible.
-            if (ok && dialog?.isShowing != true && (activity.currentFocus is PlayerView || activity.currentFocus == null)) {
+            // Use the same remote mapping as PlayerActivity so OK works consistently across TV,
+            // Android box and vendor remotes that do not emit the exact DPAD_CENTER key code.
+            if (routed.action == RemoteAction.OK && dialog?.isShowing != true &&
+                (activity.currentFocus is PlayerView || activity.currentFocus == null)
+            ) {
                 openChannelList()
                 return true
             }
