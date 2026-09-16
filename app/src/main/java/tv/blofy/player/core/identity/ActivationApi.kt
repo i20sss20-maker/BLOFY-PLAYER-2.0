@@ -19,6 +19,19 @@ data class ActivationRotateRequest(
 
 data class ActivationRotateResponse(val rotated: Boolean)
 
+data class ActivationIdentityMigrationRequest(
+    val deviceId: String,
+    val activationCode: String,
+    val targetDeviceId: String,
+    val targetActivationCode: String
+)
+
+data class ActivationIdentityMigrationResponse(
+    val migrated: Boolean,
+    val alreadyStable: Boolean = false,
+    val deviceId: String? = null
+)
+
 data class ActivationCheckResponse(
     val status: String,
     val expiresAt: Long? = null,
@@ -47,4 +60,9 @@ interface ActivationApi {
 
     @POST("api/v1/activation/rotate")
     suspend fun rotate(@Body request: ActivationRotateRequest): ActivationRotateResponse
+
+    @POST("api/v1/device/identity/migrate")
+    suspend fun migrateIdentity(
+        @Body request: ActivationIdentityMigrationRequest
+    ): ActivationIdentityMigrationResponse
 }
