@@ -1,4 +1,4 @@
-# Final QA rebuild trigger: stable Device ID + Azure identity migration + deterministic Live BACK + first-frame left overlay
+# PLAY-FINAL rebuild trigger: encrypted Play transport + branded TV banner + stable Device ID + Azure identity migration
 name: BLOFY rc07.51 Production-Signed Test
 
 on:
