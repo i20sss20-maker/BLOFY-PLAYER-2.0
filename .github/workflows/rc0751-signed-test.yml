@@ -1,4 +1,4 @@
-# Final QA rebuild trigger: deterministic Live BACK + compact translucent OK overlay
+# Final QA rebuild trigger: stable Device ID + deterministic Live BACK + first-frame left overlay
 name: BLOFY rc07.51 Production-Signed Test
 
 on:
