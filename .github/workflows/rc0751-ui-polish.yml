@@ -26,12 +26,11 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          def once(path, old, new, label):
+          def first(path, old, new, label):
               p = Path(path)
               text = p.read_text(encoding='utf-8')
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected one match in {path}, found {count}')
+              if old not in text:
+                  raise SystemExit(f'{label}: match missing in {path}')
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
               print(f'patched: {label}')
 
@@ -46,14 +45,14 @@ jobs:
                   ) {
                       startActivity(Intent(this, tv.blofy.player.ui.login.LoginActivity::class.java))
                   }.apply { tag = "blofy_device_barcode_entry" })'''
-          once(settings, marker, addition, 'settings barcode entry')
+          first(settings, marker, addition, 'settings barcode entry')
 
           overlay = 'app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt'
-          once(overlay,
-               '                itemKey = { it.key }\n            )',
-               '                itemKey = { it.key },\n                translucent = true\n            )',
-               'overlay translucent adapter')
-          replacements = [
+          first(overlay,
+                '                itemKey = { it.key }\n            )',
+                '                itemKey = { it.key },\n                translucent = true\n            )',
+                'overlay translucent adapter')
+          changes = [
               ('setPadding(dp(6), dp(6), dp(6), dp(10))', 'setPadding(dp(5), dp(4), dp(5), dp(7))', 'overlay list padding'),
               ('alpha = .97f', 'alpha = .96f', 'overlay list alpha'),
               ('textSize = 18f', 'textSize = 16.5f', 'overlay header size'),
@@ -71,25 +70,23 @@ jobs:
               ('DeviceClass.Kind.PHONE -> 0.88f', 'DeviceClass.Kind.PHONE -> 0.84f', 'overlay phone width'),
               ('DeviceClass.Kind.TV -> 0.82f', 'DeviceClass.Kind.TV -> 0.70f', 'overlay TV height'),
               ('DeviceClass.Kind.TABLET -> 0.86f', 'DeviceClass.Kind.TABLET -> 0.76f', 'overlay tablet height'),
+              ('DeviceClass.Kind.PHONE -> 0.88f', 'DeviceClass.Kind.PHONE -> 0.80f', 'overlay phone height'),
           ]
-          for old, new, label in replacements:
-              once(overlay, old, new, label)
-          # PHONE 0.88f appears in width and height in the original file; the width was replaced above,
-          # so the remaining one is the height.
-          once(overlay, 'DeviceClass.Kind.PHONE -> 0.88f', 'DeviceClass.Kind.PHONE -> 0.80f', 'overlay phone height')
+          for old, new, label in changes:
+              first(overlay, old, new, label)
 
           adapter = 'app/src/main/java/tv/blofy/player/ui/browser/LiveChannelAdapter.kt'
-          once(adapter,
-               '    private val itemKey: (StreamEntity) -> String\n)',
-               '    private val itemKey: (StreamEntity) -> String,\n    private val translucent: Boolean = false\n)',
-               'adapter translucent option')
-          once(adapter,
-               'setColor(BlofyTvDesign.BackgroundRaised)',
-               'setColor(if (translucent) 0x8A211332.toInt() else BlofyTvDesign.BackgroundRaised)',
-               'adapter logo glass')
-          once(adapter,
-               '    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean) = CinemaStyle.surface(contextForBackground, focused = focused)',
-               '''    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean): GradientDrawable {
+          first(adapter,
+                '    private val itemKey: (StreamEntity) -> String\n)',
+                '    private val itemKey: (StreamEntity) -> String,\n    private val translucent: Boolean = false\n)',
+                'adapter translucent option')
+          first(adapter,
+                'setColor(BlofyTvDesign.BackgroundRaised)',
+                'setColor(if (translucent) 0x8A211332.toInt() else BlofyTvDesign.BackgroundRaised)',
+                'adapter logo glass')
+          first(adapter,
+                '    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean) = CinemaStyle.surface(contextForBackground, focused = focused)',
+                '''    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean): GradientDrawable {
               if (!translucent) return CinemaStyle.surface(contextForBackground, focused = focused)
               val density = contextForBackground.resources.displayMetrics.density
               return GradientDrawable().apply {
@@ -98,7 +95,7 @@ jobs:
                   setStroke(((if (focused) 2 else 1) * density).toInt(), if (focused) 0xE6FFFFFF.toInt() else 0x4AFFFFFF)
               }
           }''',
-               'adapter translucent rows')
+                'adapter translucent rows')
           PY
 
           git diff --check
