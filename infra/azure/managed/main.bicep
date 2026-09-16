@@ -373,7 +373,7 @@ resource activation 'Microsoft.App/containerApps@2026-01-01' = {
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 2
       }
     }
@@ -428,7 +428,7 @@ resource releases 'Microsoft.App/containerApps@2026-01-01' = {
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 1
       }
     }
@@ -470,7 +470,7 @@ resource gateway 'Microsoft.App/containerApps@2026-01-01' = {
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 2
       }
     }
