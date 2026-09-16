@@ -1,4 +1,4 @@
-# PLAY-FINAL rebuild trigger: encrypted Play transport + branded TV banner + stable Device ID + Azure identity migration
+# FINAL PLAY-FINAL trigger: HTTPS-only Play build + exact xhdpi TV banner + stable Device ID + Azure identity migration
 name: BLOFY rc07.51 Production-Signed Test
 
 on:
