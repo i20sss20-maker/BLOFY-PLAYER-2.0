@@ -34,25 +34,26 @@ class ActivationManager(
      */
     suspend fun migrateStableIdentityIfNeeded(
         api: ActivationApi,
-        current: ActivationEntity = ensureIdentity()
+        current: ActivationEntity? = null
     ): ActivationEntity {
-        val stable = DeviceIdentity.stableIdentity(context) ?: return current
+        val resolved = current ?: ensureIdentity()
+        val stable = DeviceIdentity.stableIdentity(context) ?: return resolved
         val targetDeviceId = stable.first
         val targetActivationCode = stable.second
-        if (current.deviceId == targetDeviceId) return current
+        if (resolved.deviceId == targetDeviceId) return resolved
 
         val response = api.migrateIdentity(
             ActivationIdentityMigrationRequest(
-                deviceId = current.deviceId,
-                activationCode = current.activationCode,
+                deviceId = resolved.deviceId,
+                activationCode = resolved.activationCode,
                 targetDeviceId = targetDeviceId,
                 targetActivationCode = targetActivationCode
             )
         )
-        if (!response.migrated && !response.alreadyStable) return current
-        if (response.deviceId != null && response.deviceId != targetDeviceId) return current
+        if (!response.migrated && !response.alreadyStable) return resolved
+        if (response.deviceId != null && response.deviceId != targetDeviceId) return resolved
 
-        val migrated = current.copy(
+        val migrated = resolved.copy(
             deviceId = targetDeviceId,
             activationCode = targetActivationCode,
             lastCheckAt = System.currentTimeMillis()
