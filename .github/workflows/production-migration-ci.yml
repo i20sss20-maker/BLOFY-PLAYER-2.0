@@ -1,0 +1,54 @@
+name: BLOFY Production Migration CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/activation/src/production-migration.mjs'
+      - 'services/activation/test/production-migration-runtime.mjs'
+      - '.github/workflows/production-migration-ci.yml'
+  pull_request:
+    paths:
+      - 'services/activation/src/production-migration.mjs'
+      - 'services/activation/test/production-migration-runtime.mjs'
+      - '.github/workflows/production-migration-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: blofy_test
+          POSTGRES_PASSWORD: local_test_only
+          POSTGRES_DB: blofy_sync_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U blofy_test -d blofy_sync_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      BLOFY_TEST_DATABASE_URL: postgresql://blofy_test:local_test_only@127.0.0.1:5432/blofy_sync_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install activation dependencies
+        working-directory: services/activation
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Syntax validation
+        working-directory: services/activation
+        run: |
+          node --check src/production-migration.mjs
+          node --check test/production-migration-runtime.mjs
+      - name: Guarded source-to-target migration integration
+        working-directory: services/activation
+        run: node test/production-migration-runtime.mjs
