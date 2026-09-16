@@ -68,7 +68,7 @@ class PlayerReturnNavigationLifecycle : Application.ActivityLifecycleCallbacks {
         player.getSharedPreferences(BROWSER_STATE_PREFS, Activity.MODE_PRIVATE)
             .edit()
             .putString("$providerId:live:last_category", categoryId)
-            .putString("$providerId:live:last_stream", channelKey.ifBlank { null })
+            .putString("$providerId:live:last_stream", channelKey.takeIf { it.isNotBlank() })
             .apply()
     }
 
