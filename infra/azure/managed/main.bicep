@@ -343,6 +343,11 @@ resource activation 'Microsoft.App/containerApps@2026-01-01' = {
           keyVaultUrl: playlistKeySecret.properties.secretUri
           identity: identity.id
         }
+        {
+          name: 'admin-ui-password'
+          keyVaultUrl: releasePasswordSecret.properties.secretUri
+          identity: identity.id
+        }
       ]
     }
     template: {
@@ -356,6 +361,8 @@ resource activation 'Microsoft.App/containerApps@2026-01-01' = {
             { name: 'PGSSLMODE', value: 'require' }
             { name: 'DATABASE_URL', secretRef: 'database-url' }
             { name: 'BLOFY_ADMIN_TOKEN', secretRef: 'admin-token' }
+            { name: 'BLOFY_ADMIN_USERNAME', value: 'admin' }
+            { name: 'BLOFY_ADMIN_PASSWORD', secretRef: 'admin-ui-password' }
             { name: 'BLOFY_PLAYLIST_ENCRYPTION_KEY', secretRef: 'playlist-key' }
             { name: 'BLOFY_TRIAL_DAYS', value: '7' }
           ]
