@@ -24,6 +24,7 @@ class ActivationRetryTest {
     private class Fake(private val action: suspend (Int) -> ActivationCheckResponse) : ActivationApi {
         var checks = 0
         var rotations = 0
+        var migrations = 0
         val seen = mutableListOf<ActivationCheckRequest>()
         override suspend fun check(request: ActivationCheckRequest): ActivationCheckResponse {
             seen += request
@@ -32,6 +33,12 @@ class ActivationRetryTest {
         override suspend fun rotate(request: ActivationRotateRequest): ActivationRotateResponse {
             rotations++
             throw IOException("rotation failure")
+        }
+        override suspend fun migrateIdentity(
+            request: ActivationIdentityMigrationRequest
+        ): ActivationIdentityMigrationResponse {
+            migrations++
+            return ActivationIdentityMigrationResponse(migrated = true, deviceId = request.targetDeviceId)
         }
     }
     private fun http(code: Int) = HttpException(Response.error<Any>(code, "{}".toResponseBody("application/json".toMediaType())))
@@ -91,6 +98,20 @@ class ActivationRetryTest {
         try { RetryingActivationApi(fake) {}.rotate(ActivationRotateRequest("BLOFY-TEST-ONLY", "123456", "654321")); fail("must fail") }
         catch (_: IOException) { }
         assertEquals(1, fake.rotations)
+        assertEquals(0, fake.checks)
+    }
+    @Test fun identityMigrationIsDelegatedWithoutChangingTheRequest() = runBlocking {
+        val fake = Fake { active }
+        val migration = ActivationIdentityMigrationRequest(
+            deviceId = "BLOFY-AAAA-BBBB",
+            activationCode = "123456",
+            targetDeviceId = "BLOFY-CCCC-DDDD",
+            targetActivationCode = "654321"
+        )
+        val result = RetryingActivationApi(fake) {}.migrateIdentity(migration)
+        assertTrue(result.migrated)
+        assertEquals(migration.targetDeviceId, result.deviceId)
+        assertEquals(1, fake.migrations)
         assertEquals(0, fake.checks)
     }
     @Test fun realRetrofitClientRecoversFrom503AndPreservesBlockedResult() = runBlocking {

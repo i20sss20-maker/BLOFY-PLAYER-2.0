@@ -21,7 +21,8 @@ internal class LiveChannelAdapter(
     private val onClick: (StreamEntity) -> Unit,
     private val onFocus: (StreamEntity) -> Unit,
     private val onLongClick: (StreamEntity) -> Unit,
-    private val itemKey: (StreamEntity) -> String
+    private val itemKey: (StreamEntity) -> String,
+    private val translucent: Boolean = false
 ) : RecyclerView.Adapter<LiveChannelAdapter.Holder>() {
     private val items = ArrayList<StreamEntity>(256)
     private var focusedKey: String? = null
@@ -54,49 +55,56 @@ internal class LiveChannelAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val context = parent.context
         fun dp(v: Int) = TvUiTuning.dp(context, v)
+        val compact = translucent
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(7), dp(14), dp(7))
+            setPadding(
+                dp(if (compact) 8 else 12),
+                dp(if (compact) 4 else 7),
+                dp(if (compact) 9 else 14),
+                dp(if (compact) 4 else 7)
+            )
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
             background = rowBackground(context, false)
         }
-        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(68)).apply {
-            bottomMargin = dp(6)
+        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compact) 56 else 68)).apply {
+            bottomMargin = dp(if (compact) 4 else 6)
             marginStart = dp(3)
             marginEnd = dp(3)
         }
         val logo = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-            setPadding(dp(5), dp(5), dp(5), dp(5))
+            setPadding(dp(if (compact) 4 else 5), dp(if (compact) 4 else 5), dp(if (compact) 4 else 5), dp(if (compact) 4 else 5))
             background = GradientDrawable().apply {
-                cornerRadius = dp(10).toFloat()
-                setColor(BlofyTvDesign.BackgroundRaised)
-                setStroke(dp(1), BlofyTvDesign.Divider)
+                cornerRadius = dp(if (compact) 9 else 10).toFloat()
+                setColor(if (translucent) 0x54211332.toInt() else BlofyTvDesign.BackgroundRaised)
+                setStroke(dp(1), if (translucent) 0x3FFFFFFF else BlofyTvDesign.Divider)
             }
         }
-        row.addView(logo, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(8) })
+        val logoSize = dp(if (compact) 34 else 42)
+        row.addView(logo, LinearLayout.LayoutParams(logoSize, logoSize).apply { marginStart = dp(if (compact) 6 else 8) })
 
         val textBox = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
         }
         val title = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 13.4f)
+            textSize = TvUiTuning.sp(context, if (compact) 12.2f else 13.4f)
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            maxLines = 2
+            maxLines = if (compact) 1 else 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             gravity = Gravity.RIGHT
             includeFontPadding = false
             setLineSpacing(0f, 1.03f)
         }
         val meta = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 10.4f)
+            textSize = TvUiTuning.sp(context, if (compact) 9.1f else 10.4f)
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextMuted)
             maxLines = 1
@@ -112,18 +120,20 @@ internal class LiveChannelAdapter(
             progressBackgroundTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.Divider)
         }
         textBox.addView(title, LinearLayout.LayoutParams(-1, 0, 1f))
-        textBox.addView(meta, LinearLayout.LayoutParams(-1, dp(18)))
+        textBox.addView(meta, LinearLayout.LayoutParams(-1, dp(if (compact) 15 else 18)))
         textBox.addView(progress, LinearLayout.LayoutParams(-1, dp(3)).apply { topMargin = dp(2) })
-        row.addView(textBox, LinearLayout.LayoutParams(0, dp(54), 1f))
+        row.addView(textBox, LinearLayout.LayoutParams(0, dp(if (compact) 44 else 54), 1f))
 
         val badge = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 8.4f)
+            textSize = TvUiTuning.sp(context, if (compact) 7.6f else 8.4f)
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.CENTER
-            background = BlofyTvDesign.badge(dp(9).toFloat())
+            background = BlofyTvDesign.badge(dp(if (compact) 8 else 9).toFloat())
         }
-        row.addView(badge, LinearLayout.LayoutParams(dp(34), dp(23)).apply { marginStart = dp(8) })
+        row.addView(badge, LinearLayout.LayoutParams(dp(if (compact) 30 else 34), dp(if (compact) 20 else 23)).apply {
+            marginStart = dp(if (compact) 5 else 8)
+        })
         return Holder(row, logo, title, meta, badge, progress)
     }
 
@@ -187,5 +197,16 @@ internal class LiveChannelAdapter(
         val progress: ProgressBar
     ) : RecyclerView.ViewHolder(item)
 
-    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean) = CinemaStyle.surface(contextForBackground, focused = focused)
+    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean): GradientDrawable {
+        if (!translucent) return CinemaStyle.surface(contextForBackground, focused = focused)
+        val density = contextForBackground.resources.displayMetrics.density
+        return GradientDrawable().apply {
+            cornerRadius = 10 * density
+            setColor(if (focused) 0xAD664397.toInt() else 0x5E211332.toInt())
+            setStroke(
+                ((if (focused) 2 else 1) * density).toInt(),
+                if (focused) 0xD9FFFFFF.toInt() else 0x38FFFFFF
+            )
+        }
+    }
 }

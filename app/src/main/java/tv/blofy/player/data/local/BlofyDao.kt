@@ -273,7 +273,7 @@ interface BlofyDao {
         deleteProvider(stagedProviderId)
     }
 
-    @Query("""UPDATE categories SET hidden = COALESCE((SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId LIMIT 1),(SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId || '.0' LIMIT 1),categories.hidden) WHERE providerId = :stagedProviderId""") suspend fun inheritStagedCategoryFlags(stagedProviderId: String, targetProviderId: String)
+    @Query("""UPDATE categories SET hidden = COALESCE((SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId LIMIT 1),(SELECT old.hidden FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId || '.0' LIMIT 1),categories.hidden), orderIndex = COALESCE((SELECT old.orderIndex FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId LIMIT 1),(SELECT old.orderIndex FROM categories AS old WHERE old.`key` = :targetProviderId || ':' || categories.kind || ':' || categories.remoteId || '.0' LIMIT 1),categories.orderIndex) WHERE providerId = :stagedProviderId""") suspend fun inheritStagedCategoryFlags(stagedProviderId: String, targetProviderId: String)
     @Query("""UPDATE streams SET favorite = COALESCE((SELECT old.favorite FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId LIMIT 1),(SELECT old.favorite FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0' LIMIT 1),streams.favorite), locked = COALESCE((SELECT old.locked FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId LIMIT 1),(SELECT old.locked FROM streams AS old WHERE old.`key` = :targetProviderId || ':' || streams.kind || ':' || streams.remoteId || '.0' LIMIT 1),streams.locked) WHERE providerId = :stagedProviderId""") suspend fun inheritStagedStreamFlags(stagedProviderId: String, targetProviderId: String)
     @Query("""UPDATE categories SET providerId = :targetProviderId, `key` = :targetProviderId || ':' || kind || ':' || remoteId WHERE providerId = :stagedProviderId""") suspend fun promoteStagedCategoriesInPlace(stagedProviderId: String, targetProviderId: String)
     @Query("""UPDATE streams SET providerId = :targetProviderId, `key` = :targetProviderId || ':' || kind || ':' || remoteId WHERE providerId = :stagedProviderId""") suspend fun promoteStagedStreamsInPlace(stagedProviderId: String, targetProviderId: String)
@@ -435,8 +435,13 @@ interface BlofyDao {
         }
 
         val oldCategories = oldCategoriesList.associateBy { it.key }
+        val preservedCategories = categories.map { incoming ->
+            oldCategories[incoming.key]?.let { old ->
+                incoming.copy(orderIndex = old.orderIndex, hidden = old.hidden)
+            } ?: incoming
+        }
         val oldStreams = streamSnapshot(providerId, kind).associateBy { it.key }
-        val incomingCategoryKeys = categories.asSequence().map { it.key }.toHashSet()
+        val incomingCategoryKeys = preservedCategories.asSequence().map { it.key }.toHashSet()
         val incomingStreamKeys = streams.asSequence().map { it.key }.toHashSet()
 
         oldCategories.keys.filterNot(incomingCategoryKeys::contains)
@@ -446,7 +451,7 @@ interface BlofyDao {
             .chunked(SQLITE_BIND_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) deleteStreamsByKeys(it) }
 
-        categories.asSequence().filter { oldCategories[it.key] != it }
+        preservedCategories.asSequence().filter { oldCategories[it.key] != it }
             .chunked(CATALOG_INSERT_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) upsertCategories(it) }
         streams.asSequence().filter { oldStreams[it.key] != it }

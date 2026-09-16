@@ -61,11 +61,24 @@ class ForYouActivity : AppCompatActivity() {
                 body.addView(message(getString(R.string.for_you_add_playlist)))
                 return@launch
             }
-            val snapshot = withContext(Dispatchers.IO) { SmartHomeEngine.build(dao, provider.id) }
-            subtitle.text = getString(R.string.for_you_current_preference, kindLabel(snapshot.preferredKind))
-            addSection(body, getString(R.string.for_you_continue), snapshot.continueItems, provider.id)
-            addSection(body, getString(R.string.for_you_recommended), snapshot.recommended, provider.id)
-            addSection(body, getString(R.string.for_you_recent), snapshot.recentItems, provider.id)
+            val data = withContext(Dispatchers.IO) {
+                val smart = SmartHomeEngine.build(dao, provider.id)
+                val favorites = dao.favorites(provider.id).first()
+                    .filter { it.kind == "movie" || it.kind == "series" }
+                    .distinctBy { it.key }
+                    .take(24)
+                val latest = dao.latestHomeStreams(provider.id, 40)
+                    .filter { it.kind == "movie" || it.kind == "series" }
+                    .distinctBy { it.key }
+                    .take(24)
+                PersonalData(smart, favorites, latest)
+            }
+            subtitle.text = getString(R.string.for_you_current_preference, kindLabel(data.smart.preferredKind))
+            addSection(body, getString(R.string.for_you_continue), data.smart.continueItems, provider.id)
+            addSection(body, getString(R.string.for_you_recommended), data.smart.recommended, provider.id)
+            addSection(body, "المفضلة", data.favorites, provider.id)
+            addSection(body, "أضيف حديثًا", data.latest, provider.id)
+            addSection(body, getString(R.string.for_you_recent), data.smart.recentItems, provider.id)
             body.post { firstFocusable(body)?.requestFocus() }
         }
     }
@@ -86,6 +99,7 @@ class ForYouActivity : AppCompatActivity() {
                     append(item.name)
                     item.year?.takeIf { it.isNotBlank() }?.let { append("   •   ").append(it) }
                     item.rating?.takeIf { it.isNotBlank() }?.let { append("   •   ★ ").append(it) }
+                    if (item.favorite) append("   •   ★ مفضلة")
                 }
                 textSize = 15f
                 typeface = BlofyTvDesign.MediumTypeface
@@ -130,5 +144,12 @@ class ForYouActivity : AppCompatActivity() {
         "live" -> getString(R.string.home_live)
         else -> getString(R.string.home_movies)
     }
+
+    private data class PersonalData(
+        val smart: SmartHomeEngine.Snapshot,
+        val favorites: List<StreamEntity>,
+        val latest: List<StreamEntity>
+    )
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 }

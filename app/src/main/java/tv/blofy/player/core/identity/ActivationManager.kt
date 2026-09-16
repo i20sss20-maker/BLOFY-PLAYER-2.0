@@ -9,30 +9,18 @@ class ActivationManager(
     private val dao: BlofyDao
 ) {
     suspend fun ensureIdentity(): ActivationEntity {
-        val desiredDeviceId = DeviceIdentity.deviceId(context)
         val existing = dao.activation()
         if (existing != null) {
-            // rc04 and older derived the Device ID from ANDROID_ID. After an uninstall the
-            // random activation code was lost while the deterministic Device ID returned,
-            // colliding with the old server credential. Move an upgraded installation to the
-            // new installation-scoped ID once, while preserving its visible six-digit code.
-            if (existing.deviceId != desiredDeviceId) {
-                val migrated = existing.copy(
-                    deviceId = desiredDeviceId,
-                    activated = false,
-                    expiresAt = null,
-                    lastCheckAt = System.currentTimeMillis()
-                )
-                dao.replaceActivation(migrated)
-                return migrated
-            }
-
+            // An upgraded install must keep its server-issued identity until Azure atomically
+            // migrates that row. Room is authoritative here; never invent a local-only Device ID.
+            DeviceIdentity.preserveExistingDeviceId(context, existing.deviceId)
             val reconciledCode = DeviceIdentity.reconcileExistingActivationCode(context, existing.activationCode)
             if (reconciledCode == existing.activationCode) return existing
             return existing.copy(activationCode = reconciledCode).also { dao.upsertActivation(it) }
         }
+
         val created = ActivationEntity(
-            deviceId = desiredDeviceId,
+            deviceId = DeviceIdentity.deviceId(context),
             activationCode = DeviceIdentity.activationCode(context),
             lastCheckAt = System.currentTimeMillis()
         )
@@ -40,8 +28,44 @@ class ActivationManager(
         return created
     }
 
+    /**
+     * Moves a legacy random installation identity to this device's deterministic identity.
+     * The local identity is committed only after Azure confirms the server-side transaction.
+     */
+    suspend fun migrateStableIdentityIfNeeded(
+        api: ActivationApi,
+        current: ActivationEntity? = null
+    ): ActivationEntity {
+        val resolved = current ?: ensureIdentity()
+        val stable = DeviceIdentity.stableIdentity(context) ?: return resolved
+        val targetDeviceId = stable.first
+        val targetActivationCode = stable.second
+        if (resolved.deviceId == targetDeviceId) return resolved
+
+        val response = api.migrateIdentity(
+            ActivationIdentityMigrationRequest(
+                deviceId = resolved.deviceId,
+                activationCode = resolved.activationCode,
+                targetDeviceId = targetDeviceId,
+                targetActivationCode = targetActivationCode
+            )
+        )
+        if (!response.migrated && !response.alreadyStable) return resolved
+        if (response.deviceId != null && response.deviceId != targetDeviceId) return resolved
+
+        val migrated = resolved.copy(
+            deviceId = targetDeviceId,
+            activationCode = targetActivationCode,
+            lastCheckAt = System.currentTimeMillis()
+        )
+        dao.replaceActivation(migrated)
+        DeviceIdentity.commitStableIdentity(context, targetDeviceId, targetActivationCode)
+        return migrated
+    }
+
     suspend fun refresh(api: ActivationApi, appVersion: String): ActivationCheckResponse {
         var current = ensureIdentity()
+        current = migrateStableIdentityIfNeeded(api, current)
         // Retry a possibly-committed rotation before checking the old code. The
         // server endpoint is idempotent for this exact old/new pair.
         current = rotatePendingCode(api, current) ?: current
