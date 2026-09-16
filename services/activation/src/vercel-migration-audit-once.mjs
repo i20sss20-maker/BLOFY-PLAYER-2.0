@@ -90,6 +90,4 @@ async function runAudit() {
   }
 }
 
-// Fire once per Vercel function instance. It is intentionally not awaited so
-// normal production request handling is not blocked by this temporary audit.
-void runAudit();
+export const vercelMigrationAudit = runAudit();
