@@ -16,6 +16,7 @@ const TABLES = [
 ];
 const databaseUrl = String(process.env.DATABASE_URL || '').trim();
 const sourceKey = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
+const sourceSubscriberHost = String(process.env.BLOFY_SUBSCRIBER_HOST || '').trim();
 const pool = databaseUrl ? new pg.Pool({
   ...databaseOptions(databaseUrl), max: 1, connectionTimeoutMillis: 8000,
   statement_timeout: 30000, lock_timeout: 5000, idle_in_transaction_session_timeout: 120000
@@ -28,6 +29,13 @@ function publicKeyFingerprint(publicKeyPem) {
     const der = crypto.createPublicKey(publicKeyPem).export({ type:'spki', format:'der' });
     return crypto.createHash('sha256').update(der).digest('hex');
   } catch { return ''; }
+}
+function validSubscriberHost(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return ['http:', 'https:'].includes(url.protocol) && Boolean(url.hostname) &&
+      !url.username && !url.password && !url.search && !url.hash;
+  } catch { return false; }
 }
 async function exportWindow() {
   // Export is deliberately source-only. Azure carries the same code image but
@@ -101,6 +109,14 @@ async function buildBundle() {
     throw error;
   } finally { client.release(); }
 }
+function buildSubscriberHostBundle() {
+  if (!validSubscriberHost(sourceSubscriberHost)) throw new Error('subscriber_host_invalid');
+  return {
+    protocol:'blofy-subscriber-host-v1',
+    generatedAt:Date.now(),
+    subscriberHost:sourceSubscriberHost
+  };
+}
 function encryptBundle(bundle, window) {
   const plaintext = gzipSync(Buffer.from(JSON.stringify(bundle),'utf8'), { level:9 });
   const aesKey = crypto.randomBytes(32), iv = crypto.randomBytes(12);
@@ -133,6 +149,20 @@ http.createServer = function withMigrationExport(listener) {
         return sendJson(res,200,{ protocol:'blofy-migration-v1', enabled:Boolean(window),
           fingerprint:window?.fingerprint || '', expiresAt:window?.expiresAt || 0,
           source:VERCEL_RUNTIME?'github-main-runtime-window':'not-production-vercel-runtime' });
+      }
+      if (url.pathname === `${ROOT}/subscriber-host/status` && req.method === 'GET') {
+        const window = await exportWindow();
+        return sendJson(res,200,{ protocol:'blofy-subscriber-host-v1', supported:true,
+          enabled:Boolean(window), hostConfigured:validSubscriberHost(sourceSubscriberHost),
+          fingerprint:window?.fingerprint || '', expiresAt:window?.expiresAt || 0,
+          source:VERCEL_RUNTIME?'production-vercel-runtime':'not-production-vercel-runtime' });
+      }
+      if (url.pathname === `${ROOT}/subscriber-host`) {
+        if (req.method !== 'POST') return sendJson(res,405,{error:'method_not_allowed'});
+        const window = await exportWindow();
+        if (!window) return sendJson(res,404,{error:'migration_export_disabled'});
+        if (!validSubscriberHost(sourceSubscriberHost)) return sendJson(res,503,{error:'subscriber_host_unavailable'});
+        return sendJson(res,200,encryptBundle(buildSubscriberHostBundle(), window));
       }
       if (url.pathname === ROOT) {
         if (req.method !== 'POST') return sendJson(res,405,{error:'method_not_allowed'});
