@@ -1,4 +1,4 @@
-# QA rebuild trigger: navigation, scoped search, live overlay
+# QA rebuild trigger: device barcode entry + softer live channel overlay
 name: BLOFY rc07.51 Production-Signed Test
 
 on:
