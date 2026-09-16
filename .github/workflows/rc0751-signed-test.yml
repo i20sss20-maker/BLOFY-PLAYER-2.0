@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
-  UPDATE_BASE_URL: https://blofy-update-distribution-production.up.railway.app
+  ACTIVATION_BASE_URL: https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io
+  UPDATE_BASE_URL: https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
   EXPECTED_VERSION_CODE: "2000062"
   EXPECTED_VERSION_NAME: 2.0.0-rc07.51
