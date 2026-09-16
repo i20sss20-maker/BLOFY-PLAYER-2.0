@@ -1,4 +1,4 @@
-# QA rebuild trigger: device barcode entry + softer live channel overlay
+# Final QA rebuild trigger: deterministic Live BACK + compact translucent OK overlay
 name: BLOFY rc07.51 Production-Signed Test
 
 on:
