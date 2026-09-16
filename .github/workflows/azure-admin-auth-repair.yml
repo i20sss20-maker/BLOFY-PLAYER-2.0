@@ -1,0 +1,83 @@
+name: BLOFY Azure Admin Auth Repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/azure-admin-auth-repair.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Repair release admin secret binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+
+          APP='blofy-releases'
+          SECRET_NAME='release-admin-password'
+
+          VAULT="$(az keyvault list -g "$AZURE_RG" --query '[0].name' -o tsv)"
+          test -n "$VAULT"
+
+          SECRET_ID="$(az keyvault secret show --vault-name "$VAULT" --name "$SECRET_NAME" --query id -o tsv)"
+          test -n "$SECRET_ID"
+
+          IDENTITY_ID="$(az identity list -g "$AZURE_RG" --query "[?contains(name, 'runtime')].id | [0]" -o tsv)"
+          test -n "$IDENTITY_ID"
+
+          echo "Key Vault: $VAULT"
+          echo "Secret version: ${SECRET_ID##*/}"
+          echo "Runtime identity: ${IDENTITY_ID##*/}"
+
+          az containerapp secret set \
+            -g "$AZURE_RG" \
+            -n "$APP" \
+            --secrets "$SECRET_NAME=keyvaultref:$SECRET_ID,identityref:$IDENTITY_ID" \
+            --only-show-errors >/dev/null
+
+          az containerapp update \
+            -g "$AZURE_RG" \
+            -n "$APP" \
+            --set-env-vars \
+              "ADMIN_PASSWORD=secretref:$SECRET_NAME" \
+              "BLOFY_AUTH_REFRESH=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --only-show-errors >/dev/null
+
+          for attempt in {1..30}; do
+            READY="$(az containerapp show -g "$AZURE_RG" -n "$APP" --query 'properties.latestReadyRevisionName' -o tsv)"
+            LATEST="$(az containerapp show -g "$AZURE_RG" -n "$APP" --query 'properties.latestRevisionName' -o tsv)"
+            if [[ -n "$LATEST" && "$READY" == "$LATEST" ]]; then
+              echo "Release revision ready: $LATEST"
+              break
+            fi
+            if [[ "$attempt" == 30 ]]; then
+              echo 'Latest blofy-releases revision did not become ready in time.' >&2
+              exit 1
+            fi
+            sleep 5
+          done
+
+          ENV_SECRET="$(az containerapp show -g "$AZURE_RG" -n "$APP" --query "properties.template.containers[0].env[?name=='ADMIN_PASSWORD'].secretRef | [0]" -o tsv)"
+          test "$ENV_SECRET" = "$SECRET_NAME"
+
+          echo 'BLOFY Azure release-admin secret binding repair passed.'
