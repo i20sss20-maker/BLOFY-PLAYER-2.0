@@ -1,0 +1,218 @@
+name: BLOFY Azure Subscriber Host Transfer V3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/azure-subscriber-host-transfer-v3.yml'
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: blofy-subscriber-host-transfer-v3
+  cancel-in-progress: false
+
+env:
+  AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+  SOURCE_BASE: https://blofy-player-2-0.vercel.app
+
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify protected Vercel bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS --max-time 15 -o /tmp/subscriber-host-status.json -w '%{http_code}' \
+            "$SOURCE_BASE/api/v1/internal/migration-export/subscriber-host/status")"
+          test "$code" = '200'
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/subscriber-host-status.json', encoding='utf-8'))
+          assert p.get('protocol') == 'blofy-subscriber-host-v1'
+          assert p.get('supported') is True
+          assert p.get('hostConfigured') is True
+          assert p.get('source') == 'production-vercel-runtime'
+          print('Protected Vercel subscriber-host bridge ready.')
+          PY
+
+      - name: Open one encrypted transfer window
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          umask 077
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /tmp/blofy-subscriber-private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/blofy-subscriber-private.pem -pubout -out /tmp/blofy-subscriber-public.pem >/dev/null 2>&1
+          FINGERPRINT="$(openssl pkey -pubin -in /tmp/blofy-subscriber-public.pem -outform DER 2>/dev/null | sha256sum | awk '{print $1}')"
+          EXPIRES_AT="$(( $(date +%s%3N) + 600000 ))"
+          python3 - "$EXPIRES_AT" <<'PY'
+          import json, pathlib, sys
+          public_key=pathlib.Path('/tmp/blofy-subscriber-public.pem').read_text(encoding='utf-8').strip()
+          pathlib.Path('ops/blofy-migration-export-window.json').write_text(
+              json.dumps({'publicKeyPem': public_key, 'expiresAt': int(sys.argv[1])}, separators=(',', ':'))+'\n',
+              encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/blofy-migration-export-window.json
+          git commit -m 'ops(subscriber): open v3 encrypted host window'
+          git push origin HEAD:main
+          echo "BLOFY_TRANSFER_FINGERPRINT=$FINGERPRINT" >> "$GITHUB_ENV"
+
+      - name: Wait for Vercel to observe exact RSA fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=false
+          for attempt in $(seq 1 60); do
+            code="$(curl -sS --max-time 10 -o /tmp/subscriber-host-status.json -w '%{http_code}' \
+              "$SOURCE_BASE/api/v1/internal/migration-export/subscriber-host/status" || true)"
+            if [ "$code" = '200' ] && python3 - "$BLOFY_TRANSFER_FINGERPRINT" <<'PY'
+          import json, sys
+          try:
+              p=json.load(open('/tmp/subscriber-host-status.json', encoding='utf-8'))
+              ok=(p.get('enabled') is True and p.get('hostConfigured') is True and p.get('fingerprint') == sys.argv[1])
+          except Exception:
+              ok=False
+          raise SystemExit(0 if ok else 1)
+          PY
+            then
+              ready=true
+              break
+            fi
+            echo "window attempt $attempt/60 -> HTTP ${code:-curl-error}"
+            sleep 5
+          done
+          test "$ready" = true
+          echo 'Vercel observed the exact encrypted transfer fingerprint.'
+
+      - name: Export and decrypt subscriber host locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 20 -X POST \
+            "$SOURCE_BASE/api/v1/internal/migration-export/subscriber-host" \
+            -o /tmp/subscriber-host-envelope.json
+          node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const zlib = require('zlib');
+          const envelope = JSON.parse(fs.readFileSync('/tmp/subscriber-host-envelope.json', 'utf8'));
+          if (envelope.protocol !== 'blofy-migration-envelope-v1') throw new Error('unexpected_envelope_protocol');
+          if (envelope.fingerprint !== process.env.BLOFY_TRANSFER_FINGERPRINT) throw new Error('fingerprint_mismatch');
+          const privateKey = fs.readFileSync('/tmp/blofy-subscriber-private.pem', 'utf8');
+          const aesKey = crypto.privateDecrypt({
+            key: privateKey,
+            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+            oaepHash: 'sha256'
+          }, Buffer.from(envelope.key, 'base64url'));
+          const decipher = crypto.createDecipheriv('aes-256-gcm', aesKey, Buffer.from(envelope.iv, 'base64url'));
+          decipher.setAuthTag(Buffer.from(envelope.tag, 'base64url'));
+          const compressed = Buffer.concat([
+            decipher.update(Buffer.from(envelope.data, 'base64url')),
+            decipher.final()
+          ]);
+          const payload = JSON.parse(zlib.gunzipSync(compressed).toString('utf8'));
+          if (payload.protocol !== 'blofy-subscriber-host-v1') throw new Error('unexpected_payload_protocol');
+          const host = String(payload.subscriberHost || '').trim();
+          const url = new URL(host);
+          if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password || url.search || url.hash) throw new Error('invalid_subscriber_host');
+          fs.writeFileSync('/tmp/blofy-subscriber-host.txt', host, { mode: 0o600 });
+          NODE
+          echo 'Subscriber host decrypted locally without disclosure.'
+
+      - name: Install host in Azure Container App
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s /tmp/blofy-subscriber-host.txt
+          HOST="$(cat /tmp/blofy-subscriber-host.txt)"
+
+          # Key Vault is a defense-in-depth backup. A missing data-plane RBAC role
+          # must not block the Container App secret that production actually uses.
+          KV="$(az keyvault list --resource-group "$AZURE_RG" --query '[0].name' -o tsv 2>/dev/null || true)"
+          if [ -n "$KV" ]; then
+            if az keyvault secret set --vault-name "$KV" --name subscriber-host --value "$HOST" --only-show-errors >/dev/null 2>&1; then
+              echo 'Key Vault backup updated.'
+            else
+              echo 'Key Vault backup skipped because the OIDC principal lacks secret-write RBAC.'
+            fi
+          fi
+
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          az containerapp secret set \
+            --resource-group "$AZURE_RG" \
+            --name blofy-activation \
+            --secrets "subscriber-host=$HOST" \
+            --only-show-errors >/dev/null
+          az containerapp update \
+            --resource-group "$AZURE_RG" \
+            --name blofy-activation \
+            --set-env-vars 'BLOFY_SUBSCRIBER_HOST=secretref:subscriber-host' \
+            --min-replicas 1 \
+            --only-show-errors >/dev/null
+          unset HOST
+          echo 'Azure Container App subscriber host secret installed.'
+
+      - name: Verify Azure subscriber service is fully configured
+        shell: bash
+        run: |
+          set -euo pipefail
+          FQDN="$(az containerapp show --resource-group "$AZURE_RG" --name blofy-gateway --query properties.configuration.ingress.fqdn -o tsv)"
+          test -n "$FQDN"
+          BASE="https://$FQDN"
+          ready=false
+          for attempt in $(seq 1 36); do
+            code="$(curl -sS --max-time 15 -o /tmp/azure-subscriber-health.json -w '%{http_code}' \
+              "$BASE/api/v1/subscribers/health" || true)"
+            if [ "$code" = '200' ] && python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/azure-subscriber-health.json', encoding='utf-8'))
+          assert p.get('ok') is True
+          assert p.get('hostConfigured') is True
+          assert p.get('encryptionReady') is True
+          assert p.get('databaseReady') is True
+          PY
+            then
+              ready=true
+              break
+            fi
+            echo "Azure subscriber health attempt $attempt/36 -> HTTP ${code:-curl-error}"
+            sleep 5
+          done
+          test "$ready" = true
+          curl -fsS --max-time 10 "$BASE/health" >/dev/null
+          echo 'BLOFY subscribers fully configured on Azure.'
+
+      - name: Close transfer window and destroy temporary material
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          printf '{"publicKeyPem":"","expiresAt":0}\n' > ops/blofy-migration-export-window.json
+          git add ops/blofy-migration-export-window.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'ops(subscriber): close v3 encrypted host window'
+            git push origin HEAD:main
+          fi
+          rm -f /tmp/blofy-subscriber-private.pem /tmp/blofy-subscriber-public.pem \
+            /tmp/subscriber-host-envelope.json /tmp/blofy-subscriber-host.txt \
+            /tmp/subscriber-host-status.json /tmp/azure-subscriber-health.json
+          echo 'Encrypted host-transfer window closed and temporary material removed.'
