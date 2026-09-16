@@ -17,7 +17,8 @@ object DeviceIdentity {
     private val secureRandom = SecureRandom()
 
     /**
-     * Existing installations keep their already-issued BLOFY identity exactly as-is.
+     * Existing installations keep their already-issued BLOFY identity exactly as-is until the
+     * activation service atomically migrates that identity to the reinstall-stable target.
      *
      * Fresh installations derive their public Device ID and six-digit activation credential from
      * Android's app-scoped system identity. This makes the BLOFY identity recoverable after an
@@ -40,7 +41,7 @@ object DeviceIdentity {
     fun deviceId(context: Context): String {
         val preferences = preferences(context)
         preferences.getString(DEVICE_ID, null)?.takeIf(::validDeviceId)?.let { return it }
-        val generated = stableSystemIdentity(context)?.let(::deriveDeviceId) ?: generateDeviceId()
+        val generated = stableIdentity(context)?.first ?: generateDeviceId()
         return generated.also {
             check(preferences.edit().putString(DEVICE_ID, it).commit()) {
                 "Unable to persist the device ID"
@@ -52,12 +53,36 @@ object DeviceIdentity {
     fun activationCode(context: Context): String {
         val preferences = preferences(context)
         preferences.getString(ACTIVE_CODE, null)?.takeIf(::validActivationCode)?.let { return it }
-        val generated = stableSystemIdentity(context)?.let(::deriveActivationCode) ?: generateActivationCode()
+        val generated = stableIdentity(context)?.second ?: generateActivationCode()
         return generated.also {
             check(preferences.edit().putString(ACTIVE_CODE, it).commit()) {
                 "Unable to persist the device activation code"
             }
         }
+    }
+
+    /** Returns the deterministic reinstall target without changing the currently active identity. */
+    internal fun stableIdentity(context: Context): Pair<String, String>? = stableSystemIdentity(context)?.let {
+        deriveDeviceId(it) to deriveActivationCode(it)
+    }
+
+    /** Commits a server-approved migration. This is never called before Azure confirms success. */
+    @Synchronized
+    internal fun commitStableIdentity(context: Context, deviceId: String, activationCode: String) {
+        require(validDeviceId(deviceId)) { "Invalid stable device ID" }
+        require(validActivationCode(activationCode)) { "Invalid stable activation code" }
+        val expected = stableIdentity(context)
+            ?: throw IllegalStateException("Stable system identity is unavailable")
+        check(expected.first == deviceId && expected.second == activationCode) {
+            "Stable identity does not match this device"
+        }
+        check(
+            preferences(context).edit()
+                .putString(DEVICE_ID, deviceId)
+                .putString(ACTIVE_CODE, activationCode)
+                .remove(PENDING_CODE)
+                .commit()
+        ) { "Unable to commit stable BLOFY identity" }
     }
 
     /**
