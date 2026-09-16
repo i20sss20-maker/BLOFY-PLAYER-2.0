@@ -122,13 +122,22 @@ async function ensureTargetSchema(client) {
   const core=await readFile(new URL('../schema.sql',import.meta.url),'utf8');
   await client.query(core); await client.query(ADMIN_CONSOLE_SCHEMA); await client.query(DEVICE_ADMIN_SCHEMA); await client.query(RELEASE_SCHEMA);
 }
-async function assertCompatibility(client,bundle) {
+async function compatibilityIssues(client,bundle) {
+  const issues=[];
   for (const table of TABLES) {
-    if (!await tableExists(client,table)) throw new Error(`migration_target_table_missing:${table}`);
+    if (!await tableExists(client,table)) {
+      issues.push(`missing_table:${table}`);
+      continue;
+    }
     const target=new Set(await columns(client,table));
     const missing=bundle.tables[table].columns.filter(name=>!target.has(name));
-    if (missing.length) throw new Error(`migration_target_columns_missing:${table}:${missing.join(',')}`);
+    if (missing.length) issues.push(`missing_columns:${table}:${missing.join(',')}`);
   }
+  return issues;
+}
+async function assertCompatibility(client,bundle) {
+  const issues=await compatibilityIssues(client,bundle);
+  if (issues.length) throw new Error(`migration_target_schema_incompatible:${issues.join(';')}`);
 }
 async function insertRows(client,table,item) {
   const names=item.columns, rows=item.rows, batchSize=100;
@@ -197,8 +206,20 @@ http.createServer=function withMigrationImport(listener) {
         const compatibility=keyCompatibility(bundle.sourcePlaylistEncryptionKey);
         if (url.pathname.endsWith('/validate')) {
           const client=await pool.connect();
-          try { return sendJson(res,200,{mode:'validated',...compatibility,source:bundle.source,sourceCounts:bundle.counts,targetCountsBefore:await counts(client)}); }
-          finally { client.release(); }
+          try {
+            const targetCountsBefore=await counts(client);
+            await client.query('BEGIN');
+            try {
+              // PostgreSQL DDL is transactional: rehearse the exact schema upgrade that
+              // applyBundle will run, inspect all source columns, then roll everything back.
+              await ensureTargetSchema(client);
+              const schemaIssues=await compatibilityIssues(client,bundle);
+              return sendJson(res,200,{mode:'validated',...compatibility,source:bundle.source,sourceCounts:bundle.counts,
+                targetCountsBefore,schemaCompatible:schemaIssues.length===0,schemaIssues});
+            } finally {
+              await client.query('ROLLBACK').catch(()=>{});
+            }
+          } finally { client.release(); }
         }
         return sendJson(res,200,await applyBundle(bundle));
       }
