@@ -19,6 +19,7 @@ const sourceKey = 'a'.repeat(64);
 const targetWrappingKey = 'b'.repeat(64);
 const sourceCodec = createActivationCredentialCodec(sourceKey);
 const snapshotCreatedAt = '2026-01-02T03:04:05.000Z';
+const pairCreatedAt = '2026-01-03T04:05:06.000Z';
 const releaseSchema = `
 CREATE TABLE IF NOT EXISTS app_release_catalog (
  id UUID PRIMARY KEY,channel TEXT NOT NULL CHECK(channel IN ('stable','testing')),version_code INTEGER NOT NULL UNIQUE,
@@ -80,6 +81,8 @@ try {
       VALUES('scope-test',$1,NOW()-INTERVAL '1 day',NOW()+INTERVAL '6 days')`,[sourceDevice]);
     await source.query(`INSERT INTO profile_cloud_snapshots(device_id,profile_id,revision,payload_json,created_at)
       VALUES($1,'main',4,'{"theme":"purple"}'::jsonb,$2)`,[sourceDevice,snapshotCreatedAt]);
+    await source.query(`INSERT INTO cloud_pair_codes(code_hash,source_device_id,source_profile_id,expires_at,created_at)
+      VALUES('pair-test',$1,'main',NOW()+INTERVAL '10 minutes',$2)`,[sourceDevice,pairCreatedAt]);
     await source.query(`INSERT INTO subscription_plans(plan_key,name,duration_days,max_devices,price_minor,currency,active,sort_order)
       VALUES('annual','سنوي',365,1,18000,'SAR',TRUE,1)`);
     const subId=crypto.randomUUID();
@@ -94,9 +97,10 @@ try {
 
     const targetDevice='BLOFY-TARGET-SEED';
     await target.query(core); await target.query(ADMIN_CONSOLE_SCHEMA); await target.query(DEVICE_ADMIN_SCHEMA); await target.query(releaseSchema);
-    // Reproduce the pre-fix Azure schema. The apply path must upgrade this in place
-    // before it checks compatibility with the newer Neon production snapshot.
+    // Reproduce the two legacy Azure schema gaps seen in the real migration.
+    // The apply path must upgrade both in place before compatibility checks.
     await target.query('ALTER TABLE profile_cloud_snapshots DROP COLUMN created_at');
+    await target.query('ALTER TABLE cloud_pair_codes DROP COLUMN created_at');
     await target.query(`CREATE TABLE blofy_release_store(id SMALLINT PRIMARY KEY,state JSONB NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await target.query(`INSERT INTO blofy_release_store(id,state) VALUES(1,'{"activeVersionCode":2000061}'::jsonb)`);
     await target.query(`INSERT INTO devices(device_id,activation_code,status) VALUES($1,'seed-code','expired')`,[targetDevice]);
@@ -116,6 +120,8 @@ try {
     assert.equal((await target.query('SELECT COUNT(*)::int AS n FROM device_subscriptions')).rows[0].n,1);
     const migratedSnapshot=(await target.query(`SELECT created_at FROM profile_cloud_snapshots WHERE device_id=$1 AND profile_id='main'`,[sourceDevice])).rows[0];
     assert.equal(new Date(migratedSnapshot.created_at).toISOString(),snapshotCreatedAt,'legacy Azure snapshot schema is upgraded and source created_at is preserved');
+    const migratedPair=(await target.query(`SELECT created_at FROM cloud_pair_codes WHERE code_hash='pair-test'`)).rows[0];
+    assert.equal(new Date(migratedPair.created_at).toISOString(),pairCreatedAt,'legacy Azure pair-code schema is upgraded and source created_at is preserved');
     assert.equal((await target.query('SELECT state->>\'activeVersionCode\' AS v FROM blofy_release_store WHERE id=1')).rows[0].v,'2000061');
     assert.equal((await target.query(`SELECT device_id FROM "${applied.backupSchema}".devices`)).rows[0].device_id,targetDevice);
 
@@ -135,7 +141,7 @@ try {
     result=await runMigration({SOURCE_BLOFY_PLAYLIST_ENCRYPTION_KEY:'invalid',BLOFY_MIGRATION_APPLY:'YES_COPY_BLOFY_PRODUCTION_TO_AZURE',BLOFY_MIGRATION_CONFIRM_SOURCE:sourceName,BLOFY_MIGRATION_CONFIRM_TARGET:targetName});
     assert.equal(result.code,1);assert.match(result.stderr,/migration_source_key_invalid/);
     assert.equal((await target.query('SELECT COUNT(*)::int AS n FROM devices')).rows[0].n,1,'failed guarded run leaves target intact');
-    console.log('PASS: migration dry-run, legacy snapshot schema upgrade, different-key wrapping, target backup, canonical copy, PIN/ciphertext preservation, count verification, sequence repair and Azure release-store preservation.');
+    console.log('PASS: migration dry-run, legacy snapshot/pair schema upgrades, different-key wrapping, target backup, canonical copy, PIN/ciphertext preservation, count verification, sequence repair and Azure release-store preservation.');
   } finally { await source.end(); await target.end(); }
 } finally {
   await dropDatabase(sourceName).catch(()=>{}); await dropDatabase(targetName).catch(()=>{}); await admin.end();
