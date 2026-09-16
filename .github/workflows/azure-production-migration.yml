@@ -1,0 +1,227 @@
+name: BLOFY Azure Production Migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/azure/managed/migration.run'
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: blofy-production-migration
+  cancel-in-progress: false
+
+env:
+  AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+  VERCEL_SOURCE_URL: https://blofy-player-2-0.vercel.app
+  EXPORT_CONFIG: services/activation/src/migration-export-config.mjs
+
+jobs:
+  migrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify explicit migration trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -qx 'RUN=YES_COPY_BLOFY_PRODUCTION_TO_AZURE' infra/azure/managed/migration.run
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve Azure gateway and importer
+        id: azure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$AZURE_RG"
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          FQDN="$(az containerapp show -g "$AZURE_RG" -n blofy-gateway --query properties.configuration.ingress.fqdn -o tsv)"
+          test -n "$FQDN"
+          URL="https://$FQDN"
+          for n in $(seq 1 60); do
+            if curl -fsS --max-time 10 "$URL/api/v1/internal/migration-import/status" | jq -e '.protocol=="blofy-migration-v1"' >/dev/null; then
+              echo "url=$URL" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Azure migration importer did not become available.' >&2
+          exit 1
+
+      - name: Generate ephemeral migration keys
+        id: crypto
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRIVATE="$RUNNER_TEMP/blofy-migration-private.pem"
+          PUBLIC="$RUNNER_TEMP/blofy-migration-public.pem"
+          TOKEN_FILE="$RUNNER_TEMP/blofy-migration-token"
+          openssl genpkey -quiet -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$PRIVATE"
+          openssl pkey -in "$PRIVATE" -pubout -out "$PUBLIC"
+          openssl rand -hex 32 > "$TOKEN_FILE"
+          FP="$(openssl pkey -pubin -in "$PUBLIC" -outform DER | sha256sum | awk '{print $1}')"
+          EXPIRES_MS="$(( ($(date +%s) + 1200) * 1000 ))"
+          echo "fingerprint=$FP" >> "$GITHUB_OUTPUT"
+          echo "expires_ms=$EXPIRES_MS" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$(cat "$TOKEN_FILE")"
+          echo "::add-mask::$(base64 -w0 "$PRIVATE")"
+
+      - name: Enable encrypted Vercel export window
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FP: ${{ steps.crypto.outputs.fingerprint }}
+          EXPIRES_MS: ${{ steps.crypto.outputs.expires_ms }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PUBLIC="$RUNNER_TEMP/blofy-migration-public.pem"
+          TMP="$RUNNER_TEMP/migration-export-config.mjs"
+          {
+            echo '// Ephemeral PUBLIC key written by the guarded production migration workflow.'
+            echo '// The private key exists only in the workflow/Azure temporary secret and is never committed.'
+            echo 'export const MIGRATION_EXPORT_PUBLIC_KEY = `'
+            cat "$PUBLIC"
+            echo '`;'
+            echo "export const MIGRATION_EXPORT_EXPIRES_AT = $EXPIRES_MS;"
+          } > "$TMP"
+          SHA="$(gh api "repos/$GITHUB_REPOSITORY/contents/$EXPORT_CONFIG?ref=main" --jq .sha)"
+          CONTENT="$(base64 -w0 "$TMP")"
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$EXPORT_CONFIG" \
+            -f message='ops(migration): open encrypted production export window' \
+            -f content="$CONTENT" -f sha="$SHA" -f branch=main >/dev/null
+
+      - name: Wait for Vercel encrypted exporter
+        env:
+          FP: ${{ steps.crypto.outputs.fingerprint }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 90); do
+            STATUS="$(curl -fsS --max-time 10 "$VERCEL_SOURCE_URL/api/v1/internal/migration-export/status" 2>/dev/null || true)"
+            if jq -e --arg fp "$FP" '.enabled==true and .fingerprint==$fp and .protocol=="blofy-migration-v1"' <<<"$STATUS" >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 7
+          done
+          echo 'Vercel encrypted exporter did not become ready.' >&2
+          exit 1
+
+      - name: Enable one-time Azure importer secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRIVATE_B64="$(base64 -w0 "$RUNNER_TEMP/blofy-migration-private.pem")"
+          TOKEN="$(cat "$RUNNER_TEMP/blofy-migration-token")"
+          az containerapp secret set -g "$AZURE_RG" -n blofy-activation --secrets \
+            "migration-private-key=$PRIVATE_B64" "migration-import-token=$TOKEN" >/dev/null
+          az containerapp update -g "$AZURE_RG" -n blofy-activation --set-env-vars \
+            'BLOFY_MIGRATION_PRIVATE_KEY_B64=secretref:migration-private-key' \
+            'BLOFY_MIGRATION_IMPORT_TOKEN=secretref:migration-import-token' \
+            'BLOFY_MIGRATION_EXPECTED_SOURCE_DATABASE=neondb' >/dev/null
+          URL='${{ steps.azure.outputs.url }}'
+          for n in $(seq 1 60); do
+            if curl -fsS --max-time 10 "$URL/api/v1/internal/migration-import/status" | jq -e '.available==true' >/dev/null; then exit 0; fi
+            sleep 5
+          done
+          echo 'Azure one-time importer secret did not become active.' >&2
+          exit 1
+
+      - name: Fetch encrypted production snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/blofy-source-envelope.json"
+          curl -fsS --max-time 180 -X POST "$VERCEL_SOURCE_URL/api/v1/internal/migration-export" -o "$BUNDLE"
+          jq -e '.protocol=="blofy-migration-envelope-v1" and (.data|type=="string") and (.data|length>0)' "$BUNDLE" >/dev/null
+          echo "Encrypted snapshot bytes: $(wc -c < "$BUNDLE")"
+
+      - name: Validate real production migration without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='${{ steps.azure.outputs.url }}'
+          TOKEN="$(cat "$RUNNER_TEMP/blofy-migration-token")"
+          BUNDLE="$RUNNER_TEMP/blofy-source-envelope.json"
+          OUT="$RUNNER_TEMP/migration-validation.json"
+          curl -fsS --max-time 180 -X POST "$URL/api/v1/internal/migration-import/validate" \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            --data-binary "@$BUNDLE" -o "$OUT"
+          jq -e '.mode=="validated" and .keyCompatible==true and .source.database=="neondb"' "$OUT" >/dev/null
+          jq -e '.sourceCounts.devices>=180 and .sourceCounts.device_playlists>=40 and .sourceCounts.playback_diagnostics>=1400' "$OUT" >/dev/null
+          jq '{mode,source,sourceCounts,targetCountsBefore,keyCompatible}' "$OUT"
+
+      - name: Apply source snapshot to Azure with transactional backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='${{ steps.azure.outputs.url }}'
+          TOKEN="$(cat "$RUNNER_TEMP/blofy-migration-token")"
+          BUNDLE="$RUNNER_TEMP/blofy-source-envelope.json"
+          OUT="$RUNNER_TEMP/migration-result.json"
+          curl -fsS --max-time 300 -X POST "$URL/api/v1/internal/migration-import" \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            --data-binary "@$BUNDLE" -o "$OUT"
+          jq -e '.mode=="applied" or .mode=="already-applied"' "$OUT" >/dev/null
+          if jq -e '.mode=="applied"' "$OUT" >/dev/null; then
+            jq -e '.sourceCounts.devices==.targetCountsAfter.devices and .sourceCounts.device_playlists==.targetCountsAfter.device_playlists and .sourceCounts.playback_diagnostics==.targetCountsAfter.playback_diagnostics' "$OUT" >/dev/null
+          fi
+          jq '{mode,bundleId,backupSchema,source,sourceCounts,targetCountsAfter,preservedTargetTables}' "$OUT"
+
+      - name: Verify Azure public services after migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='${{ steps.azure.outputs.url }}'
+          curl -fsS --max-time 20 "$URL/health" | jq -e '.ok==true' >/dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$URL/admin")" = '200'
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$URL/portal")" = '200'
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$URL/release.json")" = '200'
+
+      - name: Destroy Azure migration credentials
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          az containerapp update -g "$AZURE_RG" -n blofy-activation --remove-env-vars \
+            BLOFY_MIGRATION_PRIVATE_KEY_B64 BLOFY_MIGRATION_IMPORT_TOKEN BLOFY_MIGRATION_EXPECTED_SOURCE_DATABASE >/dev/null 2>&1
+          JUNK1="$(openssl rand -base64 48 | tr -d '\n')"
+          JUNK2="$(openssl rand -hex 32)"
+          az containerapp secret set -g "$AZURE_RG" -n blofy-activation --secrets \
+            "migration-private-key=$JUNK1" "migration-import-token=$JUNK2" >/dev/null 2>&1
+          az containerapp secret remove -g "$AZURE_RG" -n blofy-activation --secret-names \
+            migration-private-key migration-import-token >/dev/null 2>&1
+
+      - name: Close Vercel export window
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set +e
+          TMP="$RUNNER_TEMP/migration-export-disabled.mjs"
+          cat > "$TMP" <<'EOF'
+          // Temporary migration export gate. Disabled after the production transfer.
+          // No private key or database credential is ever committed.
+          export const MIGRATION_EXPORT_PUBLIC_KEY = '';
+          export const MIGRATION_EXPORT_EXPIRES_AT = 0;
+          EOF
+          SHA="$(gh api "repos/$GITHUB_REPOSITORY/contents/$EXPORT_CONFIG?ref=main" --jq .sha 2>/dev/null)"
+          if [ -n "$SHA" ]; then
+            CONTENT="$(base64 -w0 "$TMP")"
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$EXPORT_CONFIG" \
+              -f message='ops(migration): close encrypted production export window' \
+              -f content="$CONTENT" -f sha="$SHA" -f branch=main >/dev/null 2>&1
+          fi
+          shred -u "$RUNNER_TEMP/blofy-migration-private.pem" "$RUNNER_TEMP/blofy-migration-public.pem" \
+            "$RUNNER_TEMP/blofy-migration-token" "$RUNNER_TEMP/blofy-source-envelope.json" 2>/dev/null || true
