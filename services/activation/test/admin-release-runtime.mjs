@@ -23,7 +23,7 @@ try{
   assert.equal(response.status,200);const cookie=response.headers.get('set-cookie').split(';')[0];assert.ok(cookie.startsWith('blofy_admin_session='));
   const headers={'content-type':'application/json',cookie,origin:base};
   const api=async(path,method='GET',body)=>{const r=await fetch(base+path,{method,headers,body:body?JSON.stringify(body):undefined,redirect:'manual'});return {status:r.status,headers:r.headers,data:await r.json()};};
-  response=await fetch(base+'/admin',{headers:{cookie}});const dashboard=await response.text();assert.match(dashboard,/release-manager\.js/);assert.match(dashboard,/customer-record/);
+  response=await fetch(base+'/admin',{headers:{cookie}});const dashboard=await response.text();assert.match(dashboard,/href="\/releases-admin"/);assert.doesNotMatch(dashboard,/blofy-update-distribution-production\.up\.railway\.app/);assert.match(dashboard,/customer-record/);
   for(const path of ['/premium.css','/release-manager.css','/experience.js','/release-manager.js','/downloads','/portal'])assert.equal((await fetch(base+path)).status,200,path);
   for(const path of ['/api/v1/admin/users','/api/v1/admin/experience/overview','/api/v1/admin/experience/tickets','/api/v1/admin/experience/renewal-options'])assert.equal((await api(path)).status,200,path);
   const root='/api/v1/admin/experience/releases';
@@ -53,5 +53,5 @@ try{
   const publicData=await (await fetch(base+'/api/v1/releases')).json();assert.equal(publicData.items.filter(x=>x.isPrimary).length,1);
   const restoredHtml=await publicPage();assert.ok(!restoredHtml.includes(body.downloadUrl));assert.ok(restoredHtml.includes(initial.downloadUrl));
   health=await (await fetch(base+'/health')).json();assert.equal(health.release.app.versionCode,initial.versionCode);
-  console.log('PASS: canonical Admin route, authenticated dashboard, existing admin sections, CRUD, primary-delete guard, CSRF, public metadata, no-JavaScript downloads and latest-APK redirect.');
+  console.log('PASS: canonical Admin route, authenticated dashboard, Azure release link, existing admin sections, CRUD, primary-delete guard, CSRF, public metadata, no-JavaScript downloads and latest-APK redirect.');
 }finally{server.kill('SIGTERM');await wait(300);if(server.exitCode===null)server.kill('SIGKILL');}
