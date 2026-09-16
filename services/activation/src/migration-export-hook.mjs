@@ -37,10 +37,12 @@ function validSubscriberHost(value) {
       !url.username && !url.password && !url.search && !url.hash;
   } catch { return false; }
 }
-async function exportWindow() {
-  // Export is deliberately source-only. Azure carries the same code image but
-  // VERCEL=1/VERCEL_ENV=production are Vercel system variables absent from Azure.
-  if (!VERCEL_RUNTIME || !pool || !/^[a-fA-F0-9]{64}$/.test(sourceKey)) return null;
+async function exportWindow({ requireMigrationContext = true } = {}) {
+  // Both export paths are source-only. Full database migration additionally
+  // requires the source database and production data key. The subscriber-host
+  // transfer does not need either secret and must not be coupled to their shape.
+  if (!VERCEL_RUNTIME) return null;
+  if (requireMigrationContext && (!pool || !/^[a-fA-F0-9]{64}$/.test(sourceKey))) return null;
   let parsed;
   try {
     const url = new URL(WINDOW_URL);
@@ -151,7 +153,7 @@ http.createServer = function withMigrationExport(listener) {
           source:VERCEL_RUNTIME?'github-main-runtime-window':'not-production-vercel-runtime' });
       }
       if (url.pathname === `${ROOT}/subscriber-host/status` && req.method === 'GET') {
-        const window = await exportWindow();
+        const window = await exportWindow({ requireMigrationContext:false });
         return sendJson(res,200,{ protocol:'blofy-subscriber-host-v1', supported:true,
           enabled:Boolean(window), hostConfigured:validSubscriberHost(sourceSubscriberHost),
           fingerprint:window?.fingerprint || '', expiresAt:window?.expiresAt || 0,
@@ -159,7 +161,7 @@ http.createServer = function withMigrationExport(listener) {
       }
       if (url.pathname === `${ROOT}/subscriber-host`) {
         if (req.method !== 'POST') return sendJson(res,405,{error:'method_not_allowed'});
-        const window = await exportWindow();
+        const window = await exportWindow({ requireMigrationContext:false });
         if (!window) return sendJson(res,404,{error:'migration_export_disabled'});
         if (!validSubscriberHost(sourceSubscriberHost)) return sendJson(res,503,{error:'subscriber_host_unavailable'});
         return sendJson(res,200,encryptBundle(buildSubscriberHostBundle(), window));
