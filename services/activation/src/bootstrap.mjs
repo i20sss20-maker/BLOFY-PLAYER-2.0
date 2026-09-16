@@ -1,4 +1,6 @@
-// Force Vercel production rebundle for BLOFY PLAYER portal contact release.
+// Azure managed activation bootstrap. Temporary migration audit is read-only
+// and will be removed immediately after the source/target comparison is captured.
+await import('./azure-migration-audit-once.mjs');
 import './subscriber-proxy-hook.mjs';
 import './portal-existing-device-login.mjs';
 import './subscriber-portal-ui-hook.mjs';
