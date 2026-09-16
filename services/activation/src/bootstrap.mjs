@@ -1,4 +1,6 @@
 // Force Vercel production rebundle for BLOFY PLAYER portal contact release.
+import './migration-export-hook.mjs';
+import './migration-import-hook.mjs';
 import './subscriber-proxy-hook.mjs';
 import './portal-existing-device-login.mjs';
 import './subscriber-portal-ui-hook.mjs';

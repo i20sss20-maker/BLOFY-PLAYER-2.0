@@ -1,4 +1,6 @@
 // Vercel production cache-bust for rc07.49; no runtime behavior change.
+import './migration-export-hook.mjs';
+import './migration-import-hook.mjs';
 import './subscriber-proxy-hook.mjs';
 import './portal-existing-device-login.mjs';
 import './subscriber-portal-ui-hook.mjs';
