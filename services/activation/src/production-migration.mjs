@@ -4,6 +4,7 @@ import pg from 'pg';
 import { databaseOptions } from './database-options.mjs';
 import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 import { DEVICE_ADMIN_SCHEMA } from './device-admin.mjs';
+import { persistDataKey, wrappingKeyFromEnv } from './data-key-state.mjs';
 
 const APPLY_PHRASE = 'YES_COPY_BLOFY_PRODUCTION_TO_AZURE';
 const sourceUrl = String(process.env.SOURCE_DATABASE_URL || '').trim();
@@ -15,9 +16,11 @@ if (sourceUrl === targetUrl) throw new Error('migration_source_equals_target');
 
 const sourceKey = String(process.env.SOURCE_BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
 const targetKey = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
-const keyDigest = value => crypto.createHash('sha256').update(value).digest();
-const keyCompatible = sourceKey.length >= 32 && targetKey.length >= 32 &&
-  crypto.timingSafeEqual(keyDigest(sourceKey), keyDigest(targetKey));
+if (!/^[a-fA-F0-9]{64}$/.test(sourceKey)) throw new Error('migration_source_key_invalid');
+if (!/^[a-fA-F0-9]{64}$/.test(targetKey)) throw new Error('migration_target_key_invalid');
+const keyDigest = value => crypto.createHash('sha256').update(Buffer.from(value,'hex')).digest();
+const keyCompatible = crypto.timingSafeEqual(keyDigest(sourceKey), keyDigest(targetKey));
+const keyMigrationMode = keyCompatible ? 'same-data-key' : 'wrap-source-data-key';
 
 const CORE_TABLES = [
   'devices',
@@ -45,6 +48,7 @@ const CORE_TABLES = [
 // - app_releases/blofy_app_release_catalog: legacy release migrations only.
 // - coupons/coupon_redemptions/payment_events: no current production route consumes them.
 // - blofy_release_store: owned by the Azure update-distribution service and preserved in place.
+// - blofy_crypto_state: target-owned wrapping state; replaced atomically with the source data key.
 
 const RELEASE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS app_release_catalog (
@@ -151,6 +155,9 @@ async function backupTarget(target, schema) {
   for (const table of CORE_TABLES) {
     await target.query(`CREATE TABLE ${q(schema)}.${q(table)} AS TABLE ${tableRef(table)}`);
   }
+  if (await tableExists(target,'blofy_crypto_state')) {
+    await target.query(`CREATE TABLE ${q(schema)}.blofy_crypto_state AS TABLE public.blofy_crypto_state`);
+  }
 }
 async function clearTarget(target) {
   // Children first; devices and release catalog last.
@@ -175,15 +182,14 @@ try {
 
   if (!apply) {
     process.stdout.write(`${JSON.stringify({
-      mode:'dry-run', keyCompatible, source:sourceIdentity, target:targetIdentity,
+      mode:'dry-run', keyCompatible, keyMigrationMode, source:sourceIdentity, target:targetIdentity,
       sourceCounts, targetCountsBefore, tables:CORE_TABLES,
       applyPhraseRequired:APPLY_PHRASE,
       privacy:'Counts and database names only; no row values or secret material are printed.'
     }, null, 2)}\n`);
     await sourceClient.query('ROLLBACK');
-    process.exitCode = keyCompatible ? 0 : 3;
+    process.exitCode = 0;
   } else {
-    if (!keyCompatible) throw new Error('migration_encryption_key_mismatch');
     if (sourceCounts.devices == null || sourceCounts.devices < 1) throw new Error('migration_source_devices_empty');
 
     await targetClient.query('BEGIN');
@@ -199,6 +205,7 @@ try {
     for (const table of CORE_TABLES) copied[table] = await copyTable(sourceClient, targetClient, table);
     for (const table of ['playback_diagnostics','device_audit','app_release_audit']) await resetSerial(targetClient, table);
 
+    const dataKeyState = await persistDataKey(targetClient, sourceKey, wrappingKeyFromEnv());
     const targetCountsAfter = await counts(targetClient);
     const mismatches = CORE_TABLES.filter(table => sourceCounts[table] !== targetCountsAfter[table]);
     if (mismatches.length) throw new Error(`migration_count_mismatch:${mismatches.join(',')}`);
@@ -206,8 +213,9 @@ try {
     await targetClient.query('COMMIT');
     await sourceClient.query('ROLLBACK');
     process.stdout.write(`${JSON.stringify({
-      mode:'applied', keyCompatible:true, source:sourceIdentity, target:targetIdentity,
+      mode:'applied', keyCompatible, keyMigrationMode, source:sourceIdentity, target:targetIdentity,
       backupSchema, copied, sourceCounts, targetCountsAfter,
+      persistedDataKey:true, dataKeyFingerprint:dataKeyState.fingerprint, restartRequired:true,
       preservedTargetTables:['blofy_release_store'],
       privacy:'No row values or secret material were printed.'
     }, null, 2)}\n`);

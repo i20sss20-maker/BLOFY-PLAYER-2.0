@@ -3,9 +3,11 @@ import http from 'node:http';
 import { gzipSync } from 'node:zlib';
 import pg from 'pg';
 import { databaseOptions } from './database-options.mjs';
-import { MIGRATION_EXPORT_PUBLIC_KEY, MIGRATION_EXPORT_EXPIRES_AT } from './migration-export-config.mjs';
 
 const ROOT = '/api/v1/internal/migration-export';
+const WINDOW_URL = String(process.env.BLOFY_MIGRATION_EXPORT_WINDOW_URL ||
+  'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/ops/blofy-migration-export-window.json').trim();
+const VERCEL_RUNTIME = process.env.VERCEL === '1' && process.env.VERCEL_ENV === 'production';
 const TABLES = [
   'devices','provider_profiles','device_trial_claims','device_customers','device_admin_metadata',
   'device_playlists','playback_diagnostics','profile_cloud_snapshots','cloud_pair_codes',
@@ -20,16 +22,37 @@ const pool = databaseUrl ? new pg.Pool({
 }) : null;
 pool?.on('error', () => console.error('migration_export_database_unavailable'));
 
-function enabled() {
-  return Boolean(pool && /^[a-fA-F0-9]{64}$/.test(sourceKey) && MIGRATION_EXPORT_PUBLIC_KEY &&
-    Number(MIGRATION_EXPORT_EXPIRES_AT) > Date.now());
-}
-function fingerprint() {
-  if (!MIGRATION_EXPORT_PUBLIC_KEY) return '';
+function publicKeyFingerprint(publicKeyPem) {
+  if (!publicKeyPem) return '';
   try {
-    const der = crypto.createPublicKey(MIGRATION_EXPORT_PUBLIC_KEY).export({ type:'spki', format:'der' });
+    const der = crypto.createPublicKey(publicKeyPem).export({ type:'spki', format:'der' });
     return crypto.createHash('sha256').update(der).digest('hex');
   } catch { return ''; }
+}
+async function exportWindow() {
+  // Export is deliberately source-only. Azure carries the same code image but
+  // VERCEL=1/VERCEL_ENV=production are Vercel system variables absent from Azure.
+  if (!VERCEL_RUNTIME || !pool || !/^[a-fA-F0-9]{64}$/.test(sourceKey)) return null;
+  let parsed;
+  try {
+    const url = new URL(WINDOW_URL);
+    if (url.protocol !== 'https:' || url.hostname !== 'raw.githubusercontent.com') return null;
+    url.searchParams.set('blofyMigrationWindow', String(Date.now()));
+    const response = await fetch(url, {
+      redirect:'error', cache:'no-store', signal:AbortSignal.timeout(8000),
+      headers:{accept:'application/json','cache-control':'no-cache'}
+    });
+    if (!response.ok) return null;
+    const text = await response.text();
+    if (Buffer.byteLength(text) > 16_384) return null;
+    parsed = JSON.parse(text);
+  } catch { return null; }
+  const publicKeyPem = typeof parsed?.publicKeyPem === 'string' ? parsed.publicKeyPem.trim() : '';
+  const expiresAt = Number(parsed?.expiresAt || 0);
+  const fingerprint = publicKeyFingerprint(publicKeyPem);
+  // A committed window is deliberately short. A stale or far-future file fails closed.
+  if (!fingerprint || !Number.isSafeInteger(expiresAt) || expiresAt <= Date.now() || expiresAt > Date.now()+30*60*1000) return null;
+  return { publicKeyPem, expiresAt, fingerprint };
 }
 function sendJson(res, status, body) {
   const payload = JSON.stringify(body);
@@ -50,7 +73,6 @@ async function columns(client, table) {
     WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`,[table])).rows.map(row=>row.column_name);
 }
 async function buildBundle() {
-  if (!enabled()) throw new Error('migration_export_disabled');
   const client = await pool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -79,30 +101,25 @@ async function buildBundle() {
     throw error;
   } finally { client.release(); }
 }
-function encryptBundle(bundle) {
+function encryptBundle(bundle, window) {
   const plaintext = gzipSync(Buffer.from(JSON.stringify(bundle),'utf8'), { level:9 });
   const aesKey = crypto.randomBytes(32), iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', aesKey, iv);
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
   const wrappedKey = crypto.publicEncrypt({
-    key:MIGRATION_EXPORT_PUBLIC_KEY,
+    key:window.publicKeyPem,
     padding:crypto.constants.RSA_PKCS1_OAEP_PADDING,
     oaepHash:'sha256'
   }, aesKey);
   return {
     protocol:'blofy-migration-envelope-v1',
-    fingerprint:fingerprint(),
+    fingerprint:window.fingerprint,
     key:wrappedKey.toString('base64url'),
     iv:iv.toString('base64url'),
     tag:tag.toString('base64url'),
     data:ciphertext.toString('base64url')
   };
-}
-let cachedExport;
-async function exportEnvelope() {
-  if (!cachedExport) cachedExport = buildBundle().then(encryptBundle).catch(error=>{ cachedExport=null; throw error; });
-  return cachedExport;
 }
 
 const previousCreateServer = http.createServer.bind(http);
@@ -112,12 +129,16 @@ http.createServer = function withMigrationExport(listener) {
     try {
       const url = new URL(req.url || '/','http://blofy.local');
       if (url.pathname === `${ROOT}/status` && req.method === 'GET') {
-        return sendJson(res,200,{ protocol:'blofy-migration-v1', enabled:enabled(), fingerprint:fingerprint(), expiresAt:Number(MIGRATION_EXPORT_EXPIRES_AT)||0 });
+        const window = await exportWindow();
+        return sendJson(res,200,{ protocol:'blofy-migration-v1', enabled:Boolean(window),
+          fingerprint:window?.fingerprint || '', expiresAt:window?.expiresAt || 0,
+          source:VERCEL_RUNTIME?'github-main-runtime-window':'not-production-vercel-runtime' });
       }
       if (url.pathname === ROOT) {
         if (req.method !== 'POST') return sendJson(res,405,{error:'method_not_allowed'});
-        if (!enabled()) return sendJson(res,404,{error:'migration_export_disabled'});
-        const envelope = await exportEnvelope();
+        const window = await exportWindow();
+        if (!window) return sendJson(res,404,{error:'migration_export_disabled'});
+        const envelope = encryptBundle(await buildBundle(), window);
         return sendJson(res,200,envelope);
       }
     } catch (error) {
