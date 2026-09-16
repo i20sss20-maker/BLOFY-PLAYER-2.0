@@ -15,7 +15,8 @@ const deviceId = 'BLOFY-CI-' + crypto.randomBytes(4).toString('hex').toUpperCase
 const activationCode = '234567', credentials = {deviceId, activationCode};
 const env = {...process.env, DATABASE_URL:database, PGSSLMODE:'disable', PORT:'8096',
   BLOFY_ADMIN_TOKEN:'ci-only-admin-token-with-32-characters', BLOFY_ADMIN_USERNAME:'ci-sync', BLOFY_ADMIN_PASSWORD:'ci-password',
-  BLOFY_SUBSCRIBER_HOST:'https://subscriber.example/base', BLOFY_PLAYLIST_ENCRYPTION_KEY:keyHex};
+  BLOFY_SUBSCRIBER_HOST:'https://subscriber.example/base', BLOFY_PLAYLIST_ENCRYPTION_KEY:keyHex,
+  BLOFY_ALLOW_LEGACY_TRIAL:'true'};
 let child, logs='';
 async function start(baseline=false) {
   logs='';
