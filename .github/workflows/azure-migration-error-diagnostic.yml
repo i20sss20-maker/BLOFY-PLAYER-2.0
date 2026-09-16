@@ -1,0 +1,38 @@
+name: BLOFY Azure Migration Error Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/azure-migration-error-diagnostic.run'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+    steps:
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Read migration error from activation logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          LOGS="$(az containerapp logs show -g "$AZURE_RG" -n blofy-activation --type console --tail 300 --follow false 2>&1 || true)"
+          MATCH="$(printf '%s\n' "$LOGS" | grep -E 'migration_import_failed|migration_import_database_unavailable' | tail -n 20 || true)"
+          if [ -z "$MATCH" ]; then
+            echo 'No migration_import_failed line found in current activation log tail.'
+            exit 2
+          fi
+          printf '%s\n' "$MATCH"
