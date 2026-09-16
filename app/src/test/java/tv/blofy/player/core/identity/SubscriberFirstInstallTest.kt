@@ -38,6 +38,9 @@ class SubscriberFirstInstallTest {
     private fun api(check: suspend (ActivationCheckRequest) -> ActivationCheckResponse) = object : ActivationApi {
         override suspend fun check(request: ActivationCheckRequest) = check.invoke(request)
         override suspend fun rotate(request: ActivationRotateRequest): ActivationRotateResponse = error("Unexpected rotation")
+        override suspend fun migrateIdentity(
+            request: ActivationIdentityMigrationRequest
+        ): ActivationIdentityMigrationResponse = error("Fresh stable install must not migrate identity")
     }
 
     @Test fun firstSubscriberSubmissionRegistersTheSameIdentityBeforeUsingIt() = runBlocking(Dispatchers.IO) {
