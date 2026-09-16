@@ -24,25 +24,18 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Read migration error from activation revision logs
+      - name: Read migration error from Log Analytics
         shell: bash
         run: |
           set -euo pipefail
-          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
-          FOUND=0
-          mapfile -t REVISIONS < <(az containerapp revision list -g "$AZURE_RG" -n blofy-activation --query 'sort_by([], &properties.createdTime)[].name' -o tsv)
-          printf 'Activation revisions: %s\n' "${#REVISIONS[@]}"
-          for REV in "${REVISIONS[@]}"; do
-            [ -n "$REV" ] || continue
-            LOGS="$(az containerapp logs show -g "$AZURE_RG" -n blofy-activation --revision "$REV" --type console --tail 300 --follow false 2>&1 || true)"
-            MATCH="$(printf '%s\n' "$LOGS" | grep -E 'migration_import_failed|migration_import_database_unavailable' | tail -n 20 || true)"
-            if [ -n "$MATCH" ]; then
-              echo "Found migration error in revision: $REV"
-              printf '%s\n' "$MATCH"
-              FOUND=1
-            fi
-          done
-          if [ "$FOUND" -ne 1 ]; then
-            echo 'No migration_import_failed line found in retained activation revision logs.'
+          WORKSPACE="$(az monitor log-analytics workspace list -g "$AZURE_RG" --query '[0].customerId' -o tsv)"
+          test -n "$WORKSPACE"
+          QUERY='ContainerAppConsoleLogs_CL | where TimeGenerated > ago(2h) | where ContainerAppName_s == "blofy-activation" | where Log_s contains "migration_import_failed" or Log_s contains "migration_import_database_unavailable" | project TimeGenerated, RevisionName_s, Log_s | order by TimeGenerated desc | take 20'
+          OUT="$(az monitor log-analytics query -w "$WORKSPACE" --analytics-query "$QUERY" -o json)"
+          COUNT="$(jq 'length' <<<"$OUT")"
+          echo "Migration error rows found: $COUNT"
+          if [ "$COUNT" -lt 1 ]; then
+            echo 'No migration error row found in Log Analytics.'
             exit 2
           fi
+          jq -r '.[] | [.TimeGenerated,.RevisionName_s,.Log_s] | @tsv' <<<"$OUT"
