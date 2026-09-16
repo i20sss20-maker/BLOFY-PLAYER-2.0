@@ -75,12 +75,18 @@ async function validSession(req) {
 }
 function sameOrigin(req) {
   try {
-    const value=req.headers.origin, host=req.headers.host;
-    if (typeof value!=='string' || typeof host!=='string' || !host) return false;
-    const source=new URL(value), target=new URL('https://'+host);
+    const value=req.headers.origin;
+    const forwardedHost=String(req.headers['x-forwarded-host']||'').split(',')[0].trim();
+    const directHost=String(req.headers.host||'').split(',')[0].trim();
+    const host=forwardedHost||directHost;
+    const forwardedProto=String(req.headers['x-forwarded-proto']||'').split(',')[0].trim().toLowerCase();
+    const protocol=forwardedProto==='http'||forwardedProto==='https'?forwardedProto:'https';
+    if (typeof value!=='string' || !host) return false;
+    const source=new URL(value), target=new URL(`${protocol}://${host}`);
     if (target.username || target.password || target.pathname!=='/' || target.search || target.hash) return false;
     if (source.origin!==value) return false;
-    // Local integration tests may use HTTP; every deployed Vercel environment requires HTTPS.
+    // Local integration tests may use HTTP. Production proxies must provide the
+    // public host/protocol through trusted forwarded headers.
     const local=!process.env.VERCEL_ENV && process.env.NODE_ENV!=='production' &&
       ['localhost','127.0.0.1','[::1]'].includes(target.hostname);
     if (local && source.protocol==='http:') target.protocol='http:';
