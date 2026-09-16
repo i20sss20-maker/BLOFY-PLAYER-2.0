@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
+import { createActivationCredentialCodec } from './auth-protection.mjs';
 import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';
 
 export class CommercialError extends Error {
@@ -8,9 +9,12 @@ export class CommercialError extends Error {
 const millis = value => value == null ? null : new Date(value).getTime();
 const entitled = row => row && ['active','trial'].includes(row.status) &&
   (row.expires_at == null || millis(row.expires_at) > Date.now());
+const validDeviceId = value => /^BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(String(value || ''));
+const validActivationCode = value => /^\d{6}$/.test(String(value || ''));
 
 export function createCommercialHandlers({pool, keyHex, json, readJson, env = process.env}) {
   const auth = createSubscriberSessionAuthorizer({pool, keyHex, env, requireActive:false});
+  const credentials = createActivationCredentialCodec(keyHex);
   const hash = value => crypto.createHmac('sha256', Buffer.from(keyHex,'hex')).update('blofy-recovery-v1:' + value).digest('hex');
   async function authorize(req, res, body) {
     const deviceId = String(body.deviceId || '').trim();
@@ -66,6 +70,52 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
       return {restored:true,expiresAt:millis(source.expires_at)};
     });
   }
+  async function migrateIdentity(sourceDeviceId, targetDeviceId, targetActivationCode) {
+    if (!validDeviceId(targetDeviceId) || !validActivationCode(targetActivationCode)) {
+      throw new CommercialError('invalid_target_identity');
+    }
+    if (sourceDeviceId === targetDeviceId) return {migrated:false,alreadyStable:true,deviceId:sourceDeviceId};
+    return transaction(async client => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',['blofy-device-identity:'+sourceDeviceId]);
+      await client.query(ADMIN_CONSOLE_SCHEMA);
+      const rows = (await client.query(
+        'SELECT * FROM devices WHERE device_id=ANY($1::text[]) ORDER BY device_id FOR UPDATE',
+        [[sourceDeviceId,targetDeviceId]]
+      )).rows;
+      const source = rows.find(row => row.device_id === sourceDeviceId);
+      const target = rows.find(row => row.device_id === targetDeviceId);
+      if (!source) throw new CommercialError('source_device_missing',404);
+      if (target) throw new CommercialError('target_device_exists',409);
+
+      const targetProof = credentials.proof(targetDeviceId,targetActivationCode);
+      await client.query(`INSERT INTO devices(
+        device_id,activation_code,status,trial_started_at,expires_at,created_at,updated_at,last_seen_at,
+        last_app_version,last_platform,auth_failed_attempts,last_auth_failure_at,auth_locked_until,
+        previous_activation_code_proof,activation_rotated_at,session_version,data_deleted_at,trial_registration_pending
+      ) SELECT $2,$3,status,trial_started_at,expires_at,created_at,NOW(),last_seen_at,
+        last_app_version,last_platform,0,NULL,NULL,NULL,NULL,session_version+1,data_deleted_at,trial_registration_pending
+        FROM devices WHERE device_id=$1`,[sourceDeviceId,targetDeviceId,targetProof]);
+
+      const directTables = [
+        'device_playlists','playback_diagnostics','license_recovery_keys','profile_cloud_snapshots',
+        'device_customers','support_tickets','subscription_orders','device_subscriptions','device_audit',
+        'device_admin_metadata'
+      ];
+      for (const table of directTables) {
+        if ((await client.query('SELECT to_regclass($1) AS name',[table])).rows[0]?.name) {
+          await client.query(`UPDATE ${table} SET device_id=$2 WHERE device_id=$1`,[sourceDeviceId,targetDeviceId]);
+        }
+      }
+      if ((await client.query("SELECT to_regclass('cloud_pair_codes') AS name")).rows[0]?.name) {
+        await client.query('UPDATE cloud_pair_codes SET source_device_id=$2 WHERE source_device_id=$1',[sourceDeviceId,targetDeviceId]);
+      }
+      if ((await client.query("SELECT to_regclass('device_trial_claims') AS name")).rows[0]?.name) {
+        await client.query('UPDATE device_trial_claims SET first_device_id=$2 WHERE first_device_id=$1',[sourceDeviceId,targetDeviceId]);
+      }
+      await client.query('DELETE FROM devices WHERE device_id=$1',[sourceDeviceId]);
+      return {migrated:true,deviceId:targetDeviceId};
+    });
+  }
   async function deleteData(deviceId, confirmation) {
     if (confirmation !== 'DELETE') throw new CommercialError('confirmation_required');
     return transaction(async client => {
@@ -95,7 +145,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
       json(res,200,{items:[],purchasesAvailable:false}); return true;
     }
     const routes=['/api/v1/subscriptions/status','/api/v1/license/recovery/create','/api/v1/license/recovery/restore',
-      '/api/v1/device/sessions/revoke','/api/v1/privacy/delete','/api/v1/privacy/support'];
+      '/api/v1/device/sessions/revoke','/api/v1/device/identity/migrate','/api/v1/privacy/delete','/api/v1/privacy/support'];
     if (!routes.includes(path)) return false;
     if (req.method!=='POST') {json(res,405,{error:'method_not_allowed'});return true;}
     try {
@@ -120,6 +170,9 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
         json(res,201,{received:true});
       } else if (path.endsWith('/recovery/create')) json(res,201,await issueKey(deviceId));
       else if (path.endsWith('/recovery/restore')) json(res,200,await restoreKey(deviceId,body.recoveryCode));
+      else if (path.endsWith('/identity/migrate')) json(res,200,await migrateIdentity(
+        deviceId,String(body.targetDeviceId||'').trim(),String(body.targetActivationCode||'').trim()
+      ));
       else if (path.endsWith('/sessions/revoke')) {
         await pool.query('UPDATE devices SET session_version=session_version+1,updated_at=NOW() WHERE device_id=$1',[deviceId]);
         json(res,200,{revoked:true});
