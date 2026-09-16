@@ -3,6 +3,7 @@ package tv.blofy.player.ui.player
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.Application
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -29,20 +30,23 @@ import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.browser.LiveChannelAdapter
 import tv.blofy.player.ui.common.BlofyTvDesign
 import java.util.WeakHashMap
 
 /**
- * TV channel browser layered over the existing PlayerActivity window. It never starts another
- * Activity or another player, so the current live session and video surface stay alive while the
- * channel list is open. A channel selection reuses PlayerActivity's existing numeric zapping path.
+ * Compact channel browser layered over the existing PlayerActivity window.
+ *
+ * Opening this overlay never creates another player or playback Activity. The current live surface
+ * stays attached and keeps rendering while the channel list is visible. Channel selection reuses
+ * PlayerActivity's established numeric zapping path instead of introducing a second playback path.
  */
 class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
     private val bindings = WeakHashMap<PlayerActivity, LiveWindowCallback>()
 
     override fun onActivityResumed(activity: Activity) {
-        if (activity !is PlayerActivity || activity.intent.getStringExtra(PlayerActivity.EXTRA_KIND) != "live") return
+        if (activity !is PlayerActivity || activity.intent.getStringExtra(PlayerActivity.EXTRA_KIND) != KIND_LIVE) return
         if (bindings.containsKey(activity)) return
         val original = activity.window.callback ?: return
         val wrapped = LiveWindowCallback(activity, original)
@@ -74,15 +78,22 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (event.action != KeyEvent.ACTION_DOWN) return delegate.dispatchKeyEvent(event)
-            if (dialog?.isShowing == true && event.keyCode == KeyEvent.KEYCODE_BACK) {
-                close()
+
+            if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+                if (dialog?.isShowing == true) {
+                    close()
+                } else {
+                    returnToLiveBrowser()
+                }
                 return true
             }
+
             val ok = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
                 event.keyCode == KeyEvent.KEYCODE_ENTER ||
                 event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
             // PlayerActivity returns focus to PlayerView whenever its HUD is hidden. Intercept OK
-            // only then, so audio/subtitle/quality controls retain their established behavior.
+            // only in that fullscreen state so the existing audio/subtitle/quality HUD keeps its
+            // established behavior when it is intentionally visible.
             if (ok && dialog?.isShowing != true && (activity.currentFocus is PlayerView || activity.currentFocus == null)) {
                 openChannelList()
                 return true
@@ -97,6 +108,29 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             currentChannelKey = null
         }
 
+        private fun returnToLiveBrowser() {
+            if (activity.isFinishing || activity.isDestroyed) return
+            val providerId = activity.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
+            if (providerId.isNotBlank()) {
+                val categoryId = activity.intent.getStringExtra(PlayerActivity.EXTRA_CATEGORY_ID)
+                val channelKey = RecentChannelStore.keys(activity, providerId).firstOrNull()
+                    ?: activity.intent.getStringExtra(PlayerActivity.EXTRA_CONTENT_KEY).orEmpty()
+                activity.getSharedPreferences(BROWSER_STATE_PREFS, Activity.MODE_PRIVATE)
+                    .edit()
+                    .putString("$providerId:live:last_category", categoryId)
+                    .putString("$providerId:live:last_stream", channelKey.ifBlank { null })
+                    .apply()
+            }
+
+            // Mark this route so the generic finish lifecycle does not launch a duplicate screen.
+            activity.intent.putExtra(PlayerReturnNavigationLifecycle.EXTRA_RETURN_ALREADY_ROUTED, true)
+            activity.startActivity(Intent(activity, ContentBrowserActivity::class.java).apply {
+                putExtra(ContentBrowserActivity.EXTRA_KIND, KIND_LIVE)
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            })
+            activity.finish()
+        }
+
         private fun openChannelList() {
             if (dialog?.isShowing == true || loading || activity.isFinishing || activity.isDestroyed) return
             val providerId = activity.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
@@ -107,9 +141,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 val result = withContext(Dispatchers.IO) {
                     runCatching {
                         val dao = BlofyDatabase.get(activity.applicationContext).dao()
-                        val channels = dao.streams(providerId, "live", categoryId).first()
+                        val channels = dao.streams(providerId, KIND_LIVE, categoryId).first()
                         val categoryName = categoryId?.let { id ->
-                            dao.categorySnapshot(providerId, "live").firstOrNull { it.remoteId == id }?.name
+                            dao.categorySnapshot(providerId, KIND_LIVE).firstOrNull { it.remoteId == id }?.name
                         }
                         channels to categoryName
                     }.getOrElse { emptyList<StreamEntity>() to null }
@@ -135,13 +169,12 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 layoutManager = LinearLayoutManager(activity)
                 itemAnimator = null
                 clipToPadding = false
-                setPadding(dp(5), dp(4), dp(5), dp(7))
+                setPadding(dp(4), dp(3), dp(4), dp(5))
                 setItemViewCacheSize(18)
                 recycledViewPool.setMaxRecycledViews(0, 24)
                 overScrollMode = View.OVER_SCROLL_NEVER
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 setBackgroundColor(Color.TRANSPARENT)
-                alpha = .96f
             }
             val adapter = LiveChannelAdapter(
                 onClick = { channel -> selectChannel(channel) },
@@ -158,24 +191,24 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     append(copy("البث المباشر", "Live channels"))
                     if (!categoryName.isNullOrBlank()) append("  •  ").append(categoryName)
                 }
-                textSize = 16.5f
+                textSize = 14.5f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.TextPrimary)
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setPadding(dp(12), dp(6), dp(12), dp(1))
+                setPadding(dp(10), dp(4), dp(10), 0)
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }
             val hint = TextView(activity).apply {
                 text = copy(
-                    "القناة مستمرة بالخلفية  •  OK للتبديل  •  BACK للإغلاق",
-                    "Channel keeps playing  •  OK to switch  •  BACK to close"
+                    "البث مستمر  •  OK للتبديل  •  BACK للإغلاق",
+                    "Live keeps playing  •  OK switch  •  BACK close"
                 )
-                textSize = 9.5f
+                textSize = 8.7f
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setPadding(dp(12), 0, dp(12), dp(3))
+                setPadding(dp(10), 0, dp(10), dp(2))
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }
@@ -183,15 +216,15 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 orientation = LinearLayout.VERTICAL
                 layoutDirection = activity.resources.configuration.layoutDirection
                 background = GradientDrawable().apply {
-                    cornerRadius = dp(18).toFloat()
-                    // Glass-like surface: video remains visible instead of being covered by an
-                    // almost opaque panel.
-                    setColor(0x9C16121E.toInt())
-                    setStroke(dp(1), 0x665D3A83.toInt())
+                    cornerRadius = dp(16).toFloat()
+                    // Intentionally translucent: the current video remains clearly visible behind
+                    // the compact list instead of looking like playback was replaced by a menu.
+                    setColor(0x7416121E.toInt())
+                    setStroke(dp(1), 0x4D7956A8.toInt())
                 }
-                elevation = dp(8).toFloat()
-                addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
-                addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28)))
+                elevation = dp(7).toFloat()
+                addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
+                addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24)))
                 addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             }
 
@@ -207,21 +240,21 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             dialog = created
             created.setOnShowListener {
                 val window = created.window ?: return@setOnShowListener
-                window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                window.setDimAmount(0.02f)
+                window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                window.setDimAmount(0f)
                 window.setGravity(Gravity.START or Gravity.CENTER_VERTICAL)
                 window.decorView.layoutDirection = activity.resources.configuration.layoutDirection
                 window.setBackgroundDrawableResource(android.R.color.transparent)
                 val device = DeviceClass.detect(activity)
                 val widthRatio = when (device) {
-                    DeviceClass.Kind.TV -> 0.30f
-                    DeviceClass.Kind.TABLET -> 0.46f
-                    DeviceClass.Kind.PHONE -> 0.84f
+                    DeviceClass.Kind.TV -> 0.24f
+                    DeviceClass.Kind.TABLET -> 0.38f
+                    DeviceClass.Kind.PHONE -> 0.78f
                 }
                 val heightRatio = when (device) {
-                    DeviceClass.Kind.TV -> 0.70f
-                    DeviceClass.Kind.TABLET -> 0.76f
-                    DeviceClass.Kind.PHONE -> 0.80f
+                    DeviceClass.Kind.TV -> 0.58f
+                    DeviceClass.Kind.TABLET -> 0.66f
+                    DeviceClass.Kind.PHONE -> 0.76f
                 }
                 val width = (activity.resources.displayMetrics.widthPixels * widthRatio).toInt()
                 val height = (activity.resources.displayMetrics.heightPixels * heightRatio).toInt()
@@ -280,5 +313,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
 
         private fun copy(arabic: String, english: String): String =
             if (ConfigurationCompat.getLocales(activity.resources.configuration)[0]?.language == "ar") arabic else english
+    }
+
+    private companion object {
+        const val KIND_LIVE = "live"
+        const val BROWSER_STATE_PREFS = "blofy_browser_state"
     }
 }
