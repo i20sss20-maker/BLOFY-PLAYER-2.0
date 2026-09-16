@@ -208,3 +208,5 @@ jobs:
             /tmp/subscriber-host-envelope.json /tmp/blofy-subscriber-host.txt \
             /tmp/subscriber-host-status.json /tmp/azure-subscriber-health.json
           echo 'Encrypted transfer window closed and temporary material removed.'
+
+# Retry after the protected Vercel Production bridge became READY.
