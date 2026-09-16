@@ -17,7 +17,10 @@ CREATE TABLE IF NOT EXISTS ${TABLE} (
 function validKey(value) {
   return /^[a-fA-F0-9]{64}$/.test(String(value || '').trim());
 }
-
+function safeEqual(a,b) {
+  const left=Buffer.from(String(a)), right=Buffer.from(String(b));
+  return left.length===right.length && crypto.timingSafeEqual(left,right);
+}
 function deriveWrappingKey(wrappingKeyHex) {
   if (!validKey(wrappingKeyHex)) throw new Error('data_key_wrapping_key_invalid');
   return crypto.createHmac('sha256', Buffer.from(wrappingKeyHex, 'hex'))
@@ -79,7 +82,7 @@ export async function loadPersistedDataKey(client, wrappingKeyHex) {
   const row = (await client.query(`SELECT wrapped_data_key,data_key_fingerprint FROM ${TABLE} WHERE singleton=TRUE`)).rows[0];
   if (!row) return null;
   const dataKeyHex = unwrapDataKey(row.wrapped_data_key, wrappingKeyHex);
-  if (!crypto.timingSafeEqual(Buffer.from(dataKeyFingerprint(dataKeyHex)), Buffer.from(String(row.data_key_fingerprint || '')))) {
+  if (!safeEqual(dataKeyFingerprint(dataKeyHex), String(row.data_key_fingerprint || ''))) {
     throw new Error('persisted_data_key_fingerprint_mismatch');
   }
   return dataKeyHex;
