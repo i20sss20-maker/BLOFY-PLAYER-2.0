@@ -21,6 +21,21 @@ class DeviceIdentityTest {
     }
 
     @Test
+    fun derivedDeviceIdIsStableForSameSystemIdentity() {
+        val first = DeviceIdentity.deriveDeviceId("android-id-123")
+        val second = DeviceIdentity.deriveDeviceId("android-id-123")
+        assertEquals(first, second)
+        assertTrue(first.matches(Regex("BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}")))
+    }
+
+    @Test
+    fun derivedDeviceIdChangesForDifferentSystemIdentity() {
+        val first = DeviceIdentity.deriveDeviceId("android-id-123")
+        val second = DeviceIdentity.deriveDeviceId("android-id-456")
+        assertNotEquals(first, second)
+    }
+
+    @Test
     fun generatedActivationCodeUsesTheFullSixDigitRange() {
         assertEquals("100000", DeviceIdentity.generateActivationCode { bound ->
             assertEquals(900_000, bound)
@@ -37,7 +52,22 @@ class DeviceIdentityTest {
     }
 
     @Test
-    fun activationCodeIsNotDerivedFromDeviceId() {
+    fun derivedActivationCodeIsStableAndSixDigits() {
+        val first = DeviceIdentity.deriveActivationCode("android-id-123")
+        val second = DeviceIdentity.deriveActivationCode("android-id-123")
+        assertEquals(first, second)
+        assertTrue(first.matches(Regex("\\d{6}")))
+    }
+
+    @Test
+    fun derivedActivationCodeChangesForDifferentSystemIdentity() {
+        val first = DeviceIdentity.deriveActivationCode("android-id-123")
+        val second = DeviceIdentity.deriveActivationCode("android-id-456")
+        assertNotEquals(first, second)
+    }
+
+    @Test
+    fun randomActivationCodeIsNotDerivedFromDeviceId() {
         val first = DeviceIdentity.generateActivationCode { 123_456 }
         val second = DeviceIdentity.generateActivationCode { 654_321 }
         assertNotEquals(first, second)
