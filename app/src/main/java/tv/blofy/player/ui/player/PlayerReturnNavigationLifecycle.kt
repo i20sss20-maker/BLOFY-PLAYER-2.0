@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.os.Bundle
+import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -14,10 +15,8 @@ import java.util.WeakHashMap
 /**
  * Keeps fullscreen playback attached to the screen that opened it.
  *
- * The playback Activity still owns BACK and its HUD exactly as before. This lifecycle only reacts
- * after PlayerActivity has already decided to finish, then reorders the recorded source Activity
- * to the front. That means Media3/FFmpeg/session behavior is untouched while Android TV no longer
- * skips Details/Live context and falls through to a higher-level catalog or Home screen.
+ * Playback/session internals stay untouched. Live always returns to the Live browser and restores
+ * its remembered category/channel context; Movies and Episodes return to their source details.
  */
 class PlayerReturnNavigationLifecycle : Application.ActivityLifecycleCallbacks {
     private val targets = WeakHashMap<PlayerActivity, ReturnTarget>()
@@ -27,7 +26,13 @@ class PlayerReturnNavigationLifecycle : Application.ActivityLifecycleCallbacks {
         if (activity is PlayerActivity) {
             val kind = activity.intent.getStringExtra(PlayerActivity.EXTRA_KIND).orEmpty()
             val remembered = pendingSource?.takeIf { it.supports(kind) }
-            targets[activity] = remembered ?: fallback(activity, kind) ?: return
+            // Live has a fixed return contract: never fall through to Home, regardless of the
+            // screen that happened to launch fullscreen playback.
+            targets[activity] = if (kind == KIND_LIVE) {
+                fallback(activity, kind) ?: return
+            } else {
+                remembered ?: fallback(activity, kind) ?: return
+            }
             return
         }
         sourceFor(activity)?.let { pendingSource = it }
@@ -36,7 +41,12 @@ class PlayerReturnNavigationLifecycle : Application.ActivityLifecycleCallbacks {
     override fun onActivityPaused(activity: Activity) {
         if (activity is PlayerActivity) {
             if (!activity.isFinishing || activity.isChangingConfigurations) return
+            if (activity.intent.getBooleanExtra(EXTRA_RETURN_ALREADY_ROUTED, false)) {
+                targets.remove(activity)
+                return
+            }
             val target = targets.remove(activity) ?: return
+            if (target.destination == Destination.LIVE) rememberLiveContext(activity)
             activity.startActivity(target.intent(activity).apply {
                 addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             })
@@ -47,6 +57,19 @@ class PlayerReturnNavigationLifecycle : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityDestroyed(activity: Activity) {
         if (activity is PlayerActivity) targets.remove(activity)
+    }
+
+    private fun rememberLiveContext(player: PlayerActivity) {
+        val providerId = player.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
+        if (providerId.isBlank()) return
+        val categoryId = player.intent.getStringExtra(PlayerActivity.EXTRA_CATEGORY_ID)
+        val channelKey = RecentChannelStore.keys(player, providerId).firstOrNull()
+            ?: player.intent.getStringExtra(PlayerActivity.EXTRA_CONTENT_KEY).orEmpty()
+        player.getSharedPreferences(BROWSER_STATE_PREFS, Activity.MODE_PRIVATE)
+            .edit()
+            .putString("$providerId:live:last_category", categoryId)
+            .putString("$providerId:live:last_stream", channelKey.ifBlank { null })
+            .apply()
     }
 
     private fun sourceFor(activity: Activity): ReturnTarget? = when (activity) {
@@ -144,9 +167,11 @@ class PlayerReturnNavigationLifecycle : Application.ActivityLifecycleCallbacks {
     override fun onActivityStopped(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
 
-    private companion object {
-        const val KIND_LIVE = "live"
-        const val KIND_MOVIE = "movie"
-        const val KIND_EPISODE = "episode"
+    companion object {
+        internal const val EXTRA_RETURN_ALREADY_ROUTED = "blofy_player_return_already_routed"
+        private const val BROWSER_STATE_PREFS = "blofy_browser_state"
+        private const val KIND_LIVE = "live"
+        private const val KIND_MOVIE = "movie"
+        private const val KIND_EPISODE = "episode"
     }
 }
