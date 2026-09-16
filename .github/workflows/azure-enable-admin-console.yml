@@ -1,0 +1,94 @@
+name: BLOFY Azure Enable Admin Console
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/azure-enable-admin-console.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Enable unified BLOFY admin console
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+
+          APP='blofy-activation'
+          KV_SECRET_NAME='release-admin-password'
+          APP_SECRET_NAME='admin-ui-password'
+
+          VAULT="$(az keyvault list -g "$AZURE_RG" --query '[0].name' -o tsv)"
+          IDENTITY_ID="$(az identity list -g "$AZURE_RG" --query "[?contains(name, 'runtime')].id | [0]" -o tsv)"
+          test -n "$VAULT"
+          test -n "$IDENTITY_ID"
+
+          KEYVAULT_URL="https://${VAULT}.vault.azure.net/secrets/${KV_SECRET_NAME}"
+
+          az containerapp secret set \
+            -g "$AZURE_RG" \
+            -n "$APP" \
+            --secrets "$APP_SECRET_NAME=keyvaultref:$KEYVAULT_URL,identityref:$IDENTITY_ID" \
+            --only-show-errors >/dev/null
+
+          az containerapp update \
+            -g "$AZURE_RG" \
+            -n "$APP" \
+            --set-env-vars \
+              'BLOFY_ADMIN_USERNAME=admin' \
+              "BLOFY_ADMIN_PASSWORD=secretref:$APP_SECRET_NAME" \
+              "BLOFY_ADMIN_UI_REFRESH=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --only-show-errors >/dev/null
+
+          for attempt in {1..36}; do
+            READY="$(az containerapp show -g "$AZURE_RG" -n "$APP" --query 'properties.latestReadyRevisionName' -o tsv)"
+            LATEST="$(az containerapp show -g "$AZURE_RG" -n "$APP" --query 'properties.latestRevisionName' -o tsv)"
+            if [[ -n "$LATEST" && "$READY" == "$LATEST" ]]; then
+              echo "Activation revision ready: $LATEST"
+              break
+            fi
+            if [[ "$attempt" == 36 ]]; then
+              echo 'Latest blofy-activation revision did not become ready in time.' >&2
+              exit 1
+            fi
+            sleep 5
+          done
+
+          USER_VALUE="$(az containerapp show -g "$AZURE_RG" -n "$APP" --query "properties.template.containers[0].env[?name=='BLOFY_ADMIN_USERNAME'].value | [0]" -o tsv)"
+          PASSWORD_REF="$(az containerapp show -g "$AZURE_RG" -n "$APP" --query "properties.template.containers[0].env[?name=='BLOFY_ADMIN_PASSWORD'].secretRef | [0]" -o tsv)"
+          test "$USER_VALUE" = 'admin'
+          test "$PASSWORD_REF" = "$APP_SECRET_NAME"
+
+          GATEWAY="https://$(az containerapp show -g "$AZURE_RG" -n blofy-gateway --query 'properties.configuration.ingress.fqdn' -o tsv)"
+          for attempt in {1..20}; do
+            STATUS="$(curl -sS -o /tmp/admin.html -w '%{http_code}' "$GATEWAY/admin" || true)"
+            if [[ "$STATUS" == '200' ]] && grep -q 'BLOFY' /tmp/admin.html && grep -q 'admin-login' /tmp/admin.html; then
+              echo "Admin login page ready: $GATEWAY/admin"
+              echo 'BLOFY unified admin console enabled.'
+              exit 0
+            fi
+            sleep 4
+          done
+
+          echo 'Admin login page verification failed.' >&2
+          cat /tmp/admin.html >&2 || true
+          exit 1
