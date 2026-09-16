@@ -1,0 +1,47 @@
+name: BLOFY Public Route Probe Temp
+
+on:
+  push:
+    branches:
+      - ops/public-route-probe
+    paths:
+      - '.github/workflows/public-route-probe-temp.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Probe production public routes independently
+        shell: bash
+        run: |
+          set -uo pipefail
+          BASE='https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io'
+          failed=0
+          for path in /health /admin /portal /release.json /releases-admin; do
+            echo "=== $path ==="
+            ok=0
+            for attempt in 1 2 3; do
+              out="$(curl -sS -L --connect-timeout 15 --max-time 90 -o /tmp/blofy-probe-body \
+                -w 'code=%{http_code} total=%{time_total} connect=%{time_connect} start=%{time_starttransfer}' \
+                "$BASE$path" 2>/tmp/blofy-probe-error)"
+              rc=$?
+              echo "attempt=$attempt rc=$rc $out"
+              if [ "$rc" -eq 0 ] && [[ "$out" == code=200* ]]; then
+                ok=1
+                break
+              fi
+              cat /tmp/blofy-probe-error || true
+              sleep 8
+            done
+            if [ "$ok" -ne 1 ]; then
+              failed=1
+              echo "FAILED_ROUTE=$path"
+            else
+              echo "OK_ROUTE=$path"
+            fi
+          done
+          exit "$failed"
