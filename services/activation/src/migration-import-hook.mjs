@@ -6,6 +6,7 @@ import pg from 'pg';
 import { databaseOptions } from './database-options.mjs';
 import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 import { DEVICE_ADMIN_SCHEMA } from './device-admin.mjs';
+import { persistDataKey, wrappingKeyFromEnv } from './data-key-state.mjs';
 
 const ROOT = '/api/v1/internal/migration-import';
 const TABLES = [
@@ -93,16 +94,21 @@ function decryptEnvelope(envelope) {
   const compressed=Buffer.concat([decipher.update(Buffer.from(envelope.data,'base64url')),decipher.final()]);
   return JSON.parse(gunzipSync(compressed).toString('utf8'));
 }
+function keyCompatibility(sourceKey) {
+  const activeKey=String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
+  if (!/^[a-fA-F0-9]{64}$/.test(activeKey)) throw new Error('migration_target_key_invalid');
+  const left=crypto.createHash('sha256').update(Buffer.from(sourceKey,'hex')).digest();
+  const right=crypto.createHash('sha256').update(Buffer.from(activeKey,'hex')).digest();
+  const compatible=crypto.timingSafeEqual(left,right);
+  return { keyCompatible:compatible, keyMigrationMode:compatible?'same-data-key':'wrap-source-data-key' };
+}
 function validateBundle(bundle) {
   if (!bundle || bundle.protocol!=='blofy-migration-v1' || !/^[0-9a-f-]{36}$/i.test(String(bundle.bundleId||''))) throw new Error('migration_bundle_invalid');
   if (!Number.isFinite(bundle.generatedAt) || Math.abs(Date.now()-bundle.generatedAt)>30*60*1000) throw new Error('migration_bundle_stale');
   const expected=String(process.env.BLOFY_MIGRATION_EXPECTED_SOURCE_DATABASE || '').trim();
   if (expected && bundle.source?.database!==expected) throw new Error('migration_source_database_confirmation_failed');
   if (!/^[a-fA-F0-9]{64}$/.test(String(bundle.sourcePlaylistEncryptionKey||''))) throw new Error('migration_source_key_invalid');
-  const targetKey=String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
-  const a=crypto.createHash('sha256').update(bundle.sourcePlaylistEncryptionKey).digest();
-  const b=crypto.createHash('sha256').update(targetKey).digest();
-  if (a.length!==b.length || !crypto.timingSafeEqual(a,b)) throw new Error('migration_encryption_key_mismatch');
+  wrappingKeyFromEnv();
   for (const table of TABLES) {
     const item=bundle.tables?.[table];
     if (!item || !Array.isArray(item.columns) || !Array.isArray(item.rows) || item.columns.length<1) throw new Error(`migration_bundle_table_invalid:${table}`);
@@ -153,15 +159,25 @@ async function applyBundle(bundle) {
     const backupSchema=backupName();
     await client.query(`CREATE SCHEMA ${q(backupSchema)}`);
     for (const table of TABLES) await client.query(`CREATE TABLE ${q(backupSchema)}.${q(table)} AS TABLE ${tableRef(table)}`);
+    if (await tableExists(client,'blofy_crypto_state')) await client.query(`CREATE TABLE ${q(backupSchema)}.blofy_crypto_state AS TABLE public.blofy_crypto_state`);
     for (const table of [...TABLES].reverse()) await client.query(`DELETE FROM ${tableRef(table)}`);
     for (const table of TABLES) await insertRows(client,table,bundle.tables[table]);
     for (const table of ['playback_diagnostics','device_audit','app_release_audit']) await resetSerial(client,table);
     for (const transient of ['admin_web_sessions','admin_login_limits']) if (await tableExists(client,transient)) await client.query(`DELETE FROM public.${q(transient)}`);
+
+    // Source credentials, playlist ciphertext and HMAC-bound records remain byte-for-byte
+    // compatible. Store the source data key wrapped by Azure's stable key-encryption key.
+    const wrappingKey=wrappingKeyFromEnv();
+    const keyState=await persistDataKey(client,bundle.sourcePlaylistEncryptionKey,wrappingKey);
+
     const after=await counts(client), mismatches=TABLES.filter(table=>after[table]!==Number(bundle.counts[table]));
     if (mismatches.length) throw new Error(`migration_count_mismatch:${mismatches.join(',')}`);
     await client.query('INSERT INTO blofy_migration_journal(bundle_id,source_database,backup_schema) VALUES($1,$2,$3)',[bundle.bundleId,bundle.source.database,backupSchema]);
     await client.query('COMMIT');
-    return {mode:'applied',bundleId:bundle.bundleId,backupSchema,source:{database:bundle.source.database},sourceCounts:bundle.counts,targetCountsAfter:after,preservedTargetTables:['blofy_release_store']};
+    const compatibility=keyCompatibility(bundle.sourcePlaylistEncryptionKey);
+    return {mode:'applied',bundleId:bundle.bundleId,backupSchema,source:{database:bundle.source.database},sourceCounts:bundle.counts,
+      targetCountsAfter:after,...compatibility,persistedDataKey:true,dataKeyFingerprint:keyState.fingerprint,
+      preservedTargetTables:['blofy_release_store'],restartRequired:true};
   } catch(error) { await client.query('ROLLBACK').catch(()=>{}); throw error; }
   finally { client.release(); }
 }
@@ -178,9 +194,10 @@ http.createServer=function withMigrationImport(listener) {
         if (!available()) return sendJson(res,404,{error:'migration_import_disabled'});
         if (!authorized(req)) return sendJson(res,401,{error:'unauthorized'});
         const bundle=validateBundle(decryptEnvelope(await readBody(req)));
+        const compatibility=keyCompatibility(bundle.sourcePlaylistEncryptionKey);
         if (url.pathname.endsWith('/validate')) {
           const client=await pool.connect();
-          try { return sendJson(res,200,{mode:'validated',keyCompatible:true,source:bundle.source,sourceCounts:bundle.counts,targetCountsBefore:await counts(client)}); }
+          try { return sendJson(res,200,{mode:'validated',...compatibility,source:bundle.source,sourceCounts:bundle.counts,targetCountsBefore:await counts(client)}); }
           finally { client.release(); }
         }
         return sendJson(res,200,await applyBundle(bundle));
