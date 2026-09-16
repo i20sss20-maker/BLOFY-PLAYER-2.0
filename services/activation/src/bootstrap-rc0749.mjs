@@ -1,6 +1,4 @@
-// Vercel production cache-bust for rc07.49; no Android runtime behavior change.
-const { vercelMigrationAudit } = await import('./vercel-migration-audit-once.mjs');
-await vercelMigrationAudit;
+// Vercel production cache-bust for rc07.49; no runtime behavior change.
 import './subscriber-proxy-hook.mjs';
 import './portal-existing-device-login.mjs';
 import './subscriber-portal-ui-hook.mjs';
