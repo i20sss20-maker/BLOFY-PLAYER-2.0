@@ -108,7 +108,7 @@ jobs:
             --mode multiple \
             --only-show-errors >/dev/null
 
-          az containerapp update --resource-group "$AZURE_RG" --name blofy-activation --image "$REG/blofy/activation:$TAG" --only-show-errors >/dev/null
+          az containerapp update --resource-group "$AZURE_RG" --name blofy-activation --image "$REG/blofy/activation:$TAG" --set-env-vars BLOFY_SUBSCRIBER_BOOTSTRAP_URL=https://blofy-player-2-0.vercel.app --only-show-errors >/dev/null
           az containerapp update --resource-group "$AZURE_RG" --name blofy-releases --image "$REG/blofy/releases:$TAG" --only-show-errors >/dev/null
           az containerapp update --resource-group "$AZURE_RG" --name blofy-gateway --image "$REG/blofy/gateway:$TAG" --only-show-errors >/dev/null
 
