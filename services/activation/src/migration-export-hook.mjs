@@ -7,6 +7,7 @@ import { databaseOptions } from './database-options.mjs';
 const ROOT = '/api/v1/internal/migration-export';
 const WINDOW_URL = String(process.env.BLOFY_MIGRATION_EXPORT_WINDOW_URL ||
   'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/ops/blofy-migration-export-window.json').trim();
+const VERCEL_RUNTIME = process.env.VERCEL === '1';
 const TABLES = [
   'devices','provider_profiles','device_trial_claims','device_customers','device_admin_metadata',
   'device_playlists','playback_diagnostics','profile_cloud_snapshots','cloud_pair_codes',
@@ -29,7 +30,9 @@ function publicKeyFingerprint(publicKeyPem) {
   } catch { return ''; }
 }
 async function exportWindow() {
-  if (!pool || !/^[a-fA-F0-9]{64}$/.test(sourceKey)) return null;
+  // Export is deliberately source-only. Azure carries the same code image but
+  // VERCEL=1 is a Vercel system variable and is absent from Azure Container Apps.
+  if (!VERCEL_RUNTIME || !pool || !/^[a-fA-F0-9]{64}$/.test(sourceKey)) return null;
   let parsed;
   try {
     const url = new URL(WINDOW_URL);
@@ -128,7 +131,8 @@ http.createServer = function withMigrationExport(listener) {
       if (url.pathname === `${ROOT}/status` && req.method === 'GET') {
         const window = await exportWindow();
         return sendJson(res,200,{ protocol:'blofy-migration-v1', enabled:Boolean(window),
-          fingerprint:window?.fingerprint || '', expiresAt:window?.expiresAt || 0, source:'github-main-runtime-window' });
+          fingerprint:window?.fingerprint || '', expiresAt:window?.expiresAt || 0,
+          source:VERCEL_RUNTIME?'github-main-runtime-window':'not-vercel-runtime' });
       }
       if (url.pathname === ROOT) {
         if (req.method !== 'POST') return sendJson(res,405,{error:'method_not_allowed'});
