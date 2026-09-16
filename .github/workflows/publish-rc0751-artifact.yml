@@ -1,0 +1,71 @@
+name: BLOFY rc07.51 Publish Signed Release
+
+on:
+  push:
+    branches: [feature/rc0751-commercial-upgrade]
+    paths:
+      - .github/workflows/publish-rc0751-artifact.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          repository: i20sss20-maker/BLOFY-PLAYER-2.0
+          run-id: 35079666443
+          name: BLOFY-PLAYER-2.0-rc07.51-PRODUCTION-SIGNED-8a593b99dd7588d12cc0ec1ef2144a747c2d51a1
+          path: signed
+          github-token: ${{ github.token }}
+
+      - name: Verify signed payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s signed/BLOFY-PLAYER-2.0-rc07.51-PRODUCTION-SIGNED.apk
+          test -s signed/BLOFY-PLAYER-2.0-rc07.51-PRODUCTION-SIGNED.aab
+          grep -Fq 'production_signed=true' signed/build-info.txt
+          grep -Fq 'ffmpeg=true' signed/build-info.txt
+          grep -Fq 'version=2.0.0-rc07.51' signed/build-info.txt
+          grep -Fq 'versionCode=2000062' signed/build-info.txt
+          grep -Fq 'commit=8a593b99dd7588d12cc0ec1ef2144a747c2d51a1' signed/build-info.txt
+          cp signed/BLOFY-PLAYER-2.0-rc07.51-PRODUCTION-SIGNED.apk signed/BLOFY-PLAYER-2.0-rc07.51-signed.apk
+          cp signed/BLOFY-PLAYER-2.0-rc07.51-PRODUCTION-SIGNED.aab signed/BLOFY-PLAYER-2.0-rc07.51-play.aab
+
+      - name: Publish immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='v2.0.0-rc07.51'
+          target='8a593b99dd7588d12cc0ec1ef2144a747c2d51a1'
+          cat > release-notes.txt <<'EOF'
+          BLOFY PLAYER 51 — النسخة الموقعة النهائية للاختبار التجاري.
+
+          تشمل تثبيت هوية الجهاز، إصلاح رجوع البث المباشر، وقائمة القنوات المصغرة الشفافة، مع Azure للتفعيل والتحديثات. Media3 وFFmpeg ومسارات التشغيل الأساسية لم تُغيّر ضمن هذه الإصلاحات.
+          EOF
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" signed/BLOFY-PLAYER-2.0-rc07.51-signed.apk signed/BLOFY-PLAYER-2.0-rc07.51-play.aab signed/SHA256SUMS --clobber
+          else
+            gh release create "$tag" \
+              signed/BLOFY-PLAYER-2.0-rc07.51-signed.apk \
+              signed/BLOFY-PLAYER-2.0-rc07.51-play.aab \
+              signed/SHA256SUMS \
+              --target "$target" \
+              --title 'BLOFY PLAYER 2.0.0-rc07.51' \
+              --notes-file release-notes.txt
+          fi
+
+      - name: Verify public APK asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.51/BLOFY-PLAYER-2.0-rc07.51-signed.apk'
+          curl -fsSIL --max-time 30 "$url" >/dev/null
+          echo 'rc07.51 GitHub release asset is public and reachable.'
