@@ -135,19 +135,20 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 layoutManager = LinearLayoutManager(activity)
                 itemAnimator = null
                 clipToPadding = false
-                setPadding(dp(6), dp(6), dp(6), dp(10))
+                setPadding(dp(5), dp(4), dp(5), dp(7))
                 setItemViewCacheSize(18)
                 recycledViewPool.setMaxRecycledViews(0, 24)
                 overScrollMode = View.OVER_SCROLL_NEVER
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 setBackgroundColor(Color.TRANSPARENT)
-                alpha = .97f
+                alpha = .96f
             }
             val adapter = LiveChannelAdapter(
                 onClick = { channel -> selectChannel(channel) },
                 onFocus = {},
                 onLongClick = {},
-                itemKey = { it.key }
+                itemKey = { it.key },
+                translucent = true
             )
             adapter.submit(channels)
             list.adapter = adapter
@@ -157,11 +158,11 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     append(copy("البث المباشر", "Live channels"))
                     if (!categoryName.isNullOrBlank()) append("  •  ").append(categoryName)
                 }
-                textSize = 18f
+                textSize = 16.5f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.TextPrimary)
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setPadding(dp(14), dp(8), dp(14), dp(2))
+                setPadding(dp(12), dp(6), dp(12), dp(1))
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }
@@ -170,11 +171,11 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     "القناة مستمرة بالخلفية  •  OK للتبديل  •  BACK للإغلاق",
                     "Channel keeps playing  •  OK to switch  •  BACK to close"
                 )
-                textSize = 10.5f
+                textSize = 9.5f
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setPadding(dp(14), 0, dp(14), dp(5))
+                setPadding(dp(12), 0, dp(12), dp(3))
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }
@@ -185,12 +186,12 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     cornerRadius = dp(18).toFloat()
                     // Glass-like surface: video remains visible instead of being covered by an
                     // almost opaque panel.
-                    setColor(0xD616121E.toInt())
-                    setStroke(dp(1), 0x805D3A83.toInt())
+                    setColor(0x9C16121E.toInt())
+                    setStroke(dp(1), 0x665D3A83.toInt())
                 }
-                elevation = dp(12).toFloat()
-                addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
-                addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)))
+                elevation = dp(8).toFloat()
+                addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
+                addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28)))
                 addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             }
 
@@ -207,20 +208,20 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             created.setOnShowListener {
                 val window = created.window ?: return@setOnShowListener
                 window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                window.setDimAmount(0.06f)
+                window.setDimAmount(0.02f)
                 window.setGravity(Gravity.START or Gravity.CENTER_VERTICAL)
                 window.decorView.layoutDirection = activity.resources.configuration.layoutDirection
                 window.setBackgroundDrawableResource(android.R.color.transparent)
                 val device = DeviceClass.detect(activity)
                 val widthRatio = when (device) {
-                    DeviceClass.Kind.TV -> 0.36f
-                    DeviceClass.Kind.TABLET -> 0.52f
-                    DeviceClass.Kind.PHONE -> 0.88f
+                    DeviceClass.Kind.TV -> 0.30f
+                    DeviceClass.Kind.TABLET -> 0.46f
+                    DeviceClass.Kind.PHONE -> 0.84f
                 }
                 val heightRatio = when (device) {
-                    DeviceClass.Kind.TV -> 0.82f
-                    DeviceClass.Kind.TABLET -> 0.86f
-                    DeviceClass.Kind.PHONE -> 0.88f
+                    DeviceClass.Kind.TV -> 0.70f
+                    DeviceClass.Kind.TABLET -> 0.76f
+                    DeviceClass.Kind.PHONE -> 0.80f
                 }
                 val width = (activity.resources.displayMetrics.widthPixels * widthRatio).toInt()
                 val height = (activity.resources.displayMetrics.heightPixels * heightRatio).toInt()

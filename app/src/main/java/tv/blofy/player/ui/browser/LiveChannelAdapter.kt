@@ -21,7 +21,8 @@ internal class LiveChannelAdapter(
     private val onClick: (StreamEntity) -> Unit,
     private val onFocus: (StreamEntity) -> Unit,
     private val onLongClick: (StreamEntity) -> Unit,
-    private val itemKey: (StreamEntity) -> String
+    private val itemKey: (StreamEntity) -> String,
+    private val translucent: Boolean = false
 ) : RecyclerView.Adapter<LiveChannelAdapter.Holder>() {
     private val items = ArrayList<StreamEntity>(256)
     private var focusedKey: String? = null
@@ -75,7 +76,7 @@ internal class LiveChannelAdapter(
             setPadding(dp(5), dp(5), dp(5), dp(5))
             background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
-                setColor(BlofyTvDesign.BackgroundRaised)
+                setColor(if (translucent) 0x8A211332.toInt() else BlofyTvDesign.BackgroundRaised)
                 setStroke(dp(1), BlofyTvDesign.Divider)
             }
         }
@@ -187,5 +188,13 @@ internal class LiveChannelAdapter(
         val progress: ProgressBar
     ) : RecyclerView.ViewHolder(item)
 
-    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean) = CinemaStyle.surface(contextForBackground, focused = focused)
+    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean): GradientDrawable {
+    if (!translucent) return CinemaStyle.surface(contextForBackground, focused = focused)
+    val density = contextForBackground.resources.displayMetrics.density
+    return GradientDrawable().apply {
+        cornerRadius = 11 * density
+        setColor(if (focused) 0xD0664397.toInt() else 0x84211332.toInt())
+        setStroke(((if (focused) 2 else 1) * density).toInt(), if (focused) 0xE6FFFFFF.toInt() else 0x4AFFFFFF)
+    }
+}
 }

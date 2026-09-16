@@ -136,6 +136,12 @@ class SettingsActivity : AppCompatActivity() {
         addCard(actionCard(getString(R.string.account_title), getString(R.string.privacy_policy)) {
             startActivity(Intent(this, tv.blofy.player.ui.account.AccountActivity::class.java))
         })
+        addCard(actionCard(
+            copy("بيانات الجهاز والباركود", "Device & barcode"),
+            copy("عرض رقم الجهاز ورمز التفعيل والباركود", "View device ID, activation code and barcode")
+        ) {
+            startActivity(Intent(this, tv.blofy.player.ui.login.LoginActivity::class.java))
+        }.apply { tag = "blofy_device_barcode_entry" })
 
         addSection(page, copy("التشغيل", "Playback"))
         addCard(cycleSetting(getString(R.string.setting_aspect), RuntimeSettings.KEY_ASPECT,
