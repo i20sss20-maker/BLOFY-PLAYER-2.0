@@ -364,6 +364,7 @@ resource activation 'Microsoft.App/containerApps@2026-01-01' = {
             { name: 'BLOFY_ADMIN_USERNAME', value: 'admin' }
             { name: 'BLOFY_ADMIN_PASSWORD', secretRef: 'admin-ui-password' }
             { name: 'BLOFY_PLAYLIST_ENCRYPTION_KEY', secretRef: 'playlist-key' }
+            { name: 'BLOFY_SUBSCRIBER_BOOTSTRAP_URL', value: 'https://blofy-player-2-0.vercel.app' }
             { name: 'BLOFY_TRIAL_DAYS', value: '7' }
           ]
           resources: {

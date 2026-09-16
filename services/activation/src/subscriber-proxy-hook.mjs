@@ -6,9 +6,11 @@ import { Readable, Transform } from 'node:stream';
 import pg from 'pg';
 import { createActivationCredentialCodec } from './auth-protection.mjs';
 import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';
+import { discoverSubscriberHost, loadPersistedSubscriberHost, savePersistedSubscriberHost } from './subscriber-host-state.mjs';
 
 const { Pool } = pg;
 const SUBSCRIBER_HOST_RAW = String(process.env.BLOFY_SUBSCRIBER_HOST || '').trim();
+const SUBSCRIBER_BOOTSTRAP_URL_RAW = String(process.env.BLOFY_SUBSCRIBER_BOOTSTRAP_URL || '').trim();
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const PLAYLIST_ENCRYPTION_KEY = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
 const SESSION_TTL_MS = Number(process.env.BLOFY_SUBSCRIBER_SESSION_TTL_MS || 30 * 24 * 60 * 60 * 1000);
@@ -17,7 +19,8 @@ const MAX_LOGIN_PASSWORD = 512;
 const SUBSCRIBER_PREFIX = '/api/v1/subscribers';
 const XTREAM_PREFIX = `${SUBSCRIBER_PREFIX}/xtream`;
 
-const subscriberHost = normalizeSubscriberHost(SUBSCRIBER_HOST_RAW);
+let subscriberHost = normalizeSubscriberHost(SUBSCRIBER_HOST_RAW);
+const subscriberBootstrapUrl = normalizeSubscriberHost(SUBSCRIBER_BOOTSTRAP_URL_RAW);
 const encryptionKey = /^[a-fA-F0-9]{64}$/.test(PLAYLIST_ENCRYPTION_KEY)
   ? Buffer.from(PLAYLIST_ENCRYPTION_KEY, 'hex')
   : null;
@@ -43,8 +46,44 @@ function normalizeSubscriberHost(value) {
   }
 }
 
+function baseReady() {
+  return Boolean(encryptionKey && activationCredentials && pool);
+}
+
+function bootstrapReady() {
+  return Boolean(subscriberBootstrapUrl && process.env.VERCEL !== '1');
+}
+
+async function restoreSubscriberHost() {
+  if (subscriberHost) return subscriberHost;
+  if (!pool || !encryptionKey) return null;
+  try {
+    const persisted = await loadPersistedSubscriberHost(pool, PLAYLIST_ENCRYPTION_KEY);
+    if (persisted) subscriberHost = persisted;
+  } catch {
+    return null;
+  }
+  return subscriberHost;
+}
+
+async function learnSubscriberHost(body) {
+  const existing = await restoreSubscriberHost();
+  if (existing) return existing;
+  if (!bootstrapReady()) return null;
+  const learned = await discoverSubscriberHost({
+    bootstrapBaseUrl: subscriberBootstrapUrl,
+    deviceId: String(body.deviceId || '').trim(),
+    activationCode: String(body.activationCode || '').trim(),
+    username: String(body.username || '').trim(),
+    password: String(body.password || '')
+  });
+  const persisted = await savePersistedSubscriberHost(pool, PLAYLIST_ENCRYPTION_KEY, learned);
+  subscriberHost = persisted;
+  return subscriberHost;
+}
+
 function available() {
-  return Boolean(subscriberHost && encryptionKey && activationCredentials && pool);
+  return Boolean(baseReady() && (subscriberHost || bootstrapReady()));
 }
 
 function sendJson(res, status, body, headers = {}) {
@@ -252,7 +291,7 @@ async function pipeUpstream(req, res, url, token) {
 }
 
 async function createSubscriberSession(req, res) {
-  if (!available()) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
+  if (!baseReady()) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
   const body = await readJson(req);
   const deviceId = String(body.deviceId || '').trim();
   const activationCode = String(body.activationCode || '').trim();
@@ -267,7 +306,18 @@ async function createSubscriberSession(req, res) {
       authorization.retryAfterSeconds ? { 'retry-after': String(authorization.retryAfterSeconds) } : {});
   }
 
-  const authUrl = new URL(`${subscriberHost}/player_api.php`);
+  let resolvedHost;
+  try {
+    resolvedHost = await learnSubscriberHost(body);
+  } catch (error) {
+    if (error?.message === 'subscriber_login_failed') {
+      return sendJson(res, 401, { error: 'subscriber_login_failed' });
+    }
+    return sendJson(res, 502, { error: 'subscriber_bootstrap_unavailable' });
+  }
+  if (!resolvedHost) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
+
+  const authUrl = new URL(`${resolvedHost}/player_api.php`);
   authUrl.searchParams.set('username', username);
   authUrl.searchParams.set('password', password);
   let upstream;
@@ -292,7 +342,7 @@ async function createSubscriberSession(req, res) {
     providerName: 'مشتركين BLOFY',
     providerType: 'xtream',
     ...(body.delivery === 'direct' ? {
-      delivery: 'direct', baseUrl: subscriberHost, username, password, sessionToken: token
+      delivery: 'direct', baseUrl: resolvedHost, username, password, sessionToken: token
     } : {
       baseUrl: `${requestOrigin(req)}${XTREAM_PREFIX}`, username: token, password: 'blofy'
     }),
@@ -301,10 +351,12 @@ async function createSubscriberSession(req, res) {
 }
 
 async function proxyPlayerApi(req, res, requestUrl) {
+  const host = await restoreSubscriberHost();
+  if (!host) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
   const token = requestUrl.searchParams.get('username') || '';
   const session = openSession(token);
   if (!session || !await subscriberSessionValid(pool, session)) return sendJson(res, 401, { error: 'subscriber_session_expired' });
-  const upstream = new URL(`${subscriberHost}/player_api.php`);
+  const upstream = new URL(`${host}/player_api.php`);
   upstream.searchParams.set('username', session.u);
   upstream.searchParams.set('password', session.p);
   for (const [key, value] of requestUrl.searchParams.entries()) {
@@ -315,18 +367,22 @@ async function proxyPlayerApi(req, res, requestUrl) {
 }
 
 async function proxyStream(req, res, requestUrl) {
+  const host = await restoreSubscriberHost();
+  if (!host) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
   const match = requestUrl.pathname.match(new RegExp(`^${XTREAM_PREFIX}/(live|movie|series)/([^/]+)/[^/]+/(.+)$`));
   if (!match) return false;
   const [, kind, encodedToken, tail] = match;
   const token = decodeURIComponent(encodedToken);
   const session = openSession(token);
   if (!session || !await subscriberSessionValid(pool, session)) return sendJson(res, 401, { error: 'subscriber_session_expired' });
-  const target = `${subscriberHost}/${kind}/${encodeURIComponent(session.u)}/${encodeURIComponent(session.p)}/${tail}${requestUrl.search}`;
+  const target = `${host}/${kind}/${encodeURIComponent(session.u)}/${encodeURIComponent(session.p)}/${tail}${requestUrl.search}`;
   await pipeUpstream(req, res, target, token);
   return true;
 }
 
 async function proxySignedUrl(req, res, requestUrl) {
+  const host = await restoreSubscriberHost();
+  if (!host) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
   const match = requestUrl.pathname.match(new RegExp(`^${XTREAM_PREFIX}/url/([^/]+)/([^/]+)/([^/]+)$`));
   if (!match) return false;
   const token = decodeURIComponent(match[1]);
@@ -339,6 +395,8 @@ async function proxySignedUrl(req, res, requestUrl) {
 }
 
 async function proxyRaw(req, res, requestUrl) {
+  const host = await restoreSubscriberHost();
+  if (!host) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
   const match = requestUrl.pathname.match(new RegExp(`^${XTREAM_PREFIX}/raw/([^/]+)(/.*)?$`));
   if (!match) return false;
   const token = decodeURIComponent(match[1]);
@@ -352,9 +410,12 @@ async function proxyRaw(req, res, requestUrl) {
 async function handleSubscriberRequest(req, res) {
   const requestUrl = new URL(req.url || '/', 'http://localhost');
   if (req.method === 'GET' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/health`) {
-    return sendJson(res, available() ? 200 : 503, {
-      ok: available(),
-      hostConfigured: Boolean(subscriberHost),
+    const restoredHost = await restoreSubscriberHost();
+    const ready = Boolean(baseReady() && (restoredHost || bootstrapReady()));
+    return sendJson(res, ready ? 200 : 503, {
+      ok: ready,
+      hostConfigured: Boolean(restoredHost),
+      bootstrapReady: bootstrapReady(),
       encryptionReady: Boolean(encryptionKey && activationCredentials),
       databaseReady: Boolean(pool)
     });
