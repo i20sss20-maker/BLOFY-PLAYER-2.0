@@ -59,7 +59,18 @@ function route(requestUrl) {
 function proxy(req, res) {
   const target = route(req.url);
   const transport = target.protocol === 'https:' ? https : http;
-  const headers = { ...req.headers, host: target.host };
+
+  // Preserve the public request authority for upstream security checks while
+  // still sending the internal service Host required by Container Apps.
+  const publicHost = String(req.headers.host || '').split(',')[0].trim();
+  const incomingProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  const publicProto = incomingProto === 'http' || incomingProto === 'https' ? incomingProto : 'https';
+  const headers = {
+    ...req.headers,
+    host: target.host,
+    'x-forwarded-host': publicHost,
+    'x-forwarded-proto': publicProto
+  };
   for (const name of HOP_BY_HOP) delete headers[name];
 
   const upstream = transport.request({
