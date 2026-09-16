@@ -40,6 +40,7 @@ jobs:
       - name: Publish immutable GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
