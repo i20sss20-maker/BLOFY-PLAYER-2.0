@@ -66,6 +66,17 @@ object DeviceIdentity {
         deriveDeviceId(it) to deriveActivationCode(it)
     }
 
+    /** Room is authoritative for an upgraded install until Azure approves migration. */
+    @Synchronized
+    internal fun preserveExistingDeviceId(context: Context, deviceId: String) {
+        require(validDeviceId(deviceId)) { "Invalid existing device ID" }
+        val preferences = preferences(context)
+        if (preferences.getString(DEVICE_ID, null) == deviceId) return
+        check(preferences.edit().putString(DEVICE_ID, deviceId).commit()) {
+            "Unable to preserve the existing BLOFY device ID"
+        }
+    }
+
     /** Commits a server-approved migration. This is never called before Azure confirms success. */
     @Synchronized
     internal fun commitStableIdentity(context: Context, deviceId: String, activationCode: String) {
