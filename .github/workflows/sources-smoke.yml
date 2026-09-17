@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/sources-smoke.yml'
       - 'services/activation/src/sources-admin-hook.mjs'
+      - 'services/activation/src/sources-curated-catalog.mjs'
       - 'services/activation/web/sources-admin.html'
       - 'services/activation/web/sources-admin.css'
       - 'services/activation/web/sources-admin.js'
@@ -33,7 +34,7 @@ jobs:
           done
           test -s /tmp/health.json
           cat /tmp/health.json
-          node -e "const x=require('/tmp/health.json'); if(x.ok!==true||x.total<3||x.enabled<3) process.exit(1)"
+          node -e "const x=require('/tmp/health.json'); if(x.ok!==true||x.total<8||x.enabled<8) process.exit(1)"
 
       - name: Verify CNCVerse repository manifest
         shell: bash
@@ -56,8 +57,11 @@ jobs:
           curl -fsS --max-time 15 "$BASE/sources/plugins.json" -o /tmp/plugins.json
           node - <<'NODE'
           const x=require('/tmp/plugins.json');
-          if(!Array.isArray(x)||x.length<3) throw new Error('expected at least 3 providers');
-          for(const name of ['InternetArchiveProvider','TwitchProvider','DailymotionProvider']) {
+          if(!Array.isArray(x)||x.length<8) throw new Error('expected at least 8 providers');
+          for(const name of [
+            'InternetArchiveProvider','TwitchProvider','DailymotionProvider','YoutubeProvider',
+            'InvidiousProvider','LibriVoxAudiobook','BilibiliProvider','M3UPlaylistPlayerProvider'
+          ]) {
             const p=x.find(v=>v.internalName===name);
             if(!p) throw new Error('missing '+name);
             if(!/^https:\/\//.test(p.url)||!Number.isInteger(p.version)||!Number.isInteger(p.status)) throw new Error('invalid '+name);
@@ -73,4 +77,4 @@ jobs:
           grep -q 'لوحة المصادر' /tmp/panel.html
           curl -fsS --max-time 15 "$BASE/sources-admin.js" -o /dev/null
           curl -fsS --max-time 15 "$BASE/sources-admin.css" -o /dev/null
-          echo 'BLOFY Sources public surface verified'
+          echo 'BLOFY Sources expanded catalog verified'
