@@ -169,4 +169,13 @@ gx('gatewayCopyAllBtn')?.addEventListener('click', () => {
 
 gx('gatewayHideCredentialsBtn')?.addEventListener('click', () => { gx('gatewayCredentials').hidden = true; });
 
+function openGatewayHashTab() {
+  const name = String(location.hash || '').replace(/^#/, '').trim().toLowerCase();
+  if (!['sources', 'xtream', 'catalog'].includes(name)) return;
+  const button = document.querySelector(`.tab[data-tab="${name}"]`);
+  if (button && !button.classList.contains('active')) button.click();
+}
+
+window.addEventListener('hashchange', openGatewayHashTab);
+setTimeout(openGatewayHashTab, 0);
 loadGateway();
