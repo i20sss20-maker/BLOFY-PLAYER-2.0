@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BLOFY Sources</title>
+  <link rel="stylesheet" href="/sources-admin.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">BLOFY</p>
+        <h1>لوحة المصادر</h1>
+        <p class="subtitle">إدارة المصادر المنشورة للمستودع التجريبي بدون لمس تطبيق BLOFY PLAYER.</p>
+      </div>
+      <div class="top-actions">
+        <a class="button ghost" href="/admin">لوحة الإدارة</a>
+        <button class="button" id="refreshBtn" type="button">تحديث</button>
+        <button class="button primary" id="syncBtn" type="button">مزامنة GitHub</button>
+      </div>
+    </header>
+
+    <section class="stats" aria-label="الإحصائيات">
+      <article><span>الإجمالي</span><strong id="statTotal">—</strong></article>
+      <article><span>المنشور</span><strong id="statEnabled">—</strong></article>
+      <article><span>متوقف</span><strong id="statDown">—</strong></article>
+      <article><span>تجريبي</span><strong id="statBeta">—</strong></article>
+    </section>
+
+    <section class="repo-card">
+      <div>
+        <span class="label">رابط المستودع لـ CNCVerse</span>
+        <code id="repoUrl">جارٍ التحميل…</code>
+      </div>
+      <button id="copyRepoBtn" class="button ghost" type="button">نسخ الرابط</button>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>المصادر</h2>
+          <p>التغيير هنا ينعكس مباشرة على <code>/sources/plugins.json</code>.</p>
+        </div>
+        <div class="legend">
+          <span><i class="dot ok"></i> يعمل</span>
+          <span><i class="dot slow"></i> بطيء</span>
+          <span><i class="dot down"></i> متوقف</span>
+          <span><i class="dot beta"></i> Beta</span>
+        </div>
+      </div>
+
+      <div id="message" class="message" hidden></div>
+      <div id="loading" class="loading">جارٍ تحميل المصادر…</div>
+      <div id="sources" class="source-list" hidden></div>
+    </section>
+
+    <footer>
+      <span>المستودع:</span>
+      <a href="https://github.com/i20sss20-maker/BLOFY-SOURCES" target="_blank" rel="noreferrer">i20sss20-maker/BLOFY-SOURCES</a>
+    </footer>
+  </main>
+  <script src="/sources-admin.js" defer></script>
+</body>
+</html>
