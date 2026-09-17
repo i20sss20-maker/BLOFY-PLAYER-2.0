@@ -48,7 +48,7 @@ export function normalizeXtreamBaseUrl(input) {
   try { url = new URL(raw); } catch { throw new Error('xtream_base_url_invalid'); }
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('xtream_protocol_invalid');
   if (url.username || url.password || url.search || url.hash) throw new Error('xtream_base_url_invalid');
-  url.pathname = url.pathname.replace(/\/+$|^$/g, '') || '';
+  url.pathname = url.pathname.replace(/\/+$/, '') || '';
   return url.toString().replace(/\/$/, '');
 }
 
@@ -275,7 +275,14 @@ export async function parseTopLevelJsonArray(body, onItem, { maxItemBytes = 2_00
     }
   };
 
-  for await (const chunk of body) await consume(decoder.decode(chunk, { stream: true }));
+  for await (const chunk of body) {
+    if (typeof chunk === 'string') {
+      await consume(chunk);
+    } else {
+      const bytes = chunk instanceof Uint8Array ? chunk : Buffer.from(chunk);
+      await consume(decoder.decode(bytes, { stream: true }));
+    }
+  }
   await consume(decoder.decode());
   if (!started || !finished || collecting) throw new Error('xtream_array_incomplete');
   return count;
