@@ -25,28 +25,29 @@ export function renderPublicDownloads(items = [], { unavailable = false } = {}) 
     ${item.isPrimary === true ? `<details class="download-alternative"><summary>إذا لم يبدأ التنزيل</summary><a class="btn" href="${escapeHtml(apkUrl(item.downloadUrl))}" rel="noopener noreferrer">تحميل مباشر بديل</a><p>بعد التنزيل اختر «تثبيت» أو «تحديث». إذا طلب الجهاز الإذن، اسمح بالتثبيت من Downloader.</p></details>` : `<a class="btn" href="${escapeHtml(apkUrl(item.downloadUrl))}" rel="noopener noreferrer">تحميل ${escapeHtml(item.versionName)}</a>`}
   </article>`;
   const older = releases.filter(item => item !== primary);
-  const cards = (primary ? card(primary) : '') + (older.length ? `<details class="previous-releases"><summary>الإصدارات السابقة <span>(${older.length})</span></summary><p class="caption">للاستخدام عند الحاجة. الإصدار الأساسي متاح من زر التحميل بالأعلى.</p><div class="previous-list">${older.map(card).join('')}</div></details>` : '');
+  const cards = (primary ? card(primary) : '') + (older.length ? `<details class="previous-releases"><summary>الإصدارات السابقة <span>(${older.length})</span></summary><p class="caption">استخدمها فقط عند الحاجة. الإصدار الأساسي متاح من زر التنزيل بالأعلى.</p><div class="previous-list">${older.map(card).join('')}</div></details>` : '');
   const empty = unavailable
-    ? '<section class="card notice" role="alert"><h2>تعذّر قراءة الإصدارات حاليًا</h2><p>أعد تحميل الصفحة بعد قليل. لا تحتاج إلى تغيير إعدادات جهازك.</p><a class="btn primary" href="/releases">إعادة المحاولة</a></section>'
-    : '<section class="card"><p>لا توجد إصدارات متاحة للتحميل حاليًا.</p><a class="btn" href="/releases">تحديث الصفحة</a></section>';
+    ? '<section class="card notice" role="alert"><h2>تعذّر قراءة الإصدارات حاليًا</h2><p>أعد تحميل الصفحة بعد قليل. لا تحتاج إلى تغيير إعدادات جهازك.</p><a class="btn primary" href="/downloads">إعادة المحاولة</a></section>'
+    : '<section class="card"><p>لا توجد إصدارات متاحة للتحميل حاليًا.</p><a class="btn" href="/downloads">تحديث الصفحة</a></section>';
   return `<!doctype html>
 <html lang="ar" dir="rtl"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#07070d">
 <title>BLOFY | مركز التحميل</title><link rel="stylesheet" href="/premium.css"><link rel="stylesheet" href="/release-manager.css">
 </head><body data-page="downloads-static"><div class="wrap">
-<header class="nav"><a class="brand" href="/"><img src="/blofy-logo.png" alt="">BLOFY PLAYER</a><nav class="nav-links" aria-label="روابط الموقع"><a href="/">الرئيسية</a><a href="/portal" class="btn">ربط جهازك</a></nav></header>
-<main class="download-page"><section class="download-hero" aria-labelledby="download-title"><span class="eyebrow">BLOFY PLAYER · ANDROID</span>
-<h1 id="download-title">بلوفي على شاشتك.</h1><p class="download-intro">حمّل التطبيق على التلفزيون أو الرسيفر أو جوال أندرويد.</p>
-${primary && !unavailable ? `<a id="download-primary" class="btn primary download-main" href="/download/latest.apk"><span>تنزيل التطبيق الآن</span><span class="download-version" dir="ltr">${escapeHtml(primary.versionName)} · APK</span></a><p class="download-assurance">عند التحديث: ثبّت فوق النسخة الحالية للحفاظ على بياناتك.</p>` : ''}
+<header class="nav"><a class="brand" href="/downloads"><img src="/blofy-logo.png" alt="">BLOFY PLAYER</a><nav class="nav-links" aria-label="روابط الموقع"><a href="/connect">ربط جهازك</a><a href="/privacy">الخصوصية</a></nav></header>
+<main class="download-page"><section class="download-hero" aria-labelledby="download-title"><span class="eyebrow">OFFICIAL DOWNLOAD CENTER</span>
+<h1 id="download-title">نزّل BLOFY PLAYER</h1><p class="download-intro">نسخة أندرويد الرسمية للتلفزيون والرسيفر والجوال، من مكان واحد واضح.</p>
+${primary && !unavailable ? `<a id="download-primary" class="btn primary download-main" href="/download/latest.apk"><span>تنزيل التطبيق الآن</span><span class="download-version" dir="ltr">${escapeHtml(primary.versionName)} · APK</span></a><p class="download-assurance">للتحديث: ثبّت فوق النسخة الحالية ولا تحذف التطبيق القديم.</p>` : ''}
 </section>
-<div id="releases" data-server-rendered="true">${unavailable ? empty : cards || empty}</div>
-<section class="section" aria-labelledby="install-title"><h2 id="install-title">بعد التنزيل</h2>
+<section class="download-steps" aria-label="خطوات التثبيت"><article><strong>01</strong><div><h2>نزّل الإصدار</h2><p>استخدم زر التنزيل الرسمي بالأعلى.</p></div></article><article><strong>02</strong><div><h2>ثبّت أو حدّث</h2><p>اسمح بالتثبيت من مصدر التنزيل عند الطلب.</p></div></article><article><strong>03</strong><div><h2>اربط جهازك</h2><p>افتح BLOFY ثم استخدم رقم الجهاز ورمز الربط.</p></div></article></section>
+<section class="download-release-section" aria-labelledby="versions-title"><div class="download-section-head"><span class="eyebrow">AVAILABLE BUILDS</span><h2 id="versions-title">الإصدارات المتاحة</h2></div><div id="releases" data-server-rendered="true">${unavailable ? empty : cards || empty}</div></section>
+<section class="section install-section" aria-labelledby="install-title"><div class="download-section-head"><span class="eyebrow">INSTALL GUIDE</span><h2 id="install-title">طريقة التثبيت حسب جهازك</h2></div>
 <nav class="actions" aria-label="تعليمات التثبيت"><a class="btn" href="#install-tv">تلفزيون / رسيفر</a><a class="btn" href="#install-phone">جوال / تابلت</a><a class="btn" href="#install-computer">كمبيوتر</a></nav>
 <section id="install-tv" class="card section"><h3>تلفزيون / رسيفر — Downloader</h3><ol><li>اضغط «تنزيل التطبيق الآن» وانتظر اكتمال التنزيل.</li><li>اختر «تثبيت» أو «تحديث»، واسمح بالتثبيت من Downloader عند الطلب.</li><li>افتح BLOFY PLAYER. لا تحذف التطبيق القديم عند التحديث.</li></ol></section>
 <section id="install-phone" class="card section"><h3>جوال / تابلت أندرويد</h3><ol><li>حمّل ملف APK من الإصدار الذي تختاره أعلاه.</li><li>افتح الملف وامنح إذن التثبيت عند الطلب.</li><li>ثبّت التطبيق أو حدّث نسختك الحالية، ثم افتح BLOFY.</li></ol></section>
 <section id="install-computer" class="card section"><h3>كمبيوتر</h3><p>هذه نسخة أندرويد APK وليست برنامج ويندوز. تشغيلها على الكمبيوتر يحتاج محاكي أندرويد.</p></section>
 </section><div class="notice">تفعيل تطبيق BLOFY وصلاحية اشتراك البث منفصلان.</div></main>
-<footer class="foot"><a href="/">BLOFY PLAYER</a><a href="/privacy">الخصوصية وحذف البيانات</a><a href="/portal">إدارة جهازك</a></footer></div></body></html>`;
+<footer class="foot"><a href="/downloads">BLOFY PLAYER</a><a href="/privacy">الخصوصية وحذف البيانات</a><a href="/connect">إدارة جهازك</a></footer></div></body></html>`;
 }
 
 export async function servePublicDownloads(req, res, pathname, { list, onError = () => {}, timeoutMs = 8000 }) {
