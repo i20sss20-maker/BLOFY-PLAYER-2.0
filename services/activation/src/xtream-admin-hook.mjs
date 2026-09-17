@@ -581,6 +581,9 @@ http.createServer = function withBlofyXtream(listener) {
       if (req.method === 'GET' && url.pathname === '/sources/xtream/catalog') {
         return publicJson(res, { items: await listCatalog(Object.fromEntries(url.searchParams), true) });
       }
+      // `/api/v1/admin/xtream-gateway/*` belongs to the dedicated BLOFY gateway
+      // handler. Do not let this broader `/api/v1/admin/xtream` router swallow it.
+      if (url.pathname.startsWith('/api/v1/admin/xtream-gateway')) return listener(req, res);
       if (!url.pathname.startsWith('/api/v1/admin/xtream')) return listener(req, res);
       if (!requireAdmin(req, res)) return;
       await ensureReady();
