@@ -7,6 +7,8 @@ on:
       - '.github/workflows/sources-smoke.yml'
       - 'services/activation/src/sources-admin-hook.mjs'
       - 'services/activation/src/sources-curated-catalog.mjs'
+      - 'services/activation/src/xtream-core.mjs'
+      - 'services/activation/src/xtream-admin-hook.mjs'
       - 'services/activation/web/sources-admin.html'
       - 'services/activation/web/sources-admin.css'
       - 'services/activation/web/sources-admin.js'
@@ -69,12 +71,32 @@ jobs:
           console.log('providers:',x.map(v=>v.internalName).join(', '));
           NODE
 
+      - name: Verify Xtream public catalog surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 "$BASE/sources/xtream/summary" -o /tmp/xtream.json
+          cat /tmp/xtream.json
+          node - <<'NODE'
+          const x=require('/tmp/xtream.json');
+          if(x.ok!==true) throw new Error('Xtream summary not ready');
+          if(x.playbackProxy!==false) throw new Error('unexpected playback proxy state');
+          if(!Array.isArray(x.servers)) throw new Error('Xtream server summary invalid');
+          const serialized=JSON.stringify(x).toLowerCase();
+          if(serialized.includes('password')||serialized.includes('username_secret')||serialized.includes('password_secret')) {
+            throw new Error('Xtream public summary leaked credentials');
+          }
+          console.log('Xtream public summary verified; published servers:', x.servers.length);
+          NODE
+
       - name: Verify Sources admin page
         shell: bash
         run: |
           set -euo pipefail
           curl -fsS --max-time 15 "$BASE/sources-admin" -o /tmp/panel.html
           grep -q 'لوحة المصادر' /tmp/panel.html
+          grep -q 'Xtream Servers' /tmp/panel.html
+          grep -q 'الكتالوج' /tmp/panel.html
           curl -fsS --max-time 15 "$BASE/sources-admin.js" -o /dev/null
           curl -fsS --max-time 15 "$BASE/sources-admin.css" -o /dev/null
-          echo 'BLOFY Sources expanded catalog verified'
+          echo 'BLOFY Sources + Xtream production surface verified'
