@@ -3,181 +3,172 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>BLOFY Sources</title>
+  <meta name="theme-color" content="#09090e">
+  <title>BLOFY | المصادر و Xtream</title>
   <link rel="stylesheet" href="/sources-admin.css">
 </head>
 <body>
-  <main class="shell">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">BLOFY</p>
-        <h1>لوحة المصادر</h1>
-        <p class="subtitle">إدارة إضافات BLOFY ومصادر Xtream والكتالوج الكبير من مكان واحد.</p>
-      </div>
-      <div class="top-actions">
-        <a class="button ghost" href="/admin">لوحة الإدارة</a>
-        <button class="button" id="refreshBtn" type="button">تحديث</button>
-      </div>
-    </header>
+  <div class="source-shell">
+    <aside class="source-rail">
+      <a class="source-brand" href="/admin"><span class="brand-mark">B</span><span>BLOFY PLAYER</span></a>
+      <span class="rail-label">مركز التحكم</span>
+      <nav class="rail-links" aria-label="تنقل الإدارة">
+        <a href="/admin"><span>▣</span>الأجهزة والاشتراكات</a>
+        <a class="active" href="#xtream"><span>◈</span>المصادر و Xtream</a>
+        <a href="/api/v1/admin/device-insights"><span>⌁</span>تقارير الأجهزة</a>
+        <a href="/releases-admin"><span>↓</span>الإصدارات</a>
+      </nav>
+      <div class="rail-bottom"><a href="/downloads" target="_blank" rel="noopener">مركز التحميل ↗</a><a href="/connect" target="_blank" rel="noopener">بوابة الجهاز ↗</a></div>
+    </aside>
 
-    <nav class="tabs" aria-label="أقسام اللوحة">
-      <button class="tab active" type="button" data-tab="sources">الإضافات</button>
-      <button class="tab" type="button" data-tab="xtream">Xtream Servers</button>
-      <button class="tab" type="button" data-tab="catalog">الكتالوج</button>
-    </nav>
-
-    <div id="message" class="message" hidden></div>
-
-    <section id="tab-sources" class="tab-page active">
-      <section class="stats" aria-label="إحصائيات الإضافات">
-        <article><span>الإجمالي</span><strong id="statTotal">—</strong></article>
-        <article><span>المنشور</span><strong id="statEnabled">—</strong></article>
-        <article><span>متوقف</span><strong id="statDown">—</strong></article>
-        <article><span>تجريبي</span><strong id="statBeta">—</strong></article>
-      </section>
-
-      <section class="repo-card">
+    <main class="source-main">
+      <header class="topbar">
         <div>
-          <span class="label">رابط المستودع لـ CNCVerse</span>
-          <code id="repoUrl">جارٍ التحميل…</code>
+          <p class="eyebrow">BLOFY CONTENT CONTROL</p>
+          <h1>المصادر و Xtream</h1>
+          <p class="subtitle">أنشئ بيانات سيرفر BLOFY، أضف مصادر مسموح لك باستخدامها، ثم تحكم بالكتالوج من شاشة واحدة.</p>
         </div>
-        <div class="inline-actions">
-          <button id="copyRepoBtn" class="button ghost" type="button">نسخ الرابط</button>
-          <button class="button primary" id="syncBtn" type="button">مزامنة GitHub</button>
+        <div class="top-actions">
+          <a class="button ghost" href="/admin">رجوع للإدارة</a>
+          <button class="button" id="refreshBtn" type="button">↻ تحديث</button>
         </div>
+      </header>
+
+      <nav class="tabs" aria-label="أقسام المصادر">
+        <button class="tab active" type="button" data-tab="sources"><span>01</span>الإضافات</button>
+        <button class="tab" type="button" data-tab="xtream"><span>02</span>سيرفر BLOFY و Xtream</button>
+        <button class="tab" type="button" data-tab="catalog"><span>03</span>الكتالوج</button>
+      </nav>
+
+      <div id="message" class="message" hidden></div>
+
+      <section id="tab-sources" class="tab-page active">
+        <section class="section-intro">
+          <div><span class="eyebrow">SOURCES</span><h2>مصادر BLOFY</h2><p>هذه الإضافات هي المصادر المدارة من BLOFY. فعّل ما تحتاجه وعطّل الباقي بدون لمس التطبيق.</p></div>
+          <div class="intro-step"><strong>1</strong><span>فعّل المصادر</span></div>
+        </section>
+
+        <section class="stats" aria-label="إحصائيات الإضافات">
+          <article><span>الإجمالي</span><strong id="statTotal">—</strong></article>
+          <article><span>المنشور</span><strong id="statEnabled">—</strong></article>
+          <article><span>متوقف</span><strong id="statDown">—</strong></article>
+          <article><span>تجريبي</span><strong id="statBeta">—</strong></article>
+        </section>
+
+        <section class="repo-card">
+          <div class="repo-info">
+            <span class="label">رابط BLOFY Sources لـ CNCVerse</span>
+            <code id="repoUrl">جارٍ التحميل…</code>
+          </div>
+          <div class="inline-actions">
+            <button id="copyRepoBtn" class="button ghost" type="button">نسخ الرابط</button>
+            <button class="button primary" id="syncBtn" type="button">مزامنة GitHub</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>الإضافات</h2><p>التغيير هنا ينعكس على قائمة المصادر المنشورة لـ BLOFY.</p></div>
+            <div class="legend"><span><i class="dot ok"></i> يعمل</span><span><i class="dot slow"></i> بطيء</span><span><i class="dot down"></i> متوقف</span><span><i class="dot beta"></i> Beta</span></div>
+          </div>
+          <div id="loading" class="loading">جارٍ تحميل المصادر…</div>
+          <div id="sources" class="source-list" hidden></div>
+        </section>
       </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>الإضافات</h2>
-            <p>التغيير هنا ينعكس مباشرة على <code>/sources/plugins.json</code>.</p>
-          </div>
-          <div class="legend">
-            <span><i class="dot ok"></i> يعمل</span>
-            <span><i class="dot slow"></i> بطيء</span>
-            <span><i class="dot down"></i> متوقف</span>
-            <span><i class="dot beta"></i> Beta</span>
-          </div>
-        </div>
-        <div id="loading" class="loading">جارٍ تحميل المصادر…</div>
-        <div id="sources" class="source-list" hidden></div>
-      </section>
-    </section>
+      <section id="tab-xtream" class="tab-page" hidden>
+        <section class="section-intro">
+          <div><span class="eyebrow">BLOFY XTREAM</span><h2>سيرفرك الخاص</h2><p>أنشئ Server + Username + Password ثم استخدمها في أي تطبيق يدعم Xtream Codes API.</p></div>
+          <div class="intro-step"><strong>2</strong><span>أنشئ بيانات الدخول</span></div>
+        </section>
 
-    <section id="tab-xtream" class="tab-page" hidden>
-      <section class="panel gateway-panel">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">BLOFY XTREAM GATEWAY</p>
-            <h2>سيرفر Xtream الخاص بك</h2>
-            <p>رابط واحد + اسم مستخدم + كلمة سر تشغلها في أي تطبيق يدعم Xtream Codes API. يعرض فقط المحتوى المفعل من المصادر التي أضفتها.</p>
-          </div>
-          <button id="gatewayCreateBtn" class="button primary" type="button">إنشاء بيانات دخول</button>
-        </div>
-
-        <div class="gateway-host-row">
-          <div>
-            <span class="label">Server / Host</span>
-            <code id="gatewayServerUrl">جارٍ التحميل…</code>
-          </div>
-          <button id="gatewayCopyHostBtn" class="button ghost" type="button">نسخ الرابط</button>
-        </div>
-
-        <div id="gatewayCredentials" class="gateway-credentials" hidden>
-          <div class="gateway-credential-head">
+        <section class="panel gateway-panel">
+          <div class="panel-head gateway-title-row">
             <div>
-              <strong>بياناتك الجديدة جاهزة</strong>
-              <small>كلمة السر تظهر الآن فقط. احفظها أو انسخ الثلاثة معًا.</small>
+              <span class="panel-kicker">BLOFY XTREAM GATEWAY</span>
+              <h2>بيانات السيرفر التي ستستخدمها في التطبيقات</h2>
+              <p>السيرفر يعرض فقط العناصر المفعلة في الكتالوج. إنشاء بيانات الدخول لا يضيف محتوى من نفسه.</p>
             </div>
-            <div class="inline-actions">
-              <button id="gatewayCopyAllBtn" class="button primary" type="button">نسخ الكل</button>
-              <button id="gatewayHideCredentialsBtn" class="button ghost" type="button">إخفاء</button>
+            <button id="gatewayCreateBtn" class="button primary big-action" type="button">إنشاء بيانات دخول</button>
+          </div>
+
+          <div class="gateway-host-row">
+            <div><span class="label">Server / Host</span><code id="gatewayServerUrl">جارٍ التحميل…</code></div>
+            <button id="gatewayCopyHostBtn" class="button ghost" type="button">نسخ الرابط</button>
+          </div>
+
+          <div id="gatewayCredentials" class="gateway-credentials" hidden>
+            <div class="gateway-credential-head">
+              <div><strong>بياناتك الجديدة جاهزة</strong><small>كلمة السر تظهر الآن فقط. احفظها أو انسخ الثلاثة معًا.</small></div>
+              <div class="inline-actions"><button id="gatewayCopyAllBtn" class="button primary" type="button">نسخ الكل</button><button id="gatewayHideCredentialsBtn" class="button ghost" type="button">إخفاء</button></div>
+            </div>
+            <div class="credential-grid">
+              <label><span>Server</span><code id="gatewayCredHost">—</code></label>
+              <label><span>Username</span><code id="gatewayCredUser">—</code></label>
+              <label><span>Password</span><code id="gatewayCredPass">—</code></label>
             </div>
           </div>
-          <div class="credential-grid">
-            <label><span>Server</span><code id="gatewayCredHost">—</code></label>
-            <label><span>Username</span><code id="gatewayCredUser">—</code></label>
-            <label><span>Password</span><code id="gatewayCredPass">—</code></label>
+
+          <div id="gatewayLoading" class="loading">جارٍ تحميل بيانات الدخول…</div>
+          <div id="gatewayAccounts" class="gateway-accounts"></div>
+          <p class="security-note">استخدم السيرفر فقط مع محتوى تملك حق الوصول إليه أو إعادة بثه. BLOFY لا ينسخ ملفات الفيديو إلى التخزين.</p>
+        </section>
+
+        <section class="stats five" aria-label="إحصائيات Xtream">
+          <article><span>المصادر</span><strong id="xtServers">0</strong></article>
+          <article><span>Online</span><strong id="xtOnline">0</strong></article>
+          <article><span>Live</span><strong id="xtLive">0</strong></article>
+          <article><span>Movies</span><strong id="xtMovies">0</strong></article>
+          <article><span>Series</span><strong id="xtSeries">0</strong></article>
+        </section>
+
+        <section class="panel form-panel">
+          <div class="panel-head">
+            <div><span class="panel-kicker">UPSTREAM SOURCES</span><h2>إضافة مصدر Xtream</h2><p>إذا عندك مصدر Xtream تملكه أو مصرح لك باستخدامه، أضفه هنا ثم اسحب Live + Movies + Series.</p></div>
+            <button id="syncAllXtreamBtn" class="button primary" type="button">مزامنة كل المصادر</button>
           </div>
-        </div>
+          <form id="xtreamForm" class="xtream-form" autocomplete="off">
+            <label><span>اسم المصدر</span><input id="xtName" required maxlength="160" placeholder="مثال: Main Server"></label>
+            <label class="wide"><span>Host / URL</span><input id="xtBaseUrl" required inputmode="url" placeholder="https://example.com:443"></label>
+            <label><span>Username</span><input id="xtUsername" required autocomplete="new-password" autocapitalize="none" spellcheck="false"></label>
+            <label><span>Password</span><input id="xtPassword" required type="password" autocomplete="new-password"></label>
+            <label><span>الأولوية</span><input id="xtPriority" type="number" min="0" max="10000" value="100"></label>
+            <label class="check"><input id="xtEnabled" type="checkbox" checked><span>مفعل</span></label>
+            <label class="check"><input id="xtPublish" type="checkbox"><span>نشر الكتالوج العام</span></label>
+            <button id="xtAddBtn" class="button primary submit" type="submit">إضافة + فحص</button>
+          </form>
+          <p class="security-note">يفضّل HTTPS. المصدر الذي يستخدم HTTP قد يرسل بيانات الدخول للمزود بدون تشفير شبكي.</p>
+        </section>
 
-        <div id="gatewayLoading" class="loading">جارٍ تحميل بيانات الدخول…</div>
-        <div id="gatewayAccounts" class="gateway-accounts"></div>
-        <p class="security-note">البوابة تمرر التشغيل من المصادر المفعلة بدون نسخ ملفات الفيديو إلى التخزين. استخدم فقط مصادر ومحتوى تملك حق الوصول إليه أو إعادة بثه.</p>
+        <section class="panel">
+          <div class="panel-head"><div><h2>المصادر المضافة</h2><p>المزامنة تستورد الكتالوج والبيانات فقط. ملفات الفيديو نفسها لا تُنسخ إلى Azure.</p></div></div>
+          <div id="xtreamLoading" class="loading">جارٍ تحميل المصادر…</div>
+          <div id="xtreamServers" class="server-list" hidden></div>
+        </section>
       </section>
 
-      <section class="stats five" aria-label="إحصائيات Xtream">
-        <article><span>السيرفرات</span><strong id="xtServers">0</strong></article>
-        <article><span>Online</span><strong id="xtOnline">0</strong></article>
-        <article><span>Live</span><strong id="xtLive">0</strong></article>
-        <article><span>Movies</span><strong id="xtMovies">0</strong></article>
-        <article><span>Series</span><strong id="xtSeries">0</strong></article>
-      </section>
-
-      <section class="panel form-panel">
-        <div class="panel-head">
-          <div>
-            <h2>إضافة مصدر Xtream</h2>
-            <p>إذا عندك مصدر Xtream تملكه أو مصرح لك باستخدامه، أضفه هنا ثم مزامنة Live + Movies + Series. بياناته تُحفظ مشفرة.</p>
+      <section id="tab-catalog" class="tab-page" hidden>
+        <section class="section-intro">
+          <div><span class="eyebrow">CATALOG</span><h2>الكتالوج المستورد</h2><p>حدد المصدر والنوع والقسم، ثم فعّل أو عطّل ما تريد ظهوره داخل سيرفر BLOFY.</p></div>
+          <div class="intro-step"><strong>3</strong><span>رتّب ما يظهر</span></div>
+        </section>
+        <section class="panel">
+          <div class="catalog-controls">
+            <label><span>المصدر</span><select id="catalogServer"></select></label>
+            <label><span>النوع</span><select id="catalogType"><option value="movie">Movies</option><option value="series">Series</option><option value="live">Live</option></select></label>
+            <label><span>القسم</span><select id="catalogCategory"><option value="">كل الأقسام</option></select></label>
+            <label class="wide"><span>بحث</span><input id="catalogSearch" placeholder="اسم فيلم، مسلسل أو قناة"></label>
+            <button id="catalogLoadBtn" class="button primary" type="button">عرض</button>
           </div>
-          <button id="syncAllXtreamBtn" class="button primary" type="button">مزامنة كل السيرفرات</button>
-        </div>
-        <form id="xtreamForm" class="xtream-form" autocomplete="off">
-          <label><span>اسم المصدر</span><input id="xtName" required maxlength="160" placeholder="مثال: Main Server"></label>
-          <label class="wide"><span>Host / URL</span><input id="xtBaseUrl" required inputmode="url" placeholder="https://example.com:443"></label>
-          <label><span>Username</span><input id="xtUsername" required autocomplete="new-password" autocapitalize="none" spellcheck="false"></label>
-          <label><span>Password</span><input id="xtPassword" required type="password" autocomplete="new-password"></label>
-          <label><span>الأولوية</span><input id="xtPriority" type="number" min="0" max="10000" value="100"></label>
-          <label class="check"><input id="xtEnabled" type="checkbox" checked><span>مفعل</span></label>
-          <label class="check"><input id="xtPublish" type="checkbox"><span>نشر الكتالوج العام</span></label>
-          <button id="xtAddBtn" class="button primary submit" type="submit">إضافة + فحص</button>
-        </form>
-        <p class="security-note">إذا كان المصدر HTTP فبيانات الدخول تنتقل إلى مزود Xtream بدون تشفير شبكي. يفضّل HTTPS متى ما كان متاحًا.</p>
+          <div class="bulk-actions"><button id="enableTypeBtn" class="button" type="button">تفعيل الكل</button><button id="disableTypeBtn" class="button ghost" type="button">تعطيل الكل</button><span id="catalogHint" class="muted"></span></div>
+          <div id="catalogLoading" class="loading" hidden>جارٍ تحميل الكتالوج…</div>
+          <div id="catalogItems" class="catalog-list"></div>
+        </section>
       </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>المصادر</h2>
-            <p>استيراد Live + Movies + Series يتم ككتالوج وبيانات فقط؛ ملفات الفيديو نفسها لا تُنسخ إلى Azure.</p>
-          </div>
-        </div>
-        <div id="xtreamLoading" class="loading">جارٍ تحميل السيرفرات…</div>
-        <div id="xtreamServers" class="server-list" hidden></div>
-      </section>
-    </section>
-
-    <section id="tab-catalog" class="tab-page" hidden>
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>الكتالوج المستورد</h2>
-            <p>ابحث وتصفح وفعل أو عطّل الأقسام والعناصر بعد المزامنة.</p>
-          </div>
-        </div>
-        <div class="catalog-controls">
-          <label><span>السيرفر</span><select id="catalogServer"></select></label>
-          <label><span>النوع</span><select id="catalogType"><option value="movie">Movies</option><option value="series">Series</option><option value="live">Live</option></select></label>
-          <label><span>القسم</span><select id="catalogCategory"><option value="">كل الأقسام</option></select></label>
-          <label class="wide"><span>بحث</span><input id="catalogSearch" placeholder="اسم فيلم، مسلسل أو قناة"></label>
-          <button id="catalogLoadBtn" class="button primary" type="button">عرض</button>
-        </div>
-        <div class="bulk-actions">
-          <button id="enableTypeBtn" class="button" type="button">تفعيل الكل</button>
-          <button id="disableTypeBtn" class="button ghost" type="button">تعطيل الكل</button>
-          <span id="catalogHint" class="muted"></span>
-        </div>
-        <div id="catalogLoading" class="loading" hidden>جارٍ تحميل الكتالوج…</div>
-        <div id="catalogItems" class="catalog-list"></div>
-      </section>
-    </section>
-
-    <footer>
-      <span>المستودع:</span>
-      <a href="https://github.com/i20sss20-maker/BLOFY-SOURCES" target="_blank" rel="noreferrer">i20sss20-maker/BLOFY-SOURCES</a>
-    </footer>
-  </main>
+      <footer><span>BLOFY Sources</span><span>•</span><a href="https://github.com/i20sss20-maker/BLOFY-SOURCES" target="_blank" rel="noreferrer">GitHub</a></footer>
+    </main>
+  </div>
   <script src="/sources-admin.js" defer></script>
   <script src="/xtream-gateway-admin.js" defer></script>
 </body>
