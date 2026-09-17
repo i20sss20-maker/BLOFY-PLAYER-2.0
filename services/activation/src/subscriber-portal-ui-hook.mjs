@@ -222,16 +222,17 @@ ${allowRenewal ? renewalStyles : ''}
     if (!button || button.dataset.blofyBusy === '1') return;
     button.dataset.blofyBusy = '1';
     button.disabled = true;
-    // Capture stable credentials and editor generation before asynchronous work.
+    // Capture the selected device and editor before either asynchronous request.
     var saved = {
-      auth: deviceAuth(),
+      auth: deviceAuth(), authReference: typeof auth !== 'undefined' && auth,
       generation: editorGeneration, id: editingSubscriberId || undefined,
       name: String(qs('name') && qs('name').value || '').trim(),
       active: !qs('active') || qs('active').checked
     };
     function sameDevice() {
       var current = deviceAuth();
-      return saved.auth.deviceId === current.deviceId && saved.auth.activationCode === current.activationCode;
+      return saved.authReference === (typeof auth !== 'undefined' && auth) &&
+        saved.auth.deviceId === current.deviceId && saved.auth.activationCode === current.activationCode;
     }
     function stillCurrent() { return sameDevice() && saved.generation === editorGeneration; }
     status('جاري التحقق من اشتراك BLOFY…', false);
