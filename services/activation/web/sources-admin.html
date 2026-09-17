@@ -12,47 +12,124 @@
       <div>
         <p class="eyebrow">BLOFY</p>
         <h1>لوحة المصادر</h1>
-        <p class="subtitle">إدارة المصادر المنشورة للمستودع التجريبي بدون لمس تطبيق BLOFY PLAYER.</p>
+        <p class="subtitle">إدارة إضافات BLOFY ومصادر Xtream والكتالوج الكبير من مكان واحد.</p>
       </div>
       <div class="top-actions">
         <a class="button ghost" href="/admin">لوحة الإدارة</a>
         <button class="button" id="refreshBtn" type="button">تحديث</button>
-        <button class="button primary" id="syncBtn" type="button">مزامنة GitHub</button>
       </div>
     </header>
 
-    <section class="stats" aria-label="الإحصائيات">
-      <article><span>الإجمالي</span><strong id="statTotal">—</strong></article>
-      <article><span>المنشور</span><strong id="statEnabled">—</strong></article>
-      <article><span>متوقف</span><strong id="statDown">—</strong></article>
-      <article><span>تجريبي</span><strong id="statBeta">—</strong></article>
-    </section>
+    <nav class="tabs" aria-label="أقسام اللوحة">
+      <button class="tab active" type="button" data-tab="sources">الإضافات</button>
+      <button class="tab" type="button" data-tab="xtream">Xtream Servers</button>
+      <button class="tab" type="button" data-tab="catalog">الكتالوج</button>
+    </nav>
 
-    <section class="repo-card">
-      <div>
-        <span class="label">رابط المستودع لـ CNCVerse</span>
-        <code id="repoUrl">جارٍ التحميل…</code>
-      </div>
-      <button id="copyRepoBtn" class="button ghost" type="button">نسخ الرابط</button>
-    </section>
+    <div id="message" class="message" hidden></div>
 
-    <section class="panel">
-      <div class="panel-head">
+    <section id="tab-sources" class="tab-page active">
+      <section class="stats" aria-label="إحصائيات الإضافات">
+        <article><span>الإجمالي</span><strong id="statTotal">—</strong></article>
+        <article><span>المنشور</span><strong id="statEnabled">—</strong></article>
+        <article><span>متوقف</span><strong id="statDown">—</strong></article>
+        <article><span>تجريبي</span><strong id="statBeta">—</strong></article>
+      </section>
+
+      <section class="repo-card">
         <div>
-          <h2>المصادر</h2>
-          <p>التغيير هنا ينعكس مباشرة على <code>/sources/plugins.json</code>.</p>
+          <span class="label">رابط المستودع لـ CNCVerse</span>
+          <code id="repoUrl">جارٍ التحميل…</code>
         </div>
-        <div class="legend">
-          <span><i class="dot ok"></i> يعمل</span>
-          <span><i class="dot slow"></i> بطيء</span>
-          <span><i class="dot down"></i> متوقف</span>
-          <span><i class="dot beta"></i> Beta</span>
+        <div class="inline-actions">
+          <button id="copyRepoBtn" class="button ghost" type="button">نسخ الرابط</button>
+          <button class="button primary" id="syncBtn" type="button">مزامنة GitHub</button>
         </div>
-      </div>
+      </section>
 
-      <div id="message" class="message" hidden></div>
-      <div id="loading" class="loading">جارٍ تحميل المصادر…</div>
-      <div id="sources" class="source-list" hidden></div>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>الإضافات</h2>
+            <p>التغيير هنا ينعكس مباشرة على <code>/sources/plugins.json</code>.</p>
+          </div>
+          <div class="legend">
+            <span><i class="dot ok"></i> يعمل</span>
+            <span><i class="dot slow"></i> بطيء</span>
+            <span><i class="dot down"></i> متوقف</span>
+            <span><i class="dot beta"></i> Beta</span>
+          </div>
+        </div>
+        <div id="loading" class="loading">جارٍ تحميل المصادر…</div>
+        <div id="sources" class="source-list" hidden></div>
+      </section>
+    </section>
+
+    <section id="tab-xtream" class="tab-page" hidden>
+      <section class="stats five" aria-label="إحصائيات Xtream">
+        <article><span>السيرفرات</span><strong id="xtServers">0</strong></article>
+        <article><span>Online</span><strong id="xtOnline">0</strong></article>
+        <article><span>Live</span><strong id="xtLive">0</strong></article>
+        <article><span>Movies</span><strong id="xtMovies">0</strong></article>
+        <article><span>Series</span><strong id="xtSeries">0</strong></article>
+      </section>
+
+      <section class="panel form-panel">
+        <div class="panel-head">
+          <div>
+            <h2>إضافة Xtream Server</h2>
+            <p>أدخل السيرفر الذي تملكه أو المصرح لك باستخدامه. بيانات الدخول تُحفظ مشفرة ولا تظهر مرة أخرى.</p>
+          </div>
+          <button id="syncAllXtreamBtn" class="button primary" type="button">مزامنة كل السيرفرات</button>
+        </div>
+        <form id="xtreamForm" class="xtream-form" autocomplete="off">
+          <label><span>اسم السيرفر</span><input id="xtName" required maxlength="160" placeholder="مثال: Main Server"></label>
+          <label class="wide"><span>Host / URL</span><input id="xtBaseUrl" required inputmode="url" placeholder="https://example.com:443"></label>
+          <label><span>Username</span><input id="xtUsername" required autocomplete="new-password" autocapitalize="none" spellcheck="false"></label>
+          <label><span>Password</span><input id="xtPassword" required type="password" autocomplete="new-password"></label>
+          <label><span>الأولوية</span><input id="xtPriority" type="number" min="0" max="10000" value="100"></label>
+          <label class="check"><input id="xtEnabled" type="checkbox" checked><span>مفعل</span></label>
+          <label class="check"><input id="xtPublish" type="checkbox"><span>نشر الكتالوج العام</span></label>
+          <button id="xtAddBtn" class="button primary submit" type="submit">إضافة + فحص</button>
+        </form>
+        <p class="security-note">إذا كان السيرفر HTTP فبيانات الدخول تنتقل إلى مزود Xtream بدون تشفير شبكي. يفضّل HTTPS متى ما كان متاحًا.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>السيرفرات</h2>
+            <p>استيراد Live + Movies + Series يتم ككتالوج وبيانات فقط؛ ملفات الفيديو نفسها لا تُنسخ إلى Azure.</p>
+          </div>
+        </div>
+        <div id="xtreamLoading" class="loading">جارٍ تحميل السيرفرات…</div>
+        <div id="xtreamServers" class="server-list" hidden></div>
+      </section>
+    </section>
+
+    <section id="tab-catalog" class="tab-page" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>الكتالوج المستورد</h2>
+            <p>ابحث وتصفح وفعل أو عطّل الأقسام والعناصر بعد المزامنة.</p>
+          </div>
+        </div>
+        <div class="catalog-controls">
+          <label><span>السيرفر</span><select id="catalogServer"></select></label>
+          <label><span>النوع</span><select id="catalogType"><option value="movie">Movies</option><option value="series">Series</option><option value="live">Live</option></select></label>
+          <label><span>القسم</span><select id="catalogCategory"><option value="">كل الأقسام</option></select></label>
+          <label class="wide"><span>بحث</span><input id="catalogSearch" placeholder="اسم فيلم، مسلسل أو قناة"></label>
+          <button id="catalogLoadBtn" class="button primary" type="button">عرض</button>
+        </div>
+        <div class="bulk-actions">
+          <button id="enableTypeBtn" class="button" type="button">تفعيل الكل</button>
+          <button id="disableTypeBtn" class="button ghost" type="button">تعطيل الكل</button>
+          <span id="catalogHint" class="muted"></span>
+        </div>
+        <div id="catalogLoading" class="loading" hidden>جارٍ تحميل الكتالوج…</div>
+        <div id="catalogItems" class="catalog-list"></div>
+      </section>
     </section>
 
     <footer>
