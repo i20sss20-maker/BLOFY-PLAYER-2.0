@@ -3,6 +3,32 @@
 if (document.body.dataset.page === 'admin') {
   try { labels.pending = 'بانتظار التطبيق'; } catch (_) {}
 
+  const PANEL_NAMES = new Set(['devices', 'support', 'releases']);
+  const panelFromHash = () => {
+    const name = String(location.hash || '').replace(/^#/, '').trim().toLowerCase();
+    return PANEL_NAMES.has(name) ? name : null;
+  };
+
+  const openHashPanel = () => {
+    const name = panelFromHash();
+    if (!name) return;
+    const button = document.querySelector(`[data-panel="${name}"]`);
+    if (button && button.getAttribute('aria-current') !== 'page') button.click();
+  };
+
+  const installPanelRouting = () => {
+    document.querySelectorAll('[data-panel]').forEach(button => {
+      if (button.dataset.blofyHashRouting === '1') return;
+      button.dataset.blofyHashRouting = '1';
+      button.addEventListener('click', () => {
+        const name = button.dataset.panel;
+        if (PANEL_NAMES.has(name) && location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
+      });
+    });
+    window.addEventListener('hashchange', openHashPanel);
+    openHashPanel();
+  };
+
   const addPendingFilter = () => {
     const filter = document.querySelector('#customer-search select[name="filter"]');
     if (!filter || filter.querySelector('option[value="pending"]')) return;
@@ -17,42 +43,22 @@ if (document.body.dataset.page === 'admin') {
   const annotateRows = () => {
     addPendingFilter();
     const rows = Array.from(document.querySelectorAll('#customer-rows tr'));
-    if (!rows.length || typeof deviceItems === 'undefined') return;
-    const items = new Map((deviceItems || []).map(item => [String(item.deviceId || '').toUpperCase(), item]));
     for (const row of rows) {
-      const first = row.querySelector('td');
-      if (!first) continue;
-      const match = String(first.textContent || '').match(/BLOFY-[A-Z0-9-]{4,32}/i);
-      if (!match) continue;
-      const item = items.get(match[0].toUpperCase());
-      if (!item) continue;
-
-      const previous = first.querySelector('[data-blofy-device-phone]');
-      if (!item.phone) previous?.remove();
-      else {
-        const text = 'الجوال: ' + item.phone;
-        if (previous) { if (previous.textContent !== text) previous.textContent = text; }
-        else {
-          const phone = document.createElement('div');
-          phone.className = 'caption';
-          phone.dataset.blofyDevicePhone = '1';
-          phone.textContent = text;
-          first.appendChild(phone);
-        }
-      }
-
-      row.classList.toggle('is-expired', item.status === 'expired');
-      const actionButton = row.querySelector('td:last-child button');
-      if (actionButton) {
-        if (item.status === 'expired') {
-          actionButton.textContent = 'تجديد / إدارة ←';
-          actionButton.classList.add('renew-action');
-          actionButton.title = 'فتح الجهاز وإعادة تفعيله';
-        } else {
-          actionButton.classList.remove('renew-action');
-          if (actionButton.textContent.includes('تجديد')) actionButton.textContent = 'إدارة ←';
-          actionButton.removeAttribute('title');
-        }
+      const cells = row.querySelectorAll('td');
+      if (cells.length < 2) continue;
+      const stateText = String(cells[1].textContent || '');
+      const expired = stateText.includes('منتهٍ') || stateText.includes('منتهي');
+      row.classList.toggle('is-expired', expired);
+      const actionButton = cells[cells.length - 1]?.querySelector('button');
+      if (!actionButton) continue;
+      if (expired) {
+        actionButton.textContent = 'تجديد / إدارة ←';
+        actionButton.classList.add('renew-action');
+        actionButton.title = 'فتح الجهاز وإعادة تفعيله';
+      } else {
+        actionButton.classList.remove('renew-action');
+        if (actionButton.textContent.includes('تجديد')) actionButton.textContent = 'إدارة ←';
+        actionButton.removeAttribute('title');
       }
     }
   };
@@ -103,6 +109,7 @@ if (document.body.dataset.page === 'admin') {
   };
 
   const start = () => {
+    installPanelRouting();
     addPendingFilter();
     const body = document.getElementById('customer-rows');
     if (body) new MutationObserver(scheduleAnnotation).observe(body, { childList: true, subtree: true });
