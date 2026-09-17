@@ -1,0 +1,76 @@
+name: BLOFY Sources Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sources-smoke.yml'
+      - 'services/activation/src/sources-admin-hook.mjs'
+      - 'services/activation/web/sources-admin.html'
+      - 'services/activation/web/sources-admin.css'
+      - 'services/activation/web/sources-admin.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public-sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE: https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io
+    steps:
+      - name: Wait for BLOFY Sources deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 12 "$BASE/sources/health" -o /tmp/health.json; then
+              break
+            fi
+            sleep 10
+          done
+          test -s /tmp/health.json
+          cat /tmp/health.json
+          node -e "const x=require('/tmp/health.json'); if(x.ok!==true||x.total<3||x.enabled<3) process.exit(1)"
+
+      - name: Verify CNCVerse repository manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 "$BASE/sources/repo.json" -o /tmp/repo.json
+          cat /tmp/repo.json
+          node - <<'NODE'
+          const x=require('/tmp/repo.json');
+          if(x.name!=='BLOFY Sources') throw new Error('wrong repo name');
+          if(x.manifestVersion!==1) throw new Error('wrong manifest version');
+          if(!Array.isArray(x.pluginLists)||x.pluginLists.length!==1) throw new Error('missing plugin list');
+          if(x.pluginLists[0]!==process.env.BASE+'/sources/plugins.json') throw new Error('wrong public plugin URL: '+x.pluginLists[0]);
+          NODE
+
+      - name: Verify published providers
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 "$BASE/sources/plugins.json" -o /tmp/plugins.json
+          node - <<'NODE'
+          const x=require('/tmp/plugins.json');
+          if(!Array.isArray(x)||x.length<3) throw new Error('expected at least 3 providers');
+          for(const name of ['InternetArchiveProvider','TwitchProvider','DailymotionProvider']) {
+            const p=x.find(v=>v.internalName===name);
+            if(!p) throw new Error('missing '+name);
+            if(!/^https:\/\//.test(p.url)||!Number.isInteger(p.version)||!Number.isInteger(p.status)) throw new Error('invalid '+name);
+          }
+          console.log('providers:',x.map(v=>v.internalName).join(', '));
+          NODE
+
+      - name: Verify Sources admin page
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 "$BASE/sources-admin" -o /tmp/panel.html
+          grep -q 'لوحة المصادر' /tmp/panel.html
+          curl -fsS --max-time 15 "$BASE/sources-admin.js" -o /dev/null
+          curl -fsS --max-time 15 "$BASE/sources-admin.css" -o /dev/null
+          echo 'BLOFY Sources public surface verified'
