@@ -66,6 +66,47 @@
     </section>
 
     <section id="tab-xtream" class="tab-page" hidden>
+      <section class="panel gateway-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">BLOFY XTREAM GATEWAY</p>
+            <h2>سيرفر Xtream الخاص بك</h2>
+            <p>رابط واحد + اسم مستخدم + كلمة سر تشغلها في أي تطبيق يدعم Xtream Codes API. يعرض فقط المحتوى المفعل من المصادر التي أضفتها.</p>
+          </div>
+          <button id="gatewayCreateBtn" class="button primary" type="button">إنشاء بيانات دخول</button>
+        </div>
+
+        <div class="gateway-host-row">
+          <div>
+            <span class="label">Server / Host</span>
+            <code id="gatewayServerUrl">جارٍ التحميل…</code>
+          </div>
+          <button id="gatewayCopyHostBtn" class="button ghost" type="button">نسخ الرابط</button>
+        </div>
+
+        <div id="gatewayCredentials" class="gateway-credentials" hidden>
+          <div class="gateway-credential-head">
+            <div>
+              <strong>بياناتك الجديدة جاهزة</strong>
+              <small>كلمة السر تظهر الآن فقط. احفظها أو انسخ الثلاثة معًا.</small>
+            </div>
+            <div class="inline-actions">
+              <button id="gatewayCopyAllBtn" class="button primary" type="button">نسخ الكل</button>
+              <button id="gatewayHideCredentialsBtn" class="button ghost" type="button">إخفاء</button>
+            </div>
+          </div>
+          <div class="credential-grid">
+            <label><span>Server</span><code id="gatewayCredHost">—</code></label>
+            <label><span>Username</span><code id="gatewayCredUser">—</code></label>
+            <label><span>Password</span><code id="gatewayCredPass">—</code></label>
+          </div>
+        </div>
+
+        <div id="gatewayLoading" class="loading">جارٍ تحميل بيانات الدخول…</div>
+        <div id="gatewayAccounts" class="gateway-accounts"></div>
+        <p class="security-note">البوابة تمرر التشغيل من المصادر المفعلة بدون نسخ ملفات الفيديو إلى التخزين. استخدم فقط مصادر ومحتوى تملك حق الوصول إليه أو إعادة بثه.</p>
+      </section>
+
       <section class="stats five" aria-label="إحصائيات Xtream">
         <article><span>السيرفرات</span><strong id="xtServers">0</strong></article>
         <article><span>Online</span><strong id="xtOnline">0</strong></article>
@@ -77,13 +118,13 @@
       <section class="panel form-panel">
         <div class="panel-head">
           <div>
-            <h2>إضافة Xtream Server</h2>
-            <p>أدخل السيرفر الذي تملكه أو المصرح لك باستخدامه. بيانات الدخول تُحفظ مشفرة ولا تظهر مرة أخرى.</p>
+            <h2>إضافة مصدر Xtream</h2>
+            <p>إذا عندك مصدر Xtream تملكه أو مصرح لك باستخدامه، أضفه هنا ثم مزامنة Live + Movies + Series. بياناته تُحفظ مشفرة.</p>
           </div>
           <button id="syncAllXtreamBtn" class="button primary" type="button">مزامنة كل السيرفرات</button>
         </div>
         <form id="xtreamForm" class="xtream-form" autocomplete="off">
-          <label><span>اسم السيرفر</span><input id="xtName" required maxlength="160" placeholder="مثال: Main Server"></label>
+          <label><span>اسم المصدر</span><input id="xtName" required maxlength="160" placeholder="مثال: Main Server"></label>
           <label class="wide"><span>Host / URL</span><input id="xtBaseUrl" required inputmode="url" placeholder="https://example.com:443"></label>
           <label><span>Username</span><input id="xtUsername" required autocomplete="new-password" autocapitalize="none" spellcheck="false"></label>
           <label><span>Password</span><input id="xtPassword" required type="password" autocomplete="new-password"></label>
@@ -92,13 +133,13 @@
           <label class="check"><input id="xtPublish" type="checkbox"><span>نشر الكتالوج العام</span></label>
           <button id="xtAddBtn" class="button primary submit" type="submit">إضافة + فحص</button>
         </form>
-        <p class="security-note">إذا كان السيرفر HTTP فبيانات الدخول تنتقل إلى مزود Xtream بدون تشفير شبكي. يفضّل HTTPS متى ما كان متاحًا.</p>
+        <p class="security-note">إذا كان المصدر HTTP فبيانات الدخول تنتقل إلى مزود Xtream بدون تشفير شبكي. يفضّل HTTPS متى ما كان متاحًا.</p>
       </section>
 
       <section class="panel">
         <div class="panel-head">
           <div>
-            <h2>السيرفرات</h2>
+            <h2>المصادر</h2>
             <p>استيراد Live + Movies + Series يتم ككتالوج وبيانات فقط؛ ملفات الفيديو نفسها لا تُنسخ إلى Azure.</p>
           </div>
         </div>
@@ -138,5 +179,6 @@
     </footer>
   </main>
   <script src="/sources-admin.js" defer></script>
+  <script src="/xtream-gateway-admin.js" defer></script>
 </body>
 </html>

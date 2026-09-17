@@ -668,3 +668,5 @@ http.createServer = function withBlofyXtream(listener) {
     }
   });
 };
+
+export { ensureReady as ensureXtreamAdminReady };
