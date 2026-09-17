@@ -9,9 +9,12 @@ on:
       - 'services/activation/src/sources-curated-catalog.mjs'
       - 'services/activation/src/xtream-core.mjs'
       - 'services/activation/src/xtream-admin-hook.mjs'
+      - 'services/activation/src/xtream-gateway-core.mjs'
+      - 'services/activation/src/xtream-gateway-hook.mjs'
       - 'services/activation/web/sources-admin.html'
       - 'services/activation/web/sources-admin.css'
       - 'services/activation/web/sources-admin.js'
+      - 'services/activation/web/xtream-gateway-admin.js'
   workflow_dispatch:
 
 permissions:
@@ -80,7 +83,7 @@ jobs:
           node - <<'NODE'
           const x=require('/tmp/xtream.json');
           if(x.ok!==true) throw new Error('Xtream summary not ready');
-          if(x.playbackProxy!==false) throw new Error('unexpected playback proxy state');
+          if(x.playbackProxy!==false) throw new Error('unexpected public catalog proxy state');
           if(!Array.isArray(x.servers)) throw new Error('Xtream server summary invalid');
           const serialized=JSON.stringify(x).toLowerCase();
           if(serialized.includes('password')||serialized.includes('username_secret')||serialized.includes('password_secret')) {
@@ -88,6 +91,29 @@ jobs:
           }
           console.log('Xtream public summary verified; published servers:', x.servers.length);
           NODE
+
+      - name: Verify private Xtream gateway surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 20 "$BASE/xtream/health" -o /tmp/gateway.json
+          cat /tmp/gateway.json
+          node - <<'NODE'
+          const x=require('/tmp/gateway.json');
+          if(x.ok!==true) throw new Error('gateway not ready');
+          if(x.compatible!=='Xtream Codes API') throw new Error('wrong gateway compatibility marker');
+          if(x.playbackProxy!==true) throw new Error('gateway playback relay not active');
+          if(!x.catalog || !Number.isInteger(x.catalog.live) || !Number.isInteger(x.catalog.movie) || !Number.isInteger(x.catalog.series)) {
+            throw new Error('gateway catalog health invalid');
+          }
+          const serialized=JSON.stringify(x).toLowerCase();
+          if(serialized.includes('password')||serialized.includes('username_secret')||serialized.includes('password_secret')) {
+            throw new Error('gateway health leaked credentials');
+          }
+          NODE
+          code=$(curl -sS -o /tmp/unauthorized.json -w '%{http_code}' --max-time 15 "$BASE/player_api.php?username=invalid&password=invalid-pass")
+          test "$code" = "200"
+          node -e "const x=require('/tmp/unauthorized.json'); if(x?.user_info?.auth!==0) process.exit(1)"
 
       - name: Verify Sources admin page
         shell: bash
@@ -97,6 +123,8 @@ jobs:
           grep -q 'لوحة المصادر' /tmp/panel.html
           grep -q 'Xtream Servers' /tmp/panel.html
           grep -q 'الكتالوج' /tmp/panel.html
+          grep -q 'سيرفر Xtream الخاص بك' /tmp/panel.html
           curl -fsS --max-time 15 "$BASE/sources-admin.js" -o /dev/null
+          curl -fsS --max-time 15 "$BASE/xtream-gateway-admin.js" -o /dev/null
           curl -fsS --max-time 15 "$BASE/sources-admin.css" -o /dev/null
-          echo 'BLOFY Sources + Xtream production surface verified'
+          echo 'BLOFY Sources + Xtream gateway production surface verified'
