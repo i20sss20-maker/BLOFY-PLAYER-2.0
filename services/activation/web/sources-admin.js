@@ -10,6 +10,11 @@ const state = {
   pollTimer: null
 };
 const statusLabels = { 0: 'متوقف', 1: 'يعمل', 2: 'بطيء', 3: 'Beta' };
+const TAB_NAMES = new Set(['sources', 'xtream', 'catalog']);
+const tabFromHash = () => {
+  const name = String(location.hash || '').replace(/^#/, '').trim().toLowerCase();
+  return TAB_NAMES.has(name) ? name : null;
+};
 
 function showMessage(text, kind = 'ok') {
   const box = el('message');
@@ -508,7 +513,9 @@ async function bulkCatalog(enabled) {
 }
 
 async function switchTab(name) {
+  if (!TAB_NAMES.has(name)) return;
   state.activeTab = name;
+  if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
   document.querySelectorAll('.tab').forEach(button => button.classList.toggle('active', button.dataset.tab === name));
   document.querySelectorAll('.tab-page').forEach(page => {
     const active = page.id === `tab-${name}`;
@@ -546,6 +553,12 @@ el('catalogLoadBtn').addEventListener('click', loadCatalog);
 el('catalogSearch').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); loadCatalog(); } });
 el('enableTypeBtn').addEventListener('click', () => bulkCatalog(true));
 el('disableTypeBtn').addEventListener('click', () => bulkCatalog(false));
+window.addEventListener('hashchange', () => {
+  const name = tabFromHash();
+  if (name && name !== state.activeTab) switchTab(name);
+});
 
 loadSources();
 loadXtream(true);
+const initialTab = tabFromHash();
+if (initialTab && initialTab !== 'sources') switchTab(initialTab);

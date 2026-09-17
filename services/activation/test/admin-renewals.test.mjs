@@ -16,6 +16,23 @@ test('week preview grants exactly seven days from now when no time remains', () 
   assert.equal(preview.expiresAt, now + (7 * DAY_MS));
 });
 
+test('expired device with an old expiry is reactivated from now, not from the old date', () => {
+  const now = Date.UTC(2026, 8, 17, 12, 0, 0);
+  const oldExpiry = now - (45 * DAY_MS);
+  const preview = renewalPreview({ status: 'expired', expires_at: new Date(oldExpiry) }, 'month', now);
+  assert.equal(preview.previousExpiresAt, oldExpiry);
+  assert.equal(preview.startsAt, now);
+  assert.equal(preview.expiresAt, addCalendarMonths(now, 1));
+});
+
+test('stale active status with a past expiry still renews from now', () => {
+  const now = Date.UTC(2026, 8, 17, 12, 0, 0);
+  const oldExpiry = now - (2 * DAY_MS);
+  const preview = renewalPreview({ status: 'active', expires_at: new Date(oldExpiry) }, 'week', now);
+  assert.equal(preview.startsAt, now);
+  assert.equal(preview.expiresAt, now + (7 * DAY_MS));
+});
+
 test('week preview adds seven days after the existing remaining time', () => {
   const now = Date.UTC(2026, 8, 15, 2, 0, 0);
   const currentExpiry = now + (2 * DAY_MS);
