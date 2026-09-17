@@ -13,6 +13,7 @@ await import('./admin-device-insights-hook.mjs');
 await import('./admin-console-hook.mjs');
 await import('./sources-admin-hook.mjs');
 await import('./xtream-admin-hook.mjs');
+await import('./xtream-gateway-hook.mjs');
 await import('./sources-curated-catalog.mjs');
 await import('./subscriber-resolve-hook.mjs');
 await import('./server.mjs');
