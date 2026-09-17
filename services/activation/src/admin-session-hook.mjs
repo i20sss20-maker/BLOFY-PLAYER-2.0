@@ -109,6 +109,7 @@ http.createServer = function patchedAdminSessionCreateServer(listener) {
     try {
     let url; try{url=new URL(req.url||'/','http://localhost')}catch{return listener(req,res)}
     if (req.method==='GET' && ['/Admin','/Admin/','/admin/'].includes(url.pathname)) { res.writeHead(302,{'location':'/admin','cache-control':'no-store'}); res.end(); return; }
+    if (req.method==='GET' && url.pathname==='/releases-admin') { res.writeHead(302,{'location':'/admin#releases','cache-control':'no-store'}); res.end(); return; }
     if (req.method==='GET' && url.pathname==='/admin') return html(res, await validSession(req)?await dashboardPage():await loginPage());
     if (!url.pathname.startsWith('/api/v1/admin/')) return listener(req,res);
     if (!['GET','HEAD'].includes(req.method) && url.pathname.startsWith('/api/v1/admin/')) {
