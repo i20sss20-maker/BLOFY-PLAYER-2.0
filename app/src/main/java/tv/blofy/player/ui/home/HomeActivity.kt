@@ -38,6 +38,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.HomeSnapshotStore
+import tv.blofy.player.data.preparation.FullLibrarySyncWorker
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
@@ -125,6 +126,7 @@ class HomeActivity : AppCompatActivity() {
                 finish()
                 return@launch
             }
+            provider?.let { FullLibrarySyncWorker.enqueue(applicationContext, it.id) }
             showReadyHome()
         }
     }
