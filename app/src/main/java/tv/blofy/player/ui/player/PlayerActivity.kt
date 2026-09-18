@@ -622,8 +622,8 @@ open class PlayerActivity : AppCompatActivity() {
                     view.nextFocusRightId = controls[
                         PlayerHudKeyPolicy.wrappedHorizontalIndex(index, controls.size, 1)
                     ].id
-                    view.nextFocusUpId = view.id
-                    view.nextFocusDownId = view.id
+                    view.nextFocusUpId = playPauseButton.id
+                    view.nextFocusDownId = playPauseButton.id
                 }
                 hud.addView(dock, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.CENTER_HORIZONTAL })
             } else {
