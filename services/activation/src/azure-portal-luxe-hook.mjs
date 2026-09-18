@@ -215,8 +215,8 @@ const luxeStyles = String.raw`
     -webkit-backdrop-filter:blur(18px);
   }
   .brand-logo{
-    width:58px!important;height:58px!important;
-    padding:6px;
+    width:46px!important;height:46px!important;
+    padding:5px;
     border:1px solid rgba(203,166,255,.24);
     border-radius:18px;
     background:
@@ -241,18 +241,7 @@ const luxeStyles = String.raw`
   .portal{width:min(1220px,calc(100% - 36px))!important;padding-top:54px!important}
   .login-layout{grid-template-columns:minmax(0,1.04fr) minmax(410px,.96fr)!important;gap:clamp(54px,8vw,118px)!important}
   .hero-panel{isolation:isolate;position:relative;padding-block:28px}
-  .hero-panel::after{
-    content:"";
-    position:absolute;
-    width:300px;height:300px;
-    inset-inline-end:-24px;
-    top:-88px;
-    z-index:-1;
-    pointer-events:none;
-    opacity:.065;
-    background:url('/blofy-logo.png') center/contain no-repeat;
-    filter:drop-shadow(0 35px 70px rgba(136,63,238,.48));
-  }
+  .hero-panel::after{display:none!important}
   .eyebrow{
     padding:10px 15px!important;
     border-color:rgba(196,150,255,.38)!important;
@@ -261,7 +250,7 @@ const luxeStyles = String.raw`
   }
   .hero-panel h1{
     margin-top:30px!important;
-    font-size:clamp(52px,6.7vw,86px)!important;
+    font-size:clamp(46px,5.6vw,72px)!important;
     font-weight:850;
     line-height:1.01!important;
     letter-spacing:-.055em!important;
@@ -299,9 +288,9 @@ const luxeStyles = String.raw`
     background:linear-gradient(90deg,transparent 5%,rgba(198,146,255,.95) 46%,rgba(113,66,238,.78) 72%,transparent 96%)!important;
   }
   .device-illustration{
-    width:86px!important;height:86px!important;
-    padding:9px!important;
-    border-radius:23px!important;
+    width:64px!important;height:64px!important;
+    padding:6px!important;
+    border-radius:18px!important;
     border-color:rgba(210,174,255,.32)!important;
     background:
       radial-gradient(circle at 38% 20%,rgba(219,190,255,.22),transparent 48%),
@@ -343,18 +332,7 @@ const luxeStyles = String.raw`
     border-color:rgba(196,155,255,.25)!important;
     box-shadow:0 44px 120px rgba(0,0,0,.40),inset 0 1px 0 rgba(255,255,255,.045)!important;
   }
-  .dashboard-panel::after{
-    content:"";
-    position:absolute;
-    width:310px;height:310px;
-    inset-inline-end:-105px;
-    top:-105px;
-    z-index:0;
-    opacity:.035;
-    pointer-events:none;
-    background:url('/blofy-logo.png') center/contain no-repeat;
-    filter:drop-shadow(0 28px 60px rgba(142,64,239,.40));
-  }
+  .dashboard-panel::after{display:none!important}
   .dashboard-panel>*{position:relative;z-index:1}
   .dashboard-head{
     padding:31px 32px!important;
@@ -503,12 +481,12 @@ const luxeStyles = String.raw`
     direction:ltr;
   }
   .brand-stage-mark{
-    width:112px;height:112px;
+    width:74px;height:74px;
     display:grid;place-items:center;
     flex:0 0 auto;
-    padding:12px;
+    padding:8px;
     border:1px solid rgba(212,177,255,.28);
-    border-radius:30px;
+    border-radius:21px;
     background:
       radial-gradient(circle at 30% 18%,rgba(226,202,255,.23),transparent 48%),
       linear-gradient(145deg,rgba(148,70,255,.24),rgba(57,29,110,.11));
@@ -526,7 +504,7 @@ const luxeStyles = String.raw`
   }
   .brand-stage-copy strong{
     color:#fff;
-    font:850 clamp(24px,3vw,36px)/1.05 "Segoe UI",sans-serif;
+    font:850 clamp(20px,2.2vw,28px)/1.05 "Segoe UI",sans-serif;
     letter-spacing:.035em;
   }
   .brand-stage-copy small{
@@ -562,10 +540,10 @@ const luxeStyles = String.raw`
     direction:ltr;
   }
   .dashboard-brand-logo{
-    width:58px;height:58px;
+    width:46px;height:46px;
     display:grid;place-items:center;
-    padding:6px;
-    border-radius:17px;
+    padding:5px;
+    border-radius:14px;
     border:1px solid rgba(205,167,255,.24);
     background:linear-gradient(145deg,rgba(147,71,255,.20),rgba(55,28,105,.10));
     box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 12px 30px rgba(76,36,139,.22);
@@ -628,9 +606,9 @@ const luxeStyles = String.raw`
     direction:ltr;
   }
   .blofy-modal-brand img{
-    width:48px;height:48px;
+    width:40px;height:40px;
     object-fit:contain;
-    padding:5px;
+    padding:4px;
     border:1px solid rgba(202,163,255,.22);
     border-radius:14px;
     background:rgba(139,55,255,.10);
@@ -661,19 +639,19 @@ const luxeStyles = String.raw`
     body::after{background-size:36px 36px;opacity:.075}
     .hero-panel{padding:24px 18px!important;border-radius:26px}
     .brand-stage{gap:13px;margin-bottom:24px;padding-bottom:20px}
-    .brand-stage-mark{width:78px;height:78px;border-radius:22px;padding:8px}
+    .brand-stage-mark{width:58px;height:58px;border-radius:17px;padding:6px}
     .brand-stage-copy strong{font-size:21px}
     .brand-stage-copy span{font-size:9px}
     .brand-stage-copy small{font-size:8px;letter-spacing:.13em}
     .dashboard-brandbar{align-items:flex-start;flex-direction:column;padding:13px 14px;border-radius:18px}
-    .dashboard-brand-logo{width:50px;height:50px}
+    .dashboard-brand-logo{width:42px;height:42px}
     .dashboard-brand-identity strong{font-size:15px}
     .dashboard-brand-secure{min-height:34px}
     .dashboard-head{padding:22px 18px!important}
     .dashboard-head .actions{width:100%;display:grid!important;grid-template-columns:1fr 1fr}
     .dashboard-head .actions button{width:100%!important}
     .blofy-modal-brand{margin-bottom:15px}
-    .blofy-modal-brand img{width:43px;height:43px}
+    .blofy-modal-brand img{width:38px;height:38px}
     .topbar{min-height:68px!important;padding-inline:12px!important}
     .brand-logo{width:43px!important;height:43px!important}
     .language-control{min-width:118px!important}
