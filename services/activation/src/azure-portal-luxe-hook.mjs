@@ -203,6 +203,268 @@ const luxeStyles = String.raw`
     background:rgba(255,255,255,.018)!important;
   }
   .legal{color:#696472!important}
+
+  /* BLOFY premium commercial refresh — visual only, no portal behavior changes. */
+  .topbar .brand{
+    padding:7px 13px 7px 8px;
+    border:1px solid rgba(193,153,255,.16);
+    border-radius:20px;
+    background:linear-gradient(135deg,rgba(33,25,49,.72),rgba(14,11,21,.58));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 14px 40px rgba(0,0,0,.16);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+  }
+  .brand-logo{
+    width:58px!important;height:58px!important;
+    padding:6px;
+    border:1px solid rgba(203,166,255,.24);
+    border-radius:18px;
+    background:
+      radial-gradient(circle at 35% 20%,rgba(205,171,255,.22),transparent 48%),
+      linear-gradient(145deg,rgba(144,70,255,.18),rgba(60,31,112,.08));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 16px 34px rgba(79,37,145,.25);
+    filter:drop-shadow(0 12px 28px rgba(151,72,255,.35))!important;
+  }
+  .brand-copy strong{
+    font-size:19px!important;
+    font-weight:850;
+    letter-spacing:.13em!important;
+    text-shadow:0 8px 24px rgba(154,91,255,.16);
+  }
+  .brand-copy span{color:#c79bff!important;font-size:9px!important;letter-spacing:.36em!important}
+  .language-control{
+    height:50px!important;
+    border-radius:17px!important;
+    background:linear-gradient(145deg,rgba(29,23,43,.82),rgba(14,11,20,.82))!important;
+  }
+
+  .portal{width:min(1220px,calc(100% - 36px))!important;padding-top:54px!important}
+  .login-layout{grid-template-columns:minmax(0,1.04fr) minmax(410px,.96fr)!important;gap:clamp(54px,8vw,118px)!important}
+  .hero-panel{isolation:isolate;position:relative;padding-block:28px}
+  .hero-panel::after{
+    content:"";
+    position:absolute;
+    width:300px;height:300px;
+    inset-inline-end:-24px;
+    top:-88px;
+    z-index:-1;
+    pointer-events:none;
+    opacity:.065;
+    background:url('/blofy-logo.png') center/contain no-repeat;
+    filter:drop-shadow(0 35px 70px rgba(136,63,238,.48));
+  }
+  .eyebrow{
+    padding:10px 15px!important;
+    border-color:rgba(196,150,255,.38)!important;
+    background:linear-gradient(105deg,rgba(145,70,235,.18),rgba(59,35,95,.10))!important;
+    color:#d0a9ff!important;
+  }
+  .hero-panel h1{
+    margin-top:30px!important;
+    font-size:clamp(52px,6.7vw,86px)!important;
+    font-weight:850;
+    line-height:1.01!important;
+    letter-spacing:-.055em!important;
+  }
+  [dir="rtl"] .hero-panel h1{letter-spacing:0!important}
+  .hero-panel h1 span{
+    background:linear-gradient(180deg,#fff 0%,#fff 34%,#eee5ff 55%,#c99cff 76%,#9a50ff 100%)!important;
+    -webkit-background-clip:text!important;background-clip:text!important;
+    filter:drop-shadow(0 16px 34px rgba(119,55,213,.10));
+  }
+  .hero-panel>p{font-size:17.5px!important;line-height:1.95!important;color:#bbb4c7!important}
+  .flow-steps{gap:10px!important;margin-top:34px!important}
+  .flow-step{
+    padding:11px 16px!important;
+    border-radius:999px!important;
+    background:linear-gradient(120deg,rgba(33,27,47,.68),rgba(18,14,27,.64))!important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 10px 28px rgba(0,0,0,.10)!important;
+  }
+
+  .auth-card{
+    padding:42px!important;
+    border-radius:34px!important;
+    border-color:rgba(202,163,255,.30)!important;
+    background:
+      radial-gradient(circle at 88% -2%,rgba(164,82,255,.20),transparent 19rem),
+      radial-gradient(circle at -14% 110%,rgba(72,63,202,.11),transparent 18rem),
+      linear-gradient(155deg,rgba(29,23,44,.975),rgba(10,8,16,.98))!important;
+    box-shadow:
+      0 52px 130px rgba(0,0,0,.52),
+      0 0 0 1px rgba(255,255,255,.018) inset,
+      0 1px 0 rgba(255,255,255,.07) inset!important;
+  }
+  .auth-card::before{
+    height:2px!important;
+    background:linear-gradient(90deg,transparent 5%,rgba(198,146,255,.95) 46%,rgba(113,66,238,.78) 72%,transparent 96%)!important;
+  }
+  .device-illustration{
+    width:86px!important;height:86px!important;
+    padding:9px!important;
+    border-radius:23px!important;
+    border-color:rgba(210,174,255,.32)!important;
+    background:
+      radial-gradient(circle at 38% 20%,rgba(219,190,255,.22),transparent 48%),
+      linear-gradient(145deg,rgba(151,70,255,.22),rgba(62,31,119,.11))!important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 18px 46px rgba(80,37,150,.34)!important;
+  }
+  .device-illustration img{filter:drop-shadow(0 10px 18px rgba(158,85,255,.32))}
+  .auth-card h2{font-size:clamp(30px,3vw,38px)!important;font-weight:850}
+  .auth-subtitle{font-size:14px!important;line-height:1.85!important;margin-bottom:30px!important}
+  .field{margin-top:20px!important}
+  .field label{margin-bottom:10px!important;color:#e7e1ee!important}
+  input,select{
+    height:58px!important;
+    border-radius:18px!important;
+    border-color:rgba(195,159,241,.22)!important;
+    background:linear-gradient(180deg,rgba(14,11,21,.98),rgba(9,7,14,.98))!important;
+  }
+  input:focus,select:focus{
+    border-color:#aa6cff!important;
+    box-shadow:0 0 0 4px rgba(159,92,255,.12),0 18px 38px rgba(0,0,0,.18)!important;
+  }
+  .primary-button{
+    min-height:58px!important;
+    border-radius:18px!important;
+    background:linear-gradient(115deg,#6f2ce8 0%,#9347f5 45%,#b967ff 100%)!important;
+    box-shadow:0 18px 44px rgba(115,42,230,.32),inset 0 1px 0 rgba(255,255,255,.22)!important;
+  }
+  .secure-note{
+    margin-top:20px!important;
+    padding:11px 13px!important;
+    border:1px solid rgba(111,221,171,.13)!important;
+    border-radius:13px!important;
+  }
+
+  .dashboard-panel{
+    position:relative!important;
+    overflow:hidden!important;
+    border-radius:34px!important;
+    border-color:rgba(196,155,255,.25)!important;
+    box-shadow:0 44px 120px rgba(0,0,0,.40),inset 0 1px 0 rgba(255,255,255,.045)!important;
+  }
+  .dashboard-panel::after{
+    content:"";
+    position:absolute;
+    width:310px;height:310px;
+    inset-inline-end:-105px;
+    top:-105px;
+    z-index:0;
+    opacity:.035;
+    pointer-events:none;
+    background:url('/blofy-logo.png') center/contain no-repeat;
+    filter:drop-shadow(0 28px 60px rgba(142,64,239,.40));
+  }
+  .dashboard-panel>*{position:relative;z-index:1}
+  .dashboard-head{
+    padding:31px 32px!important;
+    background:
+      radial-gradient(circle at 90% 0,rgba(157,75,255,.09),transparent 20rem),
+      linear-gradient(180deg,rgba(255,255,255,.025),transparent)!important;
+  }
+  .dashboard-title-wrap h1{font-size:clamp(30px,4vw,42px)!important;font-weight:850}
+  .dashboard-title-wrap p{font-size:13.5px!important;line-height:1.75!important}
+  .device-chip{
+    padding:9px 12px!important;
+    border-radius:999px!important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.03)!important;
+  }
+  .dashboard-head .actions{gap:9px!important}
+  #blofyRenewBtn{
+    min-height:50px!important;
+    padding:0 18px!important;
+    border-radius:16px!important;
+    border:1px solid rgba(89,232,169,.24)!important;
+    background:linear-gradient(120deg,rgba(67,191,139,.16),rgba(43,131,98,.10))!important;
+    color:#b7f5d8!important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 12px 30px rgba(29,111,78,.12)!important;
+  }
+  #blofyRenewBtn:hover{border-color:rgba(104,244,184,.40)!important;background:linear-gradient(120deg,rgba(71,205,148,.22),rgba(47,145,105,.14))!important}
+  #blofyPhoneBtn{
+    min-height:50px!important;
+    border-radius:16px!important;
+    border-color:rgba(198,159,255,.18)!important;
+    background:linear-gradient(145deg,rgba(37,29,53,.78),rgba(20,16,29,.78))!important;
+    color:#e5d9f7!important;
+  }
+  .dashboard-head .secondary{min-height:50px!important;border-radius:16px!important}
+  .playlist-content{padding:24px 28px 30px!important}
+  #playlistList{gap:14px!important}
+  .playlist{
+    padding:20px!important;
+    border-radius:21px!important;
+    background:
+      radial-gradient(circle at 100% 0,rgba(137,65,226,.06),transparent 15rem),
+      linear-gradient(145deg,rgba(24,19,36,.90),rgba(13,10,19,.92))!important;
+  }
+  .playlist-icon{
+    width:54px!important;height:54px!important;
+    border-radius:17px!important;
+    background:linear-gradient(145deg,rgba(145,74,242,.18),rgba(80,42,144,.10))!important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05)!important;
+  }
+  .playlist h3{font-size:17px!important}
+  .badge{border-radius:999px!important}
+  .editor-card{
+    border-radius:30px!important;
+    padding:30px!important;
+    border-color:rgba(194,152,255,.21)!important;
+    box-shadow:0 30px 80px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.035)!important;
+  }
+
+  .blofy-renew-modal,.blofy-contact-modal{
+    background:rgba(3,2,7,.78)!important;
+    backdrop-filter:blur(16px) saturate(120%)!important;
+    -webkit-backdrop-filter:blur(16px) saturate(120%)!important;
+  }
+  .blofy-renew-card,.blofy-contact-card{
+    position:relative!important;
+    overflow:hidden!important;
+    border-radius:28px!important;
+    border-color:rgba(202,163,255,.29)!important;
+    background:
+      radial-gradient(circle at 90% 0,rgba(156,74,255,.18),transparent 16rem),
+      linear-gradient(155deg,rgba(28,22,43,.995),rgba(10,8,16,.995))!important;
+    box-shadow:0 38px 110px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.05)!important;
+  }
+  .blofy-renew-card{width:min(520px,100%)!important;padding:29px!important}
+  .blofy-contact-card{width:min(470px,100%)!important;padding:28px!important}
+  .blofy-renew-card::before,.blofy-contact-card::before{
+    content:"";
+    position:absolute;
+    inset:0 0 auto;
+    height:1px;
+    background:linear-gradient(90deg,transparent,rgba(203,155,255,.9),transparent);
+  }
+  .blofy-renew-card::after,.blofy-contact-card::after{
+    content:"";
+    position:absolute;
+    width:150px;height:150px;
+    inset-inline-end:-56px;
+    bottom:-64px;
+    pointer-events:none;
+    opacity:.045;
+    background:url('/blofy-logo.png') center/contain no-repeat;
+  }
+  .blofy-renew-card h3,.blofy-contact-card h3{font-size:26px!important}
+  .blofy-renew-option{
+    min-height:76px!important;
+    border-radius:18px!important;
+    border-color:rgba(197,158,249,.18)!important;
+    background:linear-gradient(145deg,rgba(25,19,37,.96),rgba(13,10,20,.96))!important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.035)!important;
+    transition:transform .16s ease,border-color .16s ease,background .16s ease!important;
+  }
+  .blofy-renew-option:hover{
+    transform:translateY(-2px)!important;
+    border-color:rgba(185,116,255,.55)!important;
+    background:linear-gradient(145deg,rgba(39,27,57,.98),rgba(20,14,29,.98))!important;
+  }
+  .blofy-renew-option small{font-size:13px!important;color:#aef0d0!important}
+  .blofy-renew-close,.blofy-contact-cancel{
+    border-radius:15px!important;
+    background:rgba(255,255,255,.025)!important;
+  }
   @media(max-width:920px){
     .topbar{padding-inline:18px!important}
     .portal{padding-top:34px!important}
