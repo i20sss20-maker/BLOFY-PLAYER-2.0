@@ -230,6 +230,7 @@ interface BlofyDao {
     @Query("UPDATE streams SET favorite = :favorite WHERE `key` = :contentKey") suspend fun setFavorite(contentKey: String, favorite: Boolean)
     @Query("UPDATE streams SET favorite = :favorite WHERE providerId = :providerId AND kind = :kind AND remoteId = :remoteId") suspend fun setFavoriteByIdentity(providerId: String, kind: String, remoteId: String, favorite: Boolean)
     @Query("UPDATE streams SET locked = :locked WHERE `key` = :contentKey") suspend fun setLocked(contentKey: String, locked: Boolean)
+    @Query("UPDATE streams SET locked = :locked WHERE providerId = :providerId AND kind = :kind AND remoteId = :remoteId") suspend fun setLockedByIdentity(providerId: String, kind: String, remoteId: String, locked: Boolean)
 
     @Query("SELECT * FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId ORDER BY season, episode") fun episodes(providerId: String, seriesId: String): Flow<List<EpisodeEntity>>
     @Query("SELECT * FROM episodes WHERE `key` = :contentKey LIMIT 1") suspend fun episode(contentKey: String): EpisodeEntity?
@@ -378,8 +379,15 @@ interface BlofyDao {
         activateTarget: Boolean = true,
         preserveEpisodes: Boolean = false
     ) {
+        // Preserve only rows that actually carry user state. The old implementation ran
+        // correlated lookups across every staged stream, which becomes very expensive on 100k+
+        // catalogs even though favorites/locks are normally a tiny set.
+        val preservedFlags = buildList {
+            for (kind in listOf("live", "movie", "series")) {
+                addAll(persistedStreamFlags(targetProvider.id, kind))
+            }
+        }
         inheritStagedCategoryFlags(stagedProviderId, targetProvider.id)
-        inheritStagedStreamFlags(stagedProviderId, targetProvider.id)
         clearProviderCategories(targetProvider.id)
         clearProviderStreams(targetProvider.id)
         clearProviderEpg(targetProvider.id)
@@ -387,6 +395,14 @@ interface BlofyDao {
         if (!preserveEpisodes) clearProviderEpisodes(targetProvider.id)
         promoteStagedCategoriesInPlace(stagedProviderId, targetProvider.id)
         promoteStagedStreamsInPlace(stagedProviderId, targetProvider.id)
+        for (saved in preservedFlags) {
+            if (saved.favorite) {
+                setFavoriteByIdentity(targetProvider.id, saved.kind, saved.remoteId, true)
+            }
+            if (saved.locked) {
+                setLockedByIdentity(targetProvider.id, saved.kind, saved.remoteId, true)
+            }
+        }
         if (preserveEpisodes) pruneRetainedEpisodes(targetProvider.id, stagedProviderId)
         promoteStagedEpisodesInPlace(stagedProviderId, targetProvider.id)
         // The staged sync already built FTS section-by-section while data was arriving. Re-key the
