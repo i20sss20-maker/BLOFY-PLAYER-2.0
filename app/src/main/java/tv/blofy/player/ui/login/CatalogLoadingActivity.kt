@@ -35,6 +35,7 @@ import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.preparation.FullCatalogPreparer
+import tv.blofy.player.data.preparation.FullLibrarySyncWorker
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -420,8 +421,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
         withContext(Dispatchers.IO) {
             BlofyDatabase.get(applicationContext).dao().activateExistingProvider(providerId)
         }
-        // CatalogEnrichmentLifecycle resumes durable enrichment after Home is interactive and
-        // storage is healthy. Starting it here would bypass its low-memory quiet period.
+        // The durable worker owns deep metadata/episode/artwork enrichment. It survives process
+        // death and resumes from a disk checkpoint without blocking entry into Home.
+        FullLibrarySyncWorker.enqueue(applicationContext, providerId)
         startActivity(Intent(this, HomeActivity::class.java))
         finish()
     }
