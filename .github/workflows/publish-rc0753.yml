@@ -1,0 +1,56 @@
+name: Publish BLOFY rc07.53
+
+on:
+  push:
+    branches: [release/rc0753-signed-test]
+    paths:
+      - .github/workflows/publish-rc0753.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: blofy-publish-rc0753
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download verified production-signed artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p publish
+          gh run download 35341926350 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "BLOFY-PLAYER-2.0-rc07.53-PRODUCTION-SIGNED-ef2eb51a5cc0594b2535a3b0ee94186181246740" \
+            --dir publish
+          apk="$(find publish -type f -name 'BLOFY-PLAYER-2.0-rc07.53-PRODUCTION-SIGNED.apk' -print -quit)"
+          test -s "$apk"
+          sha256sum "$apk" | tee publish/RC0753-APK-SHA256.txt
+
+      - name: Publish GitHub release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v2.0.0-rc07.53"
+          APK="$(find publish -type f -name 'BLOFY-PLAYER-2.0-rc07.53-PRODUCTION-SIGNED.apk' -print -quit)"
+          NOTES="BLOFY PLAYER RC07.53 — مزامنة كاملة تدريجية ودائمة للمكتبة: البوسترات والخلفيات والتفاصيل والحلقات تُحفظ محليًا وتستأنف من آخر نقطة بعد إعادة تشغيل التطبيق أو الجهاز. لا تغييرات على Media3 أو FFmpeg أو fallback أو محركات التشغيل."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" publish/RC0753-APK-SHA256.txt --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" "$APK" publish/RC0753-APK-SHA256.txt \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "BLOFY PLAYER 2.0.0-rc07.53" \
+              --notes "$NOTES"
+          fi
