@@ -18,4 +18,9 @@ internal object PlayerHudKeyPolicy {
         focusedHudControlClickable -> HudOkAction.CLICK_FOCUSED_CONTROL
         else -> HudOkAction.SHOW_HUD
     }
+
+    fun wrappedHorizontalIndex(index: Int, size: Int, delta: Int): Int {
+        if (size <= 0 || index !in 0 until size) return -1
+        return ((index + delta) % size + size) % size
+    }
 }
