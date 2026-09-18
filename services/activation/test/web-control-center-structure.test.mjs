@@ -30,3 +30,10 @@ test('download center retains release and device-specific installation controls'
   for (const device of ['phone','tv','computer']) assert.match(html, new RegExp(`data-install=["']${device}["']`));
   assert.match(html, /id=["']install-help["']/);
 });
+
+
+test('renewal confirmation includes the customer phone from the opened record', async () => {
+  const js = await web('experience.js');
+  assert.match(js, /\['الجوال',recordState\?\.customer\?\.phone\|\|'غير مسجل'\]/);
+  assert.match(js, /\['العميل',recordState\?\.customer\?\.name\|\|'غير مسجل'\]/);
+});
