@@ -18,4 +18,11 @@ class PlayerHudKeyPolicyTest {
     fun dpadCenterKeepsVisibleHudWhenNoActionableControlIsFocused() {
         assertEquals(HudOkAction.SHOW_HUD, PlayerHudKeyPolicy.okAction(true, false))
     }
+    @Test
+    fun horizontalDockWrapsInsteadOfDeadEndingAtEdges() {
+        assertEquals(4, PlayerHudKeyPolicy.wrappedHorizontalIndex(0, 5, -1))
+        assertEquals(0, PlayerHudKeyPolicy.wrappedHorizontalIndex(4, 5, 1))
+        assertEquals(2, PlayerHudKeyPolicy.wrappedHorizontalIndex(1, 5, 1))
+    }
+
 }
