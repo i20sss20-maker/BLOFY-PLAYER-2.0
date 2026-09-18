@@ -11,6 +11,9 @@ test('premium Azure portal skin keeps BLOFY mark prominent and injects once', ()
   assert.match(html, /#blofyRenewBtn/);
   assert.match(html, /\.blofy-renew-card/);
   assert.match(html, /\.dashboard-panel::after/);
+  assert.match(html, /\.brand-stage/);
+  assert.match(html, /\.dashboard-brandbar/);
+  assert.match(html, /\.blofy-modal-brand/);
   assert.equal(injectAzurePortalLuxe(html), html);
 });
 
@@ -19,4 +22,8 @@ test('portal document exposes BLOFY icon for tabs and saved shortcuts', async ()
   assert.match(html, /rel="icon"[^>]+href="\/blofy-logo\.png"/);
   assert.match(html, /rel="apple-touch-icon"[^>]+href="\/blofy-logo\.png"/);
   assert.match(html, /class="brand-logo" src="\/blofy-logo\.png"/);
+  assert.match(html, /class="brand-stage"/);
+  assert.match(html, /DEVICE CONTROL/);
+  assert.match(html, /class="dashboard-brandbar"/);
+  assert.match(html, /DEVICE CONTROL CENTER/);
 });
