@@ -10,7 +10,7 @@ import tv.blofy.player.BuildConfig
 import java.net.URI
 import java.util.concurrent.TimeUnit
 
-/** Reads public app release metadata from the dedicated update service health endpoint. */
+/** Reads public app release metadata from the dedicated update endpoint, with legacy health fallback. */
 object AppReleaseRepository {
     data class Release(
         val versionCode: Int,
@@ -68,27 +68,32 @@ object AppReleaseRepository {
             val base = BuildConfig.UPDATE_BASE_URL.trim().trimEnd('/')
             if (!isSafeBaseUrl(base)) return@withContext usableStaleCache(cached, now)
 
-            val request = Request.Builder()
-                .url("$base/health")
-                .header("Accept", "application/json")
-                .header(
-                    "User-Agent",
-                    "BLOFY-PLAYER/${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
-                )
-                .get()
-                .build()
+            val fetched = endpointCandidates(base)
+                .asSequence()
+                .mapNotNull { endpoint ->
+                    runCatching {
+                        val request = Request.Builder()
+                            .url(endpoint)
+                            .header("Accept", "application/json")
+                            .header(
+                                "User-Agent",
+                                "BLOFY-PLAYER/${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+                            )
+                            .get()
+                            .build()
 
-            val fetched = runCatching {
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use null
-                    val body = response.body?.string() ?: return@use null
-                    val remote = gson.fromJson(body, HealthResponse::class.java)
-                        .release
-                        ?.app
-                        ?: return@use null
-                    validate(remote)
+                        client.newCall(request).execute().use { response ->
+                            if (!response.isSuccessful) return@use null
+                            val body = response.body?.string() ?: return@use null
+                            val remote = gson.fromJson(body, HealthResponse::class.java)
+                                .release
+                                ?.app
+                                ?: return@use null
+                            validate(remote)
+                        }
+                    }.getOrNull()
                 }
-            }.getOrNull()
+                .firstOrNull()
 
             app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
@@ -117,6 +122,10 @@ object AppReleaseRepository {
         context.applicationContext
             .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getLong(KEY_LAST_CHECK, 0L)
+    internal fun endpointCandidates(base: String): List<String> {
+        val normalized = base.trim().trimEnd('/')
+        return listOf("$normalized/release.json", "$normalized/health")
+    }
 
     private fun validate(remote: RemoteAppRelease): Release? {
         val name = remote.versionName?.trim()?.takeIf {

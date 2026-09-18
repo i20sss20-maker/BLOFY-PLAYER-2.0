@@ -15,6 +15,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import androidx.appcompat.widget.AppCompatImageButton
 import android.content.res.ColorStateList
 import android.net.ConnectivityManager
@@ -170,6 +171,7 @@ open class PlayerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val url = intent.getStringExtra(EXTRA_URL).orEmpty()
         if (url.isBlank()) {
             finish()
@@ -614,8 +616,14 @@ open class PlayerActivity : AppCompatActivity() {
                     dock.addView(view, controlSize(if (view === playPauseButton) 100 else 76).apply {
                         if (index < controls.lastIndex) marginEnd = dp(8)
                     })
-                    view.nextFocusLeftId = controls.getOrNull(index - 1)?.id ?: view.id
-                    view.nextFocusRightId = controls.getOrNull(index + 1)?.id ?: view.id
+                    view.nextFocusLeftId = controls[
+                        PlayerHudKeyPolicy.wrappedHorizontalIndex(index, controls.size, -1)
+                    ].id
+                    view.nextFocusRightId = controls[
+                        PlayerHudKeyPolicy.wrappedHorizontalIndex(index, controls.size, 1)
+                    ].id
+                    view.nextFocusUpId = playPauseButton.id
+                    view.nextFocusDownId = playPauseButton.id
                 }
                 hud.addView(dock, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.CENTER_HORIZONTAL })
             } else {
@@ -784,6 +792,7 @@ open class PlayerActivity : AppCompatActivity() {
         }
         if (hud.visibility == View.VISIBLE && routed.action in HUD_NAVIGATION_ACTIONS) {
             keepHudVisible()
+            if (routed.action != RemoteAction.OK) recoverHudFocusForNavigation()
         }
 
         return when (routed.action) {
@@ -1032,6 +1041,11 @@ open class PlayerActivity : AppCompatActivity() {
         return null
     }
 
+    private fun recoverHudFocusForNavigation() {
+        if (!isTv || hud.visibility != View.VISIBLE || actionableFocusedHudControl() != null) return
+        if (::playPauseButton.isInitialized) playPauseButton.requestFocus()
+    }
+
     private fun updateTitle(title: String) {
         titleView.text = if (title.isBlank()) "BLOFY PLAYER" else ContentPresentation.title(title, kind)
     }
@@ -1247,6 +1261,7 @@ open class PlayerActivity : AppCompatActivity() {
             updateProgressUi()
         }
         updatePlayPauseLabel()
+        recoverHudFocusForNavigation()
         hud.postDelayed(
             hideHudRunnable,
             if (kind == KIND_LIVE) 2200L else 3200L

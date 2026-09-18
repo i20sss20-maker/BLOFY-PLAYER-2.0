@@ -23,4 +23,14 @@ class UpdateSafetyTest {
         assertFalse(AppUpdateWorker.safeUrl("https://user:password@example.org/app.apk"))
         assertFalse(AppUpdateWorker.safeUrl("https:///app.apk"))
     }
+    @Test fun releaseMetadataPrefersDedicatedEndpointThenLegacyHealth() {
+        assertEquals(
+            listOf(
+                "https://updates.example/release.json",
+                "https://updates.example/health"
+            ),
+            AppReleaseRepository.endpointCandidates("https://updates.example/")
+        )
+    }
+
 }
