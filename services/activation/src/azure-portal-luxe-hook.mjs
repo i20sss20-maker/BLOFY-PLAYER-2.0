@@ -465,13 +465,215 @@ const luxeStyles = String.raw`
     border-radius:15px!important;
     background:rgba(255,255,255,.025)!important;
   }
+  /* Structural control-center redesign */
+  .login-layout{
+    align-items:stretch!important;
+    grid-template-columns:minmax(0,1.08fr) minmax(420px,.92fr)!important;
+  }
+  .hero-panel{
+    max-width:none!important;
+    min-height:100%;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    padding:42px!important;
+    border:1px solid rgba(194,151,255,.18);
+    border-radius:36px;
+    background:
+      radial-gradient(circle at 18% 12%,rgba(167,85,255,.16),transparent 19rem),
+      radial-gradient(circle at 96% 100%,rgba(60,67,201,.10),transparent 18rem),
+      linear-gradient(155deg,rgba(23,18,35,.78),rgba(10,8,15,.62));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 28px 90px rgba(0,0,0,.18);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+  }
+  .hero-panel::before{display:none!important}
+  .hero-panel::after{
+    width:420px!important;height:420px!important;
+    inset-inline-end:-125px!important;top:auto!important;bottom:-155px!important;
+    opacity:.045!important;
+  }
+  .brand-stage{
+    display:flex;
+    align-items:center;
+    gap:18px;
+    margin-bottom:34px;
+    padding-bottom:28px;
+    border-bottom:1px solid rgba(255,255,255,.07);
+    direction:ltr;
+  }
+  .brand-stage-mark{
+    width:112px;height:112px;
+    display:grid;place-items:center;
+    flex:0 0 auto;
+    padding:12px;
+    border:1px solid rgba(212,177,255,.28);
+    border-radius:30px;
+    background:
+      radial-gradient(circle at 30% 18%,rgba(226,202,255,.23),transparent 48%),
+      linear-gradient(145deg,rgba(148,70,255,.24),rgba(57,29,110,.11));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 24px 54px rgba(81,37,150,.32);
+  }
+  .brand-stage-mark img{
+    width:100%;height:100%;object-fit:contain;
+    filter:drop-shadow(0 12px 24px rgba(154,81,255,.32));
+  }
+  .brand-stage-copy{display:grid;gap:5px;text-align:left}
+  .brand-stage-copy span{
+    color:#caa2ff;
+    font:800 11px/1.2 "Segoe UI",sans-serif;
+    letter-spacing:.34em;
+  }
+  .brand-stage-copy strong{
+    color:#fff;
+    font:850 clamp(24px,3vw,36px)/1.05 "Segoe UI",sans-serif;
+    letter-spacing:.035em;
+  }
+  .brand-stage-copy small{
+    color:#7f778b;
+    font:700 10px/1.3 "Segoe UI",sans-serif;
+    letter-spacing:.22em;
+  }
+
+  .dashboard{
+    display:grid;
+    gap:16px;
+  }
+  .dashboard.hidden{display:none!important}
+  .dashboard-brandbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:20px;
+    padding:15px 18px;
+    border:1px solid rgba(193,151,255,.18);
+    border-radius:22px;
+    background:
+      radial-gradient(circle at 8% 0,rgba(160,77,255,.12),transparent 15rem),
+      linear-gradient(145deg,rgba(22,17,33,.90),rgba(11,9,16,.92));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 18px 55px rgba(0,0,0,.18);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+  }
+  .dashboard-brand-identity{
+    display:flex;
+    align-items:center;
+    gap:13px;
+    direction:ltr;
+  }
+  .dashboard-brand-logo{
+    width:58px;height:58px;
+    display:grid;place-items:center;
+    padding:6px;
+    border-radius:17px;
+    border:1px solid rgba(205,167,255,.24);
+    background:linear-gradient(145deg,rgba(147,71,255,.20),rgba(55,28,105,.10));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 12px 30px rgba(76,36,139,.22);
+  }
+  .dashboard-brand-logo img{width:100%;height:100%;object-fit:contain}
+  .dashboard-brand-identity>div:last-child{display:grid;gap:4px;text-align:left}
+  .dashboard-brand-identity span{
+    color:#c8a0ff;
+    font:800 10px/1.2 "Segoe UI",sans-serif;
+    letter-spacing:.30em;
+  }
+  .dashboard-brand-identity strong{
+    color:#fff;
+    font:800 18px/1.1 "Segoe UI",sans-serif;
+    letter-spacing:.06em;
+  }
+  .dashboard-brand-secure{
+    display:inline-flex;
+    align-items:center;
+    gap:9px;
+    min-height:38px;
+    padding:0 13px;
+    border:1px solid rgba(82,223,154,.17);
+    border-radius:999px;
+    background:rgba(82,223,154,.055);
+    color:#aeeed0;
+    font:800 10px/1 "Segoe UI",sans-serif;
+    letter-spacing:.16em;
+  }
+
+  .dashboard-panel{
+    border-radius:28px!important;
+  }
+  .dashboard-head{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    align-items:center!important;
+    gap:24px!important;
+    padding:28px 30px!important;
+  }
+  .dashboard-title-wrap{
+    padding-inline-start:4px;
+  }
+  .dashboard-title-wrap h1{
+    font-size:clamp(31px,4vw,44px)!important;
+    line-height:1.08!important;
+  }
+  .dashboard-head .actions{
+    justify-content:flex-end;
+    max-width:520px;
+  }
+
+  .blofy-modal-brand{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-bottom:18px;
+    padding-bottom:16px;
+    border-bottom:1px solid rgba(255,255,255,.07);
+    direction:ltr;
+  }
+  .blofy-modal-brand img{
+    width:48px;height:48px;
+    object-fit:contain;
+    padding:5px;
+    border:1px solid rgba(202,163,255,.22);
+    border-radius:14px;
+    background:rgba(139,55,255,.10);
+  }
+  .blofy-modal-brand div{display:grid;gap:3px;text-align:left}
+  .blofy-modal-brand strong{
+    color:#fff;
+    font:800 14px/1.15 "Segoe UI",sans-serif;
+    letter-spacing:.10em;
+  }
+  .blofy-modal-brand span{
+    color:#a886c5;
+    font:800 9px/1.2 "Segoe UI",sans-serif;
+    letter-spacing:.20em;
+  }
+
   @media(max-width:920px){
+    .login-layout{grid-template-columns:1fr!important}
+    .hero-panel{padding:30px!important}
+    .brand-stage{justify-content:center}
+    .dashboard-head{grid-template-columns:1fr!important}
+    .dashboard-head .actions{justify-content:flex-start;max-width:none}
     .topbar{padding-inline:18px!important}
     .portal{padding-top:34px!important}
     .hero-panel::before{inset-inline-start:50%;transform:translateX(-50%);top:-50px}
   }
   @media(max-width:680px){
     body::after{background-size:36px 36px;opacity:.075}
+    .hero-panel{padding:24px 18px!important;border-radius:26px}
+    .brand-stage{gap:13px;margin-bottom:24px;padding-bottom:20px}
+    .brand-stage-mark{width:78px;height:78px;border-radius:22px;padding:8px}
+    .brand-stage-copy strong{font-size:21px}
+    .brand-stage-copy span{font-size:9px}
+    .brand-stage-copy small{font-size:8px;letter-spacing:.13em}
+    .dashboard-brandbar{align-items:flex-start;flex-direction:column;padding:13px 14px;border-radius:18px}
+    .dashboard-brand-logo{width:50px;height:50px}
+    .dashboard-brand-identity strong{font-size:15px}
+    .dashboard-brand-secure{min-height:34px}
+    .dashboard-head{padding:22px 18px!important}
+    .dashboard-head .actions{width:100%;display:grid!important;grid-template-columns:1fr 1fr}
+    .dashboard-head .actions button{width:100%!important}
+    .blofy-modal-brand{margin-bottom:15px}
+    .blofy-modal-brand img{width:43px;height:43px}
     .topbar{min-height:68px!important;padding-inline:12px!important}
     .brand-logo{width:43px!important;height:43px!important}
     .language-control{min-width:118px!important}
