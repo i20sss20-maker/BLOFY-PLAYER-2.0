@@ -215,8 +215,8 @@ const luxeStyles = String.raw`
     -webkit-backdrop-filter:blur(18px);
   }
   .brand-logo{
-    width:58px!important;height:58px!important;
-    padding:6px;
+    width:46px!important;height:46px!important;
+    padding:5px;
     border:1px solid rgba(203,166,255,.24);
     border-radius:18px;
     background:
@@ -639,19 +639,19 @@ const luxeStyles = String.raw`
     body::after{background-size:36px 36px;opacity:.075}
     .hero-panel{padding:24px 18px!important;border-radius:26px}
     .brand-stage{gap:13px;margin-bottom:24px;padding-bottom:20px}
-    .brand-stage-mark{width:78px;height:78px;border-radius:22px;padding:8px}
+    .brand-stage-mark{width:58px;height:58px;border-radius:17px;padding:6px}
     .brand-stage-copy strong{font-size:21px}
     .brand-stage-copy span{font-size:9px}
     .brand-stage-copy small{font-size:8px;letter-spacing:.13em}
     .dashboard-brandbar{align-items:flex-start;flex-direction:column;padding:13px 14px;border-radius:18px}
-    .dashboard-brand-logo{width:50px;height:50px}
+    .dashboard-brand-logo{width:42px;height:42px}
     .dashboard-brand-identity strong{font-size:15px}
     .dashboard-brand-secure{min-height:34px}
     .dashboard-head{padding:22px 18px!important}
     .dashboard-head .actions{width:100%;display:grid!important;grid-template-columns:1fr 1fr}
     .dashboard-head .actions button{width:100%!important}
     .blofy-modal-brand{margin-bottom:15px}
-    .blofy-modal-brand img{width:43px;height:43px}
+    .blofy-modal-brand img{width:38px;height:38px}
     .topbar{min-height:68px!important;padding-inline:12px!important}
     .brand-logo{width:43px!important;height:43px!important}
     .language-control{min-width:118px!important}
