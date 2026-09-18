@@ -5,6 +5,7 @@ import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -59,6 +60,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         deviceKind = DeviceClass.detect(this)
         TvUiTuning.enter(this)
         buildUi()
@@ -330,7 +332,16 @@ class CatalogLoadingActivity : AppCompatActivity() {
             }
             check(result.freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
             check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
-            render(30, getString(if (firstLoad) R.string.catalog_finishing else R.string.catalog_saving_refresh))
+            val savingLabel = getString(if (firstLoad) R.string.catalog_finishing else R.string.catalog_saving_refresh)
+            render(30, savingLabel)
+            val savePulse = lifecycleScope.launch {
+                var value = 33
+                while (true) {
+                    delay(2_500L)
+                    render(value, savingLabel)
+                    if (value < 72) value = (value + 3).coerceAtMost(72)
+                }
+            }
             val commit: suspend () -> Unit = {
                 persistence.commit {
                     if (firstLoad) {
@@ -347,8 +358,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
                     }
                 }
             }
-            if (pendingSource != null) PortalPlaylistClient.commitPendingSource(applicationContext, dao, pendingSource, commit)
-            else commit()
+            try {
+                if (pendingSource != null) PortalPlaylistClient.commitPendingSource(applicationContext, dao, pendingSource, commit)
+                else commit()
+            } finally {
+                savePulse.cancel()
+            }
+            render(maxOf(displayedPercent, 74), savingLabel)
             awaitEntryReadyCache(providerId)
             render(100, getString(R.string.catalog_complete))
             delay(120L)
