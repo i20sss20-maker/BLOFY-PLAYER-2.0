@@ -24,12 +24,15 @@ test('masks stored numbers before returning them to the browser', () => {
   assert.equal(maskPortalPhone('+966551234567'), '+966••••4567');
 });
 
-test('injects contact UI once and keeps credentials out of browser storage', () => {
+test('injects contact UI once, remembers completion, and keeps contact secrets out of browser storage', () => {
   const html = '<html><body><div id="app"></div></body></html>';
   const injected = injectPortalContactUi(html);
   assert.match(injected, /data-blofy-contact-ui="1"/);
   assert.match(injected, /\/api\/v1\/portal\/contact\/status/);
   assert.match(injected, /\/api\/v1\/portal\/contact/);
-  assert.doesNotMatch(injected, /localStorage.*phone|sessionStorage.*phone/);
+  assert.match(injected, /blofy\.contact\.complete\.v1:/);
+  assert.match(injected, /rememberContact\(state\.deviceId\)/);
+  assert.doesNotMatch(injected, /localStorage\.setItem\([^\n]*(?:activationCode|maskedPhone|phone)/);
+  assert.doesNotMatch(injected, /sessionStorage.*(?:activationCode|maskedPhone|phone)/);
   assert.equal(injectPortalContactUi(injected), injected);
 });
