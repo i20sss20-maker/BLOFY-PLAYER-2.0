@@ -39,6 +39,40 @@ function json(res, status, body) {
   res.end(payload);
 }
 
+async function releaseHealth() {
+  const target = new URL('/health', `${RELEASE_URL}/`);
+  const transport = target.protocol === 'https:' ? https : http;
+  return await new Promise((resolve) => {
+    const request = transport.request({
+      protocol: target.protocol,
+      hostname: target.hostname,
+      port: target.port || undefined,
+      method: 'GET',
+      path: target.pathname,
+      headers: { accept: 'application/json' }
+    }, (response) => {
+      const chunks = [];
+      let size = 0;
+      response.on('data', (chunk) => {
+        size += chunk.length;
+        if (size <= 64 * 1024) chunks.push(chunk);
+      });
+      response.on('end', () => {
+        if ((response.statusCode || 500) >= 400 || size > 64 * 1024) return resolve(null);
+        try {
+          const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          resolve(payload && payload.release ? payload : null);
+        } catch (_) {
+          resolve(null);
+        }
+      });
+    });
+    request.setTimeout(3_000, () => request.destroy(new Error('release_health_timeout')));
+    request.on('error', () => resolve(null));
+    request.end();
+  });
+}
+
 function route(requestUrl) {
   const incoming = new URL(requestUrl || '/', 'http://blofy-gateway.local');
   let pathname = incoming.pathname;
@@ -103,11 +137,20 @@ function proxy(req, res) {
   req.pipe(upstream);
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://blofy-gateway.local');
     if (req.method === 'GET' && requestUrl.pathname === '/health') {
-      return json(res, 200, { ok: true, service: 'blofy-gateway' });
+      // RC07.51 website builds still read release metadata from /health.
+      // Preserve gateway health while including the release-service payload so
+      // those installed clients can discover the next update after the Azure move.
+      const upstream = await releaseHealth();
+      return json(res, 200, {
+        ok: true,
+        service: 'blofy-gateway',
+        ...(upstream?.release ? { release: upstream.release } : {}),
+        time: Date.now()
+      });
     }
     return proxy(req, res);
   } catch (error) {
