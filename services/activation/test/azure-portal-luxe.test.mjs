@@ -27,3 +27,12 @@ test('portal document exposes BLOFY icon for tabs and saved shortcuts', async ()
   assert.match(html, /class="dashboard-brandbar"/);
   assert.match(html, /DEVICE CONTROL CENTER/);
 });
+
+
+test('portal base document constrains structural BLOFY marks without relying on Azure skin', async () => {
+  const html = await readFile(new URL('../web/index.html', import.meta.url), 'utf8');
+  assert.match(html, /\.brand-stage-mark\s*\{[\s\S]*?width:\s*72px;[\s\S]*?height:\s*72px;/);
+  assert.match(html, /\.brand-stage-mark img\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;/);
+  assert.match(html, /class="brand-stage-mark"><img[^>]+width="72"[^>]+height="72"/);
+  assert.match(html, /\.dashboard-brand-logo\s*\{[\s\S]*?width:\s*44px;[\s\S]*?height:\s*44px;/);
+});
