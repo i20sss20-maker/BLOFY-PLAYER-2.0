@@ -77,6 +77,9 @@ test('playlist name remains optional', () => {
 test('renewal UI contains all approved plans and prices', () => {
   const html = injected();
   assert.match(html, /تجديد الاشتراك/);
+  assert.match(html, /class="blofy-modal-brand"/);
+  assert.match(html, /BLOFY PLAYER/);
+  assert.match(html, /MEMBERSHIP/);
   assert.match(html, /data-plan="3 شهور" data-price="10 ريال"/);
   assert.match(html, /data-plan="6 شهور" data-price="18 ريال"/);
   assert.match(html, /data-plan="سنة" data-price="25 ريال"/);

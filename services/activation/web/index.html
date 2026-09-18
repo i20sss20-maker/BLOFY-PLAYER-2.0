@@ -721,6 +721,14 @@
   <main class="portal">
     <section id="loginView" class="login-layout">
       <div class="hero-panel">
+        <div class="brand-stage">
+          <div class="brand-stage-mark"><img src="/blofy-logo.png" alt="BLOFY PLAYER" /></div>
+          <div class="brand-stage-copy">
+            <span>BLOFY PLAYER</span>
+            <strong>DEVICE CONTROL</strong>
+            <small>SECURE · SYNCED · SIMPLE</small>
+          </div>
+        </div>
         <div class="eyebrow"><span class="eyebrow-dot"></span><span data-i18n="portalBadge">بوابة الجهاز الآمنة</span></div>
         <h1><span data-i18n="heroTitle">كل قوائمك في مكان واحد.</span></h1>
         <p data-i18n="heroSubtitle">اربط جهاز BLOFY ثم أضف قوائم M3U أو Xtream من جوالك. ستظهر التغييرات على التطبيق تلقائيًا.</p>
@@ -772,6 +780,16 @@
     </section>
 
     <section id="app" class="dashboard hidden">
+      <div class="dashboard-brandbar">
+        <div class="dashboard-brand-identity">
+          <div class="dashboard-brand-logo"><img src="/blofy-logo.png" alt="" aria-hidden="true" /></div>
+          <div>
+            <span>BLOFY PLAYER</span>
+            <strong>DEVICE CONTROL CENTER</strong>
+          </div>
+        </div>
+        <div class="dashboard-brand-secure"><span class="online-dot"></span><span>SECURE SYNC</span></div>
+      </div>
       <div class="dashboard-panel">
         <header class="dashboard-head">
           <div class="dashboard-title-wrap">
@@ -850,7 +868,7 @@
     const translations = {
       ar: {
         pageTitle: "BLOFY PLAYER — إدارة الجهاز", language: "اللغة", setupSteps: "مزايا إدارة الجهاز", portalBadge: "إدارة الجهاز بأمان",
-        heroTitle: "كل قوائمك\nفي مكان واحد.", heroSubtitle: "سجّل برقم الجهاز ورمز الربط الظاهر في BLOFY PLAYER، ثم أضف قوائمك وعدّلها في أي وقت.",
+        heroTitle: "تحكم بجهازك.\nبأسلوب BLOFY.", heroSubtitle: "لوحة واحدة لإدارة جهاز BLOFY PLAYER، إضافة القوائم وتحديثها ومزامنتها بأمان وبشكل مباشر.",
         stepOneTitle: "حفظ مشفّر", stepOneText: "خذ رقم الجهاز والرمز من شاشة BLOFY.", stepTwoTitle: "مزامنة تلقائية", stepTwoText: "أدخل البيانات بأمان في النموذج.", stepThreeTitle: "أكثر من قائمة", stepThreeText: "اختر M3U أو Xtream واحفظها.",
         loginStep: "الخطوة ١ من ٢", loginTitle: "تسجيل دخول الجهاز", loginSubtitle: "تجد الرقم والرمز في شاشة قوائم التشغيل داخل التطبيق.",
         deviceIdLabel: "رقم الجهاز", deviceIdPlaceholder: "BLOFY-66AF-CB09", activationCodeLabel: "رمز الربط", activationCodePlaceholder: "000000",
@@ -867,7 +885,7 @@
       },
       en: {
         pageTitle: "BLOFY PLAYER — Device Portal", language: "Language", setupSteps: "Setup steps", portalBadge: "Secure device portal",
-        heroTitle: "All your playlists. One place.", heroSubtitle: "Connect your BLOFY device, then add M3U or Xtream playlists from your phone. Changes sync to the app automatically.",
+        heroTitle: "Control your device. The BLOFY way.", heroSubtitle: "One premium control center for your BLOFY PLAYER device, playlists and secure sync.",
         stepOneTitle: "Encrypted storage", stepOneText: "Find the device ID and code on BLOFY.", stepTwoTitle: "Automatic sync", stepTwoText: "Enter both values securely.", stepThreeTitle: "Multiple playlists", stepThreeText: "Choose M3U or Xtream and save.",
         loginStep: "STEP 1 / 2", loginTitle: "Connect your device", loginSubtitle: "Enter the Device ID and Device Key shown on your TV after scanning the QR code.",
         deviceIdLabel: "Device ID", deviceIdPlaceholder: "BLOFY-66HL-GB09", activationCodeLabel: "Device Key", activationCodePlaceholder: "000000",

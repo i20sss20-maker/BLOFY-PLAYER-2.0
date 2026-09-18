@@ -30,6 +30,9 @@ test('injects contact UI once, remembers completion, and keeps contact secrets o
   assert.match(injected, /data-blofy-contact-ui="1"/);
   assert.match(injected, /\/api\/v1\/portal\/contact\/status/);
   assert.match(injected, /\/api\/v1\/portal\/contact/);
+  assert.match(injected, /class="blofy-modal-brand"/);
+  assert.match(injected, /BLOFY PLAYER/);
+  assert.match(injected, /ACCOUNT/);
   assert.match(injected, /blofy\.contact\.complete\.v1:/);
   assert.match(injected, /rememberContact\(state\.deviceId\)/);
   assert.doesNotMatch(injected, /localStorage\.setItem\([^\n]*(?:activationCode|maskedPhone|phone)/);
