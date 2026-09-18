@@ -49,6 +49,13 @@ export function injectPortalContactUi(html) {
 (function () {
   var contactState = { required: false, masked: '', checkedDevice: '' };
   function el(id) { return document.getElementById(id); }
+  function contactStorageKey(deviceId) { return 'blofy.contact.complete.v1:' + String(deviceId || '').toUpperCase(); }
+  function hasRememberedContact(deviceId) {
+    try { return localStorage.getItem(contactStorageKey(deviceId)) === '1'; } catch (_) { return false; }
+  }
+  function rememberContact(deviceId) {
+    try { if (deviceId) localStorage.setItem(contactStorageKey(deviceId), '1'); } catch (_) {}
+  }
   function currentAuth() {
     var state = typeof auth !== 'undefined' && auth;
     return { deviceId: String(state && state.deviceId || '').trim(), activationCode: String(state && state.activationCode || '').trim() };
@@ -101,7 +108,7 @@ export function injectPortalContactUi(html) {
     var button = el('blofyContactSave'); button.disabled = true; el('blofyContactStatus').textContent = '';
     try {
       var result = await contactApi('/api/v1/portal/contact', { deviceId: state.deviceId, activationCode: state.activationCode, phone: phone });
-      contactState.required = false; contactState.masked = result.maskedPhone || ''; modal().classList.add('hidden'); installButton();
+      contactState.required = false; contactState.masked = result.maskedPhone || ''; contactState.checkedDevice = state.deviceId; rememberContact(state.deviceId); modal().classList.add('hidden'); installButton();
     } catch (_) { el('blofyContactStatus').textContent = c.failed; }
     finally { button.disabled = false; }
   }
@@ -114,11 +121,20 @@ export function injectPortalContactUi(html) {
   async function ensureContact() {
     var state = currentAuth(); if (!state.deviceId || !state.activationCode) return;
     if (contactState.checkedDevice === state.deviceId) { installButton(); return; }
+    var remembered = hasRememberedContact(state.deviceId);
     try {
       var status = await contactApi('/api/v1/portal/contact/status', state);
-      contactState.checkedDevice = state.deviceId; contactState.masked = status.maskedPhone || ''; contactState.required = !status.hasPhone;
+      contactState.checkedDevice = state.deviceId; contactState.masked = status.maskedPhone || '';
+      if (status.hasPhone) rememberContact(state.deviceId);
+      contactState.required = !status.hasPhone && !remembered;
       installButton(); if (contactState.required) openModal(true);
-    } catch (_) {}
+    } catch (_) {
+      if (remembered) {
+        contactState.checkedDevice = state.deviceId;
+        contactState.required = false;
+        installButton();
+      }
+    }
   }
   function watchLogin() {
     if (window.blofyContactLoginHook) return; window.blofyContactLoginHook = true;
