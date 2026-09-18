@@ -21,6 +21,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import android.os.SystemClock
+import java.io.IOException
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogManifestStore
@@ -95,6 +97,143 @@ object FullCatalogPreparer {
         val expectedEpoch = CatalogSyncState.lastUpdatedAt(app, providerId)
         if (expectedEpoch <= 0L || !CatalogSyncState.isReady(app, providerId)) return
         startBackground(app, providerId, expectedEpoch)
+    }
+
+    suspend fun runDurableChunk(
+        context: Context,
+        providerId: String,
+        maxRunMs: Long = 6L * 60L * 1000L
+    ): Boolean = withContext(Dispatchers.IO) {
+        val app = context.applicationContext
+        val db = BlofyDatabase.get(app)
+        val dao = db.dao()
+        val provider = dao.provider(providerId) ?: return@withContext true
+        val expectedEpoch = CatalogSyncState.lastUpdatedAt(app, providerId)
+        if (expectedEpoch <= 0L || !CatalogSyncState.isReady(app, providerId)) return@withContext true
+
+        suspend fun ensureCurrentSource() {
+            currentCoroutineContext().ensureActive()
+            val current = dao.provider(providerId)
+            check(
+                CatalogSyncState.isReady(app, providerId) &&
+                    CatalogSyncState.lastUpdatedAt(app, providerId) == expectedEpoch &&
+                    current?.baseUrl == provider.baseUrl &&
+                    current.username == provider.username &&
+                    current.password == provider.password
+            ) { "Catalog source changed during full-library sync" }
+        }
+
+        val lowMemory = DeviceClass.isLowMemory(app)
+        val pageSize = if (lowMemory) 18 else 36
+        val artConcurrency = if (lowMemory) 1 else 3
+        val detailConcurrency = if (lowMemory) 1 else 2
+        val deadline = SystemClock.elapsedRealtime() + maxRunMs.coerceAtLeast(30_000L)
+
+        suspend fun persistArtwork(stream: StreamEntity, phase: FullLibraryPhase): Boolean {
+            val metadata = if (phase == FullLibraryPhase.MOVIE_ENRICHED_ART ||
+                phase == FullLibraryPhase.SERIES_ENRICHED_ART
+            ) ProviderMetadataCache.read(app, stream.key) else null
+
+            val candidates = when (phase) {
+                FullLibraryPhase.MOVIE_POSTERS,
+                FullLibraryPhase.SERIES_POSTERS,
+                FullLibraryPhase.LIVE_LOGOS -> listOfNotNull(stream.icon)
+                FullLibraryPhase.MOVIE_BACKDROPS,
+                FullLibraryPhase.SERIES_BACKDROPS -> listOfNotNull(stream.backdrop)
+                FullLibraryPhase.MOVIE_ENRICHED_ART,
+                FullLibraryPhase.SERIES_ENRICHED_ART -> buildList {
+                    add(metadata?.posterUrl)
+                    add(metadata?.backdropUrl)
+                    add(metadata?.logoUrl)
+                    metadata?.cast?.forEach { add(it.profileUrl) }
+                    metadata?.crew?.forEach { add(it.profileUrl) }
+                }.filterNotNull()
+                else -> emptyList()
+            }.map(String::trim).filter { it.isNotBlank() && !it.equals("null", true) }.distinct()
+
+            if (candidates.isEmpty()) return true
+            var savedAny = false
+            for (raw in candidates) {
+                ensureCurrentSource()
+                val resolved = resolve(provider, raw)
+                val saved = try {
+                    ArtworkLoader.persist(app, resolved)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                }
+                savedAny = savedAny || saved
+            }
+            return savedAny
+        }
+
+        while (SystemClock.elapsedRealtime() < deadline) {
+            ensureCurrentSource()
+            val cursor = FullLibrarySyncState.read(app, providerId, expectedEpoch)
+            if (cursor.complete || cursor.phase == FullLibraryPhase.COMPLETE) {
+                CatalogSyncState.markMetadataReady(app, providerId)
+                CatalogSyncState.markEpisodesReady(app, providerId)
+                CatalogManifestStore.rebuild(app, dao, provider, completionVerified = true)
+                FullLibrarySyncState.complete(app, providerId, expectedEpoch)
+                return@withContext true
+            }
+
+            if (provider.providerType.equals("m3u", true) &&
+                cursor.phase in setOf(FullLibraryPhase.MOVIE_DETAILS, FullLibraryPhase.SERIES_DETAILS)
+            ) {
+                FullLibrarySyncState.advance(app, providerId, expectedEpoch, cursor.phase)
+                continue
+            }
+
+            val kind = cursor.phase.kind ?: run {
+                FullLibrarySyncState.complete(app, providerId, expectedEpoch)
+                return@withContext true
+            }
+            val page = dao.catalogPageAfterAll(providerId, kind, cursor.rowId, pageSize)
+            if (page.isEmpty()) {
+                FullLibrarySyncState.advance(app, providerId, expectedEpoch, cursor.phase)
+                continue
+            }
+
+            val successes = when (cursor.phase) {
+                FullLibraryPhase.MOVIE_DETAILS,
+                FullLibraryPhase.SERIES_DETAILS -> coroutineScope {
+                    page.chunked(detailConcurrency).flatMap { group ->
+                        group.map { stream ->
+                            async {
+                                ensureCurrentSource()
+                                warmOne(app, db, provider, stream, ::ensureCurrentSource)
+                            }
+                        }.awaitAll()
+                    }
+                }.count { it }
+
+                else -> coroutineScope {
+                    page.chunked(artConcurrency).flatMap { group ->
+                        group.map { stream ->
+                            async { persistArtwork(stream, cursor.phase) }
+                        }.awaitAll()
+                    }
+                }.count { it }
+            }
+
+            // If a whole page that actually contains work failed, treat it as a transient
+            // provider/network failure and leave the checkpoint in place for the next worker run.
+            val hasWork = when (cursor.phase) {
+                FullLibraryPhase.MOVIE_POSTERS,
+                FullLibraryPhase.SERIES_POSTERS,
+                FullLibraryPhase.LIVE_LOGOS -> page.any { !it.icon.isNullOrBlank() }
+                FullLibraryPhase.MOVIE_BACKDROPS,
+                FullLibraryPhase.SERIES_BACKDROPS -> page.any { !it.backdrop.isNullOrBlank() }
+                else -> true
+            }
+            if (hasWork && successes == 0) throw IOException("full_library_page_unavailable")
+
+            val nextRow = dao.streamRowId(page.last().key) ?: cursor.rowId
+            check(nextRow > cursor.rowId) { "Full-library cursor did not advance" }
+            FullLibrarySyncState.checkpoint(app, providerId, expectedEpoch, cursor.phase, nextRow)
+            if (lowMemory) delay(35L)
+        }
+        false
     }
 
     @Synchronized
@@ -202,7 +341,7 @@ object FullCatalogPreparer {
     ): Boolean {
         val cached = ProviderMetadataCache.read(app, stream.key)
         val episodesAlreadySaved = stream.kind != "series" || db.dao().episodeSnapshot(provider.id, stream.remoteId).isNotEmpty()
-        if (cached != null && episodesAlreadySaved) return true
+        if (ProviderMetadataCache.lastDetailFetch(app, stream.key) > 0L || (cached != null && episodesAlreadySaved)) return true
         return retryNetwork {
             val response = fetch(provider, stream)
             val metadata = XtreamMetadataFallback.parseResponse(
@@ -220,6 +359,7 @@ object FullCatalogPreparer {
             }
             ensureSource()
             ProviderMetadataCache.write(app, provider.id, stream.key, metadata)
+            ProviderMetadataCache.markDetailFetched(app, stream.key, provider.id)
             if (metadata != null) db.openHelper.writableDatabase.execSQL(
                 "UPDATE streams SET icon=COALESCE(?,icon),backdrop=COALESCE(?,backdrop),plot=COALESCE(?,plot),genre=COALESCE(?,genre),releaseDate=COALESCE(?,releaseDate),rating=COALESCE(?,rating),duration=COALESCE(?,duration) WHERE `key`=?",
                 arrayOf(metadata.posterUrl, metadata.backdropUrl, metadata.overview,
