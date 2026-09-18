@@ -642,6 +642,83 @@
       line-height: 1.7;
     }
 
+    /* Structural branding has safe base styles here so logos never render at intrinsic image size. */
+    .brand-stage {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 26px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      direction: ltr;
+    }
+    .brand-stage-mark {
+      width: 72px;
+      height: 72px;
+      flex: 0 0 72px;
+      display: grid;
+      place-items: center;
+      padding: 7px;
+      overflow: hidden;
+      border: 1px solid var(--line-accent);
+      border-radius: 20px;
+      background: linear-gradient(145deg, rgba(139,55,255,.16), rgba(52,28,101,.08));
+    }
+    .brand-stage-mark img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .brand-stage-copy { display: grid; gap: 4px; text-align: left; min-width: 0; }
+    .brand-stage-copy span { color: #c79bff; font: 800 10px/1.2 "Segoe UI", sans-serif; letter-spacing: .28em; }
+    .brand-stage-copy strong { color: #fff; font: 800 25px/1.05 "Segoe UI", sans-serif; letter-spacing: .04em; }
+    .brand-stage-copy small { color: #787180; font: 700 9px/1.3 "Segoe UI", sans-serif; letter-spacing: .18em; }
+
+    .dashboard { display: grid; gap: 14px; }
+    .dashboard-brandbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 13px 16px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(18,15,29,.88);
+    }
+    .dashboard-brand-identity { display: flex; align-items: center; gap: 11px; direction: ltr; }
+    .dashboard-brand-logo {
+      width: 44px;
+      height: 44px;
+      flex: 0 0 44px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      padding: 4px;
+      border: 1px solid var(--line-accent);
+      border-radius: 13px;
+      background: var(--accent-soft);
+    }
+    .dashboard-brand-logo img { display: block; width: 100%; height: 100%; object-fit: contain; }
+    .dashboard-brand-identity > div:last-child { display: grid; gap: 3px; text-align: left; }
+    .dashboard-brand-identity span { color: #bd8dff; font: 800 9px/1.2 "Segoe UI", sans-serif; letter-spacing: .24em; }
+    .dashboard-brand-identity strong { color: #fff; font: 800 15px/1.1 "Segoe UI", sans-serif; letter-spacing: .05em; }
+    .dashboard-brand-secure {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 0 11px;
+      border: 1px solid rgba(82,223,154,.18);
+      border-radius: 999px;
+      background: rgba(82,223,154,.06);
+      color: #aeeed0;
+      font: 800 9px/1 "Segoe UI", sans-serif;
+      letter-spacing: .12em;
+    }
+
     @media (max-width: 920px) {
       .portal { padding-top: 40px; }
       .login-layout { grid-template-columns: 1fr; gap: 34px; }
@@ -650,9 +727,16 @@
       .hero-panel h1 { max-width: 720px; }
       .hero-panel > p { margin-inline: auto; }
       .eyebrow { margin-inline: auto; }
+      .brand-stage { justify-content: center; }
     }
 
     @media (max-width: 680px) {
+      .brand-stage-mark { width: 58px; height: 58px; flex-basis: 58px; border-radius: 17px; }
+      .brand-stage-copy strong { font-size: 20px; }
+      .brand-stage-copy span { font-size: 8px; }
+      .brand-stage-copy small { font-size: 7px; letter-spacing: .12em; }
+      .dashboard-brandbar { align-items: flex-start; flex-direction: column; padding: 12px 14px; }
+      .dashboard-brand-logo { width: 40px; height: 40px; flex-basis: 40px; }
       .topbar, .portal { width: min(100% - 22px, 1180px); }
       .topbar { min-height: 68px; }
       .brand-logo { width: 42px; height: 42px; }
@@ -722,7 +806,7 @@
     <section id="loginView" class="login-layout">
       <div class="hero-panel">
         <div class="brand-stage">
-          <div class="brand-stage-mark"><img src="/blofy-logo.png" alt="BLOFY PLAYER" /></div>
+          <div class="brand-stage-mark"><img src="/blofy-logo.png" alt="BLOFY PLAYER" width="72" height="72" /></div>
           <div class="brand-stage-copy">
             <span>BLOFY PLAYER</span>
             <strong>DEVICE CONTROL</strong>
@@ -782,7 +866,7 @@
     <section id="app" class="dashboard hidden">
       <div class="dashboard-brandbar">
         <div class="dashboard-brand-identity">
-          <div class="dashboard-brand-logo"><img src="/blofy-logo.png" alt="" aria-hidden="true" /></div>
+          <div class="dashboard-brand-logo"><img src="/blofy-logo.png" alt="" aria-hidden="true" width="44" height="44" /></div>
           <div>
             <span>BLOFY PLAYER</span>
             <strong>DEVICE CONTROL CENTER</strong>
