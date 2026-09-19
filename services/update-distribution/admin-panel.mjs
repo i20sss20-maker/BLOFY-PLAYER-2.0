@@ -15,6 +15,10 @@ function actionPath(name) {
   return `${PUBLIC_ADMIN_PREFIX}/${name}`;
 }
 
+function isAction(action, name) {
+  return action === actionPath(name) || action === `/admin/${name}`;
+}
+
 function safeEqual(a, b) {
   const left = Buffer.from(String(a));
   const right = Buffer.from(String(b));
@@ -132,7 +136,7 @@ export async function renderAdmin(message = '') {
 }
 
 export async function handleAdminAction(form, action) {
-  if (action === actionPath('save')) {
+  if (isAction(action, 'save')) {
     const release = await upsertRelease({
       versionCode: form.get('versionCode'),
       versionName: form.get('versionName'),
@@ -142,19 +146,19 @@ export async function handleAdminAction(form, action) {
     });
     return release.stage === 'draft' ? 'تم حفظ النسخة كـ DRAFT.' : `تم حفظ ${release.versionName}.`;
   }
-  if (action === actionPath('promote')) {
+  if (isAction(action, 'promote')) {
     const release = await promoteRelease(form.get('versionCode'));
     return release.stage === 'qa' ? `تم نقل ${release.versionName} إلى QA.` : `تم اعتماد ${release.versionName} كـ PUBLIC.`;
   }
-  if (action === actionPath('activate')) {
+  if (isAction(action, 'activate')) {
     const release = await activateRelease(form.get('versionCode'));
     return `تم تعيين ${release.versionName} كتحديث عام.`;
   }
-  if (action === actionPath('delete')) {
+  if (isAction(action, 'delete')) {
     await deleteRelease(form.get('versionCode'));
     return 'تم حذف النسخة.';
   }
-  if (action === actionPath('save-app')) {
+  if (isAction(action, 'save-app')) {
     const app = await upsertApp({
       slug: form.get('slug'),
       name: form.get('name'),
@@ -171,7 +175,7 @@ export async function handleAdminAction(form, action) {
     });
     return `تم حفظ التطبيق: ${app.name}.`;
   }
-  if (action === actionPath('delete-app')) {
+  if (isAction(action, 'delete-app')) {
     await deleteApp(form.get('slug'));
     return 'تم حذف التطبيق من المكتبة.';
   }
