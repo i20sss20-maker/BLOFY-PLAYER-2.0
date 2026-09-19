@@ -467,6 +467,12 @@ const mapRow = row => ({
   enabled: row.enabled === true,
   featured: row.featured === true,
   autoUpdate: row.auto_update === true,
+  createdAt: row.created_at ? new Date(row.created_at).getTime() : 0,
+  versionUpdatedAt: row.version_updated_at ? new Date(row.version_updated_at).getTime() : 0,
+  previousVersion: row.previous_version || '',
+  previousDownloadUrl: row.previous_download_url || '',
+  previousApkSizeBytes: Number(row.previous_apk_size_bytes || 0),
+  previousSavedAt: row.previous_saved_at ? new Date(row.previous_saved_at).getTime() : 0,
   updatedAt: new Date(row.updated_at).getTime()
 });
 
@@ -502,6 +508,12 @@ export async function initAppLibrary() {
         enabled boolean not null default true,
         featured boolean not null default false,
         auto_update boolean not null default false,
+        created_at timestamptz,
+        version_updated_at timestamptz,
+        previous_version text,
+        previous_download_url text,
+        previous_apk_size_bytes bigint,
+        previous_saved_at timestamptz,
         updated_at timestamptz not null default now()
       )
     `);
@@ -509,6 +521,12 @@ export async function initAppLibrary() {
     await client.query("alter table blofy_app_catalog add column if not exists architecture text not null default ''");
     await client.query("alter table blofy_app_catalog add column if not exists apk_size_bytes bigint not null default 0");
     await client.query("alter table blofy_app_catalog add column if not exists auto_update boolean not null default false");
+    await client.query("alter table blofy_app_catalog add column if not exists created_at timestamptz");
+    await client.query("alter table blofy_app_catalog add column if not exists version_updated_at timestamptz");
+    await client.query("alter table blofy_app_catalog add column if not exists previous_version text");
+    await client.query("alter table blofy_app_catalog add column if not exists previous_download_url text");
+    await client.query("alter table blofy_app_catalog add column if not exists previous_apk_size_bytes bigint");
+    await client.query("alter table blofy_app_catalog add column if not exists previous_saved_at timestamptz");
     await client.query(`
       create table if not exists blofy_app_catalog_meta (
         id smallint primary key check(id=1),
@@ -537,8 +555,25 @@ export async function initAppLibrary() {
         status_code integer,
         size_bytes bigint not null default 0,
         checked_at timestamptz,
-        error text not null default ''
+        error text not null default '',
+        consecutive_failures integer not null default 0
       )
+    `);
+    await client.query("alter table blofy_app_health add column if not exists consecutive_failures integer not null default 0");
+    await client.query(`
+      create table if not exists blofy_app_audit (
+        id bigserial primary key,
+        slug text,
+        actor text not null,
+        action text not null,
+        details jsonb not null default '{}'::jsonb,
+        created_at timestamptz not null default now()
+      )
+    `);
+    await client.query(`
+      update blofy_app_catalog
+      set created_at=now()
+      where created_at is null and slug in ('matvt','apk-updater','mrowser','smarttube')
     `);
     await client.query('insert into blofy_app_catalog_meta(id,seed_version) values(1,0) on conflict(id) do nothing');
     const version = Number((await client.query('select seed_version from blofy_app_catalog_meta where id=1 for update')).rows[0]?.seed_version || 0);
@@ -566,35 +601,90 @@ export async function initAppLibrary() {
 }
 
 export async function listApps(includeDisabled = false) {
-  const result = await pool.query(
-    `select * from blofy_app_catalog
-     ${includeDisabled ? '' : 'where enabled=true'}
-     order by featured desc, sort_order asc, name asc
-     limit 200`
-  );
+  const result = includeDisabled
+    ? await pool.query(
+        `select c.* from blofy_app_catalog c
+         order by c.featured desc, c.sort_order asc, c.name asc
+         limit 200`
+      )
+    : await pool.query(
+        `select c.* from blofy_app_catalog c
+         left join blofy_app_health h on h.slug=c.slug
+         where c.enabled=true and coalesce(h.consecutive_failures,0) < 2
+         order by c.featured desc, c.sort_order asc, c.name asc
+         limit 200`
+      );
   return result.rows.map(mapRow);
 }
 
 export async function getApp(slug, includeDisabled = false) {
   const cleanSlug = String(slug || '').trim().toLowerCase();
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanSlug)) return null;
-  const result = await pool.query(
-    `select * from blofy_app_catalog where slug=$1 ${includeDisabled ? '' : 'and enabled=true'} limit 1`,
-    [cleanSlug]
-  );
+  const result = includeDisabled
+    ? await pool.query('select c.* from blofy_app_catalog c where c.slug=$1 limit 1', [cleanSlug])
+    : await pool.query(
+        `select c.* from blofy_app_catalog c
+         left join blofy_app_health h on h.slug=c.slug
+         where c.slug=$1 and c.enabled=true and coalesce(h.consecutive_failures,0) < 2
+         limit 1`,
+        [cleanSlug]
+      );
   return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+async function writeAudit(action, slug, actor = 'system', details = {}) {
+  await pool.query(
+    'insert into blofy_app_audit(slug,actor,action,details) values($1,$2,$3,$4::jsonb)',
+    [slug || null, actor, action, JSON.stringify(details || {})]
+  );
+}
+
+export async function listAppAudit(limit = 40) {
+  const safeLimit = Math.min(100, Math.max(1, Number(limit || 40)));
+  const result = await pool.query(
+    'select id,slug,actor,action,details,created_at from blofy_app_audit order by id desc limit $1',
+    [safeLimit]
+  );
+  return result.rows.map(row => ({
+    id: Number(row.id),
+    slug: row.slug || '',
+    actor: row.actor,
+    action: row.action,
+    details: row.details || {},
+    createdAt: new Date(row.created_at).getTime()
+  }));
 }
 
 export async function upsertApp(raw) {
   const item = cleanApp(raw);
   const count = await pool.query('select count(*)::int as n from blofy_app_catalog');
-  const exists = await pool.query('select 1 from blofy_app_catalog where slug=$1', [item.slug]);
-  if (!exists.rowCount && count.rows[0].n >= 200) throw new Error('app_catalog_full');
+  const existing = await pool.query('select * from blofy_app_catalog where slug=$1', [item.slug]);
+  if (!existing.rowCount && count.rows[0].n >= 200) throw new Error('app_catalog_full');
   const result = await pool.query(
     `insert into blofy_app_catalog
-     (slug,name,category,symbol,icon_url,description,devices,version,architecture,apk_size_bytes,download_url,download_mode,sort_order,enabled,featured,auto_update,updated_at)
-     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,now())
+     (slug,name,category,symbol,icon_url,description,devices,version,architecture,apk_size_bytes,download_url,download_mode,sort_order,enabled,featured,auto_update,created_at,updated_at)
+     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,now(),now())
      on conflict(slug) do update set
+       previous_version=case
+         when blofy_app_catalog.version is distinct from excluded.version
+           or blofy_app_catalog.download_url is distinct from excluded.download_url
+         then blofy_app_catalog.version else blofy_app_catalog.previous_version end,
+       previous_download_url=case
+         when blofy_app_catalog.version is distinct from excluded.version
+           or blofy_app_catalog.download_url is distinct from excluded.download_url
+         then blofy_app_catalog.download_url else blofy_app_catalog.previous_download_url end,
+       previous_apk_size_bytes=case
+         when blofy_app_catalog.version is distinct from excluded.version
+           or blofy_app_catalog.download_url is distinct from excluded.download_url
+         then blofy_app_catalog.apk_size_bytes else blofy_app_catalog.previous_apk_size_bytes end,
+       previous_saved_at=case
+         when blofy_app_catalog.version is distinct from excluded.version
+           or blofy_app_catalog.download_url is distinct from excluded.download_url
+         then now() else blofy_app_catalog.previous_saved_at end,
+       version_updated_at=case
+         when blofy_app_catalog.version is distinct from excluded.version
+           or blofy_app_catalog.download_url is distinct from excluded.download_url
+         then now() else blofy_app_catalog.version_updated_at end,
        name=excluded.name, category=excluded.category, symbol=excluded.symbol, icon_url=excluded.icon_url,
        description=excluded.description, devices=excluded.devices, version=excluded.version,
        architecture=excluded.architecture, apk_size_bytes=excluded.apk_size_bytes,
@@ -604,14 +694,61 @@ export async function upsertApp(raw) {
      returning *`,
     [item.slug,item.name,item.category,item.symbol,item.iconUrl,item.description,item.devices,item.version,item.architecture,item.apkSizeBytes,item.downloadUrl,item.downloadMode,item.sortOrder,item.enabled,item.featured,item.autoUpdate]
   );
-  return mapRow(result.rows[0]);
+  const before = existing.rows[0] || null;
+  const after = result.rows[0];
+  await writeAudit(before ? 'app_update' : 'app_create', item.slug, 'admin', {
+    fromVersion: before?.version || '',
+    toVersion: after.version || '',
+    urlChanged: Boolean(before && before.download_url !== after.download_url)
+  });
+  return mapRow(after);
 }
 
 export async function deleteApp(slug) {
   const cleanSlug = String(slug || '').trim().toLowerCase();
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanSlug)) throw new Error('invalid_app_slug');
+  const existing = await pool.query('select name,version from blofy_app_catalog where slug=$1', [cleanSlug]);
   const result = await pool.query('delete from blofy_app_catalog where slug=$1 returning slug', [cleanSlug]);
   if (!result.rowCount) throw new Error('app_not_found');
+  await writeAudit('app_delete', cleanSlug, 'admin', {
+    name: existing.rows[0]?.name || '',
+    version: existing.rows[0]?.version || ''
+  });
+}
+
+export async function rollbackApp(slug) {
+  const cleanSlug = String(slug || '').trim().toLowerCase();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanSlug)) throw new Error('invalid_app_slug');
+  const currentResult = await pool.query('select * from blofy_app_catalog where slug=$1', [cleanSlug]);
+  if (!currentResult.rowCount) throw new Error('app_not_found');
+  const current = currentResult.rows[0];
+  if (!current.previous_download_url) throw new Error('no_previous_app_version');
+
+  const inspection = await inspectRemoteApk(current.previous_download_url);
+  const previousSize = inspection.sizeBytes > 0
+    ? inspection.sizeBytes
+    : Number(current.previous_apk_size_bytes || 0);
+
+  const result = await pool.query(
+    `update blofy_app_catalog set
+       version=coalesce(previous_version,''),
+       download_url=previous_download_url,
+       apk_size_bytes=$2,
+       previous_version=version,
+       previous_download_url=download_url,
+       previous_apk_size_bytes=apk_size_bytes,
+       previous_saved_at=now(),
+       version_updated_at=now(),
+       updated_at=now()
+     where slug=$1
+     returning *`,
+    [cleanSlug, previousSize]
+  );
+  await writeAudit('app_rollback', cleanSlug, 'admin', {
+    fromVersion: current.version || '',
+    toVersion: result.rows[0].version || ''
+  });
+  return mapRow(result.rows[0]);
 }
 
 function wildcardMatch(value, pattern) {
@@ -677,14 +814,27 @@ async function refreshOneManagedApp(app, rule) {
       || (latest.apkSizeBytes > 0 && app.apkSizeBytes !== latest.apkSizeBytes);
     if (!changed) return { slug: app.slug, status: 'unchanged', version: app.version };
 
+    const inspection = await inspectRemoteApk(latest.downloadUrl);
+    const verifiedSize = inspection.sizeBytes > 0 ? inspection.sizeBytes : latest.apkSizeBytes;
+
     await pool.query(
       `update blofy_app_catalog
-       set version=$2, download_url=$3,
+       set previous_version=version,
+           previous_download_url=download_url,
+           previous_apk_size_bytes=apk_size_bytes,
+           previous_saved_at=now(),
+           version=$2,
+           download_url=$3,
            apk_size_bytes=case when $4 > 0 then $4 else apk_size_bytes end,
+           version_updated_at=now(),
            updated_at=now()
        where slug=$1`,
-      [app.slug, latest.version, latest.downloadUrl, latest.apkSizeBytes]
+      [app.slug, latest.version, latest.downloadUrl, verifiedSize]
     );
+    await writeAudit('app_auto_update', app.slug, 'system', {
+      fromVersion: app.version || '',
+      toVersion: latest.version
+    });
     return { slug: app.slug, status: 'updated', version: latest.version };
   } catch (error) {
     return { slug: app.slug, status: 'failed', error: String(error?.message || 'update_failed').slice(0, 80) };
@@ -762,7 +912,7 @@ export async function getDownloadStats() {
 export async function getAppHealthState() {
   const [metaResult, healthResult] = await Promise.all([
     pool.query('select last_health_at,last_health_summary from blofy_app_catalog_meta where id=1'),
-    pool.query('select slug,ok,status_code,size_bytes,checked_at,error from blofy_app_health')
+    pool.query('select slug,ok,status_code,size_bytes,checked_at,error,consecutive_failures from blofy_app_health')
   ]);
   const meta = metaResult.rows[0] || {};
   let summary = {};
@@ -774,7 +924,8 @@ export async function getAppHealthState() {
       statusCode: row.status_code == null ? 0 : Number(row.status_code),
       sizeBytes: Number(row.size_bytes || 0),
       checkedAt: row.checked_at ? new Date(row.checked_at).getTime() : 0,
-      error: String(row.error || '')
+      error: String(row.error || ''),
+      consecutiveFailures: Number(row.consecutive_failures || 0)
     };
   }
   return {
@@ -788,11 +939,11 @@ async function checkOneAppHealth(app) {
   try {
     const info = await inspectRemoteApk(app.downloadUrl);
     await pool.query(
-      `insert into blofy_app_health(slug,ok,status_code,size_bytes,checked_at,error)
-       values($1,true,$2,$3,now(),'')
+      `insert into blofy_app_health(slug,ok,status_code,size_bytes,checked_at,error,consecutive_failures)
+       values($1,true,$2,$3,now(),'',0)
        on conflict(slug) do update set
          ok=true,status_code=excluded.status_code,size_bytes=excluded.size_bytes,
-         checked_at=now(),error=''`,
+         checked_at=now(),error='',consecutive_failures=0`,
       [app.slug, info.status, info.sizeBytes]
     );
     if (info.sizeBytes > 0 && Number(app.apkSizeBytes || 0) !== info.sizeBytes) {
@@ -804,10 +955,11 @@ async function checkOneAppHealth(app) {
     const match = message.match(/(?:apk_http_|github_http_)(\d{3})/);
     const statusCode = match ? Number(match[1]) : 0;
     await pool.query(
-      `insert into blofy_app_health(slug,ok,status_code,size_bytes,checked_at,error)
-       values($1,false,$2,0,now(),$3)
+      `insert into blofy_app_health(slug,ok,status_code,size_bytes,checked_at,error,consecutive_failures)
+       values($1,false,$2,0,now(),$3,1)
        on conflict(slug) do update set
-         ok=false,status_code=excluded.status_code,checked_at=now(),error=excluded.error`,
+         ok=false,status_code=excluded.status_code,checked_at=now(),error=excluded.error,
+         consecutive_failures=blofy_app_health.consecutive_failures+1`,
       [app.slug, statusCode || null, message]
     );
     return { slug: app.slug, status: 'failed', error: message };
