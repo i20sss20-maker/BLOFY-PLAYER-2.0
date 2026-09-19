@@ -13,9 +13,9 @@ const pool = new Pool({
   ssl: String(process.env.PGSSLMODE || '').toLowerCase() === 'require' ? { rejectUnauthorized: false } : undefined
 });
 
-const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools']);
+const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network']);
 const MODES = new Set(['official', 'direct']);
-const SEED_VERSION = 3;
+const SEED_VERSION = 4;
 
 const DEFAULT_APPS = Object.freeze([
   {
@@ -23,6 +23,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/videolan/vlc-android/master/application/resources/src/main/res/drawable-xxxhdpi/icon.png',
     description:'مشغل فيديو وصوت خفيف وموثوق للشاشات والرسيفرات.',
     devices:'Android TV · Box · ARM64', version:'3.7.0',
+    architecture:'ARM64', apkSizeBytes:0,
     downloadUrl:'https://get.videolan.org/vlc-android/3.7.0/VLC-Android-3.7.0-arm64-v8a.apk',
     downloadMode:'direct', sortOrder:10, enabled:true, featured:true
   },
@@ -31,6 +32,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/xbmc/xbmc/master/media/icon256x256.png',
     description:'مركز وسائط متكامل لتشغيل وتنظيم مكتبة الأفلام والفيديو على التلفزيون.',
     devices:'Android TV · Box · ARM64', version:'21.3',
+    architecture:'ARM64', apkSizeBytes:0,
     downloadUrl:'https://mirrors.kodi.tv/releases/android/arm64-v8a/kodi-21.3-Omega-arm64-v8a.apk',
     downloadMode:'direct', sortOrder:20, enabled:true, featured:false
   },
@@ -39,6 +41,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/moneytoo/Player/master/fastlane/metadata/android/en-US/images/icon.png',
     description:'مشغل فيديو بسيط وسريع مناسب للريموت وملفات الفيديو الحديثة.',
     devices:'Android TV · Box · Mobile', version:'0.216',
+    architecture:'Universal', apkSizeBytes:51014578,
     downloadUrl:'https://github.com/moneytoo/Player/releases/download/v0.216/Just.Player.v0.216.apk',
     downloadMode:'direct', sortOrder:30, enabled:true, featured:false
   },
@@ -47,6 +50,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/nova-video-player/aos-AVP/nova/fastlane/metadata/android/en-US/images/icon.png',
     description:'مشغل ومكتبة فيديو ممتازة للشاشات مع دعم الشبكة وSMB والترجمات.',
     devices:'Android TV · Box · Universal', version:'6.4.64',
+    architecture:'Universal', apkSizeBytes:84398344,
     downloadUrl:'https://github.com/nova-video-player/aos-AVP/releases/download/v6.4.64/org.courville.nova-2669737-6.4.64-20260912.1301-universal-release.apk',
     downloadMode:'direct', sortOrder:40, enabled:true, featured:false
   },
@@ -55,6 +59,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/truefedex/tv-bro/master/app/src/main/res/drawable-xhdpi/ic_launcher.png',
     description:'متصفح مصمم للريموت على Android TV مع تنزيل ملفات وروابط بسهولة.',
     devices:'Android TV · Box', version:'2.1.6',
+    architecture:'Universal', apkSizeBytes:6790605,
     downloadUrl:'https://github.com/truefedex/tv-bro/releases/download/v2.1.6/tvbro-2.1.6-generic-geckoExcluded.apk',
     downloadMode:'direct', sortOrder:50, enabled:true, featured:false
   },
@@ -63,6 +68,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/TeamAmaze/AmazeFileManager/master/icon.png',
     description:'مدير ملفات مفتوح المصدر لإدارة الملفات وملفات APK والتخزين.',
     devices:'Android · TV/Box compatible', version:'3.11.3',
+    architecture:'Universal', apkSizeBytes:12311594,
     downloadUrl:'https://github.com/TeamAmaze/AmazeFileManager/releases/download/v3.11.3/app-fdroid-release.apk',
     downloadMode:'direct', sortOrder:60, enabled:true, featured:false
   },
@@ -71,6 +77,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/jellyfin/jellyfin-androidtv/master/fastlane/metadata/android/en-US/images/icon.png',
     description:'عميل Jellyfin الرسمي للشاشات لتشغيل مكتبتك المنزلية من السيرفر.',
     devices:'Android TV · Box', version:'0.19.10',
+    architecture:'Universal', apkSizeBytes:21950619,
     downloadUrl:'https://github.com/jellyfin/jellyfin-androidtv/releases/download/v0.19.10/jellyfin-androidtv-v0.19.10-release.apk',
     downloadMode:'direct', sortOrder:70, enabled:true, featured:false
   },
@@ -79,6 +86,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/leanbitlab-org/LtvLauncher/master/assets/icon.png',
     description:'واجهة Home خفيفة ومفتوحة المصدر لترتيب تطبيقات Android TV وFire TV.',
     devices:'Android TV · Fire TV · Universal', version:'2026.09.15',
+    architecture:'Universal', apkSizeBytes:18387553,
     downloadUrl:'https://github.com/leanbitlab-org/LtvLauncher/releases/download/v2026.09.15/LTvLauncher-universal-release.apk',
     downloadMode:'direct', sortOrder:80, enabled:true, featured:false
   },
@@ -87,6 +95,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/theothernt/AerialViews/master/app/src/main/ic_launcher-playstore.png',
     description:'شاشة توقف 4K للشاشات وGoogle TV وNVIDIA Shield وFire TV.',
     devices:'Android TV · Google TV · Fire TV', version:'1.8.4',
+    architecture:'Universal', apkSizeBytes:8776119,
     downloadUrl:'https://github.com/theothernt/AerialViews/releases/download/1.8.4/aerial-views-1.8.4.apk',
     downloadMode:'direct', sortOrder:90, enabled:true, featured:false
   },
@@ -95,6 +104,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/localsend/localsend/main/app/android/app/src/main/ic_launcher-playstore.png',
     description:'إرسال ملفات وملفات APK بين الجوال والكمبيوتر والشاشة على نفس الشبكة بدون حساب.',
     devices:'Android · TV/Box · ARM64', version:'1.18.2',
+    architecture:'ARM64', apkSizeBytes:46558706,
     downloadUrl:'https://github.com/localsend/localsend/releases/download/v1.18.2/LocalSend-1.18.2-android-arm64v8.apk',
     downloadMode:'direct', sortOrder:100, enabled:true, featured:true
   },
@@ -103,6 +113,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/mpv-android/mpv-android/master/fastlane/metadata/android/en-US/images/icon.png',
     description:'مشغل فيديو قوي وخفيف يدعم صيغ كثيرة وتسريع العتاد والترجمات.',
     devices:'Android TV · Box · ARM64', version:'2026-09-17',
+    architecture:'ARM64', apkSizeBytes:34290346,
     downloadUrl:'https://github.com/mpv-android/mpv-android/releases/download/2026-09-17/app-default-arm64-v8a-release.apk',
     downloadMode:'direct', sortOrder:110, enabled:true, featured:false
   },
@@ -111,6 +122,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/moonlight-stream/moonlight-android/master/fastlane/metadata/android/en-US/images/icon.png',
     description:'بث ألعاب الكمبيوتر إلى التلفزيون أو Android Box بجودة عالية وزمن استجابة منخفض.',
     devices:'Android TV · Box · Gamepad', version:'12.2',
+    architecture:'Universal', apkSizeBytes:11137885,
     downloadUrl:'https://github.com/moonlight-stream/moonlight-android/releases/download/v12.2/app-nonRoot-release.apk',
     downloadMode:'direct', sortOrder:120, enabled:true, featured:false
   },
@@ -119,6 +131,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/zhanghai/MaterialFiles/master/app/src/main/res/mipmap-xxxhdpi/launcher_icon.png',
     description:'مدير ملفات مفتوح المصدر لإدارة التخزين والملفات والأرشيفات وFTP.',
     devices:'Android · TV/Box compatible', version:'1.7.4',
+    architecture:'Universal', apkSizeBytes:12117315,
     downloadUrl:'https://github.com/zhanghai/MaterialFiles/releases/download/v1.7.4/app-release-universal.apk',
     downloadMode:'direct', sortOrder:130, enabled:true, featured:false
   },
@@ -127,8 +140,54 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/rustdesk/rustdesk/master/fastlane/metadata/android/en-US/images/icon.png',
     description:'أداة دعم وتحكم عن بعد مفيدة لصيانة أجهزة Android والبوكسات من جهاز آخر.',
     devices:'Android · ARM64', version:'1.4.9',
+    architecture:'ARM64', apkSizeBytes:26871021,
     downloadUrl:'https://github.com/rustdesk/rustdesk/releases/download/1.4.9/rustdesk-1.4.9-aarch64-signed.apk',
     downloadMode:'direct', sortOrder:140, enabled:true, featured:false
+  },
+  {
+    slug:'obtainium', name:'Obtainium', category:'tools', symbol:'OB',
+    iconUrl:'https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/icon-512x512.png',
+    description:'يتابع تحديثات التطبيقات من مصادرها الأصلية مثل GitHub ويثبت الإصدارات الجديدة بسهولة.',
+    devices:'Android TV · Box · Mobile', version:'1.6.17',
+    architecture:'Universal', apkSizeBytes:72251016,
+    downloadUrl:'https://github.com/ImranR98/Obtainium/releases/download/v1.6.17/app-release.apk',
+    downloadMode:'direct', sortOrder:150, enabled:true, featured:true
+  },
+  {
+    slug:'app-manager', name:'App Manager', category:'tools', symbol:'AM',
+    iconUrl:'https://raw.githubusercontent.com/MuntashirAkon/AppManager/master/app/src/main/ic_launcher-playstore.png',
+    description:'إدارة التطبيقات المثبتة والحزم والنسخ الاحتياطي ومعلومات APK على أجهزة Android.',
+    devices:'Android TV · Box · Mobile', version:'4.1.1',
+    architecture:'Universal', apkSizeBytes:28270163,
+    downloadUrl:'https://github.com/MuntashirAkon/AppManager/releases/download/v4.1.1/AppManager_v4.1.1.apk',
+    downloadMode:'direct', sortOrder:160, enabled:true, featured:false
+  },
+  {
+    slug:'next-player', name:'Next Player', category:'media', symbol:'NP',
+    iconUrl:'https://raw.githubusercontent.com/anilbeesetti/nextplayer/main/app/src/main/ic_launcher-playstore.png',
+    description:'مشغل فيديو حديث يدعم Android TV والريموت والترجمات ومجموعة واسعة من الصيغ.',
+    devices:'Android TV · Box · Mobile', version:'0.18.0',
+    architecture:'Universal', apkSizeBytes:54428199,
+    downloadUrl:'https://github.com/anilbeesetti/nextplayer/releases/download/v0.18.0/nextplayer-v0.18.0-universal.apk',
+    downloadMode:'direct', sortOrder:170, enabled:true, featured:false
+  },
+  {
+    slug:'fossify-file-manager', name:'Fossify File Manager', category:'files', symbol:'FF',
+    iconUrl:'https://raw.githubusercontent.com/FossifyOrg/File-Manager/main/app/src/main/ic_launcher-playstore.png',
+    description:'مدير ملفات بسيط ومفتوح المصدر للتصفح والنقل والضغط وفك الضغط وإدارة التخزين.',
+    devices:'Android · Box', version:'1.6.1',
+    architecture:'Universal', apkSizeBytes:9982225,
+    downloadUrl:'https://github.com/FossifyOrg/File-Manager/releases/download/1.6.1/file-manager-13-foss-release.apk',
+    downloadMode:'direct', sortOrder:180, enabled:true, featured:false
+  },
+  {
+    slug:'wifi-analyzer', name:'WiFi Analyzer', category:'network', symbol:'WF',
+    iconUrl:'https://raw.githubusercontent.com/VREMSoftwareDevelopment/WiFiAnalyzer/main/images/icon.png',
+    description:'تحليل قنوات Wi‑Fi وقوة الإشارة والازدحام للمساعدة في تحسين اتصال الشاشة أو الرسيفر.',
+    devices:'Android · Box', version:'3.3.1',
+    architecture:'Universal', apkSizeBytes:2080508,
+    downloadUrl:'https://github.com/VREMSoftwareDevelopment/WiFiAnalyzer/releases/download/V3.3.1-F-DROID/WiFiAnalyzer-3.3.1.apk',
+    downloadMode:'direct', sortOrder:190, enabled:true, featured:false
   }
 ]);
 
@@ -169,6 +228,8 @@ function cleanApp(raw) {
     description: text(raw.description, 240),
     devices: text(raw.devices || 'TV · Box', 80),
     version: text(raw.version, 40, false),
+    architecture: text(raw.architecture || 'Universal', 32),
+    apkSizeBytes: Math.max(0, Math.floor(Number(raw.apkSizeBytes || 0) || 0)),
     downloadUrl,
     downloadMode,
     sortOrder,
@@ -186,6 +247,8 @@ const mapRow = row => ({
   description: row.description,
   devices: row.devices,
   version: row.version || '',
+  architecture: row.architecture || '',
+  apkSizeBytes: Number(row.apk_size_bytes || 0),
   downloadUrl: row.download_url,
   downloadMode: row.download_mode,
   sortOrder: Number(row.sort_order),
@@ -197,10 +260,10 @@ const mapRow = row => ({
 async function insertSeed(client, item) {
   await client.query(
     `insert into blofy_app_catalog
-     (slug,name,category,symbol,icon_url,description,devices,version,download_url,download_mode,sort_order,enabled,featured,updated_at)
-     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now())
+     (slug,name,category,symbol,icon_url,description,devices,version,architecture,apk_size_bytes,download_url,download_mode,sort_order,enabled,featured,updated_at)
+     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
      on conflict(slug) do nothing`,
-    [item.slug,item.name,item.category,item.symbol,item.iconUrl,item.description,item.devices,item.version,item.downloadUrl,item.downloadMode,item.sortOrder,item.enabled,item.featured]
+    [item.slug,item.name,item.category,item.symbol,item.iconUrl,item.description,item.devices,item.version,item.architecture,item.apkSizeBytes,item.downloadUrl,item.downloadMode,item.sortOrder,item.enabled,item.featured]
   );
 }
 
@@ -218,6 +281,8 @@ export async function initAppLibrary() {
         description text not null,
         devices text not null,
         version text not null default '',
+        architecture text not null default '',
+        apk_size_bytes bigint not null default 0,
         download_url text not null,
         download_mode text not null check (download_mode in ('official','direct')),
         sort_order integer not null default 100,
@@ -227,6 +292,8 @@ export async function initAppLibrary() {
       )
     `);
     await client.query("alter table blofy_app_catalog add column if not exists icon_url text not null default ''");
+    await client.query("alter table blofy_app_catalog add column if not exists architecture text not null default ''");
+    await client.query("alter table blofy_app_catalog add column if not exists apk_size_bytes bigint not null default 0");
     await client.query(`
       create table if not exists blofy_app_catalog_meta (
         id smallint primary key check(id=1),
@@ -237,8 +304,14 @@ export async function initAppLibrary() {
     const version = Number((await client.query('select seed_version from blofy_app_catalog_meta where id=1 for update')).rows[0]?.seed_version || 0);
 
     if (version < SEED_VERSION) {
-      await client.query('delete from blofy_app_catalog');
-      for (const seed of DEFAULT_APPS) await insertSeed(client, cleanApp(seed));
+      for (const seed of DEFAULT_APPS) {
+        const item = cleanApp(seed);
+        await insertSeed(client, item);
+        await client.query(
+          'update blofy_app_catalog set architecture=$2, apk_size_bytes=$3 where slug=$1',
+          [item.slug, item.architecture, item.apkSizeBytes]
+        );
+      }
       await client.query('update blofy_app_catalog_meta set seed_version=$1 where id=1', [SEED_VERSION]);
     } else {
       for (const seed of DEFAULT_APPS) await insertSeed(client, cleanApp(seed));
@@ -284,10 +357,11 @@ export async function upsertApp(raw) {
      on conflict(slug) do update set
        name=excluded.name, category=excluded.category, symbol=excluded.symbol, icon_url=excluded.icon_url,
        description=excluded.description, devices=excluded.devices, version=excluded.version,
+       architecture=excluded.architecture, apk_size_bytes=excluded.apk_size_bytes,
        download_url=excluded.download_url, download_mode=excluded.download_mode,
        sort_order=excluded.sort_order, enabled=excluded.enabled, featured=excluded.featured, updated_at=now()
      returning *`,
-    [item.slug,item.name,item.category,item.symbol,item.iconUrl,item.description,item.devices,item.version,item.downloadUrl,item.downloadMode,item.sortOrder,item.enabled,item.featured]
+    [item.slug,item.name,item.category,item.symbol,item.iconUrl,item.description,item.devices,item.version,item.architecture,item.apkSizeBytes,item.downloadUrl,item.downloadMode,item.sortOrder,item.enabled,item.featured]
   );
   return mapRow(result.rows[0]);
 }
