@@ -352,8 +352,8 @@ export async function upsertApp(raw) {
   if (!exists.rowCount && count.rows[0].n >= 200) throw new Error('app_catalog_full');
   const result = await pool.query(
     `insert into blofy_app_catalog
-     (slug,name,category,symbol,icon_url,description,devices,version,download_url,download_mode,sort_order,enabled,featured,updated_at)
-     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now())
+     (slug,name,category,symbol,icon_url,description,devices,version,architecture,apk_size_bytes,download_url,download_mode,sort_order,enabled,featured,updated_at)
+     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
      on conflict(slug) do update set
        name=excluded.name, category=excluded.category, symbol=excluded.symbol, icon_url=excluded.icon_url,
        description=excluded.description, devices=excluded.devices, version=excluded.version,
