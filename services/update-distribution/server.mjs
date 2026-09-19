@@ -84,7 +84,7 @@ function renderAppLibrary(apps) {
   const groups = categories.map(([key, title, description]) => {
     const items = apps.filter(app => app.category === key);
     if (!items.length) return '';
-    const cards = items.map(app => `<article class="app-card${app.featured ? ' app-featured' : ''}"><div class="app-top"><div class="app-icon">${escapeHtml(app.symbol)}</div><div><h3>${escapeHtml(app.name)}</h3><span class="device-tag">${escapeHtml(app.devices)}</span></div></div><p>${escapeHtml(app.description)}</p><div class="app-bottom">${app.version ? `<span class="app-version">v ${escapeHtml(app.version)}</span>` : '<span class="app-version">Android</span>'}<a class="app-download" href="/apps/${encodeURIComponent(app.slug)}">${app.downloadMode === 'direct' ? 'تحميل التطبيق ↓' : 'فتح المصدر الرسمي ↗'}</a></div></article>`).join('');
+    const cards = items.map(app => `<article class="app-card${app.featured ? ' app-featured' : ''}"><div class="app-top"><div class="app-icon">${escapeHtml(app.symbol)}</div><div><h3>${escapeHtml(app.name)}</h3><span class="device-tag">${escapeHtml(app.devices)}</span></div></div><p>${escapeHtml(app.description)}</p><div class="app-bottom">${app.version ? `<span class="app-version">v ${escapeHtml(app.version)}</span>` : '<span class="app-version">Android</span>'}<a class="app-download" href="/download/apps/${encodeURIComponent(app.slug)}">${app.downloadMode === 'direct' ? 'تحميل التطبيق ↓' : 'فتح المصدر الرسمي ↗'}</a></div></article>`).join('');
     return `<section class="app-group"><div class="app-group-head"><div><span class="eyebrow">BLOFY APPS</span><h2>${title}</h2></div><p>${description}</p></div><div class="app-grid">${cards}</div></section>`;
   }).join('');
   if (!groups) return '';
