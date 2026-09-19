@@ -14,19 +14,23 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify compact live Azure download page
+      - name: Verify descriptions and expanded direct APK catalog
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io'
           curl -fsS --max-time 20 "$BASE/downloads" -o /tmp/downloads.html
-          grep -Fq 'class="official-card"' /tmp/downloads.html
-          grep -Fq 'تحميل BLOFY APK ↓' /tmp/downloads.html
-          grep -Fq 'class="apps-section"' /tmp/downloads.html
-          test "$(grep -o 'class="app-row' /tmp/downloads.html | wc -l)" = '9'
-          test "$(grep -Fc 'تحميل APK ↓' /tmp/downloads.html)" = '9'
-          if grep -Fq 'QUICK INSTALL' /tmp/downloads.html; then exit 11; fi
-          if grep -Fq 'نسختك الرسمية' /tmp/downloads.html; then exit 12; fi
-          if grep -Fq 'نزّله بالطريقة المناسبة لجهازك' /tmp/downloads.html; then exit 13; fi
-          if grep -Fq 'ملاحظات الإصدار' /tmp/downloads.html; then exit 14; fi
-          echo 'COMPACT_DOWNLOAD_PAGE=PASS'
+          test "$(grep -o 'class="app-row' /tmp/downloads.html | wc -l)" = '14'
+          test "$(grep -o 'class="app-desc' /tmp/downloads.html | wc -l)" = '14'
+          grep -Fq 'إرسال ملفات وملفات APK بين الجوال والكمبيوتر والشاشة' /tmp/downloads.html
+          grep -Fq 'بث ألعاب الكمبيوتر إلى التلفزيون' /tmp/downloads.html
+          grep -Fq 'أداة دعم وتحكم عن بعد' /tmp/downloads.html
+
+          for slug in vlc kodi just-player nova-player tv-bro amaze jellyfin-tv ltv-launcher aerial-views localsend mpv-android moonlight material-files rustdesk; do
+            headers="$(curl -sSI --max-time 20 "$BASE/download/apps/$slug" | tr -d '\r')"
+            code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
+            location="$(printf '%s\n' "$headers" | awk 'tolower($1)=="location:"{$1=""; sub(/^ /,""); print; exit}')"
+            test "$code" = '302'
+            case "$location" in *.apk) ;; *) echo "$slug not direct APK: $location" >&2; exit 1;; esac
+          done
+          echo 'EXPANDED_CATALOG=PASS'
