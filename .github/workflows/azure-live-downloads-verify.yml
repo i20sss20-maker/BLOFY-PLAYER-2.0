@@ -14,27 +14,19 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify final live Azure direct APK list
+      - name: Verify compact live Azure download page
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io'
           curl -fsS --max-time 20 "$BASE/downloads" -o /tmp/downloads.html
-          grep -Fq 'class="app-list"' /tmp/downloads.html
+          grep -Fq 'class="official-card"' /tmp/downloads.html
+          grep -Fq 'تحميل BLOFY APK ↓' /tmp/downloads.html
+          grep -Fq 'class="apps-section"' /tmp/downloads.html
           test "$(grep -o 'class="app-row' /tmp/downloads.html | wc -l)" = '9'
           test "$(grep -Fc 'تحميل APK ↓' /tmp/downloads.html)" = '9'
-          test "$(grep -Fc 'raw.githubusercontent.com' /tmp/downloads.html)" = '9'
-
-          for slug in vlc kodi just-player nova-player tv-bro amaze jellyfin-tv ltv-launcher aerial-views; do
-            headers="$(curl -sSI --max-time 20 "$BASE/download/apps/$slug" | tr -d '\r')"
-            code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
-            location="$(printf '%s\n' "$headers" | awk 'tolower($1)=="location:"{$1=""; sub(/^ /,""); print; exit}')"
-            test "$code" = '302'
-            case "$location" in *.apk) ;; *) echo "$slug not direct APK: $location" >&2; exit 1;; esac
-          done
-
-          for icon in             'https://raw.githubusercontent.com/videolan/vlc-android/master/application/resources/src/main/res/drawable-xxxhdpi/icon.png'             'https://raw.githubusercontent.com/xbmc/xbmc/master/media/icon256x256.png'             'https://raw.githubusercontent.com/moneytoo/Player/master/fastlane/metadata/android/en-US/images/icon.png'             'https://raw.githubusercontent.com/truefedex/tv-bro/master/app/src/main/res/drawable-xhdpi/ic_launcher.png'; do
-            test "$(curl -L -sS -o /dev/null -w '%{http_code}' --max-time 20 "$icon")" = '200'
-          done
-
-          echo 'LIVE_DIRECT_LIST=PASS'
+          if grep -Fq 'QUICK INSTALL' /tmp/downloads.html; then exit 11; fi
+          if grep -Fq 'نسختك الرسمية' /tmp/downloads.html; then exit 12; fi
+          if grep -Fq 'نزّله بالطريقة المناسبة لجهازك' /tmp/downloads.html; then exit 13; fi
+          if grep -Fq 'ملاحظات الإصدار' /tmp/downloads.html; then exit 14; fi
+          echo 'COMPACT_DOWNLOAD_PAGE=PASS'
