@@ -14,22 +14,30 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify live Azure download center
+      - name: Verify live Azure direct APK list
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io'
           curl -fsS --max-time 20 "$BASE/downloads" -o /tmp/downloads.html
-          grep -Fq 'BLOFY PLAYER' /tmp/downloads.html
           grep -Fq 'تطبيقات مفيدة للشاشات والرسيفرات' /tmp/downloads.html
-          for app in VLC Kodi Downloader 'TV Bro' FLauncher; do
-            grep -Fq "$app" /tmp/downloads.html
+          grep -Fq 'class="app-list"' /tmp/downloads.html
+          test "$(grep -o 'class="app-row' /tmp/downloads.html | wc -l)" -ge 8
+          grep -Fq 'تحميل APK ↓' /tmp/downloads.html
+          grep -Fq 'raw.githubusercontent.com' /tmp/downloads.html
+          grep -Fq 'cdn.simpleicons.org' /tmp/downloads.html
+
+          for slug in vlc kodi just-player nova-player tv-bro amaze jellyfin-tv ltv-launcher aerial-views; do
+            headers="$(curl -sSI --max-time 20 "$BASE/download/apps/$slug" | tr -d '\r')"
+            code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
+            location="$(printf '%s\n' "$headers" | awk 'tolower($1)=="location:"{$1=""; sub(/^ /,""); print; exit}')"
+            test "$code" = '302'
+            case "$location" in *.apk) ;; *) echo "$slug not direct APK: $location" >&2; exit 1;; esac
           done
-          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/download/apps/vlc")"
-          test "$code" = '302'
-          location="$(curl -sSI --max-time 20 "$BASE/download/apps/vlc" | tr -d '\r' | awk 'tolower($1)=="location:"{$1=""; sub(/^ /,""); print; exit}')"
-          test -n "$location"
-          admin_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/releases-admin")"
-          test "$admin_code" = '401'
-          echo "LIVE_DOWNLOADS_VERIFY=PASS"
-          echo "APP_REDIRECT=$location"
+
+          VLC_ICON="$(grep -o 'https://cdn.simpleicons.org/vlcmediaplayer' /tmp/downloads.html | head -1)"
+          JUST_ICON="$(grep -o 'https://raw.githubusercontent.com/moneytoo/Player/master/fastlane/metadata/android/en-US/images/icon.png' /tmp/downloads.html | head -1)"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$VLC_ICON")" = '200'
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$JUST_ICON")" = '200'
+          echo "LIVE_DIRECT_LIST=PASS"
+          echo "ROWS=$(grep -o 'class="app-row' /tmp/downloads.html | wc -l)"
