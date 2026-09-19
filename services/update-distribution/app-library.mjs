@@ -602,6 +602,15 @@ export async function initAppLibrary() {
       for (const seed of DEFAULT_APPS) await insertSeed(client, cleanApp(seed));
     }
     await client.query('COMMIT');
+    const backupCount = Number((await client.query('select count(*)::int as n from blofy_app_backups')).rows[0]?.n || 0);
+    if (backupCount === 0) {
+      await client.query(
+        `insert into blofy_app_backups(reason,actor,app_count,snapshot)
+         select 'initial_baseline','system',count(*)::int,
+                coalesce(jsonb_agg(to_jsonb(c) order by c.featured desc,c.sort_order asc,c.name asc),'[]'::jsonb)
+         from blofy_app_catalog c`
+      );
+    }
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
