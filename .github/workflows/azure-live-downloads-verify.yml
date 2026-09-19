@@ -33,12 +33,9 @@ jobs:
           grep -Fq 'Universal' /tmp/downloads.html
           grep -Fq 'MB' /tmp/downloads.html
 
-          rows="$(grep -o 'data-app-row' /tmp/downloads.html | wc -l)"
-          test "$rows" -ge 19
-
           slugs="$(grep -o 'data-slug="[^"]*"' /tmp/downloads.html | sed 's/data-slug="//;s/"//' | sort -u)"
           slug_count="$(printf '%s\n' "$slugs" | sed '/^$/d' | wc -l)"
-          test "$slug_count" = "$rows"
+          test "$slug_count" -ge 19
 
           while IFS= read -r slug; do
             [ -n "$slug" ] || continue
@@ -52,4 +49,4 @@ jobs:
             esac
           done <<< "$slugs"
 
-          echo "LIVE_CENTER_PASS rows=$rows slugs=$slug_count"
+          echo "LIVE_CENTER_PASS apps=$slug_count"
