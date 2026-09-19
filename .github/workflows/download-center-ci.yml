@@ -95,6 +95,10 @@ jobs:
           grep -Fq 'id="app-search"' /tmp/downloads.html
           grep -Fq 'id="app-vlc"' /tmp/downloads.html
           grep -Fq 'class="stable-download-link"' /tmp/downloads.html
+          grep -Fq 'class="copy-link"' /tmp/downloads.html
+          grep -Fq 'data-copy-url=' /tmp/downloads.html
+          grep -Fq 'نسخ / تفاصيل' /tmp/downloads.html
+          grep -Fq 'إذا ما تعرف نوع جهازك اختر Universal' /tmp/downloads.html
           grep -Fq '/apps/vlc' /tmp/downloads.html
 
           curl -fsS --max-time 10 'http://127.0.0.1:3100/downloads?app=vlc' >/tmp/downloads-vlc.html
@@ -105,12 +109,12 @@ jobs:
           grep -Fq 'Universal' /tmp/downloads.html
 
           for path in \
-            /download/apps/vlc/armv7 \
-            /download/apps/kodi/armv7 \
-            /download/apps/localsend/armv7 \
-            /download/apps/mpv-android/universal \
-            /download/apps/rustdesk/armv7 \
-            /download/apps/smarttube/arm64
+            /apps/vlc/armv7 \
+            /apps/kodi/armv7 \
+            /apps/localsend/armv7 \
+            /apps/mpv-android/universal \
+            /apps/rustdesk/armv7 \
+            /apps/smarttube/arm64
           do
             headers="$(curl -sSI --max-time 10 "http://127.0.0.1:3100$path" | tr -d '\r')"
             code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
