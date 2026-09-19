@@ -35,8 +35,9 @@ jobs:
           count="$(printf '%s\n' "$slugs" | sed '/^$/d' | wc -l)"
           test "$count" -ge 26
 
-          detail_buttons="$(grep -o 'data-details-toggle' /tmp/downloads.html | wc -l)"
-          detail_panels="$(grep -o 'class="app-details"' /tmp/downloads.html | wc -l)"
+          detail_buttons="$(grep -o '<button class="app-more"' /tmp/downloads.html | wc -l)"
+          detail_panels="$(grep -o '<div class="app-details"' /tmp/downloads.html | wc -l)"
+          echo "APPS=$count DETAILS_BUTTONS=$detail_buttons DETAILS_PANELS=$detail_panels"
           test "$detail_buttons" = "$count"
           test "$detail_panels" = "$count"
 
