@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { initReleaseStore, getActiveRelease } from './release-store.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
-import { initAppLibrary, listApps, getApp, refreshManagedApps } from './app-library.mjs';
+import { initAppLibrary, listApps, getApp, refreshManagedApps, refreshAppHealth, recordDownload } from './app-library.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 const APP_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -257,6 +257,14 @@ function scheduleManagedAppRefresh() {
     } catch (error) {
       console.error('BLOFY app refresh failed:', error?.message || error);
     }
+    try {
+      const health = await refreshAppHealth();
+      if (!health.skipped) {
+        console.log(`BLOFY app health checked=${health.checked || 0} healthy=${health.healthy || 0} failed=${health.failed || 0}`);
+      }
+    } catch (error) {
+      console.error('BLOFY app health failed:', error?.message || error);
+    }
   };
 
   const firstRun = setTimeout(run, 15000);
@@ -296,6 +304,9 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/health' || pathname === '/release.json') return sendJson(req, res, 200, healthPayload());
 
     if (pathname === '/download/latest.apk') {
+      if (method === 'GET') {
+        recordDownload('blofy').catch(error => console.error('BLOFY download stat failed:', error?.message || error));
+      }
       res.writeHead(302, {
         ...securityHeaders,
         location: getActiveRelease().downloadUrl,
@@ -308,6 +319,9 @@ const server = http.createServer(async (req, res) => {
     if (appMatch) {
       const app = await getApp(decodeURIComponent(appMatch[1]));
       if (!app) return sendJson(req, res, 404, { ok: false, error: 'app_not_found' });
+      if (method === 'GET') {
+        recordDownload(`app:${app.slug}`).catch(error => console.error('App download stat failed:', error?.message || error));
+      }
       res.writeHead(302, {
         ...securityHeaders,
         location: app.downloadUrl,
