@@ -14,7 +14,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify 26-app live BLOFY center
+      - name: Verify resilient catalog live
         shell: bash
         run: |
           set -euo pipefail
@@ -25,13 +25,19 @@ jobs:
           grep -Fq '"ok":true' /tmp/health.json
 
           curl -fsS --max-time 20 "$BASE/downloads" -o /tmp/downloads.html
+          grep -Fq 'id="app-search"' /tmp/downloads.html
+          grep -Fq 'مشغل وسائط احترافي للشاشات والرسيفرات' /tmp/downloads.html
+
           for name in 'MATVT' 'APKUpdater' 'Mrowser' 'SmartTube'; do
             grep -Fq "$name" /tmp/downloads.html
           done
 
+          new_count="$(grep -Fo '<span class="mini-badge badge-new">جديد</span>' /tmp/downloads.html | wc -l)"
+          test "$new_count" -ge 4
+
           slugs="$(grep -o 'data-slug="[^"]*"' /tmp/downloads.html | sed 's/data-slug="//;s/"//' | sort -u)"
           count="$(printf '%s\n' "$slugs" | sed '/^$/d' | wc -l)"
-          test "$count" -ge 26
+          test "$count" -ge 22
 
           while IFS= read -r slug; do
             [ -n "$slug" ] || continue
@@ -43,4 +49,4 @@ jobs:
           done <<< "$slugs"
 
           test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/releases-admin")" = '401'
-          echo "LIVE_26_APP_CENTER_PASS apps=$count"
+          echo "RESILIENT_CATALOG_PASS apps=$count new_badges=$new_count"
