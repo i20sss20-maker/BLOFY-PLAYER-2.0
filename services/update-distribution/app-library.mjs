@@ -20,7 +20,7 @@ const SEED_VERSION = 2;
 const DEFAULT_APPS = Object.freeze([
   {
     slug:'vlc', name:'VLC', category:'media', symbol:'VLC',
-    iconUrl:'https://cdn.simpleicons.org/vlcmediaplayer',
+    iconUrl:'https://raw.githubusercontent.com/videolan/vlc-android/master/application/resources/src/main/res/drawable-xxxhdpi/icon.png',
     description:'مشغل فيديو وصوت خفيف وموثوق للشاشات والرسيفرات.',
     devices:'Android TV · Box · ARM64', version:'3.7.0',
     downloadUrl:'https://get.videolan.org/vlc-android/3.7.0/VLC-Android-3.7.0-arm64-v8a.apk',
@@ -28,7 +28,7 @@ const DEFAULT_APPS = Object.freeze([
   },
   {
     slug:'kodi', name:'Kodi', category:'media', symbol:'K',
-    iconUrl:'https://cdn.simpleicons.org/kodi',
+    iconUrl:'https://raw.githubusercontent.com/xbmc/xbmc/master/media/icon256x256.png',
     description:'مركز وسائط متكامل لتشغيل وتنظيم مكتبة الأفلام والفيديو على التلفزيون.',
     devices:'Android TV · Box · ARM64', version:'21.3',
     downloadUrl:'https://mirrors.kodi.tv/releases/android/arm64-v8a/kodi-21.3-Omega-arm64-v8a.apk',
