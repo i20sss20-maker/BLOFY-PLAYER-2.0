@@ -982,7 +982,7 @@ export async function restoreCatalogBackup(id) {
     backupId,
     appCount: catalogSnapshot.length
   });
-  return { backupId, appCount: snapshot.length };
+  return { backupId, appCount: catalogSnapshot.length };
 }
 
 export async function upsertApp(raw) {
