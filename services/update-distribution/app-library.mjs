@@ -620,8 +620,9 @@ export async function listApps(includeDisabled = false) {
     : await pool.query(
         `select c.* from blofy_app_catalog c
          left join blofy_app_health h on h.slug=c.slug
+         left join blofy_download_stats s on s.key=('app:' || c.slug)
          where c.enabled=true and coalesce(h.consecutive_failures,0) < 2
-         order by c.featured desc, c.sort_order asc, c.name asc
+         order by c.featured desc, coalesce(s.download_count,0) desc, c.sort_order asc, c.name asc
          limit 200`
       );
   return result.rows.map(mapRow);
