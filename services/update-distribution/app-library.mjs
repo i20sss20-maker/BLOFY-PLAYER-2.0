@@ -43,6 +43,7 @@ const GITHUB_UPDATE_RULES = Object.freeze({
 });
 
 const AUTO_REFRESH_MS = 6 * 60 * 60 * 1000;
+const HEALTH_REFRESH_MS = 6 * 60 * 60 * 1000;
 
 const DEFAULT_APPS = Object.freeze([
   {
@@ -473,11 +474,32 @@ export async function initAppLibrary() {
         id smallint primary key check(id=1),
         seed_version integer not null default 0,
         last_refresh_at timestamptz,
-        last_refresh_summary text not null default ''
+        last_refresh_summary text not null default '',
+        last_health_at timestamptz,
+        last_health_summary text not null default ''
       )
     `);
     await client.query("alter table blofy_app_catalog_meta add column if not exists last_refresh_at timestamptz");
     await client.query("alter table blofy_app_catalog_meta add column if not exists last_refresh_summary text not null default ''");
+    await client.query("alter table blofy_app_catalog_meta add column if not exists last_health_at timestamptz");
+    await client.query("alter table blofy_app_catalog_meta add column if not exists last_health_summary text not null default ''");
+    await client.query(`
+      create table if not exists blofy_download_stats (
+        key text primary key,
+        download_count bigint not null default 0,
+        last_download_at timestamptz
+      )
+    `);
+    await client.query(`
+      create table if not exists blofy_app_health (
+        slug text primary key references blofy_app_catalog(slug) on delete cascade,
+        ok boolean,
+        status_code integer,
+        size_bytes bigint not null default 0,
+        checked_at timestamptz,
+        error text not null default ''
+      )
+    `);
     await client.query('insert into blofy_app_catalog_meta(id,seed_version) values(1,0) on conflict(id) do nothing');
     const version = Number((await client.query('select seed_version from blofy_app_catalog_meta where id=1 for update')).rows[0]?.seed_version || 0);
 
@@ -656,6 +678,127 @@ export async function refreshManagedApps({ force = false } = {}) {
     [JSON.stringify(summary)]
   );
   return { skipped: false, ...summary, results, lastRefreshAt: Date.now() };
+}
+
+
+export async function recordDownload(key) {
+  const cleanKey = String(key || '').trim().toLowerCase();
+  if (!/^(?:blofy|app:[a-z0-9]+(?:-[a-z0-9]+)*)$/.test(cleanKey)) throw new Error('invalid_download_stat_key');
+  await pool.query(
+    `insert into blofy_download_stats(key,download_count,last_download_at)
+     values($1,1,now())
+     on conflict(key) do update set
+       download_count=blofy_download_stats.download_count+1,
+       last_download_at=now()`,
+    [cleanKey]
+  );
+}
+
+export async function getDownloadStats() {
+  const result = await pool.query(
+    'select key,download_count,last_download_at from blofy_download_stats order by download_count desc,key asc limit 500'
+  );
+  const byKey = {};
+  let total = 0;
+  let appDownloads = 0;
+  for (const row of result.rows) {
+    const downloadCount = Number(row.download_count || 0);
+    const item = {
+      downloadCount,
+      lastDownloadAt: row.last_download_at ? new Date(row.last_download_at).getTime() : 0
+    };
+    byKey[row.key] = item;
+    total += downloadCount;
+    if (String(row.key).startsWith('app:')) appDownloads += downloadCount;
+  }
+  return {
+    total,
+    blofyDownloads: Number(byKey.blofy?.downloadCount || 0),
+    appDownloads,
+    byKey
+  };
+}
+
+export async function getAppHealthState() {
+  const [metaResult, healthResult] = await Promise.all([
+    pool.query('select last_health_at,last_health_summary from blofy_app_catalog_meta where id=1'),
+    pool.query('select slug,ok,status_code,size_bytes,checked_at,error from blofy_app_health')
+  ]);
+  const meta = metaResult.rows[0] || {};
+  let summary = {};
+  try { summary = JSON.parse(meta.last_health_summary || '{}'); } catch {}
+  const bySlug = {};
+  for (const row of healthResult.rows) {
+    bySlug[row.slug] = {
+      ok: row.ok === true,
+      statusCode: row.status_code == null ? 0 : Number(row.status_code),
+      sizeBytes: Number(row.size_bytes || 0),
+      checkedAt: row.checked_at ? new Date(row.checked_at).getTime() : 0,
+      error: String(row.error || '')
+    };
+  }
+  return {
+    lastHealthAt: meta.last_health_at ? new Date(meta.last_health_at).getTime() : 0,
+    summary,
+    bySlug
+  };
+}
+
+async function checkOneAppHealth(app) {
+  try {
+    const info = await inspectRemoteApk(app.downloadUrl);
+    await pool.query(
+      `insert into blofy_app_health(slug,ok,status_code,size_bytes,checked_at,error)
+       values($1,true,$2,$3,now(),'')
+       on conflict(slug) do update set
+         ok=true,status_code=excluded.status_code,size_bytes=excluded.size_bytes,
+         checked_at=now(),error=''`,
+      [app.slug, info.status, info.sizeBytes]
+    );
+    if (info.sizeBytes > 0 && Number(app.apkSizeBytes || 0) !== info.sizeBytes) {
+      await pool.query('update blofy_app_catalog set apk_size_bytes=$2 where slug=$1', [app.slug, info.sizeBytes]);
+    }
+    return { slug: app.slug, status: 'ok', statusCode: info.status };
+  } catch (error) {
+    const message = String(error?.message || 'health_check_failed').slice(0, 120);
+    const match = message.match(/(?:apk_http_|github_http_)(\d{3})/);
+    const statusCode = match ? Number(match[1]) : 0;
+    await pool.query(
+      `insert into blofy_app_health(slug,ok,status_code,size_bytes,checked_at,error)
+       values($1,false,$2,0,now(),$3)
+       on conflict(slug) do update set
+         ok=false,status_code=excluded.status_code,checked_at=now(),error=excluded.error`,
+      [app.slug, statusCode || null, message]
+    );
+    return { slug: app.slug, status: 'failed', error: message };
+  }
+}
+
+export async function refreshAppHealth({ force = false } = {}) {
+  const state = await getAppHealthState();
+  const now = Date.now();
+  if (!force && state.lastHealthAt && now - state.lastHealthAt < HEALTH_REFRESH_MS) {
+    return { skipped: true, ...state.summary, lastHealthAt: state.lastHealthAt };
+  }
+
+  const apps = (await listApps(false)).filter(app => app.downloadMode === 'direct');
+  const results = [];
+  const concurrency = 4;
+  for (let index = 0; index < apps.length; index += concurrency) {
+    const batch = apps.slice(index, index + concurrency);
+    results.push(...await Promise.all(batch.map(checkOneAppHealth)));
+  }
+
+  const summary = {
+    checked: results.length,
+    healthy: results.filter(item => item.status === 'ok').length,
+    failed: results.filter(item => item.status === 'failed').length
+  };
+  await pool.query(
+    'update blofy_app_catalog_meta set last_health_at=now(), last_health_summary=$1 where id=1',
+    [JSON.stringify(summary)]
+  );
+  return { skipped: false, ...summary, results, lastHealthAt: Date.now() };
 }
 
 export async function closeAppLibrary() {
