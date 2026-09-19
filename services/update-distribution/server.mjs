@@ -1,9 +1,10 @@
 import http from 'node:http';
 import { initReleaseStore, getActiveRelease } from './release-store.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
-import { initAppLibrary, listApps, getApp } from './app-library.mjs';
+import { initAppLibrary, listApps, getApp, refreshManagedApps } from './app-library.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
+const APP_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const PUBLIC_ADMIN_PREFIX = `/${String(process.env.PUBLIC_ADMIN_PREFIX || '/admin').trim().replace(/^\/+|\/+$/g, '')}`;
 
 const securityHeaders = Object.freeze({
@@ -246,6 +247,24 @@ async function downloadPage(req) {
 </script></body></html>`;
 }
 
+function scheduleManagedAppRefresh() {
+  const run = async () => {
+    try {
+      const result = await refreshManagedApps();
+      if (!result.skipped) {
+        console.log(`BLOFY app refresh checked=${result.checked || 0} updated=${result.updated || 0} failed=${result.failed || 0}`);
+      }
+    } catch (error) {
+      console.error('BLOFY app refresh failed:', error?.message || error);
+    }
+  };
+
+  const firstRun = setTimeout(run, 15000);
+  firstRun.unref?.();
+  const timer = setInterval(run, APP_REFRESH_INTERVAL_MS);
+  timer.unref?.();
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', 'http://localhost');
@@ -314,4 +333,5 @@ const server = http.createServer(async (req, res) => {
 await Promise.all([initReleaseStore(), initAppLibrary()]);
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`BLOFY Azure update distribution listening on ${PORT}`);
+  scheduleManagedAppRefresh();
 });
