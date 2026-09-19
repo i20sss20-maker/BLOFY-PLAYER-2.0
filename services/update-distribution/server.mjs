@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { initReleaseStore, getActiveRelease } from './release-store.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
-import { initAppLibrary, listApps, getApp, refreshManagedApps, refreshAppHealth, recordDownload } from './app-library.mjs';
+import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload } from './app-library.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 const APP_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -120,8 +120,13 @@ function downloadCategoryLabel(category) {
   })[category] || category;
 }
 
-function renderAppLibrary(apps) {
+function renderAppLibrary(apps, variants = []) {
   if (!apps.length) return '';
+  const variantsBySlug = new Map();
+  for (const variant of variants) {
+    if (!variantsBySlug.has(variant.slug)) variantsBySlug.set(variant.slug, []);
+    variantsBySlug.get(variant.slug).push(variant);
+  }
   const filterDefs = [
     ['all','الكل'], ['tv','TV'], ['media','مشغلات'], ['files','ملفات'],
     ['downloads','تنزيل'], ['tools','أدوات'], ['network','شبكة'], ['store','متاجر'],
@@ -139,6 +144,13 @@ function renderAppLibrary(apps) {
     const isTv = /(?:android tv|google tv|fire tv|\btv\b)/i.test(String(app.devices || ''));
     const detailsId = `details-${app.slug}`;
     const updated = formatPublicDate(app.versionUpdatedAt || app.updatedAt);
+    const appVariants = variantsBySlug.get(app.slug) || [];
+    const variantButtons = appVariants.length > 1
+      ? `<div class="variant-options"><strong>نسخ التحميل</strong>${appVariants.map(variant => {
+          const size = formatApkSize(variant.apkSizeBytes);
+          return `<a class="variant-link" href="/download/apps/${encodeURIComponent(app.slug)}/${encodeURIComponent(variant.key)}">${escapeHtml(variant.label)}${size ? ` · ${escapeHtml(size)}` : ''}</a>`;
+        }).join('')}</div>`
+      : '';
     return `<article class="app-row${app.featured ? ' app-featured' : ''}" data-app-row data-slug="${escapeHtml(app.slug)}" data-category="${escapeHtml(app.category)}" data-tv="${isTv ? '1' : '0'}" data-search="${escapeHtml(searchText)}">
       <div class="app-icon" data-symbol="${escapeHtml(app.symbol)}"><img src="${escapeHtml(app.iconUrl)}" alt="" loading="lazy"><span class="icon-fallback">${escapeHtml(app.symbol)}</span></div>
       <div class="app-copy">
@@ -157,6 +169,7 @@ function renderAppLibrary(apps) {
         ${app.apkSizeBytes ? `<span><b>الحجم</b>${escapeHtml(formatApkSize(app.apkSizeBytes))}</span>` : ''}
         <span><b>الأجهزة</b>${escapeHtml(app.devices)}</span>
         ${updated ? `<span><b>آخر تحديث</b>${escapeHtml(updated)}</span>` : ''}
+        ${variantButtons}
       </div>
     </article>`;
   }).join('');
@@ -174,14 +187,14 @@ function renderAppLibrary(apps) {
 
 async function downloadPage(req) {
   const release = getActiveRelease();
-  const apps = await listApps();
+  const [apps, variants] = await Promise.all([listApps(), listAppVariants()]);
   const rootUrl = publicBase(req);
   const directUrl = `${rootUrl}/download/latest.apk`;
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#08070e"><meta name="description" content="مركز التحميل الرسمي لتطبيق BLOFY PLAYER"><title>BLOFY PLAYER | التحميل</title><style>
-:root{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;color-scheme:dark;--bg:#08070e;--line:rgba(191,151,255,.16);--muted:#9f96aa;--green:#78e6b0;--purple:#8655f4}*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;min-height:100vh;color:#fff;background:radial-gradient(circle at 85% -10%,rgba(126,54,232,.24),transparent 30rem),linear-gradient(145deg,#08070e,#0c0912 56%,#08070e)}a{color:inherit}.shell{width:min(1100px,calc(100% - 28px));margin:auto}.topbar{height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid rgba(255,255,255,.06)}.brand{display:flex;align-items:center;gap:10px;direction:ltr;font-weight:900;letter-spacing:.1em}.mark{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.04);overflow:hidden;box-shadow:0 9px 28px rgba(126,70,255,.18)}.mark img{width:34px;height:34px;object-fit:contain}.brand-copy{display:grid;line-height:1.02}.brand-copy strong{font-size:13px}.brand-copy small{margin-top:5px;color:#857a93;font-size:8px;letter-spacing:.18em}.top-status{display:inline-flex;align-items:center;gap:7px;color:#aaa1b6;font-size:11px}.top-status:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}main{padding:18px 0 30px}.official-card{display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:center;gap:16px;padding:15px 17px;border:1px solid rgba(180,137,247,.25);border-radius:19px;background:linear-gradient(145deg,rgba(31,23,46,.92),rgba(12,10,17,.95));box-shadow:0 18px 55px rgba(0,0,0,.18)}.official-icon{width:60px;height:60px;display:grid;place-items:center;border-radius:16px;background:rgba(255,255,255,.035);overflow:hidden}.official-icon img{width:54px;height:54px;object-fit:contain}.official-copy{min-width:0}.official-title{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.official-title h1{margin:0;font-size:23px;line-height:1}.badge{display:inline-flex;padding:5px 9px;border-radius:999px;border:1px solid rgba(117,228,174,.22);background:rgba(59,171,116,.1);color:#8af0bc;font-size:10px;font-weight:900}.official-desc{margin-top:6px;color:#9b92a6;font-size:10px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.official-meta{margin-top:6px;color:#a89fb3;font-size:11px;direction:ltr;text-align:right}.direct-url{margin-top:6px;color:#786e83;font:10px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace;direction:ltr;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.official-download,.app-download{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;background:linear-gradient(115deg,#9e72ff,#7246e9);color:#fff;font-weight:900;white-space:nowrap}.official-download{min-width:170px;min-height:54px;padding:10px 18px;border-radius:14px;font-size:14px;box-shadow:0 12px 34px rgba(121,67,238,.2)}.apps-section{padding-top:18px}.apps-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.apps-head h2{margin:0;font-size:19px}.apps-count{display:grid;place-items:center;min-width:28px;height:28px;padding:0 8px;border-radius:999px;background:rgba(125,70,255,.1);border:1px solid rgba(181,139,255,.18);color:#cbb3f7;font-size:11px;font-weight:900}.app-controls{display:flex;align-items:center;gap:9px;margin-bottom:10px;flex-wrap:wrap}.search-box{height:40px;min-width:220px;flex:1 1 270px;display:flex;align-items:center;gap:8px;padding:0 11px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:rgba(14,11,20,.88);color:#776d83}.search-box:focus-within{border-color:rgba(167,127,255,.55);box-shadow:0 0 0 3px rgba(126,70,255,.12)}.search-box input{width:100%;border:0;outline:0;background:transparent;color:#fff;font:inherit;font-size:11px}.search-box input::placeholder{color:#72687d}.search-clear{width:26px;height:26px;display:grid;place-items:center;flex:0 0 26px;padding:0;border:0;border-radius:8px;background:rgba(255,255,255,.05);color:#a99eb5;font:700 17px/1 system-ui;cursor:pointer}.search-clear:hover{background:rgba(255,255,255,.09);color:#fff}.filter-bar{display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none;max-width:100%;padding:2px}.filter-bar::-webkit-scrollbar{display:none}.filter-chip{min-height:36px;padding:7px 11px;border-radius:11px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.025);color:#958b9f;font:inherit;font-size:10px;font-weight:800;white-space:nowrap;cursor:pointer}.filter-chip.active{background:rgba(129,75,228,.17);border-color:rgba(167,127,255,.3);color:#d9c5ff}.filter-chip:focus,.search-box input:focus{outline:none}.filter-chip:focus-visible{outline:3px solid #fff;outline-offset:2px}.app-list{display:flex;flex-direction:column;gap:8px}.app-row{display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:13px;min-height:72px;padding:9px 11px;border:1px solid rgba(255,255,255,.06);border-radius:15px;background:rgba(16,13,23,.82)}.app-row[hidden]{display:none!important}.app-featured{border-color:rgba(167,127,255,.24)}.app-icon{width:50px;height:50px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.035);overflow:hidden;color:#cdb6ef;font-size:10px;font-weight:900;direction:ltr}.app-icon img{grid-area:1/1;width:43px;height:43px;object-fit:contain;border-radius:9px}.icon-fallback{grid-area:1/1;display:none}.app-icon.icon-error img{display:none}.app-icon.icon-error .icon-fallback{display:block}.app-copy{min-width:0}.app-title-line{display:flex;align-items:center;gap:7px;min-width:0}.app-title-line h3{margin:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.app-version{direction:ltr;color:#83798e;font-size:9px;white-space:nowrap}.mini-badge{padding:3px 6px;border-radius:999px;border:1px solid rgba(165,124,255,.2);background:rgba(126,70,255,.1);color:#bea3ef;font-size:8px;font-weight:900;white-space:nowrap}.badge-new{color:#9af0c5;border-color:rgba(90,220,150,.2);background:rgba(39,143,92,.11)}.badge-updated{color:#f0d59a;border-color:rgba(230,185,95,.2);background:rgba(150,110,35,.12)}.app-desc{margin:4px 0 0;color:#9b92a6;font-size:10px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.device-tag{display:block;margin-top:4px;color:#7d7388;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right}.app-actions{display:grid;gap:5px;min-width:118px}.app-download{min-width:118px;min-height:40px;padding:7px 12px;border-radius:12px;font-size:11px}.app-more{min-height:28px;padding:4px 9px;border-radius:9px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.025);color:#9d93a8;font:800 9px/1 system-ui;cursor:pointer}.app-more:hover{color:#fff;border-color:rgba(167,127,255,.28)}.app-details{grid-column:2/-1;display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px 10px;border-top:1px solid rgba(255,255,255,.05);color:#8f859a;font-size:9px}.app-details[hidden]{display:none}.app-details span{display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border-radius:8px;background:rgba(255,255,255,.025)}.app-details b{color:#c4b8d0;font-size:8px}.official-download:hover,.app-download:hover{filter:brightness(1.08)}.official-download:focus,.app-download:focus,.app-more:focus{outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px rgba(126,70,255,.65)}.empty-state{padding:22px 10px;text-align:center;color:#857b90;font-size:11px}.foot{padding:22px 0 26px;color:#625b6b;font-size:10px;text-align:center}
+:root{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;color-scheme:dark;--bg:#08070e;--line:rgba(191,151,255,.16);--muted:#9f96aa;--green:#78e6b0;--purple:#8655f4}*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;min-height:100vh;color:#fff;background:radial-gradient(circle at 85% -10%,rgba(126,54,232,.24),transparent 30rem),linear-gradient(145deg,#08070e,#0c0912 56%,#08070e)}a{color:inherit}.shell{width:min(1100px,calc(100% - 28px));margin:auto}.topbar{height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid rgba(255,255,255,.06)}.brand{display:flex;align-items:center;gap:10px;direction:ltr;font-weight:900;letter-spacing:.1em}.mark{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.04);overflow:hidden;box-shadow:0 9px 28px rgba(126,70,255,.18)}.mark img{width:34px;height:34px;object-fit:contain}.brand-copy{display:grid;line-height:1.02}.brand-copy strong{font-size:13px}.brand-copy small{margin-top:5px;color:#857a93;font-size:8px;letter-spacing:.18em}.top-status{display:inline-flex;align-items:center;gap:7px;color:#aaa1b6;font-size:11px}.top-status:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}main{padding:18px 0 30px}.official-card{display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:center;gap:16px;padding:15px 17px;border:1px solid rgba(180,137,247,.25);border-radius:19px;background:linear-gradient(145deg,rgba(31,23,46,.92),rgba(12,10,17,.95));box-shadow:0 18px 55px rgba(0,0,0,.18)}.official-icon{width:60px;height:60px;display:grid;place-items:center;border-radius:16px;background:rgba(255,255,255,.035);overflow:hidden}.official-icon img{width:54px;height:54px;object-fit:contain}.official-copy{min-width:0}.official-title{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.official-title h1{margin:0;font-size:23px;line-height:1}.badge{display:inline-flex;padding:5px 9px;border-radius:999px;border:1px solid rgba(117,228,174,.22);background:rgba(59,171,116,.1);color:#8af0bc;font-size:10px;font-weight:900}.official-desc{margin-top:6px;color:#9b92a6;font-size:10px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.official-meta{margin-top:6px;color:#a89fb3;font-size:11px;direction:ltr;text-align:right}.direct-url{margin-top:6px;color:#786e83;font:10px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace;direction:ltr;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.official-download,.app-download{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;background:linear-gradient(115deg,#9e72ff,#7246e9);color:#fff;font-weight:900;white-space:nowrap}.official-download{min-width:170px;min-height:54px;padding:10px 18px;border-radius:14px;font-size:14px;box-shadow:0 12px 34px rgba(121,67,238,.2)}.apps-section{padding-top:18px}.apps-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.apps-head h2{margin:0;font-size:19px}.apps-count{display:grid;place-items:center;min-width:28px;height:28px;padding:0 8px;border-radius:999px;background:rgba(125,70,255,.1);border:1px solid rgba(181,139,255,.18);color:#cbb3f7;font-size:11px;font-weight:900}.app-controls{display:flex;align-items:center;gap:9px;margin-bottom:10px;flex-wrap:wrap}.search-box{height:40px;min-width:220px;flex:1 1 270px;display:flex;align-items:center;gap:8px;padding:0 11px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:rgba(14,11,20,.88);color:#776d83}.search-box:focus-within{border-color:rgba(167,127,255,.55);box-shadow:0 0 0 3px rgba(126,70,255,.12)}.search-box input{width:100%;border:0;outline:0;background:transparent;color:#fff;font:inherit;font-size:11px}.search-box input::placeholder{color:#72687d}.search-clear{width:26px;height:26px;display:grid;place-items:center;flex:0 0 26px;padding:0;border:0;border-radius:8px;background:rgba(255,255,255,.05);color:#a99eb5;font:700 17px/1 system-ui;cursor:pointer}.search-clear:hover{background:rgba(255,255,255,.09);color:#fff}.filter-bar{display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none;max-width:100%;padding:2px}.filter-bar::-webkit-scrollbar{display:none}.filter-chip{min-height:36px;padding:7px 11px;border-radius:11px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.025);color:#958b9f;font:inherit;font-size:10px;font-weight:800;white-space:nowrap;cursor:pointer}.filter-chip.active{background:rgba(129,75,228,.17);border-color:rgba(167,127,255,.3);color:#d9c5ff}.filter-chip:focus,.search-box input:focus{outline:none}.filter-chip:focus-visible{outline:3px solid #fff;outline-offset:2px}.app-list{display:flex;flex-direction:column;gap:8px}.app-row{display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:13px;min-height:72px;padding:9px 11px;border:1px solid rgba(255,255,255,.06);border-radius:15px;background:rgba(16,13,23,.82)}.app-row[hidden]{display:none!important}.app-featured{border-color:rgba(167,127,255,.24)}.app-icon{width:50px;height:50px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.035);overflow:hidden;color:#cdb6ef;font-size:10px;font-weight:900;direction:ltr}.app-icon img{grid-area:1/1;width:43px;height:43px;object-fit:contain;border-radius:9px}.icon-fallback{grid-area:1/1;display:none}.app-icon.icon-error img{display:none}.app-icon.icon-error .icon-fallback{display:block}.app-copy{min-width:0}.app-title-line{display:flex;align-items:center;gap:7px;min-width:0}.app-title-line h3{margin:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.app-version{direction:ltr;color:#83798e;font-size:9px;white-space:nowrap}.mini-badge{padding:3px 6px;border-radius:999px;border:1px solid rgba(165,124,255,.2);background:rgba(126,70,255,.1);color:#bea3ef;font-size:8px;font-weight:900;white-space:nowrap}.badge-new{color:#9af0c5;border-color:rgba(90,220,150,.2);background:rgba(39,143,92,.11)}.badge-updated{color:#f0d59a;border-color:rgba(230,185,95,.2);background:rgba(150,110,35,.12)}.app-desc{margin:4px 0 0;color:#9b92a6;font-size:10px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.device-tag{display:block;margin-top:4px;color:#7d7388;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right}.app-actions{display:grid;gap:5px;min-width:118px}.app-download{min-width:118px;min-height:40px;padding:7px 12px;border-radius:12px;font-size:11px}.app-more{min-height:28px;padding:4px 9px;border-radius:9px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.025);color:#9d93a8;font:800 9px/1 system-ui;cursor:pointer}.app-more:hover{color:#fff;border-color:rgba(167,127,255,.28)}.app-details{grid-column:2/-1;display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px 10px;border-top:1px solid rgba(255,255,255,.05);color:#8f859a;font-size:9px}.app-details[hidden]{display:none}.app-details span{display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border-radius:8px;background:rgba(255,255,255,.025)}.app-details b{color:#c4b8d0;font-size:8px}.variant-options{width:100%;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px}.variant-options strong{color:#c4b8d0;font-size:9px;margin-inline-end:2px}.variant-link{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:5px 8px;border-radius:9px;border:1px solid rgba(167,127,255,.16);background:rgba(126,70,255,.07);color:#cdb7f4;text-decoration:none;font-size:8px;font-weight:900;white-space:nowrap}.variant-link:hover{border-color:rgba(167,127,255,.35);color:#fff}.variant-link:focus{outline:3px solid #fff;outline-offset:2px}.official-download:hover,.app-download:hover{filter:brightness(1.08)}.official-download:focus,.app-download:focus,.app-more:focus{outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px rgba(126,70,255,.65)}.empty-state{padding:22px 10px;text-align:center;color:#857b90;font-size:11px}.foot{padding:22px 0 26px;color:#625b6b;font-size:10px;text-align:center}
 @media(max-width:620px){.shell{width:min(100% - 18px,1100px)}.app-controls{display:block}.search-box{min-width:0;width:100%;margin-bottom:8px}.filter-bar{width:100%}.topbar{height:58px}.brand-copy small,.top-status{display:none}main{padding-top:10px}.official-card{grid-template-columns:48px minmax(0,1fr);gap:10px;padding:10px}.official-icon{width:46px;height:46px;border-radius:12px;font-size:20px}.official-title h1{font-size:17px}.official-desc{font-size:9px}.official-meta{font-size:9px}.direct-url{display:none}.official-download{grid-column:1/-1;width:100%;min-height:46px}.apps-section{padding-top:14px}.apps-head h2{font-size:16px}.app-row{grid-template-columns:44px minmax(0,1fr) auto;gap:9px;min-height:62px;padding:8px}.app-icon{width:42px;height:42px}.app-icon img{width:36px;height:36px}.app-title-line h3{font-size:13px}.mini-badge{display:none}.app-desc{font-size:9px}.device-tag{font-size:8px}.app-actions{min-width:94px}.app-download{min-width:94px;min-height:38px;padding:7px 9px;font-size:10px}.app-more{font-size:8px}.app-details{grid-column:1/-1;padding:7px 5px}.app-details span{font-size:8px}}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
-</style></head><body><div class="shell"><header class="topbar"><div class="brand"><div class="mark"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><span class="brand-copy"><strong>BLOFY PLAYER</strong><small>DOWNLOAD CENTER</small></span></div><div class="top-status">مركز التحميل متصل</div></header><main><section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/download/latest.apk">تحميل BLOFY APK ↓</a></section>${renderAppLibrary(apps)}</main><footer class="foot">BLOFY PLAYER · Microsoft Azure</footer></div><script>
+</style></head><body><div class="shell"><header class="topbar"><div class="brand"><div class="mark"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><span class="brand-copy"><strong>BLOFY PLAYER</strong><small>DOWNLOAD CENTER</small></span></div><div class="top-status">مركز التحميل متصل</div></header><main><section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/download/latest.apk">تحميل BLOFY APK ↓</a></section>${renderAppLibrary(apps, variants)}</main><footer class="foot">BLOFY PLAYER · Microsoft Azure</footer></div><script>
 (() => {
   const rows = [...document.querySelectorAll('[data-app-row]')];
   const search = document.getElementById('app-search');
@@ -295,6 +308,30 @@ async function downloadPage(req) {
       return;
     }
 
+    if (target?.matches?.('.variant-link')) {
+      const row = target.closest('[data-app-row]');
+      const links = [...(row?.querySelectorAll('.variant-link') || [])];
+      const index = links.indexOf(target);
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        const step = event.key === 'ArrowLeft' ? 1 : -1;
+        const next = links[(index + step + links.length) % links.length];
+        if (next) { event.preventDefault(); next.focus(); }
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        const more = row?.querySelector('.app-more');
+        if (more) { event.preventDefault(); more.focus(); }
+        return;
+      }
+      if (event.key === 'ArrowDown') {
+        const visible = visibleRows();
+        const rowIndex = visible.indexOf(row);
+        const next = visible[rowIndex + 1]?.querySelector('.app-more');
+        if (next) { event.preventDefault(); next.focus(); next.scrollIntoView({ block:'nearest', behavior:'smooth' }); }
+        return;
+      }
+    }
+
     if (target?.matches?.('.app-download,.app-more')) {
       const row = target.closest('[data-app-row]');
       if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && row) {
@@ -306,6 +343,15 @@ async function downloadPage(req) {
           sibling.focus();
         }
         return;
+      }
+      if (event.key === 'ArrowDown' && target.classList.contains('app-more') && row) {
+        const panel = row.querySelector('.app-details');
+        const firstVariant = !panel?.hidden ? row.querySelector('.variant-link') : null;
+        if (firstVariant) {
+          event.preventDefault();
+          firstVariant.focus();
+          return;
+        }
       }
       if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && row) {
         const visible = visibleRows();
@@ -389,6 +435,21 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(302, {
         ...securityHeaders,
         location: getActiveRelease().downloadUrl,
+        'cache-control': 'no-store, max-age=0'
+      });
+      return res.end();
+    }
+
+    const variantMatch = pathname.match(/^\/(?:apps|download\/apps)\/([a-z0-9-]+)\/([a-z0-9-]+)$/i);
+    if (variantMatch) {
+      const variant = await getAppVariant(decodeURIComponent(variantMatch[1]), decodeURIComponent(variantMatch[2]));
+      if (!variant) return sendJson(req, res, 404, { ok: false, error: 'variant_not_found' });
+      if (method === 'GET') {
+        recordDownload(`app:${variant.slug}`).catch(error => console.error('Variant download stat failed:', error?.message || error));
+      }
+      res.writeHead(302, {
+        ...securityHeaders,
+        location: variant.downloadUrl,
         'cache-control': 'no-store, max-age=0'
       });
       return res.end();
