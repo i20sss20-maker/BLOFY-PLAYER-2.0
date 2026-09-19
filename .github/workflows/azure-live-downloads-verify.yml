@@ -14,7 +14,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify resilient catalog live
+      - name: Verify smart catalog and inline details live
         shell: bash
         run: |
           set -euo pipefail
@@ -26,18 +26,23 @@ jobs:
 
           curl -fsS --max-time 20 "$BASE/downloads" -o /tmp/downloads.html
           grep -Fq 'id="app-search"' /tmp/downloads.html
-          grep -Fq 'مشغل وسائط احترافي للشاشات والرسيفرات' /tmp/downloads.html
+          grep -Fq 'data-filter="store"' /tmp/downloads.html
+          grep -Fq 'data-details-toggle' /tmp/downloads.html
+          grep -Fq 'class="app-details"' /tmp/downloads.html
+          grep -Fq "target.classList.contains('app-more')" /tmp/downloads.html
+
+          slugs="$(grep -o 'data-slug="[^"]*"' /tmp/downloads.html | sed 's/data-slug="//;s/"//' | sort -u)"
+          count="$(printf '%s\n' "$slugs" | sed '/^$/d' | wc -l)"
+          test "$count" -ge 26
+
+          detail_buttons="$(grep -o 'data-details-toggle' /tmp/downloads.html | wc -l)"
+          detail_panels="$(grep -o 'class="app-details"' /tmp/downloads.html | wc -l)"
+          test "$detail_buttons" = "$count"
+          test "$detail_panels" = "$count"
 
           for name in 'MATVT' 'APKUpdater' 'Mrowser' 'SmartTube'; do
             grep -Fq "$name" /tmp/downloads.html
           done
-
-          new_count="$(grep -Fo '<span class="mini-badge badge-new">جديد</span>' /tmp/downloads.html | wc -l)"
-          test "$new_count" -ge 4
-
-          slugs="$(grep -o 'data-slug="[^"]*"' /tmp/downloads.html | sed 's/data-slug="//;s/"//' | sort -u)"
-          count="$(printf '%s\n' "$slugs" | sed '/^$/d' | wc -l)"
-          test "$count" -ge 22
 
           while IFS= read -r slug; do
             [ -n "$slug" ] || continue
@@ -48,5 +53,7 @@ jobs:
             case "$location" in *.apk) ;; *) echo "$slug invalid APK redirect: $location" >&2; exit 1;; esac
           done <<< "$slugs"
 
-          test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/releases-admin")" = '401'
-          echo "RESILIENT_CATALOG_PASS apps=$count new_badges=$new_count"
+          admin_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/releases-admin")"
+          test "$admin_code" = '401'
+
+          echo "SMART_CATALOG_DETAILS_PASS apps=$count details=$detail_buttons"
