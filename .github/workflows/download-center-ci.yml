@@ -17,6 +17,25 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: blofy_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d blofy_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/blofy_test
+      ADMIN_PASSWORD: ci-admin-password
+      PUBLIC_ADMIN_PREFIX: /admin
+      PORT: 3100
     defaults:
       run:
         working-directory: services/update-distribution
@@ -27,3 +46,37 @@ jobs:
           node-version: 20
       - run: npm install --omit=dev
       - run: npm run check
+      - name: Runtime smoke test with PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          node server.mjs >/tmp/blofy-download-center.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true; cat /tmp/blofy-download-center.log || true' EXIT
+
+          ready=0
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:3100/health >/tmp/health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = "1"
+          grep -Fq '"ok":true' /tmp/health.json
+
+          curl -fsS --max-time 10 http://127.0.0.1:3100/downloads >/tmp/downloads.html
+          grep -Fq 'data-details-toggle' /tmp/downloads.html
+          grep -Fq 'class="app-details"' /tmp/downloads.html
+          grep -Fq 'id="app-search"' /tmp/downloads.html
+
+          curl -fsS --max-time 10 -u admin:ci-admin-password http://127.0.0.1:3100/admin >/tmp/admin.html
+          grep -Fq 'data-admin-filter="healthy"' /tmp/admin.html
+          grep -Fq 'CATALOG BACKUPS' /tmp/admin.html
+          grep -Fq 'AUDIT LOG' /tmp/admin.html
+          grep -Fq 'id="admin-app-search"' /tmp/admin.html
+
+          code="$(curl -sSI --max-time 10 http://127.0.0.1:3100/download/apps/vlc | awk 'NR==1{print $2}')"
+          test "$code" = "302"
+
+          echo "DOWNLOAD_CENTER_RUNTIME_SMOKE=PASS"
