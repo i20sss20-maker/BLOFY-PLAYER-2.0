@@ -69,6 +69,24 @@ jobs:
           grep -Fq 'data-details-toggle' /tmp/downloads.html
           grep -Fq 'class="app-details"' /tmp/downloads.html
           grep -Fq 'id="app-search"' /tmp/downloads.html
+          grep -Fq 'class="variant-link"' /tmp/downloads.html
+          grep -Fq 'ARMv7 · 32-bit' /tmp/downloads.html
+          grep -Fq 'Universal' /tmp/downloads.html
+
+          for path in \
+            /download/apps/vlc/armv7 \
+            /download/apps/kodi/armv7 \
+            /download/apps/localsend/armv7 \
+            /download/apps/mpv-android/universal \
+            /download/apps/rustdesk/armv7 \
+            /download/apps/smarttube/arm64
+          do
+            headers="$(curl -sSI --max-time 10 "http://127.0.0.1:3100$path" | tr -d '\r')"
+            code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
+            location="$(printf '%s\n' "$headers" | awk 'tolower($1)=="location:"{$1="";sub(/^ /,"");print;exit}')"
+            test "$code" = "302"
+            case "$location" in *.apk) ;; *) echo "Invalid variant redirect: $path -> $location" >&2; exit 1;; esac
+          done
 
           curl -fsS --max-time 10 -u admin:ci-admin-password http://127.0.0.1:3100/admin >/tmp/admin.html
           grep -Fq 'data-admin-filter="healthy"' /tmp/admin.html
