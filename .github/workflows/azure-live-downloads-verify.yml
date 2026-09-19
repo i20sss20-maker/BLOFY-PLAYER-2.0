@@ -24,7 +24,6 @@ jobs:
           echo "HAS_LIST=$(grep -Fc 'class="app-list"' /tmp/downloads.html)"
           echo "HAS_DIRECT_TEXT=$(grep -Fc 'تحميل APK ↓' /tmp/downloads.html)"
           echo "HAS_RAW_ICONS=$(grep -Fc 'raw.githubusercontent.com' /tmp/downloads.html)"
-          echo "HAS_SIMPLEICONS=$(grep -Fc 'cdn.simpleicons.org' /tmp/downloads.html)"
           fail=0
           for slug in vlc kodi just-player nova-player tv-bro amaze jellyfin-tv ltv-launcher aerial-views; do
             headers="$(curl -sSI --max-time 20 "$BASE/download/apps/$slug" | tr -d '\r')"
