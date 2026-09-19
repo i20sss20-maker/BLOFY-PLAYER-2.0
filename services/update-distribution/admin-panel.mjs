@@ -93,13 +93,13 @@ function stageLabel(stage) {
 }
 
 function categoryLabel(category) {
-  return ({ media:'مشغلات وميديا', files:'ملفات ونقل', downloads:'تنزيل ومتصفحات', launcher:'واجهات الشاشة', screensaver:'شاشات توقف' })[category] || category;
+  return ({ media:'مشغلات وميديا', files:'ملفات ونقل', downloads:'تنزيل ومتصفحات', launcher:'واجهات الشاشة', screensaver:'شاشات توقف', tools:'أدوات وصيانة' })[category] || category;
 }
 
 function categoryOptions(current) {
   return [
     ['media','مشغلات وميديا'], ['files','ملفات ونقل'], ['downloads','تنزيل ومتصفحات'],
-    ['launcher','واجهات الشاشة'], ['screensaver','شاشات توقف']
+    ['launcher','واجهات الشاشة'], ['screensaver','شاشات توقف'], ['tools','أدوات وصيانة']
   ].map(([value,label]) => `<option value="${value}"${current === value ? ' selected' : ''}>${label}</option>`).join('');
 }
 
