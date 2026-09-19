@@ -13,7 +13,7 @@ const pool = new Pool({
   ssl: String(process.env.PGSSLMODE || '').toLowerCase() === 'require' ? { rejectUnauthorized: false } : undefined
 });
 
-const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver']);
+const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools']);
 const MODES = new Set(['official', 'direct']);
 const SEED_VERSION = 3;
 
@@ -89,6 +89,46 @@ const DEFAULT_APPS = Object.freeze([
     devices:'Android TV · Google TV · Fire TV', version:'1.8.4',
     downloadUrl:'https://github.com/theothernt/AerialViews/releases/download/1.8.4/aerial-views-1.8.4.apk',
     downloadMode:'direct', sortOrder:90, enabled:true, featured:false
+  },
+  {
+    slug:'localsend', name:'LocalSend', category:'files', symbol:'LS',
+    iconUrl:'https://raw.githubusercontent.com/localsend/localsend/main/app/android/app/src/main/ic_launcher-playstore.png',
+    description:'إرسال ملفات وملفات APK بين الجوال والكمبيوتر والشاشة على نفس الشبكة بدون حساب.',
+    devices:'Android · TV/Box · ARM64', version:'1.18.2',
+    downloadUrl:'https://github.com/localsend/localsend/releases/download/v1.18.2/LocalSend-1.18.2-android-arm64v8.apk',
+    downloadMode:'direct', sortOrder:100, enabled:true, featured:true
+  },
+  {
+    slug:'mpv-android', name:'mpv-android', category:'media', symbol:'MPV',
+    iconUrl:'https://raw.githubusercontent.com/mpv-android/mpv-android/master/fastlane/metadata/android/en-US/images/icon.png',
+    description:'مشغل فيديو قوي وخفيف يدعم صيغ كثيرة وتسريع العتاد والترجمات.',
+    devices:'Android TV · Box · ARM64', version:'2026-09-17',
+    downloadUrl:'https://github.com/mpv-android/mpv-android/releases/download/2026-09-17/app-default-arm64-v8a-release.apk',
+    downloadMode:'direct', sortOrder:110, enabled:true, featured:false
+  },
+  {
+    slug:'moonlight', name:'Moonlight', category:'media', symbol:'ML',
+    iconUrl:'https://raw.githubusercontent.com/moonlight-stream/moonlight-android/master/fastlane/metadata/android/en-US/images/icon.png',
+    description:'بث ألعاب الكمبيوتر إلى التلفزيون أو Android Box بجودة عالية وزمن استجابة منخفض.',
+    devices:'Android TV · Box · Gamepad', version:'12.2',
+    downloadUrl:'https://github.com/moonlight-stream/moonlight-android/releases/download/v12.2/app-nonRoot-release.apk',
+    downloadMode:'direct', sortOrder:120, enabled:true, featured:false
+  },
+  {
+    slug:'material-files', name:'Material Files', category:'files', symbol:'MF',
+    iconUrl:'https://raw.githubusercontent.com/zhanghai/MaterialFiles/master/app/src/main/res/mipmap-xxxhdpi/launcher_icon.png',
+    description:'مدير ملفات مفتوح المصدر لإدارة التخزين والملفات والأرشيفات وFTP.',
+    devices:'Android · TV/Box compatible', version:'1.7.4',
+    downloadUrl:'https://github.com/zhanghai/MaterialFiles/releases/download/v1.7.4/app-release-universal.apk',
+    downloadMode:'direct', sortOrder:130, enabled:true, featured:false
+  },
+  {
+    slug:'rustdesk', name:'RustDesk', category:'tools', symbol:'RD',
+    iconUrl:'https://raw.githubusercontent.com/rustdesk/rustdesk/master/fastlane/metadata/android/en-US/images/icon.png',
+    description:'أداة دعم وتحكم عن بعد مفيدة لصيانة أجهزة Android والبوكسات من جهاز آخر.',
+    devices:'Android · ARM64', version:'1.4.9',
+    downloadUrl:'https://github.com/rustdesk/rustdesk/releases/download/1.4.9/rustdesk-1.4.9-aarch64-signed.apk',
+    downloadMode:'direct', sortOrder:140, enabled:true, featured:false
   }
 ]);
 
