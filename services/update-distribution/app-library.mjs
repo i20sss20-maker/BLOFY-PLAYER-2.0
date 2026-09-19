@@ -1,5 +1,7 @@
 // Managed TV app library for the Azure download center.
 import pg from 'pg';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 
 const { Pool } = pg;
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -206,6 +208,107 @@ function httpsUrl(value, code = 'invalid_app_url') {
   try { parsed = new URL(String(value || '').trim()); } catch { throw new Error(code); }
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.hash) throw new Error(code);
   return parsed.toString();
+}
+
+function isPrivateAddress(address) {
+  if (!address) return true;
+  if (net.isIP(address) === 4) {
+    const parts = address.split('.').map(Number);
+    return parts[0] === 10
+      || parts[0] === 127
+      || (parts[0] === 169 && parts[1] === 254)
+      || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)
+      || (parts[0] === 192 && parts[1] === 168)
+      || (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127)
+      || parts[0] === 0;
+  }
+  if (net.isIP(address) === 6) {
+    const clean = address.toLowerCase();
+    return clean === '::1' || clean.startsWith('fc') || clean.startsWith('fd') || clean.startsWith('fe80:');
+  }
+  return true;
+}
+
+async function assertPublicHttpsTarget(url) {
+  const parsed = new URL(url);
+  const host = parsed.hostname.toLowerCase();
+  if (host === 'localhost' || host.endsWith('.local') || host === 'metadata.google.internal') {
+    throw new Error('apk_host_not_public');
+  }
+  if (net.isIP(host)) {
+    if (isPrivateAddress(host)) throw new Error('apk_host_not_public');
+    return;
+  }
+  const records = await dns.lookup(host, { all: true, verbatim: true });
+  if (!records.length || records.some(record => isPrivateAddress(record.address))) {
+    throw new Error('apk_host_not_public');
+  }
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    return await fetch(url, {
+      redirect: 'follow',
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'user-agent': 'BLOFY-Download-Center/1.0',
+        ...(options.headers || {})
+      }
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function inspectRemoteApk(value) {
+  const requestedUrl = httpsUrl(value);
+  if (!/\.apk$/i.test(new URL(requestedUrl).pathname)) throw new Error('direct_download_must_be_apk');
+  await assertPublicHttpsTarget(requestedUrl);
+
+  let response;
+  try {
+    response = await fetchWithTimeout(requestedUrl, { method: 'HEAD' });
+    if (response.status === 405 || response.status === 501) {
+      response = await fetchWithTimeout(requestedUrl, {
+        method: 'GET',
+        headers: { range: 'bytes=0-0' }
+      });
+    }
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('apk_check_timeout');
+    throw new Error('apk_check_failed');
+  }
+
+  if (!response.ok && response.status !== 206) throw new Error(`apk_http_${response.status}`);
+  const finalUrl = httpsUrl(response.url || requestedUrl);
+  await assertPublicHttpsTarget(finalUrl);
+  if (!/\.apk$/i.test(new URL(finalUrl).pathname)) throw new Error('apk_redirect_not_apk');
+
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  const rawLength = Number(response.headers.get('content-length') || 0);
+  const contentRange = String(response.headers.get('content-range') || '');
+  const rangeMatch = contentRange.match(/\/(\d+)$/);
+  const sizeBytes = rangeMatch ? Number(rangeMatch[1]) : (Number.isFinite(rawLength) ? rawLength : 0);
+
+  if (contentType && !(
+    contentType.includes('android.package-archive')
+    || contentType.includes('application/octet-stream')
+    || contentType.includes('binary/octet-stream')
+  )) {
+    throw new Error('apk_unexpected_content_type');
+  }
+
+  return {
+    requestedUrl,
+    finalUrl,
+    status: response.status,
+    contentType,
+    sizeBytes: Number.isFinite(sizeBytes) && sizeBytes > 0 ? Math.floor(sizeBytes) : 0,
+    checkedAt: Date.now()
+  };
 }
 
 function cleanApp(raw) {
