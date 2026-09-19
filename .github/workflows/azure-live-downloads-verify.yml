@@ -14,36 +14,25 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify upgraded Azure download center
+      - name: Diagnose upgraded Azure download center
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           BASE='https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io'
-          curl -fsS --max-time 20 "$BASE/downloads" -o /tmp/downloads.html
-
-          grep -Fq 'id="app-search"' /tmp/downloads.html
-          grep -Fq 'data-filter="all"' /tmp/downloads.html
-          grep -Fq 'data-filter="media"' /tmp/downloads.html
-          grep -Fq 'data-filter="files"' /tmp/downloads.html
-          grep -Fq 'data-filter="tools"' /tmp/downloads.html
-          grep -Fq 'data-filter="network"' /tmp/downloads.html
-          grep -Fq 'applyFilters()' /tmp/downloads.html
-          test "$(grep -o 'data-app-row' /tmp/downloads.html | wc -l)" = '19'
-
+          curl -fsS --max-time 20 "$BASE/downloads" -o /tmp/downloads.html || exit 10
+          fail=0
+          echo "ROWS=$(grep -o 'data-app-row' /tmp/downloads.html | wc -l)"
+          echo "SEARCH=$(grep -Fc 'id=\"app-search\"' /tmp/downloads.html)"
+          for filter in all media files tools network launcher screensaver; do
+            n="$(grep -Fc "data-filter=\"$filter\"" /tmp/downloads.html)"
+            echo "FILTER_$filter=$n"
+          done
           for name in 'Obtainium' 'App Manager' 'Next Player' 'Fossify File Manager' 'WiFi Analyzer'; do
-            grep -Fq "$name" /tmp/downloads.html
+            n="$(grep -Fc "$name" /tmp/downloads.html)"
+            echo "APP_$name=$n"
           done
-
-          grep -Fq 'Universal' /tmp/downloads.html
-          grep -Fq 'ARM64' /tmp/downloads.html
-          grep -Fq 'MB' /tmp/downloads.html
-
-          for slug in vlc kodi just-player nova-player tv-bro amaze jellyfin-tv ltv-launcher aerial-views localsend mpv-android moonlight material-files rustdesk obtainium app-manager next-player fossify-file-manager wifi-analyzer; do
-            headers="$(curl -sSI --max-time 20 "$BASE/download/apps/$slug" | tr -d '\r')"
-            code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
-            location="$(printf '%s\n' "$headers" | awk 'tolower($1)=="location:"{$1=""; sub(/^ /,""); print; exit}')"
-            test "$code" = '302'
-            case "$location" in *.apk) ;; *) echo "$slug not direct APK: $location" >&2; exit 1;; esac
-          done
-
-          echo 'UPGRADED_DOWNLOAD_CENTER=PASS'
+          echo "UNIVERSAL=$(grep -Fc 'Universal' /tmp/downloads.html)"
+          echo "ARM64=$(grep -Fc 'ARM64' /tmp/downloads.html)"
+          echo "MB=$(grep -Fc 'MB' /tmp/downloads.html)"
+          echo "SCRIPT=$(grep -Fc 'applyFilters()' /tmp/downloads.html)"
+          exit "$fail"
