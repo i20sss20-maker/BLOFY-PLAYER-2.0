@@ -93,13 +93,13 @@ function stageLabel(stage) {
 }
 
 function categoryLabel(category) {
-  return ({ media:'مشغلات وميديا', files:'ملفات ونقل', downloads:'تنزيل ومتصفحات', launcher:'واجهات الشاشة', screensaver:'شاشات توقف', tools:'أدوات وصيانة', network:'شبكة وواي فاي' })[category] || category;
+  return ({ media:'مشغلات وميديا', files:'ملفات ونقل', downloads:'تنزيل ومتصفحات', launcher:'واجهات الشاشة', screensaver:'شاشات توقف', tools:'أدوات وصيانة', network:'شبكة وواي فاي', store:'متاجر' })[category] || category;
 }
 
 function categoryOptions(current) {
   return [
     ['media','مشغلات وميديا'], ['files','ملفات ونقل'], ['downloads','تنزيل ومتصفحات'],
-    ['launcher','واجهات الشاشة'], ['screensaver','شاشات توقف'], ['tools','أدوات وصيانة'], ['network','شبكة وواي فاي']
+    ['launcher','واجهات الشاشة'], ['screensaver','شاشات توقف'], ['tools','أدوات وصيانة'], ['network','شبكة وواي فاي'], ['store','متاجر']
   ].map(([value,label]) => `<option value="${value}"${current === value ? ' selected' : ''}>${label}</option>`).join('');
 }
 
