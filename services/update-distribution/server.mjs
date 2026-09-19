@@ -109,7 +109,7 @@ const server = http.createServer(async (req, res) => {
     const pathname = url.pathname;
     const method = req.method || '';
 
-    if (pathname === '/admin' || pathname === '/admin/') {
+    if (pathname === '/admin' || pathname === '/admin/' || pathname === PUBLIC_ADMIN_PREFIX || pathname === `${PUBLIC_ADMIN_PREFIX}/`) {
       if (!['GET', 'HEAD'].includes(method)) {
         res.writeHead(405, { ...securityHeaders, allow: 'GET, HEAD', 'cache-control': 'no-store' });
         return res.end();
@@ -118,7 +118,7 @@ const server = http.createServer(async (req, res) => {
       return sendHtml(req, res, 200, await renderAdmin(String(url.searchParams.get('msg') || '').slice(0, 300)));
     }
 
-    if (method === 'POST' && pathname.startsWith('/admin/')) {
+    if (method === 'POST' && (pathname.startsWith('/admin/') || pathname.startsWith(`${PUBLIC_ADMIN_PREFIX}/`))) {
       if (!requireAdmin(req, res, securityHeaders)) return;
       if (!sameOrigin(req)) return sendJson(req, res, 403, { ok: false, error: 'origin_rejected' });
       const form = await readForm(req);
