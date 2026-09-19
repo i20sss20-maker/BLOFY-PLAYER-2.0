@@ -15,7 +15,7 @@ const pool = new Pool({
   ssl: String(process.env.PGSSLMODE || '').toLowerCase() === 'require' ? { rejectUnauthorized: false } : undefined
 });
 
-const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network']);
+const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
 const SEED_VERSION = 4;
 
@@ -190,6 +190,33 @@ const DEFAULT_APPS = Object.freeze([
     architecture:'Universal', apkSizeBytes:2080508,
     downloadUrl:'https://github.com/VREMSoftwareDevelopment/WiFiAnalyzer/releases/download/V3.3.1-F-DROID/WiFiAnalyzer-3.3.1.apk',
     downloadMode:'direct', sortOrder:190, enabled:true, featured:false
+  },
+  {
+    slug:'flicky', name:'Flicky', category:'store', symbol:'FK',
+    iconUrl:'https://raw.githubusercontent.com/mlm-games/flicky/kotlin/fastlane/metadata/android/en-US/images/icon.png',
+    description:'متجر F-Droid بواجهة مريحة للشاشات والريموت لتصفح وتثبيت التطبيقات المفتوحة المصدر.',
+    devices:'Android TV · Box · Mobile', version:'4.5.2',
+    architecture:'Universal', apkSizeBytes:4338885,
+    downloadUrl:'https://github.com/mlm-games/flicky/releases/download/4.5.2/flicky-4.5.2-universal.apk',
+    downloadMode:'direct', sortOrder:200, enabled:true, featured:true
+  },
+  {
+    slug:'fluffy', name:'Fluffy', category:'files', symbol:'FL',
+    iconUrl:'https://raw.githubusercontent.com/mlm-games/Fluffy/main/app/src/main/ic_launcher-playstore.png',
+    description:'مدير ملفات سريع بواجهة حديثة ودعم جيد للريموت والأرشيفات على Android TV.',
+    devices:'Android TV · Box · Mobile', version:'4.4.7',
+    architecture:'Universal', apkSizeBytes:6558122,
+    downloadUrl:'https://github.com/mlm-games/Fluffy/releases/download/4.4.7/fluffy-4.4.7-universal.apk',
+    downloadMode:'direct', sortOrder:210, enabled:true, featured:false
+  },
+  {
+    slug:'nebula-screensaver', name:'Nebula', category:'screensaver', symbol:'NB',
+    iconUrl:'https://raw.githubusercontent.com/jordanade/Nebula/main/fastlane/metadata/android/en-US/images/icon.png',
+    description:'شاشة توقف خفيفة بتأثيرات فضائية مصممة خصيصًا لأجهزة Android TV.',
+    devices:'Android TV · Google TV · Box', version:'4.12.0',
+    architecture:'Universal', apkSizeBytes:209920,
+    downloadUrl:'https://github.com/jordanade/Nebula/releases/download/v4.12.0/Nebula.apk',
+    downloadMode:'direct', sortOrder:220, enabled:true, featured:false
   }
 ]);
 
