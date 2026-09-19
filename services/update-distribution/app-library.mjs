@@ -15,7 +15,7 @@ const pool = new Pool({
 
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver']);
 const MODES = new Set(['official', 'direct']);
-const SEED_VERSION = 2;
+const SEED_VERSION = 3;
 
 const DEFAULT_APPS = Object.freeze([
   {
