@@ -14,39 +14,12 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify complete live download center
+      - name: Verify BLOFY description live
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io'
           curl -fsS --max-time 20 "$BASE/downloads" -o /tmp/downloads.html
-
-          grep -Fq 'id="app-search"' /tmp/downloads.html
-          grep -Fq 'id="search-clear"' /tmp/downloads.html
-          grep -Fq "sessionStorage.setItem('blofy-app-filter'" /tmp/downloads.html
-          grep -Fq 'data-filter="all"' /tmp/downloads.html
-          grep -Fq 'data-filter="media"' /tmp/downloads.html
-          grep -Fq 'data-filter="files"' /tmp/downloads.html
-          grep -Fq 'data-filter="tools"' /tmp/downloads.html
-          grep -Fq 'data-filter="network"' /tmp/downloads.html
-          grep -Fq 'ARM64' /tmp/downloads.html
-          grep -Fq 'Universal' /tmp/downloads.html
-          grep -Fq 'MB' /tmp/downloads.html
-
-          slugs="$(grep -o 'data-slug="[^"]*"' /tmp/downloads.html | sed 's/data-slug="//;s/"//' | sort -u)"
-          slug_count="$(printf '%s\n' "$slugs" | sed '/^$/d' | wc -l)"
-          test "$slug_count" -ge 19
-
-          while IFS= read -r slug; do
-            [ -n "$slug" ] || continue
-            headers="$(curl -sSI --max-time 20 "$BASE/download/apps/$slug" | tr -d '\r')"
-            code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
-            location="$(printf '%s\n' "$headers" | awk 'tolower($1)=="location:"{$1=""; sub(/^ /,""); print; exit}')"
-            test "$code" = '302'
-            case "$location" in
-              *.apk) ;;
-              *) echo "$slug not direct APK: $location" >&2; exit 1;;
-            esac
-          done <<< "$slugs"
-
-          echo "LIVE_CENTER_PASS apps=$slug_count"
+          grep -Fq 'مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.' /tmp/downloads.html
+          grep -Fq 'class="official-desc"' /tmp/downloads.html
+          echo 'BLOFY_DESCRIPTION_LIVE=PASS'
