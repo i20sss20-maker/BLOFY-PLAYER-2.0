@@ -99,7 +99,8 @@ jobs:
           grep -Fq 'data-copy-url=' /tmp/downloads.html
           grep -Fq 'نسخ / تفاصيل' /tmp/downloads.html
           grep -Fq 'إذا ما تعرف نوع جهازك اختر Universal' /tmp/downloads.html
-          grep -Fq '/apps/vlc' /tmp/downloads.html
+          grep -Fq '/d/vlc' /tmp/downloads.html
+          grep -Fq '/d/blofy' /tmp/downloads.html
 
           curl -fsS --max-time 10 'http://127.0.0.1:3100/downloads?app=vlc' >/tmp/downloads-vlc.html
           grep -Fq 'id="app-vlc"' /tmp/downloads-vlc.html
@@ -109,12 +110,12 @@ jobs:
           grep -Fq 'Universal' /tmp/downloads.html
 
           for path in \
-            /apps/vlc/armv7 \
-            /apps/kodi/armv7 \
-            /apps/localsend/armv7 \
-            /apps/mpv-android/universal \
-            /apps/rustdesk/armv7 \
-            /apps/smarttube/arm64
+            /d/vlc/armv7 \
+            /d/kodi/armv7 \
+            /d/localsend/armv7 \
+            /d/mpv-android/universal \
+            /d/rustdesk/armv7 \
+            /d/smarttube/arm64
           do
             headers="$(curl -sSI --max-time 10 "http://127.0.0.1:3100$path" | tr -d '\r')"
             code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
@@ -129,7 +130,7 @@ jobs:
           grep -Fq 'AUDIT LOG' /tmp/admin.html
           grep -Fq 'id="admin-app-search"' /tmp/admin.html
 
-          for path in /download/apps/vlc /apps/vlc; do
+          for path in /download/apps/vlc /apps/vlc /d/vlc /d/blofy; do
             code="$(curl -sSI --max-time 10 "http://127.0.0.1:3100$path" | awk 'NR==1{print $2}')"
             test "$code" = "302"
           done
