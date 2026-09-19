@@ -46,6 +46,30 @@ jobs:
           node-version: 20
       - run: npm install --omit=dev
       - run: npm run check
+      - name: Catalog backup restore regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {
+            initAppLibrary,
+            listApps,
+            listCatalogBackups,
+            restoreCatalogBackup,
+            closeAppLibrary
+          } from './app-library.mjs';
+
+          await initAppLibrary();
+          const before = (await listApps(true)).length;
+          const backups = await listCatalogBackups(30);
+          if (!backups.length) throw new Error('expected_catalog_backup');
+          const restored = await restoreCatalogBackup(backups[backups.length - 1].id);
+          if (restored.appCount !== before) {
+            throw new Error(`restore_count_mismatch:${restored.appCount}!=${before}`);
+          }
+          await closeAppLibrary();
+          console.log('CATALOG_BACKUP_RESTORE=PASS');
+          NODE
       - name: Runtime smoke test with PostgreSQL
         shell: bash
         run: |
@@ -69,6 +93,11 @@ jobs:
           grep -Fq 'data-details-toggle' /tmp/downloads.html
           grep -Fq 'class="app-details"' /tmp/downloads.html
           grep -Fq 'id="app-search"' /tmp/downloads.html
+          grep -Fq 'id="app-vlc"' /tmp/downloads.html
+
+          curl -fsS --max-time 10 'http://127.0.0.1:3100/downloads?app=vlc' >/tmp/downloads-vlc.html
+          grep -Fq 'id="app-vlc"' /tmp/downloads-vlc.html
+          grep -Fq "const requestedApp" /tmp/downloads-vlc.html
           grep -Fq 'class="variant-link"' /tmp/downloads.html
           grep -Fq 'ARMv7 · 32-bit' /tmp/downloads.html
           grep -Fq 'Universal' /tmp/downloads.html
