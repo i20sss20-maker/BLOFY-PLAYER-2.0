@@ -162,7 +162,8 @@ function backupReasonLabel(reason) {
     before_app_rollback:'قبل Rollback',
     before_manual_bulk_refresh:'قبل تحديث جماعي يدوي',
     before_scheduled_bulk_refresh:'قبل تحديث جماعي تلقائي',
-    before_backup_restore:'قبل استعادة Backup'
+    before_backup_restore:'قبل استعادة Backup',
+    initial_baseline:'Baseline أولي'
   })[reason] || reason;
 }
 
