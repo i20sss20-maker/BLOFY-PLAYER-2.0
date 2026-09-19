@@ -39,7 +39,11 @@ const GITHUB_UPDATE_RULES = Object.freeze({
   'wifi-analyzer': { repo:'VREMSoftwareDevelopment/WiFiAnalyzer', asset:'WiFiAnalyzer-*.apk' },
   'flicky': { repo:'mlm-games/flicky', asset:'flicky-*-universal.apk' },
   'fluffy': { repo:'mlm-games/Fluffy', asset:'fluffy-*-universal.apk' },
-  'nebula-screensaver': { repo:'jordanade/Nebula', asset:'Nebula.apk' }
+  'nebula-screensaver': { repo:'jordanade/Nebula', asset:'Nebula.apk' },
+  'matvt': { repo:'virresh/matvt', asset:'matvt-app-release-v*.apk' },
+  'apk-updater': { repo:'rumboalla/apkupdater', asset:'com.apkupdater.ci-release.apk' },
+  'mrowser': { repo:'m-salehi-v/mrowser', asset:'app-release.apk' },
+  'smarttube': { repo:'yuliskov/SmartTube', asset:'SmartTube_stable_*_universal.apk' }
 });
 
 const AUTO_REFRESH_MS = 6 * 60 * 60 * 1000;
@@ -243,6 +247,42 @@ const DEFAULT_APPS = Object.freeze([
     architecture:'Universal', apkSizeBytes:209920,
     downloadUrl:'https://github.com/jordanade/Nebula/releases/download/v4.12.0/Nebula.apk',
     downloadMode:'direct', sortOrder:220, enabled:true, featured:false
+  },
+  {
+    slug:'matvt', name:'MATVT', category:'tools', symbol:'MV',
+    iconUrl:'https://raw.githubusercontent.com/virresh/matvt/master/app/src/main/ic_launcher-playstore.png',
+    description:'ماوس افتراضي مخصص لـ Android TV يمكن التحكم به من نفس الريموت عند الحاجة للمؤشر.',
+    devices:'Android TV · Google TV · Box', version:'1.0.6',
+    architecture:'Universal', apkSizeBytes:2175957,
+    downloadUrl:'https://github.com/virresh/matvt/releases/download/v1.0.6/matvt-app-release-v1.0.6.apk',
+    downloadMode:'direct', sortOrder:230, enabled:true, featured:true
+  },
+  {
+    slug:'apk-updater', name:'APKUpdater', category:'tools', symbol:'AU',
+    iconUrl:'https://raw.githubusercontent.com/rumboalla/apkupdater/3.x/fastlane/metadata/android/en-US/images/icon.png',
+    description:'يفحص تحديثات التطبيقات المثبتة من عدة مصادر ويساعدك في تنزيل أحدث APK.',
+    devices:'Android · TV/Box compatible', version:'0.0.604',
+    architecture:'Universal', apkSizeBytes:4130561,
+    downloadUrl:'https://github.com/rumboalla/apkupdater/releases/download/0.0.604-ci/com.apkupdater.ci-release.apk',
+    downloadMode:'direct', sortOrder:240, enabled:true, featured:false
+  },
+  {
+    slug:'mrowser', name:'Mrowser', category:'downloads', symbol:'MR',
+    iconUrl:'https://raw.githubusercontent.com/m-salehi-v/mrowser/main/fastlane/metadata/android/en-US/images/icon.png',
+    description:'متصفح خفيف مفتوح المصدر مصمم خصيصًا لـ Android TV والتحكم الكامل بالريموت.',
+    devices:'Android TV · Google TV · Box', version:'1.3.0',
+    architecture:'Universal', apkSizeBytes:4852471,
+    downloadUrl:'https://github.com/m-salehi-v/mrowser/releases/download/v1.3.0/app-release.apk',
+    downloadMode:'direct', sortOrder:250, enabled:true, featured:true
+  },
+  {
+    slug:'smarttube', name:'SmartTube', category:'media', symbol:'ST',
+    iconUrl:'https://raw.githubusercontent.com/yuliskov/SmartTube/master/smarttubetv/src/ststable/res/mipmap-nodpi/app_icon.png',
+    description:'مشغل YouTube متقدم ومصمم للشاشات وAndroid TV بواجهة مناسبة للريموت.',
+    devices:'Android TV · Google TV · Fire TV · Box', version:'32.47',
+    architecture:'Universal', apkSizeBytes:34917013,
+    downloadUrl:'https://github.com/yuliskov/SmartTube/releases/download/32.47s/SmartTube_stable_32.47_universal.apk',
+    downloadMode:'direct', sortOrder:260, enabled:true, featured:true
   }
 ]);
 
