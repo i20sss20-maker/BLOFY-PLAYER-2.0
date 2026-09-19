@@ -935,7 +935,7 @@ export async function getAppHealthState() {
   };
 }
 
-async function checkOneAppHealth(app) {
+async function checkOneAppHealth(app, previousHealth = {}) {
   try {
     const info = await inspectRemoteApk(app.downloadUrl);
     await pool.query(
@@ -948,6 +948,11 @@ async function checkOneAppHealth(app) {
     );
     if (info.sizeBytes > 0 && Number(app.apkSizeBytes || 0) !== info.sizeBytes) {
       await pool.query('update blofy_app_catalog set apk_size_bytes=$2 where slug=$1', [app.slug, info.sizeBytes]);
+    }
+    if (Number(previousHealth.consecutiveFailures || 0) >= 2) {
+      await writeAudit('app_health_recovered', app.slug, 'system', {
+        previousFailures: Number(previousHealth.consecutiveFailures || 0)
+      });
     }
     return { slug: app.slug, status: 'ok', statusCode: info.status };
   } catch (error) {
@@ -962,7 +967,11 @@ async function checkOneAppHealth(app) {
          consecutive_failures=blofy_app_health.consecutive_failures+1`,
       [app.slug, statusCode || null, message]
     );
-    return { slug: app.slug, status: 'failed', error: message };
+    const nextFailures = Number(previousHealth.consecutiveFailures || 0) + 1;
+    if (Number(previousHealth.consecutiveFailures || 0) < 2 && nextFailures >= 2) {
+      await writeAudit('app_health_hidden', app.slug, 'system', { error: message });
+    }
+    return { slug: app.slug, status: 'failed', error: message, consecutiveFailures: nextFailures };
   }
 }
 
@@ -973,12 +982,12 @@ export async function refreshAppHealth({ force = false } = {}) {
     return { skipped: true, ...state.summary, lastHealthAt: state.lastHealthAt };
   }
 
-  const apps = (await listApps(false)).filter(app => app.downloadMode === 'direct');
+  const apps = (await listApps(true)).filter(app => app.enabled && app.downloadMode === 'direct');
   const results = [];
   const concurrency = 4;
   for (let index = 0; index < apps.length; index += concurrency) {
     const batch = apps.slice(index, index + concurrency);
-    results.push(...await Promise.all(batch.map(checkOneAppHealth)));
+    results.push(...await Promise.all(batch.map(app => checkOneAppHealth(app, state.bySlug?.[app.slug] || {}))));
   }
 
   const summary = {
