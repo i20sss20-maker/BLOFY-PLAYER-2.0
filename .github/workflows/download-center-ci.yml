@@ -94,6 +94,8 @@ jobs:
           grep -Fq 'class="app-details"' /tmp/downloads.html
           grep -Fq 'id="app-search"' /tmp/downloads.html
           grep -Fq 'id="app-vlc"' /tmp/downloads.html
+          grep -Fq 'class="stable-download-link"' /tmp/downloads.html
+          grep -Fq '/apps/vlc' /tmp/downloads.html
 
           curl -fsS --max-time 10 'http://127.0.0.1:3100/downloads?app=vlc' >/tmp/downloads-vlc.html
           grep -Fq 'id="app-vlc"' /tmp/downloads-vlc.html
@@ -123,7 +125,9 @@ jobs:
           grep -Fq 'AUDIT LOG' /tmp/admin.html
           grep -Fq 'id="admin-app-search"' /tmp/admin.html
 
-          code="$(curl -sSI --max-time 10 http://127.0.0.1:3100/download/apps/vlc | awk 'NR==1{print $2}')"
-          test "$code" = "302"
+          for path in /download/apps/vlc /apps/vlc; do
+            code="$(curl -sSI --max-time 10 "http://127.0.0.1:3100$path" | awk 'NR==1{print $2}')"
+            test "$code" = "302"
+          done
 
           echo "DOWNLOAD_CENTER_RUNTIME_SMOKE=PASS"
