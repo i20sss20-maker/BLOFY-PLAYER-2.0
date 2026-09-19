@@ -405,7 +405,7 @@ function cleanApp(raw) {
     sortOrder,
     enabled: flag(raw.enabled),
     featured: flag(raw.featured),
-    autoUpdate: raw.autoUpdate === undefined ? Boolean(GITHUB_UPDATE_RULES[slug]) : flag(raw.autoUpdate)
+    autoUpdate: Boolean(GITHUB_UPDATE_RULES[slug]) && (raw.autoUpdate === undefined ? true : flag(raw.autoUpdate))
   };
 }
 
