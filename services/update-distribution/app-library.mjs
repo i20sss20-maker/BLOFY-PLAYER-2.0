@@ -27,11 +27,34 @@ const GITHUB_UPDATE_RULES = Object.freeze({
   'jellyfin-tv': { repo:'jellyfin/jellyfin-androidtv', asset:'jellyfin-androidtv-*-release.apk' },
   'ltv-launcher': { repo:'leanbitlab-org/LtvLauncher', asset:'LTvLauncher-universal-release.apk' },
   'aerial-views': { repo:'theothernt/AerialViews', asset:'aerial-views-*.apk' },
-  'localsend': { repo:'localsend/localsend', asset:'LocalSend-*-android-arm64v8.apk' },
-  'mpv-android': { repo:'mpv-android/mpv-android', asset:'app-default-arm64-v8a-release.apk' },
+  'localsend': {
+    repo:'localsend/localsend',
+    asset:'LocalSend-*-android-arm64v8.apk',
+    variants:[
+      { key:'arm64', label:'ARM64', architecture:'ARM64', asset:'LocalSend-*-android-arm64v8.apk', sortOrder:10 },
+      { key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7', asset:'LocalSend-*-android-arm32v7.apk', sortOrder:20 }
+    ]
+  },
+  'mpv-android': {
+    repo:'mpv-android/mpv-android',
+    asset:'app-default-arm64-v8a-release.apk',
+    variants:[
+      { key:'universal', label:'Universal', architecture:'Universal', asset:'app-default-universal-release.apk', sortOrder:10 },
+      { key:'arm64', label:'ARM64', architecture:'ARM64', asset:'app-default-arm64-v8a-release.apk', sortOrder:20 },
+      { key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7', asset:'app-default-armeabi-v7a-release.apk', sortOrder:30 }
+    ]
+  },
   'moonlight': { repo:'moonlight-stream/moonlight-android', asset:'app-nonRoot-release.apk' },
   'material-files': { repo:'zhanghai/MaterialFiles', asset:'app-release-universal.apk' },
-  'rustdesk': { repo:'rustdesk/rustdesk', asset:'rustdesk-*-aarch64-signed.apk' },
+  'rustdesk': {
+    repo:'rustdesk/rustdesk',
+    asset:'rustdesk-*-aarch64-signed.apk',
+    variants:[
+      { key:'universal', label:'Universal', architecture:'Universal', asset:'rustdesk-*-universal-signed.apk', sortOrder:10 },
+      { key:'arm64', label:'ARM64', architecture:'ARM64', asset:'rustdesk-*-aarch64-signed.apk', sortOrder:20 },
+      { key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7', asset:'rustdesk-*-armv7-signed.apk', sortOrder:30 }
+    ]
+  },
   'obtainium': { repo:'ImranR98/Obtainium', asset:'app-release.apk' },
   'app-manager': { repo:'MuntashirAkon/AppManager', asset:'AppManager_*.apk' },
   'next-player': { repo:'anilbeesetti/nextplayer', asset:'nextplayer-*-universal.apk' },
@@ -43,7 +66,15 @@ const GITHUB_UPDATE_RULES = Object.freeze({
   'matvt': { repo:'virresh/matvt', asset:'matvt-app-release-v*.apk' },
   'apk-updater': { repo:'rumboalla/apkupdater', asset:'com.apkupdater.ci-release.apk' },
   'mrowser': { repo:'m-salehi-v/mrowser', asset:'app-release.apk' },
-  'smarttube': { repo:'yuliskov/SmartTube', asset:'SmartTube_stable_*_universal.apk' }
+  'smarttube': {
+    repo:'yuliskov/SmartTube',
+    asset:'SmartTube_stable_*_universal.apk',
+    variants:[
+      { key:'universal', label:'Universal', architecture:'Universal', asset:'SmartTube_stable_*_universal.apk', sortOrder:10 },
+      { key:'arm64', label:'ARM64', architecture:'ARM64', asset:'SmartTube_stable_*_arm64-v8a.apk', sortOrder:20 },
+      { key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7', asset:'SmartTube_stable_*_armeabi-v7a.apk', sortOrder:30 }
+    ]
+  }
 });
 
 const AUTO_REFRESH_MS = 6 * 60 * 60 * 1000;
@@ -286,6 +317,84 @@ const DEFAULT_APPS = Object.freeze([
   }
 ]);
 
+const DEFAULT_VARIANTS = Object.freeze([
+  {
+    slug:'vlc', key:'arm64', label:'ARM64', architecture:'ARM64',
+    downloadUrl:'https://get.videolan.org/vlc-android/3.7.0/VLC-Android-3.7.0-arm64-v8a.apk',
+    apkSizeBytes:49960882, sortOrder:10, enabled:true
+  },
+  {
+    slug:'vlc', key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7',
+    downloadUrl:'https://get.videolan.org/vlc-android/3.7.0/VLC-Android-3.7.0-armeabi-v7a.apk',
+    apkSizeBytes:47208378, sortOrder:20, enabled:true
+  },
+  {
+    slug:'kodi', key:'arm64', label:'ARM64', architecture:'ARM64',
+    downloadUrl:'https://mirrors.kodi.tv/releases/android/arm64-v8a/kodi-21.3-Omega-arm64-v8a.apk',
+    apkSizeBytes:0, sortOrder:10, enabled:true
+  },
+  {
+    slug:'kodi', key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7',
+    downloadUrl:'https://mirrors.kodi.tv/releases/android/arm/kodi-21.3-Omega-armeabi-v7a.apk',
+    apkSizeBytes:0, sortOrder:20, enabled:true
+  },
+  {
+    slug:'localsend', key:'arm64', label:'ARM64', architecture:'ARM64',
+    downloadUrl:'https://github.com/localsend/localsend/releases/download/v1.18.2/LocalSend-1.18.2-android-arm64v8.apk',
+    apkSizeBytes:46558706, sortOrder:10, enabled:true
+  },
+  {
+    slug:'localsend', key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7',
+    downloadUrl:'https://github.com/localsend/localsend/releases/download/v1.18.2/LocalSend-1.18.2-android-arm32v7.apk',
+    apkSizeBytes:39333444, sortOrder:20, enabled:true
+  },
+  {
+    slug:'mpv-android', key:'universal', label:'Universal', architecture:'Universal',
+    downloadUrl:'https://github.com/mpv-android/mpv-android/releases/download/2026-09-17/app-default-universal-release.apk',
+    apkSizeBytes:135357179, sortOrder:10, enabled:true
+  },
+  {
+    slug:'mpv-android', key:'arm64', label:'ARM64', architecture:'ARM64',
+    downloadUrl:'https://github.com/mpv-android/mpv-android/releases/download/2026-09-17/app-default-arm64-v8a-release.apk',
+    apkSizeBytes:34290346, sortOrder:20, enabled:true
+  },
+  {
+    slug:'mpv-android', key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7',
+    downloadUrl:'https://github.com/mpv-android/mpv-android/releases/download/2026-09-17/app-default-armeabi-v7a-release.apk',
+    apkSizeBytes:30935742, sortOrder:30, enabled:true
+  },
+  {
+    slug:'rustdesk', key:'universal', label:'Universal', architecture:'Universal',
+    downloadUrl:'https://github.com/rustdesk/rustdesk/releases/download/1.4.9/rustdesk-1.4.9-universal-signed.apk',
+    apkSizeBytes:71624497, sortOrder:10, enabled:true
+  },
+  {
+    slug:'rustdesk', key:'arm64', label:'ARM64', architecture:'ARM64',
+    downloadUrl:'https://github.com/rustdesk/rustdesk/releases/download/1.4.9/rustdesk-1.4.9-aarch64-signed.apk',
+    apkSizeBytes:26871021, sortOrder:20, enabled:true
+  },
+  {
+    slug:'rustdesk', key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7',
+    downloadUrl:'https://github.com/rustdesk/rustdesk/releases/download/1.4.9/rustdesk-1.4.9-armv7-signed.apk',
+    apkSizeBytes:25482485, sortOrder:30, enabled:true
+  },
+  {
+    slug:'smarttube', key:'universal', label:'Universal', architecture:'Universal',
+    downloadUrl:'https://github.com/yuliskov/SmartTube/releases/download/32.47s/SmartTube_stable_32.47_universal.apk',
+    apkSizeBytes:34917013, sortOrder:10, enabled:true
+  },
+  {
+    slug:'smarttube', key:'arm64', label:'ARM64', architecture:'ARM64',
+    downloadUrl:'https://github.com/yuliskov/SmartTube/releases/download/32.47s/SmartTube_stable_32.47_arm64-v8a.apk',
+    apkSizeBytes:26254606, sortOrder:20, enabled:true
+  },
+  {
+    slug:'smarttube', key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7',
+    downloadUrl:'https://github.com/yuliskov/SmartTube/releases/download/32.47s/SmartTube_stable_32.47_armeabi-v7a.apk',
+    apkSizeBytes:25040930, sortOrder:30, enabled:true
+  }
+]);
+
 function text(value, max, required = true) {
   const result = String(value ?? '').trim();
   if ((required && !result) || result.length > max) throw new Error('invalid_app_text');
@@ -450,6 +559,39 @@ function cleanApp(raw) {
   };
 }
 
+function cleanVariant(raw) {
+  const slug = text(raw.slug, 48).toLowerCase();
+  const key = text(raw.key, 32).toLowerCase();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error('invalid_variant_slug');
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key)) throw new Error('invalid_variant_key');
+  const downloadUrl = httpsUrl(raw.downloadUrl);
+  if (!/\.apk$/i.test(new URL(downloadUrl).pathname)) throw new Error('variant_download_must_be_apk');
+  const sortOrder = Number(raw.sortOrder ?? 100);
+  if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 9999) throw new Error('invalid_variant_sort_order');
+  return {
+    slug,
+    key,
+    label: text(raw.label, 48),
+    architecture: text(raw.architecture || raw.label, 32),
+    downloadUrl,
+    apkSizeBytes: Math.max(0, Math.floor(Number(raw.apkSizeBytes || 0) || 0)),
+    sortOrder,
+    enabled: raw.enabled === undefined ? true : flag(raw.enabled)
+  };
+}
+
+const mapVariant = row => ({
+  slug: row.slug,
+  key: row.variant_key,
+  label: row.label,
+  architecture: row.architecture,
+  downloadUrl: row.download_url,
+  apkSizeBytes: Number(row.apk_size_bytes || 0),
+  sortOrder: Number(row.sort_order || 100),
+  enabled: row.enabled === true,
+  updatedAt: new Date(row.updated_at).getTime()
+});
+
 const mapRow = row => ({
   slug: row.slug,
   name: row.name,
@@ -483,6 +625,17 @@ async function insertSeed(client, item) {
      values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,now())
      on conflict(slug) do nothing`,
     [item.slug,item.name,item.category,item.symbol,item.iconUrl,item.description,item.devices,item.version,item.architecture,item.apkSizeBytes,item.downloadUrl,item.downloadMode,item.sortOrder,item.enabled,item.featured,item.autoUpdate]
+  );
+}
+
+async function insertVariantSeed(client, raw) {
+  const item = cleanVariant(raw);
+  await client.query(
+    `insert into blofy_app_variants
+     (slug,variant_key,label,architecture,download_url,apk_size_bytes,sort_order,enabled,updated_at)
+     values($1,$2,$3,$4,$5,$6,$7,$8,now())
+     on conflict(slug,variant_key) do nothing`,
+    [item.slug,item.key,item.label,item.architecture,item.downloadUrl,item.apkSizeBytes,item.sortOrder,item.enabled]
   );
 }
 
@@ -527,6 +680,20 @@ export async function initAppLibrary() {
     await client.query("alter table blofy_app_catalog add column if not exists previous_download_url text");
     await client.query("alter table blofy_app_catalog add column if not exists previous_apk_size_bytes bigint");
     await client.query("alter table blofy_app_catalog add column if not exists previous_saved_at timestamptz");
+    await client.query(`
+      create table if not exists blofy_app_variants (
+        slug text not null references blofy_app_catalog(slug) on delete cascade,
+        variant_key text not null,
+        label text not null,
+        architecture text not null,
+        download_url text not null,
+        apk_size_bytes bigint not null default 0,
+        sort_order integer not null default 100,
+        enabled boolean not null default true,
+        updated_at timestamptz not null default now(),
+        primary key(slug,variant_key)
+      )
+    `);
     await client.query(`
       create table if not exists blofy_app_catalog_meta (
         id smallint primary key check(id=1),
@@ -601,6 +768,7 @@ export async function initAppLibrary() {
     } else {
       for (const seed of DEFAULT_APPS) await insertSeed(client, cleanApp(seed));
     }
+    for (const variant of DEFAULT_VARIANTS) await insertVariantSeed(client, variant);
     await client.query('COMMIT');
     const backupCount = Number((await client.query('select count(*)::int as n from blofy_app_backups')).rows[0]?.n || 0);
     if (backupCount === 0) {
@@ -652,6 +820,33 @@ export async function getApp(slug, includeDisabled = false) {
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }
 
+export async function listAppVariants() {
+  const result = await pool.query(
+    `select v.* from blofy_app_variants v
+     join blofy_app_catalog c on c.slug=v.slug
+     left join blofy_app_health h on h.slug=c.slug
+     where v.enabled=true and c.enabled=true and coalesce(h.consecutive_failures,0) < 2
+     order by v.slug asc,v.sort_order asc,v.label asc`
+  );
+  return result.rows.map(mapVariant);
+}
+
+export async function getAppVariant(slug, key) {
+  const cleanSlug = String(slug || '').trim().toLowerCase();
+  const cleanKey = String(key || '').trim().toLowerCase();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanSlug)) return null;
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanKey)) return null;
+  const visibleApp = await getApp(cleanSlug);
+  if (!visibleApp) return null;
+  const result = await pool.query(
+    `select * from blofy_app_variants
+     where slug=$1 and variant_key=$2 and enabled=true
+     limit 1`,
+    [cleanSlug,cleanKey]
+  );
+  return result.rows[0] ? mapVariant(result.rows[0]) : null;
+}
+
 async function writeAudit(action, slug, actor = 'system', details = {}) {
   await pool.query(
     'insert into blofy_app_audit(slug,actor,action,details) values($1,$2,$3,$4::jsonb)',
@@ -676,17 +871,27 @@ export async function listAppAudit(limit = 40) {
 }
 
 async function createCatalogBackup(reason, actor = 'system') {
-  const result = await pool.query(
-    `select coalesce(jsonb_agg(to_jsonb(c) order by c.featured desc,c.sort_order asc,c.name asc),'[]'::jsonb) as snapshot,
-            count(*)::int as app_count
-     from blofy_app_catalog c`
-  );
-  const row = result.rows[0] || {};
+  const [catalogResult,variantResult] = await Promise.all([
+    pool.query(
+      `select coalesce(jsonb_agg(to_jsonb(c) order by c.featured desc,c.sort_order asc,c.name asc),'[]'::jsonb) as snapshot,
+              count(*)::int as app_count
+       from blofy_app_catalog c`
+    ),
+    pool.query(
+      `select coalesce(jsonb_agg(to_jsonb(v) order by v.slug asc,v.sort_order asc,v.variant_key asc),'[]'::jsonb) as snapshot
+       from blofy_app_variants v`
+    )
+  ]);
+  const row = catalogResult.rows[0] || {};
+  const snapshot = {
+    catalog: row.snapshot || [],
+    variants: variantResult.rows[0]?.snapshot || []
+  };
   const inserted = await pool.query(
     `insert into blofy_app_backups(reason,actor,app_count,snapshot)
      values($1,$2,$3,$4::jsonb)
      returning id,reason,actor,app_count,created_at`,
-    [String(reason || 'automatic').slice(0,80), String(actor || 'system').slice(0,32), Number(row.app_count || 0), JSON.stringify(row.snapshot || [])]
+    [String(reason || 'automatic').slice(0,80), String(actor || 'system').slice(0,32), Number(row.app_count || 0), JSON.stringify(snapshot)]
   );
   await pool.query(
     `delete from blofy_app_backups
@@ -715,8 +920,11 @@ export async function restoreCatalogBackup(id) {
   if (!Number.isInteger(backupId) || backupId < 1) throw new Error('invalid_backup_id');
   const backupResult = await pool.query('select * from blofy_app_backups where id=$1', [backupId]);
   if (!backupResult.rowCount) throw new Error('backup_not_found');
-  const snapshot = backupResult.rows[0].snapshot;
-  if (!Array.isArray(snapshot) || snapshot.length > 200) throw new Error('invalid_backup_snapshot');
+  const rawSnapshot = backupResult.rows[0].snapshot;
+  const catalogSnapshot = Array.isArray(rawSnapshot) ? rawSnapshot : rawSnapshot?.catalog;
+  const variantSnapshot = Array.isArray(rawSnapshot) ? [] : rawSnapshot?.variants;
+  if (!Array.isArray(catalogSnapshot) || catalogSnapshot.length > 200) throw new Error('invalid_backup_snapshot');
+  if (!Array.isArray(variantSnapshot) || variantSnapshot.length > 1000) throw new Error('invalid_backup_variants');
 
   await createCatalogBackup('before_backup_restore', 'admin');
 
@@ -724,8 +932,9 @@ export async function restoreCatalogBackup(id) {
   try {
     await client.query('BEGIN');
     await client.query('delete from blofy_app_health');
+    await client.query('delete from blofy_app_variants');
     await client.query('delete from blofy_app_catalog');
-    for (const row of snapshot) {
+    for (const row of catalogSnapshot) {
       await client.query(
         `insert into blofy_app_catalog
          (slug,name,category,symbol,icon_url,description,devices,version,architecture,apk_size_bytes,
@@ -741,6 +950,26 @@ export async function restoreCatalogBackup(id) {
         ]
       );
     }
+    const variantsToRestore = variantSnapshot.length ? variantSnapshot : DEFAULT_VARIANTS.map(cleanVariant).map(item => ({
+      slug:item.slug,
+      variant_key:item.key,
+      label:item.label,
+      architecture:item.architecture,
+      download_url:item.downloadUrl,
+      apk_size_bytes:item.apkSizeBytes,
+      sort_order:item.sortOrder,
+      enabled:item.enabled
+    }));
+    for (const row of variantsToRestore) {
+      const parent = catalogSnapshot.some(app => app.slug === row.slug);
+      if (!parent) continue;
+      await client.query(
+        `insert into blofy_app_variants
+         (slug,variant_key,label,architecture,download_url,apk_size_bytes,sort_order,enabled,updated_at)
+         values($1,$2,$3,$4,$5,$6,$7,$8,now())`,
+        [row.slug,row.variant_key,row.label,row.architecture,row.download_url,Number(row.apk_size_bytes || 0),Number(row.sort_order || 100),row.enabled !== false]
+      );
+    }
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
@@ -751,7 +980,7 @@ export async function restoreCatalogBackup(id) {
 
   await writeAudit('catalog_backup_restore', null, 'admin', {
     backupId,
-    appCount: snapshot.length
+    appCount: catalogSnapshot.length
   });
   return { backupId, appCount: snapshot.length };
 }
@@ -895,7 +1124,8 @@ async function latestGitHubAsset(rule) {
   return {
     version: releaseVersion(release.tag_name || release.name),
     downloadUrl,
-    apkSizeBytes: Math.max(0, Math.floor(Number(asset.size || 0) || 0))
+    apkSizeBytes: Math.max(0, Math.floor(Number(asset.size || 0) || 0)),
+    assets: Array.isArray(release.assets) ? release.assets : []
   };
 }
 
@@ -908,6 +1138,34 @@ export async function getAppUpdateState() {
     lastRefreshAt: row.last_refresh_at ? new Date(row.last_refresh_at).getTime() : 0,
     summary
   };
+}
+
+async function refreshManagedVariants(slug, rule, assets) {
+  if (!Array.isArray(rule.variants) || !rule.variants.length || !Array.isArray(assets)) return { updated:0, failed:0 };
+  let updated = 0;
+  let failed = 0;
+  for (const spec of rule.variants) {
+    try {
+      const asset = assets.find(item => item && wildcardMatch(item.name, spec.asset) && /\.apk$/i.test(String(item.name || '')));
+      if (!asset?.browser_download_url) throw new Error('variant_asset_not_found');
+      const downloadUrl = httpsUrl(asset.browser_download_url);
+      const inspection = await inspectRemoteApk(downloadUrl);
+      const sizeBytes = inspection.sizeBytes > 0 ? inspection.sizeBytes : Math.max(0, Math.floor(Number(asset.size || 0) || 0));
+      await pool.query(
+        `insert into blofy_app_variants
+         (slug,variant_key,label,architecture,download_url,apk_size_bytes,sort_order,enabled,updated_at)
+         values($1,$2,$3,$4,$5,$6,$7,true,now())
+         on conflict(slug,variant_key) do update set
+           label=excluded.label,architecture=excluded.architecture,download_url=excluded.download_url,
+           apk_size_bytes=excluded.apk_size_bytes,sort_order=excluded.sort_order,enabled=true,updated_at=now()`,
+        [slug,spec.key,spec.label,spec.architecture,downloadUrl,sizeBytes,Number(spec.sortOrder || 100)]
+      );
+      updated++;
+    } catch {
+      failed++;
+    }
+  }
+  return { updated, failed };
 }
 
 async function refreshOneManagedApp(app, rule) {
@@ -935,11 +1193,14 @@ async function refreshOneManagedApp(app, rule) {
        where slug=$1`,
       [app.slug, latest.version, latest.downloadUrl, verifiedSize]
     );
+    const variantResult = await refreshManagedVariants(app.slug, rule, latest.assets);
     await writeAudit('app_auto_update', app.slug, 'system', {
       fromVersion: app.version || '',
-      toVersion: latest.version
+      toVersion: latest.version,
+      variantsUpdated: variantResult.updated,
+      variantsFailed: variantResult.failed
     });
-    return { slug: app.slug, status: 'updated', version: latest.version };
+    return { slug: app.slug, status: 'updated', version: latest.version, variantsUpdated:variantResult.updated };
   } catch (error) {
     return { slug: app.slug, status: 'failed', error: String(error?.message || 'update_failed').slice(0, 80) };
   }
