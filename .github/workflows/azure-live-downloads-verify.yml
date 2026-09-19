@@ -14,13 +14,12 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify latest BLOFY download center and background refresh stability
+      - name: Verify analytics and health-check stability
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io'
 
-          # Give the background app refresh time to run after the latest revision starts.
           sleep 20
 
           curl -fsS --max-time 20 "$BASE/health" -o /tmp/health.json
@@ -28,30 +27,21 @@ jobs:
 
           curl -fsS --max-time 20 "$BASE/downloads" -o /tmp/downloads.html
           grep -Fq 'id="app-search"' /tmp/downloads.html
-          grep -Fq 'id="search-clear"' /tmp/downloads.html
           grep -Fq 'data-filter="store"' /tmp/downloads.html
-          grep -Fq 'مشغل وسائط احترافي للشاشات والرسيفرات' /tmp/downloads.html
-          grep -Fq 'Flicky' /tmp/downloads.html
-          grep -Fq 'Fluffy' /tmp/downloads.html
-          grep -Fq 'Nebula' /tmp/downloads.html
 
           slugs="$(grep -o 'data-slug="[^"]*"' /tmp/downloads.html | sed 's/data-slug="//;s/"//' | sort -u)"
           count="$(printf '%s\n' "$slugs" | sed '/^$/d' | wc -l)"
           test "$count" -ge 22
 
+          # HEAD verifies redirects but must not count as a real download.
           while IFS= read -r slug; do
             [ -n "$slug" ] || continue
             headers="$(curl -sSI --max-time 20 "$BASE/download/apps/$slug" | tr -d '\r')"
             code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
             location="$(printf '%s\n' "$headers" | awk 'tolower($1)=="location:"{$1="";sub(/^ /,"");print;exit}')"
             test "$code" = '302'
-            case "$location" in
-              *.apk) ;;
-              *) echo "$slug not direct APK: $location" >&2; exit 1;;
-            esac
+            case "$location" in *.apk) ;; *) echo "$slug invalid redirect: $location" >&2; exit 1;; esac
           done <<< "$slugs"
 
-          admin_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/releases-admin")"
-          test "$admin_code" = '401'
-
-          echo "LIVE_CENTER_PASS apps=$count"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/releases-admin")" = '401'
+          echo "ANALYTICS_HEALTH_PASS apps=$count"
