@@ -14,23 +14,36 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify descriptions and expanded direct APK catalog
+      - name: Verify upgraded Azure download center
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io'
           curl -fsS --max-time 20 "$BASE/downloads" -o /tmp/downloads.html
-          test "$(grep -o 'class="app-row' /tmp/downloads.html | wc -l)" = '14'
-          test "$(grep -o 'class="app-desc' /tmp/downloads.html | wc -l)" = '14'
-          grep -Fq 'إرسال ملفات وملفات APK بين الجوال والكمبيوتر والشاشة' /tmp/downloads.html
-          grep -Fq 'بث ألعاب الكمبيوتر إلى التلفزيون' /tmp/downloads.html
-          grep -Fq 'أداة دعم وتحكم عن بعد' /tmp/downloads.html
 
-          for slug in vlc kodi just-player nova-player tv-bro amaze jellyfin-tv ltv-launcher aerial-views localsend mpv-android moonlight material-files rustdesk; do
+          grep -Fq 'id="app-search"' /tmp/downloads.html
+          grep -Fq 'data-filter="all"' /tmp/downloads.html
+          grep -Fq 'data-filter="media"' /tmp/downloads.html
+          grep -Fq 'data-filter="files"' /tmp/downloads.html
+          grep -Fq 'data-filter="tools"' /tmp/downloads.html
+          grep -Fq 'data-filter="network"' /tmp/downloads.html
+          grep -Fq 'applyFilters()' /tmp/downloads.html
+          test "$(grep -o 'data-app-row' /tmp/downloads.html | wc -l)" = '19'
+
+          for name in 'Obtainium' 'App Manager' 'Next Player' 'Fossify File Manager' 'WiFi Analyzer'; do
+            grep -Fq "$name" /tmp/downloads.html
+          done
+
+          grep -Fq 'Universal' /tmp/downloads.html
+          grep -Fq 'ARM64' /tmp/downloads.html
+          grep -Fq 'MB' /tmp/downloads.html
+
+          for slug in vlc kodi just-player nova-player tv-bro amaze jellyfin-tv ltv-launcher aerial-views localsend mpv-android moonlight material-files rustdesk obtainium app-manager next-player fossify-file-manager wifi-analyzer; do
             headers="$(curl -sSI --max-time 20 "$BASE/download/apps/$slug" | tr -d '\r')"
             code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
             location="$(printf '%s\n' "$headers" | awk 'tolower($1)=="location:"{$1=""; sub(/^ /,""); print; exit}')"
             test "$code" = '302'
             case "$location" in *.apk) ;; *) echo "$slug not direct APK: $location" >&2; exit 1;; esac
           done
-          echo 'EXPANDED_CATALOG=PASS'
+
+          echo 'UPGRADED_DOWNLOAD_CENTER=PASS'
