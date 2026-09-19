@@ -88,7 +88,8 @@ function downloadCategoryLabel(category) {
     launcher:'واجهات',
     screensaver:'شاشة توقف',
     tools:'أدوات',
-    network:'شبكة'
+    network:'شبكة',
+    store:'متاجر'
   })[category] || category;
 }
 
@@ -96,7 +97,7 @@ function renderAppLibrary(apps) {
   if (!apps.length) return '';
   const filterDefs = [
     ['all','الكل'], ['tv','TV'], ['media','مشغلات'], ['files','ملفات'],
-    ['downloads','تنزيل'], ['tools','أدوات'], ['network','شبكة'],
+    ['downloads','تنزيل'], ['tools','أدوات'], ['network','شبكة'], ['store','متاجر'],
     ['launcher','واجهات'], ['screensaver','شاشة توقف']
   ];
   const categories = new Set(apps.map(app => app.category));
