@@ -571,6 +571,16 @@ export async function initAppLibrary() {
       )
     `);
     await client.query(`
+      create table if not exists blofy_app_backups (
+        id bigserial primary key,
+        reason text not null,
+        actor text not null,
+        app_count integer not null,
+        snapshot jsonb not null,
+        created_at timestamptz not null default now()
+      )
+    `);
+    await client.query(`
       update blofy_app_catalog
       set created_at=now()
       where created_at is null and slug in ('matvt','apk-updater','mrowser','smarttube')
@@ -655,11 +665,93 @@ export async function listAppAudit(limit = 40) {
   }));
 }
 
+async function createCatalogBackup(reason, actor = 'system') {
+  const result = await pool.query(
+    `select coalesce(jsonb_agg(to_jsonb(c) order by c.featured desc,c.sort_order asc,c.name asc),'[]'::jsonb) as snapshot,
+            count(*)::int as app_count
+     from blofy_app_catalog c`
+  );
+  const row = result.rows[0] || {};
+  const inserted = await pool.query(
+    `insert into blofy_app_backups(reason,actor,app_count,snapshot)
+     values($1,$2,$3,$4::jsonb)
+     returning id,reason,actor,app_count,created_at`,
+    [String(reason || 'automatic').slice(0,80), String(actor || 'system').slice(0,32), Number(row.app_count || 0), JSON.stringify(row.snapshot || [])]
+  );
+  await pool.query(
+    `delete from blofy_app_backups
+     where id not in (select id from blofy_app_backups order by id desc limit 30)`
+  );
+  return inserted.rows[0];
+}
+
+export async function listCatalogBackups(limit = 10) {
+  const safeLimit = Math.min(30, Math.max(1, Number(limit || 10)));
+  const result = await pool.query(
+    'select id,reason,actor,app_count,created_at from blofy_app_backups order by id desc limit $1',
+    [safeLimit]
+  );
+  return result.rows.map(row => ({
+    id: Number(row.id),
+    reason: row.reason,
+    actor: row.actor,
+    appCount: Number(row.app_count || 0),
+    createdAt: new Date(row.created_at).getTime()
+  }));
+}
+
+export async function restoreCatalogBackup(id) {
+  const backupId = Number(id);
+  if (!Number.isInteger(backupId) || backupId < 1) throw new Error('invalid_backup_id');
+  const backupResult = await pool.query('select * from blofy_app_backups where id=$1', [backupId]);
+  if (!backupResult.rowCount) throw new Error('backup_not_found');
+  const snapshot = backupResult.rows[0].snapshot;
+  if (!Array.isArray(snapshot) || snapshot.length > 200) throw new Error('invalid_backup_snapshot');
+
+  await createCatalogBackup('before_backup_restore', 'admin');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('delete from blofy_app_health');
+    await client.query('delete from blofy_app_catalog');
+    for (const row of snapshot) {
+      await client.query(
+        `insert into blofy_app_catalog
+         (slug,name,category,symbol,icon_url,description,devices,version,architecture,apk_size_bytes,
+          download_url,download_mode,sort_order,enabled,featured,auto_update,created_at,version_updated_at,
+          previous_version,previous_download_url,previous_apk_size_bytes,previous_saved_at,updated_at)
+         values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+        [
+          row.slug,row.name,row.category,row.symbol,row.icon_url || '',row.description,row.devices,row.version || '',
+          row.architecture || '',Number(row.apk_size_bytes || 0),row.download_url,row.download_mode,
+          Number(row.sort_order || 100),row.enabled === true,row.featured === true,row.auto_update === true,
+          row.created_at || null,row.version_updated_at || null,row.previous_version || null,row.previous_download_url || null,
+          row.previous_apk_size_bytes == null ? null : Number(row.previous_apk_size_bytes),row.previous_saved_at || null,row.updated_at || new Date().toISOString()
+        ]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  await writeAudit('catalog_backup_restore', null, 'admin', {
+    backupId,
+    appCount: snapshot.length
+  });
+  return { backupId, appCount: snapshot.length };
+}
+
 export async function upsertApp(raw) {
   const item = cleanApp(raw);
   const count = await pool.query('select count(*)::int as n from blofy_app_catalog');
   const existing = await pool.query('select * from blofy_app_catalog where slug=$1', [item.slug]);
   if (!existing.rowCount && count.rows[0].n >= 200) throw new Error('app_catalog_full');
+  if (existing.rowCount) await createCatalogBackup('before_app_update', 'admin');
   const result = await pool.query(
     `insert into blofy_app_catalog
      (slug,name,category,symbol,icon_url,description,devices,version,architecture,apk_size_bytes,download_url,download_mode,sort_order,enabled,featured,auto_update,created_at,updated_at)
@@ -708,6 +800,7 @@ export async function deleteApp(slug) {
   const cleanSlug = String(slug || '').trim().toLowerCase();
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanSlug)) throw new Error('invalid_app_slug');
   const existing = await pool.query('select name,version from blofy_app_catalog where slug=$1', [cleanSlug]);
+  await createCatalogBackup('before_app_delete', 'admin');
   const result = await pool.query('delete from blofy_app_catalog where slug=$1 returning slug', [cleanSlug]);
   if (!result.rowCount) throw new Error('app_not_found');
   await writeAudit('app_delete', cleanSlug, 'admin', {
@@ -724,6 +817,7 @@ export async function rollbackApp(slug) {
   const current = currentResult.rows[0];
   if (!current.previous_download_url) throw new Error('no_previous_app_version');
 
+  await createCatalogBackup('before_app_rollback', 'admin');
   const inspection = await inspectRemoteApk(current.previous_download_url);
   const previousSize = inspection.sizeBytes > 0
     ? inspection.sizeBytes
@@ -849,6 +943,7 @@ export async function refreshManagedApps({ force = false } = {}) {
   }
 
   const apps = (await listApps(true)).filter(app => app.autoUpdate && GITHUB_UPDATE_RULES[app.slug]);
+  if (apps.length) await createCatalogBackup(force ? 'before_manual_bulk_refresh' : 'before_scheduled_bulk_refresh', force ? 'admin' : 'system');
   const results = [];
   const concurrency = 4;
   for (let index = 0; index < apps.length; index += concurrency) {
