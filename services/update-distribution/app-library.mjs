@@ -312,9 +312,17 @@ export async function inspectRemoteApk(value) {
   if (!response.ok && response.status !== 206) throw new Error(`apk_http_${response.status}`);
   const finalUrl = httpsUrl(response.url || requestedUrl);
   await assertPublicHttpsTarget(finalUrl);
-  if (!/\.apk$/i.test(new URL(finalUrl).pathname)) throw new Error('apk_redirect_not_apk');
 
   const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  const disposition = String(response.headers.get('content-disposition') || '').toLowerCase();
+  const finalLooksLikeApk = /\.apk$/i.test(new URL(finalUrl).pathname) || disposition.includes('.apk');
+  if (!finalLooksLikeApk && !(
+    contentType.includes('android.package-archive')
+    || contentType.includes('application/octet-stream')
+    || contentType.includes('binary/octet-stream')
+  )) {
+    throw new Error('apk_redirect_not_apk');
+  }
   const rawLength = Number(response.headers.get('content-length') || 0);
   const contentRange = String(response.headers.get('content-range') || '');
   const rangeMatch = contentRange.match(/\/(\d+)$/);
