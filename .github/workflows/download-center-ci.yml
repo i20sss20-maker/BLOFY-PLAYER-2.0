@@ -54,13 +54,23 @@ jobs:
           import {
             initAppLibrary,
             listApps,
+            listAppVariants,
             listCatalogBackups,
             restoreCatalogBackup,
             closeAppLibrary
           } from './app-library.mjs';
 
           await initAppLibrary();
-          const before = (await listApps(true)).length;
+          const allApps = await listApps(true);
+          const before = allApps.length;
+          const vlc = allApps.find(app => app.slug === 'vlc');
+          if (!vlc?.downloadUrl.includes('mirror.math.princeton.edu/pub/vlc/')) {
+            throw new Error('vlc_direct_source_not_migrated');
+          }
+          const vlcVariants = (await listAppVariants()).filter(item => item.slug === 'vlc');
+          if (vlcVariants.length < 2 || vlcVariants.some(item => !item.downloadUrl.includes('mirror.math.princeton.edu/pub/vlc/'))) {
+            throw new Error('vlc_variant_sources_not_migrated');
+          }
           const backups = await listCatalogBackups(30);
           if (!backups.length) throw new Error('expected_catalog_backup');
           const restored = await restoreCatalogBackup(backups[backups.length - 1].id);
