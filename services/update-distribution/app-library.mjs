@@ -17,7 +17,7 @@ const pool = new Pool({
 
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
-const SEED_VERSION = 5;
+const SEED_VERSION = 6;
 
 const GITHUB_UPDATE_RULES = Object.freeze({
   'just-player': { repo:'moneytoo/Player', asset:'Just.Player.*.apk' },
@@ -86,8 +86,8 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/videolan/vlc-android/master/application/resources/src/main/res/drawable-xxxhdpi/icon.png',
     description:'مشغل فيديو وصوت خفيف وموثوق للشاشات والرسيفرات.',
     devices:'Android TV · Box · ARM64', version:'3.7.0',
-    architecture:'ARM64', apkSizeBytes:0,
-    downloadUrl:'https://get.videolan.org/vlc-android/3.7.0/VLC-Android-3.7.0-arm64-v8a.apk',
+    architecture:'ARM64', apkSizeBytes:49960882,
+    downloadUrl:'https://mirror.math.princeton.edu/pub/vlc/vlc-android/3.7.0/VLC-Android-3.7.0-arm64-v8a.apk',
     downloadMode:'direct', sortOrder:10, enabled:true, featured:true
   },
   {
@@ -320,12 +320,12 @@ const DEFAULT_APPS = Object.freeze([
 const DEFAULT_VARIANTS = Object.freeze([
   {
     slug:'vlc', key:'arm64', label:'ARM64', architecture:'ARM64',
-    downloadUrl:'https://get.videolan.org/vlc-android/3.7.0/VLC-Android-3.7.0-arm64-v8a.apk',
+    downloadUrl:'https://mirror.math.princeton.edu/pub/vlc/vlc-android/3.7.0/VLC-Android-3.7.0-arm64-v8a.apk',
     apkSizeBytes:49960882, sortOrder:10, enabled:true
   },
   {
     slug:'vlc', key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7',
-    downloadUrl:'https://get.videolan.org/vlc-android/3.7.0/VLC-Android-3.7.0-armeabi-v7a.apk',
+    downloadUrl:'https://mirror.math.princeton.edu/pub/vlc/vlc-android/3.7.0/VLC-Android-3.7.0-armeabi-v7a.apk',
     apkSizeBytes:47208378, sortOrder:20, enabled:true
   },
   {
@@ -816,6 +816,32 @@ export async function initAppLibrary() {
           [item.slug, item.architecture, item.apkSizeBytes, item.autoUpdate]
         );
       }
+
+      if (version < 6) {
+        const vlc = cleanApp(DEFAULT_APPS.find(item => item.slug === 'vlc'));
+        await client.query(
+          `update blofy_app_catalog
+           set download_url=$2, apk_size_bytes=$3, download_mode='direct',
+               version_updated_at=now(), updated_at=now()
+           where slug=$1`,
+          [vlc.slug, vlc.downloadUrl, vlc.apkSizeBytes]
+        );
+        for (const rawVariant of DEFAULT_VARIANTS.filter(item => item.slug === 'vlc')) {
+          const variant = cleanVariant(rawVariant);
+          await client.query(
+            `insert into blofy_app_variants
+             (slug,variant_key,label,architecture,download_url,apk_size_bytes,sort_order,enabled,updated_at)
+             values($1,$2,$3,$4,$5,$6,$7,$8,now())
+             on conflict(slug,variant_key) do update set
+               label=excluded.label, architecture=excluded.architecture,
+               download_url=excluded.download_url, apk_size_bytes=excluded.apk_size_bytes,
+               sort_order=excluded.sort_order, enabled=excluded.enabled, updated_at=now()`,
+            [variant.slug,variant.key,variant.label,variant.architecture,variant.downloadUrl,variant.apkSizeBytes,variant.sortOrder,variant.enabled]
+          );
+        }
+        await client.query('delete from blofy_app_health where slug=$1', [vlc.slug]);
+      }
+
       await client.query('update blofy_app_catalog_meta set seed_version=$1 where id=1', [SEED_VERSION]);
     } else {
       for (const seed of DEFAULT_APPS) await insertSeed(client, cleanApp(seed));
