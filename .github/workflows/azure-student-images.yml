@@ -188,13 +188,27 @@ jobs:
           curl -fsS --max-time 10 "$BASE/release.json" >/tmp/blofy-release.json
           curl -fsS --max-time 10 "$BASE/" >/tmp/blofy-home.html
 
-          for path in /d/blofy /d/vlc; do
-            headers="$(curl -sSI --max-time 30 "$BASE$path" | tr -d '\r')"
-            code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
-            test "$code" = "200" -o "$code" = "206"
-            printf '%s\n' "$headers" | grep -Eiq '^content-type: application/vnd\.android\.package-archive'
-            printf '%s\n' "$headers" | grep -Eiq '^content-disposition: attachment;'
-            ! printf '%s\n' "$headers" | grep -Eiq '^location:'
+          for path in /d/blofy /d/just-player /d/vlc; do
+            direct_ok=false
+            for attempt in 1 2 3; do
+              echo "direct APK check $path attempt $attempt/3"
+              headers="$(curl -sSI --max-time 30 "$BASE$path" 2>&1 | tr -d '\r' || true)"
+              printf '%s\n' "$headers"
+              code="$(printf '%s\n' "$headers" | awk '/^HTTP\/{code=$2} END{print code}')"
+              if { [ "$code" = "200" ] || [ "$code" = "206" ]; } \
+                && printf '%s\n' "$headers" | grep -Eiq '^content-type: application/vnd\.android\.package-archive' \
+                && printf '%s\n' "$headers" | grep -Eiq '^content-disposition: attachment;' \
+                && ! printf '%s\n' "$headers" | grep -Eiq '^location:'; then
+                direct_ok=true
+                break
+              fi
+              sleep 2
+            done
+            if [ "$direct_ok" != true ]; then
+              echo "Direct APK verification failed for $path" >&2
+              dump_diagnostics
+              exit 1
+            fi
           done
 
           echo "BLOFY Azure direct APK downloads verified: $BASE/d/blofy"
