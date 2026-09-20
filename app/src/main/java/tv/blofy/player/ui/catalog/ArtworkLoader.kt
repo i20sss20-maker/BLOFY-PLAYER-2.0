@@ -238,7 +238,11 @@ object ArtworkLoader {
 
     private fun retainLocally(context: android.content.Context, url: String, target: Target, bitmap: Bitmap) {
         // Promote older disposable-cache hits without making the visible image wait for a write.
-        if (isPersisted(context, url) || !pendingWrites.add(url)) return
+        if (isPersisted(context, url)) return
+        synchronized(pendingWrites) {
+            // A fast scroll through legacy cache must not retain an unbounded bitmap queue.
+            if (pendingWrites.size >= 12 || !pendingWrites.add(url)) return
+        }
         storagePool.execute {
             try { saveDownloaded(context, url, target, bitmap) }
             finally { pendingWrites.remove(url) }

@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: blofy-rc0755-production-signed-test
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   ACTIVATION_BASE_URL: https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io
