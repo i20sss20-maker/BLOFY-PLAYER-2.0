@@ -490,14 +490,29 @@ export async function openRemoteApk(value, { method = 'GET', range = '' } = {}) 
   if (range && normalizedMethod === 'GET') headers.range = String(range).slice(0, 128);
 
   let result;
-  try {
-    result = await fetchPublic(requestedUrl, { method: normalizedMethod, headers });
-    if (normalizedMethod === 'HEAD' && (result.response.status === 405 || result.response.status === 501)) {
-      result = await fetchPublic(requestedUrl, { method: 'GET', headers: { range: 'bytes=0-0' } });
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      result = await fetchPublic(requestedUrl, { method: normalizedMethod, headers });
+      if (normalizedMethod === 'HEAD' && (result.response.status === 405 || result.response.status === 501)) {
+        result = await fetchPublic(requestedUrl, { method: 'GET', headers: { range: 'bytes=0-0' } });
+      }
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || '');
+      const nonRetryable = message.startsWith('apk_')
+        || message === 'invalid_app_url'
+        || message === 'redirect_without_location'
+        || message === 'too_many_redirects';
+      if (nonRetryable || attempt === 3) break;
+      await new Promise(resolve => setTimeout(resolve, 250 * attempt));
     }
-  } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('apk_proxy_timeout');
-    if (String(error?.message || '').startsWith('apk_')) throw error;
+  }
+  if (!result) {
+    if (lastError?.name === 'AbortError') throw new Error('apk_proxy_timeout');
+    if (String(lastError?.message || '').startsWith('apk_')) throw lastError;
     throw new Error('apk_proxy_failed');
   }
 

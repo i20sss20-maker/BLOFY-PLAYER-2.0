@@ -575,7 +575,7 @@ const server = http.createServer(async (req, res) => {
       if (method === 'GET') {
         recordDownload('blofy').catch(error => console.error('BLOFY download stat failed:', error?.message || error));
       }
-      return streamApkDownload(req, res, release.downloadUrl, `BLOFY-PLAYER-${release.versionName}.apk`);
+      return await streamApkDownload(req, res, release.downloadUrl, `BLOFY-PLAYER-${release.versionName}.apk`);
     }
 
     const variantMatch = pathname.match(/^\/(?:d|apps|download\/apps)\/([a-z0-9-]+)\/([a-z0-9-]+)$/i);
@@ -585,7 +585,7 @@ const server = http.createServer(async (req, res) => {
       if (method === 'GET') {
         recordDownload(`app:${variant.slug}`).catch(error => console.error('Variant download stat failed:', error?.message || error));
       }
-      return streamApkDownload(req, res, variant.downloadUrl, `${variant.slug}-${variant.key}.apk`);
+      return await streamApkDownload(req, res, variant.downloadUrl, `${variant.slug}-${variant.key}.apk`);
     }
 
     const appMatch = pathname.match(/^\/(?:d|apps|download\/apps)\/([a-z0-9-]+)$/i);
@@ -595,7 +595,7 @@ const server = http.createServer(async (req, res) => {
       if (method === 'GET') {
         recordDownload(`app:${app.slug}`).catch(error => console.error('App download stat failed:', error?.message || error));
       }
-      return streamApkDownload(req, res, app.downloadUrl, `${app.slug}.apk`);
+      return await streamApkDownload(req, res, app.downloadUrl, `${app.slug}.apk`);
     }
 
     if (['/', '/downloads', '/downloads/', '/releases', '/releases/'].includes(pathname)) {

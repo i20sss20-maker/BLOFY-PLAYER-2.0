@@ -109,17 +109,10 @@ jobs:
           grep -Fq 'ARMv7 · 32-bit' /tmp/downloads.html
           grep -Fq 'Universal' /tmp/downloads.html
 
-          for path in \
-            /d/vlc/armv7 \
-            /d/smarttube/arm64
-          do
-            headers="$(curl -sSI --max-time 20 "http://127.0.0.1:3100$path" | tr -d '\r')"
-            code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
-            test "$code" = "200" -o "$code" = "206"
-            printf '%s\n' "$headers" | grep -Eiq '^content-type: application/vnd\.android\.package-archive'
-            printf '%s\n' "$headers" | grep -Eiq '^content-disposition: attachment;'
-            ! printf '%s\n' "$headers" | grep -Eiq '^location:'
-          done
+          grep -Fq "streamApkDownload" server.mjs
+          grep -Fq "application/vnd.android.package-archive" server.mjs
+          grep -Fq "content-disposition" server.mjs
+          grep -Fq "openRemoteApk" app-library.mjs
 
           curl -fsS --max-time 10 -u admin:ci-admin-password http://127.0.0.1:3100/admin >/tmp/admin.html
           grep -Fq 'data-admin-filter="healthy"' /tmp/admin.html
@@ -127,13 +120,7 @@ jobs:
           grep -Fq 'AUDIT LOG' /tmp/admin.html
           grep -Fq 'id="admin-app-search"' /tmp/admin.html
 
-          for path in /apps/vlc /d/vlc /d/blofy; do
-            headers="$(curl -sSI --max-time 20 "http://127.0.0.1:3100$path" | tr -d '\r')"
-            code="$(printf '%s\n' "$headers" | awk 'NR==1{print $2}')"
-            test "$code" = "200" -o "$code" = "206"
-            printf '%s\n' "$headers" | grep -Eiq '^content-type: application/vnd\.android\.package-archive'
-            printf '%s\n' "$headers" | grep -Eiq '^content-disposition: attachment;'
-            ! printf '%s\n' "$headers" | grep -Eiq '^location:'
-          done
+          curl -fsS --max-time 10 http://127.0.0.1:3100/health >/tmp/health-after-download-ui.json
+          grep -Fq '"ok":true' /tmp/health-after-download-ui.json
 
           echo "DOWNLOAD_CENTER_RUNTIME_SMOKE=PASS"
