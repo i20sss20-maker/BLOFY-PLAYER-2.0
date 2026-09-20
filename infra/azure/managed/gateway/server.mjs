@@ -5,7 +5,7 @@ const PORT = Number(process.env.PORT || 8080);
 const ACTIVATION_URL = String(process.env.ACTIVATION_URL || 'http://blofy-activation').replace(/\/+$/, '');
 const RELEASE_URL = String(process.env.RELEASE_URL || 'http://blofy-releases').replace(/\/+$/, '');
 
-const RELEASE_PATH = /^(?:\/release\.json|\/download(?:\/|$)|\/downloads(?:\/|$)|\/releases(?:\/|$))/;
+const RELEASE_PATH = /^(?:\/release\.json|\/download(?:\/|$)|\/downloads(?:\/|$)|\/releases(?:\/|$)|\/d(?:\/|$)|\/apps(?:\/|$))/;
 const HOP_BY_HOP = new Set([
   'connection',
   'keep-alive',
