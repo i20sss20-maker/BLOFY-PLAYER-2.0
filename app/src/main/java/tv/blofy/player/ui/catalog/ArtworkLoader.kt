@@ -176,16 +176,19 @@ object ArtworkLoader {
         return File(File(File(context.filesDir, "blofy_library_art"), id.take(2)), "$id.jpg")
     }
 
-    fun isPersisted(context: android.content.Context, url: String): Boolean =
+    fun isPersisted(context: android.content.Context, url: String): Boolean = synchronized(fileLock(url)) {
         pinnedFile(context.applicationContext, url).let { it.isFile && it.length() > 0L }
+    }
 
-    private fun readPinned(context: android.content.Context, url: String, target: Target): Bitmap? {
+    private fun readPinned(context: android.content.Context, url: String, target: Target): Bitmap? = synchronized(fileLock(url)) {
+        // Older Android AtomicFile implementations write directly to the base file.
+        // Readers must wait for finishWrite instead of decoding/deleting a partial image.
         val file = pinnedFile(context, url)
-        if (!file.isFile || file.length() == 0L) return null
+        if (!file.isFile || file.length() == 0L) return@synchronized null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { file.delete(); return null }
-        return BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply {
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { file.delete(); return@synchronized null }
+        BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply {
             inPreferredConfig = Bitmap.Config.RGB_565
             inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, target.width, target.height)
         }).also { if (it == null) file.delete() }
