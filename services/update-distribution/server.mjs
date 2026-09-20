@@ -1,7 +1,8 @@
 import http from 'node:http';
+import { Readable } from 'node:stream';
 import { initReleaseStore, getActiveRelease } from './release-store.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
-import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload } from './app-library.mjs';
+import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload, openRemoteApk } from './app-library.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 const APP_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -39,6 +40,49 @@ function sendHtml(req, res, status, body) {
 function redirect(res, location) {
   res.writeHead(303, { ...securityHeaders, location, 'cache-control': 'no-store, max-age=0' });
   res.end();
+}
+
+function safeApkFilename(value) {
+  const base = String(value || 'app').trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'app';
+  return base.toLowerCase().endsWith('.apk') ? base : `${base}.apk`;
+}
+
+async function streamApkDownload(req, res, sourceUrl, filename) {
+  const rawRange = String(req.headers.range || '').trim();
+  const range = /^bytes=\d*-\d*$/.test(rawRange) ? rawRange : '';
+  const opened = await openRemoteApk(sourceUrl, { method: req.method, range });
+  const upstream = opened.response;
+  const status = upstream.status === 206 ? 206 : 200;
+  const headers = {
+    ...securityHeaders,
+    'content-type': 'application/vnd.android.package-archive',
+    'content-disposition': `attachment; filename="${safeApkFilename(filename)}"`,
+    'cache-control': 'no-store, max-age=0',
+    'accept-ranges': 'bytes'
+  };
+
+  const length = upstream.headers.get('content-length');
+  const contentRange = upstream.headers.get('content-range');
+  const etag = upstream.headers.get('etag');
+  const lastModified = upstream.headers.get('last-modified');
+  if (length) headers['content-length'] = length;
+  if (contentRange) headers['content-range'] = contentRange;
+  if (etag) headers.etag = etag;
+  if (lastModified) headers['last-modified'] = lastModified;
+
+  res.writeHead(status, headers);
+  if (req.method === 'HEAD') {
+    try { await upstream.body?.cancel(); } catch {}
+    return res.end();
+  }
+  if (!upstream.body) return res.end();
+
+  const body = Readable.fromWeb(upstream.body);
+  body.on('error', error => {
+    console.error('APK proxy stream failed:', error?.message || error);
+    if (!res.destroyed) res.destroy(error);
+  });
+  body.pipe(res);
 }
 
 function publicRelease(release) {
@@ -527,15 +571,11 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/health' || pathname === '/release.json') return sendJson(req, res, 200, healthPayload());
 
     if (pathname === '/download/latest.apk' || pathname === '/d/blofy') {
+      const release = getActiveRelease();
       if (method === 'GET') {
         recordDownload('blofy').catch(error => console.error('BLOFY download stat failed:', error?.message || error));
       }
-      res.writeHead(302, {
-        ...securityHeaders,
-        location: getActiveRelease().downloadUrl,
-        'cache-control': 'no-store, max-age=0'
-      });
-      return res.end();
+      return streamApkDownload(req, res, release.downloadUrl, `BLOFY-PLAYER-${release.versionName}.apk`);
     }
 
     const variantMatch = pathname.match(/^\/(?:d|apps|download\/apps)\/([a-z0-9-]+)\/([a-z0-9-]+)$/i);
@@ -545,12 +585,7 @@ const server = http.createServer(async (req, res) => {
       if (method === 'GET') {
         recordDownload(`app:${variant.slug}`).catch(error => console.error('Variant download stat failed:', error?.message || error));
       }
-      res.writeHead(302, {
-        ...securityHeaders,
-        location: variant.downloadUrl,
-        'cache-control': 'no-store, max-age=0'
-      });
-      return res.end();
+      return streamApkDownload(req, res, variant.downloadUrl, `${variant.slug}-${variant.key}.apk`);
     }
 
     const appMatch = pathname.match(/^\/(?:d|apps|download\/apps)\/([a-z0-9-]+)$/i);
@@ -560,12 +595,7 @@ const server = http.createServer(async (req, res) => {
       if (method === 'GET') {
         recordDownload(`app:${app.slug}`).catch(error => console.error('App download stat failed:', error?.message || error));
       }
-      res.writeHead(302, {
-        ...securityHeaders,
-        location: app.downloadUrl,
-        'cache-control': 'no-store, max-age=0'
-      });
-      return res.end();
+      return streamApkDownload(req, res, app.downloadUrl, `${app.slug}.apk`);
     }
 
     if (['/', '/downloads', '/downloads/', '/releases', '/releases/'].includes(pathname)) {
