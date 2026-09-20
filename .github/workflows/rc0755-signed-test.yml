@@ -1,0 +1,199 @@
+# RC07.55 QA: favorites posters and durable local-first artwork
+name: BLOFY rc07.55 Production-Signed Test
+
+on:
+  push:
+    branches: [fix/rc0755-favorites-artwork]
+    paths:
+      - .github/workflows/rc0755-signed-test.yml
+      - app/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blofy-rc0755-production-signed-test
+  cancel-in-progress: false
+
+env:
+  ACTIVATION_BASE_URL: https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io
+  UPDATE_BASE_URL: https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io
+  EXPECTED_APPLICATION_ID: tv.blofy.player.v2
+  EXPECTED_VERSION_CODE: "2000067"
+  EXPECTED_VERSION_NAME: 2.0.0-rc07.55
+  EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+  MEDIA3_VERSION: "1.6.1"
+  ANDROID_NDK_VERSION: 28.0.13004108
+  ANDROID_CMAKE_VERSION: 3.22.1
+  ANDROID_BUILD_TOOLS_VERSION: 35.0.0
+  FFMPEG_DECODERS: ac3 eac3 dca truehd aac mp3 opus vorbis flac
+
+jobs:
+  signed-test:
+    name: Verify + FFmpeg + signed APK/AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Validate rc07.55 identity and signing inputs
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for value in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
+          done
+          grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000067' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.55"' app/build.gradle.kts
+
+      - name: Install Android native and signing toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses >/dev/null || true
+          "$sdkmanager" "platforms;android-36" "build-tools;$ANDROID_BUILD_TOOLS_VERSION" "ndk;$ANDROID_NDK_VERSION" "cmake;$ANDROID_CMAKE_VERSION"
+          command -v ninja >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y ninja-build; }
+
+      - name: Unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL="$ACTIVATION_BASE_URL" \
+            -PBLOFY_UPDATE_BASE_URL="$UPDATE_BASE_URL" \
+            -PBLOFY_BUILD_SHA="$GITHUB_SHA" \
+            testDebugUnitTest
+
+      - name: Upload unit test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-rc0755-unit-tests-${{ github.sha }}
+          path: |
+            app/build/test-results/testDebugUnitTest/*.xml
+            app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Decode and validate production signing key
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          keystore="$RUNNER_TEMP/blofy-production.keystore"
+          clean_b64="$RUNNER_TEMP/blofy-production.b64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' > "$clean_b64"
+          remainder=$(( $(wc -c < "$clean_b64") % 4 )); if [[ "$remainder" -ne 0 ]]; then printf '%*s' $((4 - remainder)) '' | tr ' ' '=' >> "$clean_b64"; fi
+          base64 --decode "$clean_b64" > "$keystore"
+          keytool -list -keystore "$keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          actual="$(keytool -exportcert -keystore "$keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')"
+          [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
+
+      - name: Build Media3 FFmpeg decoder
+        shell: bash
+        env:
+          ENABLED_DECODERS: ${{ env.FFMPEG_DECODERS }}
+        run: |
+          set -euo pipefail
+          export NDK_PATH="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          export PATH="$ANDROID_HOME/cmake/$ANDROID_CMAKE_VERSION/bin:$PATH"
+          chmod +x tools/build_media3_ffmpeg.sh
+          tools/build_media3_ffmpeg.sh
+          aar="build/ffmpeg-native/media3-decoder-ffmpeg-$MEDIA3_VERSION.aar"
+          test -s "$aar"
+          sha256sum --check "$aar.sha256"
+
+      - name: Build production-signed website APK and Play AAB
+        shell: bash
+        env:
+          BLOFY_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/blofy-production.keystore
+          BLOFY_RELEASE_STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          BLOFY_RELEASE_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          BLOFY_RELEASE_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2048m
+        run: |
+          set -euo pipefail
+          aar="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-$MEDIA3_VERSION.aar"
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_SECURITY_R8=true \
+            -PBLOFY_ACTIVATION_BASE_URL="$ACTIVATION_BASE_URL" \
+            -PBLOFY_UPDATE_BASE_URL="$UPDATE_BASE_URL" \
+            -PBLOFY_BUILD_SHA="$GITHUB_SHA" \
+            -PBLOFY_FFMPEG_AAR="$aar" \
+            lintRelease assembleRelease
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_DISTRIBUTION=play \
+            -PBLOFY_SECURITY_R8=true \
+            -PBLOFY_ACTIVATION_BASE_URL="$ACTIVATION_BASE_URL" \
+            -PBLOFY_UPDATE_BASE_URL="$UPDATE_BASE_URL" \
+            -PBLOFY_BUILD_SHA="$GITHUB_SHA" \
+            -PBLOFY_FFMPEG_AAR="$aar" \
+            bundleRelease
+
+      - name: Verify and stage signed artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
+          apk="app/build/outputs/apk/release/app-release.apk"
+          aab="app/build/outputs/bundle/release/app-release.aab"
+          test -s "$apk"
+          test -s "$aab"
+          "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$EXPECTED_VERSION_CODE' versionName='$EXPECTED_VERSION_NAME'" "$RUNNER_TEMP/badging.txt"
+          ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/badging.txt"
+          "$tools/zipalign" -c -P 16 -v 4 "$apk"
+          "$tools/apksigner" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/signature.txt"
+          actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
+          jarsigner -verify "$aab" >/dev/null
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/apk-files.txt"
+          done
+          mkdir -p signed-test
+          cp "$apk" signed-test/BLOFY-PLAYER-2.0-rc07.55-PRODUCTION-SIGNED.apk
+          cp "$aab" signed-test/BLOFY-PLAYER-2.0-rc07.55-PRODUCTION-SIGNED.aab
+          cp "$RUNNER_TEMP/badging.txt" signed-test/apk-badging.txt
+          cp "$RUNNER_TEMP/signature.txt" signed-test/apk-signature.txt
+          {
+            echo "version=$EXPECTED_VERSION_NAME"
+            echo "versionCode=$EXPECTED_VERSION_CODE"
+            echo "commit=$GITHUB_SHA"
+            echo "activation=$ACTIVATION_BASE_URL"
+            echo "updates=$UPDATE_BASE_URL"
+            echo "production_signed=true"
+            echo "r8=true"
+            echo "ffmpeg=true"
+            echo "published=false"
+          } > signed-test/build-info.txt
+          (cd signed-test && sha256sum *.apk *.aab > SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-2.0-rc07.55-PRODUCTION-SIGNED-${{ github.sha }}
+          path: signed-test/
+          if-no-files-found: error
+          retention-days: 30

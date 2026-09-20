@@ -52,7 +52,12 @@ class ArtworkCancellationTest {
         val fresh = ImageView(RuntimeEnvironment.getApplication())
         try {
             views.forEachIndexed { index, view -> ArtworkLoader.load(view, server.url("/old-$index.png").toString()) }
-            assertTrue("Old requests must occupy each coordinator before recycling", oldStarted.await(5, TimeUnit.SECONDS))
+            val startedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (oldStarted.count > 0 && System.nanoTime() < startedDeadline) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(10)
+            }
+            assertEquals("Old requests must occupy each coordinator before recycling", 0L, oldStarted.count)
             views.forEach(ArtworkLoader::cancel)
             ArtworkLoader.load(fresh, server.url("/fresh.png").toString())
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
