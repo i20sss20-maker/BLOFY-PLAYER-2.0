@@ -481,6 +481,43 @@ async function fetchPublic(url, options = {}) {
   throw new Error('too_many_redirects');
 }
 
+export async function openRemoteApk(value, { method = 'GET', range = '' } = {}) {
+  const requestedUrl = httpsUrl(value);
+  if (!/\.apk$/i.test(new URL(requestedUrl).pathname)) throw new Error('direct_download_must_be_apk');
+
+  const normalizedMethod = String(method || 'GET').toUpperCase() === 'HEAD' ? 'HEAD' : 'GET';
+  const headers = {};
+  if (range && normalizedMethod === 'GET') headers.range = String(range).slice(0, 128);
+
+  let result;
+  try {
+    result = await fetchPublic(requestedUrl, { method: normalizedMethod, headers });
+    if (normalizedMethod === 'HEAD' && (result.response.status === 405 || result.response.status === 501)) {
+      result = await fetchPublic(requestedUrl, { method: 'GET', headers: { range: 'bytes=0-0' } });
+    }
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('apk_proxy_timeout');
+    if (String(error?.message || '').startsWith('apk_')) throw error;
+    throw new Error('apk_proxy_failed');
+  }
+
+  const response = result.response;
+  const finalUrl = result.finalUrl;
+  if (!response.ok && response.status !== 206) throw new Error(`apk_http_${response.status}`);
+
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  const disposition = String(response.headers.get('content-disposition') || '').toLowerCase();
+  const finalLooksLikeApk = /\.apk$/i.test(new URL(finalUrl).pathname) || disposition.includes('.apk');
+  const allowedBinary = !contentType
+    || contentType.includes('android.package-archive')
+    || contentType.includes('application/octet-stream')
+    || contentType.includes('binary/octet-stream');
+  if (!finalLooksLikeApk && !allowedBinary) throw new Error('apk_redirect_not_apk');
+  if (!allowedBinary) throw new Error('apk_unexpected_content_type');
+
+  return { response, requestedUrl, finalUrl };
+}
+
 export async function inspectRemoteApk(value) {
   const requestedUrl = httpsUrl(value);
   if (!/\.apk$/i.test(new URL(requestedUrl).pathname)) throw new Error('direct_download_must_be_apk');
