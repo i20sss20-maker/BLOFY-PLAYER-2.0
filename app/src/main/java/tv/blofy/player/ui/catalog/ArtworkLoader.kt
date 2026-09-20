@@ -48,8 +48,8 @@ object ArtworkLoader {
     private val localPool = Executors.newFixedThreadPool(2)
     private val backgroundPool = Executors.newFixedThreadPool(2)
     private val storagePool = Executors.newSingleThreadExecutor()
-    private val pendingWrites = ConcurrentHashMap.newKeySet<String>()
-    private val pendingPrefetch = ConcurrentHashMap.newKeySet<String>()
+    private val pendingWrites = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private val pendingPrefetch = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val fileLocks = Array(64) { Any() }
     private val taskSequence = AtomicLong(0)
     private val taskQueue = PriorityBlockingQueue<Runnable>(64) { a, b ->
