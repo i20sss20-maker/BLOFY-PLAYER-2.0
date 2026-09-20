@@ -77,19 +77,7 @@ class LibraryScrollRegressionTest {
     }
 
     private fun press(activity: LibraryActivity, key: Int) {
-        val handled = activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))
-        if (!handled) {
-            // Real DPAD events pass through ViewRootImpl after Activity dispatch.
-            // Robolectric's direct Activity call needs that unhandled focus step.
-            val direction = when (key) {
-                KeyEvent.KEYCODE_DPAD_DOWN -> View.FOCUS_DOWN
-                KeyEvent.KEYCODE_DPAD_UP -> View.FOCUS_UP
-                KeyEvent.KEYCODE_DPAD_LEFT -> View.FOCUS_LEFT
-                KeyEvent.KEYCODE_DPAD_RIGHT -> View.FOCUS_RIGHT
-                else -> error("Unsupported direction")
-            }
-            activity.currentFocus?.focusSearch(direction)?.requestFocus(direction)
-        }
+        assertTrue("Favorites should handle the remote direction", activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key)))
         activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(250))
         layout(activity)

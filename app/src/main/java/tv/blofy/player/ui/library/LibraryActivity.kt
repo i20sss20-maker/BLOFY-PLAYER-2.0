@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -35,6 +36,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.WatchStateEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.catalog.PosterStreamAdapter
@@ -143,8 +145,7 @@ class LibraryActivity : AppCompatActivity() {
                         } else {
                             val position = favorites.indexOfFirst { it.key == focusedFavoriteKey }
                                 .takeIf { it >= 0 } ?: previousPosition.coerceAtMost(favorites.lastIndex)
-                            grid.scrollToPosition(position)
-                            grid.post { grid.findViewHolderForAdapterPosition(position)?.itemView?.requestFocus() }
+                            grid.post { TwoPaneFocusGuard.focusItem(grid, position) }
                         }
                     }
                 }
@@ -156,6 +157,12 @@ class LibraryActivity : AppCompatActivity() {
     override fun onDestroy() {
         favoritesGrid?.adapter = null
         super.onDestroy()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val grid = favoritesGrid
+        if (grid != null && TwoPaneFocusGuard.handleGrid(event, grid)) return true
+        return super.dispatchKeyEvent(event)
     }
 
     private suspend fun resolveContinueWatching(dao: BlofyDao, providerId: String, states: List<WatchStateEntity>): List<ContinueWatchingEntry> {

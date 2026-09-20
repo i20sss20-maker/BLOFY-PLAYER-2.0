@@ -37,10 +37,22 @@ object TwoPaneFocusGuard {
         content: RecyclerView,
         focusCategories: () -> Boolean,
         focusContent: () -> Boolean,
+    ): Boolean = handleInternal(event, categories, content, focusCategories, focusContent)
+
+    /** Use the same offscreen/repeated-key handling for a standalone poster grid. */
+    fun handleGrid(event: KeyEvent, content: RecyclerView): Boolean =
+        handleInternal(event, null, content, { false }, { false })
+
+    private fun handleInternal(
+        event: KeyEvent,
+        categories: RecyclerView?,
+        content: RecyclerView,
+        focusCategories: () -> Boolean,
+        focusContent: () -> Boolean,
     ): Boolean {
         if (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER ||
             event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
-            val lists = listOf(categories, content)
+            val lists = listOfNotNull(categories, content)
             val captured = lists.firstOrNull { consumedConfirmKeys[it] == event.keyCode }
             if (captured != null) {
                 if (event.action == KeyEvent.ACTION_UP) {
@@ -73,7 +85,7 @@ object TwoPaneFocusGuard {
             else -> return false
         }
         val owner = when {
-            categories.hasFocus() -> categories
+            categories?.hasFocus() == true -> categories
             content.hasFocus() -> content
             else -> return false
         }
