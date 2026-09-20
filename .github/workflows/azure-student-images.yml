@@ -194,7 +194,7 @@ jobs:
               echo "direct APK check $path attempt $attempt/3"
               headers="$(curl -sSI --max-time 30 "$BASE$path" 2>&1 | tr -d '\r' || true)"
               printf '%s\n' "$headers"
-              code="$(printf '%s\n' "$headers" | awk '/^HTTP\/{code=$2} END{print code}')"
+              code="$(printf '%s\n' "$headers" | awk '/^HTTP/{code=$2} END{print code}')"
               if { [ "$code" = "200" ] || [ "$code" = "206" ]; } \
                 && printf '%s\n' "$headers" | grep -Eiq '^content-type: application/vnd\.android\.package-archive' \
                 && printf '%s\n' "$headers" | grep -Eiq '^content-disposition: attachment;' \
