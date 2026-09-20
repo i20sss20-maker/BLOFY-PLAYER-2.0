@@ -90,6 +90,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          node --check infra/azure/managed/gateway/server.mjs
+          grep -Fq "\/d(?:\/|$)" infra/azure/managed/gateway/server.mjs
+          grep -Fq "\/apps(?:\/|$)" infra/azure/managed/gateway/server.mjs
           docker build -t blofy-gateway-ci infra/azure/managed/gateway
 
       - name: Check shell scripts
