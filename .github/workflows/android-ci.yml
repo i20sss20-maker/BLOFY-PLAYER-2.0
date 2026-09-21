@@ -129,9 +129,14 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          # Unit tests start BlofyApp; never let fixtures register on a customer service.
+          gradle --no-daemon \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testDebugUnitTest 2>&1 | tee gradle-ci.log
           gradle --no-daemon \
             -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app \
-            testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee gradle-ci.log
+            lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee -a gradle-ci.log
       - name: Upload Gradle diagnostics
         if: always()
         uses: actions/upload-artifact@v4
