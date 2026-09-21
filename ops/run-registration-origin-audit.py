@@ -8,14 +8,24 @@ import signal
 
 source = Path('ops/registration-origin-audit.cjs').read_bytes()
 encoded = base64.b64encode(source).decode('ascii')
-command = shlex.join(['node', '-e', f"eval(Buffer.from('{encoded}','base64').toString())"])
+# Azure's WebSocket URL also carries the command. Keep that URL short; stream the
+# reviewed source through stdin only after the remote process reports readiness.
+program = '''let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>{s+=c;if(s.includes('\\nBLOFY_AUDIT_END\\n')){process.stdin.pause();eval(Buffer.from(s.split('\\nBLOFY_AUDIT_END\\n')[0],'base64').toString());}});console.log('BLOFY_AUDIT_READY');'''
+command = shlex.join(['node', '-e', program])
 args = ['az', 'containerapp', 'exec', '--name', 'blofy-activation',
         '--resource-group', os.environ['AZURE_RG'], '--container', 'activation', '--command', command]
 captured = bytearray()
+sent = False
+payload = ('\n'.join(encoded[i:i+256] for i in range(0,len(encoded),256))+'\nBLOFY_AUDIT_END\n').encode()
 
 def read_output(fd):
+    global sent
     data = os.read(fd, 65536)
     captured.extend(data)
+    if not sent and b'BLOFY_AUDIT_READY' in captured:
+        sent = True
+        for start in range(0, len(payload), 512):
+            os.write(fd, payload[start:start+512])
     return data
 
 signal.alarm(180)

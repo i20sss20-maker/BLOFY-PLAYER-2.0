@@ -143,10 +143,15 @@ jobs:
           set -euo pipefail
           aar="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-$MEDIA3_VERSION.aar"
           gradle --no-daemon \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_BUILD_SHA="$GITHUB_SHA" \
+            -PBLOFY_FFMPEG_AAR="$aar" testDebugUnitTest
+          gradle --no-daemon \
             -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" \
             -PBLOFY_BUILD_SHA="$GITHUB_SHA" \
             -PBLOFY_FFMPEG_AAR="$aar" \
-            testDebugUnitTest lintRelease assembleRelease bundleRelease
+            lintRelease assembleRelease bundleRelease
 
       - name: Verify package, version, signature, alignment and FFmpeg ABIs
         shell: bash
