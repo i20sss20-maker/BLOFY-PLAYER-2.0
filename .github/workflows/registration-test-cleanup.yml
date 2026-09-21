@@ -1,0 +1,68 @@
+name: BLOFY CI Registration Cleanup
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/registration-test-cleanup.yml'
+      - 'ops/registration-cleanup.cjs'
+      - 'ops/registration-cleanup.test.cjs'
+      - 'ops/registration-cleanup-20260921.json'
+      - 'ops/run-registration-cleanup.py'
+  pull_request:
+    paths:
+      - '.github/workflows/registration-test-cleanup.yml'
+      - 'ops/registration-cleanup.cjs'
+      - 'ops/registration-cleanup.test.cjs'
+      - 'ops/registration-cleanup-20260921.json'
+      - 'ops/run-registration-cleanup.py'
+permissions:
+  contents: read
+concurrency:
+  group: blofy-ci-registration-cleanup-${{ github.event_name }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: blofy_cleanup_tests
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --prefix services/activation --ignore-scripts
+      - name: Verify deletion guards, rollback, recovery and repeat execution
+        env:
+          TEST_CLEANUP_DATABASE_URL: postgres://postgres:fixture-only@127.0.0.1:5432/blofy_cleanup_tests
+        run: node --test ops/registration-cleanup.test.cjs
+  cleanup:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Archive and remove only the reviewed empty CI registrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          python3 ops/run-registration-cleanup.py
