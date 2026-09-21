@@ -36,6 +36,7 @@ import tv.blofy.player.ui.catalog.PosterStreamAdapter
 import tv.blofy.player.ui.library.LibraryActivity
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.net.ServerSocket
 import java.net.URI
 
 /** The workflow runs these methods in separate app processes, with the fixture server stopped. */
@@ -57,6 +58,9 @@ class ArtworkFavoritesDeviceTest {
             }
             ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
         }
+        // MockWebServer enables SO_REUSEADDR only for an explicit port. Both processes
+        // must enable it so TIME_WAIT sockets cannot prevent the recovery fixture binding.
+        val fixturePort = ServerSocket(0).use { it.localPort }
         val server = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
@@ -65,7 +69,7 @@ class ArtworkFavoritesDeviceTest {
                     val bytes = images[index] ?: return MockResponse().setResponseCode(404)
                     return MockResponse().setHeader("Content-Type", "image/png").setBody(Buffer().write(bytes))
                 }
-            }; start()
+            }; start(fixturePort)
         }
         val base = server.url("/").toString()
         manifest.writeText(base)
