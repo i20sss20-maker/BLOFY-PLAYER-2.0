@@ -29,13 +29,14 @@ import java.util.concurrent.atomic.AtomicInteger
 
 object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
+    private const val MAX_DIRECT_CACHE_BYTES = 384 * 1024
     private const val MAX_DISK_BYTES = 260L * 1024L * 1024L
     private const val NEGATIVE_CACHE_MS = 5 * 60_000L
     private const val MAX_FAILED_URLS = 2_048
 
     private enum class Priority { VISIBLE, PREFETCH }
     private data class Target(val width: Int, val height: Int, val diskBucket: Int)
-    private data class Downloaded(val bitmap: Bitmap, val encoded: ByteArray)
+    private data class Downloaded(val bitmap: Bitmap, val encoded: ByteArray?)
     private class ViewRequest {
         var local: FutureTask<Unit>? = null
         var release: (() -> Unit)? = null
@@ -453,7 +454,9 @@ object ArtworkLoader {
                 inPreferredConfig = Bitmap.Config.RGB_565
                 inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, download.target.width, download.target.height)
             }) ?: return null
-            return Downloaded(bitmap, bytes)
+            // Small web images can be copied without encoding. Compact large originals
+            // after display so permanent caching does not consume several MB per poster.
+            return Downloaded(bitmap, bytes.takeIf { it.size <= MAX_DIRECT_CACHE_BYTES })
         }
     }
 

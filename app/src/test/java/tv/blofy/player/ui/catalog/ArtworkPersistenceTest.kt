@@ -148,4 +148,27 @@ class ArtworkPersistenceTest {
             assertEquals(0, server.requestCount)
         } finally { ArtworkLoader.cancel(view); server.shutdown() }
     }
+
+    @Test fun oversizedOriginalIsCompactedAndStillReopensOffline() {
+        ArtworkLoader.clearMemory()
+        val random = java.util.Random(17)
+        val bitmap = Bitmap.createBitmap(1024, 1536, Bitmap.Config.RGB_565).apply {
+            setPixels(IntArray(1024 * 1536) { random.nextInt() or 0xFF000000.toInt() }, 0, 1024, 0, 0, 1024, 1536)
+        }
+        val original = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        assertTrue(original.size > 384 * 1024)
+        val server = MockWebServer().apply { enqueue(MockResponse().setBody(Buffer().write(original))); start() }
+        val url = server.url("/large-source.png").toString()
+        val view = ImageView(app)
+        try {
+            assertTrue(runBlocking { ArtworkLoader.persist(app, url) })
+            val id = MessageDigest.getInstance("SHA-256").digest(url.toByteArray()).joinToString("") { "%02x".format(it) }
+            val file = File(File(File(app.filesDir, "blofy_library_art"), id.take(2)), "$id.jpg")
+            assertTrue("Permanent artwork should not retain a multi-megabyte original", file.length() < original.size / 2)
+            ArtworkLoader.clearMemory()
+            ArtworkLoader.load(view, url)
+            await("Compacted image is decoded from permanent storage") { view.drawable is BitmapDrawable }
+            assertEquals(1, server.requestCount)
+        } finally { ArtworkLoader.cancel(view); server.shutdown() }
+    }
 }
