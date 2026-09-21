@@ -162,7 +162,7 @@ object LocalBackupManager {
 
         // Older/partial backups without this optional field must not erase current history.
         val searches = root.optJSONArray("recentSearches")
-        val searchItems = if (searches == null) null else buildList {
+        val searchItems: List<String>? = if (searches == null) null else buildList<String> {
             for (index in 0 until searches.length()) (searches.opt(index) as? String)?.let(::add)
         }
         val restoredSearches = searchItems?.let { RecentSearchStore.replace(app, it) } ?: 0
