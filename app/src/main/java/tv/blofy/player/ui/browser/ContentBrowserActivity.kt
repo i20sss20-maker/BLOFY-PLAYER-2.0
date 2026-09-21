@@ -392,7 +392,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             catalogLoading = false
             saveCatalogMemorySnapshot()
             updateCatalogState(catalogItems, categoryId)
-            if (result.first.isNotEmpty()) ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon })
+            if (result.first.isNotEmpty()) ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
         }.also { job ->
             job.invokeOnCompletion { if (generation == catalogGeneration) runOnUiThread { catalogLoading = false } }
         }
@@ -468,7 +468,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             liveLoading = false
             saveLiveMemorySnapshot()
             if (result.first.isNotEmpty()) {
-                ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon })
+                ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
             }
             if (reset && previewEnabled) startInitialPreview(result.first)
         }.also { job ->

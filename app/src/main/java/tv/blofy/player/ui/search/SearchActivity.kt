@@ -359,7 +359,7 @@ class SearchActivity : AppCompatActivity() {
                 background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0xFF17111F.toInt()) }
             }
             addView(art, LinearLayout.LayoutParams(dp(58), dp(68)).apply { marginStart = dp(14) })
-            ArtworkLoader.load(art, stream.icon ?: stream.backdrop)
+            ArtworkLoader.load(art, listOf(stream.icon, stream.backdrop))
 
             val copy = LinearLayout(this@SearchActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START }
             copy.addView(TextView(this@SearchActivity).apply {

@@ -89,7 +89,7 @@ class RecentChannelsActivity : AppCompatActivity() {
                         background = GradientDrawable().apply { cornerRadius = 12f; setColor(0xFF17111F.toInt()); setStroke(1, 0xFF49375E.toInt()) }
                     }
                     addView(logo, LinearLayout.LayoutParams(56, 56).apply { marginStart = 14 })
-                    if (!stream.icon.isNullOrBlank()) ArtworkLoader.load(logo, stream.icon) else logo.setImageResource(R.drawable.blofy_logo)
+                    if (!stream.icon.isNullOrBlank() || !stream.backdrop.isNullOrBlank()) ArtworkLoader.load(logo, listOf(stream.icon, stream.backdrop)) else logo.setImageResource(R.drawable.blofy_logo)
                     addView(TextView(this@RecentChannelsActivity).apply {
                         text = stream.name
                         textSize = 17f

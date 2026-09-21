@@ -314,7 +314,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 posterAdapter.append(result.first)
             }
             updateCount()
-            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(6).map { it.icon ?: it.backdrop })
+            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(6).map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
             loadingPage = false
             saveMemorySnapshot()
             requestInitialContentFocus()

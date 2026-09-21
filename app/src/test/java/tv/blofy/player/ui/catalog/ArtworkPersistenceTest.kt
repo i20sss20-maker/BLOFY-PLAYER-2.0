@@ -103,7 +103,7 @@ class ArtworkPersistenceTest {
 
     @Test fun localPosterDoesNotWaitBehindUncancelledSlowVisibleRequests() {
         ArtworkLoader.clearMemory()
-        val pool = ArtworkLoader::class.java.getDeclaredField("coordinatorPool").apply { isAccessible = true }
+        val pool = ArtworkLoader::class.java.getDeclaredField("networkPool").apply { isAccessible = true }
             .get(ArtworkLoader) as ThreadPoolExecutor
         val slowStarted = CountDownLatch(pool.corePoolSize)
         val release = CountDownLatch(1)
@@ -125,7 +125,7 @@ class ArtworkPersistenceTest {
             assertTrue(runBlocking { ArtworkLoader.persist(app, url) })
             ArtworkLoader.clearMemory()
             slow.forEachIndexed { index, view -> ArtworkLoader.load(view, server.url("/slow-$index.png").toString()) }
-            await("slow requests occupy coordinators") { slowStarted.count == 0L }
+            await("slow requests occupy network slots") { slowStarted.count == 0L }
             ArtworkLoader.load(local, url)
             await("disk hit bypasses blocked network waits") { local.drawable is BitmapDrawable }
             assertEquals("Slow HTTP responses should still be blocked", 1L, release.count)
