@@ -220,8 +220,8 @@ object FullCatalogPreparer {
                                     } }.awaitAll()
                                 }
                                 ensureCurrentSource()
-                                FullLibrarySyncState.checkpoint(app, providerId, expectedEpoch, cursor.phase, group.last().rowId)
                             }
+                            FullLibrarySyncState.checkpoint(app, providerId, expectedEpoch, cursor.phase, page.last().rowId)
                             continue
                         }
 
@@ -246,10 +246,12 @@ object FullCatalogPreparer {
                                 } }.awaitAll()
                             }
                             ensureCurrentSource()
-                            val nextRow = checkNotNull(dao.streamRowId(group.last().key))
-                            check(nextRow > cursor.rowId) { "Full-library cursor did not advance" }
-                            FullLibrarySyncState.checkpoint(app, providerId, expectedEpoch, cursor.phase, nextRow)
                         }
+                        // Checkpoint once per bounded page, avoiding a preference fsync per few images.
+                        // If interrupted mid-page, existing files and queued failures safely cover it.
+                        val nextRow = checkNotNull(dao.streamRowId(page.last().key))
+                        check(nextRow > cursor.rowId) { "Full-library cursor did not advance" }
+                        FullLibrarySyncState.checkpoint(app, providerId, expectedEpoch, cursor.phase, nextRow)
                         if (lowMemory) delay(35L)
                     }
                     false
