@@ -97,8 +97,11 @@ class PlaylistManagerPersistenceTest {
             }
             server.start()
             val api = tv.blofy.player.data.remote.XtreamClient.createApi(okhttp3.OkHttpClient())
+            val local = provider.copy(baseUrl = server.url("/").toString())
+            val manager = PlaylistManager(api, db.dao())
+            assertEquals(1, CatalogSectionRetry.run { manager.syncVod(local) })
             val completed = mutableListOf<String>()
-            val result = PlaylistManager(api, db.dao()).syncAll(provider.copy(baseUrl = server.url("/").toString()),
+            val result = manager.syncAll(local, completedSections = setOf("movie"),
                 onSectionComplete = { completed += it })
             assertEquals(0, result.failedSectionCount)
             assertEquals(3, result.freshItemCount)
