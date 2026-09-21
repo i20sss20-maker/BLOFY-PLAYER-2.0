@@ -1,7 +1,7 @@
 'use strict';
 
 if (document.body.dataset.page === 'admin') {
-  try { labels.pending = 'بانتظار التطبيق'; } catch (_) {}
+  try { labels.pending = 'تسجيل غير مكتمل'; } catch (_) {}
 
   const PANEL_NAMES = new Set(['devices', 'support', 'releases']);
   const panelFromHash = () => {
@@ -34,7 +34,7 @@ if (document.body.dataset.page === 'admin') {
     if (!filter || filter.querySelector('option[value="pending"]')) return;
     const option = document.createElement('option');
     option.value = 'pending';
-    option.textContent = 'بانتظار التطبيق';
+    option.textContent = 'تسجيل غير مكتمل';
     const trial = filter.querySelector('option[value="trial"]');
     if (trial) filter.insertBefore(option, trial); else filter.appendChild(option);
   };

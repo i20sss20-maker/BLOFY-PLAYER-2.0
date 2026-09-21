@@ -55,5 +55,26 @@ try{
  const customer=await request('/api/v1/admin/experience/customer?deviceId='+id);assert.equal(customer.status,200);assert.equal(customer.data.customer.name,profile.name);
  for(const path of ['/api/v1/admin/device-insights','/api/v1/admin/device-insights?format=json','/admin','/portal','/releases','/device-admin.css','/experience.js'])assert.equal((await fetch(base+path,{headers})).status,200,path);
  assert.deepEqual((await (await fetch(base+'/health')).json()).release.app,beforeRelease);
+ // Download counters share the Azure database; no customer data or credentials are exposed.
+ assert.equal((await fetch(base+'/api/v1/admin/experience/usage')).status,401);
+ let usage=await request('/api/v1/admin/experience/usage');assert.equal(usage.status,200);
+ assert.equal(usage.data.requests,null);assert.equal(usage.data.completed,null);
+ await pool.query('CREATE TABLE IF NOT EXISTS blofy_download_stats(key TEXT PRIMARY KEY,download_count BIGINT,last_download_at TIMESTAMPTZ)');
+ await pool.query("INSERT INTO blofy_download_stats VALUES('blofy',17,NOW()),('app:vlc',5,NOW())");
+ const {ensureDownloadMetrics,recordCompletedDownload}=await import('../../update-distribution/download-metrics.mjs');
+ await ensureDownloadMetrics(pool);
+ await recordCompletedDownload(pool,'blofy');await recordCompletedDownload(pool,'app:vlc');
+ await pool.query("INSERT INTO blofy_download_completions(key,day,completed_count) VALUES('blofy',(NOW() AT TIME ZONE 'Asia/Riyadh')::date-1,2)");
+ usage=await request('/api/v1/admin/experience/usage');assert.match(usage.headers.get('cache-control'),/no-store/);
+ assert.equal(usage.data.requests.blofy,17);assert.equal(usage.data.requests.total,22);
+ assert.equal(usage.data.completed.blofy,3);assert.equal(usage.data.completed.total,4);assert.equal(usage.data.completed.today,1);assert.ok(usage.data.completed.startedAt);
+ const beforeOverview=(await request('/api/v1/admin/experience/overview')).data;
+ await pool.query("INSERT INTO devices(device_id,activation_code,status,expires_at,trial_registration_pending,last_app_version,last_platform) VALUES('BLOFY-CITEST-PENDING','test-proof','expired',NOW(),TRUE,'2.0.0-rc07.55','android')");
+ const pending=(await request(root+'/BLOFY-CITEST-PENDING')).data;assert.equal(pending.status,'pending');assert.match(pending.registrationNote,/تواصل التطبيق/);
+ const afterOverview=(await request('/api/v1/admin/experience/overview')).data;
+ assert.equal(afterOverview.pending,beforeOverview.pending+1);assert.equal(afterOverview.expired,beforeOverview.expired);
+ assert.equal((await request('/api/v1/admin/experience/customer?deviceId=BLOFY-CITEST-PENDING')).data.status,'pending');
+ assert.equal((await fetch(base+'/admin-usage.js')).status,200);
+ console.log('PASS: authenticated aggregate requests/completions, Saudi day and measurement start; incomplete registrations excluded from expired subscriptions.');
  console.log('PASS: registration dates, filter/count/pagination, Arabic profile, audit, authorization/CSRF, concurrency, block/unblock preserves expiry and playlists; release and portal routes unchanged.');
 }finally{await pool.query("DELETE FROM devices WHERE device_id LIKE 'BLOFY-CITEST-%'").catch(()=>{});await pool.end();server.kill('SIGTERM');await wait(250);if(server.exitCode===null)server.kill('SIGKILL');}

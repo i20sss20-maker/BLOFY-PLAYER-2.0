@@ -46,6 +46,8 @@ jobs:
           node-version: 20
       - run: npm install --omit=dev
       - run: npm run check
+      - name: Complete-download counting regression
+        run: node --test download-metrics.test.mjs
       - name: Catalog backup restore regression
         shell: bash
         run: |

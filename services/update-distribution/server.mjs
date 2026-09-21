@@ -3,6 +3,8 @@ import { Readable } from 'node:stream';
 import { initReleaseStore, getActiveRelease } from './release-store.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
 import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload, openRemoteApk } from './app-library.mjs';
+import { observeDownloadCompletion } from './download-metrics.mjs';
+import { recordDownloadCompletion } from './app-library.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 const APP_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -47,7 +49,7 @@ function safeApkFilename(value) {
   return base.toLowerCase().endsWith('.apk') ? base : `${base}.apk`;
 }
 
-async function streamApkDownload(req, res, sourceUrl, filename) {
+async function streamApkDownload(req, res, sourceUrl, filename, metricKey) {
   const rawRange = String(req.headers.range || '').trim();
   const range = /^bytes=\d*-\d*$/.test(rawRange) ? rawRange : '';
   const opened = await openRemoteApk(sourceUrl, { method: req.method, range });
@@ -78,6 +80,10 @@ async function streamApkDownload(req, res, sourceUrl, filename) {
   if (!upstream.body) return res.end();
 
   const body = Readable.fromWeb(upstream.body);
+  observeDownloadCompletion({ req, res, body, status, length, contentRange,
+    onComplete: () => recordDownloadCompletion(metricKey),
+    onError: error => console.error('APK completion metric failed:', error?.message || error) });
+  res.once('close', () => { if (!res.writableFinished) body.destroy(); });
   body.on('error', error => {
     console.error('APK proxy stream failed:', error?.message || error);
     if (!res.destroyed) res.destroy(error);
@@ -575,7 +581,7 @@ const server = http.createServer(async (req, res) => {
       if (method === 'GET') {
         recordDownload('blofy').catch(error => console.error('BLOFY download stat failed:', error?.message || error));
       }
-      return await streamApkDownload(req, res, release.downloadUrl, `BLOFY-PLAYER-${release.versionName}.apk`);
+      return await streamApkDownload(req, res, release.downloadUrl, `BLOFY-PLAYER-${release.versionName}.apk`, 'blofy');
     }
 
     const variantMatch = pathname.match(/^\/(?:d|apps|download\/apps)\/([a-z0-9-]+)\/([a-z0-9-]+)$/i);
@@ -585,7 +591,7 @@ const server = http.createServer(async (req, res) => {
       if (method === 'GET') {
         recordDownload(`app:${variant.slug}`).catch(error => console.error('Variant download stat failed:', error?.message || error));
       }
-      return await streamApkDownload(req, res, variant.downloadUrl, `${variant.slug}-${variant.key}.apk`);
+      return await streamApkDownload(req, res, variant.downloadUrl, `${variant.slug}-${variant.key}.apk`, `app:${variant.slug}`);
     }
 
     const appMatch = pathname.match(/^\/(?:d|apps|download\/apps)\/([a-z0-9-]+)$/i);
@@ -595,7 +601,7 @@ const server = http.createServer(async (req, res) => {
       if (method === 'GET') {
         recordDownload(`app:${app.slug}`).catch(error => console.error('App download stat failed:', error?.message || error));
       }
-      return await streamApkDownload(req, res, app.downloadUrl, `${app.slug}.apk`);
+      return await streamApkDownload(req, res, app.downloadUrl, `${app.slug}.apk`, `app:${app.slug}`);
     }
 
     if (['/', '/downloads', '/downloads/', '/releases', '/releases/'].includes(pathname)) {
