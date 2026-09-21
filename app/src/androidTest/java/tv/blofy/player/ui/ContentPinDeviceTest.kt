@@ -17,6 +17,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.core.security.ParentalGate
+import tv.blofy.player.core.security.ContentAccessActivity
 import tv.blofy.player.data.local.*
 import tv.blofy.player.ui.catchup.CatchupActivity
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -32,15 +33,22 @@ class ContentPinDeviceTest {
     private val automation get() = instrumentation.uiAutomation
     private fun nodes(node: AccessibilityNodeInfo?): List<AccessibilityNodeInfo> = if (node == null) emptyList() else
         listOf(node) + (0 until node.childCount).flatMap { nodes(node.getChild(it)) }
+    private fun appNodes(): List<AccessibilityNodeInfo> {
+        // On phones EditText.error opens a separate accessibility window over the PIN dialog.
+        // Query all visible app windows, so the error popup/IME cannot hide the protected dialog.
+        val windows = automation.windows
+        val roots = if (windows.isEmpty()) listOf(automation.rootInActiveWindow) else windows.map { it.root }
+        return roots.flatMap(::nodes).filter { it.packageName?.toString() == context.packageName && it.isVisibleToUser }
+    }
     private fun await(condition: () -> Boolean) {
         val deadline = SystemClock.elapsedRealtime() + 8_000L
         while (!condition() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(25)
         assertTrue("Timed out waiting for PIN UI", condition())
     }
-    private fun pinVisible() = nodes(automation.rootInActiveWindow).any { it.className == "android.widget.EditText" }
+    private fun pinVisible() = appNodes().any { it.className == "android.widget.EditText" }
     private fun answer(pin: String) {
         await(::pinVisible)
-        val input = nodes(automation.rootInActiveWindow).single { it.className == "android.widget.EditText" }
+        val input = appNodes().single { it.className == "android.widget.EditText" }
         assertTrue(input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, pin)
         }))
@@ -48,13 +56,14 @@ class ContentPinDeviceTest {
         instrumentation.waitForIdleSync()
     }
     private fun click(id: String) {
-        val button = automation.rootInActiveWindow.findAccessibilityNodeInfosByViewId(id).single()
+        val button = appNodes().single { it.viewIdResourceName == id }
         assertTrue(button.performAction(AccessibilityNodeInfo.ACTION_CLICK))
     }
 
     @Test fun contentPinGuardsDetailsEpisodesAndPlayer() {
         automation.serviceInfo = automation.serviceInfo.apply {
-            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         }
         val singleton = BlofyDatabase::class.java.getDeclaredField("instance").apply { isAccessible = true }
         val previous = singleton.get(null)
@@ -86,8 +95,11 @@ class ContentPinDeviceTest {
                 ActivityScenario.launch<AppCompatActivity>(source).use { scenario ->
                     await(::pinVisible)
                     answer("9999")
-                    assertTrue("Wrong PIN must leave the gate visible", pinVisible())
+                    await(::pinVisible)
                     scenario.onActivity { activity ->
+                        assertFalse("${type.simpleName} must not load after a wrong PIN",
+                            ContentAccessActivity::class.java.getDeclaredField("contentReady")
+                                .apply { isAccessible = true }.getBoolean(activity))
                         if (activity is PlayerActivity) assertNull(PlayerActivity::class.java.getDeclaredField("session")
                             .apply { isAccessible = true }.get(activity))
                     }
@@ -106,7 +118,7 @@ class ContentPinDeviceTest {
                 .putExtra("provider_id", "pin").putExtra("content_key", movie.key)).use {
                 await(::pinVisible)
                 answer("1234")
-                await { nodes(automation.rootInActiveWindow).any { node -> node.text?.toString() == movie.name } }
+                await { appNodes().any { node -> node.text?.toString() == movie.name } }
                 assertFalse(pinVisible())
             }
             File(evidence, "content-pin-result.txt").writeText(
