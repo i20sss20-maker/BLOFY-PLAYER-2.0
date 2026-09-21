@@ -46,8 +46,7 @@ if (document.body.dataset.page === 'admin') {
     for (const row of rows) {
       const cells = row.querySelectorAll('td');
       if (cells.length < 2) continue;
-      const stateText = String(cells[1].textContent || '');
-      const expired = stateText.includes('منتهٍ') || stateText.includes('منتهي');
+      const expired = Boolean(cells[1].querySelector('.badge.expired'));
       row.classList.toggle('is-expired', expired);
       const actionButton = cells[cells.length - 1]?.querySelector('button');
       if (!actionButton) continue;
@@ -72,10 +71,10 @@ if (document.body.dataset.page === 'admin') {
     const preview = document.getElementById('preview-renewal');
     if (!summary || !box || !heading || !caption || !state || !preview) return;
 
-    const text = String(summary.textContent || '');
-    const expired = text.includes('منتهٍ') || text.includes('منتهي');
-    const blocked = text.includes('موقوف');
-    const lifetime = text.includes('مدى الحياة');
+    const expired = summary.dataset.status === 'expired';
+    const blocked = summary.dataset.status === 'blocked';
+    const pending = summary.dataset.status === 'pending';
+    const lifetime = summary.dataset.lifetime === 'true';
     box.classList.toggle('renewal-expired', expired && !blocked);
 
     if (expired && !blocked) {
@@ -90,6 +89,11 @@ if (document.body.dataset.page === 'admin') {
       caption.textContent = 'ألغِ إيقاف الجهاز أولًا ثم ارجع لتجديد المدة.';
       state.textContent = 'موقوف';
       preview.textContent = 'مراجعة التجديد ←';
+    } else if (pending) {
+      heading.textContent = 'تفعيل تسجيل جديد';
+      caption.textContent = 'لم تبدأ التجربة لهذا التسجيل. عند تأكيد التفعيل تبدأ المدة المدفوعة من الآن.';
+      state.textContent = 'تسجيل غير مكتمل';
+      preview.textContent = 'مراجعة التفعيل ←';
     } else if (lifetime) {
       heading.textContent = 'تفعيل مدى الحياة';
       caption.textContent = 'هذا الجهاز لا يحتاج إلى تمديد إضافي.';
