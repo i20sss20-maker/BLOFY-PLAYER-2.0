@@ -1,0 +1,46 @@
+name: BLOFY rc07.55 artwork verification
+on:
+  push:
+    branches: [fix/rc0755-artwork-throughput]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rc0755-artwork-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Verify unchanged testing version
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('app/build.gradle.kts').read_text()
+          assert 'versionCode = 2000067' in text
+          assert 'versionName = "2.0.0-rc07.55"' in text
+          PY
+      - name: Install compile SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Run image loading regression cases
+        run: gradle --no-daemon --max-workers=2 testDebugUnitTest --tests '*Artwork*Test' --tests '*LiveChannelAdapterRegressionTest' --stacktrace
+      - name: Retain verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc0755-artwork-${{ github.sha }}
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: warn
