@@ -232,7 +232,7 @@ class CatalogRecoveryDeviceTest {
                 }
             } finally { writer.cancelAndJoin() }
             File(evidence, "favorites-200k-result.txt").writeText(
-                "catalog=200000\nfavorites=40\nmigration=12_to_13\nrowids_credentials_history_preserved=true\nold_query_ms=$beforeMs\nnew_query_ms=$afterMs\nold_plan=$beforePlan\nnew_plan=$plan\nfirst_posters_ms=${timings[0]}\nreopen_posters_ms=${timings[1]}\nconcurrent_writes=$writes\nlive_favorite_removal=true\nsource_server_stopped=true\n")
+                "catalog=200000\nfavorites=40\nmigration=12_to_14\nrowids_credentials_history_preserved=true\nold_query_ms=$beforeMs\nnew_query_ms=$afterMs\nold_plan=$beforePlan\nnew_plan=$plan\nfirst_posters_ms=${timings[0]}\nreopen_posters_ms=${timings[1]}\nconcurrent_writes=$writes\nlive_favorite_removal=true\nsource_server_stopped=true\n")
         } finally { singleton.set(null, previous); db.close(); context.deleteDatabase(name) }
     }
 
