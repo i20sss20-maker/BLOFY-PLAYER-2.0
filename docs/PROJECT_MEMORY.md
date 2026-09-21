@@ -10,6 +10,8 @@
 
 - On 2026-09-21, after the PIN bypass finding and explicit scope were presented, the owner requested “كمل النسخة بعد التعديل ابي اجرب”. This authorizes unifying parental content checks, including episode parents and in-player channel switching, and producing the signed rc07.55 testing APK. Media3/FFmpeg, engine/fallback behavior and theme remain protected.
 
+- Latest signed testing source after the approved PIN fix: `e6688dd54df2ad60245de0b80edb03d9bf4f8c9d`; final emulator QA `ecff1c1766a9d4dcaf3a0f9160b26438c84951d0` differs only in the Android test. 660 unit tests, zero lint errors (553 warnings), phone/TV PIN plus artwork/catalog recovery checks and production-signed APK/AAB gates passed. APK SHA-256: `40f70c4447b7a570e63b71181d56b6e5591959a58d63137161cef55f903ba55f`. See `reviews/rc0755-pin-verification.md`. Await owner device testing; no customer publication.
+
 ## Historical accepted device-test baseline — rc07.9
 
 - Repository: `i20sss20-maker/BLOFY-PLAYER-2.0`
