@@ -36,11 +36,16 @@ internal object CatalogSectionRetry {
         }
     }
 
-    private fun isTransient(failure: Exception): Boolean = when (failure) {
-        is HttpException -> failure.code() in listOf(408, 429) || failure.code() in 500..599
-        is SSLHandshakeException, is SSLPeerUnverifiedException -> false
-        is IOException -> true // Includes interrupted/truncated response bodies and socket timeouts.
-        is JsonParseException -> (failure.cause as? IOException)?.let(::isTransient) ?: false
-        else -> false // Storage, credentials, invalid catalogs and source-change guards stay failures.
+    private fun isTransient(failure: Throwable, depth: Int = 0): Boolean {
+        if (depth > 8) return false
+        return when (failure) {
+            is HttpException -> failure.code() in listOf(408, 429) || failure.code() in 500..599
+            is SSLHandshakeException, is SSLPeerUnverifiedException -> false
+            is IOException -> true // Includes interrupted/truncated response bodies and socket timeouts.
+            // Gson wraps body IO failures, and coroutine stack recovery can wrap that exception
+            // again. Only unwrap parser errors; never reinterpret a storage/validation failure.
+            is JsonParseException -> failure.cause?.let { isTransient(it, depth + 1) } ?: false
+            else -> false
+        }
     }
 }

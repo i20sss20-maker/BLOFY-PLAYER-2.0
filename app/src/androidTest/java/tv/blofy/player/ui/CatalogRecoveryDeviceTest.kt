@@ -196,12 +196,22 @@ class CatalogRecoveryDeviceTest {
                             scenario.onActivity { activity ->
                                 val grid = descendants(activity.window.decorView).filterIsInstance<RecyclerView>().first()
                                 val holder = grid.findViewHolderForAdapterPosition(0) as? PosterStreamAdapter.Holder
-                                visible = grid.adapter?.itemCount == 40 && holder?.image?.drawable is BitmapDrawable
+                                val bitmap = (holder?.image?.drawable as? BitmapDrawable)?.bitmap
+                                visible = grid.adapter?.itemCount == 40 && bitmap?.width == 180 && bitmap.height == 270
                             }
                             if (!visible) SystemClock.sleep(20)
                         }
+                        assertTrue("Favorites with 200k rows must bind saved posters promptly", visible)
+                        // Wait for the actual rendered frame, not just ImageView.setImageDrawable.
+                        if (android.os.Build.VERSION.SDK_INT >= 29) {
+                            val rendered = java.util.concurrent.CountDownLatch(1)
+                            scenario.onActivity { activity ->
+                                activity.window.decorView.viewTreeObserver.registerFrameCommitCallback { rendered.countDown() }
+                                activity.window.decorView.invalidate()
+                            }
+                            assertTrue("The poster frame must reach the display", rendered.await(2, TimeUnit.SECONDS))
+                        }
                         val elapsed = SystemClock.elapsedRealtime() - opened
-                        assertTrue("Favorites with 200k rows must show saved posters promptly ($elapsed ms)", visible)
                         timings += elapsed
                         if (attempt == 0) File(evidence, "favorites-200k.png").outputStream().use {
                             assertTrue(instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it))

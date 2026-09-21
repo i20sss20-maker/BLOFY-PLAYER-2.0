@@ -18,7 +18,8 @@ class CatalogSectionRetryTest {
     private fun http(code: Int) = HttpException(Response.error<Unit>(code, "unavailable".toResponseBody()))
 
     @Test fun transientFailuresRecoverWithinTheSameAttempt() = runBlocking {
-        for (error in listOf(http(503), http(429), IOException("socket closed"), JsonSyntaxException(EOFException()))) {
+        for (error in listOf(http(503), http(429), IOException("socket closed"), JsonSyntaxException(EOFException()),
+            JsonSyntaxException(JsonSyntaxException(EOFException())))) {
             var calls = 0
             val retries = mutableListOf<Int>()
             val result = CatalogSectionRetry.run(onRetry = { retries += it }, pause = {}) {
