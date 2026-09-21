@@ -1,9 +1,11 @@
 """Run the reviewed, fixed 2026-09-21 cleanup through the existing Azure identity."""
 import base64
+import gzip
 import json
 import os
 from pathlib import Path
 import pty
+import select
 import signal
 import threading
 
@@ -30,8 +32,8 @@ source += '''
   process.exitCode=1;
 });
 '''
-encoded = base64.b64encode(source.encode()).decode('ascii')
-program = '''let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>{s+=c;if(s.includes('\\nBLOFY_CLEANUP_END\\n')){process.stdin.pause();Promise.resolve(eval(Buffer.from(s.split('\\nBLOFY_CLEANUP_END\\n')[0],'base64').toString())).finally(()=>process.stdin.destroy());}});console.log('BLOFY_CLEANUP_READY');'''
+encoded = base64.b64encode(gzip.compress(source.encode())).decode('ascii')
+program = '''let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>{s+=c;if(s.includes('\\nBLOFY_CLEANUP_END\\n')){process.stdin.pause();Promise.resolve(eval(require('node:zlib').gunzipSync(Buffer.from(s.split('\\nBLOFY_CLEANUP_END\\n')[0],'base64')).toString())).finally(()=>process.stdin.destroy());}});console.log('BLOFY_CLEANUP_READY');'''
 prelude = base64.b64encode(program.encode()).decode('ascii')
 command = "node -e eval(Buffer.from('"+prelude+"','base64').toString())"
 args = ['az', 'containerapp', 'exec', '--name', 'blofy-activation',
@@ -44,7 +46,13 @@ def send_source(fd):
     # Read output concurrently so terminal echo cannot fill the PTY during a large manifest.
     offset = 0
     while offset < len(payload):
-        offset += os.write(fd, payload[offset:offset+512])
+        if not select.select([], [fd], [], 5)[1]:
+            continue
+        try:
+            offset += os.write(fd, payload[offset:offset+512])
+        except BlockingIOError:
+            # pty.spawn makes this FD nonblocking; retry after its output drains.
+            continue
 
 def read_output(fd):
     global sent

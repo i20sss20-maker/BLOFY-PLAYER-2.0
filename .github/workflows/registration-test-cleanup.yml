@@ -8,6 +8,7 @@ on:
       - 'ops/registration-cleanup.test.cjs'
       - 'ops/registration-cleanup-20260921.json'
       - 'ops/run-registration-cleanup.py'
+      - 'ops/test-registration-console-transport.py'
   pull_request:
     paths:
       - '.github/workflows/registration-test-cleanup.yml'
@@ -15,6 +16,7 @@ on:
       - 'ops/registration-cleanup.test.cjs'
       - 'ops/registration-cleanup-20260921.json'
       - 'ops/run-registration-cleanup.py'
+      - 'ops/test-registration-console-transport.py'
 permissions:
   contents: read
 concurrency:
@@ -39,6 +41,7 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci --prefix services/activation --ignore-scripts
+      - run: python3 ops/test-registration-console-transport.py
       - name: Verify deletion guards, rollback, recovery and repeat execution
         env:
           TEST_CLEANUP_DATABASE_URL: postgres://postgres:fixture-only@127.0.0.1:5432/blofy_cleanup_tests
