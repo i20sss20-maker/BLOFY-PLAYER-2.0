@@ -3,15 +3,16 @@ import base64
 import os
 from pathlib import Path
 import pty
-import shlex
 import signal
 
 source = Path('ops/registration-origin-audit.cjs').read_bytes()
 encoded = base64.b64encode(source).decode('ascii')
 # Azure's WebSocket URL also carries the command. Keep that URL short; stream the
 # reviewed source through stdin only after the remote process reports readiness.
-program = '''let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>{s+=c;if(s.includes('\\nBLOFY_AUDIT_END\\n')){process.stdin.pause();eval(Buffer.from(s.split('\\nBLOFY_AUDIT_END\\n')[0],'base64').toString());}});console.log('BLOFY_AUDIT_READY');'''
-command = shlex.join(['node', '-e', program])
+program = '''let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>{s+=c;if(s.includes('\\nBLOFY_AUDIT_END\\n')){process.stdin.pause();Promise.resolve(eval(Buffer.from(s.split('\\nBLOFY_AUDIT_END\\n')[0],'base64').toString())).finally(()=>process.stdin.destroy());}});console.log('BLOFY_AUDIT_READY');'''
+# Container Apps tokenizes --command directly, without a shell's quote removal.
+prelude = base64.b64encode(program.encode()).decode('ascii')
+command = "node -e eval(Buffer.from('"+prelude+"','base64').toString())"
 args = ['az', 'containerapp', 'exec', '--name', 'blofy-activation',
         '--resource-group', os.environ['AZURE_RG'], '--container', 'activation', '--command', command]
 captured = bytearray()
