@@ -192,9 +192,11 @@ class FullLibraryDownloadTest {
     }
 
     @Test fun blankPrimaryUsesSavedBackdropAndSharedUrlsDownloadOnce() = runBlocking(Dispatchers.IO) {
-        db.dao().upsertStreams((1..8).map { stream(it, icon = " ", backdrop = "/shared") })
+        db.dao().upsertStreams(listOf("movie", "series", "live").flatMap { kind ->
+            (1..8).map { stream(it, kind, icon = " ", backdrop = "/shared-$kind") }
+        })
         assertTrue(download())
-        assertTrue(saved("/shared"))
-        assertEquals(1, server.requestCount)
+        listOf("movie", "series", "live").forEach { assertTrue(saved("/shared-$it")) }
+        assertEquals(3, server.requestCount)
     }
 }

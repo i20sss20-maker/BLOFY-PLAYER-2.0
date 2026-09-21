@@ -147,8 +147,8 @@ object FullCatalogPreparer {
                             phase == FullLibraryPhase.SERIES_ENRICHED_ART
                         val metadata = if (enriched) ProviderMetadataCache.read(app, stream.key) else null
                         val candidates = when (phase) {
-                            FullLibraryPhase.MOVIE_POSTERS, FullLibraryPhase.SERIES_POSTERS,
-                            FullLibraryPhase.LIVE_LOGOS -> listOf(stream.icon)
+                            FullLibraryPhase.MOVIE_POSTERS, FullLibraryPhase.SERIES_POSTERS -> listOf(stream.icon)
+                            FullLibraryPhase.LIVE_LOGOS -> listOf(stream.icon, stream.backdrop)
                             FullLibraryPhase.MOVIE_BACKDROPS, FullLibraryPhase.SERIES_BACKDROPS -> listOf(stream.backdrop)
                             FullLibraryPhase.MOVIE_ENRICHED_ART, FullLibraryPhase.SERIES_ENRICHED_ART -> buildList {
                                 add(stream.icon)
