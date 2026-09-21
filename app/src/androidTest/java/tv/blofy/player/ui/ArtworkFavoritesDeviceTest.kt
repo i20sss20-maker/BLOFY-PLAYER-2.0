@@ -9,6 +9,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -184,17 +185,34 @@ class ArtworkFavoritesDeviceTest {
         instrumentation.waitForIdleSync()
         scenario.onActivity { grid(it).scrollToPosition(29) }
         awaitPoster(scenario, 29)
-        scenario.onActivity { assertTrue(grid(it).findViewHolderForAdapterPosition(29)!!.itemView.requestFocus()) }
-        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
-        instrumentation.waitForIdleSync()
-        scenario.onActivity { activity ->
-            val list = grid(activity)
-            val focus = activity.currentFocus
-            assertNotNull(focus)
-            val position = list.getChildAdapterPosition(focus!!)
-            assertTrue("Remote must move through favorites", position in 0..28)
-            assertTrue(focus.isShown)
+        var expected = -1
+        scenario.onActivity {
+            val list = grid(it)
+            expected = 29 - (list.layoutManager as GridLayoutManager).spanCount
+            assertTrue(list.findViewHolderForAdapterPosition(29)!!.itemView.requestFocus())
         }
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
+        // An idle main queue is not a completed RecyclerView layout. Offscreen focus is parked
+        // on the grid until the requested row attaches on a later frame, especially on phones.
+        val deadline = SystemClock.elapsedRealtime() + 2_000L
+        var position = RecyclerView.NO_POSITION
+        var shown = false
+        val observed = mutableListOf<Int>()
+        do {
+            scenario.onActivity { activity ->
+                val list = grid(activity)
+                val focus = activity.currentFocus
+                position = focus?.takeUnless { it === list }?.let(list::findContainingViewHolder)
+                    ?.bindingAdapterPosition ?: RecyclerView.NO_POSITION
+                shown = focus?.isShown == true
+            }
+            if (observed.lastOrNull() != position) observed += position
+            if (position == expected && shown) break
+            SystemClock.sleep(25)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        File(evidence, "remote-focus.txt").appendText("expected=$expected observed=$observed shown=$shown\n")
+        assertEquals("Remote must reach the previous row after layout: $observed", expected, position)
+        assertTrue("The focused favorite must be visible", shown)
     }
 
     private fun screenshot(name: String) {
