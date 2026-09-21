@@ -1,0 +1,33 @@
+name: BLOFY Registration Origin Audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/registration-origin-audit.yml'
+      - 'ops/registration-origin-audit.cjs'
+      - 'ops/run-registration-origin-audit.py'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: blofy-registration-origin-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      AZURE_RG: ${{ vars.BLOFY_AZURE_RG }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Read registration metadata without credentials or customer content
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+          python3 ops/run-registration-origin-audit.py
