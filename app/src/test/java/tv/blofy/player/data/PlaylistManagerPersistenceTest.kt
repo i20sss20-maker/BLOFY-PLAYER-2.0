@@ -77,6 +77,40 @@ class PlaylistManagerPersistenceTest {
         assertEquals(2, db.dao().streamCountForProvider(provider.id))
     }
 
+    @Test fun interruptedBodyRetriesOnlyItsSectionAndRemovesPartialRows(): Unit = runBlocking(Dispatchers.IO) {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            val calls = java.util.concurrent.ConcurrentHashMap<String, Int>()
+            // Exceed the 700-row batch so the failed response has already reached Room/FTS.
+            val partial = (1..1000).joinToString(",") { "{\"stream_id\":$it,\"name\":\"Partial $it\"}" }
+            server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): okhttp3.mockwebserver.MockResponse {
+                    val action = request.requestUrl!!.queryParameter("action")!!
+                    val count = calls.merge(action, 1, Int::plus)!!
+                    val body = when {
+                        action.endsWith("categories") -> "[]"
+                        action == "get_vod_streams" && count == 1 -> "[$partial,{\"stream_id\":"
+                        action == "get_series" -> "[{\"series_id\":1,\"name\":\"Series\"}]"
+                        else -> "[{\"stream_id\":999,\"name\":\"Complete\"}]"
+                    }
+                    return okhttp3.mockwebserver.MockResponse().setBody(body)
+                }
+            }
+            server.start()
+            val api = tv.blofy.player.data.remote.XtreamClient.createApi(okhttp3.OkHttpClient())
+            val completed = mutableListOf<String>()
+            val result = PlaylistManager(api, db.dao()).syncAll(provider.copy(baseUrl = server.url("/").toString()),
+                onSectionComplete = { completed += it })
+            assertEquals(0, result.failedSectionCount)
+            assertEquals(3, result.freshItemCount)
+            assertEquals(listOf("live", "movie", "series"), completed)
+            assertEquals(2, calls["get_vod_streams"])
+            assertEquals(1, calls["get_live_streams"])
+            assertEquals(1, calls["get_series"])
+            assertEquals(listOf("999"), db.dao().streamSnapshot(provider.id, "movie").map { it.remoteId })
+            assertTrue(db.dao().searchStreamsFts(provider.id, "Partial*", 10).isEmpty())
+        }
+    }
+
     private class FixtureApi(
         val liveCategories: List<Map<String, Any?>> = listOf(mapOf("category_id" to "1", "category_name" to "Category")),
         val liveStreams: String = "[{\"stream_id\":1,\"name\":\"Live item\",\"category_id\":1}]"

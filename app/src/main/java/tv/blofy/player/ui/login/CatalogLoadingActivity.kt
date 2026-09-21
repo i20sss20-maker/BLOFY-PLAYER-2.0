@@ -334,14 +334,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
             check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
             val savingLabel = getString(if (firstLoad) R.string.catalog_finishing else R.string.catalog_saving_refresh)
             render(30, savingLabel)
-            val savePulse = lifecycleScope.launch {
-                var value = 33
-                while (true) {
-                    delay(2_500L)
-                    render(value, savingLabel)
-                    if (value < 72) value = (value + 3).coerceAtMost(72)
-                }
-            }
+            // SQLite commit has no measurable percentage. Keep the completed download at 30%
+            // and animate the saving stage, instead of inventing progress from elapsed time.
+            progress.isIndeterminate = true
             val commit: suspend () -> Unit = {
                 persistence.commit {
                     if (firstLoad) {
@@ -362,9 +357,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 if (pendingSource != null) PortalPlaylistClient.commitPendingSource(applicationContext, dao, pendingSource, commit)
                 else commit()
             } finally {
-                savePulse.cancel()
+                progress.isIndeterminate = false
             }
-            render(maxOf(displayedPercent, 74), savingLabel)
             awaitEntryReadyCache(providerId)
             render(100, getString(R.string.catalog_complete))
             delay(120L)
@@ -414,12 +408,14 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.MOVIES -> getString(R.string.catalog_stage_movies)
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
-        render((p.percent.coerceIn(0, 95) * 30 / 95), label)
+        val status = if (p.retryAttempt > 0) "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)" else label
+        render((p.percent.coerceIn(0, 95) * 30 / 95), status)
     }
 
     private fun render(value: Int, label: String) {
         val safe = maxOf(displayedPercent, value.coerceIn(0, 100))
         displayedPercent = safe
+        progress.isIndeterminate = false
         progress.progress = safe
         percent.text = "$safe%"
         stage.text = label
@@ -445,6 +441,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun fail(message: String) {
+        progress.isIndeterminate = false
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Error)
         retryButton.visibility = View.VISIBLE

@@ -49,6 +49,8 @@ data class CategoryEntity(
         Index(value = ["providerId", "kind", "categoryId", "name"]),
         Index(value = ["providerId", "kind", "name"]),
         Index(value = ["providerId", "name"]),
+        // Favorites must read only saved rows, even while a huge catalog is being enriched.
+        Index(value = ["providerId", "favorite", "name"]),
         Index(value = ["providerId", "kind", "addedAt"]),
         // SQLite appends rowid to these indexes, matching catalog cursor order exactly.
         Index(value = ["providerId", "kind"]),

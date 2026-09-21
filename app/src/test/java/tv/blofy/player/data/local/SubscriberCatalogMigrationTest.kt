@@ -69,6 +69,6 @@ class SubscriberCatalogMigrationTest {
         }
         db = open()
         assertEquals(old, db.dao().providerStored(old.id))
-        assertEquals(12, db.openHelper.readableDatabase.version)
+        assertEquals(BLOFY_DATABASE_VERSION, db.openHelper.readableDatabase.version)
     }
 }
