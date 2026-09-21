@@ -77,7 +77,9 @@ test('PostgreSQL filters and real admin session work without mutating device rec
   assert.equal(login.status,200);const cookie=login.headers.get('set-cookie').split(';')[0];
   const response=await fetch(base+DEVICE_INSIGHTS_PATH+'?q='+encodeURIComponent(deviceId),{headers:{cookie}});
   assert.equal(response.status,200);const html=await response.text();assert.ok(html.includes(deviceId));assert.ok(html.includes('جهاز جديد'));assert.ok(!html.includes('123456'));
-  const admin=await fetch(base+'/admin',{headers:{cookie}});assert.match(await admin.text(),/معلومات الأجهزة والجديد منها/);
+  const admin=await fetch(base+'/admin',{headers:{cookie}});assert.equal(admin.status,200);
+  const adminHtml=await admin.text();
+  assert.match(adminHtml,/<a\b[^>]*href="\/api\/v1\/admin\/device-insights"[^>]*>[\s\S]*?تقارير الأجهزة<\/a>/);
   assert.deepEqual((await pool.query('SELECT * FROM devices WHERE device_id=$1',[deviceId])).rows[0],before);
  }finally{
   if(server){server.kill('SIGTERM');await wait(250);if(server.exitCode===null)server.kill('SIGKILL');}

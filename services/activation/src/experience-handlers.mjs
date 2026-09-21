@@ -5,11 +5,13 @@ import { recordAudit } from './audit.mjs';
 import { RENEWAL_OPTIONS, RenewalError, renewalPreview, renewDevice } from './admin-renewals.mjs';
 import { appReleaseMetadata, sanitizeHttpsUrl, sanitizeVersionCode, sanitizeVersionName, sanitizeReleaseNotes } from './release-metadata.mjs';
 import { pseudonymizeDiagnosticProviderKey, sanitizeDiagnosticMessage } from './diagnostics-sanitizer.mjs';
+import { readAdminUsage } from './admin-usage.mjs';
 
 export function createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice, authorizedAccountDevice = authorizedDevice, probe = probeAccount }) {
   const checked = new Map();
   const ms = value => value ? new Date(value).getTime() : null;
-  const normalized = row => ['active','trial'].includes(row.status) && ms(row.expires_at) && ms(row.expires_at) <= Date.now() ? 'expired' : row.status;
+  const normalized = row => row.trial_registration_pending === true && row.status === 'expired' ? 'pending' :
+    ['active','trial'].includes(row.status) && ms(row.expires_at) && ms(row.expires_at) <= Date.now() ? 'expired' : row.status;
   const pageFiles = { '/':'landing.html', '/downloads':'downloads.html', '/account':'account.html' };
   const assetFiles = { '/experience.css':'experience.css', '/premium.css':'premium.css', '/experience.js':'experience.js', '/app-preview.png':'app-preview.png', '/IBMPlexSansArabic-Regular.ttf':'IBMPlexSansArabic-Regular.ttf', '/IBMPlexSansArabic-Medium.ttf':'IBMPlexSansArabic-Medium.ttf', '/OFL.txt':'OFL.txt' };
 
@@ -22,7 +24,7 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
   }
 
   async function summary(deviceId) {
-    const result = await pool.query(`SELECT d.device_id,d.status,d.expires_at,d.last_seen_at,d.last_app_version,d.last_platform,
+    const result = await pool.query(`SELECT d.device_id,d.status,d.expires_at,d.last_seen_at,d.last_app_version,d.last_platform,d.trial_registration_pending,
       c.customer_name,c.customer_email,c.customer_phone FROM devices d LEFT JOIN device_customers c ON c.device_id=d.device_id WHERE d.device_id=$1`, [deviceId]);
     const row = result.rows[0];
     if (!row) return null;
@@ -97,10 +99,14 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
       const result=await pool.query("SELECT id,device_id,description,created_at FROM support_tickets WHERE status='open' ORDER BY created_at DESC LIMIT 50");
       json(res,200,{items:result.rows}); return true;
     }
+    if (admin && req.method==='GET' && route==='/usage') {
+      json(res,200,await readAdminUsage(pool)); return true;
+    }
     if (admin && req.method==='GET' && route==='/overview') {
       const result = await pool.query(`SELECT COUNT(*)::int total,
         COUNT(*) FILTER(WHERE status IN ('active','trial') AND (expires_at IS NULL OR expires_at>NOW()))::int active,
-        COUNT(*) FILTER(WHERE status='expired' OR (status IN ('active','trial') AND expires_at<=NOW()))::int expired,
+        COUNT(*) FILTER(WHERE status='expired' AND trial_registration_pending IS NOT TRUE OR (status IN ('active','trial') AND expires_at<=NOW()))::int expired,
+        COUNT(*) FILTER(WHERE status='expired' AND trial_registration_pending=TRUE)::int pending,
         COUNT(*) FILTER(WHERE status IN ('active','trial') AND expires_at>NOW() AND expires_at<=NOW()+INTERVAL '7 days')::int expiring,
         (SELECT COUNT(*)::int FROM support_tickets WHERE status='open') AS support FROM devices`);
       json(res,200,result.rows[0]); return true;

@@ -3,6 +3,8 @@ on:
   push:
     branches: [main, fix/admin-device-insights]
     paths: ['services/activation/**', '.github/workflows/device-admin.yml']
+  pull_request:
+    paths: ['services/activation/**', 'services/update-distribution/download-metrics*', '.github/workflows/device-admin.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,5 +38,7 @@ jobs:
         run: npm run check && npm test
       - name: Authenticated device management integration
         run: node test/device-admin-runtime.mjs
+      - name: Complete-download counting regression
+        run: node --test ../update-distribution/download-metrics.test.mjs
       - name: Preserve release management and public downloads
         run: node test/admin-release-runtime.mjs

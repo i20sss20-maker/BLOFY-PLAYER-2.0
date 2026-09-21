@@ -2,6 +2,7 @@
 import pg from 'pg';
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import { ensureDownloadMetrics, recordCompletedDownload } from './download-metrics.mjs';
 
 const { Pool } = pg;
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -767,6 +768,7 @@ export async function initAppLibrary() {
         last_download_at timestamptz
       )
     `);
+    await ensureDownloadMetrics(client);
     await client.query(`
       create table if not exists blofy_app_health (
         slug text primary key references blofy_app_catalog(slug) on delete cascade,
@@ -1326,6 +1328,10 @@ export async function recordDownload(key) {
        last_download_at=now()`,
     [cleanKey]
   );
+}
+
+export async function recordDownloadCompletion(key) {
+  await recordCompletedDownload(pool, key);
 }
 
 export async function getDownloadStats() {

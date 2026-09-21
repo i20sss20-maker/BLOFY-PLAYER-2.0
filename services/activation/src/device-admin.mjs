@@ -11,9 +11,11 @@ const millis = value => { const n = value == null ? NaN : new Date(value).getTim
 export function deviceView(row, now = Date.now()) {
   const expiresAt = millis(row.expires_at), firstSeenAt = millis(row.created_at), lastSeenAt = millis(row.last_seen_at);
   const pending = row.trial_registration_pending === true && row.status === 'expired';
+  const hasAppContact = ['android','ios','tvos','windows'].includes(String(row.last_platform || '').toLowerCase()) && /^\d+\.\d+/.test(String(row.last_app_version || ''));
   const status = pending ? 'pending' : (['active', 'trial'].includes(row.status) && expiresAt != null && expiresAt <= now ? 'expired' : row.status);
   return { deviceId: row.device_id, name: row.customer_name || '', phone: row.customer_phone || '', email: row.customer_email || '',
     notes: row.notes || '', revision: Number(row.revision || 0), rawStatus: row.status, status, pending, expiresAt,
+    registrationNote: pending ? (hasAppContact ? 'تواصل التطبيق، لكن بيانات بدء التجربة لم تكتمل. لا يوجد اشتراك منتهٍ لهذا التسجيل.' : 'سُجّل رقم الجهاز، وبانتظار استكمال التسجيل من التطبيق. لم تبدأ التجربة بعد.') : null,
     firstSeenAt, trialStartedAt: millis(row.trial_started_at), lastSeenAt,
     isNew: firstSeenAt != null && firstSeenAt <= now && now - firstSeenAt < 86400000,
     recentlySeen: lastSeenAt != null && lastSeenAt <= now && now - lastSeenAt < 600000,

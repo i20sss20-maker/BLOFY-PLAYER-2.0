@@ -19,6 +19,10 @@ test('portal-only pending registration is not presented as an expired entitlemen
  const pending=deviceView({...row,status:'expired',expires_at:new Date(now-100),trial_registration_pending:true},now);
  assert.equal(pending.status,'pending');assert.equal(pending.pending,true);assert.equal(pending.remainingDays,null);
  assert.equal(deviceFilters(new URLSearchParams('filter=pending')).filter,'pending');
+ assert.match(pending.registrationNote,/بانتظار استكمال التسجيل/);
+ const contacted=deviceView({...row,status:'expired',trial_registration_pending:true,last_platform:'android',last_app_version:'2.0.0-rc07.55'},now);
+ assert.match(contacted.registrationNote,/تواصل التطبيق/);assert.equal(contacted.status,'pending');
+ assert.equal(deviceView({...row,last_platform:'android',last_app_version:'2.0.0-rc07.55'},now).registrationNote,null);
 });
 test('device view contains no pairing proof, playlist secrets, or invented hardware details',()=>{
  const x=deviceView({...row,activation_code:'SECRET',username_enc:'SECRET',password_enc:'SECRET',base_url_enc:'SECRET'},now);
