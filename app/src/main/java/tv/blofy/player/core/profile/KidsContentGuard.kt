@@ -59,9 +59,9 @@ object KidsPolicy {
         "للكبار", "للبالغين", "بالغين", "18 سنة", "+18", "اباح", "إباح", "جنسي", "جنسية", "عري"
     )
     private val blockedPatterns = blockedTerms.map { term ->
-        // English words must not match inside ordinary names such as Essex/Sussex.
-        // Arabic stems intentionally keep their existing prefix matching.
-        if (term.any { it in 'a'..'z' }) Regex("(?<![\\p{L}\\p{N}])${Regex.escape(term)}(?![\\p{L}\\p{N}])")
+        // Avoid the documented Essex/Sussex/sextant false positive without relaxing other
+        // existing markers (for example adults, pornography and sexually explicit labels).
+        if (term == "sex") Regex("(?<![\\p{L}\\p{N}])sex(?![\\p{L}\\p{N}])")
         else Regex(Regex.escape(term))
     }
 

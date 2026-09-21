@@ -10,6 +10,9 @@ class KidsPolicyTest {
         assertTrue(KidsPolicy.isBlocked("Movie", "18+", null))
         assertTrue(KidsPolicy.isBlocked("فيلم", null, "محتوى للبالغين"))
         assertTrue(KidsPolicy.isBlocked("TV-MA special", null, null))
+        listOf("Adults", "Pornography", "Sexually explicit").forEach {
+            assertTrue(KidsPolicy.isBlocked(it, null, null))
+        }
     }
 
     @Test fun ordinaryGenresAreNotOverblocked() {
