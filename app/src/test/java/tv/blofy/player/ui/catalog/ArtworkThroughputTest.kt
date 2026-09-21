@@ -85,37 +85,38 @@ class ArtworkThroughputTest {
 
     @Test fun queuedLibraryPosterIsPromotedWhenItBecomesVisible() {
         ArtworkLoader.clearMemory()
-        val started = CountDownLatch(1)
+        val background = ArtworkLoader::class.java.getDeclaredField("backgroundNetworkPool")
+            .apply { isAccessible = true }.get(ArtworkLoader) as ThreadPoolExecutor
+        val blockers = background.corePoolSize
+        val started = CountDownLatch(blockers)
         val release = CountDownLatch(1)
         val server = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    if (request.path == "/blocked-library") {
+                    if (request.path!!.startsWith("/blocked-library")) {
                         started.countDown(); release.await(10, TimeUnit.SECONDS)
                     }
                     return image()
                 }
             }; start()
         }
-        val executor = Executors.newFixedThreadPool(2)
-        val first = executor.submit<Boolean> { runBlocking {
-            ArtworkLoader.persist(app, server.url("/blocked-library").toString())
-        } }
+        val executor = Executors.newFixedThreadPool(blockers + 1)
+        val first = List(blockers) { index -> executor.submit<Boolean> { runBlocking {
+            ArtworkLoader.persist(app, server.url("/blocked-library-$index").toString())
+        } } }
         val view = ImageView(app)
         try {
             assertTrue(started.await(3, TimeUnit.SECONDS))
             val url = server.url("/becomes-visible").toString()
             val queued = executor.submit<Boolean> { runBlocking { ArtworkLoader.persist(app, url) } }
-            val background = ArtworkLoader::class.java.getDeclaredField("backgroundNetworkPool")
-                .apply { isAccessible = true }.get(ArtworkLoader) as ThreadPoolExecutor
             await("Library image is queued") { background.queue.isNotEmpty() }
             ArtworkLoader.load(view, url)
             await("Visible request must promote the existing queued download") { view.drawable is BitmapDrawable }
             assertTrue(queued.get(3, TimeUnit.SECONDS))
-            assertEquals(2, server.requestCount)
+            assertEquals(blockers + 1, server.requestCount)
             assertEquals(1L, release.count)
         } finally {
-            release.countDown(); first.get(5, TimeUnit.SECONDS); executor.shutdownNow()
+            release.countDown(); first.forEach { it.get(5, TimeUnit.SECONDS) }; executor.shutdownNow()
             ArtworkLoader.cancel(view); server.shutdown()
         }
     }

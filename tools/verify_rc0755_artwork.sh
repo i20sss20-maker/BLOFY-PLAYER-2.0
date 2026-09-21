@@ -9,7 +9,7 @@ collect_evidence() {
   adb logcat -b crash -d > artwork-evidence/crashes.txt || true
 }
 trap collect_evidence EXIT
-for method in seedFavoritesAndDurableArtwork reopenFavoritesOfflineAfterProcessRestart; do
+for method in seedFavoritesAndDurableArtwork resumeMissingArtworkAfterProcessRestart reopenFavoritesOfflineAfterProcessRestart; do
   adb shell am instrument -w -r -e class "tv.blofy.player.ui.ArtworkFavoritesDeviceTest#$method" \
     tv.blofy.player.v2.test/androidx.test.runner.AndroidJUnitRunner | tee "artwork-evidence/$method.txt"
   grep -Fq 'OK (1 test)' "artwork-evidence/$method.txt"

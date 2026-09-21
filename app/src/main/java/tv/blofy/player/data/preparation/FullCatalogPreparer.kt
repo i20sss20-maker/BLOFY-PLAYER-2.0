@@ -4,11 +4,7 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -16,7 +12,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -44,13 +39,12 @@ import java.util.concurrent.ConcurrentHashMap
  * blocking the user until every detail/episode/image request completes makes first launch unusable.
  *
  * The loading screen waits only for a durable base catalog + local home/search/manifest.
- * Remaining metadata, episodes and artwork continue from local storage in a background scope.
+ * Remaining metadata, episodes and artwork continue from local storage in a persistent worker.
  */
 object FullCatalogPreparer {
     private val locks = ConcurrentHashMap<String, Mutex>()
-    private data class BackgroundTask(val epoch: Long, val job: Job)
-    private val backgroundJobs = ConcurrentHashMap<String, BackgroundTask>()
-    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val downloadLocks = ConcurrentHashMap<String, Mutex>()
+    private class ChunkBudgetReached : Exception()
     private val gson = Gson()
 
     data class Update(val percent: Int, val label: String)
@@ -92,246 +86,177 @@ object FullCatalogPreparer {
             }
         }
 
-    fun resumeBackground(context: Context, providerId: String) {
-        val app = context.applicationContext
-        val expectedEpoch = CatalogSyncState.lastUpdatedAt(app, providerId)
-        if (expectedEpoch <= 0L || !CatalogSyncState.isReady(app, providerId)) return
-        startBackground(app, providerId, expectedEpoch)
-    }
+    fun resumeBackground(context: Context, providerId: String) = FullLibrarySyncWorker.enqueue(context, providerId)
 
+    /** Walk every catalog row without a screen visit. The durable queue retains each missing unit. */
     suspend fun runDurableChunk(
         context: Context,
         providerId: String,
         maxRunMs: Long = 6L * 60L * 1000L
-    ): Boolean = withContext(Dispatchers.IO) {
-        val app = context.applicationContext
-        val db = BlofyDatabase.get(app)
-        val dao = db.dao()
-        val provider = dao.provider(providerId) ?: return@withContext true
-        val expectedEpoch = CatalogSyncState.lastUpdatedAt(app, providerId)
-        if (expectedEpoch <= 0L || !CatalogSyncState.isReady(app, providerId)) return@withContext true
+    ): Boolean = downloadLocks.getOrPut(providerId) { Mutex() }.withLock {
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext
+            val db = BlofyDatabase.get(app)
+            val dao = db.dao()
+            val provider = dao.provider(providerId) ?: return@withContext true
+            val expectedEpoch = CatalogSyncState.lastUpdatedAt(app, providerId)
+            if (expectedEpoch <= 0L || !CatalogSyncState.isReady(app, providerId)) return@withContext true
 
-        suspend fun ensureCurrentSource() {
-            currentCoroutineContext().ensureActive()
-            val current = dao.provider(providerId)
-            check(
-                CatalogSyncState.isReady(app, providerId) &&
-                    CatalogSyncState.lastUpdatedAt(app, providerId) == expectedEpoch &&
-                    current?.baseUrl == provider.baseUrl &&
-                    current.username == provider.username &&
-                    current.password == provider.password
-            ) { "Catalog source changed during full-library sync" }
-        }
-
-        val lowMemory = DeviceClass.isLowMemory(app)
-        val pageSize = if (lowMemory) 18 else 36
-        val artConcurrency = if (lowMemory) 1 else 3
-        val detailConcurrency = if (lowMemory) 1 else 2
-        val deadline = SystemClock.elapsedRealtime() + maxRunMs.coerceAtLeast(30_000L)
-
-        suspend fun persistArtwork(stream: StreamEntity, phase: FullLibraryPhase): Boolean {
-            val metadata = if (phase == FullLibraryPhase.MOVIE_ENRICHED_ART ||
-                phase == FullLibraryPhase.SERIES_ENRICHED_ART
-            ) ProviderMetadataCache.read(app, stream.key) else null
-
-            val candidates = when (phase) {
-                FullLibraryPhase.MOVIE_POSTERS,
-                FullLibraryPhase.SERIES_POSTERS,
-                FullLibraryPhase.LIVE_LOGOS -> listOfNotNull(stream.icon)
-                FullLibraryPhase.MOVIE_BACKDROPS,
-                FullLibraryPhase.SERIES_BACKDROPS -> listOfNotNull(stream.backdrop)
-                FullLibraryPhase.MOVIE_ENRICHED_ART,
-                FullLibraryPhase.SERIES_ENRICHED_ART -> buildList {
-                    add(metadata?.posterUrl)
-                    add(metadata?.backdropUrl)
-                    add(metadata?.logoUrl)
-                    metadata?.cast?.forEach { add(it.profileUrl) }
-                    metadata?.crew?.forEach { add(it.profileUrl) }
-                }.filterNotNull()
-                else -> emptyList()
-            }.map(String::trim).filter { it.isNotBlank() && !it.equals("null", true) }.distinct()
-
-            if (candidates.isEmpty()) return true
-            var savedAny = false
-            for (raw in candidates) {
-                ensureCurrentSource()
-                val resolved = resolve(provider, raw)
-                val saved = try {
-                    ArtworkLoader.persist(app, resolved)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                }
-                savedAny = savedAny || saved
-            }
-            return savedAny
-        }
-
-        while (SystemClock.elapsedRealtime() < deadline) {
-            ensureCurrentSource()
-            val cursor = FullLibrarySyncState.read(app, providerId, expectedEpoch)
-            if (cursor.complete || cursor.phase == FullLibraryPhase.COMPLETE) {
-                CatalogSyncState.markMetadataReady(app, providerId)
-                CatalogSyncState.markEpisodesReady(app, providerId)
-                CatalogManifestStore.rebuild(app, dao, provider, completionVerified = true)
-                FullLibrarySyncState.complete(app, providerId, expectedEpoch)
-                return@withContext true
+            suspend fun ensureCurrentSource() {
+                currentCoroutineContext().ensureActive()
+                val current = dao.provider(providerId)
+                check(
+                    CatalogSyncState.isReady(app, providerId) &&
+                        CatalogSyncState.lastUpdatedAt(app, providerId) == expectedEpoch &&
+                        current?.baseUrl == provider.baseUrl && current.username == provider.username &&
+                        current.password == provider.password
+                ) { "Catalog source changed during full-library sync" }
             }
 
-            if (provider.providerType.equals("m3u", true) &&
-                cursor.phase in setOf(FullLibraryPhase.MOVIE_DETAILS, FullLibraryPhase.SERIES_DETAILS)
-            ) {
-                FullLibrarySyncState.advance(app, providerId, expectedEpoch, cursor.phase)
-                continue
-            }
-
-            val kind = cursor.phase.kind ?: run {
-                FullLibrarySyncState.complete(app, providerId, expectedEpoch)
-                return@withContext true
-            }
-            val page = dao.catalogPageAfterAll(providerId, kind, cursor.rowId, pageSize)
-            if (page.isEmpty()) {
-                FullLibrarySyncState.advance(app, providerId, expectedEpoch, cursor.phase)
-                continue
-            }
-
-            val successes = when (cursor.phase) {
-                FullLibraryPhase.MOVIE_DETAILS,
-                FullLibraryPhase.SERIES_DETAILS -> coroutineScope {
-                    page.chunked(detailConcurrency).flatMap { group ->
-                        group.map { stream ->
-                            async {
-                                ensureCurrentSource()
-                                warmOne(app, db, provider, stream, ::ensureCurrentSource)
-                            }
-                        }.awaitAll()
-                    }
-                }.count { it }
-
-                else -> coroutineScope {
-                    page.chunked(artConcurrency).flatMap { group ->
-                        group.map { stream ->
-                            async { persistArtwork(stream, cursor.phase) }
-                        }.awaitAll()
-                    }
-                }.count { it }
-            }
-
-            // If a whole page that actually contains work failed, treat it as a transient
-            // provider/network failure and leave the checkpoint in place for the next worker run.
-            val hasWork = when (cursor.phase) {
-                FullLibraryPhase.MOVIE_POSTERS,
-                FullLibraryPhase.SERIES_POSTERS,
-                FullLibraryPhase.LIVE_LOGOS -> page.any { !it.icon.isNullOrBlank() }
-                FullLibraryPhase.MOVIE_BACKDROPS,
-                FullLibraryPhase.SERIES_BACKDROPS -> page.any { !it.backdrop.isNullOrBlank() }
-                else -> true
-            }
-            if (hasWork && successes == 0) throw IOException("full_library_page_unavailable")
-
-            val nextRow = dao.streamRowId(page.last().key) ?: cursor.rowId
-            check(nextRow > cursor.rowId) { "Full-library cursor did not advance" }
-            FullLibrarySyncState.checkpoint(app, providerId, expectedEpoch, cursor.phase, nextRow)
-            if (lowMemory) delay(35L)
-        }
-        false
-    }
-
-    @Synchronized
-    private fun startBackground(app: Context, providerId: String, expectedEpoch: Long) {
-        val old = backgroundJobs[providerId]
-        if (old?.epoch == expectedEpoch && old.job.isActive) return
-        old?.job?.cancel()
-        val job = backgroundScope.launch(start = CoroutineStart.LAZY) {
+            val lowMemory = DeviceClass.isLowMemory(app)
+            val pageSize = if (lowMemory) 18 else 36
+            val artConcurrency = if (lowMemory) 1 else 3
+            val detailConcurrency = if (lowMemory) 1 else 2
+            val deadline = SystemClock.elapsedRealtime() + maxRunMs.coerceAtLeast(30_000L)
+            val generation = PreparationJournal.hash(
+                "${FullLibrarySyncState.REVISION}|${provider.baseUrl}|${provider.username}|${provider.password}|$expectedEpoch"
+            )
             try {
-                old?.job?.join()
-                enrichAll(app, providerId, expectedEpoch)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                // Saved units remain durable. Retry on the next explicit resume, not a busy loop.
-            } finally {
-                val finished = currentCoroutineContext()[Job]
-                synchronized(this@FullCatalogPreparer) {
-                    if (backgroundJobs[providerId]?.job === finished) backgroundJobs.remove(providerId)
-                }
-            }
-        }
-        backgroundJobs[providerId] = BackgroundTask(expectedEpoch, job)
-        job.start()
-    }
+                PreparationJournal(app).use { journal ->
+                    journal.begin(providerId, generation)
 
-    private suspend fun enrichAll(app: Context, providerId: String, expectedEpoch: Long) {
-        val db = BlofyDatabase.get(app)
-        val dao = db.dao()
-        val provider = dao.provider(providerId) ?: return
-        val lowMemory = DeviceClass.isLowMemory(app)
-        val pageSize = if (lowMemory) 20 else 42
-        val concurrency = if (lowMemory) 1 else 3
-        suspend fun ensureSource() {
-            currentCoroutineContext().ensureActive()
-            val current = dao.provider(providerId)
-            check(CatalogSyncState.isReady(app, providerId) && CatalogSyncState.lastUpdatedAt(app, providerId) == expectedEpoch &&
-                current?.baseUrl == provider.baseUrl && current.username == provider.username && current.password == provider.password) {
-                "Catalog source changed"
-            }
-        }
-        ensureSource()
-        val generation = PreparationJournal.hash("${provider.baseUrl}|${provider.username}|${provider.password}|$expectedEpoch")
-        PreparationJournal(app).use { journal ->
-            journal.begin(providerId, generation)
-            var allDetailsSaved = true
-            var allEpisodesSaved = true
-            var allImagesSaved = true
-            for (kind in listOf("series", "movie", "live")) {
-                var after = 0L
-                while (true) {
-                    ensureSource()
-                    val page = dao.catalogPageAfterAll(providerId, kind, after, pageSize)
-                    if (page.isEmpty()) break
-                    if (kind != "live" && !provider.providerType.equals("m3u", true)) {
-                        for (group in page.chunked(concurrency)) {
-                            val results = coroutineScope {
+                    suspend fun persistUrl(url: String) {
+                        ensureCurrentSource()
+                        if (SystemClock.elapsedRealtime() >= deadline) throw ChunkBudgetReached()
+                        val key = PreparationJournal.hash(url)
+                        if (ArtworkLoader.isPersisted(app, url)) {
+                            journal.remove(providerId, "art", key)
+                            return
+                        }
+                        // Persist intent BEFORE HTTP/write; interruption cannot lose the missing image.
+                        journal.enqueue(providerId, "art", key, url)
+                        val saved = try { ArtworkLoader.persist(app, url) }
+                        catch (full: ArtworkLoader.StorageFull) { throw full }
+                        catch (_: IOException) { false }
+                        ensureCurrentSource()
+                        if (saved) journal.remove(providerId, "art", key)
+                    }
+
+                    suspend fun persistArtwork(stream: StreamEntity, phase: FullLibraryPhase) {
+                        val enriched = phase == FullLibraryPhase.MOVIE_ENRICHED_ART ||
+                            phase == FullLibraryPhase.SERIES_ENRICHED_ART
+                        val metadata = if (enriched) ProviderMetadataCache.read(app, stream.key) else null
+                        val candidates = when (phase) {
+                            FullLibraryPhase.MOVIE_POSTERS, FullLibraryPhase.SERIES_POSTERS,
+                            FullLibraryPhase.LIVE_LOGOS -> listOf(stream.icon)
+                            FullLibraryPhase.MOVIE_BACKDROPS, FullLibraryPhase.SERIES_BACKDROPS -> listOf(stream.backdrop)
+                            FullLibraryPhase.MOVIE_ENRICHED_ART, FullLibraryPhase.SERIES_ENRICHED_ART -> buildList {
+                                add(stream.icon)
+                                add(stream.backdrop)
+                                add(metadata?.posterUrl)
+                                add(metadata?.backdropUrl)
+                                add(metadata?.logoUrl)
+                                metadata?.cast?.forEach { add(it.profileUrl) }
+                                metadata?.crew?.forEach { add(it.profileUrl) }
+                            }
+                            else -> emptyList()
+                        }.filterNotNull().map(String::trim)
+                            .filter { it.isNotBlank() && !it.equals("null", true) }
+                            .map { resolve(provider, it) }.distinct()
+                        // Every candidate is tracked separately; one saved poster cannot hide missing art.
+                        for (url in candidates) persistUrl(url)
+                    }
+
+                    suspend fun persistDetails(stream: StreamEntity, retry: Boolean) {
+                        ensureCurrentSource()
+                        journal.enqueue(providerId, "detail", stream.key)
+                        if (warmOne(app, db, provider, stream, ::ensureCurrentSource)) {
+                            if (retry) {
+                                // A recovered details response can introduce artwork AFTER the catalog pass.
+                                val refreshed = dao.stream(stream.key) ?: stream
+                                persistArtwork(refreshed, if (stream.kind == "series")
+                                    FullLibraryPhase.SERIES_ENRICHED_ART else FullLibraryPhase.MOVIE_ENRICHED_ART)
+                            }
+                            ensureCurrentSource()
+                            journal.remove(providerId, "detail", stream.key)
+                        }
+                    }
+
+                    while (SystemClock.elapsedRealtime() < deadline) {
+                        ensureCurrentSource()
+                        val cursor = FullLibrarySyncState.read(app, providerId, expectedEpoch)
+                        if (cursor.complete) return@withContext true
+                        if (cursor.phase == FullLibraryPhase.COMPLETE) {
+                            val missingDetails = journal.counts(providerId, "detail").second
+                            val missingImages = journal.counts(providerId, "art").second
+                            if (missingDetails > 0L || missingImages > 0L) {
+                                FullLibrarySyncState.checkpoint(app, providerId, expectedEpoch, FullLibraryPhase.RETRY_DETAILS, 0L)
+                                throw Incomplete(missingDetails, missingImages)
+                            }
+                            CatalogSyncState.markMetadataReady(app, providerId)
+                            CatalogSyncState.markEpisodesReady(app, providerId)
+                            CatalogManifestStore.rebuild(app, dao, provider, completionVerified = true)
+                            FullLibrarySyncState.complete(app, providerId, expectedEpoch)
+                            return@withContext true
+                        }
+
+                        if (cursor.phase == FullLibraryPhase.RETRY_DETAILS || cursor.phase == FullLibraryPhase.RETRY_ART) {
+                            val details = cursor.phase == FullLibraryPhase.RETRY_DETAILS
+                            val kind = if (details) "detail" else "art"
+                            val page = journal.pendingPage(providerId, kind, cursor.rowId, pageSize)
+                            if (page.isEmpty()) {
+                                FullLibrarySyncState.advance(app, providerId, expectedEpoch, cursor.phase)
+                                continue
+                            }
+                            for (group in page.chunked(if (details) detailConcurrency else artConcurrency)) {
+                                if (SystemClock.elapsedRealtime() >= deadline) return@withContext false
+                                coroutineScope {
+                                    group.map { unit -> async {
+                                        if (details) {
+                                            val stream = dao.stream(unit.key)
+                                            if (stream == null) journal.remove(providerId, kind, unit.key)
+                                            else persistDetails(stream, retry = true)
+                                        } else persistUrl(unit.value)
+                                    } }.awaitAll()
+                                }
+                                ensureCurrentSource()
+                                FullLibrarySyncState.checkpoint(app, providerId, expectedEpoch, cursor.phase, group.last().rowId)
+                            }
+                            continue
+                        }
+
+                        val details = cursor.phase == FullLibraryPhase.MOVIE_DETAILS || cursor.phase == FullLibraryPhase.SERIES_DETAILS
+                        if (details && provider.providerType.equals("m3u", true)) {
+                            FullLibrarySyncState.advance(app, providerId, expectedEpoch, cursor.phase)
+                            continue
+                        }
+                        val kind = checkNotNull(cursor.phase.kind)
+                        val page = dao.catalogPageAfterAll(providerId, kind, cursor.rowId, pageSize)
+                        if (page.isEmpty()) {
+                            FullLibrarySyncState.advance(app, providerId, expectedEpoch, cursor.phase)
+                            continue
+                        }
+                        for (group in page.chunked(if (details) detailConcurrency else artConcurrency)) {
+                            // Bound even a page of slow/unavailable URLs below WorkManager's execution limit.
+                            if (SystemClock.elapsedRealtime() >= deadline) return@withContext false
+                            coroutineScope {
                                 group.map { stream -> async {
-                                    ensureSource()
-                                    journal.enqueue(providerId, "detail", stream.key)
-                                    if (journal.done(providerId, "detail", stream.key)) true else {
-                                        val saved = warmOne(app, db, provider, stream, ::ensureSource)
-                                        if (saved) { ensureSource(); journal.complete(providerId, "detail", stream.key) }
-                                        saved
-                                    }
+                                    if (details) persistDetails(stream, retry = false)
+                                    else persistArtwork(stream, cursor.phase)
                                 } }.awaitAll()
                             }
-                            if (results.any { !it }) {
-                                allDetailsSaved = false
-                                if (kind == "series") allEpisodesSaved = false
-                            }
+                            ensureCurrentSource()
+                            val nextRow = checkNotNull(dao.streamRowId(group.last().key))
+                            check(nextRow > cursor.rowId) { "Full-library cursor did not advance" }
+                            FullLibrarySyncState.checkpoint(app, providerId, expectedEpoch, cursor.phase, nextRow)
                         }
+                        if (lowMemory) delay(35L)
                     }
-                    for (stream in page) {
-                        ensureSource()
-                        val metadata = ProviderMetadataCache.read(app, stream.key)
-                        val artwork = listOf(stream.icon, stream.backdrop, metadata?.posterUrl, metadata?.backdropUrl)
-                            .filterNotNull().map(String::trim).filter { it.isNotBlank() && it != "null" }.distinct()
-                            .let { if (lowMemory) it.take(2) else it }
-                        for (raw in artwork) {
-                            try { if (!ArtworkLoader.persist(app, resolve(provider, raw))) allImagesSaved = false }
-                            catch (cancelled: CancellationException) { throw cancelled }
-                            catch (full: ArtworkLoader.StorageFull) { throw full }
-                            catch (_: Exception) { allImagesSaved = false }
-                        }
-                    }
-                    val next = dao.streamRowId(page.last().key) ?: return
-                    if (next <= after) return
-                    after = next
-                    // Yield between pages on low-RAM boxes so UI, GC and remote input stay responsive.
-                    if (lowMemory) delay(25L)
+                    false
                 }
+            } catch (_: ChunkBudgetReached) {
+                false
             }
-            ensureSource()
-            if (allDetailsSaved) CatalogSyncState.markMetadataReady(app, providerId)
-            if (allEpisodesSaved) CatalogSyncState.markEpisodesReady(app, providerId)
-            CatalogManifestStore.rebuild(app, dao, provider,
-                completionVerified = allDetailsSaved && allEpisodesSaved && allImagesSaved)
         }
     }
 

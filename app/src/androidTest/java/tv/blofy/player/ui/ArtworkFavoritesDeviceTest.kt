@@ -13,6 +13,9 @@ import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.work.ListenableWorker
+import androidx.work.workDataOf
+import androidx.work.testing.TestListenableWorkerBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
@@ -23,6 +26,8 @@ import okio.Buffer
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.preparation.FullLibrarySyncWorker
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -31,6 +36,7 @@ import tv.blofy.player.ui.catalog.PosterStreamAdapter
 import tv.blofy.player.ui.library.LibraryActivity
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.net.URI
 
 /** The workflow runs these methods in separate app processes, with the fixture server stopped. */
 @RunWith(AndroidJUnit4::class)
@@ -42,7 +48,7 @@ class ArtworkFavoritesDeviceTest {
     private val providerId = "artwork-qa"
 
     @Test fun seedFavoritesAndDurableArtwork() {
-        val images = (1..30).associateWith { index ->
+        val images = (1..75).associateWith { index ->
             val bitmap = Bitmap.createBitmap(180, 270, Bitmap.Config.ARGB_8888)
             Canvas(bitmap).apply {
                 drawColor(android.graphics.Color.HSVToColor(floatArrayOf(index * 12f, .65f, .58f)))
@@ -55,6 +61,7 @@ class ArtworkFavoritesDeviceTest {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
                     val index = request.path?.substringAfterLast('/')?.toIntOrNull()
+                    if (index == 75) return MockResponse().setResponseCode(503)
                     val bytes = images[index] ?: return MockResponse().setResponseCode(404)
                     return MockResponse().setHeader("Content-Type", "image/png").setBody(Buffer().write(bytes))
                 }
@@ -64,19 +71,50 @@ class ArtworkFavoritesDeviceTest {
         manifest.writeText(base)
         try {
             withLibrary(base) { streams ->
+                CatalogSyncState.markCatalogCommitted(context, providerId)
+                assertEquals(ListenableWorker.Result.retry(), runWorker())
+                assertTrue("Unopened catalog entries must already be saved", streams.take(74).all {
+                    ArtworkLoader.isPersisted(context, checkNotNull(it.backdrop))
+                })
+                assertFalse(ArtworkLoader.isPersisted(context, checkNotNull(streams.last().backdrop)))
                 ActivityScenario.launch(LibraryActivity::class.java).use { scenario ->
                     awaitPoster(scenario, 0)
                     screenshot("favorites-first-open")
-                    runBlocking(Dispatchers.IO) { streams.forEach { stream ->
-                        assertTrue(ArtworkLoader.persist(context, checkNotNull(stream.backdrop)))
-                    } }
                     verifyLastCardAndRemote(scenario)
                     screenshot("favorites-last-card")
                 }
-                assertTrue(streams.all { ArtworkLoader.isPersisted(context, checkNotNull(it.backdrop)) })
-                File(evidence, "seed-result.txt").writeText("favorites=30\npersisted=30\nhttp_requests=${server.requestCount}\n")
+                File(evidence, "seed-result.txt").writeText("favorites=30\ncatalog=75\npersisted_before_opening=74\nmissing=1\nworker_retry=true\nhttp_requests=${server.requestCount}\n")
             }
         } finally { server.shutdown() }
+    }
+
+    @Test fun resumeMissingArtworkAfterProcessRestart() {
+        val base = manifest.readText()
+        val bitmap = Bitmap.createBitmap(180, 270, Bitmap.Config.ARGB_8888).apply { eraseColor(-0x10000) }
+        val bytes = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        val server = MockWebServer().apply {
+            dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse =
+                    if (request.path == "/art/75") MockResponse().setHeader("Content-Type", "image/png").setBody(Buffer().write(bytes))
+                    else MockResponse().setResponseCode(500)
+            }
+            start(URI(base).port)
+        }
+        try {
+            withLibrary(base) { streams ->
+                File(context.cacheDir, "blofy_posters").deleteRecursively()
+                ArtworkLoader.clearMemory()
+                assertEquals(ListenableWorker.Result.success(), runWorker())
+                assertTrue(streams.all { ArtworkLoader.isPersisted(context, checkNotNull(it.backdrop)) })
+                assertEquals("A fresh process must download ONLY the missing image", 1, server.requestCount)
+                File(evidence, "resume-result.txt").writeText("process_restarted=true\ncatalog=75\npersisted=75\nhttp_requests=1\nworker_complete=true\n")
+            }
+        } finally { server.shutdown() }
+    }
+
+    private fun runWorker() = runBlocking(Dispatchers.IO) {
+        TestListenableWorkerBuilder<FullLibrarySyncWorker>(context)
+            .setInputData(workDataOf("provider_id" to providerId)).build().doWork()
     }
 
     @Test fun reopenFavoritesOfflineAfterProcessRestart() {
@@ -93,7 +131,7 @@ class ArtworkFavoritesDeviceTest {
                 verifyLastCardAndRemote(scenario)
                 screenshot("favorites-offline-last")
             }
-            File(evidence, "offline-result.txt").writeText("process_restarted=true\nsource_server_stopped=true\nfirst_and_last_posters=visible\nfavorites=30\n")
+            File(evidence, "offline-result.txt").writeText("process_restarted=true\nsource_server_stopped=true\nfirst_and_last_posters=visible\nfavorites=30\npersisted=75\n")
         }
     }
 
@@ -101,11 +139,15 @@ class ArtworkFavoritesDeviceTest {
         val singleton = BlofyDatabase::class.java.getDeclaredField("instance").apply { isAccessible = true }
         val previous = singleton.get(null)
         val db = Room.inMemoryDatabaseBuilder(context, BlofyDatabase::class.java).build()
-        val streams = (1..30).map { i -> StreamEntity("$providerId:movie:$i", providerId, "$i", null,
-            "movie", "فيلم ${i.toString().padStart(2, '0')}", icon = " ", backdrop = "${base}art/$i", favorite = true) }
+        val streams = (1..75).map { i ->
+            val kind = when { i <= 50 -> "movie"; i <= 65 -> "series"; else -> "live" }
+            StreamEntity("$providerId:$kind:$i", providerId, "$i", null, kind,
+                "فيلم ${i.toString().padStart(2, '0')}", icon = if (i <= 30) " " else "${base}art/$i",
+                backdrop = "${base}art/$i", favorite = i <= 30)
+        }
         try {
             runBlocking(Dispatchers.IO) {
-                db.dao().saveAndActivateProvider(ProviderEntity(providerId, "Artwork fixture", base, "fixture", "fixture"))
+                db.dao().saveAndActivateProvider(ProviderEntity(providerId, "Artwork fixture", base, "fixture", "fixture", providerType = "m3u"))
                 db.dao().upsertStreams(streams)
             }
             singleton.set(null, db)

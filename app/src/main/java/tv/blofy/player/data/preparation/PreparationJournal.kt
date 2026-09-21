@@ -43,6 +43,20 @@ class PreparationJournal(context: Context) : SQLiteOpenHelper(context.applicatio
     fun reopen(provider: String, kind: String, key: String) {
         writableDatabase.update("units", ContentValues().apply { put("done", 0) }, "provider=? AND kind=? AND item=?", arrayOf(provider, kind, key))
     }
+    /** The full-library queue retains only missing units. Successful files are their own ledger. */
+    fun remove(provider: String, kind: String, key: String) {
+        writableDatabase.delete("units", "provider=? AND kind=? AND item=?", arrayOf(provider, kind, key))
+    }
+    data class Pending(val rowId: Long, val key: String, val value: String)
+    fun pendingPage(provider: String, kind: String, after: Long, limit: Int): List<Pending> {
+        require(limit > 0)
+        return readableDatabase.rawQuery(
+            "SELECT rowid,item,value FROM units WHERE provider=? AND kind=? AND done=0 AND rowid>? ORDER BY rowid LIMIT ?",
+            arrayOf(provider, kind, after.toString(), limit.toString())
+        ).use { cursor -> buildList {
+            while (cursor.moveToNext()) add(Pending(cursor.getLong(0), cursor.getString(1), cursor.getString(2)))
+        } }
+    }
     fun counts(provider: String, kind: String): Pair<Long, Long> = readableDatabase.rawQuery(
         "SELECT COALESCE(SUM(done),0),COUNT(*) FROM units WHERE provider=? AND kind=?", arrayOf(provider, kind)
     ).use { it.moveToFirst(); it.getLong(0) to it.getLong(1) }

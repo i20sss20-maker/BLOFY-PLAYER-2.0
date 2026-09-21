@@ -36,9 +36,8 @@ class FullLibrarySyncWorker(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: ArtworkLoader.StorageFull) {
-            // Keep already-downloaded library files. A later app start will enqueue the worker
-            // again after the user has freed storage.
-            Result.success()
+            // Saved images and the missing queue survive. Resume when space is available.
+            Result.retry()
         } catch (_: Throwable) {
             Result.retry()
         }
@@ -60,7 +59,7 @@ class FullLibrarySyncWorker(
                         .build()
                 )
                 .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
-                .setBackoffCriteria(BackoffPolicy.LINEAR, 15, TimeUnit.SECONDS)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .addTag(workName(providerId))
                 .build()
 

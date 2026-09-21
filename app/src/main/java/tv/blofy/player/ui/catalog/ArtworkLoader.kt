@@ -54,7 +54,8 @@ object ArtworkLoader {
     private val fileLocks = Array(64) { Any() }
     // A priority queue cannot preempt background calls that already occupy every worker.
     private val networkPool = ThreadPoolExecutor(workerCount, workerCount, 30L, TimeUnit.SECONDS, LinkedBlockingQueue<Runnable>())
-    private val backgroundNetworkPool = ThreadPoolExecutor(1, 1, 30L, TimeUnit.SECONDS, LinkedBlockingQueue<Runnable>())
+    private val backgroundWorkerCount = if (Runtime.getRuntime().maxMemory() <= 192L * 1024L * 1024L) 1 else 3
+    private val backgroundNetworkPool = ThreadPoolExecutor(backgroundWorkerCount, backgroundWorkerCount, 30L, TimeUnit.SECONDS, LinkedBlockingQueue<Runnable>())
     private val cancellationPool = Executors.newSingleThreadScheduledExecutor()
     private val requestLock = Any()
     private val trimCounter = AtomicInteger(0)
