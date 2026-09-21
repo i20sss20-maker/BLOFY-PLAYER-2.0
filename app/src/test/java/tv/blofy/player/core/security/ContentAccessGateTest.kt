@@ -33,6 +33,7 @@ import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.player.PlayerLifecycleTest
+import tv.blofy.player.ui.player.PlayerReturnNavigationLifecycle
 import tv.blofy.player.ui.series.EpisodesActivity
 import java.util.concurrent.locks.LockSupport
 
@@ -116,6 +117,8 @@ class ContentAccessGateTest {
                 assertNull(PlayerActivity::class.java.getDeclaredField("session").apply { isAccessible = true }.get(page))
             }
             prompt().cancel(); idle(); assertTrue("${type.simpleName} must close on cancel", page.isFinishing)
+            if (page is PlayerActivity) assertTrue("Cancel must not launch another protected destination",
+                page.intent.getBooleanExtra(PlayerReturnNavigationLifecycle.EXTRA_RETURN_ALREADY_ROUTED, false))
         }
     }
 

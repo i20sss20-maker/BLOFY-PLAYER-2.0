@@ -25,11 +25,11 @@ abstract class ContentAccessActivity : AppCompatActivity() {
             contentKey = savedInstanceState?.getString("content_key") ?: intent.getStringExtra("content_key").orEmpty(),
             seriesId = intent.getStringExtra("series_id").orEmpty(),
             transferToken = intent.getStringExtra(ContentAccessGate.EXTRA_TRANSFER),
-            onDenied = { finish() }
+            onDenied = { onContentAccessDenied() }
         ) {
             if (isFinishing || isDestroyed) return@requireAccess
             // An async PIN/query result must not start playback after the owner has left the screen.
-            if (!synchronous && !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) { finish(); return@requireAccess }
+            if (!synchronous && !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) { onContentAccessDenied(); return@requireAccess }
             contentReady = true
             accessScope = currentScope()
             onContentReady(savedInstanceState)
@@ -39,6 +39,7 @@ abstract class ContentAccessActivity : AppCompatActivity() {
     }
 
     protected abstract fun onContentReady(savedInstanceState: Bundle?)
+    protected open fun onContentAccessDenied() { finish() }
 
     override fun onStart() {
         super.onStart()
@@ -46,7 +47,7 @@ abstract class ContentAccessActivity : AppCompatActivity() {
         if (contentReady && accessScope != currentScope()) {
             contentAccess.cancel()
             window.decorView.visibility = android.view.View.INVISIBLE
-            finish()
+            onContentAccessDenied()
         }
     }
 

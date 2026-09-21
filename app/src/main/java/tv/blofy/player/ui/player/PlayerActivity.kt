@@ -169,6 +169,13 @@ open class PlayerActivity : ContentAccessActivity() {
         }
     }
 
+    override fun onContentAccessDenied() {
+        // No playback was authorized: return to the existing caller, without synthesizing a
+        // details/episodes destination which would immediately ask for the cancelled PIN again.
+        intent.putExtra(PlayerReturnNavigationLifecycle.EXTRA_RETURN_ALREADY_ROUTED, true)
+        finish()
+    }
+
     override fun onContentReady(savedInstanceState: Bundle?) {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val url = intent.getStringExtra(EXTRA_URL).orEmpty()
