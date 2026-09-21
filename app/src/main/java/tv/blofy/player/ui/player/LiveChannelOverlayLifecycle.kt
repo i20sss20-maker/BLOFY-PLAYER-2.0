@@ -308,7 +308,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         }
 
         private fun selectChannel(channel: StreamEntity) {
-            if (channel.key == currentChannelKey) return
+            val playingKey = RecentChannelStore.keys(activity, channel.providerId).firstOrNull() ?: currentChannelKey
+            if (channel.key == playingKey) return
             val which = displayedChannels.indexOfFirst { it.key == channel.key }
             if (which < 0) return
             val channelNumber = which + 1
@@ -321,7 +322,6 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 return
             }
             val switchAction = {
-                currentChannelKey = channel.key
                 dispatchChannelNumber(channelNumber)
             }
             switchAction() // PlayerActivity checks the same gate for digits, arrows and this overlay.

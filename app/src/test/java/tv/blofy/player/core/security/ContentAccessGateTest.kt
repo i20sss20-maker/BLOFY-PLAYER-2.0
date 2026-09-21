@@ -17,6 +17,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
@@ -213,5 +214,33 @@ class ContentAccessGateTest {
         val dialog = prompt()
         controllers.single().pause().stop().destroy(); controllers.clear()
         idle(); assertFalse(dialog.isShowing); assertFalse(page.loaded)
+    }
+
+    @Test fun switchingProfilesCannotResumeAnAuthorizedPlayerFromTheBackStack() {
+        val page = open(PlayerLifecycleTest.TestPlayerActivity::class.java,
+            intent(PlayerLifecycleTest.TestPlayerActivity::class.java, episode.key))
+        answer("1234"); await { page.players.size == 1 }
+        val controller = controllers.single()
+        controller.pause().stop()
+        ProfileStore.select(app, "kids")
+        controller.restart().start().resume()
+        assertTrue(page.isFinishing)
+        assertEquals("Old decoder must not be recreated for another profile", 1, page.players.size)
+    }
+
+    @Test fun liveSwitchUsesCurrentStoredLockBeforeChangingTheMediaItem() {
+        val next = stream("live", "4")
+        runBlocking(Dispatchers.IO) { dao.upsertStreams(listOf(next)) }
+        val page = open(PlayerLifecycleTest.TestPlayerActivity::class.java,
+            intent(PlayerLifecycleTest.TestPlayerActivity::class.java, live.key)
+                .putExtra("kind", "live").putExtra("stream_id", live.remoteId))
+        answer("1234"); await { page.players.size == 1 }
+        val first = page.players.single()
+        val initialItem = first.item
+        val switch = PlayerActivity::class.java.getDeclaredMethod("playLiveStream", ProviderEntity::class.java, StreamEntity::class.java)
+            .apply { isAccessible = true }
+        switch.invoke(page, ProviderEntity("p", "Provider", "https://example.test", "u", "p"), next.copy(locked = false))
+        prompt(); answer("9999"); assertEquals(initialItem, first.item); assertEquals(1, first.prepares)
+        answer("1234"); assertEquals(2, first.prepares); assertNotEquals(initialItem, first.item)
     }
 }

@@ -4,12 +4,18 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
+import tv.blofy.player.core.profile.ProfileStore
 
 /** Non-exported content destinations must authorize before loading details or creating a player. */
 abstract class ContentAccessActivity : AppCompatActivity() {
     protected val contentAccess by lazy { ContentAccessGate(this) }
     protected var contentReady = false
         private set
+    private var accessScope: Triple<String, Boolean, String?>? = null
+
+    private fun currentScope() = ProfileStore.active(this).let {
+        Triple(it.id, it.kids, ParentalGate.credentialVersion(this))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,6 +31,7 @@ abstract class ContentAccessActivity : AppCompatActivity() {
             // An async PIN/query result must not start playback after the owner has left the screen.
             if (!synchronous && !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) { finish(); return@requireAccess }
             contentReady = true
+            accessScope = currentScope()
             onContentReady(savedInstanceState)
         }
         synchronous = false
@@ -32,6 +39,16 @@ abstract class ContentAccessActivity : AppCompatActivity() {
     }
 
     protected abstract fun onContentReady(savedInstanceState: Bundle?)
+
+    override fun onStart() {
+        super.onStart()
+        // Returning from profile/PIN settings must not revive a previously authorized player.
+        if (contentReady && accessScope != currentScope()) {
+            contentAccess.cancel()
+            window.decorView.visibility = android.view.View.INVISIBLE
+            finish()
+        }
+    }
 
     override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
         contentAccess.forwardTo(intent)
