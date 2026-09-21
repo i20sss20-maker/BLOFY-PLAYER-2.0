@@ -64,6 +64,62 @@ class ArtworkThroughputTest {
         } finally { ArtworkLoader.cancel(view); server.shutdown() }
     }
 
+    @Test fun transientServerFailureDoesNotPoisonTheNextVisibleRequest() {
+        ArtworkLoader.clearMemory()
+        val server = MockWebServer().apply {
+            enqueue(MockResponse().setResponseCode(503)); enqueue(image()); start()
+        }
+        val view = ImageView(app)
+        try {
+            val url = server.url("/recover").toString()
+            ArtworkLoader.load(view, url)
+            await("First failed response") { server.requestCount == 1 }
+            // Wait for completion, not a fixed five-minute negative cache expiry.
+            val requests = ArtworkLoader::class.java.getDeclaredField("viewRequests").apply { isAccessible = true }
+            await("Failure delivered") { (requests.get(ArtworkLoader) as Map<*, *>).isEmpty() }
+            ArtworkLoader.load(view, url)
+            await("Recovered server image must be retried on the next bind") { view.drawable is BitmapDrawable }
+            assertEquals(2, server.requestCount)
+        } finally { ArtworkLoader.cancel(view); server.shutdown() }
+    }
+
+    @Test fun queuedLibraryPosterIsPromotedWhenItBecomesVisible() {
+        ArtworkLoader.clearMemory()
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val server = MockWebServer().apply {
+            dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    if (request.path == "/blocked-library") {
+                        started.countDown(); release.await(10, TimeUnit.SECONDS)
+                    }
+                    return image()
+                }
+            }; start()
+        }
+        val executor = Executors.newFixedThreadPool(2)
+        val first = executor.submit<Boolean> { runBlocking {
+            ArtworkLoader.persist(app, server.url("/blocked-library").toString())
+        } }
+        val view = ImageView(app)
+        try {
+            assertTrue(started.await(3, TimeUnit.SECONDS))
+            val url = server.url("/becomes-visible").toString()
+            val queued = executor.submit<Boolean> { runBlocking { ArtworkLoader.persist(app, url) } }
+            val background = ArtworkLoader::class.java.getDeclaredField("backgroundNetworkPool")
+                .apply { isAccessible = true }.get(ArtworkLoader) as ThreadPoolExecutor
+            await("Library image is queued") { background.queue.isNotEmpty() }
+            ArtworkLoader.load(view, url)
+            await("Visible request must promote the existing queued download") { view.drawable is BitmapDrawable }
+            assertTrue(queued.get(3, TimeUnit.SECONDS))
+            assertEquals(2, server.requestCount)
+            assertEquals(1L, release.count)
+        } finally {
+            release.countDown(); first.get(5, TimeUnit.SECONDS); executor.shutdownNow()
+            ArtworkLoader.cancel(view); server.shutdown()
+        }
+    }
+
     @Test fun fastVisiblePosterBypassesEarlierSlowPostersWhileNetworkCapacityIsAvailable() {
         ArtworkLoader.clearMemory()
         val count = if (workers() <= 4) 2 else 4
