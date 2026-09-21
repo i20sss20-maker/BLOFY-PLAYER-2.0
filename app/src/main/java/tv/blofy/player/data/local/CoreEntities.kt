@@ -54,6 +54,8 @@ data class CategoryEntity(
         Index(value = ["providerId", "kind", "addedAt"]),
         // SQLite appends rowid to these indexes, matching catalog cursor order exactly.
         Index(value = ["providerId", "kind"]),
+        // Identity lookups also restore saved flags during a catalog refresh or local restore.
+        Index(value = ["providerId", "kind", "remoteId"]),
         Index(value = ["providerId", "kind", "categoryId"]),
         Index(
             name = "index_streams_home_page",

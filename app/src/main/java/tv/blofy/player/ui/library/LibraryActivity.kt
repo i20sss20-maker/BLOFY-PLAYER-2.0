@@ -29,12 +29,10 @@ import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.data.ContentRepository
-import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
-import tv.blofy.player.data.local.WatchStateEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.core.device.DeviceClass
@@ -109,7 +107,7 @@ class LibraryActivity : AppCompatActivity() {
             list.removeAllViews()
             if (mode == MODE_CONTINUE) {
                 val states = withContext(Dispatchers.IO) { dao.continueWatching(provider.id).first() }
-                val entries = withContext(Dispatchers.IO) { resolveContinueWatching(dao, provider.id, states) }
+                val entries = withContext(Dispatchers.IO) { ContinueWatchingResolver.load(dao, provider.id, states) }
                 if (entries.isEmpty()) showMessage("لا يوجد محتوى للاستئناف")
                 entries.forEach { entry ->
                     when (entry) {
@@ -163,17 +161,6 @@ class LibraryActivity : AppCompatActivity() {
         val grid = favoritesGrid
         if (grid != null && TwoPaneFocusGuard.handleGrid(event, grid)) return true
         return super.dispatchKeyEvent(event)
-    }
-
-    private suspend fun resolveContinueWatching(dao: BlofyDao, providerId: String, states: List<WatchStateEntity>): List<ContinueWatchingEntry> {
-        val streams = LinkedHashMap<String, StreamEntity>()
-        val episodes = LinkedHashMap<String, EpisodeEntity>()
-        states.forEach { state ->
-            if (state.kind == "episode") dao.episode(state.contentKey)?.let { episodes[state.contentKey] = it } ?: dao.stream(state.contentKey)?.let { streams[state.contentKey] = it }
-            else dao.stream(state.contentKey)?.let { streams[state.contentKey] = it } ?: dao.episode(state.contentKey)?.let { episodes[state.contentKey] = it }
-        }
-        val parentSeries = if (episodes.isEmpty()) emptyList() else dao.streams(providerId, "series", null).first()
-        return ContinueWatchingResolver.resolve(states, streams, episodes, parentSeries)
     }
 
     private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {

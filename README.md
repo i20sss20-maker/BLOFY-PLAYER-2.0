@@ -16,8 +16,8 @@ Clean Android-native rebuild of BLOFY PLAYER.
 
 ## Status
 
-The device-test baseline is `2.0.0-rc07.9` (`versionCode 2000017`), commit `72434a500946286b84e9c779fb44e02d6052144c` on `rc07-commercial-stability`. Signed Release #257 passed. The production activation and playlist portal is connected at <https://blofy-player-2-0.vercel.app>.
+The current Android testing candidate is `2.0.0-rc07.55` (`versionCode 2000067`), tracked in draft [PR #120](https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/pull/120). The owner explicitly requires this version to stay unchanged during testing. The latest delivered baseline before the September 21 audit is commit `e3250798bcf31c5a1a7399d1384868b4714a2973`, with persistent artwork, automatic catalog recovery and indexed favorites.
 
-The next device-test candidate is `2.0.0-rc07.10` (`versionCode 2000018`), carrying the reviewed audit fixes from PR #36. The owner has authorized integration and a new signed APK to test. This candidate is being prepared; signed-release verification is required before delivery, and final approval requires real-device acceptance. See [project memory](docs/PROJECT_MEMORY.md) for the current scope and protected playback/theme boundaries. Passing CI does not replace the real-device acceptance test.
+The broader audit and its remaining findings are documented in [the rc07.55 review](docs/reviews/rc0755-code-audit.md). A signed testing build is not a production rollout or final acceptance. See [project memory](docs/PROJECT_MEMORY.md) for the protected playback/theme boundaries. The activation backend has its own deployment history; the service snapshot on this Android branch must not be deployed over production.
 
 The canonical clean-rebuild package is `tv.blofy.player.v2`, so it installs beside the legacy application. See [the Arabic final reference](docs/BLOFY_2_FINAL_REFERENCE_AR.md) and [the 7 Max parity checklist](docs/SEVEN_MAX_PARITY_CHECKLIST.md) before changing playback, catalog replacement, or TV focus behavior.

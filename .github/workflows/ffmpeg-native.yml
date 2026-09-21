@@ -179,7 +179,8 @@ jobs:
               exit 1
             fi
             for library in "${libraries[@]}"; do
-              if ! "$llvm_readelf" -h "$library" | grep -Eq 'Class:[[:space:]]+ELF64'; then
+              # Consume all output: grep -q can SIGPIPE readelf and fail a valid ELF under pipefail.
+              if ! "$llvm_readelf" -h "$library" | grep -E 'Class:[[:space:]]+ELF64' > /dev/null; then
                 echo "::error file=${library#$verify_dir/}::Expected ELF64 native library"
                 exit 1
               fi

@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.settings
 
 import android.content.Context
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
@@ -34,7 +35,7 @@ object LocalBackupManager {
     suspend fun exportJson(context: Context): String {
         val app = context.applicationContext
         val dao = BlofyDatabase.get(app).dao()
-        val provider = dao.providers().first().firstOrNull() ?: error("no_active_provider")
+        val provider = dao.providersStored().first().firstOrNull() ?: error("no_active_provider")
         val root = JSONObject()
             .put("schema", SCHEMA)
             .put("createdAt", System.currentTimeMillis())
@@ -89,54 +90,62 @@ object LocalBackupManager {
 
     suspend fun restoreJson(context: Context, json: String): RestoreResult {
         val app = context.applicationContext
+        require(json.length <= 8 * 1024 * 1024) { "backup_too_large" }
         val root = JSONObject(json)
         require(root.optInt("schema") == SCHEMA) { "unsupported_backup" }
-        val dao = BlofyDatabase.get(app).dao()
-        val provider = dao.providers().first().firstOrNull() ?: error("no_active_provider")
-        require(root.optString("providerId") == provider.id) { "backup_different_server" }
+        val database = BlofyDatabase.get(app)
+        // Room rolls back categories, favorites/locks and history together on failure/cancellation.
+        // Validate the active provider inside that transaction, before touching any saved row.
+        val restored = database.withTransaction {
+            val dao = database.dao()
+            val provider = dao.activeProviderId()?.let { dao.providerStored(it) } ?: error("no_active_provider")
+            require(root.optString("providerId") == provider.id) { "backup_different_server" }
 
-        val currentCategories = dao.allCategoriesForProvider(provider.id)
-            .associateBy { "${it.kind}\u0000${it.remoteId}" }
-        val categoryUpdates = mutableListOf<tv.blofy.player.data.local.CategoryEntity>()
-        val categoryJson = root.optJSONArray("categories") ?: JSONArray()
-        for (index in 0 until categoryJson.length()) {
-            val item = categoryJson.optJSONObject(index) ?: continue
-            val key = "${item.optString("kind")}\u0000${item.optString("remoteId")}" 
-            val existing = currentCategories[key] ?: continue
-            categoryUpdates += existing.copy(
-                orderIndex = item.optInt("orderIndex", existing.orderIndex),
-                hidden = item.optBoolean("hidden", existing.hidden)
-            )
-        }
-        if (categoryUpdates.isNotEmpty()) dao.upsertCategories(categoryUpdates)
+            val currentCategories = dao.allCategoriesForProvider(provider.id)
+                .associateBy { "${it.kind}\u0000${it.remoteId}" }
+            val categoryUpdates = mutableListOf<tv.blofy.player.data.local.CategoryEntity>()
+            val categoryJson = root.optJSONArray("categories") ?: JSONArray()
+            for (index in 0 until categoryJson.length()) {
+                val item = categoryJson.optJSONObject(index) ?: continue
+                val key = "${item.optString("kind")}\u0000${item.optString("remoteId")}"
+                val existing = currentCategories[key] ?: continue
+                categoryUpdates += existing.copy(
+                    orderIndex = item.optInt("orderIndex", existing.orderIndex),
+                    hidden = item.optBoolean("hidden", existing.hidden)
+                )
+            }
+            if (categoryUpdates.isNotEmpty()) dao.upsertCategories(categoryUpdates)
 
-        var restoredFlags = 0
-        val flags = root.optJSONArray("streamFlags") ?: JSONArray()
-        for (index in 0 until flags.length()) {
-            val item = flags.optJSONObject(index) ?: continue
-            val kind = item.optString("kind")
-            val remoteId = item.optString("remoteId")
-            val stream = dao.streamByIdentity(provider.id, kind, remoteId) ?: continue
-            dao.setFavoriteByIdentity(provider.id, kind, remoteId, item.optBoolean("favorite", stream.favorite))
-            dao.setLocked(stream.key, item.optBoolean("locked", stream.locked))
-            restoredFlags++
-        }
+            var restoredFlags = 0
+            val flags = root.optJSONArray("streamFlags") ?: JSONArray()
+            for (index in 0 until flags.length()) {
+                val item = flags.optJSONObject(index) ?: continue
+                val kind = item.optString("kind")
+                val remoteId = item.optString("remoteId")
+                val stream = dao.streamByIdentity(provider.id, kind, remoteId) ?: continue
+                dao.setFavoriteByIdentity(provider.id, kind, remoteId, item.optBoolean("favorite", stream.favorite))
+                dao.setLocked(stream.key, item.optBoolean("locked", stream.locked))
+                restoredFlags++
+            }
 
-        var restoredWatch = 0
-        val watch = root.optJSONArray("watchStates") ?: JSONArray()
-        for (index in 0 until watch.length()) {
-            val item = watch.optJSONObject(index) ?: continue
-            val contentKey = item.optString("contentKey").takeIf { it.startsWith(provider.id + ":") } ?: continue
-            dao.saveWatchState(WatchStateEntity(
-                contentKey = contentKey,
-                providerId = provider.id,
-                kind = item.optString("kind"),
-                positionMs = item.optLong("positionMs").coerceAtLeast(0L),
-                durationMs = item.optLong("durationMs").coerceAtLeast(0L),
-                completed = item.optBoolean("completed", false),
-                updatedAt = item.optLong("updatedAt", System.currentTimeMillis())
-            ))
-            restoredWatch++
+            var restoredWatch = 0
+            val watch = root.optJSONArray("watchStates") ?: JSONArray()
+            for (index in 0 until watch.length()) {
+                val item = watch.optJSONObject(index) ?: continue
+                val contentKey = item.optString("contentKey").takeIf { it.startsWith(provider.id + ":") } ?: continue
+                dao.saveWatchState(WatchStateEntity(
+                    contentKey = contentKey,
+                    providerId = provider.id,
+                    kind = item.optString("kind"),
+                    positionMs = item.optLong("positionMs").coerceAtLeast(0L),
+                    durationMs = item.optLong("durationMs").coerceAtLeast(0L),
+                    completed = item.optBoolean("completed", false),
+                    updatedAt = item.optLong("updatedAt", System.currentTimeMillis())
+                ))
+                restoredWatch++
+            }
+
+            Triple(categoryUpdates.size, restoredFlags, restoredWatch)
         }
 
         var restoredSettings = 0
@@ -151,13 +160,13 @@ object LocalBackupManager {
         }
         editor.apply()
 
-        val searches = root.optJSONArray("recentSearches") ?: JSONArray()
-        val searchItems = buildList {
-            for (index in 0 until searches.length()) searches.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+        // Older/partial backups without this optional field must not erase current history.
+        val searches = root.optJSONArray("recentSearches")
+        val searchItems = if (searches == null) null else buildList {
+            for (index in 0 until searches.length()) (searches.opt(index) as? String)?.let(::add)
         }
-        RecentSearchStore.clear(app)
-        searchItems.asReversed().forEach { RecentSearchStore.record(app, it) }
+        val restoredSearches = searchItems?.let { RecentSearchStore.replace(app, it) } ?: 0
 
-        return RestoreResult(categoryUpdates.size, restoredFlags, restoredWatch, restoredSettings, searchItems.size)
+        return RestoreResult(restored.first, restored.second, restored.third, restoredSettings, restoredSearches)
     }
 }

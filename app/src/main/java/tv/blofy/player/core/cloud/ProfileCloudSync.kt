@@ -207,16 +207,16 @@ object ProfileCloudSync {
     private fun copySettings(source: JSONObject?, target: JSONObject) {
         if (source == null) return
         val keys = source.keys()
-        var count = target.length()
-        while (keys.hasNext() && count < 80) {
+        while (keys.hasNext()) {
             val key = keys.next()
             if (!Regex("[A-Za-z0-9._-]{1,64}").matches(key)) continue
+            // A full remote map still permits replacing an existing key with local intent.
+            if (!target.has(key) && target.length() >= 80) continue
             when (val value = source.opt(key)) {
                 is String -> target.put(key, value.take(256))
                 is Boolean, is Int, is Long, is Double -> target.put(key, value)
                 else -> continue
             }
-            count++
         }
     }
 

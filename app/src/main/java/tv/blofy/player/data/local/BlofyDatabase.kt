@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-internal const val BLOFY_DATABASE_VERSION = 13
+internal const val BLOFY_DATABASE_VERSION = 14
 
 @Database(
     entities = [
@@ -253,6 +253,12 @@ abstract class BlofyDatabase : RoomDatabase() {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     // Index only: preserve catalog rowids, favorite flags, history and credentials.
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_favorite_name` ON `streams` (`providerId`, `favorite`, `name`)")
+                }
+            },
+            object : Migration(13, 14) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Add an identity index without rewriting saved rows or their rowids.
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_remoteId` ON `streams` (`providerId`, `kind`, `remoteId`)")
                 }
             }
         )

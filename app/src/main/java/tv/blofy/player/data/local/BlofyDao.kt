@@ -211,6 +211,16 @@ interface BlofyDao {
 
     @Query("SELECT * FROM streams WHERE `key` = :contentKey LIMIT 1") suspend fun stream(contentKey: String): StreamEntity?
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND remoteId = :remoteId LIMIT 1") suspend fun streamByIdentity(providerId: String, kind: String, remoteId: String): StreamEntity?
+    // Seek only the decimal-zero range for old Gson IDs such as 42.000. Do not read the
+    // complete series catalog just to resolve the parent of a saved episode.
+    @Query("""
+        SELECT * FROM streams INDEXED BY index_streams_providerId_kind_remoteId
+        WHERE providerId = :providerId AND kind = 'series'
+        AND remoteId >= :normalizedId || '.0' AND remoteId < :normalizedId || '.1'
+        AND rtrim(remoteId, '0') = :normalizedId || '.'
+        ORDER BY name DESC, `key` LIMIT 1
+    """)
+    suspend fun seriesWithLegacyDecimalId(providerId: String, normalizedId: String): StreamEntity?
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND favorite = 1 ORDER BY name") fun favorites(providerId: String): Flow<List<StreamEntity>>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND name LIKE '%' || :query || '%' ORDER BY name LIMIT :limit") suspend fun searchStreams(providerId: String, query: String, limit: Int = 80): List<StreamEntity>
     @Query("""

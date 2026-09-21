@@ -1,6 +1,14 @@
 # BLOFY PLAYER 2.0 — Current project state
 
-## Accepted device-test baseline
+## Current owner instructions — 2026-09-21
+
+- Current testing version: `2.0.0-rc07.55`, version code `2000067`. The owner explicitly requires both to remain unchanged while these fixes are tested. This supersedes the historical version-increment instruction below.
+- Android branches: `fix/rc0755-artwork-throughput` (unit/lint/phone/TV verification) and `fix/rc0755-favorites-artwork` (production-signed testing gate), draft PR #120.
+- Delivered baseline before this broader audit: `e3250798bcf31c5a1a7399d1384868b4714a2973`. Previous evidence: 630 Android unit tests, API 31 TV / API 35 phone artwork and catalog recovery tests, R8 signed build. This does not imply customer-device acceptance.
+- The owner now requests a broad code review, missing functionality and justified improvements. See `reviews/rc0755-code-audit.md` for implemented fixes, verification and remaining findings.
+- Preserve the playback/theme boundaries below. Do not deploy this branch's older `services/activation` snapshot over the separately maintained backend, publish an update, or touch MarketOS.
+
+## Historical accepted device-test baseline — rc07.9
 
 - Repository: `i20sss20-maker/BLOFY-PLAYER-2.0`
 - Branch: `rc07-commercial-stability`
@@ -10,7 +18,7 @@
 
 The audit covers minimal bug fixes and verified dead-code cleanup in preparation for commercial release after real-device testing. Do not restart the project or add new features.
 
-## Next device-test candidate
+## Historical candidate — rc07.10
 
 - Candidate version: `2.0.0-rc07.10`, version code `2000018`.
 - Reviewed audit source: PR #36, commit `5f4a9e6c4427680df27631adb9cc9ec258bbfa34`, based on the accepted rc07.9 baseline above.
@@ -27,7 +35,7 @@ Preserve production signing identity, stored playlists, device identity and upgr
 
 ## Verification and delivery
 
-Investigate code and available logs before fixes, use the smallest justified change and add behavioral regression coverage. Run Android and activation CI on the proposed changes. Before delivering a new APK, increment its version and run the existing production-signed release pipeline. Do not weaken branch/signing gates to sign an audit branch.
+Investigate code and available logs before fixes, use the smallest justified change and add behavioral regression coverage. Run applicable Android and activation checks on the proposed changes. Run the existing production-signed testing pipeline before APK delivery. Keep rc07.55 and version code 2000067 unchanged under the current owner instruction; the older instruction to increment each APK is superseded for this testing cycle. Do not weaken branch/signing gates to sign an audit branch.
 
 Real-device results remain the final acceptance gate: Hidden Host, M3U, Xtream and huge catalogs, completeness of Live/Movies/Series, playlist persistence after restart, category speed, search, low-memory behavior, and Home remote focus. CI success alone does not prove these are fixed.
 

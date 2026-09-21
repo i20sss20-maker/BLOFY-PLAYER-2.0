@@ -13,7 +13,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import tv.blofy.player.BuildConfig
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.net.URI
 import java.util.concurrent.TimeUnit
@@ -42,37 +41,14 @@ class AppUpdateWorker(context: Context, parameters: WorkerParameters) : Coroutin
                 .readTimeout(30, TimeUnit.SECONDS).callTimeout(8, TimeUnit.MINUTES)
                 .followSslRedirects(false).build()
             val resumeFrom = if (partial.isFile) partial.length() else 0L
-            val request = Request.Builder().url(url).apply {
+            val request = Request.Builder().url(url).header("Accept-Encoding", "identity").apply {
                 if (resumeFrom > 0) header("Range", "bytes=$resumeFrom-")
             }.build()
             client.newCall(request).execute().use { response ->
                 if (!response.request.url.isHttps) throw IOException("download_failed")
-                val resuming = resumeFrom > 0 && response.code == 206
-                if (!resuming && partial.isFile && !partial.delete()) throw IOException("storage_failed")
-                if (!response.isSuccessful) throw IOException("download_failed")
-                val body = response.body ?: throw IOException("empty_response")
-                val startAt = if (resuming) resumeFrom else 0L
-                val total = startAt + body.contentLength()
-                if (total > MAX_BYTES || total <= 0L) throw NonResumableException("invalid_size")
-                var downloaded = startAt
-                var lastProgress = 0L
-                body.byteStream().use { input -> FileOutputStream(partial, resuming).use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        currentCoroutineContext().ensureActive()
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        downloaded += count
-                        if (downloaded > MAX_BYTES) throw NonResumableException("invalid_size")
-                        output.write(buffer, 0, count)
-                        val now = android.os.SystemClock.elapsedRealtime()
-                        if (now - lastProgress >= 500L) {
-                            setProgress(workDataOf(BYTES to downloaded, TOTAL to total)); lastProgress = now
-                        }
-                    }
-                    output.fd.sync()
-                } }
-                if (downloaded == 0L || (total > 0 && total != downloaded)) throw IOException("incomplete_download")
+                UpdateDownload.receive(response, partial, resumeFrom) { downloaded, total ->
+                    setProgress(workDataOf(BYTES to downloaded, TOTAL to total))
+                }
             }
             currentCoroutineContext().ensureActive()
             if (!UpdatePackageVerifier.verify(applicationContext, partial, version)) {
@@ -83,17 +59,15 @@ class AppUpdateWorker(context: Context, parameters: WorkerParameters) : Coroutin
             if (!partial.renameTo(target)) throw IOException("storage_failed")
             Result.success()
         } catch (cancelled: CancellationException) {
-            partial.delete()
+            // WorkManager may stop a worker because constraints changed. Preserve its prefix.
             throw cancelled
-        } catch (nonResumable: NonResumableException) {
+        } catch (nonResumable: UpdateDownload.RestartRequired) {
             partial.delete()
             if (runAttemptCount < MAX_AUTO_RETRIES) Result.retry() else Result.failure(workDataOf(ERROR to nonResumable.message))
         } catch (_: Exception) {
             if (runAttemptCount < MAX_AUTO_RETRIES) Result.retry() else Result.failure(workDataOf(ERROR to "download_failed"))
         }
     }
-
-    private class NonResumableException(message: String) : IOException(message)
 
     companion object {
         const val VERSION = "version"

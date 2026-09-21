@@ -31,6 +31,9 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.home.HomeActivity
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class, qualifiers = "w1280dp-h720dp-land")
@@ -44,12 +47,18 @@ class ProviderManagerSelectionRegressionTest {
     private val second = first.copy(id = "second", name = "Second", username = "second-user", enabled = false)
     private val singleton = BlofyDatabase::class.java.getDeclaredField("instance").apply { isAccessible = true }
     private var previousDatabase: Any? = null
+    private val queryExecutor = Executors.newSingleThreadExecutor()
+    private val queryGate = AtomicReference<CountDownLatch?>()
 
     @Before fun setup() {
         shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
         app.getSharedPreferences("blofy_catalog_sync_state", 0).edit().clear().commit()
         app.getSharedPreferences("blofy_portal_reconciliation_v1", 0).edit().clear().commit()
-        db = Room.inMemoryDatabaseBuilder(app, BlofyDatabase::class.java).build()
+        db = Room.inMemoryDatabaseBuilder(app, BlofyDatabase::class.java)
+            .setQueryExecutor { task -> queryExecutor.execute {
+                queryGate.get()?.let { check(it.await(10, TimeUnit.SECONDS)) { "Selection test query gate timed out" } }
+                task.run()
+            } }.build()
         previousDatabase = singleton.get(null)
         singleton.set(null, db)
         runBlocking(Dispatchers.IO) {
@@ -66,10 +75,12 @@ class ProviderManagerSelectionRegressionTest {
     }
 
     @After fun cleanup() {
+        queryGate.getAndSet(null)?.countDown()
         controller?.pause()?.stop()?.destroy()
         shadowOf(Looper.getMainLooper()).idle()
         singleton.set(null, previousDatabase)
         db.close()
+        queryExecutor.shutdownNow()
     }
 
     private fun connect(provider: ProviderEntity) {
@@ -91,8 +102,17 @@ class ProviderManagerSelectionRegressionTest {
     private fun activeIds() = runBlocking(Dispatchers.IO) { db.dao().providers().first().map { it.id } }
 
     @Test fun rapidConnectRequestsOpenOnlyTheFirstChosenProvider() {
-        connect(second)
-        connect(first)
+        // Hold the database operation so these requests actually overlap, even on fast CI.
+        // Without a gate the first selection may finish before the second request is sent.
+        val gate = CountDownLatch(1)
+        queryGate.set(gate)
+        try {
+            connect(second)
+            connect(first)
+        } finally {
+            queryGate.set(null)
+            gate.countDown()
+        }
         awaitSelection()
         assertEquals(listOf(second.id), activeIds())
         assertEquals(HomeActivity::class.java.name, shadowOf(activity).nextStartedActivity?.component?.className)

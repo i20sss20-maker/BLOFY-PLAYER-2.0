@@ -150,6 +150,7 @@ class CatalogRecoveryDeviceTest {
             val query = "SELECT * FROM streams WHERE providerId=? AND favorite=1 ORDER BY name"
             SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READWRITE).use {
                 it.execSQL("DROP INDEX index_streams_providerId_favorite_name")
+                it.execSQL("DROP INDEX index_streams_providerId_kind_remoteId")
                 it.version = 12
                 beforePlan = it.rawQuery("EXPLAIN QUERY PLAN $query", arrayOf(id)).use { cursor ->
                     buildString { while (cursor.moveToNext()) append(cursor.getString(3)) }
@@ -159,8 +160,8 @@ class CatalogRecoveryDeviceTest {
                 beforeMs = SystemClock.elapsedRealtime() - started
             }
             db = open()
-            // Force/validate the real 12 -> 13 migration before timing normal navigation.
-            assertEquals(13, db.openHelper.readableDatabase.version)
+            // Force/validate the real 12 -> 14 migrations before timing normal navigation.
+            assertEquals(14, db.openHelper.readableDatabase.version)
             assertEquals(200_000, db.dao().streamCountForProvider(id))
             assertEquals(rowId, db.dao().streamRowId(watch.contentKey))
             assertEquals(provider, db.dao().provider(id))
