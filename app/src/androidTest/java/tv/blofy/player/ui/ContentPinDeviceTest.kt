@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.appcompat.app.AppCompatActivity
 import androidx.room.Room
@@ -109,7 +110,16 @@ class ContentPinDeviceTest {
                             bitmap.recycle()
                         }
                     }
-                    click("android:id/button2")
+                    // Exercise actual phone/remote BACK cancellation. A phone may first dismiss
+                    // the IME/error popup; it must then close the PIN and protected destination.
+                    repeat(3) {
+                        if (scenario.state != androidx.lifecycle.Lifecycle.State.DESTROYED) {
+                            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                            val deadline = SystemClock.elapsedRealtime() + 1_000L
+                            while (scenario.state != androidx.lifecycle.Lifecycle.State.DESTROYED &&
+                                SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(25)
+                        }
+                    }
                     await { scenario.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
                 }
             }
