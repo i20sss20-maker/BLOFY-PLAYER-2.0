@@ -133,6 +133,9 @@ class ArtworkFavoritesDeviceTest {
     }
 
     private fun verifyLastCardAndRemote(scenario: ActivityScenario<LibraryActivity>) {
+        // Phone emulators start in touch mode; keyboard focus requires leaving that mode.
+        instrumentation.setInTouchMode(false)
+        instrumentation.waitForIdleSync()
         scenario.onActivity { grid(it).scrollToPosition(29) }
         awaitPoster(scenario, 29)
         scenario.onActivity { assertTrue(grid(it).findViewHolderForAdapterPosition(29)!!.itemView.requestFocus()) }
