@@ -27,7 +27,6 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.RemoteAction
 import tv.blofy.player.core.remote.RemoteKeyRouter
-import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
@@ -325,7 +324,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 currentChannelKey = channel.key
                 dispatchChannelNumber(channelNumber)
             }
-            if (channel.locked) ParentalGate.requirePin(activity, switchAction) else switchAction()
+            switchAction() // PlayerActivity checks the same gate for digits, arrows and this overlay.
         }
 
         private fun dispatchChannelNumber(number: Int) {

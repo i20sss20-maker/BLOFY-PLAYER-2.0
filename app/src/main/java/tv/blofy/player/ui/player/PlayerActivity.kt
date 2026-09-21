@@ -32,7 +32,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.OptIn
-import androidx.appcompat.app.AppCompatActivity
+import tv.blofy.player.core.security.ContentAccessActivity
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -79,7 +79,7 @@ import java.util.Date
 import java.util.Locale
 
 @OptIn(markerClass = [UnstableApi::class])
-open class PlayerActivity : AppCompatActivity() {
+open class PlayerActivity : ContentAccessActivity() {
     private lateinit var session: BlofyPlaybackSession
     private var sessionReleased = true
     private var suspendedPlayback: PlaybackResumeState? = null
@@ -169,8 +169,7 @@ open class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    override fun onContentReady(savedInstanceState: Bundle?) {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val url = intent.getStringExtra(EXTRA_URL).orEmpty()
         if (url.isBlank()) {
@@ -227,6 +226,10 @@ open class PlayerActivity : AppCompatActivity() {
         }
         updateTitle(currentTitle)
         refreshFavoriteState()
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && kind != KIND_LIVE) {
+            hud.removeCallbacks(progressRunnable)
+            hud.post(progressRunnable)
+        }
 
         if (kind == KIND_LIVE) {
             RecentChannelStore.record(this, providerId, currentContentKey)
@@ -782,6 +785,7 @@ open class PlayerActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (!contentReady) return super.dispatchKeyEvent(event)
         val routed = RemoteKeyRouter.route(event)
         if (event.action != KeyEvent.ACTION_DOWN) {
             return super.dispatchKeyEvent(event)
@@ -1104,6 +1108,12 @@ open class PlayerActivity : AppCompatActivity() {
     }
 
     private fun playLiveStream(provider: ProviderEntity, stream: StreamEntity) {
+        contentAccess.requireAccess(provider.id, stream.key) {
+            if (!sessionReleased) playAuthorizedLiveStream(provider, stream)
+        }
+    }
+
+    private fun playAuthorizedLiveStream(provider: ProviderEntity, stream: StreamEntity) {
         if (
             stream.remoteId == currentStreamId &&
             stream.key == currentContentKey &&
@@ -1494,6 +1504,7 @@ open class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        if (!contentReady) { super.onSaveInstanceState(outState); return }
         saveResume()
         val state = if (::session.isInitialized && !sessionReleased) session.resumeState() else suspendedPlayback
         if (state != null) {

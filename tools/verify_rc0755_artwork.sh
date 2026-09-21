@@ -23,6 +23,10 @@ for method in firstAttemptRecoversWithoutShowingAnError favoritesOpenQuicklyInTw
   if grep -Eq 'FAILURES|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[1234]' "artwork-evidence/$method.txt"; then exit 1; fi
   adb shell am force-stop tv.blofy.player.v2
 done
+adb shell am instrument -w -r -e class "tv.blofy.player.ui.ContentPinDeviceTest#contentPinGuardsDetailsEpisodesAndPlayer" \
+  tv.blofy.player.v2.test/androidx.test.runner.AndroidJUnitRunner | tee artwork-evidence/content-pin.txt
+grep -Fq 'OK (1 test)' artwork-evidence/content-pin.txt
+if grep -Eq 'FAILURES|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[1234]' artwork-evidence/content-pin.txt; then exit 1; fi
 collect_evidence
 trap - EXIT
 if grep -q 'FATAL EXCEPTION' artwork-evidence/crashes.txt; then exit 1; fi

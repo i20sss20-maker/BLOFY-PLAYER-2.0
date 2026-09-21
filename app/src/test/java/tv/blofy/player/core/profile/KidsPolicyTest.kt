@@ -16,5 +16,7 @@ class KidsPolicyTest {
         assertFalse(KidsPolicy.isBlocked("Family Adventure", "Action Drama", "A normal story"))
         assertFalse(KidsPolicy.isBlocked("مسلسل عائلي", "دراما", "قصة عائلية"))
         assertFalse(KidsPolicy.isBlocked(null, null, null))
+        assertFalse(KidsPolicy.isBlocked("Essex and Sussex", null, "A sextant voyage"))
+        assertTrue(KidsPolicy.isBlocked("SEX: documentary", null, null))
     }
 }

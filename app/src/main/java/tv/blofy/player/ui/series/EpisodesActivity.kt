@@ -15,7 +15,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
+import tv.blofy.player.core.security.ContentAccessActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -42,7 +42,7 @@ import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.settings.RuntimeSettings
 
-class EpisodesActivity : AppCompatActivity() {
+class EpisodesActivity : ContentAccessActivity() {
     private lateinit var episodeAdapter: EpisodeCardAdapter
     private lateinit var seasonAdapter: FocusTextAdapter<Int>
     private lateinit var seasonList: RecyclerView
@@ -59,8 +59,7 @@ class EpisodesActivity : AppCompatActivity() {
     private val watchProgress = mutableMapOf<String, Int>()
     private lateinit var deviceKind: DeviceClass.Kind
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    override fun onContentReady(savedInstanceState: Bundle?) {
         deviceKind = DeviceClass.detect(this)
         providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         seriesId = intent.getStringExtra(EXTRA_SERIES_ID).orEmpty()

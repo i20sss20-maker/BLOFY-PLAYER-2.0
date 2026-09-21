@@ -34,7 +34,6 @@ import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
-import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
@@ -390,8 +389,7 @@ class SearchActivity : AppCompatActivity() {
 
     private fun guardedOpen(providerId: String, format: String, stream: StreamEntity) {
         RecentSearchStore.record(this, input.text?.toString().orEmpty())
-        if (stream.locked) ParentalGate.requirePin(this) { openStream(providerId, format, stream) }
-        else openStream(providerId, format, stream)
+        openStream(providerId, format, stream)
     }
 
     private fun openStream(providerId: String, format: String, stream: StreamEntity) {

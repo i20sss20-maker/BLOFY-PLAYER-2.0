@@ -89,20 +89,27 @@ object ParentalGate {
     }
 
     fun requirePin(context: Context, onGranted: () -> Unit) {
+        requestPin(context, onGranted, {})
+    }
+
+    internal fun credentialVersion(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_HASH, null)
+
+    internal fun requestPin(context: Context, onGranted: () -> Unit, onDenied: () -> Unit): AlertDialog? {
         if (!hasPin(context)) {
             onGranted()
-            return
+            return null
         }
 
         val initialLock = lockRemainingMs(context)
         if (initialLock > 0L) {
             val seconds = ((initialLock + 999L) / 1000L).coerceAtLeast(1L)
-            AlertDialog.Builder(context)
+            return AlertDialog.Builder(context)
                 .setTitle("رمز الحماية")
                 .setMessage("محاولات كثيرة. حاول مرة أخرى بعد $seconds ثانية.")
                 .setPositiveButton("حسنًا", null)
+                .setOnDismissListener { onDenied() }
                 .show()
-            return
         }
 
         val input = EditText(context).apply {
@@ -118,9 +125,12 @@ object ParentalGate {
             .setNegativeButton("إلغاء", null)
             .setPositiveButton("فتح", null)
             .create()
+        var granted = false
+        dialog.setOnDismissListener { if (!granted) onDenied() }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 if (verify(context, input.text?.toString().orEmpty())) {
+                    granted = true
                     dialog.dismiss()
                     onGranted()
                 } else {
@@ -136,6 +146,7 @@ object ParentalGate {
             }
         }
         dialog.show()
+        return dialog
     }
 
     private fun strongHash(value: String): String {

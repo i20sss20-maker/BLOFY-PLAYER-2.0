@@ -8,6 +8,8 @@
 - The owner now requests a broad code review, missing functionality and justified improvements. See `reviews/rc0755-code-audit.md` for implemented fixes, verification and remaining findings.
 - Preserve the playback/theme boundaries below. Do not deploy this branch's older `services/activation` snapshot over the separately maintained backend, publish an update, or touch MarketOS.
 
+- On 2026-09-21, after the PIN bypass finding and explicit scope were presented, the owner requested “كمل النسخة بعد التعديل ابي اجرب”. This authorizes unifying parental content checks, including episode parents and in-player channel switching, and producing the signed rc07.55 testing APK. Media3/FFmpeg, engine/fallback behavior and theme remain protected.
+
 ## Historical accepted device-test baseline — rc07.9
 
 - Repository: `i20sss20-maker/BLOFY-PLAYER-2.0`

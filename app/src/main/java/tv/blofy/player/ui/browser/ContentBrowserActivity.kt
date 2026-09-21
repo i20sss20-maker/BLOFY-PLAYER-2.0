@@ -31,7 +31,6 @@ import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
-import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
@@ -595,11 +594,11 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun openStream(stream: StreamEntity) {
-        if (stream.locked) ParentalGate.requirePin(this) { openUnlockedStream(stream) } else openUnlockedStream(stream)
+        openUnlockedStream(stream)
     }
 
     private fun openCatchup(stream: StreamEntity) {
-        if (stream.locked) ParentalGate.requirePin(this) { launchCatchup(stream) } else launchCatchup(stream)
+        launchCatchup(stream)
     }
 
     private fun launchCatchup(stream: StreamEntity) {
