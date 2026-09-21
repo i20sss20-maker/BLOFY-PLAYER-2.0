@@ -1,0 +1,78 @@
+name: Publish approved BLOFY rc07.55
+
+on:
+  push:
+    branches: [publish/rc0755-site]
+    paths:
+      - .github/workflows/publish-rc0755.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: blofy-publish-rc0755
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SIGNED_RUN: '35589487508'
+      SIGNED_COMMIT: e6688dd54df2ad60245de0b80edb03d9bf4f8c9d
+      APK_NAME: BLOFY-PLAYER-2.0-rc07.55-PRODUCTION-SIGNED.apk
+      APK_SHA256: 40f70c4447b7a570e63b71181d56b6e5591959a58d63137161cef55f903ba55f
+      RELEASE_TAG: v2.0.0-rc07.55
+    steps:
+      - name: Download the exact owner-approved signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SIGNED_RUN" > signed-run.json
+          jq -e --arg sha "$SIGNED_COMMIT" \
+            '.status == "completed" and .conclusion == "success" and .head_sha == $sha and .path == ".github/workflows/rc0755-signed-test.yml"' signed-run.json
+          mkdir -p publish
+          gh run download "$SIGNED_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "BLOFY-PLAYER-2.0-rc07.55-PRODUCTION-SIGNED-$SIGNED_COMMIT" --dir publish
+          test -s "publish/$APK_NAME"
+          (cd publish && printf '%s  %s\n' "$APK_SHA256" "$APK_NAME" | sha256sum --check)
+          grep -Fxq 'version=2.0.0-rc07.55' publish/build-info.txt
+          grep -Fxq 'versionCode=2000067' publish/build-info.txt
+          grep -Fxq "commit=$SIGNED_COMMIT" publish/build-info.txt
+          grep -Fxq 'production_signed=true' publish/build-info.txt
+          printf '%s  %s\n' "$APK_SHA256" "$APK_NAME" > publish/RC0755-APK-SHA256.txt
+
+      - name: Publish the approved APK without rebuilding
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          BLOFY PLAYER 2.0.0-rc07.55
+
+          إصلاح عرض بوسترات المفضلة، تسريع حفظ الصور محليًا واستكمال الناقص بعد الانقطاع، تحسين تحديث المحتوى للباقات الكبيرة، ومعالجة قفل المحتوى برمز PIN.
+
+          نفس ملف APK الموقّع الذي اختبره المالك واعتمده، برقم إصدار 2000067. يُثبّت فوق النسخة الحالية دون حذف التطبيق.
+          NOTES
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            mkdir -p existing
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$APK_NAME" --dir existing
+            (cd existing && printf '%s  %s\n' "$APK_SHA256" "$APK_NAME" | sha256sum --check)
+          else
+            gh release create "$RELEASE_TAG" "publish/$APK_NAME" publish/RC0755-APK-SHA256.txt \
+              --repo "$GITHUB_REPOSITORY" --target "$SIGNED_COMMIT" \
+              --title 'BLOFY PLAYER 2.0.0-rc07.55' --notes-file release-notes.md --latest
+          fi
+
+      - name: Verify the public APK bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p downloaded
+          curl --fail --location --retry 3 --max-time 120 \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$APK_NAME" \
+            --output "downloaded/$APK_NAME"
+          (cd downloaded && printf '%s  %s\n' "$APK_SHA256" "$APK_NAME" | sha256sum --check)
+          echo 'Approved rc07.55 APK published and public download verified.'
