@@ -24,8 +24,8 @@ internal object DetailsMetadataChips {
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             layoutDirection = context.resources.configuration.layoutDirection
         }, android.widget.FrameLayout.LayoutParams(
-            HorizontalScrollView.LayoutParams.WRAP_CONTENT,
-            HorizontalScrollView.LayoutParams.WRAP_CONTENT
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         ))
         update(scroll, values)
         return scroll
