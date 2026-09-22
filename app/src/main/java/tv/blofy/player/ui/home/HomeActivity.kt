@@ -133,8 +133,7 @@ class HomeActivity : AppCompatActivity() {
             background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background)
             addView(ProgressBar(this@HomeActivity))
             addView(TextView(this@HomeActivity).apply {
-                text = if (ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar")
-                    "جاري فتح المكتبة المحفوظة…" else "Opening your saved library…"
+                text = getString(R.string.home_preparing_library)
                 BlofyTvDesign.applyBody(this)
                 gravity = Gravity.CENTER
                 setPadding(24, 24, 24, 24)
@@ -337,11 +336,11 @@ class HomeActivity : AppCompatActivity() {
             .toList().forEach(actionViews::remove)
         val holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         if (data.continueWatching.isNotEmpty()) {
-            addShelf(holder, "تابع المشاهدة", "أكمل من آخر نقطة", "continue", data.providerId,
+            addShelf(holder, getString(R.string.home_continue_watching), getString(R.string.home_continue_subtitle), "continue", data.providerId,
                 data.continueWatching, data.watchStates)
         }
         if (data.recentlyWatched.isNotEmpty()) {
-            addShelf(holder, "شاهدت مؤخرًا", "ارجع بسرعة لآخر ما فتحته", "recent", data.providerId, data.recentlyWatched)
+            addShelf(holder, getString(R.string.home_recently_watched), getString(R.string.home_recently_watched_subtitle), "recent", data.providerId, data.recentlyWatched)
         }
         var index = minOf(1, feed.childCount)
         while (holder.childCount > 0) {
@@ -371,7 +370,7 @@ class HomeActivity : AppCompatActivity() {
             add(if (item.kind == "series") getString(R.string.home_series_type) else getString(R.string.home_movie_type))
         }.joinToString("   •   ")
         heroSubtitle?.text = item.plot?.takeIf(String::isNotBlank)?.take(210)
-            ?: if (item.kind == "series") "مسلسل مضاف حديثًا إلى مكتبتك — اكتشف المواسم والحلقات." else "فيلم مضاف حديثًا إلى مكتبتك — جاهز للمشاهدة الآن."
+            ?: getString(if (item.kind == "series") R.string.home_series_fallback else R.string.home_movie_fallback)
         heroPrimary?.text = getString(if (item.kind == "series") R.string.home_view_series else R.string.home_watch_now)
         heroArtwork?.let {
             it.animate().cancel()
@@ -405,7 +404,7 @@ class HomeActivity : AppCompatActivity() {
         val hero = feed.getChildAt(0)
         feed.removeViews(1, (feed.childCount - 1).coerceAtLeast(0))
         repeat(3) { shelfIndex ->
-            feed.addView(sectionTitle(if (shelfIndex == 0) "جاري تجهيز مكتبتك" else "", if (shelfIndex == 0) "نرتب المحتوى لك…" else ""))
+            feed.addView(sectionTitle(if (shelfIndex == 0) getString(R.string.home_preparing_library) else "", if (shelfIndex == 0) getString(R.string.home_preparing_subtitle) else ""))
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection; setPadding(0, dp(5), 0, dp(12)) }
             repeat(if (remote) 5 else 6) {
                 row.addView(View(this).apply { background = skeletonSurface() }, LinearLayout.LayoutParams(dp(posterWidth), dp(posterHeight)).apply { marginStart = dp(10) })
@@ -418,7 +417,7 @@ class HomeActivity : AppCompatActivity() {
     private fun renderNoCatalogState() {
         val feed = homeFeed ?: return
         while (feed.childCount > 1) feed.removeViewAt(1)
-        feed.addView(emptyState("مكتبتك جاهزة للعرض", "أضف أو حدّث قائمة التشغيل، وبعدها بتظهر هنا البانرات والصفوف تلقائيًا."))
+        feed.addView(emptyState(getString(R.string.home_library_ready), getString(R.string.home_library_ready_hint)))
     }
 
     private fun renderHomeFeed(data: HomeData) {
@@ -427,22 +426,22 @@ class HomeActivity : AppCompatActivity() {
         while (feed.childCount > 1) feed.removeViewAt(1)
 
         if (data.continueWatching.isNotEmpty()) {
-            addShelf(feed, "تابع المشاهدة", "أكمل من آخر نقطة", "continue", data.providerId, data.continueWatching, data.watchStates)
+            addShelf(feed, getString(R.string.home_continue_watching), getString(R.string.home_continue_subtitle), "continue", data.providerId, data.continueWatching, data.watchStates)
         }
         if (data.recentlyWatched.isNotEmpty()) {
-            addShelf(feed, "شاهدت مؤخرًا", "ارجع بسرعة لآخر ما فتحته", "recent", data.providerId, data.recentlyWatched)
+            addShelf(feed, getString(R.string.home_recently_watched), getString(R.string.home_recently_watched_subtitle), "recent", data.providerId, data.recentlyWatched)
         }
-        addShelf(feed, "أضيف حديثًا", "آخر الأفلام والمسلسلات في مكتبتك", "latest", data.providerId, data.latest)
+        addShelf(feed, getString(R.string.home_recently_added), getString(R.string.home_recently_added_subtitle), "latest", data.providerId, data.latest)
         addTopTenShelf(feed, data.providerId, data.topTen)
-        if (data.topRated.isNotEmpty()) addShelf(feed, "الأعلى تقييمًا", "مختارات قوية حسب تقييم السيرفر", "top", data.providerId, data.topRated)
+        if (data.topRated.isNotEmpty()) addShelf(feed, getString(R.string.home_top_rated), getString(R.string.home_top_rated_subtitle), "top", data.providerId, data.topRated)
         data.featured?.let { addFeaturedBanner(feed, data.providerId, it) }
         addPromotionBanner(feed)
 
-        if (data.arabic.isNotEmpty()) addShelf(feed, "مختارات عربية", "محتوى عربي في واجهة واحدة", "arabic", data.providerId, data.arabic)
+        if (data.arabic.isNotEmpty()) addShelf(feed, getString(R.string.home_arabic_picks), getString(R.string.home_arabic_picks_subtitle), "arabic", data.providerId, data.arabic)
 
-        if (data.ultraHd.isNotEmpty()) addShelf(feed, "4K • UHD", "للمحتوى عالي الجودة", "4k", data.providerId, data.ultraHd)
+        if (data.ultraHd.isNotEmpty()) addShelf(feed, "4K • UHD", getString(R.string.home_4k_subtitle), "4k", data.providerId, data.ultraHd)
 
-        feed.addView(sectionTitle("اختصارات سريعة", "وصل لأقسامك بضغطة واحدة").also { HomeRowOrder.mark(it, HomeRowOrder.QUICK_SHORTCUTS) })
+        feed.addView(sectionTitle(getString(R.string.home_quick_links), getString(R.string.home_quick_links_subtitle)).also { HomeRowOrder.mark(it, HomeRowOrder.QUICK_SHORTCUTS) })
         val quick = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = uiDirection
@@ -450,11 +449,11 @@ class HomeActivity : AppCompatActivity() {
             clipChildren = false
             setPadding(0, 0, 0, dp(22))
         }
-        addStory(quick, "live_story", "البث المباشر", "قنواتك الآن", contentIntent("live"))
-        addStory(quick, "movie_story", "الأفلام", "سينما", contentIntent("movie"))
-        addStory(quick, "series_story", "المسلسلات", "مواسم وحلقات", contentIntent("series"))
-        addStory(quick, "favorite_story", "المفضلة", "اختياراتك", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
-        addStory(quick, "search_story", "البحث", "ابحث فورًا", Intent(this, SearchActivity::class.java))
+        addStory(quick, "live_story", getString(R.string.home_live_tv), getString(R.string.home_live_tv_subtitle), contentIntent("live"))
+        addStory(quick, "movie_story", getString(R.string.home_movies), getString(R.string.home_movies_subtitle), contentIntent("movie"))
+        addStory(quick, "series_story", getString(R.string.home_series), getString(R.string.home_series_subtitle), contentIntent("series"))
+        addStory(quick, "favorite_story", getString(R.string.home_favorites), getString(R.string.home_favorites_subtitle), Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
+        addStory(quick, "search_story", getString(R.string.home_search), getString(R.string.home_search_subtitle), Intent(this, SearchActivity::class.java))
         if (layoutSpec.compact) {
             feed.addView(CinemaStyle.actionStrip(this, quick), LinearLayout.LayoutParams(-1, dp(100)))
         } else feed.addView(quick, LinearLayout.LayoutParams(-1, dp(100)))
@@ -508,7 +507,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun addTopTenShelf(parent: LinearLayout, providerId: String, items: List<StreamEntity>) {
         if (items.isEmpty()) return
-        parent.addView(sectionTitle("TOP 10", "الأكثر تميزًا في مكتبتك الآن"))
+        parent.addView(sectionTitle("TOP 10", getString(R.string.home_top10_subtitle)))
         val scroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; layoutDirection = View.LAYOUT_DIRECTION_LTR; clipToPadding = false }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection; setPadding(dp(4), dp(6), dp(4), dp(14)); clipChildren = false }
         items.take(10).forEachIndexed { index, item ->
@@ -622,7 +621,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun episodeHint(name: String): String? {
         val m = Regex("(?i)(?:S\\d{1,2}E|الحلقة\\s*)(\\d{1,3})").find(name) ?: return null
-        return "الحلقة ${m.groupValues[1]}"
+        return getString(R.string.home_episode_number, m.groupValues[1])
     }
 
     private fun badgeChip(label: String) = TextView(this).apply {
@@ -636,7 +635,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun addFeaturedBanner(parent: LinearLayout, providerId: String, item: StreamEntity) {
-        parent.addView(sectionTitle("مميز لك", "اختيار بارز من مكتبتك"))
+        parent.addView(sectionTitle(getString(R.string.home_featured_for_you), getString(R.string.home_featured_subtitle)))
         val card = FrameLayout(this).apply {
             id = View.generateViewId(); isFocusable = true; isFocusableInTouchMode = remote; isClickable = true; background = heroSurface(); clipChildren = true
             val art = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; alpha = .50f }
@@ -647,7 +646,7 @@ class HomeActivity : AppCompatActivity() {
                 addView(TextView(this@HomeActivity).apply { text = "BLOFY FEATURED"; textSize = 11.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.START; maxLines = 1 })
                 addView(TextView(this@HomeActivity).apply { text = buildList { item.year?.let(::add); item.rating?.let { add("★ $it") }; item.genre?.substringBefore(',')?.let(::add) }.joinToString("   •   "); textSize = 12.5f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START })
-                addView(TextView(this@HomeActivity).apply { text = item.plot?.take(150) ?: "اكتشف هذا الاختيار الآن."; textSize = 13f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START; maxLines = 2; setPadding(0, dp(5), 0, 0) })
+                addView(TextView(this@HomeActivity).apply { text = item.plot?.take(150) ?: getString(R.string.home_featured_fallback); textSize = 13f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START; maxLines = 2; setPadding(0, dp(5), 0, 0) })
             }
             addView(copy, FrameLayout.LayoutParams(-1, -1))
             setOnFocusChangeListener { view, focused ->
@@ -664,8 +663,8 @@ class HomeActivity : AppCompatActivity() {
     private fun addPromotionBanner(parent: LinearLayout) {
         val prefs = getSharedPreferences("blofy_home_promo", MODE_PRIVATE)
         if (!prefs.contains("headline") && !prefs.contains("image_url")) return
-        val headline = prefs.getString("headline", null)?.takeIf { it.isNotBlank() } ?: "اكتشف أكثر مع BLOFY"
-        val subtitle = prefs.getString("subtitle", null)?.takeIf { it.isNotBlank() } ?: "مختارات متجددة وتجربة تلفزيون مصممة عشان توصل للمحتوى بأقل عدد من الضغطات."
+        val headline = prefs.getString("headline", null)?.takeIf { it.isNotBlank() } ?: getString(R.string.home_promo_headline)
+        val subtitle = prefs.getString("subtitle", null)?.takeIf { it.isNotBlank() } ?: getString(R.string.home_promo_subtitle)
         val imageUrl = prefs.getString("image_url", null)?.takeIf { it.isNotBlank() }
         val card = FrameLayout(this).apply {
             background = promoSurface()
