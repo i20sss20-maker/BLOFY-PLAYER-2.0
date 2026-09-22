@@ -55,6 +55,11 @@
     <string name="browser_remote_hint">OK ملء الشاشة   •   ↑↓ القنوات   •   ← رجوع للفئات   •   ضغط مطوّل للأرشيف</string>
     <string name="browser_empty_category">لا يوجد محتوى في هذا القسم • اختر %1$s</string>
     <string name="browser_no_saved_catalog">لا توجد %1$s محفوظة • حدّث المكتبة يدويًا</string>
+    <string name="browser_all_channels">كل القنوات</string>
+    <string name="browser_all_movies">كل الأفلام</string>
+    <string name="browser_all_series">كل المسلسلات</string>
+    <string name="browser_movies_label">أفلام</string>
+    <string name="browser_series_label">مسلسلات</string>
     <string name="live_archive_available">مباشر • أرشيف متاح</string>
     <string name="live_now">مباشر الآن</string>
     <string name="details_movie_type">فيلم</string>
