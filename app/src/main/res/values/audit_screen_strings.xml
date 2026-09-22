@@ -441,6 +441,7 @@
     <string name="cloud_error_unauthorized">Device activation could not be verified</string>
     <string name="cloud_error_missing_snapshot">Back up the old profile first, then create a Pair code</string>
     <string name="cloud_error_generic">Cloud operation failed • %1$s</string>
+    <string name="cloud_error_network">network error</string>
     <string name="cloud_stats">Profile: %1$s\nWatchlist: %2$d • Hidden categories: %3$d • Home rows: %4$d\nCloud revision: %5$d • Last sync: %6$s</string>
     <string name="cloud_not_synced">Not synced yet</string>
     <string name="cloud_guest_local_only">Guest profiles are local-only</string>
