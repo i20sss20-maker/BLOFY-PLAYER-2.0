@@ -106,12 +106,15 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
             }
         }
         activity.setContentView(root)
-        if (!isTv) root.addView(profileActions, FrameLayout.LayoutParams(0, 0))
+        // Keep the profile-action host discoverable from the first lifecycle resume. Details data
+        // can arrive asynchronously; attachActions later moves this same host into the action row.
+        root.addView(profileActions, FrameLayout.LayoutParams(0, 0))
         ViewCompat.requestApplyInsets(content)
     }
 
     fun attachActions(row: LinearLayout) {
         if (isTv) {
+            (profileActions.parent as? android.view.ViewGroup)?.removeView(profileActions)
             row.addView(profileActions, LinearLayout.LayoutParams(-2, dp(CinemaStyle.ActionHeight)).apply {
                 marginStart = dp(8)
             })
