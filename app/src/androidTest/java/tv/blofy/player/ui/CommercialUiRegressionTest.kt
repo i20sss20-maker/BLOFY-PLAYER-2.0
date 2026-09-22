@@ -29,6 +29,7 @@ import tv.blofy.player.ui.common.RootExitConfirmationDialog
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.home.HomeActivity
+import tv.blofy.player.ui.series.EpisodesActivity
 import tv.blofy.player.ui.settings.*
 import java.io.File
 import java.security.MessageDigest
@@ -61,6 +62,18 @@ class CommercialUiRegressionTest {
                         directSource = "https://example.test/sample.mp4", duration = "01:45:00")
                 })
             }
+            db.dao().upsertEpisodes(listOf(
+                EpisodeEntity(
+                    key = "$id:episode:1",
+                    providerId = id,
+                    seriesId = "1",
+                    remoteId = "101",
+                    season = 1,
+                    episode = 1,
+                    title = "رحلة إلى المجهول - S01E01 - Episode 1",
+                    durationSecs = 53L * 60L
+                )
+            ))
         }
         CatalogSyncState.markCatalogCommitted(context, id)
         singleton.set(null, db)
@@ -163,6 +176,28 @@ class CommercialUiRegressionTest {
                     screenshot("details-$kind-$index")
                 }
             }
+        }
+    }
+
+    @Test fun singleSeasonEpisodeLayoutStaysCompactAndReadable() {
+        ActivityScenario.launch<EpisodesActivity>(Intent(context, EpisodesActivity::class.java)
+            .putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, id)
+            .putExtra(EpisodesActivity.EXTRA_SERIES_ID, "1")
+            .putExtra(EpisodesActivity.EXTRA_SERIES_NAME, "رحلة إلى المجهول")
+            .putExtra(EpisodesActivity.EXTRA_SERIES_ART, "https://example.test/$id/poster-1.jpg")).use { scenario ->
+            awaitUi { scenario.onActivity { a ->
+                val recyclers = descendants(a.window.decorView).filterIsInstance<RecyclerView>()
+                assertTrue("Episodes screen must expose season and episode lists", recyclers.size >= 2)
+                val pane = recyclers.first().parent as View
+                assertTrue("One season / one episode should not fill the TV height", pane.height < a.window.decorView.height * 0.72f)
+                val episodeList = recyclers.maxByOrNull { it.width }!!
+                assertTrue("The cached episode must render immediately", episodeList.childCount > 0)
+                val text = descendants(episodeList.getChildAt(0)).filterIsInstance<TextView>()
+                    .joinToString(" ") { it.text.toString() }
+                assertFalse("Episode title must not repeat technical season tokens", text.contains("S01E01", ignoreCase = true))
+                assertFalse("Episode card must not repeat the series title", text.contains("رحلة إلى المجهول"))
+            } }
+            screenshot("episodes-single")
         }
     }
 
