@@ -363,7 +363,7 @@
     <string name="provider_manager_fetching">Fetching playlists and details from the website…</string>
     <string name="provider_manager_empty">No saved servers yet\nAdd a BLOFY Subscriber or Xtream server</string>
     <string name="provider_manager_active">● Active playlist</string>
-    <string name="provider_manager_saved">○ Saved playlist</string>
+    <string name="provider_manager_saved">○ Saved playlist</string>\n    <string name="provider_manager_source_format">%1$s  •  %2$s</string>
     <string name="provider_manager_summary_loading">Reading library status…</string>
     <string name="provider_manager_connect">▶  Connect</string>
     <string name="provider_manager_connect_plain">Connect</string>
