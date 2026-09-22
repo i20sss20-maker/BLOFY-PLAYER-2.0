@@ -482,4 +482,42 @@
     <string name="splash_opening">Opening BLOFY…</string>
     <string name="library_stream_row">%1$s   •   %2$s</string>
 
+
+    <string name="backup_title">Backup &amp; restore</string>
+    <string name="backup_description">Saves favorites, locks, watch history, category order and BLOFY settings. Server login details and PINs are not included.</string>
+    <string name="backup_restore_same_server">Restore is available only for the same server that created the backup.</string>
+    <string name="backup_create">Create backup</string>
+    <string name="backup_restore">Restore backup</string>
+    <string name="backup_creating">Creating backup…</string>
+    <string name="backup_saved">Backup saved successfully</string>
+    <string name="backup_checking">Checking backup file…</string>
+    <string name="backup_ready_confirm">File is ready • confirm restore to continue</string>
+    <string name="backup_confirm_title">Confirm restore</string>
+    <string name="backup_confirm_message">Saved favorites, watch history, category order and BLOFY settings for this server will be applied. Login details and PINs will not change.</string>
+    <string name="backup_confirm_restore">Restore</string>
+    <string name="backup_cancelled">Restore cancelled</string>
+    <string name="backup_restoring">Restoring backup…</string>
+    <string name="backup_restore_result">Restored • %1$d categories • %2$d favorites/locks • %3$d watch entries • %4$d settings</string>
+    <string name="backup_error_no_active_provider">No active server is available</string>
+    <string name="backup_error_unsupported">This backup file is not supported</string>
+    <string name="backup_error_different_server">This backup belongs to a different server</string>
+    <string name="backup_error_too_large">The backup file is larger than the allowed limit</string>
+    <string name="backup_error_create_file">Could not create the backup file</string>
+    <string name="backup_error_read_file">Could not read the backup file</string>
+    <string name="backup_error_generic">Could not complete the operation • check the file and try again</string>
+
+    <string name="category_manager_title">Category order</string>
+    <string name="category_manager_loading">Loading categories…</string>
+    <string name="category_manager_no_provider">No active server</string>
+    <string name="category_manager_live">Live TV</string>
+    <string name="category_manager_movies">Movies</string>
+    <string name="category_manager_series">Series</string>
+    <string name="category_manager_status">%1$s • %2$d categories • %3$d hidden</string>
+    <string name="category_manager_empty">No saved categories in this section</string>
+    <string name="category_manager_hidden">Hidden</string>
+    <string name="category_manager_visible_order">Visible • order %1$d</string>
+    <string name="category_manager_show">Show</string>
+    <string name="category_manager_hide">Hide</string>
+    <string name="category_manager_pin_top">Pin to top</string>
+
 </resources>
