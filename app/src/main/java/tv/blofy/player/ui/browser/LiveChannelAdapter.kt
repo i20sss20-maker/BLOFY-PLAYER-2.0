@@ -58,7 +58,7 @@ internal class LiveChannelAdapter(
         val compact = translucent
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = context.resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
             setPadding(
                 dp(if (compact) 8 else 12),
@@ -91,7 +91,7 @@ internal class LiveChannelAdapter(
 
         val textBox = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
         }
         val title = TextView(context).apply {
             textSize = TvUiTuning.sp(context, if (compact) 12.2f else 13.4f)
@@ -99,7 +99,7 @@ internal class LiveChannelAdapter(
             setTextColor(BlofyTvDesign.TextPrimary)
             maxLines = if (compact) 1 else 2
             ellipsize = android.text.TextUtils.TruncateAt.END
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             includeFontPadding = false
             setLineSpacing(0f, 1.03f)
         }
@@ -109,7 +109,7 @@ internal class LiveChannelAdapter(
             setTextColor(BlofyTvDesign.TextMuted)
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             includeFontPadding = false
         }
         val progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -140,7 +140,7 @@ internal class LiveChannelAdapter(
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
         holder.title.text = (if (item.locked) "🔒  " else "") + item.name
-        holder.meta.text = if (item.archiveEnabled) "مباشر • أرشيف متاح" else "مباشر الآن"
+        holder.meta.text = holder.itemView.context.getString(if (item.archiveEnabled) R.string.live_archive_available else R.string.live_now)
         holder.badge.text = if (item.archiveEnabled) "ARCH" else "LIVE"
         holder.progress.visibility = View.GONE
         holder.artworkCandidates = listOf(item.icon, item.backdrop).filterNot { it.isNullOrBlank() }
