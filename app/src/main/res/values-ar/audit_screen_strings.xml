@@ -521,4 +521,26 @@
     <string name="category_manager_hide">إخفاء</string>
     <string name="category_manager_pin_top">تثبيت</string>
 
+
+    <string name="parental_title">الحماية الأبوية</string>
+    <string name="parental_subtitle">استخدم PIN من 4 إلى 8 أرقام لفتح القنوات أو المحتوى المقفل.</string>
+    <string name="parental_enabled">● الحماية مفعّلة</string>
+    <string name="parental_not_set">○ لم يتم تعيين PIN</string>
+    <string name="parental_set_pin">تعيين PIN</string>
+    <string name="parental_change_pin">تغيير PIN</string>
+    <string name="parental_clear_pin">إلغاء PIN</string>
+    <string name="parental_disable_title">إلغاء الحماية</string>
+    <string name="parental_disable_message">سيتم إزالة PIN. المحتوى الذي يحمل علامة قفل لن يطلب رمز الحماية حتى تعيّن PIN جديدًا.</string>
+    <string name="parental_back">رجوع</string>
+    <string name="parental_new_pin_hint">PIN الجديد</string>
+    <string name="parental_enter_digits">أدخل من 4 إلى 8 أرقام</string>
+    <string name="parental_next">التالي</string>
+    <string name="parental_cancel">إلغاء</string>
+    <string name="parental_invalid_pin">PIN لازم يكون من 4 إلى 8 أرقام</string>
+    <string name="parental_confirm_pin_hint">تأكيد PIN</string>
+    <string name="parental_confirm_title">تأكيد PIN</string>
+    <string name="parental_save">حفظ</string>
+    <string name="parental_mismatch">الرمزان غير متطابقين</string>
+    <string name="parental_save_failed">تعذر حفظ PIN</string>
+
 </resources>
