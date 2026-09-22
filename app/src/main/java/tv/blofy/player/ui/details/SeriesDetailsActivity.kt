@@ -199,9 +199,9 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     launchEpisode(provider, currentResume.episode, currentResume.positionMs)
                 }
                 primary = resumeButton
-                actions.addView(resumeButton, LinearLayout.LayoutParams(dp(142), dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
+                actions.addView(resumeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
                 actions.addView(actionButton(getString(R.string.details_start_over)) { launchEpisode(provider, currentResume.episode, 0L) },
-                    LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
             }
 
             val episodes = actionButton(getString(R.string.details_seasons_episodes), primary == null) {
@@ -213,11 +213,11 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 })
             }
             if (primary == null) primary = episodes
-            actions.addView(episodes, LinearLayout.LayoutParams(dp(160), dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
+            actions.addView(episodes, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
 
             metadata?.trailerUrl?.takeIf(String::isNotBlank)?.let { trailerUrl ->
                 actions.addView(actionButton(getString(R.string.details_trailer)) { openExternal(trailerUrl) },
-                    LinearLayout.LayoutParams(dp(106), dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
             }
 
             favoriteButton = actionButton(getString(if (stream.favorite) R.string.details_favorite_on else R.string.details_favorite_off)) {
@@ -227,7 +227,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     favoriteButton.text = getString(if (!current.favorite) R.string.details_favorite_on else R.string.details_favorite_off)
                 }
             }
-            actions.addView(favoriteButton, LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)))
+            actions.addView(favoriteButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)))
             layout.attachActions(actions)
 
             val castContainer = LinearLayout(this@SeriesDetailsActivity).apply {
@@ -281,6 +281,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
     private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         text = label
         CinemaStyle.styleButton(this, primary)
+        minimumWidth = dp(if (primary) 132 else 108)
         setOnClickListener { action() }
     }
 
