@@ -1,5 +1,14 @@
 # BLOFY PLAYER 2.0 — Current project state
 
+## Latest owner scope — 2026-09-22
+
+- The owner reported a blank/frozen screen after the BLOFY logo and before QR/login, requested a full Android project review, faster durable poster/package storage, and approved the work with “يلا سو كل شيء اوك”. Deliver a signed testing APK while retaining `2.0.0-rc07.55` / `2000067`, production certificate, customer data, theme and playback engines.
+- Current Android source branches: `fix/rc0755-startup-storage` and the existing signing gate `fix/rc0755-favorites-artwork`. Audit: `reviews/rc0755-startup-storage-audit.md`.
+- Delivered testing source: `555ed1fe125ce0d2841e3435eb7f0966189ce2eb`; signed run `35708113906`, exact-source QA `35708112708`, Android CI and FFmpeg Native CI passed. 671 unit tests passed; lint has zero errors / 554 warnings. API 35 phone and API 31 TV passed startup contention, offline artwork/resume, 200,000-row catalog and parental PIN flows. Supplemental test-only source `8c079ae0ff34f13b9b512169e53298f6c545d3e2` and run `35708577526` also passed.
+- Testing APK SHA-256: `a2a398d70153c0df713130a98f9638b94b642e4fe4a4a30023b5aedd7f535552`, 16,780,108 bytes. The version and production signing certificate are unchanged; install over the existing app. Owner acceptance on the affected device is not yet recorded.
+- The prior website publication approval applied to the exact accepted APK with SHA-256 `40f70c4447b7a570e63b71181d56b6e5591959a58d63137161cef55f903ba55f`. Do not overwrite that public download with this new test candidate before owner acceptance/publication authorization.
+- Keep the separately maintained activation backend on its current `main`; this Android branch contains an older backend snapshot. Do not deploy it or touch MarketOS.
+
 ## Current owner instructions — 2026-09-21
 
 - Current owner-approved version: `2.0.0-rc07.55`, version code `2000067`. The owner requires both to remain unchanged for this delivery. This supersedes the historical version-increment instruction below.
