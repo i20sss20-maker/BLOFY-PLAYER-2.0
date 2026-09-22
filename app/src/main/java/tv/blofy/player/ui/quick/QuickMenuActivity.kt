@@ -64,7 +64,7 @@ class QuickMenuActivity : AppCompatActivity() {
             gravity = Gravity.START
         })
         panel.addView(TextView(this).apply {
-            text = getString(R.string.quick_menu_title)
+            text = getString(R.string.quick_access_title)
             textSize = 26f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
