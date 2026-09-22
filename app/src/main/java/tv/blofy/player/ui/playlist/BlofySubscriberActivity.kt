@@ -32,6 +32,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import java.util.UUID
 
 class BlofySubscriberActivity : AppCompatActivity() {
@@ -119,11 +120,12 @@ class BlofySubscriberActivity : AppCompatActivity() {
                 view.background = fieldBackground(focused)
                 if (tv) {
                     view.animate().cancel()
+                    val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
                     view.animate()
-                        .scaleX(if (focused) 1.012f else 1f)
-                        .scaleY(if (focused) 1.012f else 1f)
-                        .translationZ(if (focused) dp(6).toFloat() else 0f)
-                        .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                        .scaleX(targetScale)
+                        .scaleY(targetScale)
+                        .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(6).toFloat()) else 0f)
+                        .setDuration(TvUiTuning.focusDuration(view.context, focused))
                         .start()
                 }
             }
@@ -252,11 +254,12 @@ class BlofySubscriberActivity : AppCompatActivity() {
                 view.background = buttonBackground(focused)
                 if (tv) {
                     view.animate().cancel()
+                    val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.024f) else 1f
                     view.animate()
-                        .scaleX(if (focused) 1.024f else 1f)
-                        .scaleY(if (focused) 1.024f else 1f)
-                        .translationZ(if (focused) dp(8).toFloat() else 0f)
-                        .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                        .scaleX(targetScale)
+                        .scaleY(targetScale)
+                        .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(8).toFloat()) else 0f)
+                        .setDuration(TvUiTuning.focusDuration(view.context, focused))
                         .start()
                 }
             }
