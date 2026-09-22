@@ -312,7 +312,7 @@ class SearchActivity : AppCompatActivity() {
 
         addView(TextView(this@SearchActivity).apply {
             val suffix = if (items.size >= SECTION_LIMIT) "+" else ""
-            text = "${sectionTitle(kind)}   •   ${items.size}$suffix"
+            text = getString(R.string.search_section_header, sectionTitle(kind), "${items.size}$suffix")
             textSize = 19f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -363,7 +363,7 @@ class SearchActivity : AppCompatActivity() {
 
             val copy = LinearLayout(this@SearchActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START }
             copy.addView(TextView(this@SearchActivity).apply {
-                text = (if (stream.locked) "🔒  " else "") + ContentPresentation.of(stream).title
+                text = if (stream.locked) getString(R.string.search_locked_title, ContentPresentation.of(stream).title) else ContentPresentation.of(stream).title
                 textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 1; gravity = Gravity.START
                 ellipsize = android.text.TextUtils.TruncateAt.END
             })
