@@ -30,6 +30,7 @@ import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Collections
 
 /**
  * Entry preparation is deliberately bounded. Huge Xtream libraries can contain 200k+ items;
@@ -126,8 +127,8 @@ object FullCatalogPreparer {
                         for (batch in urls.distinct().chunked(pageSize)) {
                             ensureCurrentSource()
                             if (SystemClock.elapsedRealtime() >= deadline) throw ChunkBudgetReached()
-                            val saved = ConcurrentHashMap.newKeySet<String>()
-                            val failed = ConcurrentHashMap.newKeySet<String>()
+                            val saved = Collections.synchronizedSet(mutableSetOf<String>())
+                            val failed = Collections.synchronizedSet(mutableSetOf<String>())
                             val missing = batch.mapNotNull { url ->
                                 val key = PreparationJournal.hash(url)
                                 if (ArtworkLoader.isPersisted(app, url)) { saved.add(key); null }
