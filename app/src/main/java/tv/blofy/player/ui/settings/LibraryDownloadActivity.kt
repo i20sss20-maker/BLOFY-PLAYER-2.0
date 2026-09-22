@@ -76,6 +76,7 @@ class LibraryDownloadActivity : AppCompatActivity() {
             tag = "library_download_resume"
             text = copy("استكمال الناقص / إعادة المحاولة", "Resume missing items / Retry")
             CinemaStyle.styleButton(this)
+            minimumHeight = dp(48)
             isEnabled = false
             setOnClickListener { resumeDownloads() }
         }
