@@ -144,7 +144,12 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             maxLines = 2
         }, LinearLayout.LayoutParams(-1, dp(36)))
-        val qrSize = (resources.configuration.screenHeightDp - 390).coerceIn(132, 198)
+        val screenHeightDp = resources.configuration.screenHeightDp
+        val qrSize = if (screenHeightDp <= 600) {
+            (screenHeightDp - 410).coerceIn(112, 150)
+        } else {
+            (screenHeightDp - 390).coerceIn(150, 198)
+        }
         activation.addView(qrPanel(), LinearLayout.LayoutParams(dp(qrSize), dp(qrSize)).apply {
             topMargin = dp(8)
             bottomMargin = dp(8)
