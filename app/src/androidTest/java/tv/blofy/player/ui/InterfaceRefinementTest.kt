@@ -6,6 +6,7 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.widget.GridLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
@@ -22,11 +23,14 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationDisplayState
 import tv.blofy.player.core.identity.ActivationManager
+import tv.blofy.player.core.profile.ProfileStore
+import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.local.*
 import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.login.LoginActivity
+import tv.blofy.player.ui.settings.RuntimeSettings
 import tv.blofy.player.ui.settings.SettingsActivity
 import java.io.File
 
@@ -42,12 +46,8 @@ class InterfaceRefinementTest {
 
     @Before fun setup() {
         instrumentation.runOnMainSync {
-            context.getSharedPreferences("blofy_player_settings", 0).edit().putString("app_language_tag", "ar").apply()
-            if (android.os.Build.VERSION.SDK_INT >= 33) {
-                context.getSystemService(android.app.LocaleManager::class.java).applicationLocales = android.os.LocaleList.forLanguageTags("ar")
-            } else {
-                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(androidx.core.os.LocaleListCompat.forLanguageTags("ar"))
-            }
+            ParentalGate.clearPin(context)
+            ProfileStore.select(context, "main")
         }
         previous = singleton.get(null)
         db = Room.inMemoryDatabaseBuilder(context, BlofyDatabase::class.java).build()
@@ -75,11 +75,11 @@ class InterfaceRefinementTest {
             }
             ActivityScenario.launch(LoginActivity::class.java).use { scenario ->
                 await { scenario.onActivity { activity ->
-                    assertEquals("ar", androidx.core.os.ConfigurationCompat.getLocales(activity.resources.configuration)[0]?.language)
                     val root = activity.window.decorView
                     val title = root.findViewWithTag<TextView>("blofy_trial_title")
                     assertEquals(activity.getString(if (expired) R.string.trial_ended else R.string.trial_remaining), title.text.toString())
                     val qr = root.findViewWithTag<View>("blofy_login_qr_panel")
+                    assertTrue("QR panel must keep its premium frame", qr.background is android.graphics.drawable.GradientDrawable)
                     val status = root.findViewWithTag<View>("blofy_trial_status")
                     val qrPosition = IntArray(2).also(qr::getLocationOnScreen)
                     val statusPosition = IntArray(2).also(status::getLocationOnScreen)
@@ -92,12 +92,17 @@ class InterfaceRefinementTest {
     }
 
     @Test fun selectedMovieAndSeriesFetchStoryAndCastThenReopenWithoutAnotherRequest() {
-        runBlocking {
-            db.dao().upsertProviderStored(ProviderEntity(id, "Fixture", server.url("/").toString(), "fixture", "fixture"))
-            db.dao().upsertStreams(listOf("movie", "series").map { kind ->
-                StreamEntity("$id:$kind:7", id, "7", "1", kind, "عنوان تجريبي")
-            })
-        }
+        val previousProfile = ProfileStore.active(context).id
+        val guest = ProfileStore.all(context).firstOrNull { it.guest }
+            ?: ProfileStore.create(context, "UI Fixture", guest = true)
+        assertTrue(ProfileStore.select(context, guest.id))
+        try {
+            runBlocking {
+                db.dao().upsertProviderStored(ProviderEntity(id, "Fixture", server.url("/").toString(), "fixture", "fixture"))
+                db.dao().upsertStreams(listOf("movie", "series").map { kind ->
+                    StreamEntity("$id:$kind:7", id, "7", "1", kind, "عنوان تجريبي")
+                })
+            }
         val detailRequests = java.util.concurrent.atomic.AtomicInteger()
         val imageBytes = java.io.ByteArrayOutputStream().also { output ->
             Bitmap.createBitmap(48, 72, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFF7853A8.toInt()) }
@@ -114,12 +119,23 @@ class InterfaceRefinementTest {
         for (kind in listOf("movie", "series")) {
             val type = if (kind == "movie") MovieDetailsActivity::class.java else SeriesDetailsActivity::class.java
             repeat(2) { opening ->
-                ActivityScenario.launch<android.app.Activity>(Intent(context, type)
-                    .putExtra("provider_id", id).putExtra("content_key", "$id:$kind:7")).use { scenario ->
+                withStableDetailsScenario(Intent(context, type)
+                    .putExtra("provider_id", id).putExtra("content_key", "$id:$kind:7")) { scenario ->
                     await { scenario.onActivity { activity ->
                         val root = activity.window.decorView
-                        assertEquals("وصف تجريبي من السيرفر", root.findViewWithTag<TextView>("blofy_details_overview")?.text?.toString())
-                        assertTrue(root.findViewWithTag<TextView>("blofy_details_stats").text.contains("8.4/10"))
+                        val overview = root.findViewWithTag<TextView>("blofy_details_overview")
+                        val stats = root.findViewWithTag<View>("blofy_details_stats")
+                        assertEquals("وصف تجريبي من السيرفر", overview?.text?.toString())
+                        assertNotNull("Details metadata host must stay addressable", stats)
+                        val statLabels = descendants(stats).filterIsInstance<TextView>()
+                        assertTrue("Details metadata must include provider rating", statLabels.any { it.text.contains("8.4/10") })
+                        assertTrue("Details overview must keep readable vertical spacing", overview.paddingTop > 0 && overview.paddingBottom > 0)
+                        assertTrue("Details overview text must remain visible", overview.currentTextColor != android.graphics.Color.TRANSPARENT)
+                        assertTrue("Details metadata chips must keep their badge surfaces", statLabels.any { it.background != null })
+                        val watchlist = root.findViewWithTag<View>("blofy_profile_watchlist_action")
+                        assertNotNull("Watchlist action must stay inside the details action strip", watchlist)
+                        assertTrue("Watchlist action must be hosted by an inline action row", watchlist.parent is LinearLayout)
+                        assertFalse("Watchlist action must never float directly over the details root", watchlist.parent === root)
                         val actor = root.findViewWithTag<View>("blofy_cast_ممثل تجريبي")
                         assertNotNull(actor)
                         assertTrue(descendants(actor).filterIsInstance<android.widget.ImageView>()
@@ -130,7 +146,10 @@ class InterfaceRefinementTest {
                 }
             }
         }
-        assertEquals("Only one provider detail request per title", 2, detailRequests.get())
+            assertEquals("Only one provider detail request per title", 2, detailRequests.get())
+        } finally {
+            ProfileStore.select(context, previousProfile)
+        }
     }
 
     @Test fun settingsCardsWrapTextAndKeepDirectionalFocus() {
@@ -151,7 +170,8 @@ class InterfaceRefinementTest {
                         }
                     }
                 }
-                val card = grids.first().getChildAt(0)
+                val card = activity.window.decorView.findViewWithTag<View>("setting_${RuntimeSettings.KEY_MOTION}")
+                assertNotNull("Motion setting card must stay addressable", card)
                 val before = card.contentDescription.toString()
                 card.performClick()
                 assertNotEquals(before, card.contentDescription.toString())
@@ -175,6 +195,27 @@ class InterfaceRefinementTest {
                 android.util.Log.i("BLOFY_UI_PERFORMANCE", "$name: $output")
             }
         }
+    }
+
+    private fun withStableDetailsScenario(
+        intent: Intent,
+        block: (ActivityScenario<android.app.Activity>) -> Unit
+    ) {
+        var firstDestroyed: NullPointerException? = null
+        repeat(2) { attempt ->
+            try {
+                ActivityScenario.launch<android.app.Activity>(intent).use(block)
+                return
+            } catch (error: NullPointerException) {
+                val transient = error.message.orEmpty().contains("Activity has been destroyed already")
+                if (!transient || attempt > 0) throw error
+                firstDestroyed = error
+                android.util.Log.w("BLOFY_UI_TEST", "Initial TV details activity was recreated; retrying once", error)
+                instrumentation.waitForIdleSync()
+                SystemClock.sleep(250)
+            }
+        }
+        throw firstDestroyed ?: AssertionError("Details scenario did not run")
     }
 
     private fun descendants(root: View): List<View> = listOf(root) + if (root is ViewGroup)

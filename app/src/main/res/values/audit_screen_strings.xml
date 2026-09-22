@@ -32,6 +32,7 @@
     <string name="login_one_device">One device</string>
     <string name="login_stable_identity">Stable identity</string>
     <string name="login_connection_cancelled">Connection cancelled</string>
+    <string name="login_updating_subscriber_connection">Updating BLOFY subscriber connection…</string>
     <string name="login_add_playlist_first">Add a playlist first</string>
     <string name="login_checking_activation">Checking device activation…</string>
     <string name="login_activated_add_playlist">Device activated • add a playlist</string>
@@ -56,6 +57,7 @@
     <string name="browser_remote_hint">OK full screen   •   ↑↓ channels   •   ← categories   •   long press for archive</string>
     <string name="browser_empty_category">No content in this category • choose %1$s</string>
     <string name="browser_no_saved_catalog">No saved %1$s • refresh the library manually</string>
+    <string name="browser_all_channels">All channels</string>
     <string name="browser_all_movies">All movies</string>
     <string name="browser_all_series">All series</string>
     <string name="browser_movies_label">movies</string>
@@ -80,6 +82,14 @@
     <string name="details_trailer_open_failed">Could not open the trailer on this device.</string>
     <string name="details_seasons_count">%1$d seasons</string>
     <string name="details_episodes_count">%1$d episodes</string>
+    <plurals name="details_seasons_count_plural">
+        <item quantity="one">%1$d season</item>
+        <item quantity="other">%1$d seasons</item>
+    </plurals>
+    <plurals name="details_episodes_count_plural">
+        <item quantity="one">%1$d episode</item>
+        <item quantity="other">%1$d episodes</item>
+    </plurals>
     <string name="details_continue_episode">Continue season %1$d   •   episode %2$d</string>
     <string name="details_continue_episode_progress">Continue season %1$d   •   episode %2$d   •   %3$d%%</string>
     <string name="details_resume_episode">▶  Resume episode</string>
@@ -140,4 +150,450 @@
     <string name="home_recent_channels">Recent channels</string>
     <string name="home_blofy_collections">BLOFY collections</string>
     <string name="home_continue_compact">Continue watching</string>
+
+    <string name="library_no_continue">Nothing to resume yet</string>
+    <string name="library_no_favorites">No favorites yet</string>
+    <string name="library_episode_url_failed">Could not prepare the episode link</string>
+    <string name="recent_channels_empty">No recent channels yet</string>
+    <string name="recent_channels_live">● Live</string>
+
+    <string name="playlist_form_add_server">Add server</string>
+    <string name="playlist_form_edit_server">Edit server</string>
+    <string name="playlist_form_name_hint">Server name (optional)</string>
+    <string name="playlist_form_url_hint">Server URL</string>
+    <string name="playlist_form_username_hint">Username</string>
+    <string name="playlist_form_password_hint">Password</string>
+    <string name="playlist_form_https_preferred">HTTPS preferred • HTTP available when needed</string>
+    <string name="playlist_form_http_warning">Warning: HTTP connection is not encrypted</string>
+    <string name="playlist_form_https_secure">HTTPS connection is encrypted</string>
+    <string name="playlist_form_url_required">Enter the server URL</string>
+    <string name="playlist_form_url_invalid">The server URL is not valid</string>
+    <string name="playlist_form_userinfo_not_allowed">Use the username and password fields</string>
+    <string name="playlist_form_host_unsafe">This server address is not allowed</string>
+    <string name="playlist_form_credentials_required">Enter the username and password</string>
+    <string name="playlist_form_http_dialog_title">Unencrypted HTTP connection</string>
+    <string name="playlist_form_http_dialog_message">Do you want to continue with this URL?</string>
+    <string name="playlist_form_back">Back</string>
+    <string name="playlist_form_continue">Continue</string>
+    <string name="playlist_form_saving">Saving Xtream…</string>
+    <string name="playlist_form_no_content">The server returned no content</string>
+    <string name="playlist_form_section_failed">Could not load one of the playlist sections</string>
+    <string name="playlist_form_saved_entering">Saved • opening</string>
+    <string name="playlist_form_saved">Saved</string>
+    <string name="playlist_form_setup_failed">Could not prepare the server • check the details and connection, then try again</string>
+    <string name="playlist_form_save_connect">Save and connect</string>
+    <string name="playlist_form_save">Save</string>
+    <string name="playlist_form_missing">Playlist not found • return to saved playlists</string>
+    <string name="playlist_form_legacy_unsupported">This playlist is old and unsupported • enter Xtream details</string>
+    <string name="playlist_form_read_failed">Could not read playlist details • reopen this page to try again</string>
+
+
+    <string name="catchup_title">BLOFY Archive</string>
+    <string name="catchup_loading">Loading previous programs…</string>
+    <string name="catchup_unsupported">This channel does not support archive</string>
+    <string name="catchup_channel_archive">%1$s  •  archive %2$s</string>
+    <string name="catchup_empty">No previous programs are available for this channel</string>
+    <plurals name="catchup_archive_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+
+
+    <string name="guide_title">Channel guide</string>
+    <string name="guide_loading">Loading</string>
+    <string name="guide_select_channel">Choose a channel</string>
+    <string name="guide_now_next">Now and next from the program guide</string>
+    <string name="guide_now">Now</string>
+    <string name="guide_program_unavailable">Program information is unavailable</string>
+    <string name="guide_next">Next</string>
+    <string name="guide_next_unavailable">Next program information is unavailable</string>
+    <string name="guide_no_reminder">No program available for a reminder</string>
+    <string name="guide_remote_hint">OK play channel   •   ← channels   •   ← again for categories   •   BACK return</string>
+    <plurals name="guide_channel_count">
+        <item quantity="one">%1$d channel</item>
+        <item quantity="other">%1$d channels</item>
+    </plurals>
+    <string name="guide_archive_supported">Archive supported</string>
+    <string name="guide_live_broadcast">Live broadcast</string>
+    <string name="guide_remind_before">Remind me before %1$s</string>
+    <string name="guide_reminder_set">Reminder set • %1$s</string>
+    <string name="guide_reminder_notice">You’ll get a notification five minutes before the program</string>
+    <string name="guide_reminder_failed">Could not set a reminder for this program</string>
+    <string name="guide_notifications_required">Enable notifications to use program reminders</string>
+    <string name="guide_all_channels">All channels</string>
+    <string name="guide_archive_badge">Archive</string>
+    <string name="guide_live_badge">Live</string>
+
+
+    <string name="subscriber_title">BLOFY Subscribers</string>
+    <string name="subscriber_subtitle">Sign in with your username and password only</string>
+    <string name="subscriber_playlist_name">Playlist name (optional)</string>
+    <string name="subscriber_username">Username</string>
+    <string name="subscriber_username_hint">Enter username</string>
+    <string name="subscriber_password">Password</string>
+    <string name="subscriber_password_hint">Enter password</string>
+    <string name="subscriber_saved_name_read_failed">Could not read the saved playlist name • you can enter a name</string>
+    <string name="subscriber_username_required">Enter username</string>
+    <string name="subscriber_password_required">Enter password</string>
+    <string name="subscriber_service_unavailable">BLOFY subscriber service is not configured</string>
+    <string name="subscriber_verifying">Verifying subscription…</string>
+    <string name="subscriber_verified_preparing">Verified • preparing your library</string>
+    <string name="subscriber_login_failed">Could not sign in • %1$s</string>
+    <string name="subscriber_check_details">Check your details</string>
+    <string name="subscriber_save_connect">Save and connect</string>
+    <string name="subscriber_auto_server_settings">Server settings are prepared automatically for your account</string>
+
+    <string name="profile_watchlist_title">My Watchlist</string>
+    <string name="profile_watchlist_subtitle">Picks for %1$s</string>
+    <string name="profile_watchlist_saved">✓ My Watchlist</string>
+    <string name="profile_watchlist_add">+ My Watchlist</string>
+
+
+    <string name="profiles_title">Profiles</string>
+    <string name="profiles_current">Current profile: %1$s  •  %2$d/8</string>
+    <string name="profiles_guest_meta">Guest profile • independent preferences</string>
+    <string name="profiles_kids_locked_meta">Kids mode • protected by PIN</string>
+    <string name="profiles_kids_meta">Kids mode • a profile PIN can be added</string>
+    <string name="profiles_standard_meta">Viewing, favorites and main settings</string>
+    <string name="profiles_add">＋ Add profile</string>
+    <string name="profiles_delete_current">Delete current profile</string>
+    <string name="profiles_current_security">Current profile protection</string>
+    <string name="profiles_pin_change_hint">Enter a new PIN to change it</string>
+    <string name="profiles_pin_hint">PIN from 4 to 8 digits</string>
+    <string name="profiles_save_profile_pin">Save profile PIN</string>
+    <string name="profiles_profile_pin_saved">PIN saved for %1$s</string>
+    <string name="profiles_pin_invalid">Enter 4 to 8 digits</string>
+    <string name="profiles_clear_profile_pin">Remove profile PIN</string>
+    <string name="profiles_profile_pin_cleared">Profile PIN removed</string>
+    <string name="profiles_content_pin_title">Locked content PIN</string>
+    <string name="profiles_save_content_pin">Save content PIN</string>
+    <string name="profiles_content_pin_saved">Content PIN saved</string>
+    <string name="profiles_clear_content_pin">Remove content PIN</string>
+    <string name="profiles_content_pin_cleared">Content PIN removed</string>
+    <string name="profiles_name_hint">Profile name</string>
+    <string name="profiles_kids_mode">Kids mode</string>
+    <string name="profiles_guest_mode">Guest profile</string>
+    <string name="profiles_create_title">Add profile</string>
+    <string name="profiles_cancel">Cancel</string>
+    <string name="profiles_create">Add</string>
+    <string name="profiles_create_failed">Could not create profile</string>
+    <string name="profiles_last_delete_blocked">The last profile cannot be deleted</string>
+    <string name="profiles_delete_title">Delete %1$s?</string>
+    <string name="profiles_delete_message">Only this profile’s Watchlist settings and interface order will be deleted.</string>
+    <string name="profiles_delete">Delete</string>
+    <string name="profiles_adult_required">Choose an adult profile to manage protection and profiles</string>
+    <string name="profiles_open_title">Open profile %1$s</string>
+    <string name="profiles_adult_pin_title">Adult profile protection PIN</string>
+    <string name="profiles_enter_pin">Enter this profile’s PIN</string>
+    <string name="profiles_open">Open</string>
+    <string name="profiles_pin_wrong">Incorrect PIN</string>
+    <string name="profiles_selected">Selected %1$s</string>
+
+
+    <string name="quick_access_title">Quick access</string>
+    <string name="quick_for_you">For you</string>
+    <string name="quick_for_you_subtitle">Suggestions from your library based on viewing</string>
+    <string name="quick_guide">Channel guide</string>
+    <string name="quick_guide_subtitle">Now, next and live playback</string>
+    <string name="quick_search">Search all</string>
+    <string name="quick_continue">Continue watching</string>
+    <string name="quick_watchlist">My Watchlist</string>
+    <string name="quick_watchlist_subtitle">Content saved to watch later</string>
+    <string name="quick_favorites">Favorites</string>
+    <string name="quick_recent_channels">Recent channels</string>
+    <string name="quick_recent_channels_subtitle">Jump back to live TV quickly</string>
+    <string name="quick_cloud_subtitle">Backup, sync and restore</string>
+    <string name="quick_profiles">Profiles &amp; protection</string>
+    <string name="quick_profiles_subtitle">Main, kids and PIN</string>
+    <string name="quick_artwork_performance">Artwork quality &amp; performance</string>
+    <string name="quick_artwork_performance_subtitle">Poster clarity and light mode</string>
+    <string name="quick_settings">Settings</string>
+
+    <string name="search_title">Search everything</string>
+    <string name="search_filter_all">All</string>
+    <string name="search_filter_live">Live</string>
+    <string name="search_filter_movies">Movies</string>
+    <string name="search_filter_series">Series</string>
+    <string name="search_input_channel">Type a channel name</string>
+    <string name="search_input_series">Type a series name</string>
+    <string name="search_input_movie">Type a movie name</string>
+    <string name="search_input_content">Type a title</string>
+    <string name="search_recent">Recent searches</string>
+    <string name="search_clear">Clear</string>
+    <string name="search_results_all">%1$d results • live, movies and series</string>
+    <string name="search_results_kind">%1$d results • %2$s</string>
+    <string name="search_no_matches">No matching results were found in your playlist</string>
+    <string name="search_no_results">No results</string>
+    <string name="search_hint_live">Fast local search across all channels</string>
+    <string name="search_hint_series">Fast local search across all series</string>
+    <string name="search_hint_movies">Fast local search across all movies</string>
+    <string name="search_hint_all">Live TV, movies and series in one search</string>
+    <string name="search_section_live">Live TV</string>
+    <string name="search_section_series">Series</string>
+    <string name="search_section_movies">Movies</string>
+    <string name="search_no_active_playlist">No active playlist</string>
+    <string name="search_section_empty">No results found in %1$s</string>
+    <string name="search_section_count">%1$s results in %2$s</string>
+    <string name="search_section_hint_live">Search channels only — results start from the first character</string>
+    <string name="search_section_hint_series">Search series only — results use the same posters</string>
+    <string name="search_section_hint_movies">Search movies only — results use the same posters</string>
+
+
+    <string name="catalog_step_state">%1$s  %2$s</string>
+    <string name="catalog_progress_steps">%1$d / %2$d</string>
+    <string name="catalog_percent">%1$d%%</string>
+    <string name="catchup_program_row">%1$s–%2$s   •   %3$s</string>
+    <string name="guide_time_range">%1$s – %2$s</string>
+    <string name="guide_locked_channel">🔒  %1$s</string>
+    <string name="guide_channel_number">%1$d</string>
+    <string name="profiles_card_title">%1$s  %2$s%3$s</string>
+    <string name="search_section_header">%1$s   •   %2$s</string>
+    <string name="search_locked_title">🔒  %1$s</string>
+    <string name="search_brand_section">BLOFY  •  %1$s</string>
+
+
+    <string name="provider_manager_title">BLOFY Playlists</string>
+    <string name="provider_manager_refresh_from_website">↻  Refresh from website</string>
+    <string name="provider_manager_subtitle">Connect directly to a saved server or edit its details</string>
+    <string name="provider_manager_subscriber_hint">BLOFY subscribers only need a username and password</string>
+    <string name="provider_manager_add_subscriber">+  BLOFY Subscriber</string>
+    <string name="provider_manager_saved_servers">Saved servers</string>
+    <string name="provider_manager_read_failed">Could not read saved playlists • reopen this page to try again</string>
+    <string name="provider_manager_refresh_unconfigured">Playlist refresh service is not configured</string>
+    <string name="provider_manager_refreshing">Refreshing…</string>
+    <string name="provider_manager_fetching">Fetching playlists and details from the website…</string>
+    <string name="provider_manager_empty">No saved servers yet\nAdd a BLOFY Subscriber or Xtream server</string>
+    <string name="provider_manager_active">● Active playlist</string>
+    <string name="provider_manager_saved">○ Saved playlist</string>\n    <string name="provider_manager_source_format">%1$s  •  %2$s</string>
+    <string name="provider_manager_summary_loading">Reading library status…</string>
+    <string name="provider_manager_connect">▶  Connect</string>
+    <string name="provider_manager_connect_plain">Connect</string>
+    <string name="provider_manager_edit">Edit</string>
+    <string name="provider_manager_sync">Sync</string>
+    <string name="provider_manager_delete">Delete</string>
+    <string name="provider_manager_summary_failed">Could not read the library summary</string>
+    <string name="provider_manager_ready">Ready</string>
+    <string name="provider_manager_needs_update">Needs refresh</string>
+    <string name="provider_manager_channels_count">Channels: %1$d</string>
+    <string name="provider_manager_movies_count">Movies: %1$d</string>
+    <string name="provider_manager_series_count">Series: %1$d</string>
+    <string name="provider_manager_summary_format">%1$s  •  %2$s  •  %3$s  •  %4$s</string>
+    <string name="provider_manager_summary_with_time">%1$s  •  %2$s</string>
+    <string name="provider_manager_legacy_unsupported">This playlist is old and unsupported • use Xtream</string>
+    <string name="provider_manager_opening">Opening %1$s…</string>
+    <string name="provider_manager_open_failed">Could not open the playlist • try again</string>
+    <string name="provider_manager_removed_synced">Playlist deleted from the device and website</string>
+    <string name="provider_manager_removed_pending">Playlist hidden • website deletion will finish when online</string>
+    <string name="provider_manager_remove_failed">Could not delete the playlist • try again</string>
+
+    <string name="smart_recent_title">Recently added</string>
+    <string name="smart_recent_subtitle">Latest movies and series in your playlist</string>
+    <string name="smart_top_rated_title">Top rated</string>
+    <string name="smart_top_rated_subtitle">Best titles based on library ratings</string>
+    <string name="smart_4k_title">4K &amp; UHD</string>
+    <string name="smart_4k_subtitle">High-resolution content in your subscription</string>
+    <string name="smart_arabic_title">Arabic content</string>
+    <string name="smart_arabic_subtitle">Arabic movies and series from the same playlist</string>
+    <string name="smart_default_title">BLOFY Picks</string>
+    <string name="smart_default_subtitle">Selected content from your library</string>
+    <string name="smart_collection_count">Titles: %1$d</string>
+
+    <string name="profile_watchlist_empty">Your watchlist is empty. Add movies or series from their details page.</string>
+    <string name="profile_switcher_label">%1$s  %2$s</string>
+
+
+    <string name="cloud_title">BLOFY Cloud</string>
+    <string name="cloud_subtitle">Back up, sync, and move your profile experience safely</string>
+    <string name="cloud_sync_now">Sync now</string>
+    <string name="cloud_backup_profile">Back up this profile</string>
+    <string name="cloud_restore">Restore from BLOFY Cloud</string>
+    <string name="cloud_generate_pair">Generate Pair &amp; Restore code</string>
+    <string name="cloud_restore_other">Restore from another device</string>
+    <string name="cloud_pair_note">Pair codes are one-time and expire after 10 minutes. BLOFY Cloud transfers only Watchlist, hidden categories and Home layout. Playlist credentials and playback URLs are never included.</string>
+    <string name="cloud_ready">Ready</string>
+    <string name="cloud_syncing">Syncing profile…</string>
+    <string name="cloud_sync_complete">Sync complete • revision %1$d</string>
+    <string name="cloud_sync_unavailable">Cloud sync unavailable for this profile</string>
+    <string name="cloud_backing_up">Backing up profile…</string>
+    <string name="cloud_backup_saved">Backup saved • revision %1$d</string>
+    <string name="cloud_backup_unavailable">Cloud backup unavailable for this profile</string>
+    <string name="cloud_restore_title">Restore profile</string>
+    <string name="cloud_restore_message">Cloud data will replace this profile’s local Watchlist, hidden categories and Home layout. Continue?</string>
+    <string name="cloud_cancel">Cancel</string>
+    <string name="cloud_restore_button">Restore</string>
+    <string name="cloud_restoring">Restoring profile…</string>
+    <string name="cloud_restore_complete">Restore complete • revision %1$d</string>
+    <string name="cloud_no_backup">No cloud backup found for this profile</string>
+    <string name="cloud_restore_unavailable">Cloud restore unavailable for this profile</string>
+    <string name="cloud_pair_creating">Creating one-time Pair code…</string>
+    <string name="cloud_pair_create_failed">Unable to create Pair code for this profile</string>
+    <string name="cloud_pair_title">Pair &amp; Restore</string>
+    <string name="cloud_pair_message">Enter this code on the new device:\n\n%1$s\n\nExpires in %2$d minutes. The code works once only.</string>
+    <string name="cloud_pair_ok">OK</string>
+    <string name="cloud_pair_ready">Pair code %1$s ready • expires %2$s</string>
+    <string name="cloud_pair_hint">8-character Pair code</string>
+    <string name="cloud_pair_restore_message">Generate a Pair code on your old device, then enter it here. This profile’s local cloud data will be replaced.</string>
+    <string name="cloud_pair_invalid">Pair code must be 8 valid characters</string>
+    <string name="cloud_pair_restoring">Restoring from paired device…</string>
+    <string name="cloud_pair_restore_complete">Pair restore complete • revision %1$d</string>
+    <string name="cloud_pair_restore_unavailable">Pair restore unavailable for this profile</string>
+    <string name="cloud_error_expired">Pair code expired or was already used</string>
+    <string name="cloud_error_same_device">Pair code must be used on a different device</string>
+    <string name="cloud_error_unauthorized">Device activation could not be verified</string>
+    <string name="cloud_error_missing_snapshot">Back up the old profile first, then create a Pair code</string>
+    <string name="cloud_error_generic">Cloud operation failed • %1$s</string>
+    <string name="cloud_error_network">network error</string>
+    <string name="cloud_stats">Profile: %1$s\nWatchlist: %2$d • Hidden categories: %3$d • Home rows: %4$d\nCloud revision: %5$d • Last sync: %6$s</string>
+    <string name="cloud_not_synced">Not synced yet</string>
+    <string name="cloud_guest_local_only">Guest profiles are local-only</string>
+    <string name="cloud_stats_with_guest">%1$s\n%2$s</string>
+
+    <string name="home_personalization_title">Customize Home</string>
+    <string name="home_personalization_subtitle">%1$s • choose and reorder the rows shown on Home</string>
+    <string name="home_personalization_saved_note">Changes are saved for this profile only</string>
+    <string name="home_personalization_restore_default">Restore default Home</string>
+    <string name="home_personalization_back">Back</string>
+    <string name="home_personalization_default_restored">Default Home restored</string>
+    <string name="home_personalization_visible">Visible</string>
+    <string name="home_personalization_hidden">Hidden</string>
+    <string name="home_personalization_row_state">%1$s\n%2$s</string>
+    <string name="home_personalization_hide">Hide</string>
+    <string name="home_personalization_show">Show</string>
+    <string name="home_personalization_row_hidden">Row hidden</string>
+    <string name="home_personalization_row_added">Row added to Home</string>
+    <string name="home_personalization_order_saved">Home order saved</string>
+    <string name="home_personalization_continue">Continue Watching</string>
+    <string name="home_personalization_recent">Recently Watched</string>
+    <string name="home_personalization_watchlist">My Watchlist</string>
+    <string name="home_personalization_latest">Recently Added</string>
+    <string name="home_personalization_top_rated">Top Rated</string>
+    <string name="home_personalization_arabic">Arabic Picks</string>
+    <string name="home_personalization_uhd">4K • UHD</string>
+
+
+    <string name="brand_blofy" translatable="false">BLOFY</string>
+    <string name="brand_library" translatable="false">BLOFY LIBRARY</string>
+    <string name="brand_live" translatable="false">BLOFY LIVE</string>
+    <string name="brand_quick_menu" translatable="false">BLOFY QUICK MENU</string>
+    <string name="brand_link" translatable="false">BLOFY LINK</string>
+    <string name="brand_player" translatable="false">BLOFY PLAYER</string>
+    <string name="brand_cinema" translatable="false">BLOFY CINEMA</string>
+    <string name="brand_series" translatable="false">BLOFY SERIES</string>
+    <string name="brand_live_guide" translatable="false">BLOFY LIVE GUIDE</string>
+    <string name="splash_opening">Opening BLOFY…</string>
+    <string name="library_stream_row">%1$s   •   %2$s</string>
+
+
+    <string name="backup_title">Backup &amp; restore</string>
+    <string name="backup_description">Saves favorites, locks, watch history, category order and BLOFY settings. Server login details and PINs are not included.</string>
+    <string name="backup_restore_same_server">Restore is available only for the same server that created the backup.</string>
+    <string name="backup_create">Create backup</string>
+    <string name="backup_restore">Restore backup</string>
+    <string name="backup_creating">Creating backup…</string>
+    <string name="backup_saved">Backup saved successfully</string>
+    <string name="backup_checking">Checking backup file…</string>
+    <string name="backup_ready_confirm">File is ready • confirm restore to continue</string>
+    <string name="backup_confirm_title">Confirm restore</string>
+    <string name="backup_confirm_message">Saved favorites, watch history, category order and BLOFY settings for this server will be applied. Login details and PINs will not change.</string>
+    <string name="backup_confirm_restore">Restore</string>
+    <string name="backup_cancelled">Restore cancelled</string>
+    <string name="backup_restoring">Restoring backup…</string>
+    <string name="backup_restore_result">Restored • %1$d categories • %2$d favorites/locks • %3$d watch entries • %4$d settings</string>
+    <string name="backup_error_no_active_provider">No active server is available</string>
+    <string name="backup_error_unsupported">This backup file is not supported</string>
+    <string name="backup_error_different_server">This backup belongs to a different server</string>
+    <string name="backup_error_too_large">The backup file is larger than the allowed limit</string>
+    <string name="backup_error_create_file">Could not create the backup file</string>
+    <string name="backup_error_read_file">Could not read the backup file</string>
+    <string name="backup_error_generic">Could not complete the operation • check the file and try again</string>
+
+    <string name="category_manager_title">Category order</string>
+    <string name="category_manager_loading">Loading categories…</string>
+    <string name="category_manager_no_provider">No active server</string>
+    <string name="category_manager_live">Live TV</string>
+    <string name="category_manager_movies">Movies</string>
+    <string name="category_manager_series">Series</string>
+    <string name="category_manager_status">%1$s • %2$d categories • %3$d hidden</string>
+    <string name="category_manager_empty">No saved categories in this section</string>
+    <string name="category_manager_hidden">Hidden</string>
+    <string name="category_manager_visible_order">Visible • order %1$d</string>
+    <string name="category_manager_show">Show</string>
+    <string name="category_manager_hide">Hide</string>
+    <string name="category_manager_pin_top">Pin to top</string>
+
+
+    <string name="parental_title">Parental protection</string>
+    <string name="parental_subtitle">Use a 4–8 digit PIN to unlock locked channels or content.</string>
+    <string name="parental_enabled">● Protection enabled</string>
+    <string name="parental_not_set">○ No PIN set</string>
+    <string name="parental_set_pin">Set PIN</string>
+    <string name="parental_change_pin">Change PIN</string>
+    <string name="parental_clear_pin">Remove PIN</string>
+    <string name="parental_disable_title">Remove protection</string>
+    <string name="parental_disable_message">The PIN will be removed. Locked content will no longer ask for a protection code until you set a new PIN.</string>
+    <string name="parental_back">Back</string>
+    <string name="parental_new_pin_hint">New PIN</string>
+    <string name="parental_enter_digits">Enter 4 to 8 digits</string>
+    <string name="parental_next">Next</string>
+    <string name="parental_cancel">Cancel</string>
+    <string name="parental_invalid_pin">PIN must be 4 to 8 digits</string>
+    <string name="parental_confirm_pin_hint">Confirm PIN</string>
+    <string name="parental_confirm_title">Confirm PIN</string>
+    <string name="parental_save">Save</string>
+    <string name="parental_mismatch">The two PINs do not match</string>
+    <string name="parental_save_failed">Could not save PIN</string>
+
+
+    <string name="system_status_title">BLOFY diagnostics</string>
+    <string name="system_status_section_app_device">App &amp; device</string>
+    <string name="system_status_section_network_memory">Network &amp; memory</string>
+    <string name="system_status_section_server_library">Server &amp; library</string>
+    <string name="system_status_section_storage">Storage used</string>
+    <string name="system_status_version">Version</string>
+    <string name="system_status_version_code">Version Code</string>
+    <string name="system_status_activation">Activation status</string>
+    <string name="system_status_android">Android</string>
+    <string name="system_status_android_format">%1$s (SDK %2$d)</string>
+    <string name="system_status_device">Device</string>
+    <string name="system_status_form_factor">Interface type</string>
+    <string name="system_status_tv">TV</string>
+    <string name="system_status_mobile">Mobile / Tablet</string>
+    <string name="system_status_activation_unknown">Unknown</string>
+    <string name="system_status_activation_active">Activated</string>
+    <string name="system_status_activation_inactive">Not activated</string>
+    <string name="system_status_network">Network status</string>
+    <string name="system_status_memory_available">Available memory</string>
+    <string name="system_status_memory_total">Total memory</string>
+    <string name="system_status_active_playlist">Active playlist</string>
+    <string name="system_status_no_playlist">No playlist</string>
+    <string name="system_status_server_type">Server type</string>
+    <string name="system_status_channels">Channels</string>
+    <string name="system_status_movies">Movies</string>
+    <string name="system_status_series">Series</string>
+    <string name="system_status_indexed_episodes">Indexed episodes</string>
+    <string name="system_status_metadata">Content metadata</string>
+    <string name="system_status_library_state">Library status</string>
+    <string name="system_status_library_ready_full">Fully ready</string>
+    <string name="system_status_library_ready_secondary">Ready • secondary preparation is finishing</string>
+    <string name="system_status_library_needs_refresh">Content refresh needed</string>
+    <string name="system_status_metadata_state">Movie &amp; series metadata</string>
+    <string name="system_status_ready">Ready</string>
+    <string name="system_status_preparing_unavailable">Preparing / unavailable</string>
+    <string name="system_status_episode_index">Episode index</string>
+    <string name="system_status_episode_index_ready">Ready</string>
+    <string name="system_status_episode_index_preparing">Preparing / unavailable</string>
+    <string name="system_status_last_refresh">Last successful refresh</string>
+    <string name="system_status_temp_files">Temporary files</string>
+    <string name="system_status_total_storage">Total BLOFY storage</string>
+    <string name="system_status_copy_report">Copy diagnostics report</string>
+    <string name="system_status_privacy_note">The report does not include the username, password or server URL.</string>
+    <string name="system_status_tagline">BLOFY PLAYER • Your library, your way</string>
+    <string name="system_status_disconnected">Disconnected</string>
+    <string name="system_status_connected">Connected</string>
+    <string name="system_status_unverified_internet">Internet not validated</string>
+    <string name="system_status_network_format">%1$s • %2$s</string>
+    <string name="system_status_android_device">Android device</string>
+    <string name="system_status_report_copied">Diagnostics report copied</string>
+
+    <string name="login_playlist_default_name">%1$s playlist</string>
 </resources>

@@ -7,8 +7,8 @@ object ContentPresentation {
     data class Label(val title: String, val badges: List<String>)
 
     private val languages = setOf("AR", "EN", "DE", "FR", "ES", "IT", "PT", "RU", "TR", "HI", "JP", "JA", "KO", "KR", "CN", "ZH", "NL", "PL", "SE", "NO", "DK", "FI", "US", "UK")
-    private val quality = mapOf("4K" to "4K", "UHD" to "4K", "2160P" to "4K", "FHD" to "FHD", "1080P" to "FHD", "HD" to "HD", "720P" to "HD", "SD" to "SD", "HDR" to "HDR", "HDR10" to "HDR10", "DV" to "DV")
-    private val categoryTags = setOf("TOP", "ANM", "ANIME", "VOD", "MOV", "SERIES")
+    private val quality = mapOf("8K" to "8K", "4K" to "4K", "UHD" to "4K", "3840P" to "4K", "2160P" to "4K", "FHD" to "FHD", "1080P" to "FHD", "HD" to "HD", "720P" to "HD", "SD" to "SD", "HDR" to "HDR", "HDR10" to "HDR10", "DV" to "DV")
+    private val categoryTags = setOf("TOP", "ANM", "ANIME", "VOD", "MOV", "SERIES", "DO", "DUB", "DUBBED", "MULTI", "SUBS")
     private val split = Regex("[-_ ]+")
     // Require an explicit delimiter. Words inside a title, e.g. Top Gun, are not tags.
     private val prefix = Regex("^(?:\\[([^\\[\\]]{1,32})\\]\\s*|([^\\[\\]]{1,32}?)(?:\\s+[-–—]\\s+|\\s*[:|]\\s+))")

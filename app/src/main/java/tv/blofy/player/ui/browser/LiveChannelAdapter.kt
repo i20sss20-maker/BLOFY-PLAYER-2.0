@@ -58,7 +58,7 @@ internal class LiveChannelAdapter(
         val compact = translucent
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = context.resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
             setPadding(
                 dp(if (compact) 8 else 12),
@@ -91,7 +91,7 @@ internal class LiveChannelAdapter(
 
         val textBox = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
         }
         val title = TextView(context).apply {
             textSize = TvUiTuning.sp(context, if (compact) 12.2f else 13.4f)
@@ -99,7 +99,7 @@ internal class LiveChannelAdapter(
             setTextColor(BlofyTvDesign.TextPrimary)
             maxLines = if (compact) 1 else 2
             ellipsize = android.text.TextUtils.TruncateAt.END
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             includeFontPadding = false
             setLineSpacing(0f, 1.03f)
         }
@@ -109,7 +109,7 @@ internal class LiveChannelAdapter(
             setTextColor(BlofyTvDesign.TextMuted)
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             includeFontPadding = false
         }
         val progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -139,8 +139,8 @@ internal class LiveChannelAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
-        holder.title.text = (if (item.locked) "🔒  " else "") + item.name
-        holder.meta.text = if (item.archiveEnabled) "مباشر • أرشيف متاح" else "مباشر الآن"
+        holder.title.text = (if (item.locked) "🔒  " else "") + displayChannelName(item.name)
+        holder.meta.text = holder.itemView.context.getString(if (item.archiveEnabled) R.string.live_archive_available else R.string.live_now)
         holder.badge.text = if (item.archiveEnabled) "ARCH" else "LIVE"
         holder.progress.visibility = View.GONE
         holder.artworkCandidates = listOf(item.icon, item.backdrop).filterNot { it.isNullOrBlank() }
@@ -155,12 +155,25 @@ internal class LiveChannelAdapter(
         holder.itemView.setOnFocusChangeListener { view, focused ->
             if (focused) focusedKey = itemKey(item)
             view.animate().cancel()
-            view.scaleX = 1f
-            view.scaleY = 1f
-            view.translationZ = if (focused) 4f else 0f
             renderFocus(holder, focused)
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+            view.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, TvUiTuning.dp(view.context, 7).toFloat()) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                .start()
             if (focused) onFocus(item)
         }
+    }
+
+    private fun displayChannelName(raw: String): String {
+        val cleaned = raw
+            .replace(Regex("^[\\s#*_~=-]{2,}|[\\s#*_~=-]{2,}$"), " ")
+            .replace(Regex("(?i)\\b(?:3840p|2160p|1440p|1080p|720p|576p|480p)\\b"), " ")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim(' ', '-', '•', '|')
+        return cleaned.ifBlank { raw.trim().ifBlank { "BLOFY" } }
     }
 
     private fun renderFocus(holder: Holder, focused: Boolean) {
@@ -212,10 +225,10 @@ internal class LiveChannelAdapter(
         val density = contextForBackground.resources.displayMetrics.density
         return GradientDrawable().apply {
             cornerRadius = 10 * density
-            setColor(if (focused) 0xAD664397.toInt() else 0x5E211332.toInt())
+            setColor(if (focused) 0xD35C3582.toInt() else 0x5E211332.toInt())
             setStroke(
                 ((if (focused) 2 else 1) * density).toInt(),
-                if (focused) 0xD9FFFFFF.toInt() else 0x38FFFFFF
+                if (focused) BlofyTvDesign.FocusStroke else 0x38FFFFFF
             )
         }
     }

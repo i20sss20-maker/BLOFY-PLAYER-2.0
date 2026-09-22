@@ -34,7 +34,7 @@ class SmartCollectionsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(34), dp(24), dp(34), dp(28))
             background = AppCompatResources.getDrawable(this@SmartCollectionsActivity, R.drawable.blofy_home_background)
             clipChildren = false
@@ -44,19 +44,19 @@ class SmartCollectionsActivity : AppCompatActivity() {
             textSize = 30f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         }
         subtitleView = TextView(this).apply {
             textSize = 13f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(3), 0, dp(10))
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
         }
         val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         copy.addView(titleView)
@@ -99,7 +99,7 @@ class SmartCollectionsActivity : AppCompatActivity() {
                 select(mode, all)
             }
             adapter.replace(items)
-            countView.text = "${items.size} عنوان"
+            countView.text = getString(R.string.smart_collection_count, items.size)
             ArtworkLoader.prefetch(this@SmartCollectionsActivity, items.take(24).map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
             grid.post { if (adapter.itemCount > 0) grid.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
         }
@@ -138,11 +138,11 @@ class SmartCollectionsActivity : AppCompatActivity() {
     }
 
     private fun labelsFor(mode: String) = when (mode) {
-        MODE_RECENT -> "أضيف حديثًا" to "أحدث الأفلام والمسلسلات الموجودة في باقتك"
-        MODE_TOP_RATED -> "الأعلى تقييمًا" to "أفضل العناوين حسب تقييمات المكتبة"
-        MODE_4K -> "4K و UHD" to "المحتوى عالي الدقة الموجود في اشتراكك"
-        MODE_ARABIC -> "محتوى عربي" to "أفلام ومسلسلات عربية من نفس الباقة"
-        else -> "مختارات BLOFY" to "محتوى مختار من مكتبتك"
+        MODE_RECENT -> getString(R.string.smart_recent_title) to getString(R.string.smart_recent_subtitle)
+        MODE_TOP_RATED -> getString(R.string.smart_top_rated_title) to getString(R.string.smart_top_rated_subtitle)
+        MODE_4K -> getString(R.string.smart_4k_title) to getString(R.string.smart_4k_subtitle)
+        MODE_ARABIC -> getString(R.string.smart_arabic_title) to getString(R.string.smart_arabic_subtitle)
+        else -> getString(R.string.smart_default_title) to getString(R.string.smart_default_subtitle)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

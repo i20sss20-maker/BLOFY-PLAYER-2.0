@@ -39,6 +39,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
@@ -75,7 +76,7 @@ class SearchActivity : AppCompatActivity() {
             gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = "ابحث في كل شيء"
+            text = getString(R.string.search_title)
             textSize = 26f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
@@ -98,10 +99,10 @@ class SearchActivity : AppCompatActivity() {
             clipChildren = false
         }
         listOf(
-            FILTER_ALL to "الكل",
-            KIND_LIVE to "مباشر",
-            KIND_MOVIE to "أفلام",
-            KIND_SERIES to "مسلسلات"
+            FILTER_ALL to getString(R.string.search_filter_all),
+            KIND_LIVE to getString(R.string.search_filter_live),
+            KIND_MOVIE to getString(R.string.search_filter_movies),
+            KIND_SERIES to getString(R.string.search_filter_series)
         ).forEach { (key, label) ->
             val button = Button(this).apply {
                 text = label
@@ -205,10 +206,10 @@ class SearchActivity : AppCompatActivity() {
     }
 
     private fun inputHint() = when (activeKind) {
-        KIND_LIVE -> "اكتب اسم القناة"
-        KIND_SERIES -> "اكتب اسم المسلسل"
-        KIND_MOVIE -> "اكتب اسم الفيلم"
-        else -> "اكتب اسم المحتوى"
+        KIND_LIVE -> getString(R.string.search_input_channel)
+        KIND_SERIES -> getString(R.string.search_input_series)
+        KIND_MOVIE -> getString(R.string.search_input_movie)
+        else -> getString(R.string.search_input_content)
     }
 
     private fun renderRecentSearches() {
@@ -225,7 +226,7 @@ class SearchActivity : AppCompatActivity() {
         }
         recentScroll.visibility = View.VISIBLE
         recentStrip.addView(TextView(this).apply {
-            text = "آخر البحث"
+            text = getString(R.string.search_recent)
             textSize = 12f
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -248,7 +249,7 @@ class SearchActivity : AppCompatActivity() {
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { marginEnd = dp(7) })
         }
         recentStrip.addView(Button(this).apply {
-            text = "مسح"
+            text = getString(R.string.search_clear)
             textSize = 11.5f
             isAllCaps = false
             minWidth = 0
@@ -266,7 +267,7 @@ class SearchActivity : AppCompatActivity() {
         if (q.isEmpty()) { results.removeAllViews(); return }
         val dao = BlofyDatabase.get(applicationContext).dao()
         val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
-        if (provider == null) { showMessage("أضف قائمة تشغيل أولاً"); return }
+        if (provider == null) { showMessage(getString(R.string.login_add_playlist_first)); return }
         val repository = ContentRepository(dao)
         val selectedKind = activeKind
 
@@ -282,8 +283,8 @@ class SearchActivity : AppCompatActivity() {
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
         results.removeAllViews()
         val total = sections.sumOf { it.second.size }
-        hint.text = if (selectedKind == null) "$total نتيجة • مباشر، أفلام ومسلسلات" else "$total نتيجة • ${sectionTitle(selectedKind)}"
-        if (total == 0) { showMessage("ما لقينا نتائج مطابقة داخل باقتك"); return }
+        hint.text = if (selectedKind == null) getString(R.string.search_results_all, total) else getString(R.string.search_results_kind, total, sectionTitle(selectedKind))
+        if (total == 0) { showMessage(getString(R.string.search_no_matches)); return }
 
         var firstFocusable: View? = null
         sections.forEach { (kind, items) ->
@@ -311,7 +312,7 @@ class SearchActivity : AppCompatActivity() {
 
         addView(TextView(this@SearchActivity).apply {
             val suffix = if (items.size >= SECTION_LIMIT) "+" else ""
-            text = "${sectionTitle(kind)}   •   ${items.size}$suffix"
+            text = getString(R.string.search_section_header, sectionTitle(kind), "${items.size}$suffix")
             textSize = 19f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -321,7 +322,7 @@ class SearchActivity : AppCompatActivity() {
 
         if (items.isEmpty()) {
             addView(TextView(this@SearchActivity).apply {
-                text = "لا توجد نتائج"
+                text = getString(R.string.search_no_results)
                 textSize = 13f
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.START
@@ -362,7 +363,7 @@ class SearchActivity : AppCompatActivity() {
 
             val copy = LinearLayout(this@SearchActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START }
             copy.addView(TextView(this@SearchActivity).apply {
-                text = (if (stream.locked) "🔒  " else "") + ContentPresentation.of(stream).title
+                text = if (stream.locked) getString(R.string.search_locked_title, ContentPresentation.of(stream).title) else ContentPresentation.of(stream).title
                 textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 1; gravity = Gravity.START
                 ellipsize = android.text.TextUtils.TruncateAt.END
             })
@@ -380,8 +381,13 @@ class SearchActivity : AppCompatActivity() {
             setOnFocusChangeListener { view, focused ->
                 view.background = rowBackground(focused)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.01f else 1f).scaleY(if (focused) 1.01f else 1f)
-                    .translationZ(if (focused) dp(8).toFloat() else dp(1).toFloat()).setDuration(65).start()
+                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+                view.animate()
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(8).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                    .start()
             }
             setOnClickListener { open() }
         }
@@ -416,16 +422,16 @@ class SearchActivity : AppCompatActivity() {
     }
 
     private fun emptyHint() = when (activeKind) {
-        KIND_LIVE -> "بحث محلي سريع داخل جميع القنوات"
-        KIND_SERIES -> "بحث محلي سريع داخل جميع المسلسلات"
-        KIND_MOVIE -> "بحث محلي سريع داخل جميع الأفلام"
-        else -> "البث المباشر، الأفلام والمسلسلات من بحث واحد"
+        KIND_LIVE -> getString(R.string.search_hint_live)
+        KIND_SERIES -> getString(R.string.search_hint_series)
+        KIND_MOVIE -> getString(R.string.search_hint_movies)
+        else -> getString(R.string.search_hint_all)
     }
 
     private fun sectionTitle(kind: String) = when (kind) {
-        KIND_LIVE -> "البث المباشر"
-        KIND_SERIES -> "المسلسلات"
-        KIND_MOVIE -> "الأفلام"
+        KIND_LIVE -> getString(R.string.search_section_live)
+        KIND_SERIES -> getString(R.string.search_section_series)
+        KIND_MOVIE -> getString(R.string.search_section_movies)
         else -> kind
     }
 

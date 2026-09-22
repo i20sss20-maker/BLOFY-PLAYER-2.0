@@ -45,14 +45,14 @@ class ProfileWatchlistActivity : AppCompatActivity() {
             setPadding(dp(38), dp(28), dp(38), dp(36))
         }
         list.addView(TextView(this).apply {
-            text = "MY WATCHLIST"
+            text = getString(R.string.profile_watchlist_title)
             textSize = 26f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.START
         })
         list.addView(TextView(this).apply {
-            text = "${ProfileStore.active(this@ProfileWatchlistActivity).name} • saved titles"
+            text = getString(R.string.profile_watchlist_subtitle, ProfileStore.active(this@ProfileWatchlistActivity).name)
             textSize = 13.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -103,13 +103,11 @@ class ProfileWatchlistActivity : AppCompatActivity() {
                         item.rating?.takeIf(String::isNotBlank)?.let { append("   •   ★ $it") }
                     }
                     isAllCaps = false
-                    textSize = 15f
+                    textSize = 13f
                     gravity = Gravity.START or Gravity.CENTER_VERTICAL
                     setTextColor(Color.WHITE)
                     typeface = BlofyTvDesign.BodyTypeface
                     CinemaStyle.styleButton(this)
-                    gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                    textSize = 13f
                     setOnClickListener { openDetails(item) }
                     setOnLongClickListener {
                         ProfileLibraryStore.setWatchlisted(applicationContext, item.key, false)
@@ -125,7 +123,7 @@ class ProfileWatchlistActivity : AppCompatActivity() {
 
     private fun showEmpty() {
         list.addView(TextView(this).apply {
-            text = "Your watchlist is empty. Add movies or series from their details page."
+            text = getString(R.string.profile_watchlist_empty)
             textSize = 15f
             setTextColor(BlofyTvDesign.TextMuted)
             typeface = BlofyTvDesign.BodyTypeface

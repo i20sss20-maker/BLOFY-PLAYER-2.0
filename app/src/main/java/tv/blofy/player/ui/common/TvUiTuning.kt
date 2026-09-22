@@ -15,6 +15,9 @@ object TvUiTuning {
     // RecyclerView can detach and reattach the same child many times. Keep weak bookkeeping so
     // focus/layout callbacks are installed once per View instead of stacking on every attachment.
     private val tunedChildren = WeakHashMap<View, Boolean>()
+    private val tunedRecyclers = WeakHashMap<RecyclerView, Boolean>()
+    private const val UI_PREFS = "blofy_player_settings"
+    private const val MOTION_KEY = "motion_mode"
 
     fun scale(context: Context): Float {
         val configuration = context.resources.configuration
@@ -42,6 +45,20 @@ object TvUiTuning {
     fun dp(context: Context, value: Int): Int = (value * context.resources.displayMetrics.density * scale(context)).roundToInt()
     fun sp(context: Context, value: Float): Float = value * scale(context)
 
+    fun reducedMotion(context: Context): Boolean =
+        context.applicationContext.getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE)
+            .getString(MOTION_KEY, "smooth") == "reduced"
+
+    fun focusScale(context: Context, requested: Float): Float =
+        if (reducedMotion(context)) 1f else requested
+
+    fun focusElevation(context: Context, requested: Float): Float =
+        if (reducedMotion(context)) 0f else requested
+
+    fun focusDuration(context: Context, focused: Boolean): Long =
+        if (reducedMotion(context)) 35L
+        else if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs
+
     fun installSafeFocus(recycler: RecyclerView, edgeDp: Int = 32) {
         val edge = dp(recycler.context, edgeDp)
         recycler.clipToPadding = false
@@ -56,6 +73,7 @@ object TvUiTuning {
             maxOf(recycler.paddingRight, edge),
             maxOf(recycler.paddingBottom, edge / 2)
         )
+        if (tunedRecyclers.put(recycler, true) != null) return
         recycler.addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
             override fun onChildViewAttachedToWindow(view: View) {
                 // TV/box navigation needs focus-in-touch-mode because many vendor firmwares report
@@ -79,6 +97,11 @@ object TvUiTuning {
     }
 
     fun enter(activity: Activity) {
+        if (reducedMotion(activity)) {
+            activity.window.decorView.animate().cancel()
+            activity.window.decorView.alpha = 1f
+            return
+        }
         activity.window.decorView.alpha = 0.985f
         activity.window.decorView.animate().alpha(1f).setDuration(BlofyTvDesign.SectionTransitionMs).start()
     }

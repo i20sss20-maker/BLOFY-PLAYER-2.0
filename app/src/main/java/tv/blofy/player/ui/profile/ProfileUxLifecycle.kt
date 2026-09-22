@@ -2,6 +2,8 @@ package tv.blofy.player.ui.profile
 
 import android.app.Activity
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import android.app.Application
 import android.graphics.Color
 import android.os.Bundle
@@ -47,10 +49,11 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
             tag = WATCHLIST_TAG
             isAllCaps = false
             textSize = 12f
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.LabelTypeface
+            setTextColor(CinemaStyle.White)
             gravity = Gravity.CENTER
             isFocusable = true
-            isFocusableInTouchMode = true
+            isFocusableInTouchMode = tv.blofy.player.core.device.DeviceClass.isTv(activity)
             elevation = 0f
             minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0
             stateListAnimator = null
@@ -58,17 +61,24 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
 
             fun refresh() {
                 val saved = ProfileLibraryStore.isWatchlisted(activity, contentKey)
-                text = if (saved) "✓ My Watchlist" else "+ My Watchlist"
+                text = activity.getString(
+                    if (saved) tv.blofy.player.R.string.profile_watchlist_saved
+                    else tv.blofy.player.R.string.profile_watchlist_add
+                )
                 background = CinemaStyle.buttonBackground(activity, false, hasFocus())
-                setTextColor(if (hasFocus()) CinemaStyle.Background else CinemaStyle.White)
+                setTextColor(CinemaStyle.White)
             }
             setOnFocusChangeListener { view, focused ->
                 view.background = CinemaStyle.buttonBackground(activity, false, focused)
-                setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
+                setTextColor(CinemaStyle.White)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.02f else 1f).scaleY(if (focused) 1.02f else 1f)
-                    .translationZ(0f)
-                    .setDuration(70).start()
+                val targetScale = if (focused) TvUiTuning.focusScale(activity, 1.024f) else 1f
+                view.animate()
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(activity, dp(activity, 7).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(activity, focused))
+                    .start()
             }
             setOnClickListener {
                 val next = !ProfileLibraryStore.isWatchlisted(activity, contentKey)
@@ -78,15 +88,14 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
             refresh()
         }
 
-        val actions = host.findViewWithTag<LinearLayout>("blofy_details_profile_actions")
-        if (actions != null) {
-            button.isFocusableInTouchMode = false
-            actions.addView(button, LinearLayout.LayoutParams(dp(activity, 140), dp(activity, 48)))
-            return
-        }
-        host.addView(button, FrameLayout.LayoutParams(dp(activity, 140), dp(activity, CinemaStyle.ActionHeight), Gravity.BOTTOM or Gravity.END).apply {
-            marginEnd = dp(activity, 42)
-            bottomMargin = dp(activity, 28)
+        val actions = host.findViewWithTag<LinearLayout>("blofy_details_profile_actions") ?: return
+        val tv = tv.blofy.player.core.device.DeviceClass.isTv(activity)
+        button.isFocusableInTouchMode = tv
+        actions.addView(button, LinearLayout.LayoutParams(
+            dp(activity, if (tv) 132 else 140),
+            dp(activity, if (tv) CinemaStyle.ActionHeight else 48)
+        ).apply {
+            marginStart = dp(activity, 8)
         })
     }
 

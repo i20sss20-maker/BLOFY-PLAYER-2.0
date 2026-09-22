@@ -127,8 +127,8 @@ class PosterCatalogActivity : AppCompatActivity() {
                 setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
             }
         }
-        root.addView(searchBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 40)).apply {
-            bottomMargin = dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12)
+        root.addView(searchBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 38)).apply {
+            bottomMargin = dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 10)
         })
 
         val body = LinearLayout(this).apply {
@@ -183,14 +183,16 @@ class PosterCatalogActivity : AppCompatActivity() {
                 DeviceClass.Kind.PHONE -> 20f
             }
             gravity = Gravity.START
-        }, LinearLayout.LayoutParams(0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 40), 1f))
+        }, LinearLayout.LayoutParams(0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 38), 1f))
         countView = TextView(this).apply {
             textSize = if (deviceKind == DeviceClass.Kind.PHONE) 10.5f else 12f
             typeface = BlofyTvDesign.MediumTypeface
-            setTextColor(CinemaStyle.Muted)
+            setTextColor(BlofyTvDesign.Lavender)
             gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            textDirection = View.TEXT_DIRECTION_LTR
             setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12), 0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12), 0)
-            background = CinemaStyle.surface(this@PosterCatalogActivity)
+            background = BlofyTvDesign.badge(dp(9).toFloat())
         }
         header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(28)))
         content.addView(header)
@@ -226,7 +228,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         }
         posterGrid.adapter = posterAdapter
         categoryAdapter = FocusTextAdapter(
-            label = { it.name },
+            label = { displayCategoryName(it.name) },
             onClick = { loadStreams(categoryRemoteId(it)) },
             onFocus = null,
             itemKey = { it.key }
@@ -325,7 +327,8 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun updateCount() {
         val suffix = if (hasMore) "+" else ""
-        countView.text = getString(
+        countView.text = "${loadedItems.size}$suffix"
+        countView.contentDescription = getString(
             if (kind == KIND_SERIES) R.string.series_count else R.string.movie_count,
             loadedItems.size,
             suffix
@@ -367,6 +370,15 @@ class PosterCatalogActivity : AppCompatActivity() {
             putExtra("provider_id", providerId)
             putExtra("content_key", stream.key)
         })
+    }
+
+    private fun displayCategoryName(raw: String): String {
+        val cleaned = raw
+            .replace(Regex("^[\\s#*_~=-]{2,}|[\\s#*_~=-]{2,}$"), " ")
+            .replace(Regex("(?i)\\b(?:3840p|2160p|1440p|1080p|720p|576p|480p)\\b"), " ")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim(' ', '-', '•', '|')
+        return cleaned.ifBlank { raw.trim() }
     }
 
     private fun allCategory() = CategoryEntity(

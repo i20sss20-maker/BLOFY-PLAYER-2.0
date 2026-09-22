@@ -35,7 +35,7 @@ class CategoryManagerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (isTv) 34 else 18), dp(if (isTv) 26 else 18), dp(if (isTv) 34 else 18), dp(24))
             background = AppCompatResources.getDrawable(this@CategoryManagerActivity, R.drawable.blofy_home_background)
         }
@@ -43,29 +43,29 @@ class CategoryManagerActivity : AppCompatActivity() {
             text = getString(R.string.back)
             CinemaStyle.styleButton(this)
             setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(110), dp(44)).apply { gravity = Gravity.LEFT; bottomMargin = dp(12) })
+        }, LinearLayout.LayoutParams(dp(110), dp(44)).apply { gravity = Gravity.START; bottomMargin = dp(12) })
         root.addView(TextView(this).apply {
-            text = "ترتيب الفئات"
+            text = getString(R.string.category_manager_title)
             textSize = if (isTv) 28f else 24f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         status = TextView(this).apply {
-            text = "جاري قراءة الفئات..."
+            text = getString(R.string.category_manager_loading)
             textSize = 13f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
         }
         root.addView(status, LinearLayout.LayoutParams(-1, dp(42)))
 
         val tabs = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.RIGHT
+            layoutDirection = resources.configuration.layoutDirection
+            gravity = Gravity.START
         }
-        listOf("live" to "البث المباشر", "movie" to "الأفلام", "series" to "المسلسلات").forEach { (kind, label) ->
+        listOf("live" to getString(R.string.category_manager_live), "movie" to getString(R.string.category_manager_movies), "series" to getString(R.string.category_manager_series)).forEach { (kind, label) ->
             tabs.addView(actionButton(label) {
                 currentKind = kind
                 loadCategories()
@@ -75,7 +75,7 @@ class CategoryManagerActivity : AppCompatActivity() {
 
         list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(0, dp(4), 0, dp(20))
         }
         root.addView(ScrollView(this).apply {
@@ -96,7 +96,7 @@ class CategoryManagerActivity : AppCompatActivity() {
     private fun loadCategories() {
         val generation = ++loadGeneration
         val id = providerId ?: run {
-            status.text = "لا يوجد سيرفر نشط"
+            status.setText(R.string.category_manager_no_provider)
             list.removeAllViews()
             return
         }
@@ -115,13 +115,13 @@ class CategoryManagerActivity : AppCompatActivity() {
     private fun render(items: List<CategoryEntity>, kind: String) {
         list.removeAllViews()
         val hidden = items.count { it.hidden }
-        status.text = "${kindLabel(kind)} • ${items.size} فئة • المخفية $hidden"
+        status.text = getString(R.string.category_manager_status, kindLabel(kind), items.size, hidden)
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
-                text = "ما فيه فئات محفوظة لهذا القسم"
+                text = getString(R.string.category_manager_empty)
                 textSize = 16f
                 setTextColor(BlofyTvDesign.TextSecondary)
-                gravity = Gravity.RIGHT
+                gravity = Gravity.START
                 setPadding(dp(14), dp(24), dp(14), dp(24))
             })
             return
@@ -135,40 +135,40 @@ class CategoryManagerActivity : AppCompatActivity() {
 
     private fun categoryCard(index: Int, category: CategoryEntity): LinearLayout = LinearLayout(this).apply {
         orientation = if (isTv) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = resources.configuration.layoutDirection
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(14), dp(8), dp(14), dp(8))
         background = CinemaStyle.surface(this@CategoryManagerActivity)
 
         val title = LinearLayout(this@CategoryManagerActivity).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             addView(TextView(this@CategoryManagerActivity).apply {
                 text = category.name
                 textSize = 15f
                 typeface = BlofyTvDesign.MediumTypeface
                 setTextColor(if (category.hidden) BlofyTvDesign.TextMuted else Color.WHITE)
-                gravity = Gravity.RIGHT
+                gravity = Gravity.START
                 maxLines = 1
             })
             addView(TextView(this@CategoryManagerActivity).apply {
-                text = if (category.hidden) "مخفية" else "ظاهرة • ترتيب ${index + 1}"
+                text = if (category.hidden) getString(R.string.category_manager_hidden) else getString(R.string.category_manager_visible_order, index + 1)
                 textSize = 11.5f
                 setTextColor(if (category.hidden) 0xFFFFB0B8.toInt() else BlofyTvDesign.Mint)
-                gravity = Gravity.RIGHT
+                gravity = Gravity.START
             })
         }
         addView(title, if (isTv) LinearLayout.LayoutParams(0, dp(58), 1f) else LinearLayout.LayoutParams(-1, dp(54)))
 
         val actions = LinearLayout(this@CategoryManagerActivity).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-            addView(smallButton(if (category.hidden) "إظهار" else "إخفاء") { toggleHidden(category) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
+            layoutDirection = resources.configuration.layoutDirection
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            addView(smallButton(getString(if (category.hidden) R.string.category_manager_show else R.string.category_manager_hide)) { toggleHidden(category) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
                 if (isTv) width = dp(86)
                 marginStart = dp(6)
             })
-            addView(smallButton("تثبيت") { move(index, 0) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
+            addView(smallButton(getString(R.string.category_manager_pin_top)) { move(index, 0) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
                 if (isTv) width = dp(82)
                 marginStart = dp(6)
             })
@@ -207,9 +207,9 @@ class CategoryManagerActivity : AppCompatActivity() {
     }
 
     private fun kindLabel(kind: String) = when (kind) {
-        "movie" -> "الأفلام"
-        "series" -> "المسلسلات"
-        else -> "البث المباشر"
+        "movie" -> getString(R.string.category_manager_movies)
+        "series" -> getString(R.string.category_manager_series)
+        else -> getString(R.string.category_manager_live)
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {

@@ -15,7 +15,9 @@ object BlofyTvDesign {
     val BackgroundRaised = Color.rgb(18, 10, 32)
     val Surface = CinemaStyle.Surface
     val SurfaceRaised = Color.rgb(42, 24, 62)
-    val SurfaceFocused = Color.rgb(95, 57, 140)
+    val SurfaceFocused = Color.rgb(104, 61, 154)
+    val FocusStroke = Color.rgb(235, 219, 255)
+    val FocusGlow = Color.rgb(176, 126, 236)
 
     val Purple = Color.rgb(127, 73, 209)
     val PurpleBright = CinemaStyle.Accent
@@ -48,9 +50,9 @@ object BlofyTvDesign {
     const val ButtonRadius = 6
     const val BadgeRadius = 10
     const val StandardGap = 18
-    const val FocusInMs = 80L
-    const val FocusOutMs = 65L
-    const val SectionTransitionMs = 120L
+    const val FocusInMs = 95L
+    const val FocusOutMs = 75L
+    const val SectionTransitionMs = 135L
 
     val DisplayTypeface: Typeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
     val HeadingTypeface: Typeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
@@ -67,7 +69,7 @@ object BlofyTvDesign {
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) TextPrimary else Divider)
+        setStroke(if (focused) 2 else 1, if (focused) FocusStroke else Divider)
     }
 
     fun glassSurface(radius: Float = CardRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
@@ -79,7 +81,7 @@ object BlofyTvDesign {
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) TextPrimary else Divider)
+        setStroke(if (focused) 2 else 1, if (focused) FocusStroke else Divider)
     }
 
     fun elevatedSurface(radius: Float = PanelRadius.toFloat()) = GradientDrawable(
@@ -162,7 +164,7 @@ object BlofyTvDesign {
     fun installTvFocus(
         v: View,
         radius: Float = CardRadius.toFloat(),
-        scale: Float = 1.018f,
+        scale: Float = 1.024f,
         primary: Boolean = false,
         onFocused: (() -> Unit)? = null
     ) {
@@ -172,7 +174,7 @@ object BlofyTvDesign {
     fun installTvFocusState(
         v: View,
         radius: Float = CardRadius.toFloat(),
-        scale: Float = 1.018f,
+        scale: Float = 1.024f,
         primary: Boolean = false,
         onFocusChanged: (Boolean) -> Unit
     ) {
@@ -188,6 +190,7 @@ object BlofyTvDesign {
     ) {
         v.isFocusable = true
         v.isFocusableInTouchMode = true
+        v.stateListAnimator = null
         val normal = if (primary) primaryButton(radius, false) else secondaryButton(radius, false)
         val focused = if (primary) primaryButton(radius, true) else secondaryButton(radius, true)
         v.background = normal
@@ -197,12 +200,12 @@ object BlofyTvDesign {
             view.animate().cancel()
             view.background = if (hasFocus) focused else normal
             (view as? TextView)?.setTextColor(TextPrimary)
-            val targetScale = if (hasFocus) minOf(scale, 1.012f) else 1f
-            val duration = if (hasFocus) FocusInMs else FocusOutMs
+            val targetScale = if (hasFocus) TvUiTuning.focusScale(view.context, minOf(scale, 1.028f)) else 1f
+            val duration = TvUiTuning.focusDuration(view.context, hasFocus)
             view.animate()
                 .scaleX(targetScale)
                 .scaleY(targetScale)
-                .translationZ(if (hasFocus) 6f else 0f)
+                .translationZ(if (hasFocus) TvUiTuning.focusElevation(view.context, 8f) else 0f)
                 .alpha(1f)
                 .setDuration(duration)
                 .start()

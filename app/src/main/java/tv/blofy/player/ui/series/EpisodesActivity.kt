@@ -13,6 +13,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import tv.blofy.player.core.security.ContentAccessActivity
@@ -37,7 +38,9 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.settings.RuntimeSettings
@@ -47,6 +50,7 @@ class EpisodesActivity : ContentAccessActivity() {
     private lateinit var seasonAdapter: FocusTextAdapter<Int>
     private lateinit var seasonList: RecyclerView
     private lateinit var episodeList: RecyclerView
+    private lateinit var episodeBody: LinearLayout
     private lateinit var status: TextView
     private lateinit var retryButton: Button
     private var allEpisodes: List<EpisodeEntity> = emptyList()
@@ -81,37 +85,60 @@ class EpisodesActivity : ContentAccessActivity() {
             )
             background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
         }
-        root.addView(TextView(this).apply {
-            text = "BLOFY SERIES"
-            textSize = if (compact) 10.5f else 12f
-            letterSpacing = .11f
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(CinemaStyle.Muted)
-            gravity = Gravity.START
-        })
-        root.addView(TextView(this).apply {
-            text = ContentPresentation.title(seriesName, "series").ifBlank { getString(R.string.episodes) }
-            textSize = when (deviceKind) {
-                DeviceClass.Kind.TV -> 26f
-                DeviceClass.Kind.TABLET -> 28f
-                DeviceClass.Kind.PHONE -> 23f
-            }
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.START
-            includeFontPadding = false
-            maxLines = 2
-            setPadding(0, dp(3), 0, dp(4))
-        })
-        status = TextView(this).apply {
-            text = getString(R.string.episodes_preparing)
-            textSize = if (compact) 12f else 13.5f
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.START
-            setPadding(0, 0, 0, dp(if (compact) 8 else 12))
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = uiDirection
+            setPadding(dp(if (compact) 12 else 16), dp(if (compact) 10 else 12), dp(if (compact) 12 else 16), dp(if (compact) 10 else 12))
+            setBackgroundColor(Color.TRANSPARENT)
         }
-        root.addView(status)
+        val heroArt = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = ContentScreenStyle.softSurface(this@EpisodesActivity, false, 14)
+            clipToOutline = true
+            setImageResource(R.drawable.blofy_logo)
+        }
+        if (!seriesArt.isNullOrBlank()) ArtworkLoader.load(heroArt, seriesArt)
+        header.addView(heroArt, LinearLayout.LayoutParams(dp(if (compact) 86 else 106), dp(if (compact) 58 else 68)).apply {
+            marginEnd = dp(if (compact) 10 else 16)
+        })
+        val headerCopy = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            addView(TextView(this@EpisodesActivity).apply {
+                text = "BLOFY SERIES"
+                textSize = if (compact) 10.5f else 11.5f
+                letterSpacing = .12f
+                typeface = BlofyTvDesign.LabelTypeface
+                setTextColor(BlofyTvDesign.PurpleBright)
+                gravity = Gravity.START
+            })
+            addView(TextView(this@EpisodesActivity).apply {
+                text = ContentPresentation.title(seriesName, "series").ifBlank { getString(R.string.episodes) }
+                textSize = when (deviceKind) {
+                    DeviceClass.Kind.TV -> 24f
+                    DeviceClass.Kind.TABLET -> 25f
+                    DeviceClass.Kind.PHONE -> 20f
+                }
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(BlofyTvDesign.TextPrimary)
+                gravity = Gravity.START
+                includeFontPadding = false
+                maxLines = 2
+            })
+            status = TextView(this@EpisodesActivity).apply {
+                text = getString(R.string.episodes_preparing)
+                textSize = if (compact) 11.5f else 12.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = Gravity.START
+                maxLines = 2
+                setPadding(0, dp(3), 0, 0)
+            }
+            addView(status)
+        }
+        header.addView(headerCopy, LinearLayout.LayoutParams(0, -2, 1f))
+        root.addView(header, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         retryButton = actionButton(getString(R.string.episodes_retry)) {
             lifecycleScope.launch { syncEpisodes(currentProvider()) }
         }.apply { visibility = View.GONE }
@@ -123,7 +150,7 @@ class EpisodesActivity : ContentAccessActivity() {
             gravity = Gravity.START
         })
 
-        val body = LinearLayout(this).apply {
+        episodeBody = LinearLayout(this).apply {
             orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             layoutDirection = if (compact) uiDirection else View.LAYOUT_DIRECTION_LTR
             clipChildren = false
@@ -133,7 +160,7 @@ class EpisodesActivity : ContentAccessActivity() {
             layoutManager = LinearLayoutManager(this@EpisodesActivity)
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(if (compact) 6 else 9), dp(6), dp(if (compact) 6 else 9), dp(6))
+            setPadding(dp(if (compact) 4 else 6), dp(4), dp(if (compact) 4 else 6), dp(4))
             setBackgroundColor(Color.TRANSPARENT)
             clipChildren = false
             clipToPadding = false
@@ -142,26 +169,31 @@ class EpisodesActivity : ContentAccessActivity() {
             layoutManager = LinearLayoutManager(this@EpisodesActivity)
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(if (compact) 6 else 9), dp(6), dp(if (compact) 6 else 9), dp(6))
+            setPadding(dp(if (compact) 4 else 6), dp(4), dp(if (compact) 4 else 6), dp(4))
             setBackgroundColor(Color.TRANSPARENT)
             clipChildren = false
             clipToPadding = false
         }
         if (compact) {
-            body.addView(seasonList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(116)).apply { bottomMargin = dp(8) })
-            body.addView(episodeList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            episodeBody.addView(seasonList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(116)).apply { bottomMargin = dp(10) })
+            episodeBody.addView(episodeList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            val seasonWidth = if (tablet) 170 else 178
-            body.addView(seasonList, LinearLayout.LayoutParams(dp(seasonWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(14) })
-            body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+            val seasonWidth = if (tablet) 160 else 158
+            episodeBody.addView(seasonList, LinearLayout.LayoutParams(dp(seasonWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(16) })
+            episodeBody.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         }
-        root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(episodeBody, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1f
+        ))
         setContentView(root)
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             episodeAdapter = EpisodeCardAdapter(
+                seriesName = seriesName,
                 seriesArt = seriesArt,
                 onClick = { episode -> rememberEpisode(episode); openEpisode(provider, episode) },
                 onFocus = ::rememberEpisode
@@ -290,6 +322,7 @@ class EpisodesActivity : ContentAccessActivity() {
             restoredOnce = true
             retryButton.visibility = if (allEpisodes.isEmpty() && loadState.canRetry) View.VISIBLE else View.GONE
             updateStatus()
+            adjustPaneHeight()
         }
     }
 
@@ -320,7 +353,13 @@ class EpisodesActivity : ContentAccessActivity() {
             status.text = if (syncInProgress) {
                 getString(R.string.episodes_updating, allEpisodes.size)
             } else {
-                getString(R.string.episodes_ready, seasons, allEpisodes.size)
+                val seasonLabel = resources.getQuantityString(
+                    R.plurals.details_seasons_count_plural, seasons, seasons
+                )
+                val episodeLabel = resources.getQuantityString(
+                    R.plurals.details_episodes_count_plural, allEpisodes.size, allEpisodes.size
+                )
+                "$seasonLabel • $episodeLabel"
             }
             return
         }
@@ -345,11 +384,33 @@ class EpisodesActivity : ContentAccessActivity() {
         val visible = selectedSeason?.let { s -> allEpisodes.filter { it.season == s }.sortedBy { it.episode } } ?: emptyList()
         episodeAdapter.submit(visible)
         episodeAdapter.setProgress(watchProgress)
+        adjustPaneHeight()
         if (!restoreFocus || !DeviceClass.isTv(this) || visible.isEmpty()) return
         val remembered = FocusMemory.restore(this, episodeMemoryKey())
         val index = visible.indexOfFirst { it.key == remembered }.let { if (it < 0) 0 else it }
         episodeList.scrollToPosition(index)
         episodeList.post { episodeList.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
+    }
+
+    private fun adjustPaneHeight() {
+        if (!::episodeBody.isInitialized || deviceKind == DeviceClass.Kind.PHONE) return
+        val seasonCount = allEpisodes.map { it.season }.distinct().size
+        val visibleCount = selectedSeason?.let { season -> allEpisodes.count { it.season == season } } ?: 0
+        val maxHeight = dp((resources.configuration.screenHeightDp - 210).coerceIn(230, 470))
+        val seasonNeed = dp(18 + seasonCount.coerceAtMost(7) * 54)
+        val episodeNeed = dp(14 + visibleCount.coerceAtMost(5) * 91)
+        val target = maxOf(dp(126), seasonNeed, episodeNeed).coerceAtMost(maxHeight)
+        episodeBody.layoutParams = (episodeBody.layoutParams as LinearLayout.LayoutParams).apply {
+            height = target
+            weight = 0f
+        }
+        seasonList.layoutParams = (seasonList.layoutParams as LinearLayout.LayoutParams).apply {
+            height = target
+        }
+        episodeList.layoutParams = (episodeList.layoutParams as LinearLayout.LayoutParams).apply {
+            height = target
+        }
+        episodeBody.requestLayout()
     }
 
     private fun rememberEpisode(episode: EpisodeEntity) {

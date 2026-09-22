@@ -29,6 +29,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.series.EpisodesActivity
 
@@ -72,13 +73,14 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             val seasons = allEpisodes.map { it.season }.distinct().size
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = "BLOFY SERIES"
+                text = getString(R.string.brand_series)
                 textSize = 11.5f
                 letterSpacing = .12f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleBright)
                 gravity = Gravity.START
-            })
+                setPadding(0, dp(2), 0, dp(4))
+            }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(6) })
 
             val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
             val logo = ImageView(this@SeriesDetailsActivity).apply {
@@ -90,7 +92,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             panel.addView(logo, layout.logoParams())
             val titleView = TextView(this@SeriesDetailsActivity).apply {
                 text = title
-                textSize = if (metadata?.logoUrl.isNullOrBlank()) 28f else 18f
+                textSize = if (metadata?.logoUrl.isNullOrBlank()) 32f else 18f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
                 gravity = Gravity.START
@@ -98,14 +100,14 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 includeFontPadding = false
                 alpha = if (metadata?.logoUrl.isNullOrBlank()) 1f else .9f
             }
-            panel.addView(titleView)
+            panel.addView(titleView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(7) })
 
             fun metadataStats(metadata: tv.blofy.player.data.metadata.ProviderMetadata.Metadata?) = buildList {
                     add(getString(R.string.details_series_type))
                     addAll(ContentPresentation.of(stream).badges)
                     (metadata?.releaseDate?.take(4) ?: stream.year)?.takeIf(String::isNotBlank)?.let(::add)
-                    if (seasons > 0) add(getString(R.string.details_seasons_count, seasons))
-                    if (allEpisodes.isNotEmpty()) add(getString(R.string.details_episodes_count, allEpisodes.size))
+                    if (seasons > 0) add(resources.getQuantityString(R.plurals.details_seasons_count_plural, seasons, seasons))
+                    if (allEpisodes.isNotEmpty()) add(resources.getQuantityString(R.plurals.details_episodes_count_plural, allEpisodes.size, allEpisodes.size))
                     metadata?.runtimeMinutes?.takeIf { it > 0 }?.let { add(getString(R.string.details_minutes, it)) }
                     metadata?.rating?.let { add("★ %.1f/10".format(java.util.Locale.US, it)) }
                         ?: stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
@@ -114,17 +116,9 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     else stream.genre?.takeIf(String::isNotBlank)?.let(::add)
                     metadata?.countries?.takeIf { it.isNotEmpty() }?.let { add(it.take(2).joinToString(" / ")) }
                     metadata?.originalLanguage?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
-                }.joinToString("   •   ")
-            val statsView = TextView(this@SeriesDetailsActivity).apply {
-                tag = "blofy_details_stats"
-                text = metadataStats(metadata)
-                textSize = 13.5f
-                typeface = BlofyTvDesign.BodyTypeface
-                setTextColor(0xFFE8D8FA.toInt())
-                gravity = Gravity.START
-                setPadding(0, dp(7), 0, dp(10))
-            }
-            panel.addView(statsView)
+                }
+            val statsView = DetailsMetadataChips.build(this@SeriesDetailsActivity, metadataStats(metadata))
+            panel.addView(statsView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = getString(R.string.details_story)
@@ -135,15 +129,16 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 setPadding(0, 0, 0, dp(3))
             })
             val overviewView = TextView(this@SeriesDetailsActivity).apply {
+                tag = "blofy_details_overview"
                 textSize = 15f
                 typeface = BlofyTvDesign.BodyTypeface
                 maxLines = 7
                 setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = Gravity.START
-                setLineSpacing(0f, 1.16f)
-                setPadding(0, 0, 0, dp(8))
+                setLineSpacing(0f, 1.18f)
+                setPadding(0, dp(8), 0, dp(10))
             }
-            panel.addView(overviewView)
+            panel.addView(overviewView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
             val crewView = TextView(this@SeriesDetailsActivity).apply {
                 textSize = 11.5f
                 typeface = BlofyTvDesign.MediumTypeface
@@ -167,15 +162,17 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.Mint)
                     gravity = Gravity.START
-                })
+                    background = ContentScreenStyle.chip(this@SeriesDetailsActivity)
+                    setPadding(dp(10), dp(5), dp(10), dp(5))
+                }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(7) })
                 if (currentResume.durationMs > 0) {
                     panel.addView(ProgressBar(this@SeriesDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
                         max = 100
                         this.progress = progress
                         progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
-                    }, LinearLayout.LayoutParams(-1, dp(5)).apply {
-                        topMargin = dp(6)
-                        bottomMargin = dp(10)
+                        progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF3B2B4B.toInt())
+                    }, LinearLayout.LayoutParams(-1, dp(6)).apply {
+                        bottomMargin = dp(12)
                     })
                 }
             }
@@ -191,9 +188,9 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     launchEpisode(provider, currentResume.episode, currentResume.positionMs)
                 }
                 primary = resumeButton
-                actions.addView(resumeButton, LinearLayout.LayoutParams(dp(142), dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
+                actions.addView(resumeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
                 actions.addView(actionButton(getString(R.string.details_start_over)) { launchEpisode(provider, currentResume.episode, 0L) },
-                    LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
             }
 
             val episodes = actionButton(getString(R.string.details_seasons_episodes), primary == null) {
@@ -205,11 +202,11 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 })
             }
             if (primary == null) primary = episodes
-            actions.addView(episodes, LinearLayout.LayoutParams(dp(160), dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
+            actions.addView(episodes, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
 
             metadata?.trailerUrl?.takeIf(String::isNotBlank)?.let { trailerUrl ->
                 actions.addView(actionButton(getString(R.string.details_trailer)) { openExternal(trailerUrl) },
-                    LinearLayout.LayoutParams(dp(106), dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginStart = dp(8) })
             }
 
             favoriteButton = actionButton(getString(if (stream.favorite) R.string.details_favorite_on else R.string.details_favorite_off)) {
@@ -219,23 +216,24 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     favoriteButton.text = getString(if (!current.favorite) R.string.details_favorite_on else R.string.details_favorite_off)
                 }
             }
-            actions.addView(favoriteButton, LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)))
+            actions.addView(favoriteButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)))
             layout.attachActions(actions)
 
             val castContainer = LinearLayout(this@SeriesDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
+                setPadding(0, 0, 0, dp(22))
             }
-            panel.addView(castContainer, LinearLayout.LayoutParams(-1, -2))
+            panel.addView(castContainer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
             ProviderDetailsBinding(this@SeriesDetailsActivity, overviewView, crewView,
                 castContainer, provider, stream) { updated ->
-                    statsView.text = metadataStats(updated)
+                    DetailsMetadataChips.update(statsView, metadataStats(updated))
                     titleView.text = ContentPresentation.title(updated?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
                     ArtworkLoader.loadPriority(backdrop, listOf(updated?.backdropUrl, stream.backdrop, stream.icon))
                     ArtworkLoader.loadPriority(poster, listOf(updated?.posterUrl, stream.icon, stream.backdrop))
                     val logoUrl = updated?.logoUrl
                     logo.visibility = if (logoUrl.isNullOrBlank()) View.GONE else View.VISIBLE
                     if (!logoUrl.isNullOrBlank()) ArtworkLoader.load(logo, logoUrl)
-                    titleView.textSize = if (logoUrl.isNullOrBlank()) 28f else 18f
+                    titleView.textSize = if (logoUrl.isNullOrBlank()) 32f else 18f
                 }.start(metadata)
 
             if (layout.isTv) primary?.requestFocus()
@@ -272,7 +270,8 @@ class SeriesDetailsActivity : ContentAccessActivity() {
 
     private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         text = label
-        CinemaStyle.styleButton(this, primary)
+        ContentScreenStyle.styleAction(this, primary)
+        minimumWidth = dp(if (primary) 132 else 108)
         setOnClickListener { action() }
     }
 

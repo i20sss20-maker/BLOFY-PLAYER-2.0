@@ -77,12 +77,12 @@ internal class ProviderDetailsBinding(
                 setText(if (people.isEmpty()) R.string.details_cast_unavailable else R.string.details_cast)
                 textSize = if (people.isEmpty()) 12f else 16f
                 typeface = BlofyTvDesign.HeadingTypeface
-                setTextColor(CinemaStyle.Muted)
+                setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = Gravity.START
-                setPadding(0, dp(14), 0, dp(6))
+                setPadding(0, dp(10), 0, dp(4))
             }, LinearLayout.LayoutParams(-1, -2))
-            if (people.isNotEmpty()) cast.addView(CastStrip.build(activity, people), LinearLayout.LayoutParams(-1, dp(224)))
-            cast.addView(feedback, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
+            if (people.isNotEmpty()) cast.addView(CastStrip.build(activity, people), LinearLayout.LayoutParams(-1, dp(188)))
+            cast.addView(feedback, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(6) })
             if (focusedTag != null) cast.findViewWithTag<View>(focusedTag)?.requestFocus()
         }
     }

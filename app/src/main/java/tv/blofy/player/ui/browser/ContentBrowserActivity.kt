@@ -156,8 +156,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             tag = "blofy_browser_heading"
             layoutDirection = resources.configuration.layoutDirection
-            val section = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
-            text = "BLOFY  •  $section"
+            val section = when (kind) { KIND_MOVIE -> getString(R.string.home_movies); KIND_SERIES -> getString(R.string.home_series); else -> getString(R.string.home_live) }
+            text = getString(R.string.search_brand_section, section)
             textSize = if (phoneMode) 24f else 29f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -263,18 +263,18 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun createCatalogStatusRow() = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = resources.configuration.layoutDirection
         setPadding(dp(12), 0, dp(12), dp(if (phoneMode) 8 else 12))
         background = BlofyTvDesign.elevatedSurface(20f)
         catalogStatus = TextView(this@ContentBrowserActivity).apply {
-            text = "جاري التحقق من ${catalogLabel()}..."
+            text = getString(R.string.browser_checking_catalog, catalogLabel())
             textSize = if (phoneMode) 14f else 15f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
         }
         addView(catalogStatus, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         catalogRetry = Button(this@ContentBrowserActivity).apply {
-            text = "إعادة المحاولة"
+            text = getString(R.string.browser_retry)
             isAllCaps = false
             textSize = 14f
             typeface = BlofyTvDesign.BodyTypeface
@@ -289,28 +289,28 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun createPreviewPanel() = LinearLayout(this).apply {
         tag = "blofy_live_preview"
         orientation = LinearLayout.VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = resources.configuration.layoutDirection
         setPadding(dp(12), dp(12), dp(12), dp(12))
         background = CinemaStyle.surface(this@ContentBrowserActivity)
         elevation = dp(5).toFloat()
         previewTitle = TextView(this@ContentBrowserActivity).apply {
-            text = "اختر قناة"
+            text = getString(R.string.browser_choose_channel)
             textSize = 18f
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             includeFontPadding = false
             setPadding(dp(4), 0, dp(4), dp(10))
         }
         addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         addView(TextView(this@ContentBrowserActivity).apply {
-            text = "● مباشر  •  المعاينة تبدأ تلقائيًا"
+            text = getString(R.string.browser_live_preview_auto)
             textSize = 13f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.Mint)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(dp(4), 0, dp(4), dp(10))
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
         previewView = PlayerView(this@ContentBrowserActivity).apply {
@@ -322,7 +322,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         addView(TextView(this@ContentBrowserActivity).apply {
-            text = "OK ملء الشاشة   •   ↑↓ القنوات   •   ← رجوع للفئات   •   ضغط مطوّل للأرشيف"
+            text = getString(R.string.browser_remote_hint)
             textSize = 12.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -358,7 +358,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         }
 
         streamAdapter.replace(emptyList())
-        showCatalogStatus("جاري تحميل ${catalogLabel()}...", retry = false)
+        showCatalogStatus(getString(R.string.browser_checking_catalog, catalogLabel()), retry = false)
         loadNextCatalogPage(reset = true)
     }
 
@@ -505,10 +505,10 @@ class ContentBrowserActivity : AppCompatActivity() {
             return
         }
         if (categoryId != null) {
-            showCatalogStatus("لا يوجد محتوى في هذا القسم • اختر ${allCategory().name}", retry = false)
+            showCatalogStatus(getString(R.string.browser_empty_category, allCategory().name), retry = false)
             return
         }
-        showCatalogStatus("لا توجد ${catalogLabel()} محفوظة • حدّث المكتبة يدويًا", retry = true)
+        showCatalogStatus(getString(R.string.browser_no_saved_catalog, catalogLabel()), retry = true)
     }
 
     private fun refreshMissingCatalog() {
@@ -546,14 +546,14 @@ class ContentBrowserActivity : AppCompatActivity() {
         remoteId = ALL_CATEGORY_ID,
         kind = kind,
         name = when (kind) {
-            KIND_LIVE -> "كل القنوات"
-            KIND_MOVIE -> "كل الأفلام"
-            else -> "كل المسلسلات"
+            KIND_LIVE -> getString(R.string.browser_all_channels)
+            KIND_MOVIE -> getString(R.string.browser_all_movies)
+            else -> getString(R.string.browser_all_series)
         },
         orderIndex = -1
     )
 
-    private fun catalogLabel(): String = if (kind == KIND_MOVIE) "أفلام" else "مسلسلات"
+    private fun catalogLabel(): String = getString(if (kind == KIND_MOVIE) R.string.browser_movies_label else R.string.browser_series_label)
 
     private fun schedulePreview(stream: StreamEntity, immediate: Boolean = false) {
         if (!previewEnabled || !::provider.isInitialized || stream.locked || stream.key == lastPreviewKey) return

@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.catalog
 
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.TvUiTuning
 
 import tv.blofy.player.ui.common.ContentPresentation
 
@@ -121,10 +122,14 @@ class PosterStreamAdapter(
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
             view.animate().cancel()
-            view.scaleX = 1f
-            view.scaleY = 1f
-            view.translationZ = if (focused) 4f else 0f
             renderFocus(holder, focused)
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.02f) else 1f
+            view.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, 8f) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                .start()
             if (focused) {
                 val currentPosition = holder.bindingAdapterPosition
                 if (currentPosition != RecyclerView.NO_POSITION) onFocus(item, currentPosition)
@@ -136,8 +141,8 @@ class PosterStreamAdapter(
         holder.itemView.background = card(focused, holder.radius, holder.stroke)
         holder.title.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
         holder.title.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
-        holder.meta.setTextColor(CinemaStyle.Muted)
-        holder.rating.alpha = if (focused) 1f else .9f
+        holder.meta.setTextColor(if (focused) BlofyTvDesign.Lavender else CinemaStyle.Muted)
+        holder.rating.alpha = if (focused) 1f else .88f
     }
 
     override fun onViewRecycled(holder: Holder) {
@@ -178,9 +183,15 @@ class PosterStreamAdapter(
         var artworkCandidates: List<String?> = emptyList()
     }
 
-    private fun card(focused: Boolean, radius: Float, stroke: Int) = GradientDrawable().apply {
-        setColor(CinemaStyle.Surface)
+    private fun card(focused: Boolean, radius: Float, stroke: Int) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        if (focused) {
+            intArrayOf(BlofyTvDesign.SurfaceFocused, BlofyTvDesign.SurfaceRaised, CinemaStyle.Surface)
+        } else {
+            intArrayOf(CinemaStyle.Surface, 0xFF180F23.toInt())
+        }
+    ).apply {
         cornerRadius = radius
-        setStroke(stroke * if (focused) 2 else 1, if (focused) CinemaStyle.White else 0x45FFFFFF)
+        setStroke(stroke * if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0x45FFFFFF)
     }
 }

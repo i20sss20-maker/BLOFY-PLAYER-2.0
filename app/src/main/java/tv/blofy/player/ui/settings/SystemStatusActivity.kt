@@ -46,20 +46,20 @@ class SystemStatusActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = ScrollView(this).apply {
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             background = AppCompatResources.getDrawable(this@SystemStatusActivity, R.drawable.blofy_home_background)
             isFillViewport = true
             isVerticalScrollBarEnabled = false
         }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.TOP or Gravity.RIGHT
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.TOP or Gravity.START
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(50), dp(34), dp(50), dp(46))
         }
         root.addView(content)
         setContentView(root)
-        renderHeader("تشخيص BLOFY")
+        renderHeader(getString(R.string.system_status_title))
         loadStatus()
     }
 
@@ -89,9 +89,9 @@ class SystemStatusActivity : AppCompatActivity() {
                     metadata = manifest?.metadataCount ?: 0,
                     storage = LocalStorageManager.stats(applicationContext),
                     activation = when {
-                        activation == null -> "غير معروف"
-                        activation.activated -> "مفعّل"
-                        else -> "غير مفعّل"
+                        activation == null -> getString(R.string.system_status_activation_unknown)
+                        activation.activated -> getString(R.string.system_status_activation_active)
+                        else -> getString(R.string.system_status_activation_inactive)
                     },
                     network = networkLabel(),
                     memoryAvailable = memory.first,
@@ -105,69 +105,69 @@ class SystemStatusActivity : AppCompatActivity() {
     private fun render(status: Snapshot) {
         content.removeAllViews()
         val total = status.live + status.movies + status.series
-        renderHeader("تشخيص BLOFY")
+        renderHeader(getString(R.string.system_status_title))
 
-        addSection("التطبيق والجهاز", listOf(
-            "الإصدار" to BuildConfig.VERSION_NAME,
-            "Version Code" to BuildConfig.VERSION_CODE.toString(),
-            "حالة التفعيل" to status.activation,
-            "نظام Android" to "${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
-            "الجهاز" to deviceLabel(),
-            "نوع الواجهة" to if (DeviceClass.isTv(this)) "TV" else "Mobile / Tablet"
+        addSection(getString(R.string.system_status_section_app_device), listOf(
+            getString(R.string.system_status_version) to BuildConfig.VERSION_NAME,
+            getString(R.string.system_status_version_code) to BuildConfig.VERSION_CODE.toString(),
+            getString(R.string.system_status_activation) to status.activation,
+            getString(R.string.system_status_android) to getString(R.string.system_status_android_format, Build.VERSION.RELEASE, Build.VERSION.SDK_INT),
+            getString(R.string.system_status_device) to deviceLabel(),
+            getString(R.string.system_status_form_factor) to getString(if (DeviceClass.isTv(this)) R.string.system_status_tv else R.string.system_status_mobile)
         ))
 
-        addSection("الشبكة والذاكرة", listOf(
-            "حالة الشبكة" to status.network,
-            "الذاكرة المتاحة" to status.memoryAvailable,
-            "إجمالي الذاكرة" to status.memoryTotal
+        addSection(getString(R.string.system_status_section_network_memory), listOf(
+            getString(R.string.system_status_network) to status.network,
+            getString(R.string.system_status_memory_available) to status.memoryAvailable,
+            getString(R.string.system_status_memory_total) to status.memoryTotal
         ))
 
-        addSection("السيرفر والمكتبة", if (status.providerName == null) {
-            listOf("القائمة النشطة" to "لا توجد قائمة")
+        addSection(getString(R.string.system_status_section_server_library), if (status.providerName == null) {
+            listOf(getString(R.string.system_status_active_playlist) to getString(R.string.system_status_no_playlist))
         } else {
             listOf(
-                "القائمة النشطة" to status.providerName,
-                "نوع السيرفر" to (status.providerType ?: "—").uppercase(),
-                "القنوات" to status.live.toString(),
-                "الأفلام" to status.movies.toString(),
-                "المسلسلات" to status.series.toString(),
-                "الحلقات المفهرسة" to status.episodes.toString(),
-                "بيانات المحتوى" to status.metadata.toString(),
-                "حالة المكتبة" to when {
-                    status.fullyReady && total > 0 -> "جاهزة بالكامل"
-                    status.ready && total > 0 -> "جاهزة • تجهيزات ثانوية قيد الاكتمال"
-                    else -> "تحتاج تحديث المحتوى"
+                getString(R.string.system_status_active_playlist) to status.providerName,
+                getString(R.string.system_status_server_type) to (status.providerType ?: "—").uppercase(),
+                getString(R.string.system_status_channels) to status.live.toString(),
+                getString(R.string.system_status_movies) to status.movies.toString(),
+                getString(R.string.system_status_series) to status.series.toString(),
+                getString(R.string.system_status_indexed_episodes) to status.episodes.toString(),
+                getString(R.string.system_status_metadata) to status.metadata.toString(),
+                getString(R.string.system_status_library_state) to when {
+                    status.fullyReady && total > 0 -> getString(R.string.system_status_library_ready_full)
+                    status.ready && total > 0 -> getString(R.string.system_status_library_ready_secondary)
+                    else -> getString(R.string.system_status_library_needs_refresh)
                 },
-                "بيانات الأفلام والمسلسلات" to if (status.metadataReady) "جاهزة" else "قيد التجهيز / غير متوفرة",
-                "فهرس الحلقات" to if (status.episodesReady) "جاهز" else "قيد التجهيز / غير متوفر",
-                "آخر تحديث ناجح" to formatTime(status.updatedAt)
+                getString(R.string.system_status_metadata_state) to getString(if (status.metadataReady) R.string.system_status_ready else R.string.system_status_preparing_unavailable),
+                getString(R.string.system_status_episode_index) to getString(if (status.episodesReady) R.string.system_status_episode_index_ready else R.string.system_status_episode_index_preparing),
+                getString(R.string.system_status_last_refresh) to formatTime(status.updatedAt)
             )
         })
 
-        addSection("المساحة المستخدمة", listOf(
-            "الملفات المؤقتة" to LocalStorageManager.format(this, status.storage.temporaryBytes),
-            "إجمالي مساحة BLOFY" to LocalStorageManager.format(this, status.storage.totalBytes)
+        addSection(getString(R.string.system_status_section_storage), listOf(
+            getString(R.string.system_status_temp_files) to LocalStorageManager.format(this, status.storage.temporaryBytes),
+            getString(R.string.system_status_total_storage) to LocalStorageManager.format(this, status.storage.totalBytes)
         ))
 
         content.addView(Button(this).apply {
-            text = "نسخ تقرير التشخيص"
+            text = getString(R.string.system_status_copy_report)
             CinemaStyle.styleButton(this)
             setOnClickListener { copyReport(status) }
         }, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(4); bottomMargin = dp(14) })
 
         content.addView(TextView(this).apply {
-            text = "التقرير لا يحتوي اسم المستخدم أو كلمة المرور أو رابط السيرفر."
+            text = getString(R.string.system_status_privacy_note)
             textSize = 11.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         content.addView(TextView(this).apply {
-            text = "BLOFY PLAYER • مكتبتك، بطريقتك"
+            text = getString(R.string.system_status_tagline)
             textSize = 11.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(16), 0, 0)
         })
     }
@@ -178,21 +178,21 @@ class SystemStatusActivity : AppCompatActivity() {
             text = getString(R.string.back)
             CinemaStyle.styleButton(this)
             setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(110), dp(42)).apply { gravity = Gravity.LEFT; bottomMargin = dp(12) })
+        }, LinearLayout.LayoutParams(dp(110), dp(42)).apply { gravity = Gravity.START; bottomMargin = dp(12) })
         content.addView(TextView(this).apply {
             text = "BLOFY PLAYER"
             textSize = 11.5f
             letterSpacing = .13f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(BlofyTvDesign.PurpleBright)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         content.addView(TextView(this).apply {
             text = textValue
             textSize = 30f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(4), 0, dp(18))
         })
     }
@@ -200,7 +200,7 @@ class SystemStatusActivity : AppCompatActivity() {
     private fun addSection(title: String, rows: List<Pair<String, String>>) {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(20), dp(16), dp(20), dp(16))
             background = CinemaStyle.surface(this@SystemStatusActivity, radiusDp = 14)
         }
@@ -209,26 +209,26 @@ class SystemStatusActivity : AppCompatActivity() {
             textSize = 16f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, 0, 0, dp(8))
         })
         rows.forEach { (label, value) ->
             panel.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                layoutDirection = resources.configuration.layoutDirection
                 gravity = Gravity.CENTER_VERTICAL
                 addView(TextView(this@SystemStatusActivity).apply {
                     text = label
                     textSize = 12.5f
                     setTextColor(BlofyTvDesign.TextMuted)
-                    gravity = Gravity.RIGHT
+                    gravity = Gravity.START
                 }, LinearLayout.LayoutParams(0, dp(34), 1f))
                 addView(TextView(this@SystemStatusActivity).apply {
                     text = value
                     textSize = 12.5f
                     typeface = BlofyTvDesign.MediumTypeface
                     setTextColor(BlofyTvDesign.TextSecondary)
-                    gravity = Gravity.LEFT
+                    gravity = Gravity.END
                     maxLines = 1
                 }, LinearLayout.LayoutParams(0, dp(34), 1f))
             })
@@ -245,8 +245,8 @@ class SystemStatusActivity : AppCompatActivity() {
 
     private fun networkLabel(): String {
         val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = manager.activeNetwork ?: return "غير متصل"
-        val capabilities = manager.getNetworkCapabilities(network) ?: return "غير متصل"
+        val network = manager.activeNetwork ?: return getString(R.string.system_status_disconnected)
+        val capabilities = manager.getNetworkCapabilities(network) ?: return getString(R.string.system_status_disconnected)
         val transport = when {
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi‑Fi"
@@ -254,8 +254,8 @@ class SystemStatusActivity : AppCompatActivity() {
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
             else -> "Network"
         }
-        val state = if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) "متصل" else "بدون تحقق إنترنت"
-        return "$transport • $state"
+        val state = getString(if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) R.string.system_status_connected else R.string.system_status_unverified_internet)
+        return getString(R.string.system_status_network_format, transport, state)
     }
 
     private fun deviceLabel(): String = listOf(Build.MANUFACTURER, Build.MODEL)
@@ -263,7 +263,7 @@ class SystemStatusActivity : AppCompatActivity() {
         .filter { it.isNotBlank() }
         .distinctBy { it.lowercase() }
         .joinToString(" ")
-        .ifBlank { "Android device" }
+        .ifBlank { getString(R.string.system_status_android_device) }
 
     private fun copyReport(status: Snapshot) {
         val report = buildString {
@@ -284,7 +284,7 @@ class SystemStatusActivity : AppCompatActivity() {
         }.trim()
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("BLOFY diagnostics", report))
-        Toast.makeText(this, "تم نسخ تقرير التشخيص", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.system_status_report_copied), Toast.LENGTH_SHORT).show()
     }
 
     private fun formatTime(value: Long): String =

@@ -10,54 +10,91 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnLayout
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
 
 /** Touch screens keep the primary action outside the scrolling synopsis. */
 internal class DetailsLayout(private val activity: AppCompatActivity) {
     val isTv = DeviceClass.isTv(activity)
+    private val shortTv = isTv && activity.resources.configuration.screenHeightDp <= 600
     private val stacked = !isTv && activity.resources.configuration.screenWidthDp < 600
     val root = FrameLayout(activity).apply { setBackgroundColor(CinemaStyle.Background) }
     val backdrop = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
-        alpha = .55f
+        alpha = .68f
     }
     val poster = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
-        setBackgroundColor(CinemaStyle.Surface)
+        background = GradientDrawable().apply {
+            cornerRadius = dp(16).toFloat()
+            setColor(CinemaStyle.Surface)
+        }
+        clipToOutline = true
     }
     val info = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
-        gravity = (if (isTv) Gravity.CENTER_VERTICAL else Gravity.TOP) or Gravity.END
+        gravity = Gravity.TOP or Gravity.END
         layoutDirection = activity.resources.configuration.layoutDirection
-        setPadding(dp(if (isTv) 12 else 0), dp(if (isTv) 28 else 8), dp(if (isTv) 12 else 0), dp(if (isTv) 28 else 24))
+        setPadding(
+            dp(if (shortTv) 14 else if (isTv) 22 else 14),
+            dp(if (shortTv) 12 else if (isTv) 24 else 14),
+            dp(if (shortTv) 14 else if (isTv) 22 else 14),
+            dp(if (shortTv) 22 else if (isTv) 34 else 18)
+        )
+        setBackgroundColor(android.graphics.Color.TRANSPARENT)
     }
     private val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-    private val profileActions = LinearLayout(activity).apply { tag = "blofy_details_profile_actions" }
+    private val profileActions = LinearLayout(activity).apply {
+        tag = "blofy_details_profile_actions"
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
 
     init {
         root.addView(backdrop, FrameLayout.LayoutParams(-1, -1))
         root.addView(View(activity).apply {
             background = GradientDrawable(
                 if (stacked) GradientDrawable.Orientation.TOP_BOTTOM else GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0xC0211237.toInt(), 0xE8211237.toInt(), 0xFA170D29.toInt())
+                intArrayOf(0xF707050B.toInt(), 0xD807050B.toInt(), 0x7207050B.toInt(), 0x2407050B)
+            )
+        }, FrameLayout.LayoutParams(-1, -1))
+        root.addView(View(activity).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(0xF207050B.toInt(), 0x8A07050B.toInt(), 0x0007050B)
             )
         }, FrameLayout.LayoutParams(-1, -1))
         val body = LinearLayout(activity).apply {
             orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             layoutDirection = activity.resources.configuration.layoutDirection
             gravity = if (isTv) Gravity.CENTER_VERTICAL else Gravity.TOP
-            setPadding(dp(if (isTv) 48 else 20), dp(if (isTv) 24 else 16), dp(if (isTv) 48 else 20), dp(if (isTv) 24 else 16))
+            setPadding(
+                dp(if (shortTv) 28 else if (isTv) 48 else 20),
+                dp(if (shortTv) 14 else if (isTv) 24 else 16),
+                dp(if (shortTv) 28 else if (isTv) 48 else 20),
+                dp(if (shortTv) 14 else if (isTv) 24 else 16)
+            )
         }
-        val posterHeight = if (isTv) (activity.resources.configuration.screenHeightDp * .72f).toInt().coerceIn(260, 500) else if (stacked) 188 else 210
+        val posterHeight = when {
+            shortTv -> (activity.resources.configuration.screenHeightDp * .66f).toInt().coerceIn(230, 360)
+            isTv -> (activity.resources.configuration.screenHeightDp * .72f).toInt().coerceIn(260, 500)
+            stacked -> 188
+            else -> 210
+        }
         val posterWidth = if (isTv) posterHeight * 2 / 3 else if (stacked) 128 else 142
         val card = FrameLayout(activity).apply {
-            setPadding(dp(6), dp(6), dp(6), dp(6))
-            background = CinemaStyle.surface(activity, radiusDp = 12)
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(20).toFloat()
+                setColor(0x35110B18)
+                setStroke(dp(1), 0x52FFFFFF)
+            }
+            elevation = dp(3).toFloat()
             addView(poster, FrameLayout.LayoutParams(-1, -1))
         }
         body.addView(card, LinearLayout.LayoutParams(dp(posterWidth), dp(posterHeight)).apply {
             gravity = if (stacked) Gravity.CENTER_HORIZONTAL else if (isTv) Gravity.CENTER_VERTICAL else Gravity.TOP
-            marginEnd = if (stacked) 0 else dp(if (isTv) 34 else 20)
+            marginEnd = if (stacked) 0 else dp(if (isTv) 34 else 18)
             bottomMargin = if (stacked) dp(12) else 0
         })
         if (isTv) {
@@ -80,12 +117,18 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
             }
         }
         activity.setContentView(root)
-        if (!isTv) root.addView(profileActions, FrameLayout.LayoutParams(0, 0))
+        // Keep the profile-action host discoverable from the first lifecycle resume. Details data
+        // can arrive asynchronously; attachActions later moves this same host into the action row.
+        root.addView(profileActions, FrameLayout.LayoutParams(0, 0))
         ViewCompat.requestApplyInsets(content)
     }
 
     fun attachActions(row: LinearLayout) {
         if (isTv) {
+            (profileActions.parent as? android.view.ViewGroup)?.removeView(profileActions)
+            row.addView(profileActions, LinearLayout.LayoutParams(-2, dp(CinemaStyle.ActionHeight)).apply {
+                marginStart = dp(8)
+            })
             info.addView(CinemaStyle.actionStrip(activity, row))
             return
         }
@@ -110,7 +153,10 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         content.addView(dock, LinearLayout.LayoutParams(-1, -2))
     }
 
-    fun logoParams() = LinearLayout.LayoutParams(if (isTv) dp(390) else -1, dp(if (isTv) 86 else 64)).apply {
+    fun logoParams() = LinearLayout.LayoutParams(
+        if (isTv) dp(if (shortTv) 320 else 390) else -1,
+        dp(if (shortTv) 64 else if (isTv) 86 else 64)
+    ).apply {
         gravity = Gravity.END
         topMargin = dp(4)
     }

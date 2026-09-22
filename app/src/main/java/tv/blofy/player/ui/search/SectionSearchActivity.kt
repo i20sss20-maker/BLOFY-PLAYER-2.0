@@ -64,7 +64,7 @@ class SectionSearchActivity : AppCompatActivity() {
         }
 
         root.addView(TextView(this).apply {
-            text = "BLOFY  •  ${sectionTitle()}"
+            text = getString(R.string.search_brand_section, sectionTitle())
             textSize = if (compact) 22f else 27f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -88,6 +88,9 @@ class SectionSearchActivity : AppCompatActivity() {
             background = CinemaStyle.surface(this@SectionSearchActivity)
             setPadding(dp(18), dp(6), dp(18), dp(6))
             isSingleLine = true
+            setOnFocusChangeListener { view, focused ->
+                view.background = CinemaStyle.surface(this@SectionSearchActivity, focused)
+            }
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             setOnEditorActionListener { _, _, _ ->
                 val query = text?.toString().orEmpty()
@@ -156,7 +159,7 @@ class SectionSearchActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val activeId = withContext(Dispatchers.IO) { dao.activeProviderId() }
             provider = activeId?.let { withContext(Dispatchers.IO) { dao.provider(it) } } ?: run {
-                status.text = "لا توجد قائمة تشغيل نشطة"
+                status.setText(R.string.search_no_active_playlist)
                 input.isEnabled = false
                 return@launch
             }
@@ -191,9 +194,9 @@ class SectionSearchActivity : AppCompatActivity() {
         if (input.text?.toString()?.trim() != q) return
         if (kind == KIND_LIVE) liveAdapter.replace(results) else posterAdapter.replace(results)
         status.text = if (results.isEmpty()) {
-            "ما لقينا نتائج داخل ${sectionTitle()}"
+            getString(R.string.search_section_empty, sectionTitle())
         } else {
-            "${results.size}${if (results.size >= RESULT_LIMIT) "+" else ""} نتيجة داخل ${sectionTitle()}"
+            getString(R.string.search_section_count, "${results.size}${if (results.size >= RESULT_LIMIT) "+" else ""}", sectionTitle())
         }
         if (moveFocus && results.isNotEmpty()) {
             list.scrollToPosition(0)
@@ -249,21 +252,21 @@ class SectionSearchActivity : AppCompatActivity() {
     }
 
     private fun sectionTitle() = when (kind) {
-        KIND_LIVE -> "البث المباشر"
-        KIND_SERIES -> "المسلسلات"
-        else -> "الأفلام"
+        KIND_LIVE -> getString(R.string.search_section_live)
+        KIND_SERIES -> getString(R.string.search_section_series)
+        else -> getString(R.string.search_section_movies)
     }
 
     private fun startHint() = when (kind) {
-        KIND_LIVE -> "ابحث في القنوات فقط — يبدأ البحث من أول حرف"
-        KIND_SERIES -> "ابحث في المسلسلات فقط — النتائج بنفس البوسترات"
-        else -> "ابحث في الأفلام فقط — النتائج بنفس البوسترات"
+        KIND_LIVE -> getString(R.string.search_section_hint_live)
+        KIND_SERIES -> getString(R.string.search_section_hint_series)
+        else -> getString(R.string.search_section_hint_movies)
     }
 
     private fun inputHint() = when (kind) {
-        KIND_LIVE -> "اكتب اسم القناة"
-        KIND_SERIES -> "اكتب اسم المسلسل"
-        else -> "اكتب اسم الفيلم"
+        KIND_LIVE -> getString(R.string.search_input_channel)
+        KIND_SERIES -> getString(R.string.search_input_series)
+        else -> getString(R.string.search_input_movie)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

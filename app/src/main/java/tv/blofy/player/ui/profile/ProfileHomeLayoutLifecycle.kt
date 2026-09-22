@@ -30,6 +30,8 @@ import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.home.HomeActivity
+import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeRowOrder
 import java.util.WeakHashMap
 
@@ -130,21 +132,21 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
             tag = TAG_WATCHLIST_TITLE
             HomeRowOrder.mark(this, "watchlist")
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.RIGHT
+            layoutDirection = activity.resources.configuration.layoutDirection
+            gravity = Gravity.START
             setPadding(0, dp(activity, 12), dp(activity, 4), dp(activity, 6))
             addView(TextView(activity).apply {
-                text = "قائمتي"
+                text = activity.getString(tv.blofy.player.R.string.profile_watchlist_title)
                 textSize = 19f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.rgb(249, 247, 252))
-                gravity = Gravity.RIGHT
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(BlofyTvDesign.TextPrimary)
+                gravity = Gravity.START
             })
             addView(TextView(activity).apply {
-                text = "اختيارات ${ProfileStore.active(activity).name}"
+                text = activity.getString(tv.blofy.player.R.string.profile_watchlist_subtitle, ProfileStore.active(activity).name)
                 textSize = 11.5f
-                setTextColor(Color.rgb(172, 160, 188))
-                gravity = Gravity.RIGHT
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = Gravity.START
             })
         }
 
@@ -155,11 +157,11 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
             overScrollMode = View.OVER_SCROLL_NEVER
             clipChildren = false
             clipToPadding = false
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = activity.resources.configuration.layoutDirection
         }
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = activity.resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(activity, 4), dp(activity, 5), dp(activity, 4), dp(activity, 12))
             clipChildren = false
@@ -188,7 +190,7 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
     private fun card(activity: HomeActivity, item: StreamEntity) = FrameLayout(activity).apply {
         tag = "blofy_profile_watchlist_item:${item.key}"
         isFocusable = true
-        isFocusableInTouchMode = true
+        isFocusableInTouchMode = tv.blofy.player.core.device.DeviceClass.isTv(activity)
         isClickable = true
         clipChildren = false
         background = cardBackground(activity, false)
@@ -209,19 +211,23 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
         addView(TextView(activity).apply {
             text = item.name
             textSize = 12.2f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = BlofyTvDesign.LabelTypeface
             maxLines = 2
-            setTextColor(Color.WHITE)
-            gravity = Gravity.BOTTOM or Gravity.RIGHT
+            setTextColor(BlofyTvDesign.TextPrimary)
+            gravity = Gravity.BOTTOM or Gravity.START
             setPadding(dp(activity, 10), dp(activity, 8), dp(activity, 10), dp(activity, 11))
         }, FrameLayout.LayoutParams(-1, dp(activity, 88), Gravity.BOTTOM))
 
         setOnFocusChangeListener { view, focused ->
             view.background = cardBackground(activity, focused)
             view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.065f else 1f).scaleY(if (focused) 1.065f else 1f)
-                .translationZ(if (focused) dp(activity, 15).toFloat() else dp(activity, 1).toFloat())
-                .setDuration(85).start()
+            val targetScale = if (focused) TvUiTuning.focusScale(activity, 1.02f) else 1f
+            view.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(activity, dp(activity, 10).toFloat()) else 0f)
+                .setDuration(TvUiTuning.focusDuration(activity, focused))
+                .start()
         }
         setOnClickListener {
             activity.startActivity(Intent(activity, if (item.kind == "series") SeriesDetailsActivity::class.java else MovieDetailsActivity::class.java).apply {
@@ -233,10 +239,11 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
 
     private fun cardBackground(activity: Activity, focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF9A55F0.toInt(), 0xFF522777.toInt()) else intArrayOf(0xFF2A1D39.toInt(), 0xFF17101F.toInt())
+        if (focused) intArrayOf(BlofyTvDesign.SurfaceFocused, BlofyTvDesign.SurfaceRaised, BlofyTvDesign.Surface)
+        else intArrayOf(BlofyTvDesign.Surface, BlofyTvDesign.BackgroundRaised)
     ).apply {
         cornerRadius = dp(activity, 15).toFloat()
-        setStroke(dp(activity, if (focused) 2 else 1), if (focused) Color.WHITE else 0x45FFFFFF)
+        setStroke(dp(activity, if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0x45FFFFFF)
     }
 
     private fun homeFeed(activity: HomeActivity): LinearLayout? = runCatching {

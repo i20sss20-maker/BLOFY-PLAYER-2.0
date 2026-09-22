@@ -36,21 +36,21 @@ class HomePersonalizationActivity : AppCompatActivity() {
         }
         val profile = ProfileStore.active(this)
         root.addView(TextView(this).apply {
-            text = "Customize Home"
+            text = getString(R.string.home_personalization_title)
             textSize = 28f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = "${profile.name} • choose and reorder the rows shown on Home"
+            text = getString(R.string.home_personalization_subtitle, profile.name)
             textSize = 13.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
             setPadding(0, dp(4), 0, dp(14))
         })
         status = TextView(this).apply {
-            text = "Changes are saved for this profile only"
+            text = getString(R.string.home_personalization_saved_note)
             textSize = 13f
             setTextColor(BlofyTvDesign.PurpleSoft)
             setPadding(dp(14), dp(10), dp(14), dp(10))
@@ -60,12 +60,12 @@ class HomePersonalizationActivity : AppCompatActivity() {
 
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(list)
-        root.addView(actionButton("Restore default Home") {
+        root.addView(actionButton(getString(R.string.home_personalization_restore_default)) {
             ProfileLibraryStore.resetHomeRows(this)
-            status.text = "Default Home restored"
+            status.setText(R.string.home_personalization_default_restored)
             render()
         }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
-        root.addView(actionButton("Back") { finish() }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(8) })
+        root.addView(actionButton(getString(R.string.home_personalization_back)) { finish() }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(8) })
         scroll.addView(root)
         setContentView(scroll)
         renderRows()
@@ -84,7 +84,7 @@ class HomePersonalizationActivity : AppCompatActivity() {
                 background = BlofyTvDesign.elevatedSurface(dp(18).toFloat())
             }
             val label = TextView(this).apply {
-                text = rowLabel(row) + if (on) "\nVisible" else "\nHidden"
+                text = getString(R.string.home_personalization_row_state, rowLabel(row), getString(if (on) R.string.home_personalization_visible else R.string.home_personalization_hidden))
                 textSize = 15f
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(if (on) Color.WHITE else BlofyTvDesign.TextMuted)
@@ -94,9 +94,9 @@ class HomePersonalizationActivity : AppCompatActivity() {
                 card.addView(actionButton("↑") { move(row, -1) }, LinearLayout.LayoutParams(dp(58), dp(48)).apply { marginStart = dp(6) })
                 card.addView(actionButton("↓") { move(row, 1) }, LinearLayout.LayoutParams(dp(58), dp(48)).apply { marginStart = dp(6) })
             }
-            card.addView(actionButton(if (on) "Hide" else "Show") {
+            card.addView(actionButton(getString(if (on) R.string.home_personalization_hide else R.string.home_personalization_show)) {
                 ProfileLibraryStore.setHomeRowEnabled(this, row, !on)
-                status.text = if (on) "Row hidden" else "Row added to Home"
+                status.text = getString(if (on) R.string.home_personalization_row_hidden else R.string.home_personalization_row_added)
                 renderRows()
             }, LinearLayout.LayoutParams(dp(100), dp(48)).apply { marginStart = dp(8) })
             list.addView(card, LinearLayout.LayoutParams(-1, dp(78)).apply { bottomMargin = dp(8) })
@@ -105,18 +105,18 @@ class HomePersonalizationActivity : AppCompatActivity() {
 
     private fun move(row: String, delta: Int) {
         ProfileLibraryStore.moveHomeRow(this, row, delta)
-        status.text = "Home order saved"
+        status.setText(R.string.home_personalization_order_saved)
         renderRows()
     }
 
     private fun rowLabel(row: String): String = when (row) {
-        "continue_watching" -> "Continue Watching"
-        "recent_channels" -> "Recently Watched"
-        "watchlist" -> "My Watchlist"
-        "latest" -> "Recently Added"
-        "top_rated" -> "Top Rated"
-        "arabic" -> "Arabic Picks"
-        "uhd" -> "4K • UHD"
+        "continue_watching" -> getString(R.string.home_personalization_continue)
+        "recent_channels" -> getString(R.string.home_personalization_recent)
+        "watchlist" -> getString(R.string.home_personalization_watchlist)
+        "latest" -> getString(R.string.home_personalization_latest)
+        "top_rated" -> getString(R.string.home_personalization_top_rated)
+        "arabic" -> getString(R.string.home_personalization_arabic)
+        "uhd" -> getString(R.string.home_personalization_uhd)
         else -> row
     }
 

@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import tv.blofy.player.core.security.ContentAccessActivity
@@ -27,6 +28,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.player.PlayerActivity
 
 class MovieDetailsActivity : ContentAccessActivity() {
@@ -62,13 +64,14 @@ class MovieDetailsActivity : ContentAccessActivity() {
             val info = layout.info
 
             info.addView(TextView(this@MovieDetailsActivity).apply {
-                text = "BLOFY CINEMA"
+                text = getString(R.string.brand_cinema)
                 textSize = 11.5f
                 letterSpacing = .12f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleBright)
                 gravity = contentGravity
-            })
+                setPadding(0, dp(2), 0, dp(4))
+            }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(6) })
 
             val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
             val logo = ImageView(this@MovieDetailsActivity).apply {
@@ -80,7 +83,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
             info.addView(logo, layout.logoParams())
             val titleView = TextView(this@MovieDetailsActivity).apply {
                 text = title
-                textSize = if (metadata?.logoUrl.isNullOrBlank()) 28f else 18f
+                textSize = if (metadata?.logoUrl.isNullOrBlank()) 32f else 18f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
                 gravity = contentGravity
@@ -88,7 +91,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 includeFontPadding = false
                 alpha = if (metadata?.logoUrl.isNullOrBlank()) 1f else .9f
             }
-            info.addView(titleView)
+            info.addView(titleView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(7) })
 
             fun metadataStats(metadata: tv.blofy.player.data.metadata.ProviderMetadata.Metadata?) = buildList {
                     add(getString(R.string.details_movie_type))
@@ -104,17 +107,9 @@ class MovieDetailsActivity : ContentAccessActivity() {
                     metadata?.countries?.takeIf { it.isNotEmpty() }?.let { add(it.take(2).joinToString(" / ")) }
                     metadata?.originalLanguage?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
                     stream.extension?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
-                }.joinToString("   •   ")
-            val statsView = TextView(this@MovieDetailsActivity).apply {
-                tag = "blofy_details_stats"
-                text = metadataStats(metadata)
-                textSize = 13.5f
-                typeface = BlofyTvDesign.BodyTypeface
-                setTextColor(0xFFE8D8FA.toInt())
-                gravity = contentGravity
-                setPadding(0, dp(7), 0, dp(10))
-            }
-            info.addView(statsView)
+                }
+            val statsView = DetailsMetadataChips.build(this@MovieDetailsActivity, metadataStats(metadata))
+            info.addView(statsView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = getString(R.string.details_story)
@@ -125,6 +120,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 setPadding(0, 0, 0, dp(3))
             })
             val overviewView = TextView(this@MovieDetailsActivity).apply {
+                tag = "blofy_details_overview"
                 text = metadata?.overview?.takeIf(String::isNotBlank)
                     ?: stream.plot?.takeIf(String::isNotBlank)
                     ?: getString(R.string.details_movie_no_description)
@@ -133,10 +129,10 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 maxLines = 7
                 setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = contentGravity
-                setLineSpacing(0f, 1.16f)
-                setPadding(0, 0, 0, dp(9))
+                setLineSpacing(0f, 1.18f)
+                setPadding(0, dp(8), 0, dp(10))
             }
-            info.addView(overviewView)
+            info.addView(overviewView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
             val crewView = TextView(this@MovieDetailsActivity).apply {
                 textSize = 11.5f
@@ -158,8 +154,15 @@ class MovieDetailsActivity : ContentAccessActivity() {
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.Mint)
                     gravity = contentGravity
-                    setPadding(0, 0, 0, dp(7))
-                })
+                    background = ContentScreenStyle.chip(this@MovieDetailsActivity)
+                    setPadding(dp(10), dp(5), dp(10), dp(5))
+                }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(7) })
+                info.addView(ProgressBar(this@MovieDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    max = 100
+                    this.progress = progress
+                    progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF3B2B4B.toInt())
+                }, LinearLayout.LayoutParams(-1, dp(6)).apply { bottomMargin = dp(12) })
             }
 
             val actions = LinearLayout(this@MovieDetailsActivity).apply {
@@ -170,14 +173,14 @@ class MovieDetailsActivity : ContentAccessActivity() {
             val play = actionButton(getString(if (resumeMs > 30_000L) R.string.details_resume else R.string.details_watch_now), true) {
                 openPlayer(provider, stream, url, resumeMs)
             }
-            actions.addView(play, LinearLayout.LayoutParams(dp(126), dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(8) })
+            actions.addView(play, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(8) })
             if (resumeMs > 30_000L) {
                 actions.addView(actionButton(getString(R.string.details_start_over)) { openPlayer(provider, stream, url, 0L) },
-                    LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(8) })
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(8) })
             }
             metadata?.trailerUrl?.takeIf(String::isNotBlank)?.let { trailerUrl ->
                 actions.addView(actionButton(getString(R.string.details_trailer)) { openExternal(trailerUrl) },
-                    LinearLayout.LayoutParams(dp(106), dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(8) })
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(8) })
             }
             favoriteButton = actionButton(getString(if (stream.favorite) R.string.details_favorite_on else R.string.details_favorite_off)) {
                 lifecycleScope.launch {
@@ -186,23 +189,24 @@ class MovieDetailsActivity : ContentAccessActivity() {
                     favoriteButton.text = getString(if (!current.favorite) R.string.details_favorite_on else R.string.details_favorite_off)
                 }
             }
-            actions.addView(favoriteButton, LinearLayout.LayoutParams(dp(112), dp(CinemaStyle.ActionHeight)))
+            actions.addView(favoriteButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)))
             layout.attachActions(actions)
 
             val castContainer = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
+                setPadding(0, 0, 0, dp(22))
             }
-            info.addView(castContainer, LinearLayout.LayoutParams(-1, -2))
+            info.addView(castContainer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
             ProviderDetailsBinding(this@MovieDetailsActivity, overviewView, crewView,
                 castContainer, provider, stream) { updated ->
-                    statsView.text = metadataStats(updated)
+                    DetailsMetadataChips.update(statsView, metadataStats(updated))
                     titleView.text = ContentPresentation.title(updated?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
                     ArtworkLoader.loadPriority(backdrop, listOf(updated?.backdropUrl, stream.backdrop, stream.icon))
                     ArtworkLoader.loadPriority(poster, listOf(updated?.posterUrl, stream.icon, stream.backdrop))
                     val logoUrl = updated?.logoUrl
                     logo.visibility = if (logoUrl.isNullOrBlank()) View.GONE else View.VISIBLE
                     if (!logoUrl.isNullOrBlank()) ArtworkLoader.load(logo, logoUrl)
-                    titleView.textSize = if (logoUrl.isNullOrBlank()) 28f else 18f
+                    titleView.textSize = if (logoUrl.isNullOrBlank()) 32f else 18f
                 }.start(metadata)
 
             if (layout.isTv) play.requestFocus()
@@ -236,7 +240,8 @@ class MovieDetailsActivity : ContentAccessActivity() {
 
     private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         text = label
-        CinemaStyle.styleButton(this, primary)
+        ContentScreenStyle.styleAction(this, primary)
+        minimumWidth = dp(if (primary) 126 else 108)
         setOnClickListener { action() }
     }
 

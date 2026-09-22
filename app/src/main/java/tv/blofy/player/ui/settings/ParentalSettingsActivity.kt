@@ -35,8 +35,8 @@ class ParentalSettingsActivity : AppCompatActivity() {
     private fun buildPage() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.TOP or Gravity.RIGHT
+            layoutDirection = resources.configuration.layoutDirection
+            gravity = Gravity.TOP or Gravity.START
             setPadding(dp(42), dp(32), dp(42), dp(36))
             background = AppCompatResources.getDrawable(this@ParentalSettingsActivity, R.drawable.blofy_home_background)
         }
@@ -44,26 +44,26 @@ class ParentalSettingsActivity : AppCompatActivity() {
             text = getString(R.string.back)
             CinemaStyle.styleButton(this)
             setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(110), dp(44)).apply { gravity = Gravity.LEFT; bottomMargin = dp(14) })
+        }, LinearLayout.LayoutParams(dp(110), dp(44)).apply { gravity = Gravity.START; bottomMargin = dp(14) })
         root.addView(TextView(this).apply {
-            text = "الحماية الأبوية"
+            text = getString(R.string.parental_title)
             textSize = 28f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = "استخدم PIN من 4 إلى 8 أرقام لفتح القنوات أو المحتوى المقفل."
+            text = getString(R.string.parental_subtitle)
             textSize = 13.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(8), 0, dp(20))
         })
         status = TextView(this).apply {
             textSize = 15f
             typeface = BlofyTvDesign.MediumTypeface
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setPadding(dp(18), 0, dp(18), 0)
             background = CinemaStyle.surface(this@ParentalSettingsActivity)
         }
@@ -71,24 +71,24 @@ class ParentalSettingsActivity : AppCompatActivity() {
 
         setButton = actionButton("") {
             if (ParentalGate.hasPin(this)) {
-                ParentalGate.requirePin(this) { promptNewPin("تغيير PIN") }
+                ParentalGate.requirePin(this) { promptNewPin(R.string.parental_change_pin) }
             } else {
-                promptNewPin("تعيين PIN")
+                promptNewPin(R.string.parental_set_pin)
             }
         }
         root.addView(setButton, LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(10) })
 
-        clearButton = actionButton("إلغاء PIN") {
+        clearButton = actionButton(getString(R.string.parental_clear_pin)) {
             if (!ParentalGate.hasPin(this)) return@actionButton
             ParentalGate.requirePin(this) {
                 AlertDialog.Builder(this)
-                    .setTitle("إلغاء الحماية")
-                    .setMessage("سيتم إزالة PIN. المحتوى الذي يحمل علامة قفل لن يطلب رمز الحماية حتى تعيّن PIN جديدًا.")
-                    .setPositiveButton("إلغاء PIN") { _, _ ->
+                    .setTitle(R.string.parental_disable_title)
+                    .setMessage(R.string.parental_disable_message)
+                    .setPositiveButton(R.string.parental_clear_pin) { _, _ ->
                         ParentalGate.clearPin(this)
                         refreshState()
                     }
-                    .setNegativeButton("رجوع", null)
+                    .setNegativeButton(R.string.parental_back, null)
                     .show()
             }
         }
@@ -99,28 +99,28 @@ class ParentalSettingsActivity : AppCompatActivity() {
 
     private fun refreshState() {
         val enabled = ParentalGate.hasPin(this)
-        status.text = if (enabled) "● الحماية مفعّلة" else "○ لم يتم تعيين PIN"
+        status.text = getString(if (enabled) R.string.parental_enabled else R.string.parental_not_set)
         status.setTextColor(if (enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
-        setButton.text = if (enabled) "تغيير PIN" else "تعيين PIN"
+        setButton.text = getString(if (enabled) R.string.parental_change_pin else R.string.parental_set_pin)
         clearButton.isEnabled = enabled
         clearButton.alpha = if (enabled) 1f else .45f
     }
 
-    private fun promptNewPin(title: String) {
-        val first = pinField("PIN الجديد")
+    private fun promptNewPin(titleRes: Int) {
+        val first = pinField(getString(R.string.parental_new_pin_hint))
         AlertDialog.Builder(this)
-            .setTitle(title)
-            .setMessage("أدخل من 4 إلى 8 أرقام")
+            .setTitle(titleRes)
+            .setMessage(R.string.parental_enter_digits)
             .setView(first)
-            .setPositiveButton("التالي", null)
-            .setNegativeButton("إلغاء", null)
+            .setPositiveButton(R.string.parental_next, null)
+            .setNegativeButton(R.string.parental_cancel, null)
             .create()
             .also { dialog ->
                 dialog.setOnShowListener {
                     dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                         val pin = first.text?.toString().orEmpty().trim()
                         if (!validPin(pin)) {
-                            first.error = "PIN لازم يكون من 4 إلى 8 أرقام"
+                            first.error = getString(R.string.parental_invalid_pin)
                             return@setOnClickListener
                         }
                         dialog.dismiss()
@@ -132,22 +132,22 @@ class ParentalSettingsActivity : AppCompatActivity() {
     }
 
     private fun confirmPin(pin: String) {
-        val confirm = pinField("تأكيد PIN")
+        val confirm = pinField(getString(R.string.parental_confirm_pin_hint))
         AlertDialog.Builder(this)
-            .setTitle("تأكيد PIN")
+            .setTitle(R.string.parental_confirm_title)
             .setView(confirm)
-            .setPositiveButton("حفظ", null)
-            .setNegativeButton("إلغاء", null)
+            .setPositiveButton(R.string.parental_save, null)
+            .setNegativeButton(R.string.parental_cancel, null)
             .create()
             .also { dialog ->
                 dialog.setOnShowListener {
                     dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                         if (confirm.text?.toString().orEmpty().trim() != pin) {
-                            confirm.error = "الرمزان غير متطابقين"
+                            confirm.error = getString(R.string.parental_mismatch)
                             return@setOnClickListener
                         }
                         if (!ParentalGate.setPin(this, pin)) {
-                            confirm.error = "تعذر حفظ PIN"
+                            confirm.error = getString(R.string.parental_save_failed)
                             return@setOnClickListener
                         }
                         dialog.dismiss()

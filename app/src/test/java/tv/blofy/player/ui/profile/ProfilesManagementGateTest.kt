@@ -21,6 +21,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import org.robolectric.shadows.ShadowAlertDialog
+import tv.blofy.player.R
 import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.core.security.ParentalGate
 
@@ -70,14 +71,17 @@ class ProfilesManagementGateTest {
     }
     private fun tapProfile(name: String) {
         val title = views(activity.window.decorView).filterIsInstance<TextView>()
-            .single { it.text.toString().startsWith("👤  $name") }
+            .single {
+                it.text.toString().contains(name) &&
+                    (it.parent as? View)?.isClickable == true
+            }
         clickAndIdle(title.parent as View)
     }
 
     @Test fun contentPinCannotBeClearedWithoutItsCurrentPin() {
         assertTrue(ParentalGate.setPin(context, "1234"))
         open()
-        tapButton("إلغاء PIN المحتوى")
+        tapButton(activity.getString(R.string.profiles_clear_content_pin))
         assertTrue(ParentalGate.hasPin(context))
         answerPin("9999")
         assertTrue(ParentalGate.verify(context, "1234"))
@@ -89,7 +93,7 @@ class ProfilesManagementGateTest {
         assertTrue(ParentalGate.setPin(context, "1234"))
         open()
         views(activity.window.decorView).filterIsInstance<EditText>().last().setText("5678")
-        tapButton("حفظ PIN للمحتوى")
+        tapButton(activity.getString(R.string.profiles_save_content_pin))
         assertTrue(ParentalGate.verify(context, "1234"))
         assertFalse(ParentalGate.verify(context, "5678"))
         answerPin("1234")
@@ -100,10 +104,10 @@ class ProfilesManagementGateTest {
     @Test fun activeProfilePinCannotBeClearedWithoutItsCurrentPin() {
         ProfileStore.setPin(context, "main", "1234")
         open()
-        tapButton("إلغاء PIN للملف")
+        tapButton(activity.getString(R.string.profiles_clear_profile_pin))
         answerPin("9999")
         assertNotNull(ProfileStore.active(context).pinHash)
-        tapButton("إلغاء PIN للملف")
+        tapButton(activity.getString(R.string.profiles_clear_profile_pin))
         answerPin("1234")
         assertNull(ProfileStore.active(context).pinHash)
     }
@@ -112,19 +116,19 @@ class ProfilesManagementGateTest {
         assertTrue(ParentalGate.setPin(context, "1234"))
         ProfileStore.select(context, "kids")
         open()
-        tapButton("＋ إضافة ملف")
+        tapButton(activity.getString(R.string.profiles_add))
         assertEquals("PIN", views(dialog().window!!.decorView).filterIsInstance<EditText>().single().hint.toString())
         answerPin("9999")
         assertEquals(2, ProfileStore.all(context).size)
         answerPin("1234")
-        assertEquals("اسم الملف", views(dialog().window!!.decorView).filterIsInstance<EditText>().single().hint.toString())
+        assertEquals(activity.getString(R.string.profiles_name_hint), views(dialog().window!!.decorView).filterIsInstance<EditText>().single().hint.toString())
     }
 
     @Test fun kidsCannotDeleteTheirProfileToFallBackToAdultWithoutAuthorization() {
         ProfileStore.setPin(context, "main", "1234")
         ProfileStore.select(context, "kids")
         open()
-        tapButton("حذف الملف الحالي")
+        tapButton(activity.getString(R.string.profiles_delete_current))
         answerPin("9999")
         assertEquals("kids", ProfileStore.active(context).id)
         assertEquals(2, ProfileStore.all(context).size)
@@ -153,7 +157,7 @@ class ProfilesManagementGateTest {
 
     @Test fun normalAdultCanCreateProfileWhenNoPinWasConfigured() {
         open()
-        tapButton("＋ إضافة ملف")
+        tapButton(activity.getString(R.string.profiles_add))
         val prompt = dialog()
         views(prompt.window!!.decorView).filterIsInstance<EditText>().single().setText("New adult")
         clickAndIdle(prompt.getButton(AlertDialog.BUTTON_POSITIVE))
@@ -163,7 +167,7 @@ class ProfilesManagementGateTest {
     @Test fun profilePinChangedWhileDialogIsOpenCannotBeClearedWithStalePin() {
         ProfileStore.setPin(context, "main", "1234")
         open()
-        tapButton("إلغاء PIN للملف")
+        tapButton(activity.getString(R.string.profiles_clear_profile_pin))
         ProfileStore.setPin(context, "main", "5678")
         answerPin("1234")
         assertTrue(ProfileStore.verifyPin(ProfileStore.active(context), "5678"))

@@ -4,6 +4,7 @@ import tv.blofy.player.ui.common.ContentPresentation
 
 import tv.blofy.player.ui.common.CinemaStyle
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -13,6 +14,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -20,9 +22,11 @@ import tv.blofy.player.R
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.common.TvUiTuning
 
 internal class EpisodeCardAdapter(
+    private val seriesName: String?,
     private val seriesArt: String?,
     private val onClick: (EpisodeEntity) -> Unit,
     private val onFocus: (EpisodeEntity) -> Unit
@@ -90,38 +94,39 @@ internal class EpisodeCardAdapter(
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = context.resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(8), dp(12), dp(8))
+            setPadding(dp(8), dp(7), dp(10), dp(7))
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
-            background = CinemaStyle.surface(context)
+            background = ContentScreenStyle.softSurface(context, false, 18)
         }
-        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(88)).apply {
-            bottomMargin = dp(7)
+        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(86)).apply {
+            bottomMargin = dp(5)
             marginStart = dp(2)
             marginEnd = dp(2)
         }
         val frame = FrameLayout(context)
         val image = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(0xFF16101F.toInt())
+            background = ContentScreenStyle.softSurface(context, false, 12)
+            clipToOutline = true
         }
-        frame.addView(image, FrameLayout.LayoutParams(dp(112), dp(64)))
+        frame.addView(image, FrameLayout.LayoutParams(dp(124), dp(70)))
         val number = TextView(context).apply {
             textSize = TvUiTuning.sp(context, 12f)
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply { cornerRadius = dp(9).toFloat(); setColor(0xDB191D25.toInt()) }
+            background = ContentScreenStyle.chip(context)
         }
-        frame.addView(number, FrameLayout.LayoutParams(dp(45), dp(28), Gravity.BOTTOM or Gravity.END).apply { marginEnd = dp(6); bottomMargin = dp(6) })
-        row.addView(frame, LinearLayout.LayoutParams(dp(112), dp(64)).apply { marginEnd = dp(14) })
+        frame.addView(number, FrameLayout.LayoutParams(dp(40), dp(24), Gravity.BOTTOM or Gravity.END).apply { marginEnd = dp(5); bottomMargin = dp(5) })
+        row.addView(frame, LinearLayout.LayoutParams(dp(124), dp(70)).apply { marginEnd = dp(13) })
         val textBox = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
         }
         val title = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 14f)
+            textSize = TvUiTuning.sp(context, 14.2f)
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             setTextColor(BlofyTvDesign.TextPrimary)
             maxLines = 2
@@ -136,26 +141,34 @@ internal class EpisodeCardAdapter(
             ellipsize = android.text.TextUtils.TruncateAt.END
             gravity = Gravity.START
         }
+        val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            visibility = View.GONE
+            progressTintList = ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+            progressBackgroundTintList = ColorStateList.valueOf(0xFF3A294A.toInt())
+        }
         textBox.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        textBox.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(23)))
-        row.addView(textBox, LinearLayout.LayoutParams(0, dp(64), 1f))
+        textBox.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(19)))
+        textBox.addView(progressBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4)).apply { topMargin = dp(4) })
+        row.addView(textBox, LinearLayout.LayoutParams(0, dp(70), 1f))
         val state = TextView(context).apply {
             textSize = TvUiTuning.sp(context, 12f)
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(CinemaStyle.White)
-            background = CinemaStyle.surface(context, radiusDp = 6)
+            background = ContentScreenStyle.chip(context)
             maxLines = 1
             gravity = Gravity.CENTER
         }
-        row.addView(state, LinearLayout.LayoutParams(dp(94), dp(34)))
-        return Holder(row, image, number, title, meta, state)
+        row.addView(state, LinearLayout.LayoutParams(dp(100), dp(32)))
+        return Holder(row, image, number, title, meta, progressBar, state)
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val episode = items[position]
-        holder.number.text = "E${episode.episode}"
         val context = holder.itemView.context
-        holder.title.text = ContentPresentation.title(episode.title, "episode").ifBlank { context.getString(R.string.cinema_episode_title, episode.episode) }
+        holder.number.text = context.getString(R.string.cinema_episode_badge, episode.episode)
+        holder.title.text = cleanEpisodeTitle(context, episode)
         val duration = episode.durationSecs?.takeIf { it > 0 }?.let { secs -> context.getString(R.string.details_minutes, secs / 60) }
         holder.meta.text = listOfNotNull(context.getString(R.string.episodes_season, episode.season), duration).joinToString("  •  ")
         val pct = progress[episode.key] ?: 0
@@ -164,6 +177,8 @@ internal class EpisodeCardAdapter(
             pct > 0 -> context.getString(R.string.cinema_episode_resume, pct)
             else -> context.getString(R.string.cinema_episode_play)
         }
+        holder.progressBar.visibility = if (pct in 1..99) View.VISIBLE else View.GONE
+        holder.progressBar.progress = pct.coerceIn(0, 100)
         if (!seriesArt.isNullOrBlank()) ArtworkLoader.load(holder.image, seriesArt) else {
             ArtworkLoader.cancel(holder.image)
             holder.image.setImageResource(R.drawable.blofy_logo)
@@ -175,26 +190,53 @@ internal class EpisodeCardAdapter(
             if (focused) focusedKey = episode.key
             renderFocus(holder, focused)
             view.animate().cancel()
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.005f) else 1f
             view.animate()
-                .scaleX(if (focused) 1.008f else 1f)
-                .scaleY(if (focused) 1.008f else 1f)
-                .translationZ(if (focused) 10f else 1f)
-                .setDuration(if (focused) 58L else 48L)
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, 10f) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
                 .start()
             if (focused) onFocus(episode)
         }
     }
 
+    private fun cleanEpisodeTitle(context: android.content.Context, episode: EpisodeEntity): String {
+        var title = ContentPresentation.title(episode.title, "episode").trim()
+        val normalizedSeries = seriesName?.let { ContentPresentation.title(it, "series") }?.trim().orEmpty()
+        if (normalizedSeries.isNotBlank() && title.startsWith(normalizedSeries, ignoreCase = true)) {
+            title = title.removePrefix(normalizedSeries).trim()
+        }
+        title = title
+            .replace(Regex("(?i)\\bS\\d{1,2}E\\d{1,3}\\b"), "")
+            .replace(Regex("^[\\s\\-–—•:]+"), "")
+            .replace(Regex("[\\s\\-–—•:]+$"), "")
+            .trim()
+        val genericEpisode = Regex("(?i)^(episode|ep\\.?|الحلقة)\\s*0*\\d+$")
+        return if (title.isBlank() || genericEpisode.matches(title)) {
+            context.getString(R.string.cinema_episode_title, episode.episode)
+        } else title
+    }
+
     override fun getItemCount() = items.size
 
-    internal class Holder(item: View, val image: ImageView, val number: TextView, val title: TextView, val meta: TextView, val state: TextView) : RecyclerView.ViewHolder(item)
+    internal class Holder(
+        item: View,
+        val image: ImageView,
+        val number: TextView,
+        val title: TextView,
+        val meta: TextView,
+        val progressBar: ProgressBar,
+        val state: TextView
+    ) : RecyclerView.ViewHolder(item)
 
     private fun renderFocus(holder: Holder, focused: Boolean) {
-        holder.itemView.background = CinemaStyle.surface(holder.itemView.context, focused)
+        holder.itemView.background = ContentScreenStyle.softSurface(holder.itemView.context, focused, 18)
         holder.title.setTextColor(CinemaStyle.White)
-        holder.meta.setTextColor(CinemaStyle.Muted)
-        holder.state.background = CinemaStyle.surface(holder.itemView.context, focused, filledFocus = true, radiusDp = 6)
-        holder.state.setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
+        holder.meta.setTextColor(if (focused) BlofyTvDesign.Lavender else CinemaStyle.Muted)
+        holder.state.background = if (focused) ContentScreenStyle.actionBackground(holder.itemView.context, true, true) else ContentScreenStyle.chip(holder.itemView.context)
+        holder.state.setTextColor(if (focused) 0xFF130B1D.toInt() else CinemaStyle.White)
+        holder.progressBar.progressTintList = ColorStateList.valueOf(if (focused) BlofyTvDesign.FocusGlow else BlofyTvDesign.PurpleBright)
     }
 
     override fun onViewRecycled(holder: Holder) {

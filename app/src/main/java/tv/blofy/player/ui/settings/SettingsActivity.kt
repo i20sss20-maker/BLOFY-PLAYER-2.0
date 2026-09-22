@@ -257,7 +257,8 @@ class SettingsActivity : AppCompatActivity() {
             columnSpec = GridLayout.spec(position % grid.columnCount, 1f)
             width = 0
             height = ViewGroup.LayoutParams.WRAP_CONTENT
-            setMargins(dp(6), dp(6), dp(6), dp(6))
+            val gap = dp(if (isTv()) 4 else 6)
+            setMargins(gap, gap, gap, gap)
         })
     }
 
@@ -287,7 +288,7 @@ class SettingsActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(CinemaStyle.White)
             gravity = Gravity.START
-            setPadding(dp(5), dp(18), dp(5), dp(8))
+            setPadding(dp(5), dp(if (isTv()) 13 else 18), dp(5), dp(if (isTv()) 5 else 8))
         })
         grid = GridLayout(this).apply {
             val available = resources.configuration.screenWidthDp - if (isTv()) 72 else 36

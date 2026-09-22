@@ -34,6 +34,7 @@ import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.ui.catalog.ArtworkLoader
@@ -53,25 +54,25 @@ class LibraryActivity : AppCompatActivity() {
         val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_FAVORITES
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(50, 34, 50, 38)
+            layoutDirection = resources.configuration.layoutDirection
+            setPadding(dp(50), dp(34), dp(50), dp(38))
             background = AppCompatResources.getDrawable(this@LibraryActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
-            text = "BLOFY LIBRARY"
+            text = getString(R.string.brand_library)
             textSize = 12f
             letterSpacing = .11f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleBright)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = if (mode == MODE_CONTINUE) "تابع المشاهدة" else "المفضلة"
+            text = getString(if (mode == MODE_CONTINUE) R.string.home_continue_watching else R.string.home_favorites)
             textSize = 30f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT
-            setPadding(0, 4, 0, 14)
+            gravity = Gravity.START
+            setPadding(0, dp(4), 0, dp(14))
         })
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         if (mode == MODE_FAVORITES) {
@@ -86,7 +87,7 @@ class LibraryActivity : AppCompatActivity() {
                 setItemViewCacheSize(columns * 2)
                 preserveFocusAfterLayout = true
                 clipToPadding = false
-                setPadding(4, 4, 4, 12)
+                setPadding(dp(4), dp(4), dp(4), dp(12))
             }
             root.addView(favoritesGrid, LinearLayout.LayoutParams(-1, 0, 1f))
         } else {
@@ -103,12 +104,12 @@ class LibraryActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
-            if (provider == null) { showMessage("أضف قائمة تشغيل أولاً"); return@launch }
+            if (provider == null) { showMessage(getString(R.string.login_add_playlist_first)); return@launch }
             list.removeAllViews()
             if (mode == MODE_CONTINUE) {
                 val states = withContext(Dispatchers.IO) { dao.continueWatching(provider.id).first() }
                 val entries = withContext(Dispatchers.IO) { ContinueWatchingResolver.load(dao, provider.id, states) }
-                if (entries.isEmpty()) showMessage("لا يوجد محتوى للاستئناف")
+                if (entries.isEmpty()) showMessage(getString(R.string.library_no_continue))
                 entries.forEach { entry ->
                     when (entry) {
                         is ContinueWatchingEntry.StreamEntry -> addRow(provider.id, provider.liveFormat, entry.stream, entry.state.positionMs)
@@ -139,7 +140,7 @@ class LibraryActivity : AppCompatActivity() {
                         adapter.replace(favorites)
                         grid.visibility = if (favorites.isEmpty()) View.GONE else View.VISIBLE
                         if (favorites.isEmpty()) {
-                            showMessage("لا توجد عناصر في المفضلة")
+                            showMessage(getString(R.string.library_no_favorites))
                         } else {
                             val position = favorites.indexOfFirst { it.key == focusedFavoriteKey }
                                 .takeIf { it >= 0 } ?: previousPosition.coerceAtMost(favorites.lastIndex)
@@ -165,46 +166,58 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
         val row = TextView(this).apply {
-            text = "${kindLabel(stream.kind)}   •   ${ContentPresentation.of(stream).title}"
+            text = getString(R.string.library_stream_row, kindLabel(stream.kind), ContentPresentation.of(stream).title)
             textSize = 17f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            setPadding(24, 16, 24, 16)
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            setPadding(dp(24), dp(16), dp(24), dp(16))
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
             isFocusable = true; isClickable = true
             background = rowBackground(false)
             setOnFocusChangeListener { view, focused ->
                 setTextColor(Color.WHITE)
                 view.background = rowBackground(focused)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).translationZ(if (focused) 9f else 1f).setDuration(75).start()
+                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+                view.animate()
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(9).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                    .start()
             }
             setOnClickListener { open(providerId, liveFormat, stream, resumeMs) }
         }
-        list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
+        list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(66)).apply { topMargin = dp(7) })
     }
 
     private fun addEpisodeRow(provider: ProviderEntity, entry: ContinueWatchingEntry.EpisodeEntry) {
         val episode = entry.episode
-        val seriesName = entry.parentSeries?.name?.takeIf(String::isNotBlank) ?: "مسلسل"
+        val seriesName = entry.parentSeries?.name?.takeIf(String::isNotBlank) ?: getString(R.string.details_series_type)
         val row = TextView(this).apply {
-            text = "${ContentPresentation.title(seriesName, "series")}   •   الموسم ${episode.season}   •   الحلقة ${episode.episode}   •   ${ContentPresentation.title(episode.title, "episode")}"
+            text = listOf(ContentPresentation.title(seriesName, "series"), getString(R.string.episodes_season, episode.season), getString(R.string.cinema_episode_title, episode.episode), ContentPresentation.title(episode.title, "episode")).joinToString("   •   ")
             textSize = 17f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            setPadding(24, 16, 24, 16)
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            setPadding(dp(24), dp(16), dp(24), dp(16))
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
             isFocusable = true; isClickable = true
             background = rowBackground(false)
             setOnFocusChangeListener { view, focused ->
                 setTextColor(Color.WHITE)
                 view.background = rowBackground(focused)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).translationZ(if (focused) 9f else 1f).setDuration(75).start()
+                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+                view.animate()
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(9).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                    .start()
             }
             setOnClickListener { openEpisode(provider, episode, entry.state.positionMs, seriesName) }
         }
-        list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
+        list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(66)).apply { topMargin = dp(7) })
     }
 
     private fun open(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
@@ -228,7 +241,7 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun openEpisode(provider: ProviderEntity, episode: EpisodeEntity, resumeMs: Long, seriesName: String) {
-        val url = runCatching { ContentUrlResolver.episode(provider, episode) }.getOrNull() ?: run { showMessage("تعذر تجهيز رابط الحلقة"); return }
+        val url = runCatching { ContentUrlResolver.episode(provider, episode) }.getOrNull() ?: run { showMessage(getString(R.string.library_episode_url_failed)); return }
         startActivity(Intent(this, PlayerActivity::class.java).apply {
             putExtra(PlayerActivity.EXTRA_URL, url); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key); putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
             putExtra(PlayerActivity.EXTRA_KIND, "episode"); putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat); putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
@@ -242,15 +255,18 @@ class LibraryActivity : AppCompatActivity() {
     private fun kindLabel(kind: String) = when (kind) { "live" -> "LIVE"; "movie" -> "MOVIE"; "series" -> "SERIES"; else -> kind.uppercase() }
 
     private fun rowBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF7139BE.toInt(), 0xFF402461.toInt()) else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
+        if (focused) intArrayOf(0xFF68409A.toInt(), 0xFF3D2858.toInt(), 0xFF24182F.toInt())
+        else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
     ).apply {
-        cornerRadius = 16f
-        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF463455.toInt())
+        cornerRadius = dp(16).toFloat()
+        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF463455.toInt())
     }
 
     private fun showMessage(text: String) {
-        list.addView(TextView(this).apply { this.text = text; textSize = 18f; setTextColor(BlofyTvDesign.TextMuted); setPadding(0, 24, 0, 0) })
+        list.addView(TextView(this).apply { this.text = text; textSize = 18f; setTextColor(BlofyTvDesign.TextMuted); setPadding(0, dp(24), 0, 0) })
     }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
         const val EXTRA_MODE = "mode"

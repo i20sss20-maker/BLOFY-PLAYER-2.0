@@ -117,12 +117,16 @@ class FocusTextAdapter<T : Any>(
             view.setOnFocusChangeListener { focusedView, focused ->
                 val text = focusedView as TextView
                 focusedView.animate().cancel()
-                focusedView.scaleX = 1f
-                focusedView.scaleY = 1f
-                focusedView.translationZ = if (focused) TvUiTuning.dp(context, 4).toFloat() else 0f
                 text.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
                 text.setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
                 focusedView.background = CinemaStyle.surface(context, focused, filledFocus = true)
+                val targetScale = if (focused) TvUiTuning.focusScale(context, 1.012f) else 1f
+                focusedView.animate()
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(context, TvUiTuning.dp(context, 6).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(context, focused))
+                    .start()
                 if (focused) {
                     restorePending = false
                     val position = holder.bindingAdapterPosition

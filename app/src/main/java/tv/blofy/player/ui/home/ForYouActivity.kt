@@ -19,6 +19,7 @@ import tv.blofy.player.R
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 
@@ -37,13 +38,13 @@ class ForYouActivity : AppCompatActivity() {
             textSize = 31f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.END
+            gravity = Gravity.START
         }
         val subtitle = TextView(this).apply {
             text = getString(R.string.for_you_subtitle)
             textSize = 13f
             setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.END
+            gravity = Gravity.START
             setPadding(0, dp(4), 0, dp(14))
         }
         val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
@@ -76,8 +77,8 @@ class ForYouActivity : AppCompatActivity() {
             subtitle.text = getString(R.string.for_you_current_preference, kindLabel(data.smart.preferredKind))
             addSection(body, getString(R.string.for_you_continue), data.smart.continueItems, provider.id)
             addSection(body, getString(R.string.for_you_recommended), data.smart.recommended, provider.id)
-            addSection(body, "المفضلة", data.favorites, provider.id)
-            addSection(body, "أضيف حديثًا", data.latest, provider.id)
+            addSection(body, getString(R.string.home_favorites), data.favorites, provider.id)
+            addSection(body, getString(R.string.home_recently_added), data.latest, provider.id)
             addSection(body, getString(R.string.for_you_recent), data.smart.recentItems, provider.id)
             body.post { firstFocusable(body)?.requestFocus() }
         }
@@ -90,7 +91,7 @@ class ForYouActivity : AppCompatActivity() {
             textSize = 19f
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.END
+            gravity = Gravity.START
             setPadding(0, dp(14), 0, dp(8))
         })
         items.take(24).forEach { item ->
@@ -99,12 +100,12 @@ class ForYouActivity : AppCompatActivity() {
                     append(item.name)
                     item.year?.takeIf { it.isNotBlank() }?.let { append("   •   ").append(it) }
                     item.rating?.takeIf { it.isNotBlank() }?.let { append("   •   ★ ").append(it) }
-                    if (item.favorite) append("   •   ★ مفضلة")
+                    if (item.favorite) append("   •   ★ ").append(getString(R.string.home_favorites))
                 }
                 textSize = 15f
                 typeface = BlofyTvDesign.MediumTypeface
                 setTextColor(BlofyTvDesign.TextSecondary)
-                gravity = Gravity.CENTER_VERTICAL or Gravity.END
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
                 setPadding(dp(18), 0, dp(18), 0)
                 isFocusable = true
                 isFocusableInTouchMode = true
@@ -112,9 +113,15 @@ class ForYouActivity : AppCompatActivity() {
                 background = BlofyTvDesign.glassSurface(dp(14).toFloat())
                 setOnFocusChangeListener { view, focused ->
                     setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
+                    view.background = BlofyTvDesign.glassSurface(dp(14).toFloat(), focused)
                     view.animate().cancel()
-                    view.animate().scaleX(if (focused) 1.012f else 1f).scaleY(if (focused) 1.012f else 1f)
-                        .translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(65).start()
+                    val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+                    view.animate()
+                        .scaleX(targetScale)
+                        .scaleY(targetScale)
+                        .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(8).toFloat()) else 0f)
+                        .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                        .start()
                 }
                 setOnClickListener { open(providerId, item) }
             }

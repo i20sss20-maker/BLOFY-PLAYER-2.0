@@ -2,6 +2,7 @@ package tv.blofy.player.ui.login
 
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -51,6 +52,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private var displayedPercent = 0
     private lateinit var percent: TextView
     private lateinit var stage: TextView
+    private lateinit var progressMeta: TextView
     private lateinit var progress: ProgressBar
     private lateinit var serverStep: TextView
     private lateinit var contentStep: TextView
@@ -123,16 +125,17 @@ class CatalogLoadingActivity : AppCompatActivity() {
         fun s(v: Float) = TvUiTuning.sp(this, v)
         val compact = deviceKind == DeviceClass.Kind.PHONE
         val tablet = deviceKind == DeviceClass.Kind.TABLET
+        val shortTv = deviceKind == DeviceClass.Kind.TV && resources.configuration.screenHeightDp in 1..620
         val screenWidthDp = resources.configuration.screenWidthDp.takeIf { it > 0 } ?: resources.configuration.smallestScreenWidthDp
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(
-                u(if (compact) 14 else if (tablet) 28 else 72),
-                u(if (compact) 16 else 40),
-                u(if (compact) 14 else if (tablet) 28 else 72),
-                u(if (compact) 16 else 40)
+                u(if (compact) 14 else if (tablet) 28 else if (shortTv) 38 else 72),
+                u(if (compact) 16 else if (shortTv) 18 else 40),
+                u(if (compact) 14 else if (tablet) 28 else if (shortTv) 38 else 72),
+                u(if (compact) 16 else if (shortTv) 18 else 40)
             )
             background = AppCompatResources.getDrawable(this@CatalogLoadingActivity, R.drawable.blofy_home_background)
         }
@@ -140,10 +143,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(
-                u(if (compact) 20 else if (tablet) 34 else 52),
-                u(if (compact) 22 else 34),
-                u(if (compact) 20 else if (tablet) 34 else 52),
-                u(if (compact) 22 else 34)
+                u(if (compact) 20 else if (tablet) 34 else if (shortTv) 34 else 52),
+                u(if (compact) 22 else if (shortTv) 22 else 34),
+                u(if (compact) 20 else if (tablet) 34 else if (shortTv) 34 else 52),
+                u(if (compact) 22 else if (shortTv) 22 else 34)
             )
             background = BlofyTvDesign.glassSurface(u(BlofyTvDesign.PanelRadius).toFloat())
             elevation = u(6).toFloat()
@@ -152,11 +155,11 @@ class CatalogLoadingActivity : AppCompatActivity() {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
-        }, LinearLayout.LayoutParams(u(if (compact) 120 else 176), u(if (compact) 66 else 96)))
+        }, LinearLayout.LayoutParams(u(if (compact) 128 else if (shortTv) 154 else 196), u(if (compact) 70 else if (shortTv) 82 else 108)))
         panel.addView(TextView(this).apply {
             text = getString(R.string.catalog_title)
             BlofyTvDesign.applyTitle(this)
-            textSize = s(if (compact) 23f else if (tablet) 27f else 30f)
+            textSize = s(if (compact) 23f else if (tablet) 27f else if (shortTv) 27f else 30f)
             gravity = Gravity.CENTER
             setPadding(0, u(4), 0, u(4))
         })
@@ -166,13 +169,15 @@ class CatalogLoadingActivity : AppCompatActivity() {
             textSize = s(if (compact) 12f else 14f)
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, u(if (compact) 12 else 20))
+            setPadding(0, 0, 0, u(if (compact) 12 else if (shortTv) 12 else 20))
         })
 
         val progressRow = LinearLayout(this).apply {
             orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
+            setPadding(u(if (compact) 14 else 20), u(if (compact) 12 else if (shortTv) 11 else 16), u(if (compact) 14 else 20), u(if (compact) 12 else if (shortTv) 11 else 16))
+            background = progressCardBackground()
         }
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
@@ -181,41 +186,57 @@ class CatalogLoadingActivity : AppCompatActivity() {
             progressBackgroundTintList = ColorStateList.valueOf(BlofyTvDesign.Divider)
         }
         if (compact) {
-            progressRow.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(10)).apply {
+            progressRow.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(12)).apply {
                 bottomMargin = u(8)
             })
         } else {
-            progressRow.addView(progress, LinearLayout.LayoutParams(0, u(12), 1f).apply { marginEnd = u(24) })
+            progressRow.addView(progress, LinearLayout.LayoutParams(0, u(16), 1f).apply { marginEnd = u(20) })
         }
         percent = TextView(this).apply {
             text = "0%"
-            textSize = s(if (compact) 32f else 40f)
+            textSize = s(if (compact) 30f else if (shortTv) 33f else 36f)
             typeface = BlofyTvDesign.DisplayTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            textDirection = View.TEXT_DIRECTION_LTR
             includeFontPadding = false
+            background = percentBadgeBackground()
         }
         progressRow.addView(percent, if (compact) {
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(50))
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(48))
         } else {
-            LinearLayout.LayoutParams(u(132), u(64))
+            LinearLayout.LayoutParams(u(if (shortTv) 102 else 112), u(if (shortTv) 52 else 58))
         })
-        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(if (compact) 72 else 72)))
+        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(if (compact) 86 else if (shortTv) 76 else 88)).apply {
+            bottomMargin = u(if (compact) 6 else if (shortTv) 6 else 10)
+        })
 
         stage = TextView(this).apply {
             text = getString(R.string.catalog_connecting)
             BlofyTvDesign.applyHeading(this)
-            textSize = s(if (compact) 16f else 20f)
+            textSize = s(if (compact) 17f else if (shortTv) 20f else 22f)
             gravity = Gravity.CENTER
-            setPadding(0, u(if (compact) 6 else 12), 0, u(6))
+            setPadding(0, u(if (compact) 6 else if (shortTv) 4 else 10), 0, u(4))
         }
         panel.addView(stage)
+        progressMeta = TextView(this).apply {
+            visibility = View.GONE
+            textSize = s(if (compact) 11f else 12.5f)
+            typeface = BlofyTvDesign.MediumTypeface
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            textDirection = View.TEXT_DIRECTION_LTR
+            includeFontPadding = false
+        }
+        panel.addView(progressMeta, LinearLayout.LayoutParams(-1, u(if (compact) 20 else 24)))
         panel.addView(TextView(this).apply {
             text = getString(R.string.catalog_note)
             BlofyTvDesign.applyCaption(this)
             textSize = s(if (compact) 11f else 12.5f)
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, u(if (compact) 14 else 22))
+            setPadding(0, 0, 0, u(if (compact) 14 else if (shortTv) 10 else 22))
         })
 
         val steps = LinearLayout(this).apply {
@@ -248,7 +269,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         ).apply { bottomMargin = u(if (compact) 8 else 0) })
         panel.addView(steps, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            if (compact) LinearLayout.LayoutParams.WRAP_CONTENT else u(60)
+            if (compact) LinearLayout.LayoutParams.WRAP_CONTENT else u(if (shortTv) 50 else 60)
         ))
 
         val panelWidth = when {
@@ -261,11 +282,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun step(label: String) = TextView(this).apply {
-        text = "○  $label"
+        text = getString(R.string.catalog_step_state, "○", label)
         textSize = TvUiTuning.sp(this@CatalogLoadingActivity, if (deviceKind == DeviceClass.Kind.PHONE) 11.5f else 12.5f)
         typeface = BlofyTvDesign.MediumTypeface
         setTextColor(BlofyTvDesign.TextMuted)
         gravity = Gravity.CENTER
+        background = stepBackground(false, false)
+        setPadding(TvUiTuning.dp(this@CatalogLoadingActivity, 8), 0, TvUiTuning.dp(this@CatalogLoadingActivity, 8), 0)
     }
 
     private fun stepParams(compact: Boolean) = if (compact) {
@@ -273,7 +296,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             topMargin = TvUiTuning.dp(this@CatalogLoadingActivity, 2)
         }
     } else {
-        LinearLayout.LayoutParams(0, TvUiTuning.dp(this, 50), 1f).apply {
+        LinearLayout.LayoutParams(0, TvUiTuning.dp(this, if (resources.configuration.screenHeightDp in 1..620) 44 else 50), 1f).apply {
             marginStart = TvUiTuning.dp(this@CatalogLoadingActivity, 5)
             marginEnd = TvUiTuning.dp(this@CatalogLoadingActivity, 5)
         }
@@ -334,9 +357,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
             check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
             val savingLabel = getString(if (firstLoad) R.string.catalog_finishing else R.string.catalog_saving_refresh)
             render(30, savingLabel)
-            // SQLite commit has no measurable percentage. Keep the completed download at 30%
-            // and animate the saving stage, instead of inventing progress from elapsed time.
+            // SQLite commit has no measurable percentage. Keep the completed download checkpoint internally,
+            // but replace the frozen number with an explicit indeterminate state until measurable preparation resumes.
             progress.isIndeterminate = true
+            percent.text = "…"
             val commit: suspend () -> Unit = {
                 persistence.commit {
                     if (firstLoad) {
@@ -410,23 +434,34 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         val status = if (p.retryAttempt > 0) "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)" else label
         render((p.percent.coerceIn(0, 95) * 30 / 95), status)
+        progressMeta.text = getString(R.string.catalog_progress_steps, p.step.coerceAtLeast(1), p.totalSteps.coerceAtLeast(1))
+        progressMeta.visibility = View.VISIBLE
     }
 
     private fun render(value: Int, label: String) {
         val safe = maxOf(displayedPercent, value.coerceIn(0, 100))
         displayedPercent = safe
+        progressMeta.visibility = View.GONE
         progress.isIndeterminate = false
         progress.progress = safe
-        percent.text = "$safe%"
+        percent.text = getString(R.string.catalog_percent, safe)
         stage.text = label
-        serverStep.setTextColor(if (safe >= 5) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        contentStep.setTextColor(if (safe >= 10) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        prepareStep.setTextColor(if (safe >= 30) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        readyStep.setTextColor(if (safe >= 100) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
-        serverStep.text = "${if (safe >= 10) "✓" else "●"}  ${getString(R.string.catalog_step_server)}"
-        contentStep.text = "${if (safe >= 30) "✓" else "○"}  ${getString(R.string.catalog_step_content)}"
-        prepareStep.text = "${if (safe >= 100) "✓" else "○"}  ${getString(R.string.catalog_step_prepare)}"
-        readyStep.text = "${if (safe >= 100) "✓" else "○"}  ${getString(R.string.catalog_step_ready)}"
+        val serverDone = safe >= 10
+        val contentDone = safe >= 30
+        val prepareDone = safe >= 100
+        val readyDone = safe >= 100
+        serverStep.setTextColor(if (serverDone) BlofyTvDesign.Mint else if (safe in 1..9) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        contentStep.setTextColor(if (contentDone) BlofyTvDesign.Mint else if (safe in 10..29) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        prepareStep.setTextColor(if (prepareDone) BlofyTvDesign.Mint else if (safe in 30..99) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        readyStep.setTextColor(if (readyDone) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
+        serverStep.background = stepBackground(serverDone, safe in 1..9)
+        contentStep.background = stepBackground(contentDone, safe in 10..29)
+        prepareStep.background = stepBackground(prepareDone, safe in 30..99)
+        readyStep.background = stepBackground(readyDone, safe >= 100)
+        serverStep.text = getString(R.string.catalog_step_state, if (serverDone) "✓" else if (safe in 1..9) "●" else "○", getString(R.string.catalog_step_server))
+        contentStep.text = getString(R.string.catalog_step_state, if (contentDone) "✓" else if (safe in 10..29) "●" else "○", getString(R.string.catalog_step_content))
+        prepareStep.text = getString(R.string.catalog_step_state, if (prepareDone) "✓" else if (safe in 30..99) "●" else "○", getString(R.string.catalog_step_prepare))
+        readyStep.text = getString(R.string.catalog_step_state, if (readyDone) "✓" else "○", getString(R.string.catalog_step_ready))
     }
 
     private suspend fun openHome(providerId: String) {
@@ -440,8 +475,44 @@ class CatalogLoadingActivity : AppCompatActivity() {
         finish()
     }
 
+    private fun progressCardBackground() = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT,
+        intArrayOf(0xE5251735.toInt(), 0xE3181025.toInt(), 0xE50D0A12.toInt())
+    ).apply {
+        cornerRadius = TvUiTuning.dp(this@CatalogLoadingActivity, 18).toFloat()
+        setStroke(TvUiTuning.dp(this@CatalogLoadingActivity, 1), 0xFF674A84.toInt())
+    }
+
+    private fun percentBadgeBackground() = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        intArrayOf(0xFF7F4AC6.toInt(), 0xFF4C2A73.toInt())
+    ).apply {
+        cornerRadius = TvUiTuning.dp(this@CatalogLoadingActivity, 16).toFloat()
+        setStroke(TvUiTuning.dp(this@CatalogLoadingActivity, 1), BlofyTvDesign.FocusStroke)
+    }
+
+    private fun stepBackground(done: Boolean, active: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT,
+        when {
+            done -> intArrayOf(0x5538CFA4, 0x33217E67)
+            active -> intArrayOf(0x665F3890, 0x33351F50)
+            else -> intArrayOf(0x331B1424, 0x22110D17)
+        }
+    ).apply {
+        cornerRadius = TvUiTuning.dp(this@CatalogLoadingActivity, 12).toFloat()
+        setStroke(
+            TvUiTuning.dp(this@CatalogLoadingActivity, 1),
+            when {
+                done -> 0x995BDEBB.toInt()
+                active -> 0x998C65B6.toInt()
+                else -> 0x334E3A60
+            }
+        )
+    }
+
     private fun fail(message: String) {
         progress.isIndeterminate = false
+        progressMeta.visibility = View.GONE
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Error)
         retryButton.visibility = View.VISIBLE

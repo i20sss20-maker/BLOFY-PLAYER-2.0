@@ -4,4 +4,5 @@
     <string name="cinema_episode_completed">✓ Watched</string>
     <string name="cinema_episode_resume">Resume %1$d%%</string>
     <string name="cinema_episode_play">▶ Play</string>
+    <string name="cinema_episode_badge" translatable="false">E%1$d</string>
 </resources>
