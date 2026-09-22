@@ -23,7 +23,7 @@ internal object DetailsMetadataChips {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             layoutDirection = context.resources.configuration.layoutDirection
-        }, HorizontalScrollView.LayoutParams(
+        }, android.widget.FrameLayout.LayoutParams(
             HorizontalScrollView.LayoutParams.WRAP_CONTENT,
             HorizontalScrollView.LayoutParams.WRAP_CONTENT
         ))
