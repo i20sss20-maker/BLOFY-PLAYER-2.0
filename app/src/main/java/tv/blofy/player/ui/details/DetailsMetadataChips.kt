@@ -7,6 +7,7 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.ContentScreenStyle
 
 /** Read-only metadata badges. Keeps mixed Arabic/Latin values isolated for stable bidi rendering. */
 internal object DetailsMetadataChips {
@@ -42,14 +43,14 @@ internal object DetailsMetadataChips {
             .forEach { value ->
                 row.addView(TextView(host.context).apply {
                     text = value
-                    textSize = 12.5f
+                    textSize = 11.8f
                     typeface = BlofyTvDesign.MediumTypeface
                     setTextColor(BlofyTvDesign.Lavender)
                     gravity = Gravity.CENTER
                     textDirection = View.TEXT_DIRECTION_LOCALE
                     includeFontPadding = false
-                    background = BlofyTvDesign.badge(dp(host.context, 10).toFloat())
-                    setPadding(dp(host.context, 10), dp(host.context, 6), dp(host.context, 10), dp(host.context, 6))
+                    background = ContentScreenStyle.chip(host.context)
+                    setPadding(dp(host.context, 10), dp(host.context, 5), dp(host.context, 10), dp(host.context, 5))
                 }, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
