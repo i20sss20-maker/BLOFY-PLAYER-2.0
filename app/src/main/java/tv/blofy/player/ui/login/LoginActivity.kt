@@ -125,7 +125,7 @@ class LoginActivity : AppCompatActivity() {
         val activation = LinearLayout(this).apply {
             tag = "blofy_login_activation_panel"
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL or if (shortTv) Gravity.TOP else Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL or (if (shortTv) Gravity.TOP else Gravity.CENTER_VERTICAL)
             setPadding(dp(18), dp(if (shortTv) 8 else 14), dp(18), dp(if (shortTv) 8 else 14))
             background = premiumPanelBackground(true)
         }
