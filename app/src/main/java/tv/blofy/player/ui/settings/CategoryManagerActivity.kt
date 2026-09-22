@@ -62,7 +62,7 @@ class CategoryManagerActivity : AppCompatActivity() {
 
         val tabs = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.START
         }
         listOf("live" to getString(R.string.category_manager_live), "movie" to getString(R.string.category_manager_movies), "series" to getString(R.string.category_manager_series)).forEach { (kind, label) ->
@@ -75,7 +75,7 @@ class CategoryManagerActivity : AppCompatActivity() {
 
         list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(0, dp(4), 0, dp(20))
         }
         root.addView(ScrollView(this).apply {
@@ -135,7 +135,7 @@ class CategoryManagerActivity : AppCompatActivity() {
 
     private fun categoryCard(index: Int, category: CategoryEntity): LinearLayout = LinearLayout(this).apply {
         orientation = if (isTv) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = resources.configuration.layoutDirection
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(14), dp(8), dp(14), dp(8))
         background = CinemaStyle.surface(this@CategoryManagerActivity)
@@ -162,7 +162,7 @@ class CategoryManagerActivity : AppCompatActivity() {
 
         val actions = LinearLayout(this@CategoryManagerActivity).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             addView(smallButton(getString(if (category.hidden) R.string.category_manager_show else R.string.category_manager_hide)) { toggleHidden(category) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
                 if (isTv) width = dp(86)
