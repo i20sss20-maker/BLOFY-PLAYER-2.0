@@ -125,7 +125,7 @@ class LoginActivity : AppCompatActivity() {
         val activation = LinearLayout(this).apply {
             tag = "blofy_login_activation_panel"
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
+            gravity = Gravity.CENTER_HORIZONTAL or if (shortTv) Gravity.TOP else Gravity.CENTER_VERTICAL
             setPadding(dp(18), dp(if (shortTv) 8 else 14), dp(18), dp(if (shortTv) 8 else 14))
             background = premiumPanelBackground(true)
         }
@@ -188,7 +188,7 @@ class LoginActivity : AppCompatActivity() {
         identity.addView(identityField(R.string.login_device_label, deviceView, 12f), LinearLayout.LayoutParams(0, -1, 1.8f))
         identity.addView(identityField(R.string.login_pairing_label, codeView, 20f), LinearLayout.LayoutParams(0, -1, 1f))
         activation.addView(identity, LinearLayout.LayoutParams(-1, dp(if (shortTv) 50 else 56)))
-        activation.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+        activation.addView(View(this), LinearLayout.LayoutParams(1, dp(if (shortTv) 2 else 8)))
         status.apply {
             textSize = 11f
             maxLines = 2
