@@ -39,7 +39,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
             dp(if (shortTv) 14 else if (isTv) 22 else 14),
             dp(if (shortTv) 12 else if (isTv) 24 else 14),
             dp(if (shortTv) 14 else if (isTv) 22 else 14),
-            dp(if (shortTv) 12 else if (isTv) 24 else 18)
+            dp(if (shortTv) 22 else if (isTv) 34 else 18)
         )
         background = BlofyTvDesign.glassSurface(dp(22).toFloat(), false)
     }
