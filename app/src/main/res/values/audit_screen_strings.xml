@@ -469,4 +469,17 @@
     <string name="home_personalization_arabic">Arabic Picks</string>
     <string name="home_personalization_uhd">4K • UHD</string>
 
+
+    <string name="brand_blofy" translatable="false">BLOFY</string>
+    <string name="brand_library" translatable="false">BLOFY LIBRARY</string>
+    <string name="brand_live" translatable="false">BLOFY LIVE</string>
+    <string name="brand_quick_menu" translatable="false">BLOFY QUICK MENU</string>
+    <string name="brand_link" translatable="false">BLOFY LINK</string>
+    <string name="brand_player" translatable="false">BLOFY PLAYER</string>
+    <string name="brand_cinema" translatable="false">BLOFY CINEMA</string>
+    <string name="brand_series" translatable="false">BLOFY SERIES</string>
+    <string name="brand_live_guide" translatable="false">BLOFY LIVE GUIDE</string>
+    <string name="splash_opening">Opening BLOFY…</string>
+    <string name="library_stream_row">%1$s   •   %2$s</string>
+
 </resources>
