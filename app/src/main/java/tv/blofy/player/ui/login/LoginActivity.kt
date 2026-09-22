@@ -46,6 +46,7 @@ import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
 
@@ -481,11 +482,12 @@ class LoginActivity : AppCompatActivity() {
         setOnFocusChangeListener { view, focused ->
             view.background = playlistCardBackground(provider.enabled, focused)
             view.animate().cancel()
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.018f) else 1f
             view.animate()
-                .scaleX(if (focused) 1.018f else 1f)
-                .scaleY(if (focused) 1.018f else 1f)
-                .translationZ(if (focused) 15f else 2f)
-                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, 15f) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
                 .start()
         }
         setOnClickListener { selectPortalProvider(provider) }
