@@ -288,4 +288,58 @@
     <string name="profiles_pin_wrong">Incorrect PIN</string>
     <string name="profiles_selected">Selected %1$s</string>
 
+
+    <string name="quick_menu_title">Quick access</string>
+    <string name="quick_for_you">For you</string>
+    <string name="quick_for_you_subtitle">Suggestions from your library based on viewing</string>
+    <string name="quick_guide">Channel guide</string>
+    <string name="quick_guide_subtitle">Now, next and live playback</string>
+    <string name="quick_search">Search all</string>
+    <string name="quick_search_subtitle">Channels, movies, series and cast</string>
+    <string name="quick_continue">Continue watching</string>
+    <string name="quick_continue_subtitle">Return to your last position</string>
+    <string name="quick_watchlist">My Watchlist</string>
+    <string name="quick_watchlist_subtitle">Content saved to watch later</string>
+    <string name="quick_favorites">Favorites</string>
+    <string name="quick_favorites_subtitle">Your saved picks</string>
+    <string name="quick_recent_channels">Recent channels</string>
+    <string name="quick_recent_channels_subtitle">Jump back to live TV quickly</string>
+    <string name="quick_collections_subtitle">Top rated, 4K, Arabic and new</string>
+    <string name="quick_cloud_subtitle">Backup, sync and restore</string>
+    <string name="quick_profiles">Profiles &amp; protection</string>
+    <string name="quick_profiles_subtitle">Main, kids and PIN</string>
+    <string name="quick_artwork_performance">Artwork quality &amp; performance</string>
+    <string name="quick_artwork_performance_subtitle">Poster clarity and light mode</string>
+    <string name="quick_settings">Settings</string>
+    <string name="quick_settings_subtitle">Player, content and app</string>
+
+    <string name="search_title">Search everything</string>
+    <string name="search_filter_all">All</string>
+    <string name="search_filter_live">Live</string>
+    <string name="search_filter_movies">Movies</string>
+    <string name="search_filter_series">Series</string>
+    <string name="search_input_channel">Type a channel name</string>
+    <string name="search_input_series">Type a series name</string>
+    <string name="search_input_movie">Type a movie name</string>
+    <string name="search_input_content">Type a title</string>
+    <string name="search_recent">Recent searches</string>
+    <string name="search_clear">Clear</string>
+    <string name="search_results_all">%1$d results • live, movies and series</string>
+    <string name="search_results_kind">%1$d results • %2$s</string>
+    <string name="search_no_matches">No matching results were found in your playlist</string>
+    <string name="search_no_results">No results</string>
+    <string name="search_hint_live">Fast local search across all channels</string>
+    <string name="search_hint_series">Fast local search across all series</string>
+    <string name="search_hint_movies">Fast local search across all movies</string>
+    <string name="search_hint_all">Live TV, movies and series in one search</string>
+    <string name="search_section_live">Live TV</string>
+    <string name="search_section_series">Series</string>
+    <string name="search_section_movies">Movies</string>
+    <string name="search_no_active_playlist">No active playlist</string>
+    <string name="search_section_empty">No results found in %1$s</string>
+    <string name="search_section_count">%1$s results in %2$s</string>
+    <string name="search_section_hint_live">Search channels only — results start from the first character</string>
+    <string name="search_section_hint_series">Search series only — results use the same posters</string>
+    <string name="search_section_hint_movies">Search movies only — results use the same posters</string>
+
 </resources>
