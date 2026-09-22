@@ -543,4 +543,56 @@
     <string name="parental_mismatch">الرمزان غير متطابقين</string>
     <string name="parental_save_failed">تعذر حفظ PIN</string>
 
+
+    <string name="system_status_title">تشخيص BLOFY</string>
+    <string name="system_status_section_app_device">التطبيق والجهاز</string>
+    <string name="system_status_section_network_memory">الشبكة والذاكرة</string>
+    <string name="system_status_section_server_library">السيرفر والمكتبة</string>
+    <string name="system_status_section_storage">المساحة المستخدمة</string>
+    <string name="system_status_version">الإصدار</string>
+    <string name="system_status_version_code">Version Code</string>
+    <string name="system_status_activation">حالة التفعيل</string>
+    <string name="system_status_android">نظام Android</string>
+    <string name="system_status_android_format">%1$s (SDK %2$d)</string>
+    <string name="system_status_device">الجهاز</string>
+    <string name="system_status_form_factor">نوع الواجهة</string>
+    <string name="system_status_tv">TV</string>
+    <string name="system_status_mobile">Mobile / Tablet</string>
+    <string name="system_status_activation_unknown">غير معروف</string>
+    <string name="system_status_activation_active">مفعّل</string>
+    <string name="system_status_activation_inactive">غير مفعّل</string>
+    <string name="system_status_network">حالة الشبكة</string>
+    <string name="system_status_memory_available">الذاكرة المتاحة</string>
+    <string name="system_status_memory_total">إجمالي الذاكرة</string>
+    <string name="system_status_active_playlist">القائمة النشطة</string>
+    <string name="system_status_no_playlist">لا توجد قائمة</string>
+    <string name="system_status_server_type">نوع السيرفر</string>
+    <string name="system_status_channels">القنوات</string>
+    <string name="system_status_movies">الأفلام</string>
+    <string name="system_status_series">المسلسلات</string>
+    <string name="system_status_indexed_episodes">الحلقات المفهرسة</string>
+    <string name="system_status_metadata">بيانات المحتوى</string>
+    <string name="system_status_library_state">حالة المكتبة</string>
+    <string name="system_status_library_ready_full">جاهزة بالكامل</string>
+    <string name="system_status_library_ready_secondary">جاهزة • تجهيزات ثانوية قيد الاكتمال</string>
+    <string name="system_status_library_needs_refresh">تحتاج تحديث المحتوى</string>
+    <string name="system_status_metadata_state">بيانات الأفلام والمسلسلات</string>
+    <string name="system_status_ready">جاهزة</string>
+    <string name="system_status_preparing_unavailable">قيد التجهيز / غير متوفرة</string>
+    <string name="system_status_episode_index">فهرس الحلقات</string>
+    <string name="system_status_episode_index_ready">جاهز</string>
+    <string name="system_status_episode_index_preparing">قيد التجهيز / غير متوفر</string>
+    <string name="system_status_last_refresh">آخر تحديث ناجح</string>
+    <string name="system_status_temp_files">الملفات المؤقتة</string>
+    <string name="system_status_total_storage">إجمالي مساحة BLOFY</string>
+    <string name="system_status_copy_report">نسخ تقرير التشخيص</string>
+    <string name="system_status_privacy_note">التقرير لا يحتوي اسم المستخدم أو كلمة المرور أو رابط السيرفر.</string>
+    <string name="system_status_tagline">BLOFY PLAYER • مكتبتك، بطريقتك</string>
+    <string name="system_status_disconnected">غير متصل</string>
+    <string name="system_status_connected">متصل</string>
+    <string name="system_status_unverified_internet">بدون تحقق إنترنت</string>
+    <string name="system_status_network_format">%1$s • %2$s</string>
+    <string name="system_status_android_device">جهاز Android</string>
+    <string name="system_status_report_copied">تم نسخ تقرير التشخيص</string>
+
 </resources>
