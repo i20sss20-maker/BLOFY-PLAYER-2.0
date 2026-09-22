@@ -98,7 +98,7 @@ internal class EpisodeCardAdapter(
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
-            background = ContentScreenStyle.softSurface(context, false, 14)
+            background = ContentScreenStyle.softSurface(context, false, 18)
         }
         row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(86)).apply {
             bottomMargin = dp(5)
@@ -190,7 +190,7 @@ internal class EpisodeCardAdapter(
             if (focused) focusedKey = episode.key
             renderFocus(holder, focused)
             view.animate().cancel()
-            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.008f) else 1f
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.005f) else 1f
             view.animate()
                 .scaleX(targetScale)
                 .scaleY(targetScale)
@@ -231,7 +231,7 @@ internal class EpisodeCardAdapter(
     ) : RecyclerView.ViewHolder(item)
 
     private fun renderFocus(holder: Holder, focused: Boolean) {
-        holder.itemView.background = ContentScreenStyle.softSurface(holder.itemView.context, focused, 14)
+        holder.itemView.background = ContentScreenStyle.softSurface(holder.itemView.context, focused, 18)
         holder.title.setTextColor(CinemaStyle.White)
         holder.meta.setTextColor(if (focused) BlofyTvDesign.Lavender else CinemaStyle.Muted)
         holder.state.background = if (focused) ContentScreenStyle.actionBackground(holder.itemView.context, true, true) else ContentScreenStyle.chip(holder.itemView.context)
