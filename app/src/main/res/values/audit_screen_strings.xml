@@ -80,6 +80,14 @@
     <string name="details_trailer_open_failed">Could not open the trailer on this device.</string>
     <string name="details_seasons_count">%1$d seasons</string>
     <string name="details_episodes_count">%1$d episodes</string>
+    <plurals name="details_seasons_count_plural">
+        <item quantity="one">%1$d season</item>
+        <item quantity="other">%1$d seasons</item>
+    </plurals>
+    <plurals name="details_episodes_count_plural">
+        <item quantity="one">%1$d episode</item>
+        <item quantity="other">%1$d episodes</item>
+    </plurals>
     <string name="details_continue_episode">Continue season %1$d   •   episode %2$d</string>
     <string name="details_continue_episode_progress">Continue season %1$d   •   episode %2$d   •   %3$d%%</string>
     <string name="details_resume_episode">▶  Resume episode</string>
