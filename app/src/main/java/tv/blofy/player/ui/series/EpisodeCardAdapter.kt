@@ -25,6 +25,7 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
 
 internal class EpisodeCardAdapter(
+    private val seriesName: String?,
     private val seriesArt: String?,
     private val onClick: (EpisodeEntity) -> Unit,
     private val onFocus: (EpisodeEntity) -> Unit
@@ -165,7 +166,7 @@ internal class EpisodeCardAdapter(
         val episode = items[position]
         holder.number.text = "E${episode.episode}"
         val context = holder.itemView.context
-        holder.title.text = ContentPresentation.title(episode.title, "episode").ifBlank { context.getString(R.string.cinema_episode_title, episode.episode) }
+        holder.title.text = cleanEpisodeTitle(context, episode)
         val duration = episode.durationSecs?.takeIf { it > 0 }?.let { secs -> context.getString(R.string.details_minutes, secs / 60) }
         holder.meta.text = listOfNotNull(context.getString(R.string.episodes_season, episode.season), duration).joinToString("  •  ")
         val pct = progress[episode.key] ?: 0
@@ -196,6 +197,20 @@ internal class EpisodeCardAdapter(
                 .start()
             if (focused) onFocus(episode)
         }
+    }
+
+    private fun cleanEpisodeTitle(context: android.content.Context, episode: EpisodeEntity): String {
+        var title = ContentPresentation.title(episode.title, "episode").trim()
+        val normalizedSeries = seriesName?.let { ContentPresentation.title(it, "series") }?.trim().orEmpty()
+        if (normalizedSeries.isNotBlank() && title.startsWith(normalizedSeries, ignoreCase = true)) {
+            title = title.removePrefix(normalizedSeries).trim()
+        }
+        title = title
+            .replace(Regex("(?i)\\bS\\d{1,2}E\\d{1,3}\\b"), "")
+            .replace(Regex("^[\\s\\-–—•:]+"), "")
+            .replace(Regex("[\\s\\-–—•:]+$"), "")
+            .trim()
+        return title.ifBlank { context.getString(R.string.cinema_episode_title, episode.episode) }
     }
 
     override fun getItemCount() = items.size
