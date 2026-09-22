@@ -64,7 +64,7 @@ class SectionSearchActivity : AppCompatActivity() {
         }
 
         root.addView(TextView(this).apply {
-            text = "BLOFY  •  ${sectionTitle()}"
+            text = getString(R.string.search_brand_section, sectionTitle())
             textSize = if (compact) 22f else 27f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
