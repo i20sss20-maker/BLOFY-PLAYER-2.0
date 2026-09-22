@@ -110,7 +110,7 @@ class LiveGuideActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             addView(TextView(this@LiveGuideActivity).apply {
-                text = "BLOFY LIVE GUIDE"
+                text = getString(R.string.brand_live_guide)
                 textSize = 11.5f
                 letterSpacing = .13f
                 typeface = Typeface.DEFAULT_BOLD
