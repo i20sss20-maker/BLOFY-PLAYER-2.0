@@ -61,13 +61,19 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
 
             fun refresh() {
                 val saved = ProfileLibraryStore.isWatchlisted(activity, contentKey)
-                text = if (saved) "✓ My Watchlist" else "+ My Watchlist"
+                val arabic = androidx.core.os.ConfigurationCompat.getLocales(activity.resources.configuration)[0]?.language == "ar"
+                text = when {
+                    arabic && saved -> "✓ في قائمتي"
+                    arabic -> "+ قائمتي"
+                    saved -> "✓ My Watchlist"
+                    else -> "+ My Watchlist"
+                }
                 background = CinemaStyle.buttonBackground(activity, false, hasFocus())
-                setTextColor(if (hasFocus()) CinemaStyle.Background else CinemaStyle.White)
+                setTextColor(CinemaStyle.White)
             }
             setOnFocusChangeListener { view, focused ->
                 view.background = CinemaStyle.buttonBackground(activity, false, focused)
-                setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
+                setTextColor(CinemaStyle.White)
                 view.animate().cancel()
                 val targetScale = if (focused) TvUiTuning.focusScale(activity, 1.024f) else 1f
                 view.animate()
