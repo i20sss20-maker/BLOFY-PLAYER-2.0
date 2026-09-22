@@ -36,7 +36,7 @@ class RecentChannelsActivity : AppCompatActivity() {
             background = AppCompatResources.getDrawable(this@RecentChannelsActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
-            text = "BLOFY LIVE"
+            text = getString(R.string.brand_live)
             textSize = 12f
             letterSpacing = .11f
             typeface = BlofyTvDesign.BodyTypeface
