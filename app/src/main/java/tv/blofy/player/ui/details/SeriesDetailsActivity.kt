@@ -29,6 +29,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.series.EpisodesActivity
 
@@ -78,8 +79,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleBright)
                 gravity = Gravity.START
-                background = BlofyTvDesign.badge(dp(10).toFloat())
-                setPadding(dp(10), dp(4), dp(10), dp(4))
+                setPadding(0, dp(2), 0, dp(4))
             }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(6) })
 
             val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
@@ -92,7 +92,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             panel.addView(logo, layout.logoParams())
             val titleView = TextView(this@SeriesDetailsActivity).apply {
                 text = title
-                textSize = if (metadata?.logoUrl.isNullOrBlank()) 28f else 18f
+                textSize = if (metadata?.logoUrl.isNullOrBlank()) 32f else 18f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
                 gravity = Gravity.START
@@ -136,8 +136,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = Gravity.START
                 setLineSpacing(0f, 1.18f)
-                background = BlofyTvDesign.glassSurface(dp(14).toFloat(), false)
-                setPadding(dp(14), dp(12), dp(14), dp(12))
+                setPadding(0, dp(8), 0, dp(10))
             }
             panel.addView(overviewView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
             val crewView = TextView(this@SeriesDetailsActivity).apply {
@@ -163,7 +162,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.Mint)
                     gravity = Gravity.START
-                    background = BlofyTvDesign.badge(dp(10).toFloat())
+                    background = ContentScreenStyle.chip(this@SeriesDetailsActivity)
                     setPadding(dp(10), dp(5), dp(10), dp(5))
                 }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(7) })
                 if (currentResume.durationMs > 0) {
@@ -234,7 +233,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     val logoUrl = updated?.logoUrl
                     logo.visibility = if (logoUrl.isNullOrBlank()) View.GONE else View.VISIBLE
                     if (!logoUrl.isNullOrBlank()) ArtworkLoader.load(logo, logoUrl)
-                    titleView.textSize = if (logoUrl.isNullOrBlank()) 28f else 18f
+                    titleView.textSize = if (logoUrl.isNullOrBlank()) 32f else 18f
                 }.start(metadata)
 
             if (layout.isTv) primary?.requestFocus()
@@ -271,7 +270,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
 
     private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         text = label
-        CinemaStyle.styleButton(this, primary)
+        ContentScreenStyle.styleAction(this, primary)
         minimumWidth = dp(if (primary) 132 else 108)
         setOnClickListener { action() }
     }
