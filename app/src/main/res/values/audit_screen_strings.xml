@@ -149,4 +149,41 @@
     <string name="home_recent_channels">Recent channels</string>
     <string name="home_blofy_collections">BLOFY collections</string>
     <string name="home_continue_compact">Continue watching</string>
+
+    <string name="library_no_continue">Nothing to resume yet</string>
+    <string name="library_no_favorites">No favorites yet</string>
+    <string name="library_episode_url_failed">Could not prepare the episode link</string>
+    <string name="recent_channels_empty">No recent channels yet</string>
+    <string name="recent_channels_live">● Live</string>
+
+    <string name="playlist_form_add_server">Add server</string>
+    <string name="playlist_form_edit_server">Edit server</string>
+    <string name="playlist_form_name_hint">Server name (optional)</string>
+    <string name="playlist_form_url_hint">Server URL</string>
+    <string name="playlist_form_username_hint">Username</string>
+    <string name="playlist_form_password_hint">Password</string>
+    <string name="playlist_form_https_preferred">HTTPS preferred • HTTP available when needed</string>
+    <string name="playlist_form_http_warning">Warning: HTTP connection is not encrypted</string>
+    <string name="playlist_form_https_secure">HTTPS connection is encrypted</string>
+    <string name="playlist_form_url_required">Enter the server URL</string>
+    <string name="playlist_form_url_invalid">The server URL is not valid</string>
+    <string name="playlist_form_userinfo_not_allowed">Use the username and password fields</string>
+    <string name="playlist_form_host_unsafe">This server address is not allowed</string>
+    <string name="playlist_form_credentials_required">Enter the username and password</string>
+    <string name="playlist_form_http_dialog_title">Unencrypted HTTP connection</string>
+    <string name="playlist_form_http_dialog_message">Do you want to continue with this URL?</string>
+    <string name="playlist_form_back">Back</string>
+    <string name="playlist_form_continue">Continue</string>
+    <string name="playlist_form_saving">Saving Xtream…</string>
+    <string name="playlist_form_no_content">The server returned no content</string>
+    <string name="playlist_form_section_failed">Could not load one of the playlist sections</string>
+    <string name="playlist_form_saved_entering">Saved • opening</string>
+    <string name="playlist_form_saved">Saved</string>
+    <string name="playlist_form_setup_failed">Could not prepare the server • check the details and connection, then try again</string>
+    <string name="playlist_form_save_connect">Save and connect</string>
+    <string name="playlist_form_save">Save</string>
+    <string name="playlist_form_missing">Playlist not found • return to saved playlists</string>
+    <string name="playlist_form_legacy_unsupported">This playlist is old and unsupported • enter Xtream details</string>
+    <string name="playlist_form_read_failed">Could not read playlist details • reopen this page to try again</string>
+
 </resources>
