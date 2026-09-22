@@ -177,7 +177,12 @@ class LibraryActivity : AppCompatActivity() {
                 setTextColor(Color.WHITE)
                 view.background = rowBackground(focused)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).translationZ(if (focused) 9f else 1f).setDuration(75).start()
+                view.animate()
+                    .scaleX(if (focused) 1.012f else 1f)
+                    .scaleY(if (focused) 1.012f else 1f)
+                    .translationZ(if (focused) 9f else 1f)
+                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .start()
             }
             setOnClickListener { open(providerId, liveFormat, stream, resumeMs) }
         }
@@ -200,7 +205,12 @@ class LibraryActivity : AppCompatActivity() {
                 setTextColor(Color.WHITE)
                 view.background = rowBackground(focused)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).translationZ(if (focused) 9f else 1f).setDuration(75).start()
+                view.animate()
+                    .scaleX(if (focused) 1.012f else 1f)
+                    .scaleY(if (focused) 1.012f else 1f)
+                    .translationZ(if (focused) 9f else 1f)
+                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .start()
             }
             setOnClickListener { openEpisode(provider, episode, entry.state.positionMs, seriesName) }
         }
@@ -242,10 +252,11 @@ class LibraryActivity : AppCompatActivity() {
     private fun kindLabel(kind: String) = when (kind) { "live" -> "LIVE"; "movie" -> "MOVIE"; "series" -> "SERIES"; else -> kind.uppercase() }
 
     private fun rowBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF7139BE.toInt(), 0xFF402461.toInt()) else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
+        if (focused) intArrayOf(0xFF68409A.toInt(), 0xFF3D2858.toInt(), 0xFF24182F.toInt())
+        else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
     ).apply {
         cornerRadius = 16f
-        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF463455.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF463455.toInt())
     }
 
     private fun showMessage(text: String) {

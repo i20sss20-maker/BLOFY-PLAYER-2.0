@@ -380,8 +380,12 @@ class SearchActivity : AppCompatActivity() {
             setOnFocusChangeListener { view, focused ->
                 view.background = rowBackground(focused)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.01f else 1f).scaleY(if (focused) 1.01f else 1f)
-                    .translationZ(if (focused) dp(8).toFloat() else dp(1).toFloat()).setDuration(65).start()
+                view.animate()
+                    .scaleX(if (focused) 1.012f else 1f)
+                    .scaleY(if (focused) 1.012f else 1f)
+                    .translationZ(if (focused) dp(8).toFloat() else dp(1).toFloat())
+                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .start()
             }
             setOnClickListener { open() }
         }

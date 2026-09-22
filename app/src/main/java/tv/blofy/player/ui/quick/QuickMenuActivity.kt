@@ -23,6 +23,7 @@ import tv.blofy.player.ui.profile.ProfilesActivity
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.CommercialSettingsActivity
 import tv.blofy.player.ui.settings.SettingsActivity
+import tv.blofy.player.ui.common.BlofyTvDesign
 
 /** Lightweight TV overlay-style hub. It never touches playback/catalog state. */
 class QuickMenuActivity : AppCompatActivity() {
@@ -127,8 +128,12 @@ class QuickMenuActivity : AppCompatActivity() {
             setOnFocusChangeListener { view, focused ->
                 view.background = itemBackground(focused, primary)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.014f else 1f).scaleY(if (focused) 1.014f else 1f)
-                    .translationZ(if (focused) dp(10).toFloat() else dp(1).toFloat()).setDuration(60).start()
+                view.animate()
+                    .scaleX(if (focused) 1.014f else 1f)
+                    .scaleY(if (focused) 1.014f else 1f)
+                    .translationZ(if (focused) dp(10).toFloat() else dp(1).toFloat())
+                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .start()
             }
             setOnClickListener { startActivity(intent); finish() }
         }
@@ -144,7 +149,7 @@ class QuickMenuActivity : AppCompatActivity() {
         }
     ).apply {
         cornerRadius = dp(15).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFC897FF.toInt() else 0xFF49345E.toInt())
+        setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF49345E.toInt())
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

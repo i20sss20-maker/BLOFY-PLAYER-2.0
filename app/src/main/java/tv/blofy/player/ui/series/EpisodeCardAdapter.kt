@@ -176,10 +176,10 @@ internal class EpisodeCardAdapter(
             renderFocus(holder, focused)
             view.animate().cancel()
             view.animate()
-                .scaleX(if (focused) 1.008f else 1f)
-                .scaleY(if (focused) 1.008f else 1f)
+                .scaleX(if (focused) 1.012f else 1f)
+                .scaleY(if (focused) 1.012f else 1f)
                 .translationZ(if (focused) 10f else 1f)
-                .setDuration(if (focused) 58L else 48L)
+                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
                 .start()
             if (focused) onFocus(episode)
         }
@@ -192,7 +192,7 @@ internal class EpisodeCardAdapter(
     private fun renderFocus(holder: Holder, focused: Boolean) {
         holder.itemView.background = CinemaStyle.surface(holder.itemView.context, focused)
         holder.title.setTextColor(CinemaStyle.White)
-        holder.meta.setTextColor(CinemaStyle.Muted)
+        holder.meta.setTextColor(if (focused) BlofyTvDesign.Lavender else CinemaStyle.Muted)
         holder.state.background = CinemaStyle.surface(holder.itemView.context, focused, filledFocus = true, radiusDp = 6)
         holder.state.setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
     }
