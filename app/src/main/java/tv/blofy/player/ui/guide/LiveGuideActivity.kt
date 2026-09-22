@@ -375,7 +375,7 @@ class LiveGuideActivity : AppCompatActivity() {
             progress.progress = 0
         } else {
             nowTitle.text = current.title
-            nowTime.text = "${time(current.startMs)} – ${time(current.endMs)}"
+            nowTime.text = getString(R.string.guide_time_range, time(current.startMs), time(current.endMs))
             nowDescription.text = current.description.orEmpty()
             val duration = (current.endMs - current.startMs).coerceAtLeast(1L)
             progress.progress = (((now - current.startMs).coerceIn(0L, duration) * 1000L) / duration).toInt()
@@ -622,12 +622,12 @@ private class GuideChannelAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
-        holder.title.text = (if (item.locked) "🔒  " else "") + item.name
+        holder.title.text = if (item.locked) holder.itemView.context.getString(R.string.guide_locked_channel, item.name) else item.name
         holder.meta.text = buildString {
             append(holder.itemView.context.getString(if (item.archiveEnabled) R.string.guide_archive_badge else R.string.guide_live_badge))
             item.streamType?.takeIf(String::isNotBlank)?.let { append("  •  ").append(it.uppercase()) }
         }
-        holder.number.text = (position + 1).toString()
+        holder.number.text = holder.itemView.context.getString(R.string.guide_channel_number, position + 1)
         ArtworkLoader.load(holder.logo, item.icon)
         holder.itemView.background = rowBackground(holder.itemView.hasFocus(), holder.dp(14))
         holder.itemView.setOnClickListener { onClick(item) }
