@@ -63,7 +63,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
             val info = layout.info
 
             info.addView(TextView(this@MovieDetailsActivity).apply {
-                text = "BLOFY CINEMA"
+                text = getString(R.string.brand_cinema)
                 textSize = 11.5f
                 letterSpacing = .12f
                 typeface = BlofyTvDesign.HeadingTypeface
