@@ -106,8 +106,8 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     add(getString(R.string.details_series_type))
                     addAll(ContentPresentation.of(stream).badges)
                     (metadata?.releaseDate?.take(4) ?: stream.year)?.takeIf(String::isNotBlank)?.let(::add)
-                    if (seasons > 0) add(getString(R.string.details_seasons_count, seasons))
-                    if (allEpisodes.isNotEmpty()) add(getString(R.string.details_episodes_count, allEpisodes.size))
+                    if (seasons > 0) add(resources.getQuantityString(R.plurals.details_seasons_count_plural, seasons, seasons))
+                    if (allEpisodes.isNotEmpty()) add(resources.getQuantityString(R.plurals.details_episodes_count_plural, allEpisodes.size, allEpisodes.size))
                     metadata?.runtimeMinutes?.takeIf { it > 0 }?.let { add(getString(R.string.details_minutes, it)) }
                     metadata?.rating?.let { add("★ %.1f/10".format(java.util.Locale.US, it)) }
                         ?: stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
