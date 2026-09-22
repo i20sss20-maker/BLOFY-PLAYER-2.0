@@ -42,6 +42,7 @@ import tv.blofy.player.ui.catalog.PosterStreamAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
+import tv.blofy.player.ui.settings.RuntimeSettings
 
 class LibraryActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
@@ -79,7 +80,14 @@ class LibraryActivity : AppCompatActivity() {
             root.addView(list)
             val widthDp = resources.configuration.screenWidthDp
             val tv = DeviceClass.detect(this) == DeviceClass.Kind.TV
-            val columns = ((widthDp - 48) / if (tv) 150 else 130).coerceIn(2, if (tv) 7 else 6)
+            val compact = RuntimeSettings.catalogDensity(this) == RuntimeSettings.CatalogDensity.COMPACT
+            val targetWidth = when {
+                tv && compact -> 124
+                tv -> 150
+                compact -> 108
+                else -> 130
+            }
+            val columns = ((widthDp - 48) / targetWidth).coerceIn(2, if (tv && compact) 8 else if (tv) 7 else if (compact) 7 else 6)
             favoritesGrid = RecyclerView(this).apply {
                 layoutManager = GridLayoutManager(this@LibraryActivity, columns)
                 itemAnimator = null
