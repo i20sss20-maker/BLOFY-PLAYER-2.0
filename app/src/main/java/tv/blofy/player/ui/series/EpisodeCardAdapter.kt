@@ -210,7 +210,10 @@ internal class EpisodeCardAdapter(
             .replace(Regex("^[\\s\\-–—•:]+"), "")
             .replace(Regex("[\\s\\-–—•:]+$"), "")
             .trim()
-        return title.ifBlank { context.getString(R.string.cinema_episode_title, episode.episode) }
+        val genericEpisode = Regex("(?i)^(episode|ep\\.?|الحلقة)\\s*0*\\d+$")
+        return if (title.isBlank() || genericEpisode.matches(title)) {
+            context.getString(R.string.cinema_episode_title, episode.episode)
+        } else title
     }
 
     override fun getItemCount() = items.size
