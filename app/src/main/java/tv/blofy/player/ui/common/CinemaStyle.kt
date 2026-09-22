@@ -21,17 +21,36 @@ object CinemaStyle {
     val Accent = 0xFFC9A6FF.toInt()
     const val ActionHeight = 34
 
-    fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 8) = GradientDrawable().apply {
+    fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 8) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        when {
+            focused && filledFocus -> intArrayOf(0xFFE6D2FF.toInt(), Accent, 0xFFB882F0.toInt())
+            focused -> intArrayOf(0xFF63408A.toInt(), 0xFF3D2756.toInt(), Surface)
+            else -> intArrayOf(Surface, 0xFF180F23.toInt())
+        }
+    ).apply {
         val density = context.resources.displayMetrics.density
         cornerRadius = radiusDp * density
-        setColor(if (focused && filledFocus) White else Surface)
-        setStroke(((if (focused) 2 else 1) * density).toInt(), if (focused) White else 0x62FFFFFF)
+        setStroke(
+            ((if (focused) 2 else 1) * density).toInt(),
+            if (focused) 0xFFEBD8FF.toInt() else 0x52FFFFFF
+        )
     }
 
-    fun buttonBackground(context: Context, primary: Boolean, focused: Boolean) = GradientDrawable().apply {
+    fun buttonBackground(context: Context, primary: Boolean, focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT,
+        when {
+            primary && focused -> intArrayOf(0xFFE9D4FF.toInt(), 0xFFD3B2FF.toInt(), 0xFFB67DEA.toInt())
+            primary -> intArrayOf(Accent, 0xFFB98AEF.toInt())
+            focused -> intArrayOf(0xFF7650A2.toInt(), 0xFF4A2E69.toInt())
+            else -> intArrayOf(Surface, 0xFF1A1026.toInt())
+        }
+    ).apply {
         cornerRadius = 6 * context.resources.displayMetrics.density
-        setColor(if (primary) Accent else if (focused) 0xFF684397.toInt() else Surface)
-        setStroke(((if (focused) 2 else 1) * context.resources.displayMetrics.density).toInt(), if (focused) White else 0x62FFFFFF)
+        setStroke(
+            ((if (focused) 2 else 1) * context.resources.displayMetrics.density).toInt(),
+            if (focused) 0xFFF0E1FF.toInt() else 0x52FFFFFF
+        )
     }
 
     fun styleButton(button: Button, primary: Boolean = false, onFocus: ((Boolean) -> Unit)? = null) {
@@ -56,8 +75,12 @@ object CinemaStyle {
                 background = buttonBackground(context, primary, focused)
                 setTextColor(if (primary) Background else White)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.02f else 1f).scaleY(if (focused) 1.02f else 1f)
-                    .setDuration(120).start()
+                view.animate()
+                    .scaleX(if (focused) 1.028f else 1f)
+                    .scaleY(if (focused) 1.028f else 1f)
+                    .translationZ(if (focused) 8 * density else 0f)
+                    .setDuration(if (focused) 95L else 75L)
+                    .start()
                 onFocus?.invoke(focused)
             }
         }

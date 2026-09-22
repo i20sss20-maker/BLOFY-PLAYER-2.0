@@ -17,7 +17,7 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
     private val titleView = label(16f, true)
     private val valueView = label(13f, true).apply { setTextColor(CinemaStyle.Accent) }
     private val hintView = label(12f, false).apply { setTextColor(CinemaStyle.Muted) }
-    private val indicator = label(16f, true)
+    private val indicator = label(16f, true).apply { setTextColor(BlofyTvDesign.PurpleSoft) }
 
     init {
         orientation = VERTICAL
@@ -34,17 +34,25 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
         heading.addView(indicator, LayoutParams(dp(24), -2).apply { marginStart = dp(8) })
         addView(heading, LayoutParams(-1, -2))
         valueView.setPadding(dp(10), dp(5), dp(10), dp(5))
-        valueView.background = android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = dp(8).toFloat()
-            setColor(0xFF261936.toInt())
-        }
+        valueView.background = valueBackground(false)
         addView(valueView, LayoutParams(-2, -2).apply { topMargin = dp(9) })
         addView(hintView, LayoutParams(-1, -2).apply { topMargin = dp(5) })
         background = CinemaStyle.surface(context, radiusDp = 16)
-        setOnFocusChangeListener { _, focused ->
+        stateListAnimator = null
+        setOnFocusChangeListener { view, focused ->
             background = CinemaStyle.surface(context, focused, radiusDp = 16)
+            valueView.background = valueBackground(focused)
             valueView.setTextColor(if (focused) CinemaStyle.White else CinemaStyle.Accent)
-            elevation = if (focused) dp(5).toFloat() else 0f
+            titleView.setTextColor(CinemaStyle.White)
+            hintView.setTextColor(if (focused) BlofyTvDesign.Lavender else CinemaStyle.Muted)
+            indicator.setTextColor(if (focused) CinemaStyle.White else BlofyTvDesign.PurpleSoft)
+            view.animate().cancel()
+            view.animate()
+                .scaleX(if (focused) 1.012f else 1f)
+                .scaleY(if (focused) 1.012f else 1f)
+                .translationZ(if (focused) dp(8).toFloat() else 0f)
+                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                .start()
         }
     }
 
@@ -62,6 +70,15 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
     override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
         super.onInitializeAccessibilityNodeInfo(info)
         info.className = Button::class.java.name
+    }
+
+    private fun valueBackground(focused: Boolean) = android.graphics.drawable.GradientDrawable(
+        android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+        if (focused) intArrayOf(0xFF5A377D.toInt(), 0xFF3A2452.toInt())
+        else intArrayOf(0xFF261936.toInt(), 0xFF1C1228.toInt())
+    ).apply {
+        cornerRadius = dp(8).toFloat()
+        setStroke(dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF4C365F.toInt())
     }
 
     private fun label(size: Float, bold: Boolean) = TextView(context).apply {

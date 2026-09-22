@@ -15,6 +15,7 @@ object TvUiTuning {
     // RecyclerView can detach and reattach the same child many times. Keep weak bookkeeping so
     // focus/layout callbacks are installed once per View instead of stacking on every attachment.
     private val tunedChildren = WeakHashMap<View, Boolean>()
+    private val tunedRecyclers = WeakHashMap<RecyclerView, Boolean>()
 
     fun scale(context: Context): Float {
         val configuration = context.resources.configuration
@@ -56,6 +57,7 @@ object TvUiTuning {
             maxOf(recycler.paddingRight, edge),
             maxOf(recycler.paddingBottom, edge / 2)
         )
+        if (tunedRecyclers.put(recycler, true) != null) return
         recycler.addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
             override fun onChildViewAttachedToWindow(view: View) {
                 // TV/box navigation needs focus-in-touch-mode because many vendor firmwares report

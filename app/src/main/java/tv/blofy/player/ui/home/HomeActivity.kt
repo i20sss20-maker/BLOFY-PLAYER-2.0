@@ -846,7 +846,7 @@ class HomeActivity : AppCompatActivity() {
         setOnFocusChangeListener { view, focused ->
             view.background = transparentSurface(focused)
             (getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(if (focused) PURPLE_BRIGHT else TEXT_MUTED)
-            (getChildAt(1) as? TextView)?.setTextColor(TEXT_PRIMARY)
+            (getChildAt(1) as? TextView)?.setTextColor(if (focused) Color.WHITE else TEXT_MUTED)
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
             animateFocus(view, focused, 1f, 0f, 0f)
         }
@@ -1026,7 +1026,15 @@ class HomeActivity : AppCompatActivity() {
     private fun roundedColor(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = dp(radius).toFloat(); setColor(color); stroke?.let { setStroke(dp(1), it) } }
     private fun surface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
     private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8D4AE2.toInt(), 0xFF502779.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFC9A1F4.toInt()) }
-    private fun transparentSurface(focused: Boolean) = roundedColor(if (focused) CinemaStyle.Surface else Color.TRANSPARENT, 6, if (focused) Color.WHITE else null)
+    private fun transparentSurface(focused: Boolean) = if (focused) {
+        GradientDrawable(
+            GradientDrawable.Orientation.LEFT_RIGHT,
+            intArrayOf(0xFF51306F.toInt(), 0xFF2B1A3D.toInt(), 0xFF1B1226.toInt())
+        ).apply {
+            cornerRadius = dp(10).toFloat()
+            setStroke(dp(1), BlofyTvDesign.FocusStroke)
+        }
+    } else roundedColor(Color.TRANSPARENT, 10)
     private fun heroSurface() = CinemaStyle.surface(this, radiusDp = 16)
     private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF4B276A.toInt(), 0xFF20142E.toInt(), 0xFF121019.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF7F56A0.toInt()) }
     private fun featuredSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 18)
