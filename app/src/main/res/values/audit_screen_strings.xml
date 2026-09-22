@@ -542,4 +542,56 @@
     <string name="parental_mismatch">The two PINs do not match</string>
     <string name="parental_save_failed">Could not save PIN</string>
 
+
+    <string name="system_status_title">BLOFY diagnostics</string>
+    <string name="system_status_section_app_device">App &amp; device</string>
+    <string name="system_status_section_network_memory">Network &amp; memory</string>
+    <string name="system_status_section_server_library">Server &amp; library</string>
+    <string name="system_status_section_storage">Storage used</string>
+    <string name="system_status_version">Version</string>
+    <string name="system_status_version_code">Version Code</string>
+    <string name="system_status_activation">Activation status</string>
+    <string name="system_status_android">Android</string>
+    <string name="system_status_android_format">%1$s (SDK %2$d)</string>
+    <string name="system_status_device">Device</string>
+    <string name="system_status_form_factor">Interface type</string>
+    <string name="system_status_tv">TV</string>
+    <string name="system_status_mobile">Mobile / Tablet</string>
+    <string name="system_status_activation_unknown">Unknown</string>
+    <string name="system_status_activation_active">Activated</string>
+    <string name="system_status_activation_inactive">Not activated</string>
+    <string name="system_status_network">Network status</string>
+    <string name="system_status_memory_available">Available memory</string>
+    <string name="system_status_memory_total">Total memory</string>
+    <string name="system_status_active_playlist">Active playlist</string>
+    <string name="system_status_no_playlist">No playlist</string>
+    <string name="system_status_server_type">Server type</string>
+    <string name="system_status_channels">Channels</string>
+    <string name="system_status_movies">Movies</string>
+    <string name="system_status_series">Series</string>
+    <string name="system_status_indexed_episodes">Indexed episodes</string>
+    <string name="system_status_metadata">Content metadata</string>
+    <string name="system_status_library_state">Library status</string>
+    <string name="system_status_library_ready_full">Fully ready</string>
+    <string name="system_status_library_ready_secondary">Ready • secondary preparation is finishing</string>
+    <string name="system_status_library_needs_refresh">Content refresh needed</string>
+    <string name="system_status_metadata_state">Movie &amp; series metadata</string>
+    <string name="system_status_ready">Ready</string>
+    <string name="system_status_preparing_unavailable">Preparing / unavailable</string>
+    <string name="system_status_episode_index">Episode index</string>
+    <string name="system_status_episode_index_ready">Ready</string>
+    <string name="system_status_episode_index_preparing">Preparing / unavailable</string>
+    <string name="system_status_last_refresh">Last successful refresh</string>
+    <string name="system_status_temp_files">Temporary files</string>
+    <string name="system_status_total_storage">Total BLOFY storage</string>
+    <string name="system_status_copy_report">Copy diagnostics report</string>
+    <string name="system_status_privacy_note">The report does not include the username, password or server URL.</string>
+    <string name="system_status_tagline">BLOFY PLAYER • Your library, your way</string>
+    <string name="system_status_disconnected">Disconnected</string>
+    <string name="system_status_connected">Connected</string>
+    <string name="system_status_unverified_internet">Internet not validated</string>
+    <string name="system_status_network_format">%1$s • %2$s</string>
+    <string name="system_status_android_device">Android device</string>
+    <string name="system_status_report_copied">Diagnostics report copied</string>
+
 </resources>
