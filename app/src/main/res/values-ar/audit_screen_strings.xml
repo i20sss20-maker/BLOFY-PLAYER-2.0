@@ -360,4 +360,55 @@
     <string name="search_locked_title">🔒  %1$s</string>
     <string name="search_brand_section">BLOFY  •  %1$s</string>
 
+
+    <string name="provider_manager_title">قوائم BLOFY</string>
+    <string name="provider_manager_refresh_from_website">↻  تحديث من الموقع</string>
+    <string name="provider_manager_subtitle">اتصل مباشرة بالسيرفر المحفوظ أو عدّل بياناته</string>
+    <string name="provider_manager_subscriber_hint">مشتركو BLOFY يحتاجون اسم المستخدم وكلمة المرور فقط</string>
+    <string name="provider_manager_add_subscriber">+  مشتركو BLOFY</string>
+    <string name="provider_manager_saved_servers">السيرفرات المحفوظة</string>
+    <string name="provider_manager_read_failed">تعذر قراءة القوائم المحفوظة • أعد فتح الصفحة للمحاولة</string>
+    <string name="provider_manager_refresh_unconfigured">خدمة تحديث القوائم غير مهيأة</string>
+    <string name="provider_manager_refreshing">جاري التحديث…</string>
+    <string name="provider_manager_fetching">جاري جلب القوائم وبياناتها من الموقع…</string>
+    <string name="provider_manager_empty">ما عندك سيرفرات محفوظة حتى الآن\nأضف مشترك BLOFY أو Xtream</string>
+    <string name="provider_manager_active">● القائمة النشطة</string>
+    <string name="provider_manager_saved">○ قائمة محفوظة</string>
+    <string name="provider_manager_summary_loading">قراءة حالة المكتبة…</string>
+    <string name="provider_manager_connect">▶  اتصال</string>
+    <string name="provider_manager_connect_plain">اتصال</string>
+    <string name="provider_manager_edit">تعديل</string>
+    <string name="provider_manager_sync">مزامنة</string>
+    <string name="provider_manager_delete">حذف</string>
+    <string name="provider_manager_summary_failed">تعذر قراءة ملخص المكتبة</string>
+    <string name="provider_manager_ready">جاهز</string>
+    <string name="provider_manager_needs_update">يحتاج تحديث</string>
+    <string name="provider_manager_channels_count">القنوات: %1$d</string>
+    <string name="provider_manager_movies_count">الأفلام: %1$d</string>
+    <string name="provider_manager_series_count">المسلسلات: %1$d</string>
+    <string name="provider_manager_summary_format">%1$s  •  %2$s  •  %3$s  •  %4$s</string>
+    <string name="provider_manager_legacy_unsupported">هذه القائمة قديمة وغير مدعومة • استخدم Xtream</string>
+    <string name="provider_manager_opening">جاري فتح %1$s…</string>
+    <string name="provider_manager_open_failed">تعذر فتح القائمة • حاول مرة أخرى</string>
+    <string name="provider_manager_removed_synced">تم حذف القائمة من الجهاز والموقع</string>
+    <string name="provider_manager_removed_pending">تم إخفاء القائمة • سيُستكمل حذفها من الموقع عند الاتصال</string>
+    <string name="provider_manager_remove_failed">تعذر حذف القائمة • حاول مرة أخرى</string>
+
+    <string name="smart_recent_title">أضيف حديثًا</string>
+    <string name="smart_recent_subtitle">أحدث الأفلام والمسلسلات الموجودة في باقتك</string>
+    <string name="smart_top_rated_title">الأعلى تقييمًا</string>
+    <string name="smart_top_rated_subtitle">أفضل العناوين حسب تقييمات المكتبة</string>
+    <string name="smart_4k_title">4K و UHD</string>
+    <string name="smart_4k_subtitle">المحتوى عالي الدقة الموجود في اشتراكك</string>
+    <string name="smart_arabic_title">محتوى عربي</string>
+    <string name="smart_arabic_subtitle">أفلام ومسلسلات عربية من نفس الباقة</string>
+    <string name="smart_default_title">مختارات BLOFY</string>
+    <string name="smart_default_subtitle">محتوى مختار من مكتبتك</string>
+    <string name="smart_collection_count">العناوين: %1$d</string>
+
+    <string name="profile_watchlist_title">قائمتي</string>
+    <string name="profile_watchlist_subtitle">%1$s • عناوين محفوظة</string>
+    <string name="profile_watchlist_empty">قائمتك فارغة. أضف أفلامًا أو مسلسلات من صفحة التفاصيل.</string>
+    <string name="profile_switcher_label">%1$s  %2$s</string>
+
 </resources>
