@@ -49,6 +49,7 @@ class EpisodesActivity : ContentAccessActivity() {
     private lateinit var seasonAdapter: FocusTextAdapter<Int>
     private lateinit var seasonList: RecyclerView
     private lateinit var episodeList: RecyclerView
+    private lateinit var episodeBody: LinearLayout
     private lateinit var status: TextView
     private lateinit var retryButton: Button
     private var allEpisodes: List<EpisodeEntity> = emptyList()
@@ -148,7 +149,7 @@ class EpisodesActivity : ContentAccessActivity() {
             gravity = Gravity.START
         })
 
-        val body = LinearLayout(this).apply {
+        episodeBody = LinearLayout(this).apply {
             orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             layoutDirection = if (compact) uiDirection else View.LAYOUT_DIRECTION_LTR
             clipChildren = false
@@ -173,14 +174,18 @@ class EpisodesActivity : ContentAccessActivity() {
             clipToPadding = false
         }
         if (compact) {
-            body.addView(seasonList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(116)).apply { bottomMargin = dp(10) })
-            body.addView(episodeList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            episodeBody.addView(seasonList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(116)).apply { bottomMargin = dp(10) })
+            episodeBody.addView(episodeList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
             val seasonWidth = if (tablet) 170 else 178
-            body.addView(seasonList, LinearLayout.LayoutParams(dp(seasonWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(16) })
-            body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+            episodeBody.addView(seasonList, LinearLayout.LayoutParams(dp(seasonWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(16) })
+            episodeBody.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         }
-        root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(episodeBody, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            if (compact) 0 else dp(320),
+            if (compact) 1f else 0f
+        ))
         setContentView(root)
 
         lifecycleScope.launch {
@@ -315,6 +320,7 @@ class EpisodesActivity : ContentAccessActivity() {
             restoredOnce = true
             retryButton.visibility = if (allEpisodes.isEmpty() && loadState.canRetry) View.VISIBLE else View.GONE
             updateStatus()
+            adjustPaneHeight()
         }
     }
 
@@ -370,11 +376,29 @@ class EpisodesActivity : ContentAccessActivity() {
         val visible = selectedSeason?.let { s -> allEpisodes.filter { it.season == s }.sortedBy { it.episode } } ?: emptyList()
         episodeAdapter.submit(visible)
         episodeAdapter.setProgress(watchProgress)
+        adjustPaneHeight()
         if (!restoreFocus || !DeviceClass.isTv(this) || visible.isEmpty()) return
         val remembered = FocusMemory.restore(this, episodeMemoryKey())
         val index = visible.indexOfFirst { it.key == remembered }.let { if (it < 0) 0 else it }
         episodeList.scrollToPosition(index)
         episodeList.post { episodeList.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
+    }
+
+    private fun adjustPaneHeight() {
+        if (!::episodeBody.isInitialized || deviceKind == DeviceClass.Kind.PHONE) return
+        val seasonCount = allEpisodes.map { it.season }.distinct().size
+        val visibleCount = selectedSeason?.let { season -> allEpisodes.count { it.season == season } } ?: 0
+        val maxHeight = dp((resources.configuration.screenHeightDp - 170).coerceIn(240, 520))
+        val seasonNeed = dp(16 + seasonCount.coerceAtMost(7) * 58)
+        val episodeNeed = dp(16 + visibleCount.coerceAtMost(5) * 95)
+        val target = maxOf(dp(112), seasonNeed, episodeNeed).coerceAtMost(maxHeight)
+        episodeBody.layoutParams = (episodeBody.layoutParams as LinearLayout.LayoutParams).apply {
+            height = target
+            weight = 0f
+        }
+        seasonList.layoutParams = (seasonList.layoutParams as LinearLayout.LayoutParams).apply { height = target }
+        episodeList.layoutParams = (episodeList.layoutParams as LinearLayout.LayoutParams).apply { height = target }
+        episodeBody.requestLayout()
     }
 
     private fun rememberEpisode(episode: EpisodeEntity) {
