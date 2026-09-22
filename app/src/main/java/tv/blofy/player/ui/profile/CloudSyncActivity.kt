@@ -37,16 +37,17 @@ class CloudSyncActivity : AppCompatActivity() {
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(36), dp(28), dp(36), dp(36))
         }
         root.addView(TextView(this).apply {
-            text = "BLOFY CLOUD"
+            text = getString(R.string.cloud_title)
             textSize = 30f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
         })
         root.addView(TextView(this).apply {
-            text = "Backup, sync and move your profile experience safely"
+            text = getString(R.string.cloud_subtitle)
             textSize = 14f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -69,14 +70,14 @@ class CloudSyncActivity : AppCompatActivity() {
         }
         root.addView(stats, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
 
-        root.addView(actionButton("Sync now") { runSync() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
-        root.addView(actionButton("Back up this profile") { backup() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
-        root.addView(actionButton("Restore from BLOFY Cloud") { confirmRestore() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
-        root.addView(actionButton("Generate Pair & Restore code") { createPairCode() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
-        root.addView(actionButton("Restore from another device") { askPairCode() }, LinearLayout.LayoutParams(-1, dp(54)))
+        root.addView(actionButton(getString(R.string.cloud_sync_now)) { runSync() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
+        root.addView(actionButton(getString(R.string.cloud_backup_profile)) { backup() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
+        root.addView(actionButton(getString(R.string.cloud_restore)) { confirmRestore() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
+        root.addView(actionButton(getString(R.string.cloud_generate_pair)) { createPairCode() }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
+        root.addView(actionButton(getString(R.string.cloud_restore_other)) { askPairCode() }, LinearLayout.LayoutParams(-1, dp(54)))
 
         root.addView(TextView(this).apply {
-            text = "Pair codes are one-time and expire after 10 minutes. BLOFY Cloud transfers only Watchlist, hidden categories and Home layout. Playlist credentials and playback URLs are never included."
+            text = getString(R.string.cloud_pair_note)
             textSize = 12f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -84,80 +85,80 @@ class CloudSyncActivity : AppCompatActivity() {
         })
         scroll.addView(root)
         setContentView(scroll)
-        renderState("Ready")
+        renderState(getString(R.string.cloud_ready))
     }
 
     override fun onResume() {
         super.onResume()
-        renderState(status.text?.toString().orEmpty().ifBlank { "Ready" })
+        renderState(status.text?.toString().orEmpty().ifBlank { getString(R.string.cloud_ready) })
     }
 
-    private fun runSync() = runOperation("Syncing profile…") {
+    private fun runSync() = runOperation(getString(R.string.cloud_syncing)) {
         val result = ProfileCloudSync.syncActive(applicationContext)
-        result?.let { "Sync complete • revision ${it.revision}" } ?: "Cloud sync unavailable for this profile"
+        result?.let { getString(R.string.cloud_sync_complete, it.revision) } ?: getString(R.string.cloud_sync_unavailable)
     }
 
-    private fun backup() = runOperation("Backing up profile…") {
+    private fun backup() = runOperation(getString(R.string.cloud_backing_up)) {
         val result = ProfileCloudSync.backupActive(applicationContext)
-        result?.let { "Backup saved • revision ${it.revision}" } ?: "Cloud backup unavailable for this profile"
+        result?.let { getString(R.string.cloud_backup_saved, it.revision) } ?: getString(R.string.cloud_backup_unavailable)
     }
 
     private fun confirmRestore() {
         AlertDialog.Builder(this)
-            .setTitle("Restore profile")
-            .setMessage("Cloud data will replace this profile's local Watchlist, hidden categories and Home layout. Continue?")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Restore") { _, _ -> restore() }
+            .setTitle(R.string.cloud_restore_title)
+            .setMessage(R.string.cloud_restore_message)
+            .setNegativeButton(R.string.cloud_cancel, null)
+            .setPositiveButton(R.string.cloud_restore_button) { _, _ -> restore() }
             .show()
     }
 
-    private fun restore() = runOperation("Restoring profile…") {
+    private fun restore() = runOperation(getString(R.string.cloud_restoring)) {
         val result = ProfileCloudSync.restoreActive(applicationContext)
         when (result?.action) {
-            "restore" -> "Restore complete • revision ${result.revision}"
-            "no_backup" -> "No cloud backup found for this profile"
-            else -> "Cloud restore unavailable for this profile"
+            "restore" -> getString(R.string.cloud_restore_complete, result.revision)
+            "no_backup" -> getString(R.string.cloud_no_backup)
+            else -> getString(R.string.cloud_restore_unavailable)
         }
     }
 
-    private fun createPairCode() = runOperation("Creating one-time Pair code…") {
+    private fun createPairCode() = runOperation(getString(R.string.cloud_pair_creating)) {
         val pair = ProfileCloudSync.createPairCodeActive(applicationContext)
-            ?: return@runOperation "Unable to create Pair code for this profile"
+            ?: return@runOperation getString(R.string.cloud_pair_create_failed)
         withContext(Dispatchers.Main) {
             AlertDialog.Builder(this@CloudSyncActivity)
-                .setTitle("Pair & Restore")
-                .setMessage("Enter this code on the new device:\n\n${pair.code}\n\nExpires in ${pair.ttlMinutes} minutes. The code works once only.")
-                .setPositiveButton("OK", null)
+                .setTitle(R.string.cloud_pair_title)
+                .setMessage(getString(R.string.cloud_pair_message, pair.code, pair.ttlMinutes))
+                .setPositiveButton(R.string.cloud_pair_ok, null)
                 .show()
         }
-        "Pair code ${pair.code} ready • expires ${formatTime(pair.expiresAt)}"
+        getString(R.string.cloud_pair_ready, pair.code, formatTime(pair.expiresAt))
     }
 
     private fun askPairCode() {
         val field = EditText(this).apply {
-            hint = "8-character Pair code"
+            hint = getString(R.string.cloud_pair_hint)
             isSingleLine = true
             setPadding(dp(18), dp(8), dp(18), dp(8))
         }
         AlertDialog.Builder(this)
-            .setTitle("Restore from another device")
-            .setMessage("Generate a Pair code on your old device, then enter it here. This profile's local cloud data will be replaced.")
+            .setTitle(R.string.cloud_restore_other)
+            .setMessage(R.string.cloud_pair_restore_message)
             .setView(field)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Restore") { _, _ -> restorePair(field.text?.toString().orEmpty()) }
+            .setNegativeButton(R.string.cloud_cancel, null)
+            .setPositiveButton(R.string.cloud_restore_button) { _, _ -> restorePair(field.text?.toString().orEmpty()) }
             .show()
     }
 
     private fun restorePair(code: String) {
         val clean = code.trim().uppercase()
         if (!Regex("^[A-HJ-NP-Z2-9]{8}$").matches(clean)) {
-            renderState("Pair code must be 8 valid characters")
+            renderState(getString(R.string.cloud_pair_invalid))
             return
         }
-        runOperation("Restoring from paired device…") {
+        runOperation(getString(R.string.cloud_pair_restoring)) {
             val result = ProfileCloudSync.restorePairActive(applicationContext, clean)
-            result?.let { "Pair restore complete • revision ${it.revision}" }
-                ?: "Pair restore unavailable for this profile"
+            result?.let { getString(R.string.cloud_pair_restore_complete, it.revision) }
+                ?: getString(R.string.cloud_pair_restore_unavailable)
         }
     }
 
@@ -167,18 +168,18 @@ class CloudSyncActivity : AppCompatActivity() {
         status.text = message
         lifecycleScope.launch {
             val text = runCatching { withContext(Dispatchers.IO) { block() } }
-                .getOrElse { errorText(it.message ?: "network error") }
+                .getOrElse { errorText(it.message ?: getString(R.string.cloud_error_network)) }
             busy = false
             renderState(text)
         }
     }
 
     private fun errorText(code: String): String = when (code) {
-        "pair_code_expired_or_used" -> "Pair code expired or was already used"
-        "same_device_pair" -> "Pair code must be used on a different device"
-        "unauthorized_device" -> "Device activation could not be verified"
-        "cloud_snapshot_missing" -> "Back up the old profile first, then create a Pair code"
-        else -> "Cloud operation failed • $code"
+        "pair_code_expired_or_used" -> getString(R.string.cloud_error_expired)
+        "same_device_pair" -> getString(R.string.cloud_error_same_device)
+        "unauthorized_device" -> getString(R.string.cloud_error_unauthorized)
+        "cloud_snapshot_missing" -> getString(R.string.cloud_error_missing_snapshot)
+        else -> getString(R.string.cloud_error_generic, code)
     }
 
     private fun renderState(message: String) {
@@ -187,15 +188,18 @@ class CloudSyncActivity : AppCompatActivity() {
         val last = ProfileCloudSync.lastSyncAt(this, profile.id)
         val revision = ProfileCloudSync.knownRevision(this, profile.id)
         status.text = message
-        stats.text = buildString {
-            append("Profile: ${profile.name}")
-            append("\nWatchlist: ${snapshot.watchlist.size}")
-            append(" • Hidden categories: ${snapshot.hiddenCategories.size}")
-            append(" • Home rows: ${snapshot.homeRows.size}")
-            append("\nCloud revision: $revision")
-            append(" • Last sync: ${if (last > 0L) formatTime(last) else "Not synced yet"}")
-            if (profile.guest) append("\nGuest profiles are local-only")
-        }
+        val baseStats = getString(
+            R.string.cloud_stats,
+            profile.name,
+            snapshot.watchlist.size,
+            snapshot.hiddenCategories.size,
+            snapshot.homeRows.size,
+            revision,
+            if (last > 0L) formatTime(last) else getString(R.string.cloud_not_synced)
+        )
+        stats.text = if (profile.guest) {
+            getString(R.string.cloud_stats_with_guest, baseStats, getString(R.string.cloud_guest_local_only))
+        } else baseStats
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
