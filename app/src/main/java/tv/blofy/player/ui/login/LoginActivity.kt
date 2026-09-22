@@ -130,7 +130,7 @@ class LoginActivity : AppCompatActivity() {
             background = premiumPanelBackground(true)
         }
         activation.addView(TextView(this).apply {
-            text = "BLOFY LINK"
+            text = getString(R.string.brand_link)
             textSize = 10.5f
             letterSpacing = .14f
             typeface = BlofyTvDesign.LabelTypeface
