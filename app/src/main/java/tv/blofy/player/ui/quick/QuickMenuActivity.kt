@@ -56,7 +56,7 @@ class QuickMenuActivity : AppCompatActivity() {
         })
 
         panel.addView(TextView(this).apply {
-            text = "BLOFY QUICK MENU"
+            text = getString(R.string.brand_quick_menu)
             textSize = 11.5f
             letterSpacing = .12f
             typeface = Typeface.DEFAULT_BOLD
