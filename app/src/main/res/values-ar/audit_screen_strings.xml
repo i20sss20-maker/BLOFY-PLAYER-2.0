@@ -451,6 +451,7 @@
     <string name="cloud_error_unauthorized">تعذر التحقق من تفعيل الجهاز</string>
     <string name="cloud_error_missing_snapshot">أنشئ نسخة احتياطية للملف القديم أولًا ثم أنشئ رمز Pair</string>
     <string name="cloud_error_generic">فشلت عملية Cloud • %1$s</string>
+    <string name="cloud_error_network">خطأ في الشبكة</string>
     <string name="cloud_stats">الملف: %1$s\nقائمتي: %2$d • الفئات المخفية: %3$d • صفوف الرئيسية: %4$d\nمراجعة Cloud: %5$d • آخر مزامنة: %6$s</string>
     <string name="cloud_not_synced">لم تتم المزامنة بعد</string>
     <string name="cloud_guest_local_only">ملفات الضيف محلية فقط</string>
