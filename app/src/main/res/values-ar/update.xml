@@ -14,4 +14,9 @@
     <string name="update_installer_missing">افتح إعدادات جهازك للسماح بتثبيت التطبيقات، ثم أعد المحاولة.</string>
     <string name="update_check">البحث عن تحديث</string>
     <string name="update_check_hint">تنزيل أحدث إصدار من بلوفي وتثبيته</string>
+    <string name="update_badge">تحديث BLOFY</string>
+    <string name="update_current_version">الحالي • %1$s</string>
+    <string name="update_new_version">الجديد • %1$s</string>
+    <string name="update_whats_new">الجديد في الإصدار</string>
+    <string name="update_progress_detailed">جارٍ التنزيل • %1$d%% • %2$s / %3$s</string>
 </resources>
