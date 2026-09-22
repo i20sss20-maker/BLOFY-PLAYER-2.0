@@ -233,4 +233,28 @@
     <string name="guide_archive_badge">أرشيف</string>
     <string name="guide_live_badge">مباشر</string>
 
+
+    <string name="subscriber_title">مشتركو BLOFY</string>
+    <string name="subscriber_subtitle">سجّل باسم المستخدم وكلمة المرور فقط</string>
+    <string name="subscriber_playlist_name">اسم القائمة (اختياري)</string>
+    <string name="subscriber_username">اسم المستخدم</string>
+    <string name="subscriber_username_hint">أدخل اسم المستخدم</string>
+    <string name="subscriber_password">كلمة المرور</string>
+    <string name="subscriber_password_hint">أدخل كلمة المرور</string>
+    <string name="subscriber_saved_name_read_failed">تعذر قراءة اسم القائمة المحفوظ • يمكنك إدخال الاسم</string>
+    <string name="subscriber_username_required">أدخل اسم المستخدم</string>
+    <string name="subscriber_password_required">أدخل كلمة المرور</string>
+    <string name="subscriber_service_unavailable">خدمة BLOFY غير مهيأة</string>
+    <string name="subscriber_verifying">جاري التحقق من الاشتراك…</string>
+    <string name="subscriber_verified_preparing">تم التحقق • جاري تجهيز المكتبة</string>
+    <string name="subscriber_login_failed">تعذر الدخول • %1$s</string>
+    <string name="subscriber_check_details">تحقق من البيانات</string>
+    <string name="subscriber_save_connect">حفظ واتصال</string>
+    <string name="subscriber_auto_server_settings">إعدادات السيرفر تُجهّز تلقائيًا لحسابك</string>
+
+    <string name="profile_watchlist_title">قائمتي</string>
+    <string name="profile_watchlist_subtitle">اختيارات %1$s</string>
+    <string name="profile_watchlist_saved">✓ في قائمتي</string>
+    <string name="profile_watchlist_add">+ قائمتي</string>
+
 </resources>
