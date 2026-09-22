@@ -93,14 +93,14 @@ internal class EpisodeCardAdapter(
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = context.resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(8), dp(12), dp(8))
+            setPadding(dp(10), dp(9), dp(12), dp(9))
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
             background = CinemaStyle.surface(context)
         }
-        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(88)).apply {
-            bottomMargin = dp(7)
+        row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(94)).apply {
+            bottomMargin = dp(8)
             marginStart = dp(2)
             marginEnd = dp(2)
         }
@@ -109,7 +109,7 @@ internal class EpisodeCardAdapter(
             scaleType = ImageView.ScaleType.CENTER_CROP
             setBackgroundColor(0xFF16101F.toInt())
         }
-        frame.addView(image, FrameLayout.LayoutParams(dp(112), dp(64)))
+        frame.addView(image, FrameLayout.LayoutParams(dp(118), dp(68)))
         val number = TextView(context).apply {
             textSize = TvUiTuning.sp(context, 12f)
             typeface = Typeface.DEFAULT_BOLD
@@ -118,13 +118,13 @@ internal class EpisodeCardAdapter(
             background = GradientDrawable().apply { cornerRadius = dp(9).toFloat(); setColor(0xDB191D25.toInt()) }
         }
         frame.addView(number, FrameLayout.LayoutParams(dp(45), dp(28), Gravity.BOTTOM or Gravity.END).apply { marginEnd = dp(6); bottomMargin = dp(6) })
-        row.addView(frame, LinearLayout.LayoutParams(dp(112), dp(64)).apply { marginEnd = dp(14) })
+        row.addView(frame, LinearLayout.LayoutParams(dp(118), dp(68)).apply { marginEnd = dp(14) })
         val textBox = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
         }
         val title = TextView(context).apply {
-            textSize = TvUiTuning.sp(context, 14f)
+            textSize = TvUiTuning.sp(context, 14.5f)
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             setTextColor(BlofyTvDesign.TextPrimary)
             maxLines = 2
@@ -148,8 +148,8 @@ internal class EpisodeCardAdapter(
         }
         textBox.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         textBox.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(19)))
-        textBox.addView(progressBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3)).apply { topMargin = dp(4) })
-        row.addView(textBox, LinearLayout.LayoutParams(0, dp(64), 1f))
+        textBox.addView(progressBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4)).apply { topMargin = dp(4) })
+        row.addView(textBox, LinearLayout.LayoutParams(0, dp(68), 1f))
         val state = TextView(context).apply {
             textSize = TvUiTuning.sp(context, 12f)
             typeface = BlofyTvDesign.BodyTypeface
@@ -158,7 +158,7 @@ internal class EpisodeCardAdapter(
             maxLines = 1
             gravity = Gravity.CENTER
         }
-        row.addView(state, LinearLayout.LayoutParams(dp(94), dp(34)))
+        row.addView(state, LinearLayout.LayoutParams(dp(100), dp(36)))
         return Holder(row, image, number, title, meta, progressBar, state)
     }
 
@@ -188,7 +188,7 @@ internal class EpisodeCardAdapter(
             if (focused) focusedKey = episode.key
             renderFocus(holder, focused)
             view.animate().cancel()
-            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.018f) else 1f
             view.animate()
                 .scaleX(targetScale)
                 .scaleY(targetScale)
