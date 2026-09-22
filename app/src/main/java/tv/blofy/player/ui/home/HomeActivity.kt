@@ -361,16 +361,26 @@ class HomeActivity : AppCompatActivity() {
 
     private fun renderHero(item: StreamEntity) {
         heroKicker?.text = getString(if (item.kind == "series") R.string.home_new_series else R.string.home_new_movie)
-        heroTitle?.text = ContentPresentation.of(item).title
-        heroMeta?.text = buildList {
-            item.year?.takeIf(String::isNotBlank)?.let(::add)
-            item.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
-            item.genre?.substringBefore(',')?.trim()?.takeIf(String::isNotBlank)?.let(::add)
-            addAll(qualityBadges(item).filter { it != "NEW" }.take(3))
-            add(if (item.kind == "series") getString(R.string.home_series_type) else getString(R.string.home_movie_type))
-        }.joinToString("   •   ")
-        heroSubtitle?.text = item.plot?.takeIf(String::isNotBlank)?.take(210)
-            ?: getString(if (item.kind == "series") R.string.home_series_fallback else R.string.home_movie_fallback)
+        heroTitle?.apply {
+            text = ContentPresentation.of(item).title
+            textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+        }
+        val bidi = android.text.BidiFormatter.getInstance(uiDirection == View.LAYOUT_DIRECTION_RTL)
+        heroMeta?.apply {
+            text = buildList {
+                item.year?.takeIf(String::isNotBlank)?.let(::add)
+                item.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
+                item.genre?.substringBefore(',')?.trim()?.takeIf(String::isNotBlank)?.let(::add)
+                addAll(qualityBadges(item).filter { it != "NEW" }.take(3))
+                add(if (item.kind == "series") getString(R.string.home_series_type) else getString(R.string.home_movie_type))
+            }.joinToString("   •   ") { bidi.unicodeWrap(it) }
+            textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+        }
+        heroSubtitle?.apply {
+            textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+            text = item.plot?.takeIf(String::isNotBlank)?.take(210)
+                ?: getString(if (item.kind == "series") R.string.home_series_fallback else R.string.home_movie_fallback)
+        }
         heroPrimary?.text = getString(if (item.kind == "series") R.string.home_view_series else R.string.home_watch_now)
         heroArtwork?.let {
             it.animate().cancel()
