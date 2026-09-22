@@ -1,6 +1,5 @@
 package tv.blofy.player.ui.common
 
-import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
@@ -22,9 +21,7 @@ class FocusTextAdapter<T>(
     private var restorePending = false
     private var attachedRecyclerView: RecyclerView? = null
 
-    init {
-        setHasStableIds(itemKey != null)
-    }
+    init { setHasStableIds(itemKey != null) }
 
     fun submit(newItems: List<T>) {
         val listOwnedFocus = attachedRecyclerView?.hasFocus() == true
@@ -35,17 +32,13 @@ class FocusTextAdapter<T>(
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize(): Int = oldItems.size
             override fun getNewListSize(): Int = nextItems.size
-
             override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
                 val oldItem = oldItems[oldItemPosition]
                 val newItem = nextItems[newItemPosition]
                 return if (keyOf != null) keyOf(oldItem) == keyOf(newItem) else oldItem == newItem
             }
-
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition] == nextItems[newItemPosition]
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean = oldItems[oldItemPosition] == nextItems[newItemPosition]
         }, false)
-
         items.clear()
         items.addAll(nextItems)
         focusedPosition = when {
@@ -82,23 +75,22 @@ class FocusTextAdapter<T>(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val view = TextView(parent.context).apply {
-            textSize = 17f
-            setTextColor(TEXT_IDLE)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(22, 0, 22, 0)
+            textSize = 16.5f
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(24, 0, 24, 0)
             isFocusable = true
+            isFocusableInTouchMode = true
             isClickable = true
             isLongClickable = true
             background = background(false)
             setOnFocusChangeListener { v, focused ->
-                (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
+                (v as TextView).setTextColor(if (focused) BlofyTvDesign.PurpleDeep else BlofyTvDesign.TextPrimary)
                 v.animate().cancel()
-                v.animate()
-                    .scaleX(if (focused) 1.02f else 1f)
-                    .scaleY(if (focused) 1.02f else 1f)
-                    .translationZ(if (focused) 10f else 2f)
-                    .setDuration(75)
-                    .start()
+                v.animate().scaleX(if (focused) 1.025f else 1f).scaleY(if (focused) 1.025f else 1f)
+                    .translationZ(if (focused) 12f else 2f).setDuration(if (focused) 90L else 75L).start()
                 v.background = background(focused)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
@@ -137,16 +129,9 @@ class FocusTextAdapter<T>(
 
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
 
-    private fun background(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF7930D7.toInt(), 0xFF32164F.toInt())
-        else intArrayOf(0xD91C162C.toInt(), 0xE8110E1B.toInt())
-    ).apply {
-        cornerRadius = 16f
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFE1B8FF.toInt() else 0x554D376B)
-    }
-
-    companion object {
-        private val TEXT_IDLE = Color.rgb(232, 226, 239)
+    private fun background(focused: Boolean) = GradientDrawable().apply {
+        cornerRadius = 18f
+        setColor(if (focused) 0xFFF2E9FF.toInt() else 0xFFFFFFFF.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.Purple else BlofyTvDesign.Divider)
     }
 }
