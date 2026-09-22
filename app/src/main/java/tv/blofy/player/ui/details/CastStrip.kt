@@ -79,15 +79,15 @@ internal object CastStrip {
             val portrait = FrameLayout(context).apply {
                 background = BlofyTvDesign.glassSurface(dp(13).toFloat(), false)
                 addView(TextView(context).apply {
-                    text = person.name.split(' ').filter(String::isNotBlank).take(2).map { it.take(1) }.joinToString(" ")
-                    textSize = 30f
+                    text = person.name.trim().take(1).uppercase()
+                    textSize = 21f
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.PurpleSoft)
                     gravity = Gravity.CENTER
                 }, FrameLayout.LayoutParams(-1, -1))
                 if (!person.profileUrl.isNullOrBlank()) addView(image, FrameLayout.LayoutParams(-1, -1))
             }
-            card.addView(portrait, LinearLayout.LayoutParams(dp(94), dp(112)))
+            card.addView(portrait, LinearLayout.LayoutParams(dp(86), dp(96)))
             person.profileUrl?.let { ArtworkLoader.load(image, it) }
             card.addView(TextView(context).apply {
                 text = person.name
@@ -98,18 +98,19 @@ internal object CastStrip {
                 maxLines = 2
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 includeFontPadding = false
-            }, LinearLayout.LayoutParams(dp(114), dp(38)).apply { topMargin = dp(5) })
+            }, LinearLayout.LayoutParams(dp(106), dp(34)).apply { topMargin = dp(5) })
             card.addView(TextView(context).apply {
                 text = person.character.orEmpty()
-                textSize = 10.3f
+                textSize = 10.1f
                 typeface = BlofyTvDesign.MediumTypeface
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.CENTER
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 includeFontPadding = false
-            }, LinearLayout.LayoutParams(dp(114), dp(21)))
-            row.addView(card, LinearLayout.LayoutParams(dp(126), dp(204)).apply {
+                visibility = if (person.character.isNullOrBlank()) View.GONE else View.VISIBLE
+            }, LinearLayout.LayoutParams(dp(106), dp(18)))
+            row.addView(card, LinearLayout.LayoutParams(dp(116), dp(172)).apply {
                 marginStart = dp(8)
                 marginEnd = dp(3)
             })
