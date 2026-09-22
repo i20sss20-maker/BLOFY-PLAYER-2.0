@@ -347,4 +347,17 @@
     <string name="search_section_hint_series">ابحث في المسلسلات فقط — النتائج بنفس البوسترات</string>
     <string name="search_section_hint_movies">ابحث في الأفلام فقط — النتائج بنفس البوسترات</string>
 
+
+    <string name="catalog_step_state">%1$s  %2$s</string>
+    <string name="catalog_progress_steps">%1$d / %2$d</string>
+    <string name="catalog_percent">%1$d%%</string>
+    <string name="catchup_program_row">%1$s–%2$s   •   %3$s</string>
+    <string name="guide_time_range">%1$s – %2$s</string>
+    <string name="guide_locked_channel">🔒  %1$s</string>
+    <string name="guide_channel_number">%1$d</string>
+    <string name="profiles_card_title">%1$s  %2$s%3$s</string>
+    <string name="search_section_header">%1$s   •   %2$s</string>
+    <string name="search_locked_title">🔒  %1$s</string>
+    <string name="search_brand_section">BLOFY  •  %1$s</string>
+
 </resources>
