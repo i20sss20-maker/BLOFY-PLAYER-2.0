@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.widget.Button
+import tv.blofy.player.core.device.DeviceClass
 
 /** Premium surfaces used only by movie/series/episode presentation screens. */
 object ContentScreenStyle {
@@ -39,6 +40,8 @@ object ContentScreenStyle {
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             gravity = Gravity.CENTER
             isSingleLine = true
+            isFocusable = true
+            isFocusableInTouchMode = DeviceClass.detect(context) == DeviceClass.Kind.TV
             stateListAnimator = null
             backgroundTintList = null
             elevation = 0f
