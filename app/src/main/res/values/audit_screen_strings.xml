@@ -595,4 +595,5 @@
     <string name="system_status_android_device">Android device</string>
     <string name="system_status_report_copied">Diagnostics report copied</string>
 
+    <string name="login_playlist_default_name">%1$s playlist</string>
 </resources>
