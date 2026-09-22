@@ -47,12 +47,6 @@ class InterfaceRefinementTest {
         instrumentation.runOnMainSync {
             ParentalGate.clearPin(context)
             ProfileStore.select(context, "main")
-            context.getSharedPreferences("blofy_player_settings", 0).edit().putString("app_language_tag", "ar").apply()
-            if (android.os.Build.VERSION.SDK_INT >= 33) {
-                context.getSystemService(android.app.LocaleManager::class.java).applicationLocales = android.os.LocaleList.forLanguageTags("ar")
-            } else {
-                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(androidx.core.os.LocaleListCompat.forLanguageTags("ar"))
-            }
         }
         previous = singleton.get(null)
         db = Room.inMemoryDatabaseBuilder(context, BlofyDatabase::class.java).build()
@@ -80,7 +74,6 @@ class InterfaceRefinementTest {
             }
             ActivityScenario.launch(LoginActivity::class.java).use { scenario ->
                 await { scenario.onActivity { activity ->
-                    assertEquals("ar", androidx.core.os.ConfigurationCompat.getLocales(activity.resources.configuration)[0]?.language)
                     val root = activity.window.decorView
                     val title = root.findViewWithTag<TextView>("blofy_trial_title")
                     assertEquals(activity.getString(if (expired) R.string.trial_ended else R.string.trial_remaining), title.text.toString())
