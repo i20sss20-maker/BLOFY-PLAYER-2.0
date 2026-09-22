@@ -3,7 +3,7 @@ name: BLOFY rc07.55 Production-Signed Test
 
 on:
   push:
-    branches: [fix/rc0755-favorites-artwork]
+    branches: [fix/rc0755-favorites-artwork, qa/rc0755-ui-focus-signed-02bea]
     paths:
       - .github/workflows/rc0755-signed-test.yml
       - app/**
