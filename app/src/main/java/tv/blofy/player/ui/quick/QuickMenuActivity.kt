@@ -24,6 +24,7 @@ import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.CommercialSettingsActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 
 /** Lightweight TV overlay-style hub. It never touches playback/catalog state. */
 class QuickMenuActivity : AppCompatActivity() {
@@ -128,11 +129,12 @@ class QuickMenuActivity : AppCompatActivity() {
             setOnFocusChangeListener { view, focused ->
                 view.background = itemBackground(focused, primary)
                 view.animate().cancel()
+                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.014f) else 1f
                 view.animate()
-                    .scaleX(if (focused) 1.014f else 1f)
-                    .scaleY(if (focused) 1.014f else 1f)
-                    .translationZ(if (focused) dp(10).toFloat() else dp(1).toFloat())
-                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(10).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
                     .start()
             }
             setOnClickListener { startActivity(intent); finish() }
