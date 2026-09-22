@@ -273,7 +273,7 @@ class LoginActivity : AppCompatActivity() {
         }
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(150), dp(82)))
         root.addView(title("BLOFY PLAYER", 29f))
-        root.addView(subtitle("فعّل جهازك ثم اختر قائمة التشغيل"))
+        root.addView(subtitle(getString(R.string.login_phone_subtitle)))
         deviceView.background = fieldBackground(); root.addView(deviceView, LinearLayout.LayoutParams(-1, dp(54)))
         codeView.background = premiumFieldBackground(true); root.addView(codeView, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(8) })
         root.addView(qrPanel(), LinearLayout.LayoutParams(dp(196), dp(196)).apply { topMargin = dp(14) })
@@ -285,9 +285,9 @@ class LoginActivity : AppCompatActivity() {
             addView(subtitle(getString(R.string.login_loading_saved_playlists)), LinearLayout.LayoutParams(-1, dp(60)))
         }
         root.addView(playlistRow, LinearLayout.LayoutParams(-1, -2))
-        addPlaylist = primaryActionButton("إضافة / إدارة القوائم") { startActivity(Intent(this, PlaylistActivity::class.java)) }
-        connectButton = actionButton("دخول") { startOrCancelConnect() }
-        refreshCodeButton = actionButton("تحديث") { requestIdentityRefresh(fromWebsite = true) }
+        addPlaylist = primaryActionButton(getString(R.string.login_add_manage_playlists_plain)) { startActivity(Intent(this, PlaylistActivity::class.java)) }
+        connectButton = actionButton(getString(R.string.login_enter)) { startOrCancelConnect() }
+        refreshCodeButton = actionButton(getString(R.string.login_refresh)) { requestIdentityRefresh(fromWebsite = true) }
         root.addView(addPlaylist, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(12) })
         root.addView(connectButton, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(10) })
         root.addView(refreshCodeButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
@@ -304,7 +304,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun createIdentityViews(phone: Boolean) {
         deviceView = TextView(this).apply {
-            text = "جاري إنشاء هوية الجهاز..."
+            text = getString(R.string.login_creating_identity)
             textSize = if (phone) 17f else 21f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -340,10 +340,10 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun startOrCancelConnect() {
-        if (connectJob?.isActive == true) { connectJob?.cancel(); status.text = "تم إلغاء الاتصال"; return }
+        if (connectJob?.isActive == true) { connectJob?.cancel(); status.setText(R.string.login_connection_cancelled); return }
         if (playlistJob?.isActive == true) return
         connectJob = lifecycleScope.launch {
-            connectButton.text = "إلغاء"
+            connectButton.setText(android.R.string.cancel)
             try {
                 identityJob?.cancel()
                 withTimeout(25_000L) { connectFlow() }
@@ -378,7 +378,7 @@ class LoginActivity : AppCompatActivity() {
             return
         }
         if (tv.blofy.player.core.identity.BlofySubscriberClient.isLegacyProxy(localProvider, endpoint)) {
-            status.text = "جاري تحديث اتصال مشترك BLOFY..."
+            status.setText(R.string.login_updating_subscriber_connection)
             PortalPlaylistClient.ensureSubscriberConnection(applicationContext, endpoint, dao, localProvider.id)
         }
         if ((endpoint.isBlank() || manager.cachedCanUse(local.first)) &&
@@ -390,7 +390,7 @@ class LoginActivity : AppCompatActivity() {
             if (hasCachedCatalog(dao, localProvider.id)) openHome() else openCatalogLoading(localProvider.id)
             return
         }
-        status.text = "جاري التحقق من تفعيل الجهاز..."
+        status.setText(R.string.login_checking_activation)
         val result = runSuspendCatching { withContext(Dispatchers.IO) { manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME) } }
         if (result.isSuccess) {
             val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
@@ -405,13 +405,13 @@ class LoginActivity : AppCompatActivity() {
             // Enter uses the playlist the user selected locally. Website imports belong only
             // to the explicit refresh action, never to activation or an empty catalog.
             runSuspendCatching { PortalPlaylistClient.retryPendingDeletes(applicationContext, endpoint) }
-            status.text = "جاري تجهيز ${localProvider.name}"
+            status.text = getString(R.string.login_preparing_playlist, localProvider.name)
             openCatalogLoading(localProvider.id)
         }.onFailure {
             val cached = withContext(Dispatchers.IO) { dao.activation() }
             val provider = dao.providers().first().firstOrNull()
             if (cached != null && manager.cachedCanUse(cached) && provider != null && hasCachedCatalog(dao, provider.id)) openHome()
-            else status.text = "تعذر التحقق من التفعيل"
+            else status.setText(R.string.login_activation_check_failed)
         }
     }
 
@@ -433,7 +433,7 @@ class LoginActivity : AppCompatActivity() {
                     }
                     val latest = withContext(Dispatchers.IO) { dao.provider(provider.id) }
                     if (latest == null) { status.text = getString(R.string.refresh_site_failed); return@withTimeout }
-                    status.text = "جاري اختيار ${latest.name}..."
+                    status.text = getString(R.string.login_selecting_playlist, latest.name)
                     // The client serializes selection with explicit website refresh and mirrors it
                     // asynchronously. Do not immediately request another website list/profile here.
                     val selected = PortalPlaylistClient.selectProvider(applicationContext, endpoint, latest, dao)
@@ -464,7 +464,7 @@ class LoginActivity : AppCompatActivity() {
             .firstOrNull { it.hasFocus() }?.tag as? String
         row.removeAllViews()
         if (providers.isEmpty()) {
-            row.addView(emptyPlaylistView("ما عندك قوائم إلى الآن • اضغط إضافة / إدارة"), LinearLayout.LayoutParams(-1, dp(86)))
+            row.addView(emptyPlaylistView(getString(R.string.login_no_playlists)), LinearLayout.LayoutParams(-1, dp(86)))
             return
         }
         providers.forEach { provider ->
@@ -494,7 +494,7 @@ class LoginActivity : AppCompatActivity() {
         })
         info.addView(TextView(this@LoginActivity).apply {
             val type = if (provider.providerType.equals("xtream", true)) "Xtream" else "M3U"
-            text = if (provider.enabled) "● القائمة النشطة   •   $type" else "$type   •   اضغط OK للدخول"
+            text = if (provider.enabled) getString(R.string.login_active_playlist_type, type) else getString(R.string.login_playlist_press_ok, type)
             textSize = 11.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
@@ -538,7 +538,7 @@ class LoginActivity : AppCompatActivity() {
         addView(LinearLayout(this@LoginActivity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            addView(TextView(this@LoginActivity).apply { text = "ابدأ بإضافة أول قائمة"; textSize = 14f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.START })
+            addView(TextView(this@LoginActivity).apply { text = getString(R.string.login_add_first_playlist); textSize = 14f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.START })
             addView(TextView(this@LoginActivity).apply { text = message; textSize = 11.5f; typeface = BlofyTvDesign.BodyTypeface; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.START })
         }, LinearLayout.LayoutParams(0, -1, 1f))
     }
@@ -614,7 +614,7 @@ class LoginActivity : AppCompatActivity() {
         val local = withContext(Dispatchers.IO) { dao.providerSnapshotStored() }
         renderPortalPlaylists(local)
         val active = local.firstOrNull { it.enabled }
-        status.text = if (active == null) "في انتظار إضافة قائمة" else "● جاهز • ${active.name}"
+        status.text = if (active == null) getString(R.string.login_waiting_for_playlist) else getString(R.string.login_ready_provider, active.name)
         val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
         renderIdentity(identity.deviceId, identity.activationCode)
         bindTrialStatus(identity)
@@ -712,11 +712,11 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun activationLabel(remote: ActivationCheckResponse) = when (remote.state()) {
-        ActivationCheckResponse.State.TRIAL -> "● الفترة التجريبية فعالة"
-        ActivationCheckResponse.State.ACTIVE -> "● الجهاز مفعل وجاهز"
-        ActivationCheckResponse.State.EXPIRED -> "انتهت صلاحية الجهاز"
-        ActivationCheckResponse.State.BLOCKED -> "الجهاز موقوف"
-        ActivationCheckResponse.State.UNKNOWN -> remote.message ?: "حالة التفعيل غير معروفة"
+        ActivationCheckResponse.State.TRIAL -> getString(R.string.login_trial_active)
+        ActivationCheckResponse.State.ACTIVE -> getString(R.string.login_device_active)
+        ActivationCheckResponse.State.EXPIRED -> getString(R.string.login_device_expired)
+        ActivationCheckResponse.State.BLOCKED -> getString(R.string.login_device_blocked)
+        ActivationCheckResponse.State.UNKNOWN -> remote.message ?: getString(R.string.login_activation_unknown)
     }
 
     private fun openHome() { startActivity(Intent(this, HomeActivity::class.java)); finish() }
