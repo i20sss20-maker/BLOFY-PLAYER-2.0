@@ -40,6 +40,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.settings.RuntimeSettings
@@ -89,16 +90,16 @@ class EpisodesActivity : ContentAccessActivity() {
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = uiDirection
             setPadding(dp(if (compact) 12 else 16), dp(if (compact) 10 else 12), dp(if (compact) 12 else 16), dp(if (compact) 10 else 12))
-            background = BlofyTvDesign.elevatedSurface(dp(18).toFloat())
+            setBackgroundColor(Color.TRANSPARENT)
         }
         val heroArt = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = CinemaStyle.surface(this@EpisodesActivity, radiusDp = 12)
+            background = ContentScreenStyle.softSurface(this@EpisodesActivity, false, 14)
             clipToOutline = true
             setImageResource(R.drawable.blofy_logo)
         }
         if (!seriesArt.isNullOrBlank()) ArtworkLoader.load(heroArt, seriesArt)
-        header.addView(heroArt, LinearLayout.LayoutParams(dp(if (compact) 86 else 118), dp(if (compact) 58 else 74)).apply {
+        header.addView(heroArt, LinearLayout.LayoutParams(dp(if (compact) 86 else 106), dp(if (compact) 58 else 68)).apply {
             marginEnd = dp(if (compact) 10 else 16)
         })
         val headerCopy = LinearLayout(this).apply {
@@ -137,7 +138,7 @@ class EpisodesActivity : ContentAccessActivity() {
             addView(status)
         }
         header.addView(headerCopy, LinearLayout.LayoutParams(0, -2, 1f))
-        root.addView(header, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        root.addView(header, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         retryButton = actionButton(getString(R.string.episodes_retry)) {
             lifecycleScope.launch { syncEpisodes(currentProvider()) }
         }.apply { visibility = View.GONE }
@@ -159,8 +160,8 @@ class EpisodesActivity : ContentAccessActivity() {
             layoutManager = LinearLayoutManager(this@EpisodesActivity)
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(if (compact) 6 else 9), dp(6), dp(if (compact) 6 else 9), dp(6))
-            background = BlofyTvDesign.glassSurface(dp(16).toFloat(), false)
+            setPadding(dp(if (compact) 4 else 6), dp(4), dp(if (compact) 4 else 6), dp(4))
+            setBackgroundColor(Color.TRANSPARENT)
             clipChildren = false
             clipToPadding = false
         }
@@ -168,8 +169,8 @@ class EpisodesActivity : ContentAccessActivity() {
             layoutManager = LinearLayoutManager(this@EpisodesActivity)
             itemAnimator = null
             setHasFixedSize(true)
-            setPadding(dp(if (compact) 6 else 9), dp(6), dp(if (compact) 6 else 9), dp(6))
-            background = BlofyTvDesign.glassSurface(dp(16).toFloat(), false)
+            setPadding(dp(if (compact) 4 else 6), dp(4), dp(if (compact) 4 else 6), dp(4))
+            setBackgroundColor(Color.TRANSPARENT)
             clipChildren = false
             clipToPadding = false
         }
@@ -177,7 +178,7 @@ class EpisodesActivity : ContentAccessActivity() {
             episodeBody.addView(seasonList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(116)).apply { bottomMargin = dp(10) })
             episodeBody.addView(episodeList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            val seasonWidth = if (tablet) 170 else 178
+            val seasonWidth = if (tablet) 160 else 158
             episodeBody.addView(seasonList, LinearLayout.LayoutParams(dp(seasonWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(16) })
             episodeBody.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         }
