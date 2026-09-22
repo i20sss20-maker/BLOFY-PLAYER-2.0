@@ -484,9 +484,12 @@ class LoginActivity : AppCompatActivity() {
         isFocusableInTouchMode = true
         isClickable = true
         background = playlistCardBackground(provider.enabled, false)
+        val type = if (provider.providerType.equals("xtream", true)) "Xtream" else "M3U"
+        val displayName = provider.name.trim().takeIf { it.length > 1 }
+            ?: getString(R.string.login_playlist_default_name, type)
         val info = LinearLayout(this@LoginActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START }
         info.addView(TextView(this@LoginActivity).apply {
-            text = provider.name
+            text = displayName
             textSize = 16f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -494,7 +497,6 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.START
         })
         info.addView(TextView(this@LoginActivity).apply {
-            val type = if (provider.providerType.equals("xtream", true)) "Xtream" else "M3U"
             text = if (provider.enabled) getString(R.string.login_active_playlist_type, type) else getString(R.string.login_playlist_press_ok, type)
             textSize = 11.5f
             typeface = BlofyTvDesign.BodyTypeface
