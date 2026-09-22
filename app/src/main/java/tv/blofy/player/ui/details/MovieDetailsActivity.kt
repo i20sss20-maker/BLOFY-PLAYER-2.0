@@ -165,14 +165,15 @@ class MovieDetailsActivity : ContentAccessActivity() {
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.Mint)
                     gravity = contentGravity
-                    setPadding(0, 0, 0, dp(6))
-                })
+                    background = BlofyTvDesign.badge(dp(10).toFloat())
+                    setPadding(dp(10), dp(5), dp(10), dp(5))
+                }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(7) })
                 info.addView(ProgressBar(this@MovieDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
                     max = 100
                     this.progress = progress
                     progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
                     progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF3B2B4B.toInt())
-                }, LinearLayout.LayoutParams(-1, dp(5)).apply { bottomMargin = dp(11) })
+                }, LinearLayout.LayoutParams(-1, dp(6)).apply { bottomMargin = dp(12) })
             }
 
             val actions = LinearLayout(this@MovieDetailsActivity).apply {
