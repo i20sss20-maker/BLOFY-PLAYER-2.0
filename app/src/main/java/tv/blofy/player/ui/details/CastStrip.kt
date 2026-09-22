@@ -15,6 +15,7 @@ import tv.blofy.player.R
 import tv.blofy.player.data.metadata.ProviderMetadata
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.common.TvUiTuning
 
 internal object CastStrip {
@@ -44,12 +45,12 @@ internal object CastStrip {
                 isFocusable = true
                 isFocusableInTouchMode = true
                 isClickable = true
-                setPadding(dp(6), dp(6), dp(6), dp(8))
-                background = BlofyTvDesign.glassSurface(dp(17).toFloat(), false)
+                setPadding(dp(5), dp(5), dp(5), dp(6))
+                background = ContentScreenStyle.softSurface(context, false, 16)
                 elevation = dp(2).toFloat()
                 setOnFocusChangeListener { view, focused ->
                     view.animate().cancel()
-                    view.background = BlofyTvDesign.glassSurface(dp(17).toFloat(), focused)
+                    view.background = ContentScreenStyle.softSurface(context, focused, 16)
                     val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.018f) else 1f
                     view.animate()
                         .scaleX(targetScale)
@@ -77,7 +78,7 @@ internal object CastStrip {
                 clipToOutline = true
             }
             val portrait = FrameLayout(context).apply {
-                background = BlofyTvDesign.glassSurface(dp(13).toFloat(), false)
+                background = ContentScreenStyle.softSurface(context, false, 13)
                 addView(TextView(context).apply {
                     text = person.name.trim().take(1).uppercase()
                     textSize = 21f
@@ -87,21 +88,21 @@ internal object CastStrip {
                 }, FrameLayout.LayoutParams(-1, -1))
                 if (!person.profileUrl.isNullOrBlank()) addView(image, FrameLayout.LayoutParams(-1, -1))
             }
-            card.addView(portrait, LinearLayout.LayoutParams(dp(86), dp(96)))
+            card.addView(portrait, LinearLayout.LayoutParams(dp(78), dp(88)))
             person.profileUrl?.let { ArtworkLoader.load(image, it) }
             card.addView(TextView(context).apply {
                 text = person.name
-                textSize = 12.4f
+                textSize = 11.7f
                 typeface = BlofyTvDesign.LabelTypeface
                 setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
                 maxLines = 2
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 includeFontPadding = false
-            }, LinearLayout.LayoutParams(dp(106), dp(34)).apply { topMargin = dp(5) })
+            }, LinearLayout.LayoutParams(dp(96), dp(32)).apply { topMargin = dp(4) })
             card.addView(TextView(context).apply {
                 text = person.character.orEmpty()
-                textSize = 10.1f
+                textSize = 9.6f
                 typeface = BlofyTvDesign.MediumTypeface
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.CENTER
@@ -109,8 +110,8 @@ internal object CastStrip {
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 includeFontPadding = false
                 visibility = if (person.character.isNullOrBlank()) View.GONE else View.VISIBLE
-            }, LinearLayout.LayoutParams(dp(106), dp(18)))
-            row.addView(card, LinearLayout.LayoutParams(dp(116), dp(172)).apply {
+            }, LinearLayout.LayoutParams(dp(96), dp(17)))
+            row.addView(card, LinearLayout.LayoutParams(dp(106), dp(152)).apply {
                 marginStart = dp(8)
                 marginEnd = dp(3)
             })
