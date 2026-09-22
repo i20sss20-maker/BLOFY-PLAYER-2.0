@@ -30,6 +30,7 @@
     <string name="login_one_device">جهاز واحد</string>
     <string name="login_stable_identity">هوية مستقرة</string>
     <string name="login_connection_cancelled">تم إلغاء الاتصال</string>
+    <string name="login_updating_subscriber_connection">جاري تحديث اتصال مشترك BLOFY…</string>
     <string name="login_add_playlist_first">أضف قائمة تشغيل أولاً</string>
     <string name="login_checking_activation">جاري التحقق من تفعيل الجهاز...</string>
     <string name="login_activated_add_playlist">الجهاز مفعل • أضف قائمة</string>
