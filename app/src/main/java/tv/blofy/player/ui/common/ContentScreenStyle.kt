@@ -65,7 +65,7 @@ object ContentScreenStyle {
     fun softSurface(context: Context, focused: Boolean = false, radiusDp: Int = 14) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) {
-            intArrayOf(0xB9543575.toInt(), 0x96301D47.toInt(), 0x72160F21.toInt())
+            intArrayOf(0x8F4A3165.toInt(), 0x6B2B1B40.toInt(), 0x42150E20.toInt())
         } else {
             intArrayOf(0x23251A30, 0x18160F20, 0x10100B17)
         }
@@ -74,7 +74,7 @@ object ContentScreenStyle {
         cornerRadius = radiusDp * d
         setStroke(
             (1f * d).toInt().coerceAtLeast(1),
-            if (focused) 0xAA9A6BC6.toInt() else 0x18FFFFFF
+            if (focused) 0x669D75C2.toInt() else 0x12FFFFFF
         )
     }
 
