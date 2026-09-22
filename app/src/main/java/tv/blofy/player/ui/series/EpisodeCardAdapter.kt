@@ -4,6 +4,7 @@ import tv.blofy.player.ui.common.ContentPresentation
 
 import tv.blofy.player.ui.common.CinemaStyle
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -13,6 +14,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -136,8 +138,16 @@ internal class EpisodeCardAdapter(
             ellipsize = android.text.TextUtils.TruncateAt.END
             gravity = Gravity.START
         }
+        val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            visibility = View.GONE
+            progressTintList = ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+            progressBackgroundTintList = ColorStateList.valueOf(0xFF3A294A.toInt())
+        }
         textBox.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        textBox.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(23)))
+        textBox.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(19)))
+        textBox.addView(progressBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3)).apply { topMargin = dp(4) })
         row.addView(textBox, LinearLayout.LayoutParams(0, dp(64), 1f))
         val state = TextView(context).apply {
             textSize = TvUiTuning.sp(context, 12f)
@@ -148,7 +158,7 @@ internal class EpisodeCardAdapter(
             gravity = Gravity.CENTER
         }
         row.addView(state, LinearLayout.LayoutParams(dp(94), dp(34)))
-        return Holder(row, image, number, title, meta, state)
+        return Holder(row, image, number, title, meta, progressBar, state)
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -164,6 +174,8 @@ internal class EpisodeCardAdapter(
             pct > 0 -> context.getString(R.string.cinema_episode_resume, pct)
             else -> context.getString(R.string.cinema_episode_play)
         }
+        holder.progressBar.visibility = if (pct in 1..99) View.VISIBLE else View.GONE
+        holder.progressBar.progress = pct.coerceIn(0, 100)
         if (!seriesArt.isNullOrBlank()) ArtworkLoader.load(holder.image, seriesArt) else {
             ArtworkLoader.cancel(holder.image)
             holder.image.setImageResource(R.drawable.blofy_logo)
@@ -188,7 +200,15 @@ internal class EpisodeCardAdapter(
 
     override fun getItemCount() = items.size
 
-    internal class Holder(item: View, val image: ImageView, val number: TextView, val title: TextView, val meta: TextView, val state: TextView) : RecyclerView.ViewHolder(item)
+    internal class Holder(
+        item: View,
+        val image: ImageView,
+        val number: TextView,
+        val title: TextView,
+        val meta: TextView,
+        val progressBar: ProgressBar,
+        val state: TextView
+    ) : RecyclerView.ViewHolder(item)
 
     private fun renderFocus(holder: Holder, focused: Boolean) {
         holder.itemView.background = CinemaStyle.surface(holder.itemView.context, focused)
@@ -196,6 +216,7 @@ internal class EpisodeCardAdapter(
         holder.meta.setTextColor(if (focused) BlofyTvDesign.Lavender else CinemaStyle.Muted)
         holder.state.background = CinemaStyle.surface(holder.itemView.context, focused, filledFocus = true, radiusDp = 6)
         holder.state.setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
+        holder.progressBar.progressTintList = ColorStateList.valueOf(if (focused) BlofyTvDesign.FocusGlow else BlofyTvDesign.PurpleBright)
     }
 
     override fun onViewRecycled(holder: Holder) {
