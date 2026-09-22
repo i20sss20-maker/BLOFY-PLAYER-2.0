@@ -9,7 +9,7 @@ classes=tv.blofy.player.ui.InterfaceRefinementTest
 expected=3
 if [[ "$kind" == tv ]]; then
   classes="$classes,tv.blofy.player.ui.CommercialUiRegressionTest"
-  expected=6
+  expected=7
 fi
 adb shell am instrument -w -r -e class "$classes" -e expected_kind "$kind" tv.blofy.player.v2.test/androidx.test.runner.AndroidJUnitRunner | tee ui-evidence/instrumentation.txt
 adb pull /sdcard/Android/data/tv.blofy.player.v2/files/ui-refinement ui-evidence/ || true
