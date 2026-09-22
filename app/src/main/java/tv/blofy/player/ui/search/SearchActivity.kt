@@ -39,6 +39,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
@@ -380,11 +381,12 @@ class SearchActivity : AppCompatActivity() {
             setOnFocusChangeListener { view, focused ->
                 view.background = rowBackground(focused)
                 view.animate().cancel()
+                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
                 view.animate()
-                    .scaleX(if (focused) 1.012f else 1f)
-                    .scaleY(if (focused) 1.012f else 1f)
-                    .translationZ(if (focused) dp(8).toFloat() else dp(1).toFloat())
-                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(8).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
                     .start()
             }
             setOnClickListener { open() }
