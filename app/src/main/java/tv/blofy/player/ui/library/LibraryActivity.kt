@@ -59,7 +59,7 @@ class LibraryActivity : AppCompatActivity() {
             background = AppCompatResources.getDrawable(this@LibraryActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
-            text = "BLOFY LIBRARY"
+            text = getString(R.string.brand_library)
             textSize = 12f
             letterSpacing = .11f
             typeface = BlofyTvDesign.BodyTypeface
@@ -166,7 +166,7 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
         val row = TextView(this).apply {
-            text = "${kindLabel(stream.kind)}   •   ${ContentPresentation.of(stream).title}"
+            text = getString(R.string.library_stream_row, kindLabel(stream.kind), ContentPresentation.of(stream).title)
             textSize = 17f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
