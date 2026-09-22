@@ -21,6 +21,7 @@ import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 
 class ProfilesActivity : AppCompatActivity() {
     private lateinit var root: LinearLayout
@@ -87,11 +88,12 @@ class ProfilesActivity : AppCompatActivity() {
                 setOnFocusChangeListener { view, focused ->
                     view.background = cardBg(profile.id == active.id, focused)
                     view.animate().cancel()
+                    val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.015f) else 1f
                     view.animate()
-                        .scaleX(if (focused) 1.015f else 1f)
-                        .scaleY(if (focused) 1.015f else 1f)
-                        .translationZ(if (focused) dp(8).toFloat() else 0f)
-                        .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                        .scaleX(targetScale)
+                        .scaleY(targetScale)
+                        .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(8).toFloat()) else 0f)
+                        .setDuration(TvUiTuning.focusDuration(view.context, focused))
                         .start()
                 }
                 setOnClickListener { selectProfile(profile) }
@@ -293,11 +295,12 @@ class ProfilesActivity : AppCompatActivity() {
         setOnFocusChangeListener { view, focused ->
             view.background = buttonBg(focused)
             view.animate().cancel()
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.02f) else 1f
             view.animate()
-                .scaleX(if (focused) 1.02f else 1f)
-                .scaleY(if (focused) 1.02f else 1f)
-                .translationZ(if (focused) dp(7).toFloat() else 0f)
-                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(7).toFloat()) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
                 .start()
         }
         setOnClickListener { action() }
