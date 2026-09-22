@@ -21,7 +21,7 @@ class SplashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val statusView = TextView(this).apply {
-            text = "جاري فتح BLOFY..."
+            text = getString(R.string.splash_opening)
             textSize = 13.5f
             setTextColor(0xFFB8ABC7.toInt())
             gravity = Gravity.CENTER
@@ -38,7 +38,7 @@ class SplashActivity : AppCompatActivity() {
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(dp(220), dp(132)))
         root.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"
+            text = getString(R.string.brand_player)
             textSize = 24f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             letterSpacing = 0.08f
