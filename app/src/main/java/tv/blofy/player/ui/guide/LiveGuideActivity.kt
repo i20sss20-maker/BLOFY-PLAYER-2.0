@@ -94,7 +94,7 @@ class LiveGuideActivity : AppCompatActivity() {
     private fun buildUi(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(28), dp(20), dp(28), dp(24))
             background = AppCompatResources.getDrawable(this@LiveGuideActivity, R.drawable.blofy_home_background)
             clipChildren = false
@@ -103,32 +103,32 @@ class LiveGuideActivity : AppCompatActivity() {
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
         }
         val headerCopy = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
             addView(TextView(this@LiveGuideActivity).apply {
                 text = "BLOFY LIVE GUIDE"
                 textSize = 11.5f
                 letterSpacing = .13f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(BlofyTvDesign.PurpleBright)
-                gravity = Gravity.RIGHT
+                gravity = Gravity.START
             })
             addView(TextView(this@LiveGuideActivity).apply {
-                text = "دليل القنوات"
+                text = getString(R.string.guide_title)
                 textSize = 29f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
-                gravity = Gravity.RIGHT
+                gravity = Gravity.START
                 includeFontPadding = false
             })
         }
         header.addView(headerCopy, LinearLayout.LayoutParams(0, dp(66), 1f))
         countView = TextView(this).apply {
-            text = "جاري التحميل"
+            text = getString(R.string.guide_loading)
             textSize = 12.5f
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
@@ -147,7 +147,7 @@ class LiveGuideActivity : AppCompatActivity() {
         }
 
         categoryList = RecyclerView(this).apply {
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             layoutManager = LinearLayoutManager(this@LiveGuideActivity)
             setPadding(dp(8), dp(10), dp(8), dp(10))
             background = panelBackground()
@@ -160,7 +160,7 @@ class LiveGuideActivity : AppCompatActivity() {
         body.addView(categoryList, LinearLayout.LayoutParams(dp(245), ViewGroup.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(18) })
 
         channelList = RecyclerView(this).apply {
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             layoutManager = LinearLayoutManager(this@LiveGuideActivity)
             setPadding(dp(8), dp(10), dp(8), dp(10))
             background = panelBackground()
@@ -180,38 +180,38 @@ class LiveGuideActivity : AppCompatActivity() {
 
     private fun buildGuidePanel(): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
-        gravity = Gravity.TOP or Gravity.RIGHT
+        layoutDirection = resources.configuration.layoutDirection
+        gravity = Gravity.TOP or Gravity.START
         setPadding(dp(24), dp(22), dp(24), dp(22))
         background = panelBackground()
 
         guideTitle = TextView(this@LiveGuideActivity).apply {
-            text = "اختر قناة"
+            text = getString(R.string.guide_select_channel)
             textSize = 27f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             maxLines = 2
         }
         addView(guideTitle)
 
         guideMeta = TextView(this@LiveGuideActivity).apply {
-            text = "الآن والتالي من دليل البرامج"
+            text = getString(R.string.guide_now_next)
             textSize = 12.5f
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(4), 0, dp(18))
         }
         addView(guideMeta)
 
-        addView(sectionLabel("الآن"))
+        addView(sectionLabel(getString(R.string.guide_now)))
         nowTitle = TextView(this@LiveGuideActivity).apply {
-            text = "لا تتوفر معلومات البرنامج"
+            text = getString(R.string.guide_program_unavailable)
             textSize = 21f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             maxLines = 2
         }
         addView(nowTitle)
@@ -220,7 +220,7 @@ class LiveGuideActivity : AppCompatActivity() {
             textSize = 13f
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.Mint)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(6), 0, dp(8))
         }
         addView(nowTime)
@@ -236,25 +236,25 @@ class LiveGuideActivity : AppCompatActivity() {
             textSize = 14f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             maxLines = 5
             setLineSpacing(0f, 1.14f)
         }
         addView(nowDescription)
 
-        addView(sectionLabel("التالي").apply { setPadding(0, dp(24), 0, dp(8)) })
+        addView(sectionLabel(getString(R.string.guide_next)).apply { setPadding(0, dp(24), 0, dp(8)) })
         nextTitle = TextView(this@LiveGuideActivity).apply {
-            text = "لا تتوفر معلومات البرنامج التالي"
+            text = getString(R.string.guide_next_unavailable)
             textSize = 17f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             maxLines = 2
         }
         addView(nextTitle)
 
         reminderButton = Button(this@LiveGuideActivity).apply {
-            text = "لا يوجد برنامج للتذكير"
+            text = getString(R.string.guide_no_reminder)
             isAllCaps = false
             isEnabled = false
             CinemaStyle.styleButton(this)
@@ -263,7 +263,7 @@ class LiveGuideActivity : AppCompatActivity() {
         addView(reminderButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(12) })
 
         addView(TextView(this@LiveGuideActivity).apply {
-            text = "OK تشغيل القناة   •   ← القنوات   •   ← مرة أخرى للفئات   •   BACK رجوع"
+            text = getString(R.string.guide_remote_hint)
             textSize = 11.8f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
@@ -277,7 +277,7 @@ class LiveGuideActivity : AppCompatActivity() {
         letterSpacing = .08f
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(BlofyTvDesign.PurpleBright)
-        gravity = Gravity.RIGHT
+        gravity = Gravity.START
         setPadding(0, 0, 0, dp(8))
     }
 
@@ -308,7 +308,7 @@ class LiveGuideActivity : AppCompatActivity() {
     private fun loadInitialData() {
         lifecycleScope.launch {
             provider = dao.providers().first().firstOrNull() ?: run {
-                Toast.makeText(this@LiveGuideActivity, "أضف قائمة تشغيل أولاً", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@LiveGuideActivity, getString(R.string.login_add_playlist_first), Toast.LENGTH_SHORT).show()
                 finish()
                 return@launch
             }
@@ -332,7 +332,7 @@ class LiveGuideActivity : AppCompatActivity() {
             val items = dao.streams(provider.id, KIND_LIVE, categoryId).first()
             channelRows = items
             channelAdapter.submit(items)
-            countView.text = "${items.size} قناة"
+            countView.text = resources.getQuantityString(R.plurals.guide_channel_count, items.size, items.size)
             selectedStream = null
             clearGuide()
             if (immediate) channelList.post { requestChannelFocus() }
@@ -343,7 +343,7 @@ class LiveGuideActivity : AppCompatActivity() {
         selectedStream = stream
         guideTitle.text = stream.name
         guideMeta.text = buildString {
-            append(if (stream.archiveEnabled) "يدعم الأرشيف" else "بث مباشر")
+            append(getString(if (stream.archiveEnabled) R.string.guide_archive_supported else R.string.guide_live_broadcast))
             stream.streamType?.takeIf(String::isNotBlank)?.let { append("  •  ").append(it.uppercase()) }
         }
         guideJob?.cancel()
@@ -369,7 +369,7 @@ class LiveGuideActivity : AppCompatActivity() {
         val next = current?.let { item -> items.firstOrNull { it.startMs >= item.endMs } }
         nextProgram = next
         if (current == null) {
-            nowTitle.text = "لا تتوفر معلومات البرنامج"
+            nowTitle.text = getString(R.string.guide_program_unavailable)
             nowTime.text = ""
             nowDescription.text = ""
             progress.progress = 0
@@ -381,12 +381,12 @@ class LiveGuideActivity : AppCompatActivity() {
             progress.progress = (((now - current.startMs).coerceIn(0L, duration) * 1000L) / duration).toInt()
         }
         nextTitle.text = if (next == null) {
-            "لا تتوفر معلومات البرنامج التالي"
+            getString(R.string.guide_next_unavailable)
         } else {
             "${time(next.startMs)}   ${next.title}"
         }
         reminderButton.isEnabled = next != null && next.startMs > now
-        reminderButton.text = if (reminderButton.isEnabled) "ذكّرني قبل ${time(checkNotNull(next).startMs)}" else "لا يوجد برنامج للتذكير"
+        reminderButton.text = if (reminderButton.isEnabled) getString(R.string.guide_remind_before, time(checkNotNull(next).startMs)) else getString(R.string.guide_no_reminder)
     }
 
     private fun requestProgramReminder() {
@@ -417,10 +417,10 @@ class LiveGuideActivity : AppCompatActivity() {
             program = program
         )
         if (scheduled) {
-            reminderButton.text = "تم ضبط التذكير • ${time(program.startMs)}"
-            Toast.makeText(this, "سيصلك تنبيه قبل البرنامج بخمس دقائق", Toast.LENGTH_SHORT).show()
+            reminderButton.text = getString(R.string.guide_reminder_set, time(program.startMs))
+            Toast.makeText(this, getString(R.string.guide_reminder_notice), Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, "تعذر ضبط التذكير لهذا البرنامج", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.guide_reminder_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -432,20 +432,20 @@ class LiveGuideActivity : AppCompatActivity() {
         if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED && pending != null) {
             scheduleReminder(pending.first, pending.second)
         } else {
-            Toast.makeText(this, "فعّل الإشعارات لاستخدام تذكير البرامج", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.guide_notifications_required), Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun clearGuide() {
         nextProgram = null
         pendingReminder = null
-        guideTitle.text = "اختر قناة"
-        guideMeta.text = "الآن والتالي من دليل البرامج"
-        nowTitle.text = "لا تتوفر معلومات البرنامج"
+        guideTitle.setText(R.string.guide_select_channel)
+        guideMeta.setText(R.string.guide_now_next)
+        nowTitle.text = getString(R.string.guide_program_unavailable)
         nowTime.text = ""
         nowDescription.text = ""
-        nextTitle.text = "لا تتوفر معلومات البرنامج التالي"
-        reminderButton.text = "لا يوجد برنامج للتذكير"
+        nextTitle.setText(R.string.guide_next_unavailable)
+        reminderButton.setText(R.string.guide_no_reminder)
         reminderButton.isEnabled = false
         progress.progress = 0
     }
@@ -504,7 +504,7 @@ class LiveGuideActivity : AppCompatActivity() {
         providerId = if (::provider.isInitialized) provider.id else "guide",
         remoteId = ALL_CATEGORY_ID,
         kind = KIND_LIVE,
-        name = "كل القنوات",
+        name = getString(R.string.guide_all_channels),
         orderIndex = -1
     )
 
@@ -564,7 +564,7 @@ private class GuideChannelAdapter(
         fun dp(v: Int) = (v * parent.resources.displayMetrics.density).toInt()
         val root = LinearLayout(parent.context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = parent.resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), dp(7), dp(12), dp(7))
             isFocusable = true
@@ -584,13 +584,13 @@ private class GuideChannelAdapter(
 
         val copy = LinearLayout(parent.context).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
         }
         val title = TextView(parent.context).apply {
             textSize = 14f
             typeface = BlofyTvDesign.LabelTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
@@ -598,7 +598,7 @@ private class GuideChannelAdapter(
             textSize = 10.8f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
@@ -624,7 +624,7 @@ private class GuideChannelAdapter(
         val item = items[position]
         holder.title.text = (if (item.locked) "🔒  " else "") + item.name
         holder.meta.text = buildString {
-            append(if (item.archiveEnabled) "أرشيف" else "مباشر")
+            append(holder.itemView.context.getString(if (item.archiveEnabled) R.string.guide_archive_badge else R.string.guide_live_badge))
             item.streamType?.takeIf(String::isNotBlank)?.let { append("  •  ").append(it.uppercase()) }
         }
         holder.number.text = (position + 1).toString()
