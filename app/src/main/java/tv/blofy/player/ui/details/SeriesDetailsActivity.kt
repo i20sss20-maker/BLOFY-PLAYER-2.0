@@ -139,6 +139,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 setPadding(0, 0, 0, dp(3))
             })
             val overviewView = TextView(this@SeriesDetailsActivity).apply {
+                tag = "blofy_details_overview"
                 textSize = 15f
                 typeface = BlofyTvDesign.BodyTypeface
                 maxLines = 7
