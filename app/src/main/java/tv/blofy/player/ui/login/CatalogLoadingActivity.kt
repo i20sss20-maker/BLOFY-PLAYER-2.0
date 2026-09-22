@@ -352,9 +352,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
             check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
             val savingLabel = getString(if (firstLoad) R.string.catalog_finishing else R.string.catalog_saving_refresh)
             render(30, savingLabel)
-            // SQLite commit has no measurable percentage. Keep the completed download at 30%
-            // and animate the saving stage, instead of inventing progress from elapsed time.
+            // SQLite commit has no measurable percentage. Keep the completed download checkpoint internally,
+            // but replace the frozen number with an explicit indeterminate state until measurable preparation resumes.
             progress.isIndeterminate = true
+            percent.text = "…"
             val commit: suspend () -> Unit = {
                 persistence.commit {
                     if (firstLoad) {
