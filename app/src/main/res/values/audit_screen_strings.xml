@@ -397,8 +397,6 @@
     <string name="smart_default_subtitle">Selected content from your library</string>
     <string name="smart_collection_count">Titles: %1$d</string>
 
-    <string name="profile_watchlist_title">My Watchlist</string>
-    <string name="profile_watchlist_subtitle">%1$s • saved titles</string>
     <string name="profile_watchlist_empty">Your watchlist is empty. Add movies or series from their details page.</string>
     <string name="profile_switcher_label">%1$s  %2$s</string>
 
