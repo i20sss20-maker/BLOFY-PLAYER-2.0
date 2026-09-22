@@ -122,11 +122,12 @@ class PosterStreamAdapter(
         holder.itemView.setOnFocusChangeListener { view, focused ->
             view.animate().cancel()
             renderFocus(holder, focused)
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.02f) else 1f
             view.animate()
-                .scaleX(if (focused) 1.02f else 1f)
-                .scaleY(if (focused) 1.02f else 1f)
-                .translationZ(if (focused) 8f else 0f)
-                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, 8f) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
                 .start()
             if (focused) {
                 val currentPosition = holder.bindingAdapterPosition
