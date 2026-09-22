@@ -483,4 +483,42 @@
     <string name="splash_opening">جاري فتح BLOFY…</string>
     <string name="library_stream_row">%1$s   •   %2$s</string>
 
+
+    <string name="backup_title">النسخ الاحتياطي والاستعادة</string>
+    <string name="backup_description">يحفظ المفضلة، القفل، سجل المشاهدة، ترتيب الفئات وإعدادات BLOFY. لا يتم حفظ بيانات دخول السيرفر أو PIN.</string>
+    <string name="backup_restore_same_server">الاستعادة متاحة لنفس السيرفر الذي أُنشئت منه النسخة فقط.</string>
+    <string name="backup_create">إنشاء نسخة احتياطية</string>
+    <string name="backup_restore">استعادة نسخة احتياطية</string>
+    <string name="backup_creating">جاري إنشاء النسخة الاحتياطية…</string>
+    <string name="backup_saved">تم حفظ النسخة الاحتياطية بنجاح</string>
+    <string name="backup_checking">جاري فحص ملف النسخة…</string>
+    <string name="backup_ready_confirm">الملف جاهز • أكد الاستعادة للمتابعة</string>
+    <string name="backup_confirm_title">تأكيد الاستعادة</string>
+    <string name="backup_confirm_message">سيتم تطبيق المفضلة وسجل المشاهدة وترتيب الفئات وإعدادات BLOFY المحفوظة لهذا السيرفر. بيانات الدخول وPIN لن تتغير.</string>
+    <string name="backup_confirm_restore">استعادة</string>
+    <string name="backup_cancelled">تم إلغاء الاستعادة</string>
+    <string name="backup_restoring">جاري استعادة النسخة…</string>
+    <string name="backup_restore_result">تمت الاستعادة • %1$d فئة • %2$d مفضلة/قفل • %3$d سجل مشاهدة • %4$d إعداد</string>
+    <string name="backup_error_no_active_provider">لا يوجد سيرفر نشط حاليًا</string>
+    <string name="backup_error_unsupported">ملف النسخة غير مدعوم</string>
+    <string name="backup_error_different_server">هذه النسخة تخص سيرفرًا مختلفًا</string>
+    <string name="backup_error_too_large">ملف النسخة أكبر من الحد المسموح</string>
+    <string name="backup_error_create_file">تعذر إنشاء ملف النسخة</string>
+    <string name="backup_error_read_file">تعذر قراءة ملف النسخة</string>
+    <string name="backup_error_generic">تعذر تنفيذ العملية • تأكد من الملف وحاول مرة أخرى</string>
+
+    <string name="category_manager_title">ترتيب الفئات</string>
+    <string name="category_manager_loading">جاري قراءة الفئات…</string>
+    <string name="category_manager_no_provider">لا يوجد سيرفر نشط</string>
+    <string name="category_manager_live">البث المباشر</string>
+    <string name="category_manager_movies">الأفلام</string>
+    <string name="category_manager_series">المسلسلات</string>
+    <string name="category_manager_status">%1$s • %2$d فئة • المخفية %3$d</string>
+    <string name="category_manager_empty">ما فيه فئات محفوظة لهذا القسم</string>
+    <string name="category_manager_hidden">مخفية</string>
+    <string name="category_manager_visible_order">ظاهرة • ترتيب %1$d</string>
+    <string name="category_manager_show">إظهار</string>
+    <string name="category_manager_hide">إخفاء</string>
+    <string name="category_manager_pin_top">تثبيت</string>
+
 </resources>
