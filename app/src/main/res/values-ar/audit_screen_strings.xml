@@ -74,6 +74,20 @@
     <string name="details_trailer_open_failed">تعذر فتح الإعلان على هذا الجهاز.</string>
     <string name="details_seasons_count">%1$d موسم</string>
     <string name="details_episodes_count">%1$d حلقة</string>
+    <plurals name="details_seasons_count_plural">
+        <item quantity="one">%1$d موسم</item>
+        <item quantity="two">%1$d موسمان</item>
+        <item quantity="few">%1$d مواسم</item>
+        <item quantity="many">%1$d موسمًا</item>
+        <item quantity="other">%1$d موسم</item>
+    </plurals>
+    <plurals name="details_episodes_count_plural">
+        <item quantity="one">%1$d حلقة</item>
+        <item quantity="two">%1$d حلقتان</item>
+        <item quantity="few">%1$d حلقات</item>
+        <item quantity="many">%1$d حلقة</item>
+        <item quantity="other">%1$d حلقة</item>
+    </plurals>
     <string name="details_continue_episode">متابعة الموسم %1$d   •   الحلقة %2$d</string>
     <string name="details_continue_episode_progress">متابعة الموسم %1$d   •   الحلقة %2$d   •   %3$d%%</string>
     <string name="details_resume_episode">▶  استئناف الحلقة</string>
