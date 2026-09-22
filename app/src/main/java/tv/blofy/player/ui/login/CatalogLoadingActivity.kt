@@ -226,6 +226,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            textDirection = View.TEXT_DIRECTION_LTR
             includeFontPadding = false
         }
         panel.addView(progressMeta, LinearLayout.LayoutParams(-1, u(if (compact) 20 else 24)))
