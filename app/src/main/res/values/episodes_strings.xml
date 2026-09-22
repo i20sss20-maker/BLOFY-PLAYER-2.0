@@ -6,6 +6,15 @@
     <string name="episodes_loading_first">Loading this series now…</string>
     <string name="episodes_updating">Updating episodes in background • %1$d saved</string>
     <string name="episodes_ready">%1$d seasons • %2$d episodes • ready from local storage</string>
+    <plurals name="episodes_seasons_short">
+        <item quantity="one">%1$d season</item>
+        <item quantity="other">%1$d seasons</item>
+    </plurals>
+    <plurals name="episodes_episodes_short">
+        <item quantity="one">%1$d episode</item>
+        <item quantity="other">%1$d episodes</item>
+    </plurals>
+    <string name="episodes_ready_suffix">ready from local storage</string>
     <string name="episodes_empty_response">Server returned no episodes for this series • retry</string>
     <string name="episodes_invalid_response">Server response is incomplete • reload episodes</string>
     <string name="episodes_load_error">Could not load episodes • check connection and retry</string>
