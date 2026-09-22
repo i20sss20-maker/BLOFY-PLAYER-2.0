@@ -124,11 +124,13 @@ class InterfaceRefinementTest {
                     await { scenario.onActivity { activity ->
                         val root = activity.window.decorView
                         val overview = root.findViewWithTag<TextView>("blofy_details_overview")
-                        val stats = root.findViewWithTag<TextView>("blofy_details_stats")
+                        val stats = root.findViewWithTag<View>("blofy_details_stats")
                         assertEquals("وصف تجريبي من السيرفر", overview?.text?.toString())
-                        assertTrue(stats.text.contains("8.4/10"))
+                        assertNotNull("Details metadata host must stay addressable", stats)
+                        val statLabels = descendants(stats).filterIsInstance<TextView>()
+                        assertTrue("Details metadata must include provider rating", statLabels.any { it.text.contains("8.4/10") })
                         assertNotNull("Details overview must keep its readable surface", overview.background)
-                        assertNotNull("Details metadata must keep its badge surface", stats.background)
+                        assertTrue("Details metadata chips must keep their badge surfaces", statLabels.any { it.background != null })
                         val watchlist = root.findViewWithTag<View>("blofy_profile_watchlist_action")
                         assertNotNull("Watchlist action must stay inside the details action strip", watchlist)
                         assertTrue("Watchlist action must be hosted by an inline action row", watchlist.parent is LinearLayout)
