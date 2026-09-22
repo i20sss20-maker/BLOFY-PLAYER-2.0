@@ -57,8 +57,28 @@ class ContentPinDeviceTest {
         instrumentation.waitForIdleSync()
     }
     private fun click(id: String) {
-        val button = appNodes().single { it.viewIdResourceName == id }
-        assertTrue(button.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        // ACTION_SET_TEXT can briefly replace the accessibility window while the IME opens.
+        // Reacquire the actual button after that transition; never reuse a stale node.
+        var clicked = false
+        val deadline = SystemClock.elapsedRealtime() + 8_000L
+        while (!clicked && SystemClock.elapsedRealtime() < deadline) {
+            clicked = appNodes().firstOrNull { it.viewIdResourceName == id }
+                ?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+            if (!clicked) SystemClock.sleep(25)
+        }
+        if (!clicked) {
+            val evidence = File(context.getExternalFilesDir(null), "artwork-qa").apply { mkdirs() }
+            automation.takeScreenshot().let { bitmap ->
+                File(evidence, "content-pin-missing-button.png").outputStream().use {
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+                bitmap.recycle()
+            }
+            File(evidence, "content-pin-missing-button.txt").writeText(appNodes().joinToString("\n") {
+                "${it.className} id=${it.viewIdResourceName} clickable=${it.isClickable}"
+            })
+        }
+        assertTrue("PIN dialog button was not actionable: $id", clicked)
     }
 
     @Test fun contentPinGuardsDetailsEpisodesAndPlayer() {
