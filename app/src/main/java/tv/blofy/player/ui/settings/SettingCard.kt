@@ -24,8 +24,9 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
         orientation = VERTICAL
         layoutDirection = resources.configuration.layoutDirection
         gravity = Gravity.TOP
-        setPadding(dp(16), dp(14), dp(16), dp(14))
-        minimumHeight = dp(116)
+        val tv = DeviceClass.isTv(context)
+        setPadding(dp(16), dp(if (tv) 10 else 14), dp(16), dp(if (tv) 10 else 14))
+        minimumHeight = dp(if (tv) 98 else 116)
         isFocusable = true
         isFocusableInTouchMode = DeviceClass.isTv(context)
         isClickable = true
@@ -36,8 +37,8 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
         addView(heading, LayoutParams(-1, -2))
         valueView.setPadding(dp(10), dp(5), dp(10), dp(5))
         valueView.background = valueBackground(false)
-        addView(valueView, LayoutParams(-2, -2).apply { topMargin = dp(9) })
-        addView(hintView, LayoutParams(-1, -2).apply { topMargin = dp(5) })
+        addView(valueView, LayoutParams(-2, -2).apply { topMargin = dp(if (tv) 6 else 9) })
+        addView(hintView, LayoutParams(-1, -2).apply { topMargin = dp(if (tv) 3 else 5) })
         background = CinemaStyle.surface(context, radiusDp = 16)
         stateListAnimator = null
         setOnFocusChangeListener { view, focused ->
