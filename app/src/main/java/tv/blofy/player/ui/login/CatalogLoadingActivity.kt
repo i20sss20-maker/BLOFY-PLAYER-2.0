@@ -277,7 +277,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun step(label: String) = TextView(this).apply {
-        text = "○  $label"
+        text = getString(R.string.catalog_step_state, "○", label)
         textSize = TvUiTuning.sp(this@CatalogLoadingActivity, if (deviceKind == DeviceClass.Kind.PHONE) 11.5f else 12.5f)
         typeface = BlofyTvDesign.MediumTypeface
         setTextColor(BlofyTvDesign.TextMuted)
@@ -429,7 +429,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         val status = if (p.retryAttempt > 0) "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)" else label
         render((p.percent.coerceIn(0, 95) * 30 / 95), status)
-        progressMeta.text = "${p.step.coerceAtLeast(1)} / ${p.totalSteps.coerceAtLeast(1)}"
+        progressMeta.text = getString(R.string.catalog_progress_steps, p.step.coerceAtLeast(1), p.totalSteps.coerceAtLeast(1))
         progressMeta.visibility = View.VISIBLE
     }
 
@@ -439,7 +439,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         progressMeta.visibility = View.GONE
         progress.isIndeterminate = false
         progress.progress = safe
-        percent.text = "$safe%"
+        percent.text = getString(R.string.catalog_percent, safe)
         stage.text = label
         val serverDone = safe >= 10
         val contentDone = safe >= 30
@@ -453,10 +453,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
         contentStep.background = stepBackground(contentDone, safe in 10..29)
         prepareStep.background = stepBackground(prepareDone, safe in 30..99)
         readyStep.background = stepBackground(readyDone, safe >= 100)
-        serverStep.text = "${if (serverDone) "✓" else if (safe in 1..9) "●" else "○"}  ${getString(R.string.catalog_step_server)}"
-        contentStep.text = "${if (contentDone) "✓" else if (safe in 10..29) "●" else "○"}  ${getString(R.string.catalog_step_content)}"
-        prepareStep.text = "${if (prepareDone) "✓" else if (safe in 30..99) "●" else "○"}  ${getString(R.string.catalog_step_prepare)}"
-        readyStep.text = "${if (readyDone) "✓" else "○"}  ${getString(R.string.catalog_step_ready)}"
+        serverStep.text = getString(R.string.catalog_step_state, if (serverDone) "✓" else if (safe in 1..9) "●" else "○", getString(R.string.catalog_step_server))
+        contentStep.text = getString(R.string.catalog_step_state, if (contentDone) "✓" else if (safe in 10..29) "●" else "○", getString(R.string.catalog_step_content))
+        prepareStep.text = getString(R.string.catalog_step_state, if (prepareDone) "✓" else if (safe in 30..99) "●" else "○", getString(R.string.catalog_step_prepare))
+        readyStep.text = getString(R.string.catalog_step_state, if (readyDone) "✓" else "○", getString(R.string.catalog_step_ready))
     }
 
     private suspend fun openHome(providerId: String) {
