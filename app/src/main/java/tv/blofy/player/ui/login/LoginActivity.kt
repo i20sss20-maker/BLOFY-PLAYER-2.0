@@ -478,7 +478,7 @@ class LoginActivity : AppCompatActivity() {
         tag = provider.id
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = resources.configuration.layoutDirection
         setPadding(dp(17), dp(8), dp(17), dp(8))
         isFocusable = true
         isFocusableInTouchMode = true
@@ -525,7 +525,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun emptyPlaylistView(message: String) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = resources.configuration.layoutDirection
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(18), 0, dp(18), 0)
         background = emptyBackground()
