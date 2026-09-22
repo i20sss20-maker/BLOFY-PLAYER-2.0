@@ -225,7 +225,7 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
             view.animate()
                 .scaleX(targetScale)
                 .scaleY(targetScale)
-                .translationZ(if (focused) TvUiTuning.focusElevation(activity, dp(activity, 10).toFloat()) else dp(activity, 1).toFloat())
+                .translationZ(if (focused) TvUiTuning.focusElevation(activity, dp(activity, 10).toFloat()) else 0f)
                 .setDuration(TvUiTuning.focusDuration(activity, focused))
                 .start()
         }
