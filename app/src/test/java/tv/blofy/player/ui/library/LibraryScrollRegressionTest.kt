@@ -93,8 +93,18 @@ class LibraryScrollRegressionTest {
             assertEquals("Remote navigation down to row ${row + 1}",
                 (row + 1) * manager.spanCount, grid.getChildAdapterPosition(grid.focusedChild!!))
         }
+        val forward = if (grid.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+            KeyEvent.KEYCODE_DPAD_LEFT
+        } else {
+            KeyEvent.KEYCODE_DPAD_RIGHT
+        }
+        val backward = if (forward == KeyEvent.KEYCODE_DPAD_LEFT) {
+            KeyEvent.KEYCODE_DPAD_RIGHT
+        } else {
+            KeyEvent.KEYCODE_DPAD_LEFT
+        }
         repeat(29 % manager.spanCount) { column ->
-            press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+            press(activity, forward)
             assertEquals("Remote navigation across the last row", 29 / manager.spanCount * manager.spanCount + column + 1,
                 grid.getChildAdapterPosition(grid.focusedChild!!))
         }
@@ -103,7 +113,7 @@ class LibraryScrollRegressionTest {
         assertTrue("The last poster must receive focus", last!!.hasFocus())
         assertTrue("The grid must scroll to keep the poster on screen", grid.computeVerticalScrollOffset() > 0)
         assertTrue(last.top >= grid.paddingTop && last.bottom <= grid.height - grid.paddingBottom)
-        repeat(29 % manager.spanCount) { press(activity, KeyEvent.KEYCODE_DPAD_RIGHT) }
+        repeat(29 % manager.spanCount) { press(activity, backward) }
         repeat(29 / manager.spanCount) { press(activity, KeyEvent.KEYCODE_DPAD_UP) }
         assertTrue("Remote navigation must return to the first poster", grid.findViewHolderForAdapterPosition(0)!!.itemView.hasFocus())
     }
