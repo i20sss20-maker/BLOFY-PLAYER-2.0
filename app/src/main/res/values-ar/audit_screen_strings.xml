@@ -76,6 +76,7 @@
     <string name="details_seasons_count">%1$d موسم</string>
     <string name="details_episodes_count">%1$d حلقة</string>
     <plurals name="details_seasons_count_plural">
+        <item quantity="zero">%1$d موسم</item>
         <item quantity="one">%1$d موسم</item>
         <item quantity="two">%1$d موسمان</item>
         <item quantity="few">%1$d مواسم</item>
@@ -83,6 +84,7 @@
         <item quantity="other">%1$d موسم</item>
     </plurals>
     <plurals name="details_episodes_count_plural">
+        <item quantity="zero">%1$d حلقة</item>
         <item quantity="one">%1$d حلقة</item>
         <item quantity="two">%1$d حلقتان</item>
         <item quantity="few">%1$d حلقات</item>
