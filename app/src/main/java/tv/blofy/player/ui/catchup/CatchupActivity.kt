@@ -43,13 +43,13 @@ class CatchupActivity : ContentAccessActivity() {
             background = AppCompatResources.getDrawable(this@CatchupActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
-            text = "أرشيف BLOFY"
+            text = getString(R.string.catchup_title)
             textSize = 30f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
         })
         status = TextView(this).apply {
-            text = "جاري تحميل البرامج السابقة..."
+            text = getString(R.string.catchup_loading)
             textSize = 15f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
@@ -65,10 +65,10 @@ class CatchupActivity : ContentAccessActivity() {
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
             if (!stream.archiveEnabled || provider.providerType.equals("m3u", true)) {
-                status.text = "هذه القناة لا تدعم الأرشيف"
+                status.setText(R.string.catchup_unsupported)
                 return@launch
             }
-            status.text = "${stream.name}  •  أرشيف ${stream.archiveDurationDays.coerceAtLeast(1)} يوم"
+            val archiveDays = stream.archiveDurationDays.coerceAtLeast(1)\n            val archiveDaysLabel = resources.getQuantityString(R.plurals.catchup_archive_days, archiveDays, archiveDays)\n            status.text = getString(R.string.catchup_channel_archive, stream.name, archiveDaysLabel)
             runCatching {
                 withContext(Dispatchers.IO) {
                     PlaylistManager(XtreamClient.api, dao).syncCatchupEpg(provider, stream.remoteId)
@@ -85,7 +85,7 @@ class CatchupActivity : ContentAccessActivity() {
     private fun render(provider: ProviderEntity, stream: StreamEntity, items: List<EpgEntity>) {
         list.removeAllViews()
         if (items.isEmpty()) {
-            status.text = "لا توجد برامج سابقة متاحة لهذه القناة"
+            status.setText(R.string.catchup_empty)
             return
         }
         items.forEach { item ->
