@@ -100,7 +100,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 includeFontPadding = false
                 alpha = if (metadata?.logoUrl.isNullOrBlank()) 1f else .9f
             }
-            panel.addView(titleView)
+            panel.addView(titleView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(7) })
 
             fun metadataStats(metadata: tv.blofy.player.data.metadata.ProviderMetadata.Metadata?) = buildList {
                     add(getString(R.string.details_series_type))
@@ -116,18 +116,8 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     else stream.genre?.takeIf(String::isNotBlank)?.let(::add)
                     metadata?.countries?.takeIf { it.isNotEmpty() }?.let { add(it.take(2).joinToString(" / ")) }
                     metadata?.originalLanguage?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
-                }.joinToString("   •   ")
-            val statsView = TextView(this@SeriesDetailsActivity).apply {
-                tag = "blofy_details_stats"
-                text = metadataStats(metadata)
-                textSize = 13.5f
-                typeface = BlofyTvDesign.BodyTypeface
-                setTextColor(BlofyTvDesign.Lavender)
-                gravity = Gravity.START
-                maxLines = 2
-                background = BlofyTvDesign.badge(dp(12).toFloat())
-                setPadding(dp(12), dp(8), dp(12), dp(8))
-            }
+                }
+            val statsView = DetailsMetadataChips.build(this@SeriesDetailsActivity, metadataStats(metadata))
             panel.addView(statsView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
@@ -232,11 +222,12 @@ class SeriesDetailsActivity : ContentAccessActivity() {
 
             val castContainer = LinearLayout(this@SeriesDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
+                setPadding(0, 0, 0, dp(22))
             }
             panel.addView(castContainer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
             ProviderDetailsBinding(this@SeriesDetailsActivity, overviewView, crewView,
                 castContainer, provider, stream) { updated ->
-                    statsView.text = metadataStats(updated)
+                    DetailsMetadataChips.update(statsView, metadataStats(updated))
                     titleView.text = ContentPresentation.title(updated?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
                     ArtworkLoader.loadPriority(backdrop, listOf(updated?.backdropUrl, stream.backdrop, stream.icon))
                     ArtworkLoader.loadPriority(poster, listOf(updated?.posterUrl, stream.icon, stream.backdrop))
