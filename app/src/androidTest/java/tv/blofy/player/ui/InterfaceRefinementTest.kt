@@ -119,8 +119,8 @@ class InterfaceRefinementTest {
         for (kind in listOf("movie", "series")) {
             val type = if (kind == "movie") MovieDetailsActivity::class.java else SeriesDetailsActivity::class.java
             repeat(2) { opening ->
-                ActivityScenario.launch<android.app.Activity>(Intent(context, type)
-                    .putExtra("provider_id", id).putExtra("content_key", "$id:$kind:7")).use { scenario ->
+                withStableDetailsScenario(Intent(context, type)
+                    .putExtra("provider_id", id).putExtra("content_key", "$id:$kind:7")) { scenario ->
                     await { scenario.onActivity { activity ->
                         val root = activity.window.decorView
                         assertEquals("وصف تجريبي من السيرفر", root.findViewWithTag<TextView>("blofy_details_overview")?.text?.toString())
@@ -181,6 +181,27 @@ class InterfaceRefinementTest {
                 android.util.Log.i("BLOFY_UI_PERFORMANCE", "$name: $output")
             }
         }
+    }
+
+    private fun withStableDetailsScenario(
+        intent: Intent,
+        block: (ActivityScenario<android.app.Activity>) -> Unit
+    ) {
+        var firstDestroyed: NullPointerException? = null
+        repeat(2) { attempt ->
+            try {
+                ActivityScenario.launch<android.app.Activity>(intent).use(block)
+                return
+            } catch (error: NullPointerException) {
+                val transient = error.message.orEmpty().contains("Activity has been destroyed already")
+                if (!transient || attempt > 0) throw error
+                firstDestroyed = error
+                android.util.Log.w("BLOFY_UI_TEST", "Initial TV details activity was recreated; retrying once", error)
+                instrumentation.waitForIdleSync()
+                SystemClock.sleep(250)
+            }
+        }
+        throw firstDestroyed ?: AssertionError("Details scenario did not run")
     }
 
     private fun descendants(root: View): List<View> = listOf(root) + if (root is ViewGroup)
