@@ -31,8 +31,10 @@ import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
+import tv.blofy.player.ui.profile.HomePersonalizationActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -127,6 +129,12 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting(getString(R.string.setting_motion), RuntimeSettings.KEY_MOTION,
             arrayOf("smooth", "reduced"),
             arrayOf(getString(R.string.setting_smooth), getString(R.string.setting_reduced))))
+        addCard(actionCard(
+            copy("ترتيب وإخفاء أقسام الرئيسية", "Home section order and visibility"),
+            copy("رتّب ما يظهر لك وأخفِ الأقسام غير المهمة", "Reorder your Home rows and hide what you do not need")
+        ) {
+            startActivity(Intent(this, HomePersonalizationActivity::class.java))
+        })
         addCard(actionCard(copy("باقتي", "My plan"), copy("مدة التفعيل والأجهزة المسموحة", "Activation period and allowed devices")) {
             startActivity(Intent(this, tv.blofy.player.ui.subscription.SubscriptionActivity::class.java))
         }.apply { tag = "blofy_subscription_entry" })
@@ -163,6 +171,12 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting(getString(R.string.setting_next_episode), RuntimeSettings.KEY_AUTO_NEXT,
             arrayOf("ask", "on", "off"),
             arrayOf(getString(R.string.setting_ask_me), getString(R.string.setting_auto), getString(R.string.setting_off))))
+        addCard(cycleSetting(
+            copy("حجم عرض البوسترات", "Poster layout"),
+            RuntimeSettings.KEY_CATALOG_DENSITY,
+            arrayOf("comfortable", "compact"),
+            arrayOf(copy("مريح", "Comfortable"), copy("مضغوط", "Compact"))
+        ))
 
         addSection(page, copy("الترجمة والصوت", "Subtitles and audio"))
         addCard(cycleSetting(getString(R.string.setting_audio_output), RuntimeSettings.KEY_AUDIO_OUTPUT,
@@ -312,6 +326,7 @@ class SettingsActivity : AppCompatActivity() {
         RuntimeSettings.KEY_RESUME_PROMPT -> copy("السؤال قبل متابعة آخر نقطة", "Ask before resuming your progress")
         RuntimeSettings.KEY_AUTO_NEXT -> copy("ما يحدث عند انتهاء الحلقة", "What happens when an episode ends")
         RuntimeSettings.KEY_MOTION -> copy("حركة الانتقال بين عناصر الواجهة", "Animations as you browse")
+        RuntimeSettings.KEY_CATALOG_DENSITY -> copy("غيّر عدد البوسترات الظاهرة بدون التأثير على جودة الصور", "Change how many posters fit on screen without changing artwork quality")
         else -> ""
     }
 
@@ -356,10 +371,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun formatSyncTime(value: Long): String {
-        val locale = Locale.getDefault()
-        val sameDay = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(value)) ==
-            SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-        return SimpleDateFormat(if (sameDay) "HH:mm" else "dd/MM HH:mm", locale).format(Date(value))
+        val now = System.currentTimeMillis()
+        return DeviceLocalTime.format(this, value, if (DeviceLocalTime.isSameLocalDay(this, value, now)) "HH:mm" else "dd/MM HH:mm")
     }
 
     private fun updateStorageCard() {
