@@ -387,6 +387,7 @@
     <string name="provider_manager_movies_count">الأفلام: %1$d</string>
     <string name="provider_manager_series_count">المسلسلات: %1$d</string>
     <string name="provider_manager_summary_format">%1$s  •  %2$s  •  %3$s  •  %4$s</string>
+    <string name="provider_manager_summary_with_time">%1$s  •  %2$s</string>
     <string name="provider_manager_legacy_unsupported">هذه القائمة قديمة وغير مدعومة • استخدم Xtream</string>
     <string name="provider_manager_opening">جاري فتح %1$s…</string>
     <string name="provider_manager_open_failed">تعذر فتح القائمة • حاول مرة أخرى</string>
