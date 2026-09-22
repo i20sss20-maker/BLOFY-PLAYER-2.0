@@ -49,24 +49,24 @@ class PlaylistActivity : AppCompatActivity() {
         val phone = DeviceClass.detect(this) == DeviceClass.Kind.PHONE
         val tv = DeviceClass.isTv(this)
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (phone) 22 else 54), dp(if (phone) 24 else 28), dp(if (phone) 22 else 54), dp(if (phone) 24 else 28))
             background = AppCompatResources.getDrawable(this@PlaylistActivity, R.drawable.blofy_home_background)
         }
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(if (phone) 150 else 170), dp(if (phone) 72 else 76)))
         root.addView(TextView(this).apply {
-            text = if (editingProviderId == null) "إضافة سيرفر" else "تعديل السيرفر"; textSize = if (phone) 25f else 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            text = getString(if (editingProviderId == null) R.string.playlist_form_add_server else R.string.playlist_form_edit_server); textSize = if (phone) 25f else 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
         })
         root.addView(TextView(this).apply { text = "Xtream Codes"; textSize = if (phone) 13f else 15f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(5), 0, dp(16)) })
 
         val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (phone) 18 else 28), dp(if (phone) 18 else 22), dp(if (phone) 18 else 28), dp(if (phone) 18 else 22)); background = panelBackground()
         }
         root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else dp(760), LinearLayout.LayoutParams.WRAP_CONTENT))
 
         fun field(hintText: String, passwordField: Boolean = false) = EditText(this).apply {
-            hint = hintText; isSingleLine = true; gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; setTextColor(Color.WHITE); setHintTextColor(0xFF8E829A.toInt()); setPadding(dp(22), 0, dp(22), 0)
+            hint = hintText; isSingleLine = true; gravity = Gravity.START or Gravity.CENTER_VERTICAL; setTextColor(Color.WHITE); setHintTextColor(0xFF8E829A.toInt()); setPadding(dp(22), 0, dp(22), 0)
             background = fieldBackground(false); isFocusable = true; isFocusableInTouchMode = true
             setOnFocusChangeListener { view, focused ->
                 if (tv) {
@@ -83,24 +83,24 @@ class PlaylistActivity : AppCompatActivity() {
             }
             if (passwordField) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
-        val name = field("اسم السيرفر (اختياري)")
-        val url = field("رابط السيرفر")
-        val username = field("اسم المستخدم")
-        val password = field("كلمة المرور", true)
+        val name = field(getString(R.string.playlist_form_name_hint))
+        val url = field(getString(R.string.playlist_form_url_hint))
+        val username = field(getString(R.string.playlist_form_username_hint))
+        val password = field(getString(R.string.playlist_form_password_hint), true)
         listOf(name, url).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 64)).apply { topMargin = dp(9) }) }
 
-        val transportNotice = TextView(this).apply { text = "يفضل HTTPS • HTTP متاح عند الحاجة"; textSize = if (phone) 12f else 13f; setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.RIGHT; setPadding(dp(8), dp(8), dp(8), dp(1)) }
+        val transportNotice = TextView(this).apply { text = getString(R.string.playlist_form_https_preferred); textSize = if (phone) 12f else 13f; setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.START; setPadding(dp(8), dp(8), dp(8), dp(1)) }
         panel.addView(transportNotice)
         url.doAfterTextChanged { value ->
             val candidate = value?.toString()?.trim().orEmpty()
             when {
-                candidate.startsWith("http://", true) -> { transportNotice.text = "تنبيه: اتصال HTTP غير مشفر"; transportNotice.setTextColor(Color.rgb(255,179,71)) }
-                candidate.startsWith("https://", true) -> { transportNotice.text = "اتصال HTTPS مشفر"; transportNotice.setTextColor(Color.rgb(116,224,174)) }
-                else -> { transportNotice.text = "يفضل HTTPS • HTTP متاح عند الحاجة"; transportNotice.setTextColor(0xFFB78CFF.toInt()) }
+                candidate.startsWith("http://", true) -> { transportNotice.setText(R.string.playlist_form_http_warning); transportNotice.setTextColor(Color.rgb(255,179,71)) }
+                candidate.startsWith("https://", true) -> { transportNotice.setText(R.string.playlist_form_https_secure); transportNotice.setTextColor(Color.rgb(116,224,174)) }
+                else -> { transportNotice.setText(R.string.playlist_form_https_preferred); transportNotice.setTextColor(0xFFB78CFF.toInt()) }
             }
         }
         listOf(username, password).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 64)).apply { topMargin = dp(9) }) }
-        val status = TextView(this).apply { setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.RIGHT; setPadding(0, dp(12), 0, dp(2)) }
+        val status = TextView(this).apply { setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.START; setPadding(0, dp(12), 0, dp(2)) }
         panel.addView(status)
 
         var confirmedHttpUrl: String? = null
@@ -109,17 +109,17 @@ class PlaylistActivity : AppCompatActivity() {
             val baseUrl = url.text.toString().trim(); val user = username.text.toString().trim(); val pass = password.text.toString()
             val playlistName = name.text.toString().trim().ifBlank { "BLOFY Server" }
             val validation = PlaylistUrlPolicy.validate(baseUrl)
-            if (validation == PlaylistUrlPolicy.Result.EMPTY) { status.text = "أدخل رابط السيرفر"; return }
-            if (validation == PlaylistUrlPolicy.Result.INVALID) { status.text = "الرابط غير صحيح"; return }
-            if (validation == PlaylistUrlPolicy.Result.USER_INFO_NOT_ALLOWED) { status.text = "استخدم حقول اسم المستخدم وكلمة المرور"; return }
-            if (validation == PlaylistUrlPolicy.Result.UNSAFE_HOST) { status.text = "عنوان السيرفر غير مسموح"; return }
-            if (user.isBlank() || pass.isBlank()) { status.text = "أدخل اسم المستخدم وكلمة المرور"; return }
+            if (validation == PlaylistUrlPolicy.Result.EMPTY) { status.setText(R.string.playlist_form_url_required); return }
+            if (validation == PlaylistUrlPolicy.Result.INVALID) { status.setText(R.string.playlist_form_url_invalid); return }
+            if (validation == PlaylistUrlPolicy.Result.USER_INFO_NOT_ALLOWED) { status.setText(R.string.playlist_form_userinfo_not_allowed); return }
+            if (validation == PlaylistUrlPolicy.Result.UNSAFE_HOST) { status.setText(R.string.playlist_form_host_unsafe); return }
+            if (user.isBlank() || pass.isBlank()) { status.setText(R.string.playlist_form_credentials_required); return }
             if (validation == PlaylistUrlPolicy.Result.HTTP_CLEAR_TEXT && confirmedHttpUrl != baseUrl) {
-                AlertDialog.Builder(this@PlaylistActivity).setTitle("اتصال HTTP غير مشفر").setMessage("هل تريد المتابعة بهذا الرابط؟")
-                    .setNegativeButton("رجوع", null).setPositiveButton("متابعة") { _, _ -> confirmedHttpUrl = baseUrl; lifecycleScope.launch { persist(connectAfter) } }.show(); return
+                AlertDialog.Builder(this@PlaylistActivity).setTitle(R.string.playlist_form_http_dialog_title).setMessage(R.string.playlist_form_http_dialog_message)
+                    .setNegativeButton(R.string.playlist_form_back, null).setPositiveButton(R.string.playlist_form_continue) { _, _ -> confirmedHttpUrl = baseUrl; lifecycleScope.launch { persist(connectAfter) } }.show(); return
             }
             if (busy) return
-            busy = true; status.text = "جاري حفظ Xtream..."
+            busy = true; status.setText(R.string.playlist_form_saving)
             try {
                 val provider = withContext(Dispatchers.IO) {
                     val dao = BlofyDatabase.get(applicationContext).dao(); val existing = editingProviderId?.let { dao.provider(it) }
@@ -144,7 +144,7 @@ class PlaylistActivity : AppCompatActivity() {
                         val staging = next.copy(id = UUID.randomUUID().toString(), enabled = false); var promoted = false
                         try {
                             val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(staging) }
-                            check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }; check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
+                            check(result.freshItemCount > 0) { getString(R.string.playlist_form_no_content) }; check(result.failedSectionCount == 0) { getString(R.string.playlist_form_section_failed) }
                             withContext(NonCancellable) {
                                 dao.promoteStagedCatalog(staging.id, next); promoted = true
                                 CatalogSyncState.markSourceReplaced(applicationContext, id)
@@ -158,13 +158,13 @@ class PlaylistActivity : AppCompatActivity() {
                     val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim(); if (endpoint.isNotBlank()) runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
                     next
                 }
-                setResult(RESULT_OK); status.text = if (connectAfter) "تم الحفظ • جاري الدخول" else "تم الحفظ"
+                setResult(RESULT_OK); status.text = getString(if (connectAfter) R.string.playlist_form_saved_entering else R.string.playlist_form_saved)
                 if (connectAfter) {
                     startActivity(Intent(this@PlaylistActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)); finish()
                 } else finish()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (secure: tv.blofy.player.data.local.ProviderSecretUnavailableException) { status.text = secure.message; busy = false }
-            catch (_: Exception) { status.text = "تعذر تجهيز السيرفر • تحقق من البيانات والاتصال ثم حاول مرة أخرى"; busy = false }
+            catch (_: Exception) { status.setText(R.string.playlist_form_setup_failed); busy = false }
         }
 
         fun action(label: String, primary: Boolean, connectAfter: Boolean) = Button(this).apply {
@@ -183,8 +183,8 @@ class PlaylistActivity : AppCompatActivity() {
             }
             setOnClickListener { lifecycleScope.launch { persist(connectAfter) } }
         }
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER }
-        val saveConnect = action("حفظ واتصال", true, true); val saveOnly = action("حفظ", false, false)
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = resources.configuration.layoutDirection; gravity = Gravity.CENTER }
+        val saveConnect = action(getString(R.string.playlist_form_save_connect), true, true); val saveOnly = action(getString(R.string.playlist_form_save), false, false)
         actions.addView(saveConnect, LinearLayout.LayoutParams(if (phone) 0 else dp(300), dp(if (phone) 62 else 66), if (phone) 1f else 0f).apply { marginStart = dp(8) })
         actions.addView(saveOnly, LinearLayout.LayoutParams(if (phone) 0 else dp(220), dp(if (phone) 62 else 66), if (phone) 1f else 0f))
         panel.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(if (phone) 72 else 76)).apply { topMargin = dp(12) })
@@ -195,7 +195,7 @@ class PlaylistActivity : AppCompatActivity() {
             saveOnly.isEnabled = false
             try {
                 val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: run {
-                    status.text = "القائمة غير موجودة • ارجع إلى القوائم المحفوظة"
+                    status.setText(R.string.playlist_form_missing)
                     return@launch
                 }
                 if (BlofySubscriberClient.isManaged(provider)) {
@@ -204,13 +204,13 @@ class PlaylistActivity : AppCompatActivity() {
                     return@launch
                 }
                 name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password)
-                status.text = if (provider.providerType.equals("xtream", true)) "XTREAM • ${provider.name}" else "هذه القائمة قديمة وغير مدعومة • أدخل بيانات Xtream"
+                status.text = if (provider.providerType.equals("xtream", true)) "XTREAM • ${provider.name}" else getString(R.string.playlist_form_legacy_unsupported)
                 saveConnect.isEnabled = true
                 saveOnly.isEnabled = true
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                status.text = "تعذر قراءة بيانات القائمة • أعد فتح الصفحة للمحاولة"
+                status.setText(R.string.playlist_form_read_failed)
             }
         }
     }
