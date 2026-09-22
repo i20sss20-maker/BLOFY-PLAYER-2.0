@@ -97,12 +97,17 @@ class InterfaceRefinementTest {
     }
 
     @Test fun selectedMovieAndSeriesFetchStoryAndCastThenReopenWithoutAnotherRequest() {
-        runBlocking {
-            db.dao().upsertProviderStored(ProviderEntity(id, "Fixture", server.url("/").toString(), "fixture", "fixture"))
-            db.dao().upsertStreams(listOf("movie", "series").map { kind ->
-                StreamEntity("$id:$kind:7", id, "7", "1", kind, "عنوان تجريبي")
-            })
-        }
+        val previousProfile = ProfileStore.active(context).id
+        val guest = ProfileStore.all(context).firstOrNull { it.guest }
+            ?: ProfileStore.create(context, "UI Fixture", guest = true)
+        assertTrue(ProfileStore.select(context, guest.id))
+        try {
+            runBlocking {
+                db.dao().upsertProviderStored(ProviderEntity(id, "Fixture", server.url("/").toString(), "fixture", "fixture"))
+                db.dao().upsertStreams(listOf("movie", "series").map { kind ->
+                    StreamEntity("$id:$kind:7", id, "7", "1", kind, "عنوان تجريبي")
+                })
+            }
         val detailRequests = java.util.concurrent.atomic.AtomicInteger()
         val imageBytes = java.io.ByteArrayOutputStream().also { output ->
             Bitmap.createBitmap(48, 72, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFF7853A8.toInt()) }
@@ -135,7 +140,10 @@ class InterfaceRefinementTest {
                 }
             }
         }
-        assertEquals("Only one provider detail request per title", 2, detailRequests.get())
+            assertEquals("Only one provider detail request per title", 2, detailRequests.get())
+        } finally {
+            ProfileStore.select(context, previousProfile)
+        }
     }
 
     @Test fun settingsCardsWrapTextAndKeepDirectionalFocus() {
