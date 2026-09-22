@@ -57,6 +57,7 @@
     <string name="browser_remote_hint">OK full screen   •   ↑↓ channels   •   ← categories   •   long press for archive</string>
     <string name="browser_empty_category">No content in this category • choose %1$s</string>
     <string name="browser_no_saved_catalog">No saved %1$s • refresh the library manually</string>
+    <string name="browser_all_channels">All channels</string>
     <string name="browser_all_movies">All movies</string>
     <string name="browser_all_series">All series</string>
     <string name="browser_movies_label">movies</string>
