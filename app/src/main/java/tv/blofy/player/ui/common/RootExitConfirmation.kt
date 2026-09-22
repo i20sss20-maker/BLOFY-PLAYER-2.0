@@ -7,7 +7,6 @@ import android.content.DialogInterface
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
-import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.ViewGroup
@@ -141,19 +140,24 @@ class RootExitConfirmationDialog : DialogFragment() {
             button.setSingleLine(false)
             button.maxLines = 2
             fun render(focused: Boolean) {
-                button.background = GradientDrawable().apply {
-                    cornerRadius = 14 * density
-                    setColor(if (focused) Color.WHITE else CinemaStyle.Surface)
-                    setStroke(((if (focused) 2 else 1) * density).toInt(), if (focused) Color.WHITE else 0x80FFFFFF.toInt())
-                }
+                button.background = CinemaStyle.surface(
+                    requireContext(),
+                    focused = focused,
+                    filledFocus = focused,
+                    radiusDp = 14
+                )
                 button.setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
             }
             render(button.hasFocus())
             button.setOnFocusChangeListener { view, focused ->
                 render(focused)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.02f else 1f).scaleY(if (focused) 1.02f else 1f)
-                    .setDuration(if (focused) 90 else 70).start()
+                view.animate()
+                    .scaleX(if (focused) 1.024f else 1f)
+                    .scaleY(if (focused) 1.024f else 1f)
+                    .translationZ(if (focused) 8 * density else 0f)
+                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .start()
             }
         }
 
