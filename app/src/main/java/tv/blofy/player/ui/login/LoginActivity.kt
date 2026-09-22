@@ -121,11 +121,12 @@ class LoginActivity : AppCompatActivity() {
             clipChildren = false
             clipToPadding = false
         }
+        val compactTvHeight = resources.configuration.screenHeightDp <= 600
         val activation = LinearLayout(this).apply {
             tag = "blofy_login_activation_panel"
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(18), dp(20), dp(18))
+            setPadding(dp(20), dp(if (compactTvHeight) 12 else 18), dp(20), dp(if (compactTvHeight) 12 else 18))
             background = premiumPanelBackground(true)
         }
         activation.addView(TextView(this).apply {
@@ -137,19 +138,30 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             background = BlofyTvDesign.badge(dp(12).toFloat())
             setPadding(dp(14), 0, dp(14), 0)
-        }, LinearLayout.LayoutParams(-2, dp(28)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(6) })
-        activation.addView(loginText(R.string.login_link_tv, 20f, true).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(-1, dp(30)))
+        }, LinearLayout.LayoutParams(-2, dp(if (compactTvHeight) 24 else 28)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(if (compactTvHeight) 3 else 6)
+        })
+        activation.addView(loginText(R.string.login_link_tv, if (compactTvHeight) 18f else 20f, true).apply {
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, dp(if (compactTvHeight) 26 else 30)))
         activation.addView(loginText(R.string.login_scan_hint, 12f).apply {
-            visibility = if (resources.configuration.screenHeightDp <= 600) View.GONE else View.VISIBLE
+            visibility = if (compactTvHeight) View.GONE else View.VISIBLE
             gravity = Gravity.CENTER
             maxLines = 2
         }, LinearLayout.LayoutParams(-1, dp(36)))
-        val qrSize = (resources.configuration.screenHeightDp - 390).coerceIn(132, 198)
+        val qrSize = if (compactTvHeight) {
+            (resources.configuration.screenHeightDp - 408).coerceIn(120, 142)
+        } else {
+            (resources.configuration.screenHeightDp - 390).coerceIn(132, 198)
+        }
         activation.addView(qrPanel(), LinearLayout.LayoutParams(dp(qrSize), dp(qrSize)).apply {
-            topMargin = dp(8)
-            bottomMargin = dp(8)
+            topMargin = dp(if (compactTvHeight) 5 else 8)
+            bottomMargin = dp(if (compactTvHeight) 5 else 8)
         })
-        activation.addView(trialView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        activation.addView(trialView, LinearLayout.LayoutParams(-1, -2).apply {
+            bottomMargin = dp(if (compactTvHeight) 5 else 8)
+        })
         val identity = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -175,7 +187,7 @@ class LoginActivity : AppCompatActivity() {
         }
         identity.addView(identityField(R.string.login_device_label, deviceView, 12f), LinearLayout.LayoutParams(0, -1, 1.8f))
         identity.addView(identityField(R.string.login_pairing_label, codeView, 20f), LinearLayout.LayoutParams(0, -1, 1f))
-        activation.addView(identity, LinearLayout.LayoutParams(-1, dp(56)))
+        activation.addView(identity, LinearLayout.LayoutParams(-1, dp(if (compactTvHeight) 52 else 56)))
         activation.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
         status.apply {
             textSize = 11f
@@ -183,7 +195,9 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 0)
         }
-        activation.addView(status, LinearLayout.LayoutParams(-1, dp(32)).apply { topMargin = dp(6) })
+        activation.addView(status, LinearLayout.LayoutParams(-1, dp(if (compactTvHeight) 28 else 32)).apply {
+            topMargin = dp(if (compactTvHeight) 3 else 6)
+        })
 
         val playlists = LinearLayout(this).apply {
             tag = "blofy_login_playlists_panel"
