@@ -247,4 +247,45 @@
     <string name="profile_watchlist_saved">✓ My Watchlist</string>
     <string name="profile_watchlist_add">+ My Watchlist</string>
 
+
+    <string name="profiles_title">Profiles</string>
+    <string name="profiles_current">Current profile: %1$s  •  %2$d/8</string>
+    <string name="profiles_guest_meta">Guest profile • independent preferences</string>
+    <string name="profiles_kids_locked_meta">Kids mode • protected by PIN</string>
+    <string name="profiles_kids_meta">Kids mode • a profile PIN can be added</string>
+    <string name="profiles_standard_meta">Viewing, favorites and main settings</string>
+    <string name="profiles_add">＋ Add profile</string>
+    <string name="profiles_delete_current">Delete current profile</string>
+    <string name="profiles_current_security">Current profile protection</string>
+    <string name="profiles_pin_change_hint">Enter a new PIN to change it</string>
+    <string name="profiles_pin_hint">PIN from 4 to 8 digits</string>
+    <string name="profiles_save_profile_pin">Save profile PIN</string>
+    <string name="profiles_profile_pin_saved">PIN saved for %1$s</string>
+    <string name="profiles_pin_invalid">Enter 4 to 8 digits</string>
+    <string name="profiles_clear_profile_pin">Remove profile PIN</string>
+    <string name="profiles_profile_pin_cleared">Profile PIN removed</string>
+    <string name="profiles_content_pin_title">Locked content PIN</string>
+    <string name="profiles_save_content_pin">Save content PIN</string>
+    <string name="profiles_content_pin_saved">Content PIN saved</string>
+    <string name="profiles_clear_content_pin">Remove content PIN</string>
+    <string name="profiles_content_pin_cleared">Content PIN removed</string>
+    <string name="profiles_name_hint">Profile name</string>
+    <string name="profiles_kids_mode">Kids mode</string>
+    <string name="profiles_guest_mode">Guest profile</string>
+    <string name="profiles_create_title">Add profile</string>
+    <string name="profiles_cancel">Cancel</string>
+    <string name="profiles_create">Add</string>
+    <string name="profiles_create_failed">Could not create profile</string>
+    <string name="profiles_last_delete_blocked">The last profile cannot be deleted</string>
+    <string name="profiles_delete_title">Delete %1$s?</string>
+    <string name="profiles_delete_message">Only this profile’s Watchlist settings and interface order will be deleted.</string>
+    <string name="profiles_delete">Delete</string>
+    <string name="profiles_adult_required">Choose an adult profile to manage protection and profiles</string>
+    <string name="profiles_open_title">Open profile %1$s</string>
+    <string name="profiles_adult_pin_title">Adult profile protection PIN</string>
+    <string name="profiles_enter_pin">Enter this profile’s PIN</string>
+    <string name="profiles_open">Open</string>
+    <string name="profiles_pin_wrong">Incorrect PIN</string>
+    <string name="profiles_selected">Selected %1$s</string>
+
 </resources>
