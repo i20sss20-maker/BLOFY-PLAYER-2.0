@@ -17,15 +17,21 @@ object RuntimeSettings {
     const val KEY_AUTOPLAY_LIVE = "autoplay_live"
     const val KEY_RESUME_PROMPT = "resume_prompt"
     const val KEY_AUTO_NEXT = "auto_next_episode"
+    const val KEY_CATALOG_DENSITY = "catalog_density"
 
     enum class AutoNext { ASK, ON, OFF }
     enum class SubtitleLanguage { ARABIC_FIRST, AUTO, OFF }
+    enum class CatalogDensity { COMFORTABLE, COMPACT }
 
     private fun value(context: Context, key: String, default: String): String =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(key, default).orEmpty().ifBlank { default }
 
     fun autoplayLive(context: Context): Boolean = value(context, KEY_AUTOPLAY_LIVE, "on") == "on"
+
+    fun catalogDensity(context: Context): CatalogDensity =
+        if (value(context, KEY_CATALOG_DENSITY, "comfortable") == "compact") CatalogDensity.COMPACT
+        else CatalogDensity.COMFORTABLE
     fun askBeforeResume(context: Context): Boolean = value(context, KEY_RESUME_PROMPT, "on") == "on"
 
     fun autoNext(context: Context): AutoNext = when (value(context, KEY_AUTO_NEXT, "ask")) {
