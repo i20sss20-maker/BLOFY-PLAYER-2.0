@@ -68,7 +68,13 @@ class CatchupActivity : ContentAccessActivity() {
                 status.setText(R.string.catchup_unsupported)
                 return@launch
             }
-            val archiveDays = stream.archiveDurationDays.coerceAtLeast(1)\n            val archiveDaysLabel = resources.getQuantityString(R.plurals.catchup_archive_days, archiveDays, archiveDays)\n            status.text = getString(R.string.catchup_channel_archive, stream.name, archiveDaysLabel)
+            val archiveDays = stream.archiveDurationDays.coerceAtLeast(1)
+            val archiveDaysLabel = resources.getQuantityString(
+                R.plurals.catchup_archive_days,
+                archiveDays,
+                archiveDays
+            )
+            status.text = getString(R.string.catchup_channel_archive, stream.name, archiveDaysLabel)
             runCatching {
                 withContext(Dispatchers.IO) {
                     PlaylistManager(XtreamClient.api, dao).syncCatchupEpg(provider, stream.remoteId)
