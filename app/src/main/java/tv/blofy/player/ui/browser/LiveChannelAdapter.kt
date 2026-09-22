@@ -139,7 +139,7 @@ internal class LiveChannelAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
-        holder.title.text = (if (item.locked) "🔒  " else "") + item.name
+        holder.title.text = (if (item.locked) "🔒  " else "") + displayChannelName(item.name)
         holder.meta.text = holder.itemView.context.getString(if (item.archiveEnabled) R.string.live_archive_available else R.string.live_now)
         holder.badge.text = if (item.archiveEnabled) "ARCH" else "LIVE"
         holder.progress.visibility = View.GONE
@@ -165,6 +165,15 @@ internal class LiveChannelAdapter(
                 .start()
             if (focused) onFocus(item)
         }
+    }
+
+    private fun displayChannelName(raw: String): String {
+        val cleaned = raw
+            .replace(Regex("^[\\s#*_~=-]{2,}|[\\s#*_~=-]{2,}$"), " ")
+            .replace(Regex("(?i)\\b(?:3840p|2160p|1440p|1080p|720p|576p|480p)\\b"), " ")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim(' ', '-', '•', '|')
+        return cleaned.ifBlank { raw.trim().ifBlank { "BLOFY" } }
     }
 
     private fun renderFocus(holder: Holder, focused: Boolean) {
