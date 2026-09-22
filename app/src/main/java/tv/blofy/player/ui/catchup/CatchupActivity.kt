@@ -96,7 +96,7 @@ class CatchupActivity : ContentAccessActivity() {
         }
         items.forEach { item ->
             list.addView(TextView(this).apply {
-                text = "${time(item.startMs)}–${time(item.endMs)}   •   ${item.title}"
+                text = getString(R.string.catchup_program_row, time(item.startMs), time(item.endMs), item.title)
                 textSize = 17f
                 setTextColor(Color.WHITE)
                 setPadding(dp(22), dp(16), dp(22), dp(16))
