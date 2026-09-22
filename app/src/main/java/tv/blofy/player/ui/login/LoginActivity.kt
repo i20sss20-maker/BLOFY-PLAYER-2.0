@@ -126,7 +126,7 @@ class LoginActivity : AppCompatActivity() {
             tag = "blofy_login_activation_panel"
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(if (shortTv) 10 else 18), dp(20), dp(if (shortTv) 10 else 18))
+            setPadding(dp(18), dp(if (shortTv) 8 else 14), dp(18), dp(if (shortTv) 8 else 14))
             background = premiumPanelBackground(true)
         }
         activation.addView(TextView(this).apply {
@@ -151,16 +151,16 @@ class LoginActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(-1, dp(36)))
         val screenHeightDp = resources.configuration.screenHeightDp
         val qrSize = if (shortTv) {
-            (screenHeightDp - 420).coerceIn(112, 150)
+            (screenHeightDp - 398).coerceIn(128, 166)
         } else {
-            (screenHeightDp - 390).coerceIn(150, 198)
+            (screenHeightDp - 360).coerceIn(172, 220)
         }
         activation.addView(qrPanel(), LinearLayout.LayoutParams(dp(qrSize), dp(qrSize)).apply {
-            topMargin = dp(if (shortTv) 4 else 8)
-            bottomMargin = dp(if (shortTv) 4 else 8)
+            topMargin = dp(if (shortTv) 2 else 6)
+            bottomMargin = dp(if (shortTv) 2 else 6)
         })
         activation.addView(trialView, LinearLayout.LayoutParams(-1, -2).apply {
-            bottomMargin = dp(if (shortTv) 4 else 8)
+            bottomMargin = dp(if (shortTv) 2 else 6)
         })
         val identity = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -196,7 +196,7 @@ class LoginActivity : AppCompatActivity() {
             setPadding(0, 0, 0, 0)
         }
         activation.addView(status, LinearLayout.LayoutParams(-1, dp(if (shortTv) 28 else 32)).apply {
-            topMargin = dp(if (shortTv) 3 else 6)
+            topMargin = dp(if (shortTv) 2 else 4)
         })
 
         val playlists = LinearLayout(this).apply {
@@ -257,8 +257,8 @@ class LoginActivity : AppCompatActivity() {
     private fun qrPanel() = FrameLayout(this).apply {
         tag = "blofy_login_qr_panel"
         background = qrFrameBackground()
-        setPadding(dp(7), dp(7), dp(7), dp(7))
-        elevation = dp(7).toFloat()
+        setPadding(dp(8), dp(8), dp(8), dp(8))
+        elevation = dp(8).toFloat()
         addView(qrView, FrameLayout.LayoutParams(-1, -1))
         addView(qrMessage, FrameLayout.LayoutParams(-1, -1))
     }
@@ -323,7 +323,7 @@ class LoginActivity : AppCompatActivity() {
             visibility = View.INVISIBLE
             scaleType = ImageView.ScaleType.FIT_CENTER
             background = qrBackground()
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
         qrMessage = loginText(R.string.login_qr_loading, 12f).apply {
             gravity = Gravity.CENTER
