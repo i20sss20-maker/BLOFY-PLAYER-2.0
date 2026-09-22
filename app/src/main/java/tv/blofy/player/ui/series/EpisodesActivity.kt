@@ -394,15 +394,21 @@ class EpisodesActivity : ContentAccessActivity() {
 
     private fun adjustPaneHeight() {
         if (!::episodeBody.isInitialized || deviceKind == DeviceClass.Kind.PHONE) return
+        val seasonCount = allEpisodes.map { it.season }.distinct().size
+        val visibleCount = selectedSeason?.let { season -> allEpisodes.count { it.season == season } } ?: 0
+        val maxHeight = dp((resources.configuration.screenHeightDp - 210).coerceIn(230, 470))
+        val seasonNeed = dp(18 + seasonCount.coerceAtMost(7) * 54)
+        val episodeNeed = dp(14 + visibleCount.coerceAtMost(5) * 91)
+        val target = maxOf(dp(126), seasonNeed, episodeNeed).coerceAtMost(maxHeight)
         episodeBody.layoutParams = (episodeBody.layoutParams as LinearLayout.LayoutParams).apply {
-            height = 0
-            weight = 1f
+            height = target
+            weight = 0f
         }
         seasonList.layoutParams = (seasonList.layoutParams as LinearLayout.LayoutParams).apply {
-            height = LinearLayout.LayoutParams.MATCH_PARENT
+            height = target
         }
         episodeList.layoutParams = (episodeList.layoutParams as LinearLayout.LayoutParams).apply {
-            height = LinearLayout.LayoutParams.MATCH_PARENT
+            height = target
         }
         episodeBody.requestLayout()
     }
