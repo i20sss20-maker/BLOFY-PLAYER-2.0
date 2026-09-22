@@ -34,6 +34,7 @@ import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.ui.catalog.ArtworkLoader
@@ -177,11 +178,12 @@ class LibraryActivity : AppCompatActivity() {
                 setTextColor(Color.WHITE)
                 view.background = rowBackground(focused)
                 view.animate().cancel()
+                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
                 view.animate()
-                    .scaleX(if (focused) 1.012f else 1f)
-                    .scaleY(if (focused) 1.012f else 1f)
-                    .translationZ(if (focused) dp(9).toFloat() else dp(1).toFloat())
-                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(9).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
                     .start()
             }
             setOnClickListener { open(providerId, liveFormat, stream, resumeMs) }
@@ -205,11 +207,12 @@ class LibraryActivity : AppCompatActivity() {
                 setTextColor(Color.WHITE)
                 view.background = rowBackground(focused)
                 view.animate().cancel()
+                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
                 view.animate()
-                    .scaleX(if (focused) 1.012f else 1f)
-                    .scaleY(if (focused) 1.012f else 1f)
-                    .translationZ(if (focused) dp(9).toFloat() else dp(1).toFloat())
-                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(9).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
                     .start()
             }
             setOnClickListener { openEpisode(provider, episode, entry.state.positionMs, seriesName) }
