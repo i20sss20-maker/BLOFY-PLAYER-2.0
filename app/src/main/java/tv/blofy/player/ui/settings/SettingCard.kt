@@ -11,6 +11,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.TvUiTuning
 
 /** One focus target with separate, wrapping title/value/description areas. */
 internal class SettingCard(context: Context) : LinearLayout(context) {
@@ -47,11 +48,12 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
             hintView.setTextColor(if (focused) BlofyTvDesign.Lavender else CinemaStyle.Muted)
             indicator.setTextColor(if (focused) CinemaStyle.White else BlofyTvDesign.PurpleSoft)
             view.animate().cancel()
+            val targetScale = if (focused) TvUiTuning.focusScale(context, 1.012f) else 1f
             view.animate()
-                .scaleX(if (focused) 1.012f else 1f)
-                .scaleY(if (focused) 1.012f else 1f)
-                .translationZ(if (focused) dp(8).toFloat() else 0f)
-                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(context, dp(8).toFloat()) else 0f)
+                .setDuration(TvUiTuning.focusDuration(context, focused))
                 .start()
         }
     }
