@@ -479,4 +479,8 @@
     <string name="home_personalization_arabic">مختارات عربية</string>
     <string name="home_personalization_uhd">4K • UHD</string>
 
+
+    <string name="splash_opening">جاري فتح BLOFY…</string>
+    <string name="library_stream_row">%1$s   •   %2$s</string>
+
 </resources>
