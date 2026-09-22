@@ -1,6 +1,9 @@
 package tv.blofy.player.ui.details
 
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.view.Gravity
 import android.view.View
 import android.widget.*
@@ -21,7 +24,12 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
     val root = FrameLayout(activity).apply { setBackgroundColor(CinemaStyle.Background) }
     val backdrop = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
-        alpha = .68f
+        alpha = .82f
+        // A subtle cinematic blur also makes poster fallbacks look intentional instead of stretched.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val blur = dp(if (isTv) 5 else 3).toFloat()
+            setRenderEffect(RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP))
+        }
     }
     val poster = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
@@ -52,16 +60,28 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
 
     init {
         root.addView(backdrop, FrameLayout.LayoutParams(-1, -1))
+        // BLOFY tint: keep the artwork visible while tying every provider backdrop to the app identity.
         root.addView(View(activity).apply {
             background = GradientDrawable(
-                if (stacked) GradientDrawable.Orientation.TOP_BOTTOM else GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0xF707050B.toInt(), 0xD807050B.toInt(), 0x7207050B.toInt(), 0x2407050B)
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(0x66251438.toInt(), 0x2E140D20.toInt(), 0x5207050B.toInt())
+            )
+        }, FrameLayout.LayoutParams(-1, -1))
+        val darkEdge = if (activity.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+            GradientDrawable.Orientation.RIGHT_LEFT
+        } else {
+            GradientDrawable.Orientation.LEFT_RIGHT
+        }
+        root.addView(View(activity).apply {
+            background = GradientDrawable(
+                if (stacked) GradientDrawable.Orientation.TOP_BOTTOM else darkEdge,
+                intArrayOf(0xF507050B.toInt(), 0xCE0A0710.toInt(), 0x760B0711.toInt(), 0x1807050B)
             )
         }, FrameLayout.LayoutParams(-1, -1))
         root.addView(View(activity).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.BOTTOM_TOP,
-                intArrayOf(0xF207050B.toInt(), 0x8A07050B.toInt(), 0x0007050B)
+                intArrayOf(0xF707050B.toInt(), 0xB307050B.toInt(), 0x3307050B.toInt(), 0x0007050B)
             )
         }, FrameLayout.LayoutParams(-1, -1))
         val body = LinearLayout(activity).apply {
