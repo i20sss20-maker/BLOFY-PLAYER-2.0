@@ -4,4 +4,4 @@
     <string name="cinema_episode_completed">✓ تمت المشاهدة</string>
     <string name="cinema_episode_resume">استئناف %1$d%%</string>
     <string name="cinema_episode_play">▶ تشغيل</string>
-</resources>
+    <string name="cinema_episode_badge">E%1$d</string>\n</resources>
