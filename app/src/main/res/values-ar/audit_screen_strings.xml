@@ -600,4 +600,5 @@
     <string name="system_status_android_device">جهاز Android</string>
     <string name="system_status_report_copied">تم نسخ تقرير التشخيص</string>
 
+    <string name="login_playlist_default_name">قائمة %1$s</string>
 </resources>
