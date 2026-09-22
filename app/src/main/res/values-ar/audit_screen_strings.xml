@@ -149,4 +149,41 @@
     <string name="home_recent_channels">آخر القنوات</string>
     <string name="home_blofy_collections">مختارات BLOFY</string>
     <string name="home_continue_compact">متابعة المشاهدة</string>
+
+    <string name="library_no_continue">لا يوجد محتوى للاستئناف</string>
+    <string name="library_no_favorites">لا توجد عناصر في المفضلة</string>
+    <string name="library_episode_url_failed">تعذر تجهيز رابط الحلقة</string>
+    <string name="recent_channels_empty">لا توجد قنوات حديثة</string>
+    <string name="recent_channels_live">● مباشر</string>
+
+    <string name="playlist_form_add_server">إضافة سيرفر</string>
+    <string name="playlist_form_edit_server">تعديل السيرفر</string>
+    <string name="playlist_form_name_hint">اسم السيرفر (اختياري)</string>
+    <string name="playlist_form_url_hint">رابط السيرفر</string>
+    <string name="playlist_form_username_hint">اسم المستخدم</string>
+    <string name="playlist_form_password_hint">كلمة المرور</string>
+    <string name="playlist_form_https_preferred">يفضل HTTPS • HTTP متاح عند الحاجة</string>
+    <string name="playlist_form_http_warning">تنبيه: اتصال HTTP غير مشفر</string>
+    <string name="playlist_form_https_secure">اتصال HTTPS مشفر</string>
+    <string name="playlist_form_url_required">أدخل رابط السيرفر</string>
+    <string name="playlist_form_url_invalid">الرابط غير صحيح</string>
+    <string name="playlist_form_userinfo_not_allowed">استخدم حقول اسم المستخدم وكلمة المرور</string>
+    <string name="playlist_form_host_unsafe">عنوان السيرفر غير مسموح</string>
+    <string name="playlist_form_credentials_required">أدخل اسم المستخدم وكلمة المرور</string>
+    <string name="playlist_form_http_dialog_title">اتصال HTTP غير مشفر</string>
+    <string name="playlist_form_http_dialog_message">هل تريد المتابعة بهذا الرابط؟</string>
+    <string name="playlist_form_back">رجوع</string>
+    <string name="playlist_form_continue">متابعة</string>
+    <string name="playlist_form_saving">جاري حفظ Xtream…</string>
+    <string name="playlist_form_no_content">السيرفر لم يرجع محتوى</string>
+    <string name="playlist_form_section_failed">تعذر تحميل أحد أقسام القائمة</string>
+    <string name="playlist_form_saved_entering">تم الحفظ • جاري الدخول</string>
+    <string name="playlist_form_saved">تم الحفظ</string>
+    <string name="playlist_form_setup_failed">تعذر تجهيز السيرفر • تحقق من البيانات والاتصال ثم حاول مرة أخرى</string>
+    <string name="playlist_form_save_connect">حفظ واتصال</string>
+    <string name="playlist_form_save">حفظ</string>
+    <string name="playlist_form_missing">القائمة غير موجودة • ارجع إلى القوائم المحفوظة</string>
+    <string name="playlist_form_legacy_unsupported">هذه القائمة قديمة وغير مدعومة • أدخل بيانات Xtream</string>
+    <string name="playlist_form_read_failed">تعذر قراءة بيانات القائمة • أعد فتح الصفحة للمحاولة</string>
+
 </resources>
