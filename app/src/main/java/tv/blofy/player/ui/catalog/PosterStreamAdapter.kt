@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.catalog
 
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.TvUiTuning
 
 import tv.blofy.player.ui.common.ContentPresentation
 
