@@ -1015,7 +1015,18 @@ class HomeActivity : AppCompatActivity() {
 
     private fun collectionIntent(mode: String): Intent = Intent(this, SmartCollectionsActivity::class.java).putExtra(SmartCollectionsActivity.EXTRA_MODE, mode)
     private fun animateFocus(view: View, focused: Boolean, scale: Float, translateX: Float, elevation: Float) {
-        view.animate().cancel(); view.animate().scaleX(if (focused) scale else 1f).scaleY(if (focused) scale else 1f).translationX(if (focused) translateX else 0f).translationZ(if (focused) elevation else dp(1).toFloat()).alpha(if (focused) 1f else .97f).setDuration(if (focused) 95 else 80).start()
+        val targetScale = if (focused) tv.blofy.player.ui.common.TvUiTuning.focusScale(view.context, scale) else 1f
+        val targetX = if (focused && !tv.blofy.player.ui.common.TvUiTuning.reducedMotion(view.context)) translateX else 0f
+        val targetZ = if (focused) tv.blofy.player.ui.common.TvUiTuning.focusElevation(view.context, elevation) else 0f
+        view.animate().cancel()
+        view.animate()
+            .scaleX(targetScale)
+            .scaleY(targetScale)
+            .translationX(targetX)
+            .translationZ(targetZ)
+            .alpha(if (focused) 1f else .97f)
+            .setDuration(tv.blofy.player.ui.common.TvUiTuning.focusDuration(view.context, focused))
+            .start()
     }
 
     private fun registerAction(key: String, view: View) { actionViews[key] = view; if (firstAction == null) firstAction = view }
