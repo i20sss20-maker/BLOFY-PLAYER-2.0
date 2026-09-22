@@ -352,14 +352,13 @@ class EpisodesActivity : ContentAccessActivity() {
             status.text = if (syncInProgress) {
                 getString(R.string.episodes_updating, allEpisodes.size)
             } else {
-                val language = androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]?.language
-                if (language == "en") {
-                    val seasonWord = if (seasons == 1) "season" else "seasons"
-                    val episodeWord = if (allEpisodes.size == 1) "episode" else "episodes"
-                    "$seasons $seasonWord • ${allEpisodes.size} $episodeWord • ready from local storage"
-                } else {
-                    getString(R.string.episodes_ready, seasons, allEpisodes.size)
-                }
+                val seasonLabel = resources.getQuantityString(
+                    R.plurals.details_seasons_count_plural, seasons, seasons
+                )
+                val episodeLabel = resources.getQuantityString(
+                    R.plurals.details_episodes_count_plural, allEpisodes.size, allEpisodes.size
+                )
+                "$seasonLabel • $episodeLabel"
             }
             return
         }
