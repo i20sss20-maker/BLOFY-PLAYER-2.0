@@ -183,8 +183,8 @@ class EpisodesActivity : ContentAccessActivity() {
         }
         root.addView(episodeBody, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            if (compact) 0 else dp(320),
-            if (compact) 1f else 0f
+            0,
+            1f
         ))
         setContentView(root)
 
@@ -393,18 +393,16 @@ class EpisodesActivity : ContentAccessActivity() {
 
     private fun adjustPaneHeight() {
         if (!::episodeBody.isInitialized || deviceKind == DeviceClass.Kind.PHONE) return
-        val seasonCount = allEpisodes.map { it.season }.distinct().size
-        val visibleCount = selectedSeason?.let { season -> allEpisodes.count { it.season == season } } ?: 0
-        val maxHeight = dp((resources.configuration.screenHeightDp - 170).coerceIn(240, 520))
-        val seasonNeed = dp(16 + seasonCount.coerceAtMost(7) * 58)
-        val episodeNeed = dp(16 + visibleCount.coerceAtMost(5) * 95)
-        val target = maxOf(dp(112), seasonNeed, episodeNeed).coerceAtMost(maxHeight)
         episodeBody.layoutParams = (episodeBody.layoutParams as LinearLayout.LayoutParams).apply {
-            height = target
-            weight = 0f
+            height = 0
+            weight = 1f
         }
-        seasonList.layoutParams = (seasonList.layoutParams as LinearLayout.LayoutParams).apply { height = target }
-        episodeList.layoutParams = (episodeList.layoutParams as LinearLayout.LayoutParams).apply { height = target }
+        seasonList.layoutParams = (seasonList.layoutParams as LinearLayout.LayoutParams).apply {
+            height = LinearLayout.LayoutParams.MATCH_PARENT
+        }
+        episodeList.layoutParams = (episodeList.layoutParams as LinearLayout.LayoutParams).apply {
+            height = LinearLayout.LayoutParams.MATCH_PARENT
+        }
         episodeBody.requestLayout()
     }
 
