@@ -192,6 +192,7 @@ class EpisodesActivity : ContentAccessActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             episodeAdapter = EpisodeCardAdapter(
+                seriesName = seriesName,
                 seriesArt = seriesArt,
                 onClick = { episode -> rememberEpisode(episode); openEpisode(provider, episode) },
                 onFocus = ::rememberEpisode
