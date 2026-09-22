@@ -27,6 +27,7 @@ import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.login.LoginActivity
+import tv.blofy.player.ui.settings.RuntimeSettings
 import tv.blofy.player.ui.settings.SettingsActivity
 import java.io.File
 
@@ -151,7 +152,8 @@ class InterfaceRefinementTest {
                         }
                     }
                 }
-                val card = grids.first().getChildAt(0)
+                val card = activity.window.decorView.findViewWithTag<View>("setting_${RuntimeSettings.KEY_MOTION}")
+                assertNotNull("Motion setting card must stay addressable", card)
                 val before = card.contentDescription.toString()
                 card.performClick()
                 assertNotEquals(before, card.contentDescription.toString())
