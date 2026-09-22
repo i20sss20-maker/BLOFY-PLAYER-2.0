@@ -596,4 +596,10 @@
     <string name="system_status_report_copied">Diagnostics report copied</string>
 
     <string name="login_playlist_default_name">%1$s playlist</string>
+    <string name="quick_context_title">Quick actions · %1$s</string>
+    <string name="quick_open_details">Open details</string>
+    <string name="quick_open_details_subtitle">Open the title page without losing your place</string>
+    <string name="quick_add_favorite">Add to favorites</string>
+    <string name="quick_remove_favorite">Remove from favorites</string>
+    <string name="quick_favorite_subtitle">Update this title in your saved favorites</string>
 </resources>
