@@ -132,21 +132,21 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
             tag = TAG_WATCHLIST_TITLE
             HomeRowOrder.mark(this, "watchlist")
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.RIGHT
+            layoutDirection = activity.resources.configuration.layoutDirection
+            gravity = Gravity.START
             setPadding(0, dp(activity, 12), dp(activity, 4), dp(activity, 6))
             addView(TextView(activity).apply {
-                text = "قائمتي"
+                text = activity.getString(tv.blofy.player.R.string.profile_watchlist_title)
                 textSize = 19f
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.TextPrimary)
-                gravity = Gravity.RIGHT
+                gravity = Gravity.START
             })
             addView(TextView(activity).apply {
-                text = "اختيارات ${ProfileStore.active(activity).name}"
+                text = activity.getString(tv.blofy.player.R.string.profile_watchlist_subtitle, ProfileStore.active(activity).name)
                 textSize = 11.5f
                 setTextColor(BlofyTvDesign.TextMuted)
-                gravity = Gravity.RIGHT
+                gravity = Gravity.START
             })
         }
 
@@ -157,11 +157,11 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
             overScrollMode = View.OVER_SCROLL_NEVER
             clipChildren = false
             clipToPadding = false
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = activity.resources.configuration.layoutDirection
         }
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = activity.resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(activity, 4), dp(activity, 5), dp(activity, 4), dp(activity, 12))
             clipChildren = false
@@ -214,7 +214,7 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
             typeface = BlofyTvDesign.LabelTypeface
             maxLines = 2
             setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.BOTTOM or Gravity.RIGHT
+            gravity = Gravity.BOTTOM or Gravity.START
             setPadding(dp(activity, 10), dp(activity, 8), dp(activity, 10), dp(activity, 11))
         }, FrameLayout.LayoutParams(-1, dp(activity, 88), Gravity.BOTTOM))
 
