@@ -61,13 +61,10 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
 
             fun refresh() {
                 val saved = ProfileLibraryStore.isWatchlisted(activity, contentKey)
-                val arabic = androidx.core.os.ConfigurationCompat.getLocales(activity.resources.configuration)[0]?.language == "ar"
-                text = when {
-                    arabic && saved -> "✓ في قائمتي"
-                    arabic -> "+ قائمتي"
-                    saved -> "✓ My Watchlist"
-                    else -> "+ My Watchlist"
-                }
+                text = activity.getString(
+                    if (saved) tv.blofy.player.R.string.profile_watchlist_saved
+                    else tv.blofy.player.R.string.profile_watchlist_add
+                )
                 background = CinemaStyle.buttonBackground(activity, false, hasFocus())
                 setTextColor(CinemaStyle.White)
             }
