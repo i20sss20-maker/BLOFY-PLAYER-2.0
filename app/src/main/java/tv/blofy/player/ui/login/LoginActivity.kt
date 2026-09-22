@@ -481,7 +481,12 @@ class LoginActivity : AppCompatActivity() {
         setOnFocusChangeListener { view, focused ->
             view.background = playlistCardBackground(provider.enabled, focused)
             view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.018f else 1f).scaleY(if (focused) 1.018f else 1f).translationZ(if (focused) 15f else 2f).setDuration(95).start()
+            view.animate()
+                .scaleX(if (focused) 1.018f else 1f)
+                .scaleY(if (focused) 1.018f else 1f)
+                .translationZ(if (focused) 15f else 2f)
+                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                .start()
         }
         setOnClickListener { selectPortalProvider(provider) }
     }
@@ -805,7 +810,7 @@ class LoginActivity : AppCompatActivity() {
         }
     ).apply {
         cornerRadius = dp(17).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), when { focused -> BlofyTvDesign.PurpleBright; active -> 0xFF715A89.toInt(); else -> 0xFF49375E.toInt() })
+        setStroke(if (focused) dp(2) else dp(1), when { focused -> BlofyTvDesign.FocusStroke; active -> 0xFF715A89.toInt(); else -> 0xFF49375E.toInt() })
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
