@@ -325,10 +325,11 @@ class LoginActivity : AppCompatActivity() {
             background = qrBackground()
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
-        qrMessage = loginText(R.string.login_qr_loading, 12f).apply {
+        qrMessage = loginText(R.string.login_qr_loading, 12.5f).apply {
             gravity = Gravity.CENTER
-            setTextColor(0xFF43364F.toInt())
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            typeface = BlofyTvDesign.MediumTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            setPadding(dp(14), dp(14), dp(14), dp(14))
         }
         status = TextView(this).apply {
             textSize = 14f
