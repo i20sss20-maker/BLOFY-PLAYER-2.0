@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
+import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -54,7 +55,7 @@ class ProfileSwitcherLifecycle : Application.ActivityLifecycleCallbacks {
         val button = activity.findViewById<FrameLayout>(android.R.id.content)
             ?.findViewWithTag<Button>(TAG) ?: return
         val profile = ProfileStore.active(activity)
-        button.text = (if (profile.kids) "🧒  " else if (profile.guest) "◌  " else "●  ") + profile.name
+        button.text = activity.getString(R.string.profile_switcher_label, if (profile.kids) "🧒" else if (profile.guest) "◌" else "●", profile.name)
     }
 
     override fun onActivityStarted(activity: Activity) = Unit
