@@ -54,7 +54,7 @@ class LibraryActivity : AppCompatActivity() {
         val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_FAVORITES
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(50), dp(34), dp(50), dp(38))
             background = AppCompatResources.getDrawable(this@LibraryActivity, R.drawable.blofy_home_background)
         }
@@ -64,10 +64,10 @@ class LibraryActivity : AppCompatActivity() {
             letterSpacing = .11f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleBright)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = if (mode == MODE_CONTINUE) "تابع المشاهدة" else "المفضلة"
+            text = getString(if (mode == MODE_CONTINUE) R.string.home_continue_watching else R.string.home_favorites)
             textSize = 30f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -104,12 +104,12 @@ class LibraryActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
-            if (provider == null) { showMessage("أضف قائمة تشغيل أولاً"); return@launch }
+            if (provider == null) { showMessage(getString(R.string.login_add_playlist_first)); return@launch }
             list.removeAllViews()
             if (mode == MODE_CONTINUE) {
                 val states = withContext(Dispatchers.IO) { dao.continueWatching(provider.id).first() }
                 val entries = withContext(Dispatchers.IO) { ContinueWatchingResolver.load(dao, provider.id, states) }
-                if (entries.isEmpty()) showMessage("لا يوجد محتوى للاستئناف")
+                if (entries.isEmpty()) showMessage(getString(R.string.library_no_continue))
                 entries.forEach { entry ->
                     when (entry) {
                         is ContinueWatchingEntry.StreamEntry -> addRow(provider.id, provider.liveFormat, entry.stream, entry.state.positionMs)
@@ -140,7 +140,7 @@ class LibraryActivity : AppCompatActivity() {
                         adapter.replace(favorites)
                         grid.visibility = if (favorites.isEmpty()) View.GONE else View.VISIBLE
                         if (favorites.isEmpty()) {
-                            showMessage("لا توجد عناصر في المفضلة")
+                            showMessage(getString(R.string.library_no_favorites))
                         } else {
                             val position = favorites.indexOfFirst { it.key == focusedFavoriteKey }
                                 .takeIf { it >= 0 } ?: previousPosition.coerceAtMost(favorites.lastIndex)
@@ -171,7 +171,7 @@ class LibraryActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             setPadding(dp(24), dp(16), dp(24), dp(16))
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
             isFocusable = true; isClickable = true
             background = rowBackground(false)
             setOnFocusChangeListener { view, focused ->
@@ -193,9 +193,9 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun addEpisodeRow(provider: ProviderEntity, entry: ContinueWatchingEntry.EpisodeEntry) {
         val episode = entry.episode
-        val seriesName = entry.parentSeries?.name?.takeIf(String::isNotBlank) ?: "مسلسل"
+        val seriesName = entry.parentSeries?.name?.takeIf(String::isNotBlank) ?: getString(R.string.details_series_type)
         val row = TextView(this).apply {
-            text = "${ContentPresentation.title(seriesName, "series")}   •   الموسم ${episode.season}   •   الحلقة ${episode.episode}   •   ${ContentPresentation.title(episode.title, "episode")}"
+            text = listOf(ContentPresentation.title(seriesName, "series"), getString(R.string.episodes_season, episode.season), getString(R.string.cinema_episode_title, episode.episode), ContentPresentation.title(episode.title, "episode")).joinToString("   •   ")
             textSize = 17f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -241,7 +241,7 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun openEpisode(provider: ProviderEntity, episode: EpisodeEntity, resumeMs: Long, seriesName: String) {
-        val url = runCatching { ContentUrlResolver.episode(provider, episode) }.getOrNull() ?: run { showMessage("تعذر تجهيز رابط الحلقة"); return }
+        val url = runCatching { ContentUrlResolver.episode(provider, episode) }.getOrNull() ?: run { showMessage(getString(R.string.library_episode_url_failed)); return }
         startActivity(Intent(this, PlayerActivity::class.java).apply {
             putExtra(PlayerActivity.EXTRA_URL, url); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, episode.key); putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
             putExtra(PlayerActivity.EXTRA_KIND, "episode"); putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat); putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
