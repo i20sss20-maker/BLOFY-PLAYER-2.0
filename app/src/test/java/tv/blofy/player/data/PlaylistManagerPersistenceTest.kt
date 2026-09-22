@@ -19,6 +19,7 @@ import org.robolectric.annotation.Config
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.local.StreamSearchFtsEntity
 import tv.blofy.player.data.remote.XtreamApi
 
 @RunWith(RobolectricTestRunner::class)
@@ -32,6 +33,18 @@ class PlaylistManagerPersistenceTest {
     }
 
     @After fun cleanup() = db.close()
+
+    @Test fun failedSearchWriteCannotLeaveAHalfSavedCatalogBatch(): Unit = runBlocking(Dispatchers.IO) {
+        val stream = StreamEntity("batch:movie:1", "batch", "1", null, "movie", "Fixture")
+        db.openHelper.writableDatabase.execSQL("DROP TABLE streams_fts")
+        try {
+            db.dao().insertCatalogBatch(listOf(stream),
+                listOf(StreamSearchFtsEntity(stream.key, stream.providerId, stream.kind, "fixture")))
+            fail("Missing FTS table must reject the batch")
+        } catch (_: android.database.sqlite.SQLiteException) { }
+        assertEquals("The catalog row must roll back with its failed search entry", 0,
+            db.dao().streamCountForProvider("batch"))
+    }
 
     @Test fun rejectedCategoryPayloadIsReportedAsFailedAndCannotClaimFreshRows(): Unit = runBlocking(Dispatchers.IO) {
         val api = FixtureApi(liveCategories = listOf(mapOf("category_name" to "Missing identifier")))

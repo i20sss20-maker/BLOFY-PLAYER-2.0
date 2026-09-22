@@ -18,7 +18,7 @@ import okhttp3.Request
 import okhttp3.Call
 import tv.blofy.player.core.commercial.CommercialRuntime
 import java.io.File
-import java.security.MessageDigest
+import tv.blofy.player.core.storage.StableHash
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.FutureTask
@@ -529,7 +529,7 @@ object ArtworkLoader {
     private fun cacheKey(url: String, target: Target) = "$url@${target.diskBucket}"
     private fun skeleton() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF21182D.toInt(), 0xFF30203F.toInt(), 0xFF17111F.toInt())).apply { cornerRadius = 18f }
     private fun diskFile(cacheDir: File, url: String, target: Target) = File(File(cacheDir, "blofy_posters"), hash(cacheKey(url, target)) + ".jpg")
-    private fun hash(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
+    private fun hash(value: String) = StableHash.sha256(value)
     private fun sampleSize(w: Int, h: Int, tw: Int, th: Int): Int { var s = 1; while (w / (s * 2) >= tw && h / (s * 2) >= th) s *= 2; return s }
 
     private fun normalizeUrl(raw: String?): String? {

@@ -57,6 +57,11 @@ class StartupRecoveryDeviceTest {
             assertFalse("Login was not responsive before the writer released", timedOut.get())
             File(evidence, "startup-blocked-result.txt").writeText(
                 "identity_lock_held=true\nfirst_frame_and_input_before_release=true\nelapsed_ms=$elapsed\nwatchdog_ms=8000\n")
+            for ((name, command) in listOf("memory" to "dumpsys meminfo ${context.packageName}",
+                "frames" to "dumpsys gfxinfo ${context.packageName}")) {
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command))
+                    .bufferedReader().use { File(evidence, "startup-$name.txt").writeText(it.readText()) }
+            }
         } finally {
             release.countDown()
             writer.join(2_000)

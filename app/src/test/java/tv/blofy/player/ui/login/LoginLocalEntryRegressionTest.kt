@@ -182,16 +182,20 @@ class LoginLocalEntryRegressionTest {
     }
 
     @Test fun failedStartupDatabaseReadDoesNotCrashAndCanBeRetried() = runBlocking(Dispatchers.IO) {
-        val closed = Room.inMemoryDatabaseBuilder(app, BlofyDatabase::class.java).build()
-        closed.openHelper.writableDatabase
-        closed.close()
-        var reachedRead = false
-        ActivationStartupRegistration.attempt {
-            reachedRead = true
-            ActivationManager(app, closed.dao()).ensureIdentity()
-            fail("A closed database must fail this startup read")
+        val unavailable = Room.inMemoryDatabaseBuilder(app, BlofyDatabase::class.java).build()
+        // Closing Room cancels its scope; exercise an actual SQLite read failure separately.
+        unavailable.openHelper.writableDatabase.execSQL("DROP TABLE activation")
+        try {
+            var reachedRead = false
+            ActivationStartupRegistration.attempt {
+                reachedRead = true
+                ActivationManager(app, unavailable.dao()).ensureIdentity()
+                fail("The missing table must fail this startup read")
+            }
+            assertTrue(reachedRead)
+        } finally {
+            unavailable.close()
         }
-        assertTrue(reachedRead)
         ActivationStartupRegistration.attempt {
             assertNotNull(ActivationManager(app, db.dao()).ensureIdentity())
         }

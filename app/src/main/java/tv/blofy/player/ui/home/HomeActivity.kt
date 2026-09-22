@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.home
 
 import tv.blofy.player.ui.common.ContentPresentation
+import tv.blofy.player.ui.common.BlofyTvDesign
 
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -22,6 +23,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.os.ConfigurationCompat
@@ -30,6 +32,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,6 +45,8 @@ import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.HomeSnapshotStore
 import tv.blofy.player.data.preparation.FullLibrarySyncWorker
 import tv.blofy.player.ui.login.CatalogLoadingActivity
+import tv.blofy.player.ui.login.LoginActivity
+import tv.blofy.player.ui.login.StartupEntryState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.WatchStateEntity
@@ -59,6 +66,7 @@ import java.util.Date
 import java.util.Locale
 
 class HomeActivity : AppCompatActivity() {
+    internal var savedEntryDeadlineMillis = 8_000L
     private lateinit var deviceKind: DeviceClass.Kind
     private val uiDirection get() = resources.configuration.layoutDirection
     private val remote get() = !::deviceKind.isInitialized || deviceKind == DeviceClass.Kind.TV
@@ -118,17 +126,48 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         deviceKind = DeviceClass.detect(this)
         // A direct intent must not bypass the same readiness check as the login screen.
-        setContentView(FrameLayout(this).apply { background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background) })
+        setContentView(LinearLayout(this).apply {
+            tag = "blofy_home_opening"
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background)
+            addView(ProgressBar(this@HomeActivity))
+            addView(TextView(this@HomeActivity).apply {
+                text = if (ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar")
+                    "جاري فتح المكتبة المحفوظة…" else "Opening your saved library…"
+                BlofyTvDesign.applyBody(this)
+                gravity = Gravity.CENTER
+                setPadding(24, 24, 24, 24)
+            })
+        })
         lifecycleScope.launch {
-            val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().providersStored().first().firstOrNull() }
-            if (provider != null && !CatalogSyncState.isEntryReady(applicationContext, provider.id)) {
-                startActivity(Intent(this@HomeActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
-                finish()
-                return@launch
+            val owner = coroutineContext[Job]
+            // Separate from the IO job: firmware/SQLite may not respond to cancellation promptly.
+            val deadline = lifecycleScope.launch {
+                delay(savedEntryDeadlineMillis)
+                owner?.cancel()
+                returnToLogin()
             }
-            provider?.let { FullLibrarySyncWorker.enqueue(applicationContext, it.id) }
-            showReadyHome()
+            try {
+                val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().providersStored().first().firstOrNull() }
+                if (provider != null && !CatalogSyncState.isEntryReady(applicationContext, provider.id)) {
+                    startActivity(Intent(this@HomeActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
+                    finish()
+                    return@launch
+                }
+                provider?.let { FullLibrarySyncWorker.enqueue(applicationContext, it.id) }
+                showReadyHome()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { returnToLogin() }
+            finally { deadline.cancel() }
         }
+    }
+
+    private fun returnToLogin() {
+        if (isFinishing || isDestroyed) return
+        StartupEntryState.clear(applicationContext)
+        startActivity(Intent(this, LoginActivity::class.java))
+        finish()
     }
 
     private fun showReadyHome() {

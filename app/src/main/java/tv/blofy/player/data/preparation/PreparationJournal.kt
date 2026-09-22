@@ -5,7 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.io.Closeable
-import java.security.MessageDigest
+import tv.blofy.player.core.storage.StableHash
 
 /** Private resumable ledger, independent from the playback/catalog schema. No log contains URLs. */
 class PreparationJournal(context: Context) : SQLiteOpenHelper(context.applicationContext, "blofy-preparation-v1.db", null, 2), Closeable {
@@ -110,6 +110,6 @@ class PreparationJournal(context: Context) : SQLiteOpenHelper(context.applicatio
         ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.getString(0) to cursor.getString(1)) } }
     }
     companion object {
-        fun hash(value: String): String = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        fun hash(value: String): String = StableHash.sha256(value)
     }
 }

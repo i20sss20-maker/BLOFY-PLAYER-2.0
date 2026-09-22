@@ -50,6 +50,21 @@ class PreparationJournalRegressionTest {
         }
     }
 
+    @Test fun failedBatchRollsBackEveryIntentAndOldEpochIsNotShownAsCurrentProgress() {
+        PreparationJournal(app).use { j ->
+            j.begin("p", "g", 12)
+            j.writableDatabase.execSQL("CREATE TRIGGER fail_batch BEFORE INSERT ON units WHEN NEW.item='broken' BEGIN SELECT RAISE(ABORT,'fixture failure'); END")
+            try {
+                j.enqueueBatch("p", "art", listOf("first" to "one", "broken" to "two"))
+                fail("The fixture must reject the second write")
+            } catch (_: android.database.sqlite.SQLiteException) { }
+            assertEquals(0L, j.progress("p").pendingImages)
+            j.enqueue("p", "art", "valid", "url")
+            assertEquals(1L, j.progress("p", 12).pendingImages)
+            assertEquals(0L, j.progress("p", 13).pendingImages)
+        }
+    }
+
     @Test fun completedAndPendingUnitsSurviveDatabaseReopen() {
         PreparationJournal(app).use { j ->
             j.begin("provider", "generation-1")
