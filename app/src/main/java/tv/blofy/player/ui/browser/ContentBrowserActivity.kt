@@ -289,28 +289,28 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun createPreviewPanel() = LinearLayout(this).apply {
         tag = "blofy_live_preview"
         orientation = LinearLayout.VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = resources.configuration.layoutDirection
         setPadding(dp(12), dp(12), dp(12), dp(12))
         background = CinemaStyle.surface(this@ContentBrowserActivity)
         elevation = dp(5).toFloat()
         previewTitle = TextView(this@ContentBrowserActivity).apply {
-            text = "اختر قناة"
+            text = getString(R.string.browser_choose_channel)
             textSize = 18f
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             includeFontPadding = false
             setPadding(dp(4), 0, dp(4), dp(10))
         }
         addView(previewTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         addView(TextView(this@ContentBrowserActivity).apply {
-            text = "● مباشر  •  المعاينة تبدأ تلقائيًا"
+            text = getString(R.string.browser_live_preview_auto)
             textSize = 13f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.Mint)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(dp(4), 0, dp(4), dp(10))
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
         previewView = PlayerView(this@ContentBrowserActivity).apply {
@@ -322,7 +322,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         addView(TextView(this@ContentBrowserActivity).apply {
-            text = "OK ملء الشاشة   •   ↑↓ القنوات   •   ← رجوع للفئات   •   ضغط مطوّل للأرشيف"
+            text = getString(R.string.browser_remote_hint)
             textSize = 12.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
