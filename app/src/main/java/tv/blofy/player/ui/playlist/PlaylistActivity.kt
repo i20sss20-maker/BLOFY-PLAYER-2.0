@@ -49,23 +49,23 @@ class PlaylistActivity : AppCompatActivity() {
         val tv = DeviceClass.isTv(this)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(if (phone) 22 else 54, if (phone) 24 else 28, if (phone) 22 else 54, if (phone) 24 else 28)
+            setPadding(dp(if (phone) 22 else 54), dp(if (phone) 24 else 28), dp(if (phone) 22 else 54), dp(if (phone) 24 else 28))
             background = AppCompatResources.getDrawable(this@PlaylistActivity, R.drawable.blofy_home_background)
         }
-        root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(if (phone) 150 else 170, if (phone) 72 else 76))
+        root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(if (phone) 150 else 170), dp(if (phone) 72 else 76)))
         root.addView(TextView(this).apply {
             text = if (editingProviderId == null) "إضافة سيرفر" else "تعديل السيرفر"; textSize = if (phone) 25f else 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
         })
-        root.addView(TextView(this).apply { text = "Xtream Codes"; textSize = if (phone) 13f else 15f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, 5, 0, 16) })
+        root.addView(TextView(this).apply { text = "Xtream Codes"; textSize = if (phone) 13f else 15f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(5), 0, dp(16)) })
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(if (phone) 18 else 28, if (phone) 18 else 22, if (phone) 18 else 28, if (phone) 18 else 22); background = panelBackground()
+            setPadding(dp(if (phone) 18 else 28), dp(if (phone) 18 else 22), dp(if (phone) 18 else 28), dp(if (phone) 18 else 22)); background = panelBackground()
         }
-        root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 760, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else dp(760), LinearLayout.LayoutParams.WRAP_CONTENT))
 
         fun field(hintText: String, passwordField: Boolean = false) = EditText(this).apply {
-            hint = hintText; isSingleLine = true; gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; setTextColor(Color.WHITE); setHintTextColor(0xFF8E829A.toInt()); setPadding(22,0,22,0)
+            hint = hintText; isSingleLine = true; gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; setTextColor(Color.WHITE); setHintTextColor(0xFF8E829A.toInt()); setPadding(dp(22), 0, dp(22), 0)
             background = fieldBackground(false); isFocusable = true; isFocusableInTouchMode = true
             setOnFocusChangeListener { view, focused ->
                 if (tv) {
@@ -85,9 +85,9 @@ class PlaylistActivity : AppCompatActivity() {
         val url = field("رابط السيرفر")
         val username = field("اسم المستخدم")
         val password = field("كلمة المرور", true)
-        listOf(name, url).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 9 }) }
+        listOf(name, url).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 64)).apply { topMargin = dp(9) }) }
 
-        val transportNotice = TextView(this).apply { text = "يفضل HTTPS • HTTP متاح عند الحاجة"; textSize = if (phone) 12f else 13f; setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.RIGHT; setPadding(8,8,8,1) }
+        val transportNotice = TextView(this).apply { text = "يفضل HTTPS • HTTP متاح عند الحاجة"; textSize = if (phone) 12f else 13f; setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.RIGHT; setPadding(dp(8), dp(8), dp(8), dp(1)) }
         panel.addView(transportNotice)
         url.doAfterTextChanged { value ->
             val candidate = value?.toString()?.trim().orEmpty()
@@ -97,8 +97,8 @@ class PlaylistActivity : AppCompatActivity() {
                 else -> { transportNotice.text = "يفضل HTTPS • HTTP متاح عند الحاجة"; transportNotice.setTextColor(0xFFB78CFF.toInt()) }
             }
         }
-        listOf(username, password).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 9 }) }
-        val status = TextView(this).apply { setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.RIGHT; setPadding(0,12,0,2) }
+        listOf(username, password).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 64)).apply { topMargin = dp(9) }) }
+        val status = TextView(this).apply { setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.RIGHT; setPadding(0, dp(12), 0, dp(2)) }
         panel.addView(status)
 
         var confirmedHttpUrl: String? = null
@@ -182,9 +182,9 @@ class PlaylistActivity : AppCompatActivity() {
         }
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER }
         val saveConnect = action("حفظ واتصال", true, true); val saveOnly = action("حفظ", false, false)
-        actions.addView(saveConnect, LinearLayout.LayoutParams(if (phone) 0 else 300, if (phone) 62 else 66, if (phone) 1f else 0f).apply { marginStart = 8 })
-        actions.addView(saveOnly, LinearLayout.LayoutParams(if (phone) 0 else 220, if (phone) 62 else 66, if (phone) 1f else 0f))
-        panel.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, if (phone) 72 else 76).apply { topMargin = 12 })
+        actions.addView(saveConnect, LinearLayout.LayoutParams(if (phone) 0 else dp(300), dp(if (phone) 62 else 66), if (phone) 1f else 0f).apply { marginStart = dp(8) })
+        actions.addView(saveOnly, LinearLayout.LayoutParams(if (phone) 0 else dp(220), dp(if (phone) 62 else 66), if (phone) 1f else 0f))
+        panel.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(if (phone) 72 else 76)).apply { topMargin = dp(12) })
         setContentView(root); name.requestFocus()
 
         if (editingProviderId != null) lifecycleScope.launch {
@@ -212,9 +212,11 @@ class PlaylistActivity : AppCompatActivity() {
         }
     }
 
-    private fun panelBackground() = GradientDrawable().apply { cornerRadius = 24f; setColor(0xEA151020.toInt()); setStroke(1, 0xFF67458E.toInt()) }
-    private fun fieldBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = 16f; setColor(0xFF110F19.toInt()); setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF342C44.toInt()) }
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply { cornerRadius = 18f; setColor(if (focused) 0xFF7D45D9.toInt() else if (primary) 0xFF5F2AB5.toInt() else 0xFF241A30.toInt()); setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF69468F.toInt()) }
+    private fun panelBackground() = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(0xEA151020.toInt()); setStroke(dp(1), 0xFF67458E.toInt()) }
+    private fun fieldBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(0xFF110F19.toInt()); setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF342C44.toInt()) }
+    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply { cornerRadius = dp(18).toFloat(); setColor(if (focused) 0xFF7D45D9.toInt() else if (primary) 0xFF5F2AB5.toInt() else 0xFF241A30.toInt()); setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF69468F.toInt()) }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object { const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_DIRECT_FORM = "direct_form" }
 }
