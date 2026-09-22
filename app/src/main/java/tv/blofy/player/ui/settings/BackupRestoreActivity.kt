@@ -29,7 +29,7 @@ class BackupRestoreActivity : AppCompatActivity() {
     private val createBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) return@registerForActivityResult
         lifecycleScope.launch {
-            status.text = "جاري إنشاء النسخة الاحتياطية..."
+            status.setText(R.string.backup_creating)
             runCatching {
                 val json = withContext(Dispatchers.IO) { LocalBackupManager.exportJson(applicationContext) }
                 withContext(Dispatchers.IO) {
@@ -37,7 +37,7 @@ class BackupRestoreActivity : AppCompatActivity() {
                         ?: error("cannot_open_backup_file")
                 }
             }.onSuccess {
-                status.text = "تم حفظ النسخة الاحتياطية بنجاح"
+                status.setText(R.string.backup_saved)
             }.onFailure {
                 status.text = backupError(it)
             }
@@ -47,7 +47,7 @@ class BackupRestoreActivity : AppCompatActivity() {
     private val openBackup = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
         lifecycleScope.launch {
-            status.text = "جاري فحص ملف النسخة..."
+            status.setText(R.string.backup_checking)
             runCatching {
                 withContext(Dispatchers.IO) {
                     contentResolver.openInputStream(uri)?.bufferedReader()?.use(::readBoundedBackup)
@@ -62,8 +62,8 @@ class BackupRestoreActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.TOP or Gravity.RIGHT
+            layoutDirection = resources.configuration.layoutDirection
+            gravity = Gravity.TOP or Gravity.START
             setPadding(dp(42), dp(32), dp(42), dp(36))
             background = AppCompatResources.getDrawable(this@BackupRestoreActivity, R.drawable.blofy_home_background)
         }
@@ -71,37 +71,37 @@ class BackupRestoreActivity : AppCompatActivity() {
             text = getString(R.string.back)
             CinemaStyle.styleButton(this)
             setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(110), dp(44)).apply { gravity = Gravity.LEFT; bottomMargin = dp(14) })
+        }, LinearLayout.LayoutParams(dp(110), dp(44)).apply { gravity = Gravity.START; bottomMargin = dp(14) })
         root.addView(TextView(this).apply {
-            text = "النسخ الاحتياطي والاستعادة"
+            text = getString(R.string.backup_title)
             textSize = 28f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = "يحفظ المفضلة، القفل، سجل المشاهدة، ترتيب الفئات وإعدادات BLOFY. لا يتم حفظ بيانات دخول السيرفر أو PIN."
+            text = getString(R.string.backup_description)
             textSize = 13.5f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(8), 0, dp(18))
         })
         status = TextView(this).apply {
-            text = "الاستعادة متاحة لنفس السيرفر الذي أُنشئت منه النسخة فقط."
+            text = getString(R.string.backup_restore_same_server)
             textSize = 13f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setPadding(dp(16), 0, dp(16), 0)
             background = CinemaStyle.surface(this@BackupRestoreActivity)
         }
         root.addView(status, LinearLayout.LayoutParams(-1, dp(58)).apply { bottomMargin = dp(16) })
-        root.addView(actionButton("إنشاء نسخة احتياطية") {
+        root.addView(actionButton(getString(R.string.backup_create)) {
             val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
             createBackup.launch("BLOFY-backup-$stamp.json")
         }, LinearLayout.LayoutParams(-1, dp(58)).apply { bottomMargin = dp(10) })
-        root.addView(actionButton("استعادة نسخة احتياطية") {
+        root.addView(actionButton(getString(R.string.backup_restore)) {
             openBackup.launch(arrayOf("application/json", "text/plain"))
         }, LinearLayout.LayoutParams(-1, dp(58)))
         setContentView(root)
@@ -121,22 +121,22 @@ class BackupRestoreActivity : AppCompatActivity() {
 
     private fun confirmRestore(json: String) {
         if (isFinishing || isDestroyed) return
-        status.text = "الملف جاهز • أكد الاستعادة للمتابعة"
+        status.setText(R.string.backup_ready_confirm)
         AlertDialog.Builder(this)
-            .setTitle("تأكيد الاستعادة")
-            .setMessage("سيتم تطبيق المفضلة وسجل المشاهدة وترتيب الفئات وإعدادات BLOFY المحفوظة لهذا السيرفر. بيانات الدخول وPIN لن تتغير.")
-            .setPositiveButton("استعادة") { _, _ -> restore(json) }
-            .setNegativeButton("إلغاء") { _, _ -> status.text = "تم إلغاء الاستعادة" }
+            .setTitle(R.string.backup_confirm_title)
+            .setMessage(R.string.backup_confirm_message)
+            .setPositiveButton(R.string.backup_confirm_restore) { _, _ -> restore(json) }
+            .setNegativeButton(R.string.profiles_cancel) { _, _ -> status.setText(R.string.backup_cancelled) }
             .show()
     }
 
     private fun restore(json: String) {
         lifecycleScope.launch {
-            status.text = "جاري استعادة النسخة..."
+            status.setText(R.string.backup_restoring)
             runCatching {
                 withContext(Dispatchers.IO) { LocalBackupManager.restoreJson(applicationContext, json) }
             }.onSuccess { result ->
-                status.text = "تمت الاستعادة • ${result.categories} فئة • ${result.flags} مفضلة/قفل • ${result.watchStates} سجل مشاهدة • ${result.settings} إعداد"
+                status.text = getString(R.string.backup_restore_result, result.categories, result.flags, result.watchStates, result.settings)
             }.onFailure {
                 status.text = backupError(it)
             }
@@ -144,13 +144,13 @@ class BackupRestoreActivity : AppCompatActivity() {
     }
 
     private fun backupError(error: Throwable): String = when (error.message) {
-        "no_active_provider" -> "لا يوجد سيرفر نشط حاليًا"
-        "unsupported_backup" -> "ملف النسخة غير مدعوم"
-        "backup_different_server" -> "هذه النسخة تخص سيرفرًا مختلفًا"
-        "backup_too_large" -> "ملف النسخة أكبر من الحد المسموح"
-        "cannot_open_backup_file" -> "تعذر إنشاء ملف النسخة"
-        "cannot_read_backup_file" -> "تعذر قراءة ملف النسخة"
-        else -> "تعذر تنفيذ العملية • تأكد من الملف وحاول مرة أخرى"
+        "no_active_provider" -> getString(R.string.backup_error_no_active_provider)
+        "unsupported_backup" -> getString(R.string.backup_error_unsupported)
+        "backup_different_server" -> getString(R.string.backup_error_different_server)
+        "backup_too_large" -> getString(R.string.backup_error_too_large)
+        "cannot_open_backup_file" -> getString(R.string.backup_error_create_file)
+        "cannot_read_backup_file" -> getString(R.string.backup_error_read_file)
+        else -> getString(R.string.backup_error_generic)
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
