@@ -151,11 +151,12 @@ class RootExitConfirmationDialog : DialogFragment() {
             button.setOnFocusChangeListener { view, focused ->
                 render(focused)
                 view.animate().cancel()
+                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.024f) else 1f
                 view.animate()
-                    .scaleX(if (focused) 1.024f else 1f)
-                    .scaleY(if (focused) 1.024f else 1f)
-                    .translationZ(if (focused) 8 * density else 0f)
-                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, 8 * density) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
                     .start()
             }
         }
