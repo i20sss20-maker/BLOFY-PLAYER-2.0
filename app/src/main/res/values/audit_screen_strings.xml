@@ -186,4 +186,15 @@
     <string name="playlist_form_legacy_unsupported">This playlist is old and unsupported • enter Xtream details</string>
     <string name="playlist_form_read_failed">Could not read playlist details • reopen this page to try again</string>
 
+
+    <string name="catchup_title">BLOFY Archive</string>
+    <string name="catchup_loading">Loading previous programs…</string>
+    <string name="catchup_unsupported">This channel does not support archive</string>
+    <string name="catchup_channel_archive">%1$s  •  archive %2$s</string>
+    <string name="catchup_empty">No previous programs are available for this channel</string>
+    <plurals name="catchup_archive_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+
 </resources>
