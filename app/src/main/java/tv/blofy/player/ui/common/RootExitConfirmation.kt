@@ -63,7 +63,7 @@ class RootExitConfirmationDialog : DialogFragment() {
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(24), dp(26), dp(24), dp(24))
             addView(TextView(context).apply {
-                text = "BLOFY"
+                text = getString(R.string.brand_blofy)
                 typeface = BlofyTvDesign.HeadingTypeface
                 textSize = 13f
                 letterSpacing = .16f
