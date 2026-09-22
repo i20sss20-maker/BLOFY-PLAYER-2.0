@@ -197,4 +197,30 @@
         <item quantity="other">%1$d days</item>
     </plurals>
 
+
+    <string name="guide_title">Channel guide</string>
+    <string name="guide_loading">Loading</string>
+    <string name="guide_select_channel">Choose a channel</string>
+    <string name="guide_now_next">Now and next from the program guide</string>
+    <string name="guide_now">Now</string>
+    <string name="guide_program_unavailable">Program information is unavailable</string>
+    <string name="guide_next">Next</string>
+    <string name="guide_next_unavailable">Next program information is unavailable</string>
+    <string name="guide_no_reminder">No program available for a reminder</string>
+    <string name="guide_remote_hint">OK play channel   •   ← channels   •   ← again for categories   •   BACK return</string>
+    <plurals name="guide_channel_count">
+        <item quantity="one">%1$d channel</item>
+        <item quantity="other">%1$d channels</item>
+    </plurals>
+    <string name="guide_archive_supported">Archive supported</string>
+    <string name="guide_live_broadcast">Live broadcast</string>
+    <string name="guide_remind_before">Remind me before %1$s</string>
+    <string name="guide_reminder_set">Reminder set • %1$s</string>
+    <string name="guide_reminder_notice">You’ll get a notification five minutes before the program</string>
+    <string name="guide_reminder_failed">Could not set a reminder for this program</string>
+    <string name="guide_notifications_required">Enable notifications to use program reminders</string>
+    <string name="guide_all_channels">All channels</string>
+    <string name="guide_archive_badge">Archive</string>
+    <string name="guide_live_badge">Live</string>
+
 </resources>
