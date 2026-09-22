@@ -158,7 +158,7 @@ internal class EpisodeCardAdapter(
             maxLines = 1
             gravity = Gravity.CENTER
         }
-        row.addView(state, LinearLayout.LayoutParams(dp(100), dp(36)))
+        row.addView(state, LinearLayout.LayoutParams(dp(118), dp(36)))
         return Holder(row, image, number, title, meta, progressBar, state)
     }
 
