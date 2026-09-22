@@ -21,7 +21,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
     val root = FrameLayout(activity).apply { setBackgroundColor(CinemaStyle.Background) }
     val backdrop = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
-        alpha = .46f
+        alpha = .68f
     }
     val poster = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
@@ -41,7 +41,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
             dp(if (shortTv) 14 else if (isTv) 22 else 14),
             dp(if (shortTv) 22 else if (isTv) 34 else 18)
         )
-        background = BlofyTvDesign.glassSurface(dp(22).toFloat(), false)
+        setBackgroundColor(android.graphics.Color.TRANSPARENT)
     }
     private val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
     private val profileActions = LinearLayout(activity).apply {
@@ -55,7 +55,13 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         root.addView(View(activity).apply {
             background = GradientDrawable(
                 if (stacked) GradientDrawable.Orientation.TOP_BOTTOM else GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0xB807050B.toInt(), 0xE80D0913.toInt(), 0xFC07050B.toInt())
+                intArrayOf(0xF707050B.toInt(), 0xD807050B.toInt(), 0x7207050B.toInt(), 0x2407050B)
+            )
+        }, FrameLayout.LayoutParams(-1, -1))
+        root.addView(View(activity).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(0xF207050B.toInt(), 0x8A07050B.toInt(), 0x0007050B)
             )
         }, FrameLayout.LayoutParams(-1, -1))
         val body = LinearLayout(activity).apply {
@@ -77,13 +83,18 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         }
         val posterWidth = if (isTv) posterHeight * 2 / 3 else if (stacked) 128 else 142
         val card = FrameLayout(activity).apply {
-            setPadding(dp(6), dp(6), dp(6), dp(6))
-            background = BlofyTvDesign.elevatedSurface(dp(20).toFloat())
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(20).toFloat()
+                setColor(0x35110B18)
+                setStroke(dp(1), 0x52FFFFFF)
+            }
+            elevation = dp(3).toFloat()
             addView(poster, FrameLayout.LayoutParams(-1, -1))
         }
         body.addView(card, LinearLayout.LayoutParams(dp(posterWidth), dp(posterHeight)).apply {
             gravity = if (stacked) Gravity.CENTER_HORIZONTAL else if (isTv) Gravity.CENTER_VERTICAL else Gravity.TOP
-            marginEnd = if (stacked) 0 else dp(if (isTv) 28 else 18)
+            marginEnd = if (stacked) 0 else dp(if (isTv) 34 else 18)
             bottomMargin = if (stacked) dp(12) else 0
         })
         if (isTv) {
