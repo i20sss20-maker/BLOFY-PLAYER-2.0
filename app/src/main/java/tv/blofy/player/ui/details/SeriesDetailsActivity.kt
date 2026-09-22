@@ -78,7 +78,9 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleBright)
                 gravity = Gravity.START
-            })
+                background = BlofyTvDesign.badge(dp(10).toFloat())
+                setPadding(dp(10), dp(4), dp(10), dp(4))
+            }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(6) })
 
             val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
             val logo = ImageView(this@SeriesDetailsActivity).apply {
@@ -120,11 +122,13 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 text = metadataStats(metadata)
                 textSize = 13.5f
                 typeface = BlofyTvDesign.BodyTypeface
-                setTextColor(0xFFE8D8FA.toInt())
+                setTextColor(BlofyTvDesign.Lavender)
                 gravity = Gravity.START
-                setPadding(0, dp(7), 0, dp(10))
+                maxLines = 2
+                background = BlofyTvDesign.badge(dp(12).toFloat())
+                setPadding(dp(12), dp(8), dp(12), dp(8))
             }
-            panel.addView(statsView)
+            panel.addView(statsView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = getString(R.string.details_story)
@@ -140,10 +144,11 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 maxLines = 7
                 setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = Gravity.START
-                setLineSpacing(0f, 1.16f)
-                setPadding(0, 0, 0, dp(8))
+                setLineSpacing(0f, 1.18f)
+                background = BlofyTvDesign.glassSurface(dp(14).toFloat(), false)
+                setPadding(dp(14), dp(12), dp(14), dp(12))
             }
-            panel.addView(overviewView)
+            panel.addView(overviewView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
             val crewView = TextView(this@SeriesDetailsActivity).apply {
                 textSize = 11.5f
                 typeface = BlofyTvDesign.MediumTypeface
@@ -173,6 +178,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                         max = 100
                         this.progress = progress
                         progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+                        progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF3B2B4B.toInt())
                     }, LinearLayout.LayoutParams(-1, dp(5)).apply {
                         topMargin = dp(6)
                         bottomMargin = dp(10)
@@ -225,7 +231,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             val castContainer = LinearLayout(this@SeriesDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
             }
-            panel.addView(castContainer, LinearLayout.LayoutParams(-1, -2))
+            panel.addView(castContainer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
             ProviderDetailsBinding(this@SeriesDetailsActivity, overviewView, crewView,
                 castContainer, provider, stream) { updated ->
                     statsView.text = metadataStats(updated)
