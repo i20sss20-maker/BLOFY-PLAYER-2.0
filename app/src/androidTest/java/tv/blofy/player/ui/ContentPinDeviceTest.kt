@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import androidx.appcompat.app.AppCompatActivity
 import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
@@ -60,10 +61,21 @@ class ContentPinDeviceTest {
         // ACTION_SET_TEXT can briefly replace the accessibility window while the IME opens.
         // Reacquire the actual button after that transition; never reuse a stale node.
         var clicked = false
+        var dismissedKeyboard = false
         val deadline = SystemClock.elapsedRealtime() + 8_000L
         while (!clicked && SystemClock.elapsedRealtime() < deadline) {
             clicked = appNodes().firstOrNull { it.viewIdResourceName == id }
                 ?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+            // The TV numeric IME can occlude the dialog's accessibility button panel.
+            // Dismiss that visible keyboard once, just as a remote user does, then retry.
+            // Never send BACK when no IME is present: that would cancel the PIN dialog.
+            if (!clicked && !dismissedKeyboard && automation.windows.any {
+                    it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD
+                }) {
+                dismissedKeyboard = true
+                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                instrumentation.waitForIdleSync()
+            }
             if (!clicked) SystemClock.sleep(25)
         }
         if (!clicked) {
