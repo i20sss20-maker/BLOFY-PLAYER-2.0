@@ -105,7 +105,7 @@ class SystemStatusActivity : AppCompatActivity() {
     private fun render(status: Snapshot) {
         content.removeAllViews()
         val total = status.live + status.movies + status.series
-        renderHeader("تشخيص BLOFY")
+        renderHeader(getString(R.string.system_status_title))
 
         addSection(getString(R.string.system_status_section_app_device), listOf(
             getString(R.string.system_status_version) to BuildConfig.VERSION_NAME,
