@@ -68,7 +68,7 @@ class ProfilesActivity : AppCompatActivity() {
                 addView(TextView(this@ProfilesActivity).apply {
                     val lock = if (profile.pinHash != null) "  🔒" else ""
                     val icon = when { profile.kids -> "🧒"; profile.guest -> "◌"; else -> "👤" }
-                    text = "$icon  ${profile.name}$lock"
+                    text = getString(R.string.profiles_card_title, icon, profile.name, lock)
                     textSize = 19f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.WHITE)
