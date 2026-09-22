@@ -31,7 +31,7 @@ class RecentChannelsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(48), dp(34), dp(48), dp(36))
             background = AppCompatResources.getDrawable(this@RecentChannelsActivity, R.drawable.blofy_home_background)
         }
@@ -41,19 +41,19 @@ class RecentChannelsActivity : AppCompatActivity() {
             letterSpacing = .11f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleBright)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
-            text = "آخر القنوات"
+            text = getString(R.string.home_recent_channels)
             textSize = 30f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(4), 0, dp(14))
         })
         val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
         }
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -69,7 +69,7 @@ class RecentChannelsActivity : AppCompatActivity() {
             val streams = keys.mapNotNull { dao.stream(it) }
             if (streams.isEmpty()) {
                 list.addView(TextView(this@RecentChannelsActivity).apply {
-                    text = "لا توجد قنوات حديثة"
+                    text = getString(R.string.recent_channels_empty)
                     textSize = 17f
                     setTextColor(BlofyTvDesign.TextMuted)
                     setPadding(0, dp(20), 0, 0)
@@ -79,7 +79,7 @@ class RecentChannelsActivity : AppCompatActivity() {
             streams.forEach { stream ->
                 val row = LinearLayout(this@RecentChannelsActivity).apply {
                     orientation = LinearLayout.HORIZONTAL
-                    layoutDirection = View.LAYOUT_DIRECTION_RTL
+                    layoutDirection = resources.configuration.layoutDirection
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(16), dp(8), dp(16), dp(8))
                     isFocusable = true; isFocusableInTouchMode = true; isClickable = true
@@ -96,11 +96,11 @@ class RecentChannelsActivity : AppCompatActivity() {
                         textSize = 17f
                         typeface = BlofyTvDesign.HeadingTypeface
                         setTextColor(BlofyTvDesign.TextPrimary)
-                        gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+                        gravity = Gravity.START or Gravity.CENTER_VERTICAL
                         maxLines = 1
                     }, LinearLayout.LayoutParams(0, dp(64), 1f))
                     addView(TextView(this@RecentChannelsActivity).apply {
-                        text = "● مباشر"
+                        text = getString(R.string.recent_channels_live)
                         textSize = 12f
                         typeface = BlofyTvDesign.BodyTypeface
                         setTextColor(BlofyTvDesign.Mint)
