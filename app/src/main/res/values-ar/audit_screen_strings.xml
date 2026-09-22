@@ -203,4 +203,34 @@
         <item quantity="other">%1$d يوم</item>
     </plurals>
 
+
+    <string name="guide_title">دليل القنوات</string>
+    <string name="guide_loading">جاري التحميل</string>
+    <string name="guide_select_channel">اختر قناة</string>
+    <string name="guide_now_next">الآن والتالي من دليل البرامج</string>
+    <string name="guide_now">الآن</string>
+    <string name="guide_program_unavailable">لا تتوفر معلومات البرنامج</string>
+    <string name="guide_next">التالي</string>
+    <string name="guide_next_unavailable">لا تتوفر معلومات البرنامج التالي</string>
+    <string name="guide_no_reminder">لا يوجد برنامج للتذكير</string>
+    <string name="guide_remote_hint">OK تشغيل القناة   •   ← القنوات   •   ← مرة أخرى للفئات   •   BACK رجوع</string>
+    <plurals name="guide_channel_count">
+        <item quantity="zero">%1$d قناة</item>
+        <item quantity="one">%1$d قناة</item>
+        <item quantity="two">%1$d قناتان</item>
+        <item quantity="few">%1$d قنوات</item>
+        <item quantity="many">%1$d قناة</item>
+        <item quantity="other">%1$d قناة</item>
+    </plurals>
+    <string name="guide_archive_supported">يدعم الأرشيف</string>
+    <string name="guide_live_broadcast">بث مباشر</string>
+    <string name="guide_remind_before">ذكّرني قبل %1$s</string>
+    <string name="guide_reminder_set">تم ضبط التذكير • %1$s</string>
+    <string name="guide_reminder_notice">سيصلك تنبيه قبل البرنامج بخمس دقائق</string>
+    <string name="guide_reminder_failed">تعذر ضبط التذكير لهذا البرنامج</string>
+    <string name="guide_notifications_required">فعّل الإشعارات لاستخدام تذكير البرامج</string>
+    <string name="guide_all_channels">كل القنوات</string>
+    <string name="guide_archive_badge">أرشيف</string>
+    <string name="guide_live_badge">مباشر</string>
+
 </resources>
