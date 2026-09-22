@@ -32,6 +32,7 @@
     <string name="login_one_device">One device</string>
     <string name="login_stable_identity">Stable identity</string>
     <string name="login_connection_cancelled">Connection cancelled</string>
+    <string name="login_updating_subscriber_connection">Updating BLOFY subscriber connection…</string>
     <string name="login_add_playlist_first">Add a playlist first</string>
     <string name="login_checking_activation">Checking device activation…</string>
     <string name="login_activated_add_playlist">Device activated • add a playlist</string>
