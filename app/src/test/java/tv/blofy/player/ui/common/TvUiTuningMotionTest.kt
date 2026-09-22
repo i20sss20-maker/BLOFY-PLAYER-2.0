@@ -1,19 +1,19 @@
 package tv.blofy.player.ui.common
 
 import android.app.Application
-import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
 class TvUiTuningMotionTest {
-    private val context = ApplicationProvider.getApplicationContext<Application>()
+    private val context get() = RuntimeEnvironment.getApplication()
 
     @Test fun reducedMotionKeepsFocusVisibleWithoutZoomOrLift() {
         val prefs = context.getSharedPreferences("blofy_player_settings", 0)
