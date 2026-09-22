@@ -70,6 +70,7 @@ class LoginActivity : AppCompatActivity() {
     private var playlistJob: Job? = null
     private var identityJob: Job? = null
     private var resolvedIdentity = false
+    private var identityRendered = false
     private var lastQrUrl: String? = null
     private var renderedPlaylists: List<List<String>>? = null
     private var websiteRefreshButton: Button? = null
@@ -535,9 +536,15 @@ class LoginActivity : AppCompatActivity() {
             val owner = coroutineContext[Job]
             val cardsDeadline = lifecycleScope.launch {
                 delay(savedPlaylistDeadlineMillis)
-                if (renderedPlaylists == null) {
+                if (renderedPlaylists == null || !identityRendered) {
                     owner?.cancel()
                     renderPlaylistLoadFailure()
+                    if (!identityRendered) {
+                        status.setText(R.string.login_identity_read_failed)
+                        qrView.visibility = View.INVISIBLE
+                        qrMessage.setText(R.string.login_identity_read_failed)
+                        qrMessage.visibility = View.VISIBLE
+                    }
                 }
             }
             try {
@@ -622,6 +629,7 @@ class LoginActivity : AppCompatActivity() {
 
     private suspend fun renderIdentity(deviceId: String, activationCode: String, cached: Boolean = false) {
         if (!cached) resolvedIdentity = true
+        identityRendered = true
         deviceView.text = deviceId
         codeView.text = activationCode
         val url = ActivationPortalUrl.create(activationEndpoint, deviceId, activationCode)

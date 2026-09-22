@@ -4,7 +4,7 @@ Owner scope: investigate the blank/frozen screen after the BLOFY logo, review th
 
 ## Findings and changes
 
-- Login called synchronized `DeviceIdentity.cachedIdentity` on the main thread before its first frame. The same monitor protects synchronous preference commits and Android identity reads during background registration. Cached reads now run on IO; a late cached identity cannot overwrite an identity resolved by the live login flow.
+- Login called synchronized `DeviceIdentity.cachedIdentity` on the main thread before its first frame. The same monitor protects synchronous preference commits and Android identity reads during background registration. Cached reads now run on IO; a late cached identity cannot overwrite an identity resolved by the live login flow. An independent UI deadline also turns a blocked identity read into an actionable retry message even after saved playlist cards have appeared.
 - Application startup registration handled remote failures but left the initial Room/identity operation outside that boundary. Recoverable local exceptions now defer registration instead of escaping the application coroutine. Cancellation and fatal errors still propagate, and logs omit exception messages/credentials.
 - Home's saved-entry check displayed only a background while waiting for Room, with no error or deadline handling. It now shows a loading state and independently returns to Login after an eight-second blocked read, clearing only the startup shortcut hint.
 - First-import batches wrote catalog and search rows in separate transactions. Both writes now share one transaction; an FTS failure rolls the entire batch back.

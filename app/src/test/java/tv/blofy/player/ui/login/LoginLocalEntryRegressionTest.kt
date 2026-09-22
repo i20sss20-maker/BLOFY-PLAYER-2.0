@@ -124,7 +124,7 @@ class LoginLocalEntryRegressionTest {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
         do {
             shadowOf(Looper.getMainLooper()).idle()
-            if (field<Job?>(name)?.isActive != true) return
+            if (field<Job?>(name)?.isCompleted != false) return
             Thread.sleep(10)
         } while (System.nanoTime() < deadline)
         fail("Login job did not complete: $name")
@@ -168,9 +168,20 @@ class LoginLocalEntryRegressionTest {
         try {
             controller = Robolectric.buildActivity(LoginActivity::class.java)
             activity.activationEndpoint = server.url("/").toString()
+            activity.savedPlaylistDeadlineMillis = 1_000L
             checkNotNull(controller).setup().visible()
             shadowOf(Looper.getMainLooper()).idle()
             assertFalse("Login waited for an identity write before rendering", timedOut.get())
+            val cardsDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+            while (field<List<List<String>>?>("renderedPlaylists") == null && System.nanoTime() < cardsDeadline) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(10)
+            }
+            assertNotNull(field<List<List<String>>?>("renderedPlaylists"))
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_100))
+            assertEquals(activity.getString(tv.blofy.player.R.string.login_identity_read_failed),
+                field<TextView>("status").text.toString())
+            assertFalse(field<Job?>("identityJob")?.isActive == true)
             assertTrue(field<Button>("addPlaylist").performClick())
             assertNotNull("The screen must accept input during the blocked read", shadowOf(activity).nextStartedActivity)
             assertEquals(1L, release.count)
