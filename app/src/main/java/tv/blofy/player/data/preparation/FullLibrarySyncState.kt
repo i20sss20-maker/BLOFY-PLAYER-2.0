@@ -31,11 +31,11 @@ internal object FullLibrarySyncState {
 
     private fun key(providerId: String, suffix: String) = "$providerId:$suffix"
 
-    fun read(context: Context, providerId: String, epoch: Long): FullLibraryCursor {
+    fun read(context: Context, providerId: String, epoch: Long, resetInvalid: Boolean = true): FullLibraryCursor {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val savedEpoch = prefs.getLong(key(providerId, "epoch"), 0L)
         if (savedEpoch != epoch || epoch <= 0L || prefs.getInt(key(providerId, "revision"), 0) != REVISION) {
-            reset(context, providerId, epoch)
+            if (resetInvalid) reset(context, providerId, epoch)
             return FullLibraryCursor(epoch, FullLibraryPhase.MOVIE_POSTERS, 0L, false)
         }
         val phase = FullLibraryPhase.entries.getOrNull(

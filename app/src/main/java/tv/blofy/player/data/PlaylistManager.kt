@@ -263,8 +263,7 @@ class PlaylistManager(
 
     private fun directBatchSink(enabled: Boolean): suspend (List<StreamEntity>) -> Unit = { batch ->
         if (enabled && batch.isNotEmpty()) {
-            dao.upsertStreams(batch)
-            dao.insertSearchRows(batch.map(::searchRow))
+            dao.insertCatalogBatch(batch, batch.map(::searchRow))
         }
     }
 

@@ -6,9 +6,6 @@ import com.google.gson.JsonElement
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -123,30 +120,43 @@ object FullCatalogPreparer {
             )
             try {
                 PreparationJournal(app).use { journal ->
-                    journal.begin(providerId, generation)
+                    journal.begin(providerId, generation, expectedEpoch)
 
-                    suspend fun persistUrl(url: String) {
-                        ensureCurrentSource()
-                        if (SystemClock.elapsedRealtime() >= deadline) throw ChunkBudgetReached()
-                        val key = PreparationJournal.hash(url)
-                        if (ArtworkLoader.isPersisted(app, url)) {
-                            journal.remove(providerId, "art", key)
-                            return
+                    suspend fun persistUrls(urls: List<String>) {
+                        for (batch in urls.distinct().chunked(pageSize)) {
+                            ensureCurrentSource()
+                            if (SystemClock.elapsedRealtime() >= deadline) throw ChunkBudgetReached()
+                            val saved = ConcurrentHashMap.newKeySet<String>()
+                            val failed = ConcurrentHashMap.newKeySet<String>()
+                            val missing = batch.mapNotNull { url ->
+                                val key = PreparationJournal.hash(url)
+                                if (ArtworkLoader.isPersisted(app, url)) { saved.add(key); null }
+                                else key to url
+                            }
+                            // One durable intent commit before HTTP; one completion commit afterwards.
+                            journal.enqueueBatch(providerId, "art", missing)
+                            try {
+                                forEachDownload(missing, artConcurrency) { (key, url) ->
+                                    ensureCurrentSource()
+                                    if (SystemClock.elapsedRealtime() >= deadline) throw ChunkBudgetReached()
+                                    val stored = try { ArtworkLoader.persist(app, url) }
+                                    catch (full: ArtworkLoader.StorageFull) { throw full }
+                                    catch (_: IOException) { false }
+                                    ensureCurrentSource()
+                                    if (stored) saved.add(key) else failed.add(key)
+                                }
+                            } finally {
+                                // Synchronous local transaction also records partial success on cancellation.
+                                journal.finishBatch(providerId, "art", saved, failed)
+                            }
                         }
-                        // Persist intent BEFORE HTTP/write; interruption cannot lose the missing image.
-                        journal.enqueue(providerId, "art", key, url)
-                        val saved = try { ArtworkLoader.persist(app, url) }
-                        catch (full: ArtworkLoader.StorageFull) { throw full }
-                        catch (_: IOException) { false }
-                        ensureCurrentSource()
-                        if (saved) journal.remove(providerId, "art", key)
                     }
 
-                    suspend fun persistArtwork(stream: StreamEntity, phase: FullLibraryPhase) {
+                    fun artworkUrls(stream: StreamEntity, phase: FullLibraryPhase): List<String> {
                         val enriched = phase == FullLibraryPhase.MOVIE_ENRICHED_ART ||
                             phase == FullLibraryPhase.SERIES_ENRICHED_ART
                         val metadata = if (enriched) ProviderMetadataCache.read(app, stream.key) else null
-                        val candidates = when (phase) {
+                        return when (phase) {
                             FullLibraryPhase.MOVIE_POSTERS, FullLibraryPhase.SERIES_POSTERS -> listOf(stream.icon)
                             FullLibraryPhase.LIVE_LOGOS -> listOf(stream.icon, stream.backdrop)
                             FullLibraryPhase.MOVIE_BACKDROPS, FullLibraryPhase.SERIES_BACKDROPS -> listOf(stream.backdrop)
@@ -163,8 +173,6 @@ object FullCatalogPreparer {
                         }.filterNotNull().map(String::trim)
                             .filter { it.isNotBlank() && !it.equals("null", true) }
                             .map { resolve(provider, it) }.distinct()
-                        // Every candidate is tracked separately; one saved poster cannot hide missing art.
-                        for (url in candidates) persistUrl(url)
                     }
 
                     suspend fun persistDetails(stream: StreamEntity, retry: Boolean) {
@@ -174,11 +182,13 @@ object FullCatalogPreparer {
                             if (retry) {
                                 // A recovered details response can introduce artwork AFTER the catalog pass.
                                 val refreshed = dao.stream(stream.key) ?: stream
-                                persistArtwork(refreshed, if (stream.kind == "series")
-                                    FullLibraryPhase.SERIES_ENRICHED_ART else FullLibraryPhase.MOVIE_ENRICHED_ART)
+                                persistUrls(artworkUrls(refreshed, if (stream.kind == "series")
+                                    FullLibraryPhase.SERIES_ENRICHED_ART else FullLibraryPhase.MOVIE_ENRICHED_ART))
                             }
                             ensureCurrentSource()
                             journal.remove(providerId, "detail", stream.key)
+                        } else {
+                            journal.finishBatch(providerId, "detail", emptyList(), listOf(stream.key))
                         }
                     }
 
@@ -208,19 +218,15 @@ object FullCatalogPreparer {
                                 FullLibrarySyncState.advance(app, providerId, expectedEpoch, cursor.phase)
                                 continue
                             }
-                            for (group in page.chunked(if (details) detailConcurrency else artConcurrency)) {
-                                if (SystemClock.elapsedRealtime() >= deadline) return@withContext false
-                                coroutineScope {
-                                    group.map { unit -> async {
-                                        if (details) {
-                                            val stream = dao.stream(unit.key)
-                                            if (stream == null) journal.remove(providerId, kind, unit.key)
-                                            else persistDetails(stream, retry = true)
-                                        } else persistUrl(unit.value)
-                                    } }.awaitAll()
+                            if (details) {
+                                forEachDownload(page, detailConcurrency) { unit ->
+                                    if (SystemClock.elapsedRealtime() >= deadline) throw ChunkBudgetReached()
+                                    val stream = dao.stream(unit.key)
+                                    if (stream == null) journal.remove(providerId, kind, unit.key)
+                                    else persistDetails(stream, retry = true)
                                 }
-                                ensureCurrentSource()
-                            }
+                            } else persistUrls(page.map { it.value })
+                            ensureCurrentSource()
                             FullLibrarySyncState.checkpoint(app, providerId, expectedEpoch, cursor.phase, page.last().rowId)
                             continue
                         }
@@ -236,17 +242,13 @@ object FullCatalogPreparer {
                             FullLibrarySyncState.advance(app, providerId, expectedEpoch, cursor.phase)
                             continue
                         }
-                        for (group in page.chunked(if (details) detailConcurrency else artConcurrency)) {
-                            // Bound even a page of slow/unavailable URLs below WorkManager's execution limit.
-                            if (SystemClock.elapsedRealtime() >= deadline) return@withContext false
-                            coroutineScope {
-                                group.map { stream -> async {
-                                    if (details) persistDetails(stream, retry = false)
-                                    else persistArtwork(stream, cursor.phase)
-                                } }.awaitAll()
+                        if (details) {
+                            forEachDownload(page, detailConcurrency) { stream ->
+                                if (SystemClock.elapsedRealtime() >= deadline) throw ChunkBudgetReached()
+                                persistDetails(stream, retry = false)
                             }
-                            ensureCurrentSource()
-                        }
+                        } else persistUrls(page.flatMap { artworkUrls(it, cursor.phase) })
+                        ensureCurrentSource()
                         // Checkpoint once per bounded page, avoiding a preference fsync per few images.
                         // If interrupted mid-page, existing files and queued failures safely cover it.
                         val nextRow = checkNotNull(dao.streamRowId(page.last().key))

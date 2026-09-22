@@ -159,6 +159,13 @@ interface BlofyDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEpisodes(items: List<EpisodeEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEpg(items: List<EpgEntity>)
     @Insert suspend fun insertSearchRows(items: List<StreamSearchFtsEntity>)
+
+    /** One durable commit per streamed batch; catalog rows and their search entries stay atomic. */
+    @Transaction
+    suspend fun insertCatalogBatch(items: List<StreamEntity>, search: List<StreamSearchFtsEntity>) {
+        upsertStreams(items)
+        insertSearchRows(search)
+    }
     @Query("SELECT EXISTS(SELECT 1 FROM streams_fts WHERE providerId = :providerId LIMIT 1)")
     suspend fun hasSearchIndex(providerId: String): Boolean
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertActivation(state: ActivationEntity)

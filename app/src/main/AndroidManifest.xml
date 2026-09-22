@@ -40,6 +40,7 @@
         <activity android:name=".ui.settings.CategoryManagerActivity" android:exported="false" />
         <activity android:name=".ui.settings.ParentalSettingsActivity" android:exported="false" />
         <activity android:name=".ui.settings.SystemStatusActivity" android:exported="false" />
+        <activity android:name=".ui.settings.LibraryDownloadActivity" android:exported="false" />
         <activity android:name=".ui.settings.SettingsActivity" android:exported="false" />
         <activity android:name=".ui.series.EpisodesActivity" android:exported="false" />
         <activity android:name=".ui.browser.ContentBrowserActivity" android:exported="false" />

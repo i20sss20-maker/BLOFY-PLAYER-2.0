@@ -41,6 +41,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationPortalUrl
+import tv.blofy.player.core.identity.DeviceIdentity
+import tv.blofy.player.core.identity.ActivationStartupRegistration
 import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
@@ -150,6 +152,49 @@ class LoginLocalEntryRegressionTest {
         }
         assertEquals(0, server.requestCount)
         assertNull(shadowOf(activity).nextStartedActivity)
+    }
+
+    @Test fun loginDrawsAndAcceptsInputWhileStartupHoldsTheIdentityLock() {
+        val locked = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
+        val writer = Thread {
+            synchronized(DeviceIdentity) {
+                locked.countDown()
+                timedOut.set(!release.await(5, TimeUnit.SECONDS))
+            }
+        }.apply { isDaemon = true; start() }
+        assertTrue(locked.await(2, TimeUnit.SECONDS))
+        try {
+            controller = Robolectric.buildActivity(LoginActivity::class.java)
+            activity.activationEndpoint = server.url("/").toString()
+            checkNotNull(controller).setup().visible()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertFalse("Login waited for an identity write before rendering", timedOut.get())
+            assertTrue(field<Button>("addPlaylist").performClick())
+            assertNotNull("The screen must accept input during the blocked read", shadowOf(activity).nextStartedActivity)
+            assertEquals(1L, release.count)
+        } finally {
+            release.countDown()
+            writer.join(2_000)
+            awaitJob("identityJob")
+        }
+    }
+
+    @Test fun failedStartupDatabaseReadDoesNotCrashAndCanBeRetried() = runBlocking(Dispatchers.IO) {
+        val closed = Room.inMemoryDatabaseBuilder(app, BlofyDatabase::class.java).build()
+        closed.openHelper.writableDatabase
+        closed.close()
+        var reachedRead = false
+        ActivationStartupRegistration.attempt {
+            reachedRead = true
+            ActivationManager(app, closed.dao()).ensureIdentity()
+            fail("A closed database must fail this startup read")
+        }
+        assertTrue(reachedRead)
+        ActivationStartupRegistration.attempt {
+            assertNotNull(ActivationManager(app, db.dao()).ensureIdentity())
+        }
     }
 
     @Test fun identityAndSavedCardsDoNotWaitForProviderKeystoreAccess() {
