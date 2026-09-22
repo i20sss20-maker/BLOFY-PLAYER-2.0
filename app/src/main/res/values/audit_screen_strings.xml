@@ -350,4 +350,55 @@
     <string name="search_locked_title">🔒  %1$s</string>
     <string name="search_brand_section">BLOFY  •  %1$s</string>
 
+
+    <string name="provider_manager_title">BLOFY Playlists</string>
+    <string name="provider_manager_refresh_from_website">↻  Refresh from website</string>
+    <string name="provider_manager_subtitle">Connect directly to a saved server or edit its details</string>
+    <string name="provider_manager_subscriber_hint">BLOFY subscribers only need a username and password</string>
+    <string name="provider_manager_add_subscriber">+  BLOFY Subscriber</string>
+    <string name="provider_manager_saved_servers">Saved servers</string>
+    <string name="provider_manager_read_failed">Could not read saved playlists • reopen this page to try again</string>
+    <string name="provider_manager_refresh_unconfigured">Playlist refresh service is not configured</string>
+    <string name="provider_manager_refreshing">Refreshing…</string>
+    <string name="provider_manager_fetching">Fetching playlists and details from the website…</string>
+    <string name="provider_manager_empty">No saved servers yet\nAdd a BLOFY Subscriber or Xtream server</string>
+    <string name="provider_manager_active">● Active playlist</string>
+    <string name="provider_manager_saved">○ Saved playlist</string>
+    <string name="provider_manager_summary_loading">Reading library status…</string>
+    <string name="provider_manager_connect">▶  Connect</string>
+    <string name="provider_manager_connect_plain">Connect</string>
+    <string name="provider_manager_edit">Edit</string>
+    <string name="provider_manager_sync">Sync</string>
+    <string name="provider_manager_delete">Delete</string>
+    <string name="provider_manager_summary_failed">Could not read the library summary</string>
+    <string name="provider_manager_ready">Ready</string>
+    <string name="provider_manager_needs_update">Needs refresh</string>
+    <string name="provider_manager_channels_count">Channels: %1$d</string>
+    <string name="provider_manager_movies_count">Movies: %1$d</string>
+    <string name="provider_manager_series_count">Series: %1$d</string>
+    <string name="provider_manager_summary_format">%1$s  •  %2$s  •  %3$s  •  %4$s</string>
+    <string name="provider_manager_legacy_unsupported">This playlist is old and unsupported • use Xtream</string>
+    <string name="provider_manager_opening">Opening %1$s…</string>
+    <string name="provider_manager_open_failed">Could not open the playlist • try again</string>
+    <string name="provider_manager_removed_synced">Playlist deleted from the device and website</string>
+    <string name="provider_manager_removed_pending">Playlist hidden • website deletion will finish when online</string>
+    <string name="provider_manager_remove_failed">Could not delete the playlist • try again</string>
+
+    <string name="smart_recent_title">Recently added</string>
+    <string name="smart_recent_subtitle">Latest movies and series in your playlist</string>
+    <string name="smart_top_rated_title">Top rated</string>
+    <string name="smart_top_rated_subtitle">Best titles based on library ratings</string>
+    <string name="smart_4k_title">4K &amp; UHD</string>
+    <string name="smart_4k_subtitle">High-resolution content in your subscription</string>
+    <string name="smart_arabic_title">Arabic content</string>
+    <string name="smart_arabic_subtitle">Arabic movies and series from the same playlist</string>
+    <string name="smart_default_title">BLOFY Picks</string>
+    <string name="smart_default_subtitle">Selected content from your library</string>
+    <string name="smart_collection_count">Titles: %1$d</string>
+
+    <string name="profile_watchlist_title">My Watchlist</string>
+    <string name="profile_watchlist_subtitle">%1$s • saved titles</string>
+    <string name="profile_watchlist_empty">Your watchlist is empty. Add movies or series from their details page.</string>
+    <string name="profile_switcher_label">%1$s  %2$s</string>
+
 </resources>
