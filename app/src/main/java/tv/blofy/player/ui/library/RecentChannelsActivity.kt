@@ -108,7 +108,12 @@ class RecentChannelsActivity : AppCompatActivity() {
                     setOnFocusChangeListener { view, focused ->
                         view.background = rowBackground(focused)
                         view.animate().cancel()
-                        view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).translationZ(if (focused) 9f else 1f).setDuration(75).start()
+                        view.animate()
+                            .scaleX(if (focused) 1.012f else 1f)
+                            .scaleY(if (focused) 1.012f else 1f)
+                            .translationZ(if (focused) 9f else 1f)
+                            .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                            .start()
                     }
                     setOnClickListener {
                         val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (provider.liveFormat.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
@@ -132,6 +137,6 @@ class RecentChannelsActivity : AppCompatActivity() {
         if (focused) intArrayOf(0xFF7139BE.toInt(), 0xFF402461.toInt()) else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
     ).apply {
         cornerRadius = 18f
-        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF463455.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF463455.toInt())
     }
 }

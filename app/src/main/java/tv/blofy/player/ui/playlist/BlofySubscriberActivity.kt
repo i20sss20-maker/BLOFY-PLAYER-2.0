@@ -31,6 +31,7 @@ import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
+import tv.blofy.player.ui.common.BlofyTvDesign
 import java.util.UUID
 
 class BlofySubscriberActivity : AppCompatActivity() {
@@ -116,7 +117,15 @@ class BlofySubscriberActivity : AppCompatActivity() {
             setSelectAllOnFocus(false)
             setOnFocusChangeListener { view, focused ->
                 view.background = fieldBackground(focused)
-                if (tv) view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(90).start()
+                if (tv) {
+                    view.animate().cancel()
+                    view.animate()
+                        .scaleX(if (focused) 1.012f else 1f)
+                        .scaleY(if (focused) 1.012f else 1f)
+                        .translationZ(if (focused) dp(6).toFloat() else 0f)
+                        .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                        .start()
+                }
             }
         }
 
@@ -238,9 +247,18 @@ class BlofySubscriberActivity : AppCompatActivity() {
             isFocusable = true
             isFocusableInTouchMode = true
             background = buttonBackground(false)
+            stateListAnimator = null
             setOnFocusChangeListener { view, focused ->
                 view.background = buttonBackground(focused)
-                if (tv) view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(100).start()
+                if (tv) {
+                    view.animate().cancel()
+                    view.animate()
+                        .scaleX(if (focused) 1.024f else 1f)
+                        .scaleY(if (focused) 1.024f else 1f)
+                        .translationZ(if (focused) dp(8).toFloat() else 0f)
+                        .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                        .start()
+                }
             }
             setOnClickListener { submit() }
         }
@@ -274,13 +292,13 @@ class BlofySubscriberActivity : AppCompatActivity() {
     private fun fieldBackground(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = dp(17).toFloat()
         setColor(0xFF110F19.toInt())
-        setStroke(dp(if (focused) 3 else 1), if (focused) 0xFFBE87FF.toInt() else 0xFF342C44.toInt())
+        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF342C44.toInt())
     }
 
     private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = dp(18).toFloat()
         setColor(if (focused) 0xFF7D45D9.toInt() else 0xFF5F2AB5.toInt())
-        setStroke(dp(if (focused) 3 else 1), if (focused) Color.WHITE else 0xFF8C59D8.toInt())
+        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF8C59D8.toInt())
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

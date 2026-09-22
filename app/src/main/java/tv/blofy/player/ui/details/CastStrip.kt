@@ -49,10 +49,13 @@ internal object CastStrip {
                 setOnFocusChangeListener { view, focused ->
                     view.animate().cancel()
                     view.background = BlofyTvDesign.glassSurface(dp(17).toFloat(), focused)
-                    view.scaleX = if (focused) 1.01f else 1f
-                    view.scaleY = if (focused) 1.01f else 1f
-                    view.translationZ = if (focused) dp(6).toFloat() else 0f
-                    view.alpha = if (focused) 1f else .96f
+                    view.animate()
+                        .scaleX(if (focused) 1.018f else 1f)
+                        .scaleY(if (focused) 1.018f else 1f)
+                        .translationZ(if (focused) dp(7).toFloat() else 0f)
+                        .alpha(if (focused) 1f else .96f)
+                        .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                        .start()
                 }
                 setOnClickListener {
                     context.startActivity(Intent(context, PersonDetailsActivity::class.java).apply {

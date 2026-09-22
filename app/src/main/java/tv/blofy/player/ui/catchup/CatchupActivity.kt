@@ -2,7 +2,6 @@ package tv.blofy.player.ui.catchup
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
@@ -20,6 +19,8 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.player.PlayerActivity
+import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CinemaStyle
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -92,7 +93,16 @@ class CatchupActivity : ContentAccessActivity() {
                 isFocusable = true
                 isClickable = true
                 background = rowBackground(false)
-                setOnFocusChangeListener { view, focused -> view.background = rowBackground(focused) }
+                setOnFocusChangeListener { view, focused ->
+                    view.background = rowBackground(focused)
+                    view.animate().cancel()
+                    view.animate()
+                        .scaleX(if (focused) 1.012f else 1f)
+                        .scaleY(if (focused) 1.012f else 1f)
+                        .translationZ(if (focused) 8f else 0f)
+                        .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                        .start()
+                }
                 setOnClickListener { playCatchup(provider, stream, item) }
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 64).apply { topMargin = 6 })
         }
@@ -112,11 +122,8 @@ class CatchupActivity : ContentAccessActivity() {
 
     private fun time(ms: Long): String = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(ms))
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 15f
-        setColor(if (focused) Color.rgb(70, 34, 118) else Color.rgb(18, 17, 28))
-        if (focused) setStroke(2, Color.rgb(190, 135, 255))
-    }
+    private fun rowBackground(focused: Boolean) =
+        CinemaStyle.surface(this, focused = focused, radiusDp = 15)
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"

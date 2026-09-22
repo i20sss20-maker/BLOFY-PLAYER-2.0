@@ -34,6 +34,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.login.CatalogLoadingActivity
+import tv.blofy.player.ui.common.BlofyTvDesign
 import java.util.UUID
 
 class PlaylistActivity : AppCompatActivity() {
@@ -66,7 +67,18 @@ class PlaylistActivity : AppCompatActivity() {
         fun field(hintText: String, passwordField: Boolean = false) = EditText(this).apply {
             hint = hintText; isSingleLine = true; gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; setTextColor(Color.WHITE); setHintTextColor(0xFF8E829A.toInt()); setPadding(22,0,22,0)
             background = fieldBackground(false); isFocusable = true; isFocusableInTouchMode = true
-            setOnFocusChangeListener { view, focused -> if (tv) view.background = fieldBackground(focused) }
+            setOnFocusChangeListener { view, focused ->
+                if (tv) {
+                    view.background = fieldBackground(focused)
+                    view.animate().cancel()
+                    view.animate()
+                        .scaleX(if (focused) 1.012f else 1f)
+                        .scaleY(if (focused) 1.012f else 1f)
+                        .translationZ(if (focused) dp(6).toFloat() else 0f)
+                        .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                        .start()
+                }
+            }
             if (passwordField) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         val name = field("اسم السيرفر (اختياري)")
@@ -155,7 +167,17 @@ class PlaylistActivity : AppCompatActivity() {
 
         fun action(label: String, primary: Boolean, connectAfter: Boolean) = Button(this).apply {
             text = label; isAllCaps = false; textSize = 16f; setTextColor(Color.WHITE); isFocusable = true; isFocusableInTouchMode = true; background = buttonBackground(false, primary)
-            setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused, primary); view.animate().scaleX(if (focused) 1.03f else 1f).scaleY(if (focused) 1.03f else 1f).setDuration(90).start() }
+            stateListAnimator = null
+            setOnFocusChangeListener { view, focused ->
+                view.background = buttonBackground(focused, primary)
+                view.animate().cancel()
+                view.animate()
+                    .scaleX(if (focused) 1.024f else 1f)
+                    .scaleY(if (focused) 1.024f else 1f)
+                    .translationZ(if (focused) dp(8).toFloat() else 0f)
+                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .start()
+            }
             setOnClickListener { lifecycleScope.launch { persist(connectAfter) } }
         }
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER }
@@ -191,8 +213,8 @@ class PlaylistActivity : AppCompatActivity() {
     }
 
     private fun panelBackground() = GradientDrawable().apply { cornerRadius = 24f; setColor(0xEA151020.toInt()); setStroke(1, 0xFF67458E.toInt()) }
-    private fun fieldBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = 16f; setColor(0xFF110F19.toInt()); setStroke(if (focused) 3 else 1, if (focused) 0xFFBE87FF.toInt() else 0xFF342C44.toInt()) }
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply { cornerRadius = 18f; setColor(if (focused) 0xFF7D45D9.toInt() else if (primary) 0xFF5F2AB5.toInt() else 0xFF241A30.toInt()); setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else 0xFF69468F.toInt()) }
+    private fun fieldBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = 16f; setColor(0xFF110F19.toInt()); setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF342C44.toInt()) }
+    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply { cornerRadius = 18f; setColor(if (focused) 0xFF7D45D9.toInt() else if (primary) 0xFF5F2AB5.toInt() else 0xFF241A30.toInt()); setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF69468F.toInt()) }
 
     companion object { const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_DIRECT_FORM = "direct_form" }
 }

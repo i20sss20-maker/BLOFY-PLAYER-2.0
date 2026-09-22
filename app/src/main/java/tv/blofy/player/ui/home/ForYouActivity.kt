@@ -112,9 +112,14 @@ class ForYouActivity : AppCompatActivity() {
                 background = BlofyTvDesign.glassSurface(dp(14).toFloat())
                 setOnFocusChangeListener { view, focused ->
                     setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
+                    view.background = BlofyTvDesign.glassSurface(dp(14).toFloat(), focused)
                     view.animate().cancel()
-                    view.animate().scaleX(if (focused) 1.012f else 1f).scaleY(if (focused) 1.012f else 1f)
-                        .translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(65).start()
+                    view.animate()
+                        .scaleX(if (focused) 1.012f else 1f)
+                        .scaleY(if (focused) 1.012f else 1f)
+                        .translationZ(if (focused) dp(8).toFloat() else 1f)
+                        .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                        .start()
                 }
                 setOnClickListener { open(providerId, item) }
             }

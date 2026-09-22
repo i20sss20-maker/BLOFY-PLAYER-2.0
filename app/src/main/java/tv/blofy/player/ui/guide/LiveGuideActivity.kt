@@ -638,7 +638,7 @@ private class GuideChannelAdapter(
                 .scaleX(if (focused) 1.012f else 1f)
                 .scaleY(if (focused) 1.012f else 1f)
                 .translationZ(if (focused) holder.dp(8).toFloat() else 1f)
-                .setDuration(60L)
+                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
                 .start()
             if (focused) onFocus(item)
         }
@@ -667,7 +667,7 @@ private class GuideChannelAdapter(
             else intArrayOf(0xD923182F.toInt(), 0xE616101E.toInt())
         ).apply {
             cornerRadius = radius.toFloat()
-            setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF49365D.toInt())
+            setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF49365D.toInt())
         }
     }
 }
