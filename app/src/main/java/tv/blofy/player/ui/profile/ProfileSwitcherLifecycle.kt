@@ -34,11 +34,11 @@ class ProfileSwitcherLifecycle : Application.ActivityLifecycleCallbacks {
             isAllCaps = false
             isFocusable = true
             isFocusableInTouchMode = kind == DeviceClass.Kind.TV
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.LabelTypeface
             textSize = if (kind == DeviceClass.Kind.PHONE) 12f else 13f
             setTextColor(BlofyTvDesign.TextPrimary)
             background = BlofyTvDesign.elevatedSurface(dp(15).toFloat())
-            if (kind == DeviceClass.Kind.TV) BlofyTvDesign.installTvFocus(this, dp(15).toFloat(), 1.03f, false) {}
+            if (kind == DeviceClass.Kind.TV) BlofyTvDesign.installTvFocus(this, dp(15).toFloat(), 1.024f, false) {}
             setOnClickListener { activity.startActivity(Intent(activity, ProfilesActivity::class.java)) }
         }
         val width = if (kind == DeviceClass.Kind.PHONE) dp(132) else dp(176)
