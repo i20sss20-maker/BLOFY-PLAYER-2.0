@@ -175,11 +175,12 @@ internal class EpisodeCardAdapter(
             if (focused) focusedKey = episode.key
             renderFocus(holder, focused)
             view.animate().cancel()
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
             view.animate()
-                .scaleX(if (focused) 1.012f else 1f)
-                .scaleY(if (focused) 1.012f else 1f)
-                .translationZ(if (focused) 10f else 1f)
-                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, 10f) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
                 .start()
             if (focused) onFocus(episode)
         }
