@@ -223,4 +223,28 @@
     <string name="guide_archive_badge">Archive</string>
     <string name="guide_live_badge">Live</string>
 
+
+    <string name="subscriber_title">BLOFY Subscribers</string>
+    <string name="subscriber_subtitle">Sign in with your username and password only</string>
+    <string name="subscriber_playlist_name">Playlist name (optional)</string>
+    <string name="subscriber_username">Username</string>
+    <string name="subscriber_username_hint">Enter username</string>
+    <string name="subscriber_password">Password</string>
+    <string name="subscriber_password_hint">Enter password</string>
+    <string name="subscriber_saved_name_read_failed">Could not read the saved playlist name • you can enter a name</string>
+    <string name="subscriber_username_required">Enter username</string>
+    <string name="subscriber_password_required">Enter password</string>
+    <string name="subscriber_service_unavailable">BLOFY subscriber service is not configured</string>
+    <string name="subscriber_verifying">Verifying subscription…</string>
+    <string name="subscriber_verified_preparing">Verified • preparing your library</string>
+    <string name="subscriber_login_failed">Could not sign in • %1$s</string>
+    <string name="subscriber_check_details">Check your details</string>
+    <string name="subscriber_save_connect">Save and connect</string>
+    <string name="subscriber_auto_server_settings">Server settings are prepared automatically for your account</string>
+
+    <string name="profile_watchlist_title">My Watchlist</string>
+    <string name="profile_watchlist_subtitle">Picks for %1$s</string>
+    <string name="profile_watchlist_saved">✓ My Watchlist</string>
+    <string name="profile_watchlist_add">+ My Watchlist</string>
+
 </resources>
