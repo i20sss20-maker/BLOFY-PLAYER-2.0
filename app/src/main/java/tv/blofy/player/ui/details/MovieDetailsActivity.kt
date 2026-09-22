@@ -130,6 +130,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 setPadding(0, 0, 0, dp(3))
             })
             val overviewView = TextView(this@MovieDetailsActivity).apply {
+                tag = "blofy_details_overview"
                 text = metadata?.overview?.takeIf(String::isNotBlank)
                     ?: stream.plot?.takeIf(String::isNotBlank)
                     ?: getString(R.string.details_movie_no_description)
