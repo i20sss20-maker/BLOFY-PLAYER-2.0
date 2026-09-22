@@ -188,4 +188,19 @@
     <string name="playlist_form_legacy_unsupported">هذه القائمة قديمة وغير مدعومة • أدخل بيانات Xtream</string>
     <string name="playlist_form_read_failed">تعذر قراءة بيانات القائمة • أعد فتح الصفحة للمحاولة</string>
 
+
+    <string name="catchup_title">أرشيف BLOFY</string>
+    <string name="catchup_loading">جاري تحميل البرامج السابقة…</string>
+    <string name="catchup_unsupported">هذه القناة لا تدعم الأرشيف</string>
+    <string name="catchup_channel_archive">%1$s  •  أرشيف %2$s</string>
+    <string name="catchup_empty">لا توجد برامج سابقة متاحة لهذه القناة</string>
+    <plurals name="catchup_archive_days">
+        <item quantity="zero">%1$d يوم</item>
+        <item quantity="one">%1$d يوم</item>
+        <item quantity="two">%1$d يومان</item>
+        <item quantity="few">%1$d أيام</item>
+        <item quantity="many">%1$d يومًا</item>
+        <item quantity="other">%1$d يوم</item>
+    </plurals>
+
 </resources>
