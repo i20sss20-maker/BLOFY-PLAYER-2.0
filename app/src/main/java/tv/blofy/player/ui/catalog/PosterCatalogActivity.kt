@@ -228,7 +228,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         }
         posterGrid.adapter = posterAdapter
         categoryAdapter = FocusTextAdapter(
-            label = { it.name },
+            label = { displayCategoryName(it.name) },
             onClick = { loadStreams(categoryRemoteId(it)) },
             onFocus = null,
             itemKey = { it.key }
@@ -370,6 +370,15 @@ class PosterCatalogActivity : AppCompatActivity() {
             putExtra("provider_id", providerId)
             putExtra("content_key", stream.key)
         })
+    }
+
+    private fun displayCategoryName(raw: String): String {
+        val cleaned = raw
+            .replace(Regex("^[\\s#*_~=-]{2,}|[\\s#*_~=-]{2,}$"), " ")
+            .replace(Regex("(?i)\\b(?:3840p|2160p|1440p|1080p|720p|576p|480p)\\b"), " ")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim(' ', '-', '•', '|')
+        return cleaned.ifBlank { raw.trim() }
     }
 
     private fun allCategory() = CategoryEntity(
