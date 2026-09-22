@@ -52,7 +52,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (phone) 22 else 54), dp(if (phone) 24 else 34), dp(if (phone) 22 else 54), dp(if (phone) 28 else 38))
         }
         scroll.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
@@ -63,14 +63,14 @@ class BlofySubscriberActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(dp(if (phone) 150 else 180), dp(if (phone) 72 else 82)))
 
         root.addView(TextView(this).apply {
-            text = "مشتركين BLOFY"
+            text = getString(R.string.subscriber_title)
             textSize = if (phone) 27f else 32f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         })
         root.addView(TextView(this).apply {
-            text = "سجّل باسم المستخدم وكلمة المرور فقط"
+            text = getString(R.string.subscriber_subtitle)
             textSize = if (phone) 14f else 15f
             setTextColor(0xFFB8ABC7.toInt())
             gravity = Gravity.CENTER
@@ -80,7 +80,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (phone) 18 else 30), dp(if (phone) 20 else 26), dp(if (phone) 18 else 30), dp(if (phone) 20 else 26))
             background = panelBackground()
             clipChildren = false
@@ -93,7 +93,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
             textSize = if (phone) 13f else 14f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(0xFFEADDF7.toInt())
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setPadding(dp(4), dp(4), dp(4), dp(6))
         }
 
@@ -101,7 +101,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
             hint = hintText
             textSize = if (phone) 16f else 17f
             isSingleLine = true
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             textDirection = View.TEXT_DIRECTION_LTR
             setTextColor(Color.WHITE)
             setHintTextColor(0xFF8E829A.toInt())
@@ -131,16 +131,16 @@ class BlofySubscriberActivity : AppCompatActivity() {
             }
         }
 
-        panel.addView(label("اسم القائمة (اختياري)"))
-        val playlistName = field("اسم القائمة (اختياري)")
+        panel.addView(label(getString(R.string.subscriber_playlist_name)))
+        val playlistName = field(getString(R.string.subscriber_playlist_name))
         panel.addView(playlistName, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 66)))
         val editingId = intent.getStringExtra(PlaylistActivity.EXTRA_PROVIDER_ID)
-        panel.addView(label("اسم المستخدم"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        val username = field("أدخل اسم المستخدم")
+        panel.addView(label(getString(R.string.subscriber_username)), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val username = field(getString(R.string.subscriber_username_hint))
         panel.addView(username, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 66)))
 
-        panel.addView(label("كلمة المرور"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
-        val password = field("أدخل كلمة المرور", true)
+        panel.addView(label(getString(R.string.subscriber_password)), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+        val password = field(getString(R.string.subscriber_password_hint), true)
         panel.addView(password, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 66)))
 
         val status = TextView(this).apply {
@@ -158,7 +158,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                status.text = "تعذر قراءة اسم القائمة المحفوظ • يمكنك إدخال الاسم"
+                status.setText(R.string.subscriber_saved_name_read_failed)
             }
         }
 
@@ -169,19 +169,19 @@ class BlofySubscriberActivity : AppCompatActivity() {
             val user = username.text.toString().trim()
             val pass = password.text.toString()
             if (user.isBlank()) {
-                status.text = "أدخل اسم المستخدم"
+                status.setText(R.string.subscriber_username_required)
                 username.requestFocus()
                 return
             }
             if (pass.isBlank()) {
-                status.text = "أدخل كلمة المرور"
+                status.setText(R.string.subscriber_password_required)
                 password.requestFocus()
                 return
             }
             val selectedName = playlistName.text.toString().trim().ifBlank { "BLOFY Playlist" }
             val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
             if (endpoint.isBlank()) {
-                status.text = "خدمة BLOFY غير مهيأة"
+                status.setText(R.string.subscriber_service_unavailable)
                 return
             }
 
@@ -189,7 +189,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
             login.isEnabled = false
             username.isEnabled = false
             password.isEnabled = false
-            status.text = "جاري التحقق من الاشتراك..."
+            status.setText(R.string.subscriber_verifying)
 
             lifecycleScope.launch {
                 try {
@@ -218,7 +218,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                     }
 
                     setResult(RESULT_OK)
-                    status.text = "تم التحقق • جاري تجهيز المكتبة"
+                    status.setText(R.string.subscriber_verified_preparing)
                     startActivity(Intent(this@BlofySubscriberActivity, CatalogLoadingActivity::class.java).apply {
                         putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, prepared.providerId)
                         putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, prepared.sourceChanged && prepared.hadReadyCatalog)
@@ -231,7 +231,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                     throw cancelled
                 } catch (error: Exception) {
                     submitting = false
-                    status.text = "تعذر الدخول • ${error.message ?: "تحقق من البيانات"}"
+                    status.text = getString(R.string.subscriber_login_failed, error.message ?: getString(R.string.subscriber_check_details))
                     login.isEnabled = true
                     username.isEnabled = true
                     password.isEnabled = true
@@ -241,7 +241,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
         }
 
         login = Button(this).apply {
-            text = "حفظ واتصال"
+            text = getString(R.string.subscriber_save_connect)
             isAllCaps = false
             textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
@@ -275,7 +275,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
         }
 
         panel.addView(TextView(this).apply {
-            text = "إعدادات السيرفر تُجهّز تلقائيًا لحسابك"
+            text = getString(R.string.subscriber_auto_server_settings)
             textSize = 12f
             setTextColor(0xFF857B91.toInt())
             gravity = Gravity.CENTER
