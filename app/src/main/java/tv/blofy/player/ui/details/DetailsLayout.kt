@@ -16,6 +16,7 @@ import tv.blofy.player.ui.common.CinemaStyle
 /** Touch screens keep the primary action outside the scrolling synopsis. */
 internal class DetailsLayout(private val activity: AppCompatActivity) {
     val isTv = DeviceClass.isTv(activity)
+    private val shortTv = isTv && activity.resources.configuration.screenHeightDp <= 600
     private val stacked = !isTv && activity.resources.configuration.screenWidthDp < 600
     val root = FrameLayout(activity).apply { setBackgroundColor(CinemaStyle.Background) }
     val backdrop = ImageView(activity).apply {
@@ -32,13 +33,22 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
     }
     val info = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
-        gravity = (if (isTv) Gravity.CENTER_VERTICAL else Gravity.TOP) or Gravity.END
+        gravity = Gravity.TOP or Gravity.END
         layoutDirection = activity.resources.configuration.layoutDirection
-        setPadding(dp(if (isTv) 22 else 14), dp(if (isTv) 24 else 14), dp(if (isTv) 22 else 14), dp(if (isTv) 24 else 18))
+        setPadding(
+            dp(if (shortTv) 14 else if (isTv) 22 else 14),
+            dp(if (shortTv) 12 else if (isTv) 24 else 14),
+            dp(if (shortTv) 14 else if (isTv) 22 else 14),
+            dp(if (shortTv) 12 else if (isTv) 24 else 18)
+        )
         background = BlofyTvDesign.glassSurface(dp(22).toFloat(), false)
     }
     private val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-    private val profileActions = LinearLayout(activity).apply { tag = "blofy_details_profile_actions" }
+    private val profileActions = LinearLayout(activity).apply {
+        tag = "blofy_details_profile_actions"
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
 
     init {
         root.addView(backdrop, FrameLayout.LayoutParams(-1, -1))
@@ -52,9 +62,19 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
             orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             layoutDirection = activity.resources.configuration.layoutDirection
             gravity = if (isTv) Gravity.CENTER_VERTICAL else Gravity.TOP
-            setPadding(dp(if (isTv) 48 else 20), dp(if (isTv) 24 else 16), dp(if (isTv) 48 else 20), dp(if (isTv) 24 else 16))
+            setPadding(
+                dp(if (shortTv) 28 else if (isTv) 48 else 20),
+                dp(if (shortTv) 14 else if (isTv) 24 else 16),
+                dp(if (shortTv) 28 else if (isTv) 48 else 20),
+                dp(if (shortTv) 14 else if (isTv) 24 else 16)
+            )
         }
-        val posterHeight = if (isTv) (activity.resources.configuration.screenHeightDp * .72f).toInt().coerceIn(260, 500) else if (stacked) 188 else 210
+        val posterHeight = when {
+            shortTv -> (activity.resources.configuration.screenHeightDp * .66f).toInt().coerceIn(230, 360)
+            isTv -> (activity.resources.configuration.screenHeightDp * .72f).toInt().coerceIn(260, 500)
+            stacked -> 188
+            else -> 210
+        }
         val posterWidth = if (isTv) posterHeight * 2 / 3 else if (stacked) 128 else 142
         val card = FrameLayout(activity).apply {
             setPadding(dp(6), dp(6), dp(6), dp(6))
@@ -92,6 +112,9 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
 
     fun attachActions(row: LinearLayout) {
         if (isTv) {
+            row.addView(profileActions, LinearLayout.LayoutParams(-2, dp(CinemaStyle.ActionHeight)).apply {
+                marginStart = dp(8)
+            })
             info.addView(CinemaStyle.actionStrip(activity, row))
             return
         }
@@ -116,7 +139,10 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         content.addView(dock, LinearLayout.LayoutParams(-1, -2))
     }
 
-    fun logoParams() = LinearLayout.LayoutParams(if (isTv) dp(390) else -1, dp(if (isTv) 86 else 64)).apply {
+    fun logoParams() = LinearLayout.LayoutParams(
+        if (isTv) dp(if (shortTv) 320 else 390) else -1,
+        dp(if (shortTv) 64 else if (isTv) 86 else 64)
+    ).apply {
         gravity = Gravity.END
         topMargin = dp(4)
     }
