@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.ScrollView
 import androidx.appcompat.app.AppCompatActivity
+import tv.blofy.player.R
 import tv.blofy.player.ui.catalog.SmartCollectionsActivity
 import tv.blofy.player.ui.guide.LiveGuideActivity
 import tv.blofy.player.ui.home.ForYouActivity
@@ -34,7 +35,7 @@ class QuickMenuActivity : AppCompatActivity() {
         val root = FrameLayout(this).apply { setBackgroundColor(0xC9080710.toInt()) }
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(22), dp(16), dp(22), dp(16))
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF261832.toInt(), 0xFF120D1A.toInt())).apply {
@@ -60,29 +61,29 @@ class QuickMenuActivity : AppCompatActivity() {
             letterSpacing = .12f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(0xFFB574FF.toInt())
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
         })
         panel.addView(TextView(this).apply {
-            text = "وصول سريع"
+            text = getString(R.string.quick_menu_title)
             textSize = 26f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(3), 0, dp(10))
         })
 
-        addAction(panel, "✦", "مختار لك", "اقتراحات من مكتبتك حسب مشاهداتك", Intent(this, ForYouActivity::class.java), true)
-        addAction(panel, "▤", "دليل القنوات", "الآن، التالي وتشغيل مباشر", Intent(this, LiveGuideActivity::class.java))
-        addAction(panel, "⌕", "البحث الشامل", "قنوات، أفلام، مسلسلات وممثلين", Intent(this, SearchActivity::class.java))
-        addAction(panel, "▶", "متابعة المشاهدة", "ارجع لآخر نقطة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE))
-        addAction(panel, "＋", "قائمتي", "محتوى حفظته للمشاهدة لاحقًا", Intent(this, ProfileWatchlistActivity::class.java))
-        addAction(panel, "★", "المفضلة", "اختياراتك المحفوظة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
-        addAction(panel, "◉", "آخر القنوات", "ارجع للبث بسرعة", Intent(this, RecentChannelsActivity::class.java))
-        addAction(panel, "◆", "BLOFY Collections", "الأعلى تقييمًا، 4K، عربي والجديد", Intent(this, SmartCollectionsActivity::class.java))
-        addAction(panel, "☁", "BLOFY Cloud", "نسخ احتياطي ومزامنة واستعادة", Intent(this, CloudSyncActivity::class.java))
-        addAction(panel, "👤", "الملفات والحماية", "الرئيسي، أطفال وPIN", Intent(this, ProfilesActivity::class.java))
-        addAction(panel, "◈", "جودة الصور والأداء", "وضوح البوسترات والوضع الخفيف", Intent(this, CommercialSettingsActivity::class.java))
-        addAction(panel, "⚙", "الإعدادات", "المشغل، المحتوى والتطبيق", Intent(this, SettingsActivity::class.java))
+        addAction(panel, "✦", getString(R.string.quick_for_you), getString(R.string.quick_for_you_subtitle), Intent(this, ForYouActivity::class.java), true)
+        addAction(panel, "▤", getString(R.string.quick_guide), getString(R.string.quick_guide_subtitle), Intent(this, LiveGuideActivity::class.java))
+        addAction(panel, "⌕", getString(R.string.quick_search), getString(R.string.quick_search_subtitle), Intent(this, SearchActivity::class.java))
+        addAction(panel, "▶", getString(R.string.quick_continue), getString(R.string.quick_continue_subtitle), Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE))
+        addAction(panel, "＋", getString(R.string.quick_watchlist), getString(R.string.quick_watchlist_subtitle), Intent(this, ProfileWatchlistActivity::class.java))
+        addAction(panel, "★", getString(R.string.quick_favorites), getString(R.string.quick_favorites_subtitle), Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
+        addAction(panel, "◉", getString(R.string.quick_recent_channels), getString(R.string.quick_recent_channels_subtitle), Intent(this, RecentChannelsActivity::class.java))
+        addAction(panel, "◆", "BLOFY Collections", getString(R.string.quick_collections_subtitle), Intent(this, SmartCollectionsActivity::class.java))
+        addAction(panel, "☁", "BLOFY Cloud", getString(R.string.quick_cloud_subtitle), Intent(this, CloudSyncActivity::class.java))
+        addAction(panel, "👤", getString(R.string.quick_profiles), getString(R.string.quick_profiles_subtitle), Intent(this, ProfilesActivity::class.java))
+        addAction(panel, "◈", getString(R.string.quick_artwork_performance), getString(R.string.quick_artwork_performance_subtitle), Intent(this, CommercialSettingsActivity::class.java))
+        addAction(panel, "⚙", getString(R.string.quick_settings), getString(R.string.quick_settings_subtitle), Intent(this, SettingsActivity::class.java))
 
         setContentView(root)
         panel.post { panel.getChildAt(2)?.requestFocus() }
@@ -91,7 +92,7 @@ class QuickMenuActivity : AppCompatActivity() {
     private fun addAction(parent: LinearLayout, icon: String, title: String, subtitle: String, intent: Intent, primary: Boolean = false) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
             isFocusable = true
             isFocusableInTouchMode = true
@@ -109,19 +110,19 @@ class QuickMenuActivity : AppCompatActivity() {
 
             val copy = LinearLayout(this@QuickMenuActivity).apply {
                 orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
                 addView(TextView(this@QuickMenuActivity).apply {
                     text = title
                     textSize = 14.6f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.WHITE)
-                    gravity = Gravity.RIGHT
+                    gravity = Gravity.START
                 })
                 addView(TextView(this@QuickMenuActivity).apply {
                     text = subtitle
                     textSize = 10.4f
                     setTextColor(0xFFB2A7BE.toInt())
-                    gravity = Gravity.RIGHT
+                    gravity = Gravity.START
                 })
             }
             addView(copy, LinearLayout.LayoutParams(0, dp(49), 1f))
