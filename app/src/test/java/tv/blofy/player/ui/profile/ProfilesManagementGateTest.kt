@@ -71,7 +71,10 @@ class ProfilesManagementGateTest {
     }
     private fun tapProfile(name: String) {
         val title = views(activity.window.decorView).filterIsInstance<TextView>()
-            .single { it.text.toString().startsWith("👤  $name") }
+            .single {
+                it.text.toString().contains(name) &&
+                    (it.parent as? View)?.isClickable == true
+            }
         clickAndIdle(title.parent as View)
     }
 
