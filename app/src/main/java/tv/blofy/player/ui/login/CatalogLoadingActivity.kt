@@ -52,6 +52,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private var displayedPercent = 0
     private lateinit var percent: TextView
     private lateinit var stage: TextView
+    private lateinit var progressMeta: TextView
     private lateinit var progress: ProgressBar
     private lateinit var serverStep: TextView
     private lateinit var contentStep: TextView
@@ -153,7 +154,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
-        }, LinearLayout.LayoutParams(u(if (compact) 120 else 176), u(if (compact) 66 else 96)))
+        }, LinearLayout.LayoutParams(u(if (compact) 128 else 196), u(if (compact) 70 else 108)))
         panel.addView(TextView(this).apply {
             text = getString(R.string.catalog_title)
             BlofyTvDesign.applyTitle(this)
@@ -184,15 +185,15 @@ class CatalogLoadingActivity : AppCompatActivity() {
             progressBackgroundTintList = ColorStateList.valueOf(BlofyTvDesign.Divider)
         }
         if (compact) {
-            progressRow.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(10)).apply {
+            progressRow.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(12)).apply {
                 bottomMargin = u(8)
             })
         } else {
-            progressRow.addView(progress, LinearLayout.LayoutParams(0, u(12), 1f).apply { marginEnd = u(24) })
+            progressRow.addView(progress, LinearLayout.LayoutParams(0, u(16), 1f).apply { marginEnd = u(20) })
         }
         percent = TextView(this).apply {
             text = "0%"
-            textSize = s(if (compact) 34f else 42f)
+            textSize = s(if (compact) 30f else 36f)
             typeface = BlofyTvDesign.DisplayTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
@@ -200,9 +201,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
             background = percentBadgeBackground()
         }
         progressRow.addView(percent, if (compact) {
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(50))
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(48))
         } else {
-            LinearLayout.LayoutParams(u(132), u(64))
+            LinearLayout.LayoutParams(u(112), u(58))
         })
         panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(if (compact) 86 else 88)).apply {
             bottomMargin = u(if (compact) 6 else 10)
@@ -211,11 +212,20 @@ class CatalogLoadingActivity : AppCompatActivity() {
         stage = TextView(this).apply {
             text = getString(R.string.catalog_connecting)
             BlofyTvDesign.applyHeading(this)
-            textSize = s(if (compact) 16f else 20f)
+            textSize = s(if (compact) 17f else 22f)
             gravity = Gravity.CENTER
-            setPadding(0, u(if (compact) 6 else 12), 0, u(6))
+            setPadding(0, u(if (compact) 6 else 10), 0, u(4))
         }
         panel.addView(stage)
+        progressMeta = TextView(this).apply {
+            visibility = View.GONE
+            textSize = s(if (compact) 11f else 12.5f)
+            typeface = BlofyTvDesign.MediumTypeface
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+        }
+        panel.addView(progressMeta, LinearLayout.LayoutParams(-1, u(if (compact) 20 else 24)))
         panel.addView(TextView(this).apply {
             text = getString(R.string.catalog_note)
             BlofyTvDesign.applyCaption(this)
@@ -418,11 +428,14 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         val status = if (p.retryAttempt > 0) "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)" else label
         render((p.percent.coerceIn(0, 95) * 30 / 95), status)
+        progressMeta.text = "${p.step.coerceAtLeast(1)} / ${p.totalSteps.coerceAtLeast(1)}"
+        progressMeta.visibility = View.VISIBLE
     }
 
     private fun render(value: Int, label: String) {
         val safe = maxOf(displayedPercent, value.coerceIn(0, 100))
         displayedPercent = safe
+        progressMeta.visibility = View.GONE
         progress.isIndeterminate = false
         progress.progress = safe
         percent.text = "$safe%"
@@ -493,6 +506,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private fun fail(message: String) {
         progress.isIndeterminate = false
+        progressMeta.visibility = View.GONE
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Error)
         retryButton.visibility = View.VISIBLE
