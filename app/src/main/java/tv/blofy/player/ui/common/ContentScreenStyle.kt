@@ -65,16 +65,16 @@ object ContentScreenStyle {
     fun softSurface(context: Context, focused: Boolean = false, radiusDp: Int = 14) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) {
-            intArrayOf(0xC94D2E67.toInt(), 0xA7271838.toInt(), 0x8A130E1B.toInt())
+            intArrayOf(0xB9543575.toInt(), 0x96301D47.toInt(), 0x72160F21.toInt())
         } else {
-            intArrayOf(0x2B251831, 0x20170F21, 0x18100B17)
+            intArrayOf(0x23251A30, 0x18160F20, 0x10100B17)
         }
     ).apply {
         val d = context.resources.displayMetrics.density
         cornerRadius = radiusDp * d
         setStroke(
-            ((if (focused) 2 else 1) * d).toInt(),
-            if (focused) 0xFFEAD7FF.toInt() else 0x24FFFFFF
+            (1f * d).toInt().coerceAtLeast(1),
+            if (focused) 0xAA9A6BC6.toInt() else 0x18FFFFFF
         )
     }
 
