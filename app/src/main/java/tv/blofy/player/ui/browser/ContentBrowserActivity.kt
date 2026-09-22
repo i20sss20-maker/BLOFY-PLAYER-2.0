@@ -156,8 +156,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             tag = "blofy_browser_heading"
             layoutDirection = resources.configuration.layoutDirection
-            val section = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
-            text = "BLOFY  •  $section"
+            val section = when (kind) { KIND_MOVIE -> getString(R.string.home_movies); KIND_SERIES -> getString(R.string.home_series); else -> getString(R.string.home_live) }
+            text = getString(R.string.search_brand_section, section)
             textSize = if (phoneMode) 24f else 29f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -263,18 +263,18 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun createCatalogStatusRow() = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        layoutDirection = resources.configuration.layoutDirection
         setPadding(dp(12), 0, dp(12), dp(if (phoneMode) 8 else 12))
         background = BlofyTvDesign.elevatedSurface(20f)
         catalogStatus = TextView(this@ContentBrowserActivity).apply {
-            text = "جاري التحقق من ${catalogLabel()}..."
+            text = getString(R.string.browser_checking_catalog, catalogLabel())
             textSize = if (phoneMode) 14f else 15f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
         }
         addView(catalogStatus, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         catalogRetry = Button(this@ContentBrowserActivity).apply {
-            text = "إعادة المحاولة"
+            text = getString(R.string.browser_retry)
             isAllCaps = false
             textSize = 14f
             typeface = BlofyTvDesign.BodyTypeface
@@ -358,7 +358,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         }
 
         streamAdapter.replace(emptyList())
-        showCatalogStatus("جاري تحميل ${catalogLabel()}...", retry = false)
+        showCatalogStatus(getString(R.string.browser_checking_catalog, catalogLabel()), retry = false)
         loadNextCatalogPage(reset = true)
     }
 
@@ -505,10 +505,10 @@ class ContentBrowserActivity : AppCompatActivity() {
             return
         }
         if (categoryId != null) {
-            showCatalogStatus("لا يوجد محتوى في هذا القسم • اختر ${allCategory().name}", retry = false)
+            showCatalogStatus(getString(R.string.browser_empty_category, allCategory().name), retry = false)
             return
         }
-        showCatalogStatus("لا توجد ${catalogLabel()} محفوظة • حدّث المكتبة يدويًا", retry = true)
+        showCatalogStatus(getString(R.string.browser_no_saved_catalog, catalogLabel()), retry = true)
     }
 
     private fun refreshMissingCatalog() {
@@ -546,14 +546,14 @@ class ContentBrowserActivity : AppCompatActivity() {
         remoteId = ALL_CATEGORY_ID,
         kind = kind,
         name = when (kind) {
-            KIND_LIVE -> "كل القنوات"
-            KIND_MOVIE -> "كل الأفلام"
-            else -> "كل المسلسلات"
+            KIND_LIVE -> getString(R.string.browser_all_channels)
+            KIND_MOVIE -> getString(R.string.browser_all_movies)
+            else -> getString(R.string.browser_all_series)
         },
         orderIndex = -1
     )
 
-    private fun catalogLabel(): String = if (kind == KIND_MOVIE) "أفلام" else "مسلسلات"
+    private fun catalogLabel(): String = getString(if (kind == KIND_MOVIE) R.string.browser_movies_label else R.string.browser_series_label)
 
     private fun schedulePreview(stream: StreamEntity, immediate: Boolean = false) {
         if (!previewEnabled || !::provider.isInitialized || stream.locked || stream.key == lastPreviewKey) return
