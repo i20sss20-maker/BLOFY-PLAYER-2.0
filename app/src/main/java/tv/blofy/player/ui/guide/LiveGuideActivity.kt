@@ -635,10 +635,10 @@ private class GuideChannelAdapter(
             view.background = rowBackground(focused, holder.dp(14))
             view.animate().cancel()
             view.animate()
-                .scaleX(if (focused) 1.012f else 1f)
-                .scaleY(if (focused) 1.012f else 1f)
-                .translationZ(if (focused) holder.dp(8).toFloat() else 1f)
-                .setDuration(60L)
+                .scaleX(if (focused) tv.blofy.player.ui.common.TvUiTuning.focusScale(view.context, 1.012f) else 1f)
+                .scaleY(if (focused) tv.blofy.player.ui.common.TvUiTuning.focusScale(view.context, 1.012f) else 1f)
+                .translationZ(if (focused) tv.blofy.player.ui.common.TvUiTuning.focusElevation(view.context, holder.dp(8).toFloat()) else 0f)
+                .setDuration(tv.blofy.player.ui.common.TvUiTuning.focusDuration(view.context, focused))
                 .start()
             if (focused) onFocus(item)
         }
@@ -667,7 +667,7 @@ private class GuideChannelAdapter(
             else intArrayOf(0xD923182F.toInt(), 0xE616101E.toInt())
         ).apply {
             cornerRadius = radius.toFloat()
-            setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF49365D.toInt())
+            setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF49365D.toInt())
         }
     }
 }

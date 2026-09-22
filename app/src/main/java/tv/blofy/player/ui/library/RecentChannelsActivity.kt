@@ -23,6 +23,7 @@ import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.player.PlayerActivity
 
 class RecentChannelsActivity : AppCompatActivity() {
@@ -31,7 +32,7 @@ class RecentChannelsActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(48, 34, 48, 36)
+            setPadding(dp(48), dp(34), dp(48), dp(36))
             background = AppCompatResources.getDrawable(this@RecentChannelsActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
@@ -48,7 +49,7 @@ class RecentChannelsActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT
-            setPadding(0, 4, 0, 14)
+            setPadding(0, dp(4), 0, dp(14))
         })
         val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -71,7 +72,7 @@ class RecentChannelsActivity : AppCompatActivity() {
                     text = "لا توجد قنوات حديثة"
                     textSize = 17f
                     setTextColor(BlofyTvDesign.TextMuted)
-                    setPadding(0, 20, 0, 0)
+                    setPadding(0, dp(20), 0, 0)
                 })
                 return@launch
             }
@@ -80,15 +81,15 @@ class RecentChannelsActivity : AppCompatActivity() {
                     orientation = LinearLayout.HORIZONTAL
                     layoutDirection = View.LAYOUT_DIRECTION_RTL
                     gravity = Gravity.CENTER_VERTICAL
-                    setPadding(16, 8, 16, 8)
+                    setPadding(dp(16), dp(8), dp(16), dp(8))
                     isFocusable = true; isFocusableInTouchMode = true; isClickable = true
                     background = rowBackground(false)
                     val logo = ImageView(this@RecentChannelsActivity).apply {
                         scaleType = ImageView.ScaleType.CENTER_INSIDE
-                        setPadding(5, 5, 5, 5)
-                        background = GradientDrawable().apply { cornerRadius = 12f; setColor(0xFF17111F.toInt()); setStroke(1, 0xFF49375E.toInt()) }
+                        setPadding(dp(5), dp(5), dp(5), dp(5))
+                        background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0xFF17111F.toInt()); setStroke(dp(1), 0xFF49375E.toInt()) }
                     }
-                    addView(logo, LinearLayout.LayoutParams(56, 56).apply { marginStart = 14 })
+                    addView(logo, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginStart = dp(14) })
                     if (!stream.icon.isNullOrBlank() || !stream.backdrop.isNullOrBlank()) ArtworkLoader.load(logo, listOf(stream.icon, stream.backdrop)) else logo.setImageResource(R.drawable.blofy_logo)
                     addView(TextView(this@RecentChannelsActivity).apply {
                         text = stream.name
@@ -97,18 +98,24 @@ class RecentChannelsActivity : AppCompatActivity() {
                         setTextColor(BlofyTvDesign.TextPrimary)
                         gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
                         maxLines = 1
-                    }, LinearLayout.LayoutParams(0, 64, 1f))
+                    }, LinearLayout.LayoutParams(0, dp(64), 1f))
                     addView(TextView(this@RecentChannelsActivity).apply {
                         text = "● مباشر"
                         textSize = 12f
                         typeface = BlofyTvDesign.BodyTypeface
                         setTextColor(BlofyTvDesign.Mint)
                         gravity = Gravity.CENTER
-                    }, LinearLayout.LayoutParams(90, 64))
+                    }, LinearLayout.LayoutParams(dp(90), dp(64)))
                     setOnFocusChangeListener { view, focused ->
                         view.background = rowBackground(focused)
                         view.animate().cancel()
-                        view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).translationZ(if (focused) 9f else 1f).setDuration(75).start()
+                        val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+                        view.animate()
+                            .scaleX(targetScale)
+                            .scaleY(targetScale)
+                            .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(9).toFloat()) else 0f)
+                            .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                            .start()
                     }
                     setOnClickListener {
                         val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (provider.liveFormat.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
@@ -122,16 +129,18 @@ class RecentChannelsActivity : AppCompatActivity() {
                         })
                     }
                 }
-                list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 78).apply { topMargin = 8 })
+                list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(78)).apply { topMargin = dp(8) })
             }
             list.getChildAt(0)?.requestFocus()
         }
     }
 
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
     private fun rowBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) intArrayOf(0xFF7139BE.toInt(), 0xFF402461.toInt()) else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
     ).apply {
-        cornerRadius = 18f
-        setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.PurpleBright else 0xFF463455.toInt())
+        cornerRadius = dp(18).toFloat()
+        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF463455.toInt())
     }
 }

@@ -88,6 +88,9 @@ class SectionSearchActivity : AppCompatActivity() {
             background = CinemaStyle.surface(this@SectionSearchActivity)
             setPadding(dp(18), dp(6), dp(18), dp(6))
             isSingleLine = true
+            setOnFocusChangeListener { view, focused ->
+                view.background = CinemaStyle.surface(this@SectionSearchActivity, focused)
+            }
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             setOnEditorActionListener { _, _, _ ->
                 val query = text?.toString().orEmpty()

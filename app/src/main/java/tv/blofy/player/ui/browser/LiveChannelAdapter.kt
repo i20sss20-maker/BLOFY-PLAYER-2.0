@@ -155,10 +155,14 @@ internal class LiveChannelAdapter(
         holder.itemView.setOnFocusChangeListener { view, focused ->
             if (focused) focusedKey = itemKey(item)
             view.animate().cancel()
-            view.scaleX = 1f
-            view.scaleY = 1f
-            view.translationZ = if (focused) 4f else 0f
             renderFocus(holder, focused)
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+            view.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, TvUiTuning.dp(view.context, 7).toFloat()) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                .start()
             if (focused) onFocus(item)
         }
     }
@@ -212,10 +216,10 @@ internal class LiveChannelAdapter(
         val density = contextForBackground.resources.displayMetrics.density
         return GradientDrawable().apply {
             cornerRadius = 10 * density
-            setColor(if (focused) 0xAD664397.toInt() else 0x5E211332.toInt())
+            setColor(if (focused) 0xD35C3582.toInt() else 0x5E211332.toInt())
             setStroke(
                 ((if (focused) 2 else 1) * density).toInt(),
-                if (focused) 0xD9FFFFFF.toInt() else 0x38FFFFFF
+                if (focused) BlofyTvDesign.FocusStroke else 0x38FFFFFF
             )
         }
     }

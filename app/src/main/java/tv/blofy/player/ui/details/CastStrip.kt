@@ -15,6 +15,7 @@ import tv.blofy.player.R
 import tv.blofy.player.data.metadata.ProviderMetadata
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 
 internal object CastStrip {
     fun build(context: Context, people: List<ProviderMetadata.Person>): View {
@@ -49,10 +50,14 @@ internal object CastStrip {
                 setOnFocusChangeListener { view, focused ->
                     view.animate().cancel()
                     view.background = BlofyTvDesign.glassSurface(dp(17).toFloat(), focused)
-                    view.scaleX = if (focused) 1.01f else 1f
-                    view.scaleY = if (focused) 1.01f else 1f
-                    view.translationZ = if (focused) dp(6).toFloat() else 0f
-                    view.alpha = if (focused) 1f else .96f
+                    val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.018f) else 1f
+                    view.animate()
+                        .scaleX(targetScale)
+                        .scaleY(targetScale)
+                        .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(7).toFloat()) else 0f)
+                        .alpha(if (focused) 1f else .96f)
+                        .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                        .start()
                 }
                 setOnClickListener {
                     context.startActivity(Intent(context, PersonDetailsActivity::class.java).apply {

@@ -2,12 +2,12 @@ package tv.blofy.player.ui.catchup
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
 import tv.blofy.player.core.security.ContentAccessActivity
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -20,6 +20,10 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.player.PlayerActivity
+import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.TvUiTuning
+import tv.blofy.player.R
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -35,19 +39,21 @@ class CatchupActivity : ContentAccessActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(46, 34, 46, 34)
-            setBackgroundColor(Color.rgb(5, 5, 10))
+            setPadding(dp(46), dp(34), dp(46), dp(34))
+            background = AppCompatResources.getDrawable(this@CatchupActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
             text = "أرشيف BLOFY"
             textSize = 30f
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
         })
         status = TextView(this).apply {
             text = "جاري تحميل البرامج السابقة..."
             textSize = 15f
-            setTextColor(Color.rgb(190, 145, 255))
-            setPadding(0, 5, 0, 18)
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            setPadding(0, dp(5), 0, dp(18))
         }
         root.addView(status)
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -87,14 +93,24 @@ class CatchupActivity : ContentAccessActivity() {
                 text = "${time(item.startMs)}–${time(item.endMs)}   •   ${item.title}"
                 textSize = 17f
                 setTextColor(Color.WHITE)
-                setPadding(22, 16, 22, 16)
+                setPadding(dp(22), dp(16), dp(22), dp(16))
                 gravity = Gravity.CENTER_VERTICAL
                 isFocusable = true
                 isClickable = true
                 background = rowBackground(false)
-                setOnFocusChangeListener { view, focused -> view.background = rowBackground(focused) }
+                setOnFocusChangeListener { view, focused ->
+                    view.background = rowBackground(focused)
+                    view.animate().cancel()
+                    val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+                    view.animate()
+                        .scaleX(targetScale)
+                        .scaleY(targetScale)
+                        .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(8).toFloat()) else 0f)
+                        .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                        .start()
+                }
                 setOnClickListener { playCatchup(provider, stream, item) }
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 64).apply { topMargin = 6 })
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)).apply { topMargin = dp(6) })
         }
         list.getChildAt(0)?.requestFocus()
     }
@@ -112,11 +128,10 @@ class CatchupActivity : ContentAccessActivity() {
 
     private fun time(ms: Long): String = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(ms))
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 15f
-        setColor(if (focused) Color.rgb(70, 34, 118) else Color.rgb(18, 17, 28))
-        if (focused) setStroke(2, Color.rgb(190, 135, 255))
-    }
+    private fun rowBackground(focused: Boolean) =
+        CinemaStyle.surface(this, focused = focused, radiusDp = 15)
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"

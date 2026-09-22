@@ -24,6 +24,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.*
 import tv.blofy.player.ui.catalog.PosterCatalogActivity
+import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.RootExitConfirmationDialog
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -121,7 +122,9 @@ class CommercialUiRegressionTest {
                 assertTrue(dialog.getButton(DialogInterface.BUTTON_NEGATIVE).hasFocus())
                 assertVisible(dialog.getButton(DialogInterface.BUTTON_NEGATIVE))
                 assertVisible(dialog.getButton(DialogInterface.BUTTON_POSITIVE))
-                assertEquals(Color.WHITE, (dialog.getButton(DialogInterface.BUTTON_NEGATIVE).background as android.graphics.drawable.GradientDrawable).color!!.defaultColor)
+                val stay = dialog.getButton(DialogInterface.BUTTON_NEGATIVE)
+                assertTrue(stay.background is android.graphics.drawable.GradientDrawable)
+                assertEquals(CinemaStyle.Background, stay.currentTextColor)
             } }
             screenshot("exit-stay")
             key(KeyEvent.KEYCODE_DPAD_LEFT)

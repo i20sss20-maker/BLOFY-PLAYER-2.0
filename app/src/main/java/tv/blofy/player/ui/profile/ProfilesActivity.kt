@@ -21,6 +21,7 @@ import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 
 class ProfilesActivity : AppCompatActivity() {
     private lateinit var root: LinearLayout
@@ -87,7 +88,13 @@ class ProfilesActivity : AppCompatActivity() {
                 setOnFocusChangeListener { view, focused ->
                     view.background = cardBg(profile.id == active.id, focused)
                     view.animate().cancel()
-                    view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(65).start()
+                    val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.015f) else 1f
+                    view.animate()
+                        .scaleX(targetScale)
+                        .scaleY(targetScale)
+                        .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(8).toFloat()) else 0f)
+                        .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                        .start()
                 }
                 setOnClickListener { selectProfile(profile) }
             }
@@ -284,15 +291,28 @@ class ProfilesActivity : AppCompatActivity() {
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label; isAllCaps = false; textSize = 14f; setTextColor(Color.WHITE); background = buttonBg(false)
-        setOnFocusChangeListener { view, focused -> view.background = buttonBg(focused) }
+        stateListAnimator = null
+        setOnFocusChangeListener { view, focused ->
+            view.background = buttonBg(focused)
+            view.animate().cancel()
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.02f) else 1f
+            view.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(7).toFloat()) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                .start()
+        }
         setOnClickListener { action() }
     }
 
     private fun cardBg(selected: Boolean, focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
         when { focused -> intArrayOf(0xFF6D3FA0.toInt(), 0xFF352047.toInt()); selected -> intArrayOf(0xFF342248.toInt(), 0xFF20162C.toInt()); else -> intArrayOf(0xFF21172D.toInt(), 0xFF15101D.toInt()) }
-    ).apply { cornerRadius = dp(16).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFC690FF.toInt() else 0xFF4B385E.toInt()) }
+    ).apply { cornerRadius = dp(16).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF4B385E.toInt()) }
 
     private fun fieldBg() = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(0xFF20162B.toInt()); setStroke(dp(1), 0xFF513D67.toInt()) }
-    private fun buttonBg(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(if (focused) 0xFF6B37A0.toInt() else 0xFF2A1C39.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFC690FF.toInt() else 0xFF513D67.toInt()) }
+    private fun buttonBg(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+        if (focused) intArrayOf(0xFF7143A3.toInt(), 0xFF43285E.toInt()) else intArrayOf(0xFF2A1C39.toInt(), 0xFF1D1427.toInt())
+    ).apply { cornerRadius = dp(14).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF513D67.toInt()) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 }

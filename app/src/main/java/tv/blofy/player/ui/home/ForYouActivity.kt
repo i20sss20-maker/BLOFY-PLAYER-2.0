@@ -19,6 +19,7 @@ import tv.blofy.player.R
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 
@@ -112,9 +113,15 @@ class ForYouActivity : AppCompatActivity() {
                 background = BlofyTvDesign.glassSurface(dp(14).toFloat())
                 setOnFocusChangeListener { view, focused ->
                     setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
+                    view.background = BlofyTvDesign.glassSurface(dp(14).toFloat(), focused)
                     view.animate().cancel()
-                    view.animate().scaleX(if (focused) 1.012f else 1f).scaleY(if (focused) 1.012f else 1f)
-                        .translationZ(if (focused) dp(8).toFloat() else 1f).setDuration(65).start()
+                    val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+                    view.animate()
+                        .scaleX(targetScale)
+                        .scaleY(targetScale)
+                        .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(8).toFloat()) else 0f)
+                        .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                        .start()
                 }
                 setOnClickListener { open(providerId, item) }
             }

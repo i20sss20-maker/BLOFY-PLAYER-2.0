@@ -46,6 +46,7 @@ import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
 
@@ -120,35 +121,60 @@ class LoginActivity : AppCompatActivity() {
             clipChildren = false
             clipToPadding = false
         }
+        val compactTvHeight = resources.configuration.screenHeightDp <= 600
         val activation = LinearLayout(this).apply {
             tag = "blofy_login_activation_panel"
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(18), dp(16), dp(18), dp(16))
-            background = premiumPanelBackground(false)
+            setPadding(dp(20), dp(if (compactTvHeight) 12 else 18), dp(20), dp(if (compactTvHeight) 12 else 18))
+            background = premiumPanelBackground(true)
         }
-        activation.addView(loginText(R.string.login_link_tv, 19f, true).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(-1, dp(28)))
+        activation.addView(TextView(this).apply {
+            text = "BLOFY LINK"
+            textSize = 10.5f
+            letterSpacing = .14f
+            typeface = BlofyTvDesign.LabelTypeface
+            setTextColor(BlofyTvDesign.PurpleBright)
+            gravity = Gravity.CENTER
+            background = BlofyTvDesign.badge(dp(12).toFloat())
+            setPadding(dp(14), 0, dp(14), 0)
+        }, LinearLayout.LayoutParams(-2, dp(if (compactTvHeight) 24 else 28)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(if (compactTvHeight) 3 else 6)
+        })
+        activation.addView(loginText(R.string.login_link_tv, if (compactTvHeight) 18f else 20f, true).apply {
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, dp(if (compactTvHeight) 26 else 30)))
         activation.addView(loginText(R.string.login_scan_hint, 12f).apply {
-            visibility = if (resources.configuration.screenHeightDp <= 600) View.GONE else View.VISIBLE
+            visibility = if (compactTvHeight) View.GONE else View.VISIBLE
             gravity = Gravity.CENTER
             maxLines = 2
         }, LinearLayout.LayoutParams(-1, dp(36)))
-        val qrSize = (resources.configuration.screenHeightDp - 420).coerceIn(112, 180)
+        val qrSize = if (compactTvHeight) {
+            (resources.configuration.screenHeightDp - 408).coerceIn(120, 142)
+        } else {
+            (resources.configuration.screenHeightDp - 390).coerceIn(132, 198)
+        }
         activation.addView(qrPanel(), LinearLayout.LayoutParams(dp(qrSize), dp(qrSize)).apply {
-            topMargin = dp(8)
-            bottomMargin = dp(8)
+            topMargin = dp(if (compactTvHeight) 5 else 8)
+            bottomMargin = dp(if (compactTvHeight) 5 else 8)
         })
-        activation.addView(trialView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        activation.addView(trialView, LinearLayout.LayoutParams(-1, -2).apply {
+            bottomMargin = dp(if (compactTvHeight) 5 else 8)
+        })
         val identity = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = premiumFieldBackground(false)
-            setPadding(dp(10), dp(5), dp(10), dp(5))
+            background = identityPanelBackground()
+            setPadding(dp(8), dp(7), dp(8), dp(7))
         }
         fun identityField(labelId: Int, value: TextView, size: Float) = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            addView(loginText(labelId, 10f).apply { gravity = Gravity.CENTER })
+            addView(loginText(labelId, 10f).apply {
+                gravity = Gravity.CENTER
+                setTextColor(BlofyTvDesign.TextMuted)
+            })
             value.apply {
                 textSize = size
                 layoutDirection = View.LAYOUT_DIRECTION_LTR
@@ -161,7 +187,7 @@ class LoginActivity : AppCompatActivity() {
         }
         identity.addView(identityField(R.string.login_device_label, deviceView, 12f), LinearLayout.LayoutParams(0, -1, 1.8f))
         identity.addView(identityField(R.string.login_pairing_label, codeView, 20f), LinearLayout.LayoutParams(0, -1, 1f))
-        activation.addView(identity, LinearLayout.LayoutParams(-1, dp(56)))
+        activation.addView(identity, LinearLayout.LayoutParams(-1, dp(if (compactTvHeight) 52 else 56)))
         activation.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
         status.apply {
             textSize = 11f
@@ -169,7 +195,9 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 0)
         }
-        activation.addView(status, LinearLayout.LayoutParams(-1, dp(32)).apply { topMargin = dp(6) })
+        activation.addView(status, LinearLayout.LayoutParams(-1, dp(if (compactTvHeight) 28 else 32)).apply {
+            topMargin = dp(if (compactTvHeight) 3 else 6)
+        })
 
         val playlists = LinearLayout(this).apply {
             tag = "blofy_login_playlists_panel"
@@ -228,7 +256,9 @@ class LoginActivity : AppCompatActivity() {
 
     private fun qrPanel() = FrameLayout(this).apply {
         tag = "blofy_login_qr_panel"
-        background = qrBackground()
+        background = qrFrameBackground()
+        setPadding(dp(7), dp(7), dp(7), dp(7))
+        elevation = dp(7).toFloat()
         addView(qrView, FrameLayout.LayoutParams(-1, -1))
         addView(qrMessage, FrameLayout.LayoutParams(-1, -1))
     }
@@ -246,7 +276,7 @@ class LoginActivity : AppCompatActivity() {
         root.addView(subtitle("فعّل جهازك ثم اختر قائمة التشغيل"))
         deviceView.background = fieldBackground(); root.addView(deviceView, LinearLayout.LayoutParams(-1, dp(54)))
         codeView.background = premiumFieldBackground(true); root.addView(codeView, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(8) })
-        root.addView(qrPanel(), LinearLayout.LayoutParams(dp(180), dp(180)).apply { topMargin = dp(12) })
+        root.addView(qrPanel(), LinearLayout.LayoutParams(dp(196), dp(196)).apply { topMargin = dp(14) })
         root.addView(trialView, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         status.background = statusBackground(); root.addView(status, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
         root.addView(loginText(R.string.login_your_playlists, 18f, true), LinearLayout.LayoutParams(-1, dp(40)))
@@ -481,7 +511,13 @@ class LoginActivity : AppCompatActivity() {
         setOnFocusChangeListener { view, focused ->
             view.background = playlistCardBackground(provider.enabled, focused)
             view.animate().cancel()
-            view.animate().scaleX(if (focused) 1.018f else 1f).scaleY(if (focused) 1.018f else 1f).translationZ(if (focused) 15f else 2f).setDuration(95).start()
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.018f) else 1f
+            view.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, 15f) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                .start()
         }
         setOnClickListener { selectPortalProvider(provider) }
     }
@@ -781,8 +817,24 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun qrBackground() = GradientDrawable().apply {
-        cornerRadius = dp(18).toFloat()
+        cornerRadius = dp(15).toFloat()
         setColor(Color.WHITE)
+    }
+
+    private fun qrFrameBackground() = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        intArrayOf(0xFFB987F3.toInt(), 0xFF7041B4.toInt(), 0xFF2B193E.toInt())
+    ).apply {
+        cornerRadius = dp(22).toFloat()
+        setStroke(dp(1), BlofyTvDesign.FocusStroke)
+    }
+
+    private fun identityPanelBackground() = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT,
+        intArrayOf(0xD921142E.toInt(), 0xE5160F20.toInt())
+    ).apply {
+        cornerRadius = dp(16).toFloat()
+        setStroke(dp(1), 0xFF735394.toInt())
     }
 
     private fun miniCircle() = GradientDrawable().apply {
@@ -805,7 +857,7 @@ class LoginActivity : AppCompatActivity() {
         }
     ).apply {
         cornerRadius = dp(17).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), when { focused -> BlofyTvDesign.PurpleBright; active -> 0xFF715A89.toInt(); else -> 0xFF49375E.toInt() })
+        setStroke(if (focused) dp(2) else dp(1), when { focused -> BlofyTvDesign.FocusStroke; active -> 0xFF715A89.toInt(); else -> 0xFF49375E.toInt() })
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

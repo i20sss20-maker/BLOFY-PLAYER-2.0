@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import tv.blofy.player.core.security.ContentAccessActivity
@@ -68,7 +69,9 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.PurpleBright)
                 gravity = contentGravity
-            })
+                background = BlofyTvDesign.badge(dp(10).toFloat())
+                setPadding(dp(10), dp(4), dp(10), dp(4))
+            }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(6) })
 
             val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
             val logo = ImageView(this@MovieDetailsActivity).apply {
@@ -110,11 +113,13 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 text = metadataStats(metadata)
                 textSize = 13.5f
                 typeface = BlofyTvDesign.BodyTypeface
-                setTextColor(0xFFE8D8FA.toInt())
+                setTextColor(BlofyTvDesign.Lavender)
                 gravity = contentGravity
-                setPadding(0, dp(7), 0, dp(10))
+                maxLines = 2
+                background = BlofyTvDesign.badge(dp(12).toFloat())
+                setPadding(dp(12), dp(8), dp(12), dp(8))
             }
-            info.addView(statsView)
+            info.addView(statsView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = getString(R.string.details_story)
@@ -133,10 +138,11 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 maxLines = 7
                 setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = contentGravity
-                setLineSpacing(0f, 1.16f)
-                setPadding(0, 0, 0, dp(9))
+                setLineSpacing(0f, 1.18f)
+                background = BlofyTvDesign.glassSurface(dp(14).toFloat(), false)
+                setPadding(dp(14), dp(12), dp(14), dp(12))
             }
-            info.addView(overviewView)
+            info.addView(overviewView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
             val crewView = TextView(this@MovieDetailsActivity).apply {
                 textSize = 11.5f
@@ -158,8 +164,14 @@ class MovieDetailsActivity : ContentAccessActivity() {
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.Mint)
                     gravity = contentGravity
-                    setPadding(0, 0, 0, dp(7))
+                    setPadding(0, 0, 0, dp(6))
                 })
+                info.addView(ProgressBar(this@MovieDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    max = 100
+                    this.progress = progress
+                    progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF3B2B4B.toInt())
+                }, LinearLayout.LayoutParams(-1, dp(5)).apply { bottomMargin = dp(11) })
             }
 
             val actions = LinearLayout(this@MovieDetailsActivity).apply {
@@ -192,7 +204,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
             val castContainer = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
             }
-            info.addView(castContainer, LinearLayout.LayoutParams(-1, -2))
+            info.addView(castContainer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
             ProviderDetailsBinding(this@MovieDetailsActivity, overviewView, crewView,
                 castContainer, provider, stream) { updated ->
                     statsView.text = metadataStats(updated)

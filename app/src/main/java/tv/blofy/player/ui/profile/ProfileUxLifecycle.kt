@@ -2,6 +2,8 @@ package tv.blofy.player.ui.profile
 
 import android.app.Activity
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import android.app.Application
 import android.graphics.Color
 import android.os.Bundle
@@ -47,10 +49,11 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
             tag = WATCHLIST_TAG
             isAllCaps = false
             textSize = 12f
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.LabelTypeface
+            setTextColor(CinemaStyle.White)
             gravity = Gravity.CENTER
             isFocusable = true
-            isFocusableInTouchMode = true
+            isFocusableInTouchMode = tv.blofy.player.core.device.DeviceClass.isTv(activity)
             elevation = 0f
             minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0
             stateListAnimator = null
@@ -66,9 +69,13 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
                 view.background = CinemaStyle.buttonBackground(activity, false, focused)
                 setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
                 view.animate().cancel()
-                view.animate().scaleX(if (focused) 1.02f else 1f).scaleY(if (focused) 1.02f else 1f)
-                    .translationZ(0f)
-                    .setDuration(70).start()
+                val targetScale = if (focused) TvUiTuning.focusScale(activity, 1.024f) else 1f
+                view.animate()
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(activity, dp(activity, 7).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(activity, focused))
+                    .start()
             }
             setOnClickListener {
                 val next = !ProfileLibraryStore.isWatchlisted(activity, contentKey)
