@@ -22,6 +22,8 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationDisplayState
 import tv.blofy.player.core.identity.ActivationManager
+import tv.blofy.player.core.profile.ProfileStore
+import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.local.*
 import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -43,6 +45,8 @@ class InterfaceRefinementTest {
 
     @Before fun setup() {
         instrumentation.runOnMainSync {
+            ParentalGate.clearPin(context)
+            ProfileStore.select(context, "main")
             context.getSharedPreferences("blofy_player_settings", 0).edit().putString("app_language_tag", "ar").apply()
             if (android.os.Build.VERSION.SDK_INT >= 33) {
                 context.getSystemService(android.app.LocaleManager::class.java).applicationLocales = android.os.LocaleList.forLanguageTags("ar")
