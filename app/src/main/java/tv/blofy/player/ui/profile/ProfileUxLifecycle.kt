@@ -85,15 +85,14 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
             refresh()
         }
 
-        val actions = host.findViewWithTag<LinearLayout>("blofy_details_profile_actions")
-        if (actions != null) {
-            button.isFocusableInTouchMode = false
-            actions.addView(button, LinearLayout.LayoutParams(dp(activity, 140), dp(activity, 48)))
-            return
-        }
-        host.addView(button, FrameLayout.LayoutParams(dp(activity, 140), dp(activity, CinemaStyle.ActionHeight), Gravity.BOTTOM or Gravity.END).apply {
-            marginEnd = dp(activity, 42)
-            bottomMargin = dp(activity, 28)
+        val actions = host.findViewWithTag<LinearLayout>("blofy_details_profile_actions") ?: return
+        val tv = tv.blofy.player.core.device.DeviceClass.isTv(activity)
+        button.isFocusableInTouchMode = tv
+        actions.addView(button, LinearLayout.LayoutParams(
+            dp(activity, if (tv) 132 else 140),
+            dp(activity, if (tv) CinemaStyle.ActionHeight else 48)
+        ).apply {
+            marginStart = dp(activity, 8)
         })
     }
 
