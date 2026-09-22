@@ -72,7 +72,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             val seasons = allEpisodes.map { it.season }.distinct().size
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = "BLOFY SERIES"
+                text = getString(R.string.brand_series)
                 textSize = 11.5f
                 letterSpacing = .12f
                 typeface = BlofyTvDesign.HeadingTypeface
