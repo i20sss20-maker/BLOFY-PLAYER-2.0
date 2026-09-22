@@ -8,7 +8,5 @@
         <item name="android:navigationBarColor">@color/blofy_black</item>
         <item name="android:statusBarColor">@color/blofy_black</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:forceDarkAllowed">false</item>
     </style>
 </resources>
