@@ -164,7 +164,7 @@ internal class EpisodeCardAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val episode = items[position]
-        holder.number.text = "E${episode.episode}"
+        holder.number.text = context.getString(R.string.cinema_episode_badge, episode.episode)
         val context = holder.itemView.context
         holder.title.text = cleanEpisodeTitle(context, episode)
         val duration = episode.durationSecs?.takeIf { it > 0 }?.let { secs -> context.getString(R.string.details_minutes, secs / 60) }
