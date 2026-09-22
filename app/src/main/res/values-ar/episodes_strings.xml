@@ -6,6 +6,15 @@
     <string name="episodes_loading_first">جاري تحميل هذا المسلسل الآن…</string>
     <string name="episodes_updating">جاري تحديث الحلقات بالخلفية • %1$d محفوظة</string>
     <string name="episodes_ready">%1$d موسم • %2$d حلقة • جاهزة من التخزين المحلي</string>
+    <plurals name="episodes_seasons_short">
+        <item quantity="one">%1$d موسم</item>
+        <item quantity="other">%1$d مواسم</item>
+    </plurals>
+    <plurals name="episodes_episodes_short">
+        <item quantity="one">%1$d حلقة</item>
+        <item quantity="other">%1$d حلقات</item>
+    </plurals>
+    <string name="episodes_ready_suffix">جاهزة من التخزين المحلي</string>
     <string name="episodes_empty_response">السيرفر لم يرسل حلقات لهذا المسلسل • حاول مرة أخرى</string>
     <string name="episodes_invalid_response">رد السيرفر غير مكتمل • أعد تحميل الحلقات</string>
     <string name="episodes_load_error">تعذر تحميل الحلقات • تحقق من الاتصال ثم أعد المحاولة</string>
