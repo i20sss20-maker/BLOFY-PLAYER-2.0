@@ -47,6 +47,7 @@ import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
 import java.text.SimpleDateFormat
@@ -509,7 +510,7 @@ class LiveGuideActivity : AppCompatActivity() {
     )
 
     private fun categoryId(category: CategoryEntity): String? = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
-    private fun time(ms: Long) = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
+    private fun time(ms: Long) = DeviceLocalTime.format(this, ms, "HH:mm")
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private fun panelBackground() = GradientDrawable(
