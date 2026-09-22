@@ -3,6 +3,7 @@ package tv.blofy.player.ui.profile
 import android.app.Activity
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import android.app.Application
 import android.graphics.Color
 import android.os.Bundle
@@ -68,11 +69,12 @@ class ProfileUxLifecycle : Application.ActivityLifecycleCallbacks {
                 view.background = CinemaStyle.buttonBackground(activity, false, focused)
                 setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
                 view.animate().cancel()
+                val targetScale = if (focused) TvUiTuning.focusScale(activity, 1.024f) else 1f
                 view.animate()
-                    .scaleX(if (focused) 1.024f else 1f)
-                    .scaleY(if (focused) 1.024f else 1f)
-                    .translationZ(if (focused) dp(activity, 7).toFloat() else 0f)
-                    .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(activity, dp(activity, 7).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(activity, focused))
                     .start()
             }
             setOnClickListener {

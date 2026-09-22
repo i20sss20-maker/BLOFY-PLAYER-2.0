@@ -31,6 +31,7 @@ import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeRowOrder
 import java.util.WeakHashMap
 
@@ -220,11 +221,12 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
         setOnFocusChangeListener { view, focused ->
             view.background = cardBackground(activity, focused)
             view.animate().cancel()
+            val targetScale = if (focused) TvUiTuning.focusScale(activity, 1.02f) else 1f
             view.animate()
-                .scaleX(if (focused) 1.02f else 1f)
-                .scaleY(if (focused) 1.02f else 1f)
-                .translationZ(if (focused) dp(activity, 10).toFloat() else dp(activity, 1).toFloat())
-                .setDuration(if (focused) BlofyTvDesign.FocusInMs else BlofyTvDesign.FocusOutMs)
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(activity, dp(activity, 10).toFloat()) else dp(activity, 1).toFloat())
+                .setDuration(TvUiTuning.focusDuration(activity, focused))
                 .start()
         }
         setOnClickListener {

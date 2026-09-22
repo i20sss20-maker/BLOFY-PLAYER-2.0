@@ -200,12 +200,12 @@ object BlofyTvDesign {
             view.animate().cancel()
             view.background = if (hasFocus) focused else normal
             (view as? TextView)?.setTextColor(TextPrimary)
-            val targetScale = if (hasFocus) minOf(scale, 1.028f) else 1f
-            val duration = if (hasFocus) FocusInMs else FocusOutMs
+            val targetScale = if (hasFocus) TvUiTuning.focusScale(view.context, minOf(scale, 1.028f)) else 1f
+            val duration = TvUiTuning.focusDuration(view.context, hasFocus)
             view.animate()
                 .scaleX(targetScale)
                 .scaleY(targetScale)
-                .translationZ(if (hasFocus) 8f else 0f)
+                .translationZ(if (hasFocus) TvUiTuning.focusElevation(view.context, 8f) else 0f)
                 .alpha(1f)
                 .setDuration(duration)
                 .start()

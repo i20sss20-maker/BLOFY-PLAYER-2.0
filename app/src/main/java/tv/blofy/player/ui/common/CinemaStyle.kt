@@ -75,11 +75,12 @@ object CinemaStyle {
                 background = buttonBackground(context, primary, focused)
                 setTextColor(if (primary) Background else White)
                 view.animate().cancel()
+                val targetScale = if (focused) TvUiTuning.focusScale(context, 1.028f) else 1f
                 view.animate()
-                    .scaleX(if (focused) 1.028f else 1f)
-                    .scaleY(if (focused) 1.028f else 1f)
-                    .translationZ(if (focused) 8 * density else 0f)
-                    .setDuration(if (focused) 95L else 75L)
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(context, 8 * density) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(context, focused))
                     .start()
                 onFocus?.invoke(focused)
             }
