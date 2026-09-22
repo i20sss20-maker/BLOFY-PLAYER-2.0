@@ -71,7 +71,7 @@ class LibraryActivity : AppCompatActivity() {
             textSize = 30f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT
+            gravity = Gravity.START
             setPadding(0, dp(4), 0, dp(14))
         })
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -200,7 +200,7 @@ class LibraryActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             setPadding(dp(24), dp(16), dp(24), dp(16))
-            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
             isFocusable = true; isClickable = true
             background = rowBackground(false)
             setOnFocusChangeListener { view, focused ->
