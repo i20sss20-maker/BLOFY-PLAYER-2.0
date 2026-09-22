@@ -407,8 +407,6 @@
     <string name="smart_default_subtitle">محتوى مختار من مكتبتك</string>
     <string name="smart_collection_count">العناوين: %1$d</string>
 
-    <string name="profile_watchlist_title">قائمتي</string>
-    <string name="profile_watchlist_subtitle">%1$s • عناوين محفوظة</string>
     <string name="profile_watchlist_empty">قائمتك فارغة. أضف أفلامًا أو مسلسلات من صفحة التفاصيل.</string>
     <string name="profile_switcher_label">%1$s  %2$s</string>
 
