@@ -377,6 +377,7 @@
     <string name="provider_manager_movies_count">Movies: %1$d</string>
     <string name="provider_manager_series_count">Series: %1$d</string>
     <string name="provider_manager_summary_format">%1$s  •  %2$s  •  %3$s  •  %4$s</string>
+    <string name="provider_manager_summary_with_time">%1$s  •  %2$s</string>
     <string name="provider_manager_legacy_unsupported">This playlist is old and unsupported • use Xtream</string>
     <string name="provider_manager_opening">Opening %1$s…</string>
     <string name="provider_manager_open_failed">Could not open the playlist • try again</string>
