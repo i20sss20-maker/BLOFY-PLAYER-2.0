@@ -41,6 +41,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.identity.ActivationPortalUrl
+import tv.blofy.player.core.identity.DeviceIdentity
+import tv.blofy.player.core.identity.ActivationStartupRegistration
 import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
@@ -122,7 +124,7 @@ class LoginLocalEntryRegressionTest {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
         do {
             shadowOf(Looper.getMainLooper()).idle()
-            if (field<Job?>(name)?.isActive != true) return
+            if (field<Job?>(name)?.isCompleted != false) return
             Thread.sleep(10)
         } while (System.nanoTime() < deadline)
         fail("Login job did not complete: $name")
@@ -150,6 +152,64 @@ class LoginLocalEntryRegressionTest {
         }
         assertEquals(0, server.requestCount)
         assertNull(shadowOf(activity).nextStartedActivity)
+    }
+
+    @Test fun loginDrawsAndAcceptsInputWhileStartupHoldsTheIdentityLock() {
+        val locked = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
+        val writer = Thread {
+            synchronized(DeviceIdentity) {
+                locked.countDown()
+                timedOut.set(!release.await(5, TimeUnit.SECONDS))
+            }
+        }.apply { isDaemon = true; start() }
+        assertTrue(locked.await(2, TimeUnit.SECONDS))
+        try {
+            controller = Robolectric.buildActivity(LoginActivity::class.java)
+            activity.activationEndpoint = server.url("/").toString()
+            activity.savedPlaylistDeadlineMillis = 1_000L
+            checkNotNull(controller).setup().visible()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertFalse("Login waited for an identity write before rendering", timedOut.get())
+            val cardsDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+            while (field<List<List<String>>?>("renderedPlaylists") == null && System.nanoTime() < cardsDeadline) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(10)
+            }
+            assertNotNull(field<List<List<String>>?>("renderedPlaylists"))
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_100))
+            assertEquals(activity.getString(tv.blofy.player.R.string.login_identity_read_failed),
+                field<TextView>("status").text.toString())
+            assertFalse(field<Job?>("identityJob")?.isActive == true)
+            assertTrue(field<Button>("addPlaylist").performClick())
+            assertNotNull("The screen must accept input during the blocked read", shadowOf(activity).nextStartedActivity)
+            assertEquals(1L, release.count)
+        } finally {
+            release.countDown()
+            writer.join(2_000)
+            awaitJob("identityJob")
+        }
+    }
+
+    @Test fun failedStartupDatabaseReadDoesNotCrashAndCanBeRetried() = runBlocking(Dispatchers.IO) {
+        val unavailable = Room.inMemoryDatabaseBuilder(app, BlofyDatabase::class.java).build()
+        // Closing Room cancels its scope; exercise an actual SQLite read failure separately.
+        unavailable.openHelper.writableDatabase.execSQL("DROP TABLE activation")
+        try {
+            var reachedRead = false
+            ActivationStartupRegistration.attempt {
+                reachedRead = true
+                ActivationManager(app, unavailable.dao()).ensureIdentity()
+                fail("The missing table must fail this startup read")
+            }
+            assertTrue(reachedRead)
+        } finally {
+            unavailable.close()
+        }
+        ActivationStartupRegistration.attempt {
+            assertNotNull(ActivationManager(app, db.dao()).ensureIdentity())
+        }
     }
 
     @Test fun identityAndSavedCardsDoNotWaitForProviderKeystoreAccess() {

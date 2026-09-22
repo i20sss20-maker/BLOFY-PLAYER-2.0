@@ -19,6 +19,7 @@ import org.robolectric.annotation.Config
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.local.StreamSearchFtsEntity
 import tv.blofy.player.data.remote.XtreamApi
 
 @RunWith(RobolectricTestRunner::class)
@@ -32,6 +33,18 @@ class PlaylistManagerPersistenceTest {
     }
 
     @After fun cleanup() = db.close()
+
+    @Test fun failedSearchWriteCannotLeaveAHalfSavedCatalogBatch(): Unit = runBlocking(Dispatchers.IO) {
+        val stream = StreamEntity("batch:movie:1", "batch", "1", null, "movie", "Fixture")
+        db.openHelper.writableDatabase.execSQL("DROP TABLE streams_fts")
+        try {
+            db.dao().insertCatalogBatch(listOf(stream),
+                listOf(StreamSearchFtsEntity(stream.key, stream.providerId, stream.kind, "fixture")))
+            fail("Missing FTS table must reject the batch")
+        } catch (_: android.database.sqlite.SQLiteException) { }
+        assertEquals("The catalog row must roll back with its failed search entry", 0,
+            db.dao().streamCountForProvider("batch"))
+    }
 
     @Test fun rejectedCategoryPayloadIsReportedAsFailedAndCannotClaimFreshRows(): Unit = runBlocking(Dispatchers.IO) {
         val api = FixtureApi(liveCategories = listOf(mapOf("category_name" to "Missing identifier")))
@@ -75,6 +88,43 @@ class PlaylistManagerPersistenceTest {
         assertEquals(0, result.failedSectionCount)
         assertEquals(2, result.freshItemCount)
         assertEquals(2, db.dao().streamCountForProvider(provider.id))
+    }
+
+    @Test fun interruptedBodyRetriesOnlyItsSectionAndRemovesPartialRows(): Unit = runBlocking(Dispatchers.IO) {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            val calls = java.util.concurrent.ConcurrentHashMap<String, Int>()
+            // Exceed the 700-row batch so the failed response has already reached Room/FTS.
+            val partial = (1..1000).joinToString(",") { "{\"stream_id\":$it,\"name\":\"Partial $it\"}" }
+            server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): okhttp3.mockwebserver.MockResponse {
+                    val action = request.requestUrl!!.queryParameter("action")!!
+                    val count = calls.merge(action, 1, Int::plus)!!
+                    val body = when {
+                        action.endsWith("categories") -> "[]"
+                        action == "get_vod_streams" && count == 1 -> "[$partial,{\"stream_id\":"
+                        action == "get_series" -> "[{\"series_id\":1,\"name\":\"Series\"}]"
+                        else -> "[{\"stream_id\":999,\"name\":\"Complete\"}]"
+                    }
+                    return okhttp3.mockwebserver.MockResponse().setBody(body)
+                }
+            }
+            server.start()
+            val api = tv.blofy.player.data.remote.XtreamClient.createApi(okhttp3.OkHttpClient())
+            val local = provider.copy(baseUrl = server.url("/").toString())
+            val manager = PlaylistManager(api, db.dao())
+            assertEquals(1, CatalogSectionRetry.run { manager.syncVod(local) })
+            val completed = mutableListOf<String>()
+            val result = manager.syncAll(local, completedSections = setOf("movie"),
+                onSectionComplete = { completed += it })
+            assertEquals(0, result.failedSectionCount)
+            assertEquals(3, result.freshItemCount)
+            assertEquals(listOf("live", "movie", "series"), completed)
+            assertEquals(2, calls["get_vod_streams"])
+            assertEquals(1, calls["get_live_streams"])
+            assertEquals(1, calls["get_series"])
+            assertEquals(listOf("999"), db.dao().streamSnapshot(provider.id, "movie").map { it.remoteId })
+            assertTrue(db.dao().searchStreamsFts(provider.id, "Partial*", 10).isEmpty())
+        }
     }
 
     private class FixtureApi(

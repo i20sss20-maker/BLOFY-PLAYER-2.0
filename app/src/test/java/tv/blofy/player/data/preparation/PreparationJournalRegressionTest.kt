@@ -17,6 +17,54 @@ class PreparationJournalRegressionTest {
     @Before fun setup() { app.deleteDatabase("blofy-preparation-v1.db") }
     @After fun cleanup() { app.deleteDatabase("blofy-preparation-v1.db") }
 
+    @Test fun batchIntentAndPartialCompletionSurviveRestartWithoutLosingTheMissingImage() {
+        PreparationJournal(app).use { j ->
+            j.begin("p", "g")
+            j.enqueueBatch("p", "art", (1..36).map { "$it" to "https://example.test/$it" })
+        }
+        PreparationJournal(app).use { j ->
+            j.begin("p", "g")
+            assertEquals(36L, j.progress("p").pendingImages)
+            j.finishBatch("p", "art", (1..35).map(Int::toString), listOf("36"))
+        }
+        PreparationJournal(app).use { j ->
+            assertEquals(PreparationJournal.Progress(1, 0, 1), j.progress("p"))
+            assertEquals("36", j.pendingPage("p", "art", 0, 40).single().key)
+            j.finishBatch("p", "art", listOf("36"))
+            assertEquals(PreparationJournal.Progress(0, 0, 0), j.progress("p"))
+        }
+    }
+
+    @Test fun versionOneUpgradePreservesItsResumeQueue() {
+        app.openOrCreateDatabase("blofy-preparation-v1.db", 0, null).use { db ->
+            db.execSQL("CREATE TABLE runs(provider TEXT PRIMARY KEY NOT NULL,generation TEXT NOT NULL)")
+            db.execSQL("CREATE TABLE units(provider TEXT NOT NULL,kind TEXT NOT NULL,item TEXT NOT NULL,value TEXT NOT NULL DEFAULT '',done INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(provider,kind,item))")
+            db.execSQL("INSERT INTO runs VALUES('p','g')")
+            db.execSQL("INSERT INTO units VALUES('p','art','one','https://example.test/one',0)")
+            db.version = 1
+        }
+        PreparationJournal(app).use { j ->
+            j.begin("p", "g")
+            assertEquals("one", j.pendingPage("p", "art", 0, 4).single().key)
+            assertEquals(PreparationJournal.Progress(1, 0, 0), j.progress("p"))
+        }
+    }
+
+    @Test fun failedBatchRollsBackEveryIntentAndOldEpochIsNotShownAsCurrentProgress() {
+        PreparationJournal(app).use { j ->
+            j.begin("p", "g", 12)
+            j.writableDatabase.execSQL("CREATE TRIGGER fail_batch BEFORE INSERT ON units WHEN NEW.item='broken' BEGIN SELECT RAISE(ABORT,'fixture failure'); END")
+            try {
+                j.enqueueBatch("p", "art", listOf("first" to "one", "broken" to "two"))
+                fail("The fixture must reject the second write")
+            } catch (_: android.database.sqlite.SQLiteException) { }
+            assertEquals(0L, j.progress("p").pendingImages)
+            j.enqueue("p", "art", "valid", "url")
+            assertEquals(1L, j.progress("p", 12).pendingImages)
+            assertEquals(0L, j.progress("p", 13).pendingImages)
+        }
+    }
+
     @Test fun completedAndPendingUnitsSurviveDatabaseReopen() {
         PreparationJournal(app).use { j ->
             j.begin("provider", "generation-1")

@@ -1,0 +1,3 @@
+<resources>
+    <string name="login_identity_read_failed">Cihaz bilgileri okunamadı. Yeniden denemek için Yenile seçeneğini seçin.</string>
+</resources>

@@ -1,6 +1,29 @@
 # BLOFY PLAYER 2.0 — Current project state
 
-## Accepted device-test baseline
+## Latest owner scope — 2026-09-22
+
+- The owner reported a blank/frozen screen after the BLOFY logo and before QR/login, requested a full Android project review, faster durable poster/package storage, and approved the work with “يلا سو كل شيء اوك”. Deliver a signed testing APK while retaining `2.0.0-rc07.55` / `2000067`, production certificate, customer data, theme and playback engines.
+- Current Android source branches: `fix/rc0755-startup-storage` and the existing signing gate `fix/rc0755-favorites-artwork`. Audit: `reviews/rc0755-startup-storage-audit.md`.
+- Delivered testing source: `555ed1fe125ce0d2841e3435eb7f0966189ce2eb`; signed run `35708113906`, exact-source QA `35708112708`, Android CI and FFmpeg Native CI passed. 671 unit tests passed; lint has zero errors / 554 warnings. API 35 phone and API 31 TV passed startup contention, offline artwork/resume, 200,000-row catalog and parental PIN flows. Supplemental test-only source `8c079ae0ff34f13b9b512169e53298f6c545d3e2` and run `35708577526` also passed.
+- Testing APK SHA-256: `a2a398d70153c0df713130a98f9638b94b642e4fe4a4a30023b5aedd7f535552`, 16,780,108 bytes. The version and production signing certificate are unchanged; install over the existing app. Owner acceptance on the affected device is not yet recorded.
+- The prior website publication approval applied to the exact accepted APK with SHA-256 `40f70c4447b7a570e63b71181d56b6e5591959a58d63137161cef55f903ba55f`. Do not overwrite that public download with this new test candidate before owner acceptance/publication authorization.
+- Keep the separately maintained activation backend on its current `main`; this Android branch contains an older backend snapshot. Do not deploy it or touch MarketOS.
+
+## Current owner instructions — 2026-09-21
+
+- Current owner-approved version: `2.0.0-rc07.55`, version code `2000067`. The owner requires both to remain unchanged for this delivery. This supersedes the historical version-increment instruction below.
+- Android branches: `fix/rc0755-artwork-throughput` (unit/lint/phone/TV verification) and `fix/rc0755-favorites-artwork` (production-signed testing gate), draft PR #120.
+- Delivered baseline before this broader audit: `e3250798bcf31c5a1a7399d1384868b4714a2973`. Previous evidence: 630 Android unit tests, API 31 TV / API 35 phone artwork and catalog recovery tests, R8 signed build. This does not imply customer-device acceptance.
+- The owner now requests a broad code review, missing functionality and justified improvements. See `reviews/rc0755-code-audit.md` for implemented fixes, verification and remaining findings.
+- Preserve the playback/theme boundaries below. Do not deploy this branch's older `services/activation` snapshot over the separately maintained backend or touch MarketOS. Website publication of the exact approved APK is now authorized below; use the current backend `main` for its release metadata.
+
+- On 2026-09-21, after the PIN bypass finding and explicit scope were presented, the owner requested “كمل النسخة بعد التعديل ابي اجرب”. This authorizes unifying parental content checks, including episode parents and in-player channel switching, and producing the signed rc07.55 testing APK. Media3/FFmpeg, engine/fallback behavior and theme remain protected.
+
+- Latest signed source after the approved PIN fix: `e6688dd54df2ad60245de0b80edb03d9bf4f8c9d`; final emulator QA `ecff1c1766a9d4dcaf3a0f9160b26438c84951d0` differs only in the Android test. 660 unit tests, zero lint errors (553 warnings), phone/TV PIN plus artwork/catalog recovery checks and production-signed APK/AAB gates passed. APK SHA-256: `40f70c4447b7a570e63b71181d56b6e5591959a58d63137161cef55f903ba55f`. See `reviews/rc0755-pin-verification.md`.
+
+- On 2026-09-21 the owner accepted the delivered APK and explicitly requested publication: “اي ممتازه خلاص ارفعها فالموقع”. GitHub release `v2.0.0-rc07.55` now contains the identical APK, without rebuilding. Publication run `35593053281` verified the original signing run and the public download hash. Website PR #121 changes only its publication workflow and `services/update-distribution/release-store.mjs`, based on the latest backend main; merged as `8e9e6ff1a8ce80649a89c833c870d4cd3ce6c6bb` after Download Center and Azure Infrastructure CI passed. Azure now serves rc07.55 as its active release: `/health`, `/release.json` and `/downloads` verified; full GET `/d/blofy` and HEAD `/download/latest.apk` return HTTP 200 with the APK attachment MIME, no redirects and the expected 16,762,468-byte file. The full download SHA-256 matches the owner-approved APK. The current app library remains present. See the publication section in `reviews/rc0755-pin-verification.md` for links.
+
+## Historical accepted device-test baseline — rc07.9
 
 - Repository: `i20sss20-maker/BLOFY-PLAYER-2.0`
 - Branch: `rc07-commercial-stability`
@@ -10,7 +33,7 @@
 
 The audit covers minimal bug fixes and verified dead-code cleanup in preparation for commercial release after real-device testing. Do not restart the project or add new features.
 
-## Next device-test candidate
+## Historical candidate — rc07.10
 
 - Candidate version: `2.0.0-rc07.10`, version code `2000018`.
 - Reviewed audit source: PR #36, commit `5f4a9e6c4427680df27631adb9cc9ec258bbfa34`, based on the accepted rc07.9 baseline above.
@@ -27,7 +50,7 @@ Preserve production signing identity, stored playlists, device identity and upgr
 
 ## Verification and delivery
 
-Investigate code and available logs before fixes, use the smallest justified change and add behavioral regression coverage. Run Android and activation CI on the proposed changes. Before delivering a new APK, increment its version and run the existing production-signed release pipeline. Do not weaken branch/signing gates to sign an audit branch.
+Investigate code and available logs before fixes, use the smallest justified change and add behavioral regression coverage. Run applicable Android and activation checks on the proposed changes. Run the existing production-signed testing pipeline before APK delivery. Keep rc07.55 and version code 2000067 unchanged under the current owner instruction; the older instruction to increment each APK is superseded for this testing cycle. Do not weaken branch/signing gates to sign an audit branch.
 
 Real-device results remain the final acceptance gate: Hidden Host, M3U, Xtream and huge catalogs, completeness of Live/Movies/Series, playlist persistence after restart, category speed, search, low-memory behavior, and Home remote focus. CI success alone does not prove these are fixed.
 

@@ -120,6 +120,25 @@ class ProfileCloudSyncRegressionTest {
         } finally { allowFirst.countDown() }
     }
 
+    @Test fun localSettingWinsEvenWhenTheRemoteSettingsMapIsFull(): Unit = runBlocking(Dispatchers.IO) {
+        ProfileLibraryStore.setSetting(app, "setting79", "local value", profileId)
+        val incoming = ProfileLibraryStore.snapshotJson(app, profileId).apply {
+            put("settings", JSONObject().apply { repeat(80) { put("setting$it", "remote value") } })
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = if (request.method == "GET") {
+                json(JSONObject().put("exists", true).put("revision", 1).put("payload", incoming))
+            } else {
+                val uploaded = JSONObject(request.body.readUtf8()).getJSONObject("payload")
+                json(JSONObject().put("revision", 2).put("payload", uploaded))
+            }
+        }
+        ProfileCloudSync.sync(app, server.url("/").toString(), profileId)
+        assertEquals(80, ProfileLibraryStore.settings(app, profileId).size)
+        assertEquals("local value", ProfileLibraryStore.settings(app, profileId)["setting79"])
+        assertEquals("remote value", ProfileLibraryStore.settings(app, profileId)["setting0"])
+    }
+
     private fun json(value: JSONObject) = MockResponse()
         .setHeader("Content-Type", "application/json").setBody(value.toString())
 }

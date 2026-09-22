@@ -34,7 +34,6 @@ import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
-import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
@@ -359,7 +358,7 @@ class SearchActivity : AppCompatActivity() {
                 background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0xFF17111F.toInt()) }
             }
             addView(art, LinearLayout.LayoutParams(dp(58), dp(68)).apply { marginStart = dp(14) })
-            ArtworkLoader.load(art, stream.icon ?: stream.backdrop)
+            ArtworkLoader.load(art, listOf(stream.icon, stream.backdrop))
 
             val copy = LinearLayout(this@SearchActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START }
             copy.addView(TextView(this@SearchActivity).apply {
@@ -390,8 +389,7 @@ class SearchActivity : AppCompatActivity() {
 
     private fun guardedOpen(providerId: String, format: String, stream: StreamEntity) {
         RecentSearchStore.record(this, input.text?.toString().orEmpty())
-        if (stream.locked) ParentalGate.requirePin(this) { openStream(providerId, format, stream) }
-        else openStream(providerId, format, stream)
+        openStream(providerId, format, stream)
     }
 
     private fun openStream(providerId: String, format: String, stream: StreamEntity) {

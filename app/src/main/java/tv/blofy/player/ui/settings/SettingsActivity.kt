@@ -184,6 +184,10 @@ class SettingsActivity : AppCompatActivity() {
         })
         refreshCard = actionCard(getString(R.string.setting_refresh_content), syncSubtitle()) { refreshLibrary() }
         addCard(refreshCard)
+        addCard(actionCard(copy("حالة حفظ المكتبة والصور", "Library download status"),
+            copy("المحفوظ والناقص واستكمال التحميل", "Saved files, remaining items and resume")) {
+            startActivity(Intent(this, LibraryDownloadActivity::class.java))
+        }.apply { tag = "blofy_library_download_entry" })
 
         addSection(page, copy("الحماية", "Security"))
         addCard(actionCard(copy("الحماية الأبوية وPIN", "Parental control and PIN"), copy("تعيين أو تغيير رمز فتح المحتوى المقفل", "Set or change the PIN for locked content")) {

@@ -1,0 +1,3 @@
+<resources>
+    <string name="login_identity_read_failed">Device details could not be read. Tap Refresh to retry.</string>
+</resources>

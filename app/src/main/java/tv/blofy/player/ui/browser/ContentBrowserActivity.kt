@@ -31,7 +31,6 @@ import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
-import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
@@ -392,7 +391,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             catalogLoading = false
             saveCatalogMemorySnapshot()
             updateCatalogState(catalogItems, categoryId)
-            if (result.first.isNotEmpty()) ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon })
+            if (result.first.isNotEmpty()) ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
         }.also { job ->
             job.invokeOnCompletion { if (generation == catalogGeneration) runOnUiThread { catalogLoading = false } }
         }
@@ -468,7 +467,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             liveLoading = false
             saveLiveMemorySnapshot()
             if (result.first.isNotEmpty()) {
-                ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon })
+                ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
             }
             if (reset && previewEnabled) startInitialPreview(result.first)
         }.also { job ->
@@ -595,11 +594,11 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun openStream(stream: StreamEntity) {
-        if (stream.locked) ParentalGate.requirePin(this) { openUnlockedStream(stream) } else openUnlockedStream(stream)
+        openUnlockedStream(stream)
     }
 
     private fun openCatchup(stream: StreamEntity) {
-        if (stream.locked) ParentalGate.requirePin(this) { launchCatchup(stream) } else launchCatchup(stream)
+        launchCatchup(stream)
     }
 
     private fun launchCatchup(stream: StreamEntity) {

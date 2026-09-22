@@ -1,0 +1,3 @@
+<resources>
+    <string name="login_identity_read_failed">Impossibile leggere i dati del dispositivo. Seleziona Aggiorna per riprovare.</string>
+</resources>

@@ -7,7 +7,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
+import tv.blofy.player.core.security.ContentAccessActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,12 +24,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class CatchupActivity : AppCompatActivity() {
+class CatchupActivity : ContentAccessActivity() {
     private lateinit var list: LinearLayout
     private lateinit var status: TextView
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    override fun onContentReady(savedInstanceState: Bundle?) {
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         val contentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
         if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }

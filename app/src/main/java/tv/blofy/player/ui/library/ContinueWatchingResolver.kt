@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.library
 
 import tv.blofy.player.data.SeriesEpisodeParser
+import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.WatchStateEntity
@@ -22,6 +23,24 @@ internal sealed interface ContinueWatchingEntry {
 
 /** Resolves watch-state keys against both catalog tables without changing their recency order. */
 internal object ContinueWatchingResolver {
+    suspend fun load(dao: BlofyDao, providerId: String, states: List<WatchStateEntity>): List<ContinueWatchingEntry> {
+        val streams = LinkedHashMap<String, StreamEntity>()
+        val episodes = LinkedHashMap<String, EpisodeEntity>()
+        states.filter { it.providerId == providerId }.forEach { state ->
+            if (state.kind == "episode") dao.episode(state.contentKey)?.let { episodes[state.contentKey] = it }
+                ?: dao.stream(state.contentKey)?.let { streams[state.contentKey] = it }
+            else dao.stream(state.contentKey)?.let { streams[state.contentKey] = it }
+                ?: dao.episode(state.contentKey)?.let { episodes[state.contentKey] = it }
+        }
+        val parents = episodes.values.filter { it.providerId == providerId }.map { it.seriesId }.distinct().mapNotNull { rawId ->
+            val normalized = SeriesEpisodeParser.normalizeSeriesIdForRequest(rawId)
+            dao.streamByIdentity(providerId, "series", rawId)
+                ?: (if (normalized != rawId) dao.streamByIdentity(providerId, "series", normalized) else null)
+                ?: (if (normalized.matches(Regex("[+-]?\\d+"))) dao.seriesWithLegacyDecimalId(providerId, normalized) else null)
+        }
+        return resolve(states.filter { it.providerId == providerId }, streams, episodes, parents)
+    }
+
     fun resolve(
         states: List<WatchStateEntity>,
         streamsByKey: Map<String, StreamEntity>,

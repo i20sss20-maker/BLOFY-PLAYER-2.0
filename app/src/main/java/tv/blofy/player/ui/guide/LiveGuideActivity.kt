@@ -37,7 +37,6 @@ import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderKind
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
-import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
@@ -452,7 +451,7 @@ class LiveGuideActivity : AppCompatActivity() {
     }
 
     private fun guardedPlay(stream: StreamEntity) {
-        if (stream.locked) ParentalGate.requirePin(this) { play(stream) } else play(stream)
+        play(stream)
     }
 
     private fun play(stream: StreamEntity) {

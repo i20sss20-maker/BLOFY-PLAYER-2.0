@@ -143,8 +143,8 @@ internal class LiveChannelAdapter(
         holder.meta.text = if (item.archiveEnabled) "مباشر • أرشيف متاح" else "مباشر الآن"
         holder.badge.text = if (item.archiveEnabled) "ARCH" else "LIVE"
         holder.progress.visibility = View.GONE
-        val art = item.icon ?: item.backdrop
-        if (!art.isNullOrBlank()) ArtworkLoader.load(holder.logo, art) else {
+        holder.artworkCandidates = listOf(item.icon, item.backdrop).filterNot { it.isNullOrBlank() }
+        if (holder.artworkCandidates.isNotEmpty()) ArtworkLoader.load(holder.logo, holder.artworkCandidates) else {
             ArtworkLoader.cancel(holder.logo)
             holder.logo.setImageResource(R.drawable.blofy_logo)
         }
@@ -172,6 +172,7 @@ internal class LiveChannelAdapter(
 
     override fun onViewRecycled(holder: Holder) {
         ArtworkLoader.cancel(holder.logo)
+        holder.artworkCandidates = emptyList()
         holder.logo.setImageDrawable(null)
         holder.itemView.animate().cancel()
         holder.itemView.scaleX = 1f
@@ -186,6 +187,13 @@ internal class LiveChannelAdapter(
         super.onViewDetachedFromWindow(holder)
     }
 
+    override fun onViewAttachedToWindow(holder: Holder) {
+        super.onViewAttachedToWindow(holder)
+        if (holder.logo.tag == null && holder.artworkCandidates.isNotEmpty()) {
+            ArtworkLoader.load(holder.logo, holder.artworkCandidates)
+        }
+    }
+
     override fun getItemCount() = items.size
 
     internal class Holder(
@@ -195,7 +203,9 @@ internal class LiveChannelAdapter(
         val meta: TextView,
         val badge: TextView,
         val progress: ProgressBar
-    ) : RecyclerView.ViewHolder(item)
+    ) : RecyclerView.ViewHolder(item) {
+        var artworkCandidates: List<String?> = emptyList()
+    }
 
     private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean): GradientDrawable {
         if (!translucent) return CinemaStyle.surface(contextForBackground, focused = focused)

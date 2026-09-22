@@ -61,6 +61,27 @@ class CatalogReadPerformanceTest {
         }
     }
 
+    @Test fun v13IdentityIndexMigrationPreservesSavedRowsAndUsesAnIndexSeek(): Unit = runBlocking(Dispatchers.IO) {
+        val row = StreamEntity("p:series:42", "p", "42", "c", "series", "Saved series", favorite = true, locked = true)
+        val watch = WatchStateEntity(row.key, "p", "series", 5000, 100_000)
+        db.dao().upsertStreams(listOf(row))
+        db.dao().saveWatchState(watch)
+        val rowid = db.dao().streamRowId(row.key)
+        db.close()
+        SQLiteDatabase.openDatabase(app.getDatabasePath(name).absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use {
+            it.execSQL("DROP INDEX index_streams_providerId_kind_remoteId")
+            it.version = 13
+        }
+        db = open()
+        assertEquals(row, db.dao().streamByIdentity("p", "series", "42"))
+        assertEquals(rowid, db.dao().streamRowId(row.key))
+        assertEquals(watch, db.dao().watchState(row.key))
+        val plan = db.openHelper.readableDatabase.query("EXPLAIN QUERY PLAN UPDATE streams SET favorite=1 WHERE providerId='p' AND kind='series' AND remoteId='42'").use {
+            buildString { while (it.moveToNext()) append(it.getString(3)) }
+        }
+        assertTrue(plan.contains("index_streams_providerId_kind_remoteId"))
+    }
+
     @Test fun v10IndexMigrationKeepsSavedRowsRowidsCredentialsFtsAndResume(): Unit = runBlocking(Dispatchers.IO) {
         val provider = ProviderEntity("p", "Saved", "BLOFYENC1:preserve-host", "BLOFYENC1:preserve-user", "BLOFYENC1:preserve-password")
         val row = StreamEntity("saved", "p", "1", "c", "movie", "Saved", addedAt = 42L, favorite = true)

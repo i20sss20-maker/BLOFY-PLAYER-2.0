@@ -12,6 +12,8 @@ internal enum class FullLibraryPhase(val kind: String?) {
     SERIES_DETAILS("series"),
     MOVIE_ENRICHED_ART("movie"),
     SERIES_ENRICHED_ART("series"),
+    RETRY_DETAILS(null),
+    RETRY_ART(null),
     COMPLETE(null)
 }
 
@@ -24,14 +26,16 @@ internal data class FullLibraryCursor(
 
 internal object FullLibrarySyncState {
     private const val PREFS = "blofy_full_library_sync_v1"
+    // Rescan older cursors once: those could skip partially failed pages. Keep saved artwork.
+    internal const val REVISION = 2
 
     private fun key(providerId: String, suffix: String) = "$providerId:$suffix"
 
-    fun read(context: Context, providerId: String, epoch: Long): FullLibraryCursor {
+    fun read(context: Context, providerId: String, epoch: Long, resetInvalid: Boolean = true): FullLibraryCursor {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val savedEpoch = prefs.getLong(key(providerId, "epoch"), 0L)
-        if (savedEpoch != epoch || epoch <= 0L) {
-            reset(context, providerId, epoch)
+        if (savedEpoch != epoch || epoch <= 0L || prefs.getInt(key(providerId, "revision"), 0) != REVISION) {
+            if (resetInvalid) reset(context, providerId, epoch)
             return FullLibraryCursor(epoch, FullLibraryPhase.MOVIE_POSTERS, 0L, false)
         }
         val phase = FullLibraryPhase.entries.getOrNull(
@@ -49,6 +53,7 @@ internal object FullLibrarySyncState {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         check(
             prefs.edit()
+                .putInt(key(providerId, "revision"), REVISION)
                 .putLong(key(providerId, "epoch"), epoch)
                 .putInt(key(providerId, "phase"), phase.ordinal)
                 .putLong(key(providerId, "row"), rowId.coerceAtLeast(0L))
@@ -67,6 +72,7 @@ internal object FullLibrarySyncState {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         check(
             prefs.edit()
+                .putInt(key(providerId, "revision"), REVISION)
                 .putLong(key(providerId, "epoch"), epoch)
                 .putInt(key(providerId, "phase"), FullLibraryPhase.COMPLETE.ordinal)
                 .putLong(key(providerId, "row"), 0L)
@@ -79,12 +85,13 @@ internal object FullLibrarySyncState {
     fun reset(context: Context, providerId: String, epoch: Long) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs.edit()
+            .putInt(key(providerId, "revision"), REVISION)
             .putLong(key(providerId, "epoch"), epoch)
             .putInt(key(providerId, "phase"), FullLibraryPhase.MOVIE_POSTERS.ordinal)
             .putLong(key(providerId, "row"), 0L)
             .putBoolean(key(providerId, "complete"), false)
             .putLong(key(providerId, "updated"), System.currentTimeMillis())
-            .apply()
+            .commit().also { check(it) { "Unable to reset full-library checkpoint" } }
     }
 
     fun clear(context: Context, providerId: String) {

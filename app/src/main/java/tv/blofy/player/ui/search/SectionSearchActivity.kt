@@ -24,7 +24,6 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
-import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -210,7 +209,7 @@ class SectionSearchActivity : AppCompatActivity() {
 
     private fun guardedOpen(stream: StreamEntity) {
         RecentSearchStore.record(this, input.text?.toString().orEmpty())
-        if (stream.locked) ParentalGate.requirePin(this) { open(stream) } else open(stream)
+        open(stream)
     }
 
     private fun open(stream: StreamEntity) {

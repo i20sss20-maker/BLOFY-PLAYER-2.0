@@ -164,7 +164,10 @@ internal class EpisodeCardAdapter(
             pct > 0 -> context.getString(R.string.cinema_episode_resume, pct)
             else -> context.getString(R.string.cinema_episode_play)
         }
-        if (!seriesArt.isNullOrBlank()) ArtworkLoader.load(holder.image, seriesArt) else holder.image.setImageResource(R.drawable.blofy_logo)
+        if (!seriesArt.isNullOrBlank()) ArtworkLoader.load(holder.image, seriesArt) else {
+            ArtworkLoader.cancel(holder.image)
+            holder.image.setImageResource(R.drawable.blofy_logo)
+        }
         renderFocus(holder, holder.itemView.hasFocus())
         holder.itemView.contentDescription = listOf(holder.title.text, holder.meta.text, holder.state.text).joinToString(". ")
         holder.itemView.setOnClickListener { onClick(episode) }

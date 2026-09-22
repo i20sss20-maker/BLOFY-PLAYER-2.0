@@ -29,6 +29,19 @@ object RecentSearchStore {
         editor.putInt(COUNT, items.size).apply()
     }
 
+    /** Replace a backup's newest-first history in one preferences update. */
+    internal fun replace(context: Context, queries: List<String>): Int {
+        val items = queries.asSequence()
+            .map { it.trim().replace(Regex("\\s+"), " ").take(120) }
+            .filter { it.length >= 2 }
+            .distinctBy { it.lowercase() }
+            .take(MAX_ITEMS).toList()
+        val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear()
+        items.forEachIndexed { index, value -> editor.putString(ITEM_PREFIX + index, value) }
+        editor.putInt(COUNT, items.size).apply()
+        return items.size
+    }
+
     fun clear(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
     }

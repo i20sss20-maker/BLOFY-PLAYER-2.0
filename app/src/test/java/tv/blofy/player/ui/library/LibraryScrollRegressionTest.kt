@@ -1,19 +1,16 @@
 package tv.blofy.player.ui.library
 
-import android.app.Application
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.ScrollView
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.room.Room
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.assertSame
-import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,10 +24,14 @@ import org.robolectric.annotation.LooperMode
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.ui.catalog.PosterStreamAdapter
+import tv.blofy.player.ui.details.MovieDetailsActivity
+import java.time.Duration
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class, qualifiers = "w960dp-h540dp-land-mdpi")
+@Config(sdk = [28], application = tv.blofy.player.data.local.InMemoryKeystoreApplication::class,
+    qualifiers = "w960dp-h540dp-land-television-mdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class LibraryScrollRegressionTest {
     private lateinit var db: BlofyDatabase
@@ -58,47 +59,88 @@ class LibraryScrollRegressionTest {
         db.close()
     }
 
-    @Test fun allThirtyFavoritesCanBeReachedAndRemainVisibleWithTheRemote() {
-        controller = Robolectric.buildActivity(LibraryActivity::class.java).setup().visible()
-        val activity = checkNotNull(controller).get()
-        val list = LibraryActivity::class.java.getDeclaredField("list").apply { isAccessible = true }
-            .get(activity) as LinearLayout
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-        while (list.childCount != 30) {
-            shadowOf(Looper.getMainLooper()).idle()
-            if (System.nanoTime() >= deadline) fail("Library favorites did not finish loading")
-            Thread.sleep(10)
-        }
-        assertTrue("Library rows need a scrollable viewport", list.parent is ScrollView)
-        val scroll = list.parent as ScrollView
-        // Focus scrolling is checked without depending on animation timing.
-        scroll.isSmoothScrollingEnabled = false
+    private fun launch(): Pair<LibraryActivity, RecyclerView> {
+        val activity = Robolectric.buildActivity(LibraryActivity::class.java).also { controller = it }.setup().visible().get()
+        val grid = LibraryActivity::class.java.getDeclaredField("favoritesGrid").apply { isAccessible = true }
+            .get(activity) as RecyclerView
+        await { grid.adapter?.itemCount == 30 }
+        layout(activity)
+        return activity to grid
+    }
+
+    private fun layout(activity: LibraryActivity) {
         val root = activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
         root.measure(View.MeasureSpec.makeMeasureSpec(960, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(540, View.MeasureSpec.EXACTLY))
         root.layout(0, 0, 960, 540)
-        assertTrue("The rows must exceed the viewport", list.height > scroll.height)
-        assertTrue(list.getChildAt(0).requestFocus())
-        for (index in 1 until list.childCount) {
-            activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_DOWN))
-            activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_DOWN))
-            assertSame("Remote navigation to row $index", list.getChildAt(index), list.findFocus())
-        }
-        val last = list.getChildAt(29)
-        assertTrue("The viewport must scroll down", scroll.scrollY > 0)
-        assertTrue("The final row must be inside the visible viewport", last.top >= scroll.scrollY)
-        assertTrue("The final row must not remain below the screen", last.bottom <= scroll.scrollY + scroll.height)
+        shadowOf(Looper.getMainLooper()).idle()
+    }
 
-        for (index in 28 downTo 0) {
-            activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP))
-            activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_UP))
-            assertSame("Remote navigation back to row $index", list.getChildAt(index), list.findFocus())
+    private fun press(activity: LibraryActivity, key: Int) {
+        assertTrue("Favorites should handle the remote direction", activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key)))
+        activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(250))
+        layout(activity)
+    }
+
+    @Test fun allThirtyFavoritesCanBeReachedAndRemainVisibleWithTheRemote() {
+        val (activity, grid) = launch()
+        val manager = grid.layoutManager as GridLayoutManager
+        assertTrue("Favorites use recycled poster cards", grid.adapter is PosterStreamAdapter)
+        assertTrue(grid.findViewHolderForAdapterPosition(0)!!.itemView.requestFocus())
+        repeat((29 / manager.spanCount)) { row ->
+            press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+            assertEquals("Remote navigation down to row ${row + 1}",
+                (row + 1) * manager.spanCount, grid.getChildAdapterPosition(grid.focusedChild!!))
         }
-        val first = list.getChildAt(0)
-        assertSame("Returning up restores focus to the first row", first, list.findFocus())
-        // The row has an existing top margin. ScrollView may align to the row's top rather
-        // than offset zero; the requirement is that the entire focused row stays visible.
-        assertTrue("The first row must not be clipped above the viewport", first.top >= scroll.scrollY)
-        assertTrue("The first row must fit inside the viewport", first.bottom <= scroll.scrollY + scroll.height)
+        repeat(29 % manager.spanCount) { column ->
+            press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+            assertEquals("Remote navigation across the last row", 29 / manager.spanCount * manager.spanCount + column + 1,
+                grid.getChildAdapterPosition(grid.focusedChild!!))
+        }
+        val last = grid.findViewHolderForAdapterPosition(29)?.itemView
+        assertNotNull("The last poster must be attached after remote navigation", last)
+        assertTrue("The last poster must receive focus", last!!.hasFocus())
+        assertTrue("The grid must scroll to keep the poster on screen", grid.computeVerticalScrollOffset() > 0)
+        assertTrue(last.top >= grid.paddingTop && last.bottom <= grid.height - grid.paddingBottom)
+        repeat(29 % manager.spanCount) { press(activity, KeyEvent.KEYCODE_DPAD_RIGHT) }
+        repeat(29 / manager.spanCount) { press(activity, KeyEvent.KEYCODE_DPAD_UP) }
+        assertTrue("Remote navigation must return to the first poster", grid.findViewHolderForAdapterPosition(0)!!.itemView.hasFocus())
+    }
+
+    @Test fun favoritesHaveImageViewsAndKeepTheExistingDetailsRoute() {
+        val (activity, grid) = launch()
+        val holder = grid.findViewHolderForAdapterPosition(0) as PosterStreamAdapter.Holder
+        assertNotNull(holder.image)
+        assertTrue("A poster has a real measured viewport", holder.image.width > 0 && holder.image.height > 0)
+        assertEquals("Film 01", holder.title.text.toString())
+        holder.itemView.performClick()
+        val intent = shadowOf(activity).nextStartedActivity
+        assertEquals(MovieDetailsActivity::class.java.name, intent.component?.className)
+        assertEquals("saved", intent.getStringExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID))
+        assertEquals("saved:movie:1", intent.getStringExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY))
+    }
+
+    @Test fun removingAFavoriteRefreshesTheGridAndReturningDoesNotDuplicateItems() {
+        val (activity, grid) = launch()
+        runBlocking(Dispatchers.IO) { db.dao().setFavorite("saved:movie:1", false) }
+        await { grid.adapter?.itemCount == 29 }
+        val adapter = grid.adapter as PosterStreamAdapter
+        assertEquals("saved:movie:2", adapter.itemAt(0)?.key)
+        checkNotNull(controller).pause().stop().start().resume().visible()
+        await { grid.adapter?.itemCount == 29 }
+        layout(activity)
+        assertEquals(29, adapter.itemCount)
+        assertFalse((0 until adapter.itemCount).any { adapter.itemAt(it)?.key == "saved:movie:1" })
+    }
+
+    private fun await(condition: () -> Boolean) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        do {
+            shadowOf(Looper.getMainLooper()).idle()
+            if (condition()) return
+            Thread.sleep(10)
+        } while (System.nanoTime() < deadline)
+        fail("Favorites did not finish updating")
     }
 }

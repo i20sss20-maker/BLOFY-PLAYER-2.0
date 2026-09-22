@@ -115,7 +115,9 @@ class PosterStreamAdapter(
         holder.rating.text = item.rating?.takeIf(String::isNotBlank)?.let { "★ $it" }.orEmpty()
         holder.rating.visibility = if (holder.rating.text.isNotBlank()) View.VISIBLE else View.GONE
         renderFocus(holder, holder.itemView.hasFocus())
-        ArtworkLoader.load(holder.image, item.icon ?: item.backdrop)
+        holder.artworkCandidates = listOf(item.icon, item.backdrop)
+        holder.image.scaleType = if (item.kind == "live") ImageView.ScaleType.FIT_CENTER else ImageView.ScaleType.CENTER_CROP
+        ArtworkLoader.load(holder.image, holder.artworkCandidates)
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
             view.animate().cancel()
@@ -140,6 +142,7 @@ class PosterStreamAdapter(
 
     override fun onViewRecycled(holder: Holder) {
         ArtworkLoader.cancel(holder.image)
+        holder.artworkCandidates = emptyList()
         holder.image.setImageDrawable(null)
         holder.itemView.animate().cancel()
         holder.itemView.scaleX = 1f
@@ -153,6 +156,14 @@ class PosterStreamAdapter(
         super.onViewDetachedFromWindow(holder)
     }
 
+    override fun onViewAttachedToWindow(holder: Holder) {
+        super.onViewAttachedToWindow(holder)
+        // RecyclerView may reattach a cached holder without binding it again.
+        if (holder.image.tag == null && holder.artworkCandidates.isNotEmpty()) {
+            ArtworkLoader.load(holder.image, holder.artworkCandidates)
+        }
+    }
+
     override fun getItemCount(): Int = items.size
 
     class Holder(
@@ -163,7 +174,9 @@ class PosterStreamAdapter(
         val rating: TextView,
         val radius: Float,
         val stroke: Int
-    ) : RecyclerView.ViewHolder(itemView)
+    ) : RecyclerView.ViewHolder(itemView) {
+        var artworkCandidates: List<String?> = emptyList()
+    }
 
     private fun card(focused: Boolean, radius: Float, stroke: Int) = GradientDrawable().apply {
         setColor(CinemaStyle.Surface)

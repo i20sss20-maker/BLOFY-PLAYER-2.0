@@ -49,9 +49,13 @@ data class CategoryEntity(
         Index(value = ["providerId", "kind", "categoryId", "name"]),
         Index(value = ["providerId", "kind", "name"]),
         Index(value = ["providerId", "name"]),
+        // Favorites must read only saved rows, even while a huge catalog is being enriched.
+        Index(value = ["providerId", "favorite", "name"]),
         Index(value = ["providerId", "kind", "addedAt"]),
         // SQLite appends rowid to these indexes, matching catalog cursor order exactly.
         Index(value = ["providerId", "kind"]),
+        // Identity lookups also restore saved flags during a catalog refresh or local restore.
+        Index(value = ["providerId", "kind", "remoteId"]),
         Index(value = ["providerId", "kind", "categoryId"]),
         Index(
             name = "index_streams_home_page",

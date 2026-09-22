@@ -58,6 +58,12 @@ object KidsPolicy {
         "xxx", "porn", "erotic", "erotica", "sex", "sexual", "nude", "nudity", "uncensored", "playboy",
         "للكبار", "للبالغين", "بالغين", "18 سنة", "+18", "اباح", "إباح", "جنسي", "جنسية", "عري"
     )
+    private val blockedPatterns = blockedTerms.map { term ->
+        // Avoid the documented Essex/Sussex/sextant false positive without relaxing other
+        // existing markers (for example adults, pornography and sexually explicit labels).
+        if (term == "sex") Regex("(?<![\\p{L}\\p{N}])sex(?![\\p{L}\\p{N}])")
+        else Regex(Regex.escape(term))
+    }
 
     // Keep this intentionally explicit. Kids Mode must hide clearly marked adult content without
     // guessing from ordinary drama/action words and accidentally removing normal catalog items.
@@ -68,9 +74,6 @@ object KidsPolicy {
             .lowercase()
             .replace('_', ' ')
         if (haystack.isBlank()) return false
-        return blockedTerms.any { term ->
-            val normalized = term.lowercase()
-            haystack.contains(normalized)
-        }
+        return blockedPatterns.any { it.containsMatchIn(haystack) }
     }
 }

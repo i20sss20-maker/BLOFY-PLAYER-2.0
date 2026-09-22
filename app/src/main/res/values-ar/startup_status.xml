@@ -1,0 +1,3 @@
+<resources>
+    <string name="login_identity_read_failed">تعذرت قراءة بيانات الجهاز. اضغط تحديث لإعادة المحاولة.</string>
+</resources>

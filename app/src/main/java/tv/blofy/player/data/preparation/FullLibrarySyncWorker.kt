@@ -9,9 +9,12 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.WorkInfo
 import androidx.work.WorkerParameters
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.ui.catalog.ArtworkLoader
 
@@ -36,10 +39,9 @@ class FullLibrarySyncWorker(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: ArtworkLoader.StorageFull) {
-            // Keep already-downloaded library files. A later app start will enqueue the worker
-            // again after the user has freed storage.
-            Result.success()
-        } catch (_: Throwable) {
+            // Saved images and the missing queue survive. Resume when space is available.
+            Result.retry()
+        } catch (_: Exception) {
             Result.retry()
         }
     }
@@ -48,7 +50,7 @@ class FullLibrarySyncWorker(
         private const val KEY_PROVIDER_ID = "provider_id"
         private const val MAX_RUN_MS = 6L * 60L * 1000L
 
-        private fun workName(providerId: String) = "blofy-full-library:$providerId"
+        internal fun workName(providerId: String) = "blofy-full-library:$providerId"
 
         private fun request(providerId: String, delaySeconds: Long) =
             OneTimeWorkRequestBuilder<FullLibrarySyncWorker>()
@@ -60,7 +62,7 @@ class FullLibrarySyncWorker(
                         .build()
                 )
                 .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
-                .setBackoffCriteria(BackoffPolicy.LINEAR, 15, TimeUnit.SECONDS)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .addTag(workName(providerId))
                 .build()
 
@@ -71,6 +73,16 @@ class FullLibrarySyncWorker(
                 ExistingWorkPolicy.KEEP,
                 request(providerId, 4)
             )
+        }
+
+        /** An explicit retry clears backoff; a currently running download keeps its progress. */
+        suspend fun resumeNow(context: Context, providerId: String) = withContext(Dispatchers.IO) {
+            require(providerId.isNotBlank())
+            val manager = WorkManager.getInstance(context.applicationContext)
+            val running = manager.getWorkInfosForUniqueWork(workName(providerId)).get(10, TimeUnit.SECONDS)
+                .any { it.state == WorkInfo.State.RUNNING }
+            if (!running) manager.enqueueUniqueWork(workName(providerId), ExistingWorkPolicy.REPLACE,
+                request(providerId, 0)).result.get(10, TimeUnit.SECONDS)
         }
 
         private fun enqueueContinuation(context: Context, providerId: String) {

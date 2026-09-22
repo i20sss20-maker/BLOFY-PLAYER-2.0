@@ -69,6 +69,8 @@ class LoginActivity : AppCompatActivity() {
     private var connectJob: Job? = null
     private var playlistJob: Job? = null
     private var identityJob: Job? = null
+    private var resolvedIdentity = false
+    private var identityRendered = false
     private var lastQrUrl: String? = null
     private var renderedPlaylists: List<List<String>>? = null
     private var websiteRefreshButton: Button? = null
@@ -79,7 +81,7 @@ class LoginActivity : AppCompatActivity() {
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildTvLogin() else buildPhoneLogin())
         if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
         installWebsiteRefreshButton()
-        renderCachedIdentityImmediately()
+        renderCachedIdentity()
     }
 
     private fun buildTvLogin(): LinearLayout {
@@ -513,12 +515,17 @@ class LoginActivity : AppCompatActivity() {
         startActivity(Intent(this, PlaylistActivity::class.java))
     }
 
-    private fun renderCachedIdentityImmediately() {
-        val cached = DeviceIdentity.cachedIdentity(applicationContext) ?: return
-        deviceView.text = cached.first
-        codeView.text = cached.second
-        status.setText(R.string.login_loading_saved_playlists)
-        lifecycleScope.launch { renderIdentity(cached.first, cached.second) }
+    private fun renderCachedIdentity() {
+        lifecycleScope.launch {
+            // DeviceIdentity also protects synchronous durable writes and firmware binder reads.
+            // Never wait for its monitor before drawing the first Login frame.
+            val cached = try {
+                withContext(Dispatchers.IO) { DeviceIdentity.cachedIdentity(applicationContext) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { null }
+            // A late cache read must not replace an identity resolved/rotated by an explicit flow.
+            if (cached != null && !resolvedIdentity) renderIdentity(cached.first, cached.second, cached = true)
+        }
     }
 
     private fun requestIdentityRefresh(fromWebsite: Boolean = false) {
@@ -529,9 +536,15 @@ class LoginActivity : AppCompatActivity() {
             val owner = coroutineContext[Job]
             val cardsDeadline = lifecycleScope.launch {
                 delay(savedPlaylistDeadlineMillis)
-                if (renderedPlaylists == null) {
+                if (renderedPlaylists == null || !identityRendered) {
                     owner?.cancel()
                     renderPlaylistLoadFailure()
+                    if (!identityRendered) {
+                        status.setText(R.string.login_identity_read_failed)
+                        qrView.visibility = View.INVISIBLE
+                        qrMessage.setText(R.string.login_identity_read_failed)
+                        qrMessage.visibility = View.VISIBLE
+                    }
                 }
             }
             try {
@@ -614,7 +627,9 @@ class LoginActivity : AppCompatActivity() {
     catch (c: CancellationException) { throw c }
     catch (e: Throwable) { Result.failure(e) }
 
-    private suspend fun renderIdentity(deviceId: String, activationCode: String) {
+    private suspend fun renderIdentity(deviceId: String, activationCode: String, cached: Boolean = false) {
+        if (!cached) resolvedIdentity = true
+        identityRendered = true
         deviceView.text = deviceId
         codeView.text = activationCode
         val url = ActivationPortalUrl.create(activationEndpoint, deviceId, activationCode)

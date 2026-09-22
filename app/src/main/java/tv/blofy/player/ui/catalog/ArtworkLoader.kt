@@ -15,46 +15,51 @@ import android.util.LruCache
 import android.widget.ImageView
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Call
 import tv.blofy.player.core.commercial.CommercialRuntime
 import java.io.File
-import java.security.MessageDigest
+import tv.blofy.player.core.storage.StableHash
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.FutureTask
-import java.util.concurrent.PriorityBlockingQueue
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicLong
 
 object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
+    private const val MAX_DIRECT_CACHE_BYTES = 384 * 1024
     private const val MAX_DISK_BYTES = 260L * 1024L * 1024L
     private const val NEGATIVE_CACHE_MS = 5 * 60_000L
     private const val MAX_FAILED_URLS = 2_048
 
-    private enum class Priority(val weight: Int) { VISIBLE(0), PREFETCH(1) }
+    private enum class Priority { VISIBLE, PREFETCH }
     private data class Target(val width: Int, val height: Int, val diskBucket: Int)
-
-    private class PriorityTask(val priority: Priority, val sequence: Long, private val block: () -> Unit) : Runnable {
-        override fun run() = block()
+    private data class Downloaded(val bitmap: Bitmap, val encoded: ByteArray?)
+    private class ViewRequest {
+        var local: FutureTask<Unit>? = null
+        var release: (() -> Unit)? = null
     }
 
     private val main = Handler(Looper.getMainLooper())
     private val workerCount = adaptiveWorkerCount()
-    private val coordinatorPool = Executors.newFixedThreadPool(if (workerCount <= 4) 2 else 4) as ThreadPoolExecutor
-    private val viewRequests = java.util.WeakHashMap<ImageView, FutureTask<Unit>>()
+    private val viewRequests = java.util.WeakHashMap<ImageView, ViewRequest>()
+    // Local hits must never queue behind a view waiting for a slow HTTP response.
+    private val localPool = Executors.newFixedThreadPool(2)
     private val backgroundPool = Executors.newFixedThreadPool(2)
-    private val taskSequence = AtomicLong(0)
-    private val taskQueue = PriorityBlockingQueue<Runnable>(64) { a, b ->
-        val left = a as PriorityTask
-        val right = b as PriorityTask
-        val byPriority = left.priority.weight.compareTo(right.priority.weight)
-        if (byPriority != 0) byPriority else left.sequence.compareTo(right.sequence)
-    }
-    private val networkPool = ThreadPoolExecutor(workerCount, workerCount, 30L, TimeUnit.SECONDS, taskQueue).apply { allowCoreThreadTimeOut(false) }
+    private val storagePool = Executors.newSingleThreadExecutor()
+    private val pendingWrites = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private val pendingPrefetch = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private val fileLocks = Array(64) { Any() }
+    // A priority queue cannot preempt background calls that already occupy every worker.
+    private val networkPool = ThreadPoolExecutor(workerCount, workerCount, 30L, TimeUnit.SECONDS, LinkedBlockingQueue<Runnable>())
+    private val backgroundWorkerCount = if (Runtime.getRuntime().maxMemory() <= 192L * 1024L * 1024L) 1 else 3
+    private val backgroundNetworkPool = ThreadPoolExecutor(backgroundWorkerCount, backgroundWorkerCount, 30L, TimeUnit.SECONDS, LinkedBlockingQueue<Runnable>())
+    private val cancellationPool = Executors.newSingleThreadScheduledExecutor()
+    private val requestLock = Any()
     private val trimCounter = AtomicInteger(0)
-    private val inFlight = ConcurrentHashMap<String, FutureTask<Bitmap?>>()
+    private val inFlight = HashMap<String, Download>()
     // Broken artwork can have a different URL for every catalog row. Bound those entries too.
     private val failedUntil = LruCache<String, Long>(MAX_FAILED_URLS)
 
@@ -97,6 +102,7 @@ object ArtworkLoader {
         val target = target(view.context)
         val requestKey = urls.joinToString("|") + "@${target.diskBucket}"
         view.tag = requestKey
+        view.alpha = 1f
         view.setImageDrawable(skeleton())
         if (urls.isEmpty()) return
 
@@ -106,47 +112,54 @@ object ArtworkLoader {
         }
 
         val app = view.context.applicationContext
-        val task = FutureTask<Unit>(work@{
+        val request = ViewRequest()
+        viewRequests[view] = request
+        val task = FutureTask<Unit> {
             var bitmap: Bitmap? = null
-            var resolvedUrl: String? = null
-            // Read ANY available local candidate before starting a network fallback.
             for (url in urls) {
-                if (Thread.currentThread().isInterrupted || view.tag != requestKey) return@work
-                bitmap = readPinned(app, url, target) ?: readDisk(app.cacheDir, url, target)
-                if (bitmap != null) { cache.put(cacheKey(url, target), bitmap); break }
+                if (Thread.currentThread().isInterrupted) return@FutureTask
+                bitmap = cache.get(cacheKey(url, target))?.takeUnless { it.isRecycled }
+                    ?: readPinned(app, url, target) ?: readDisk(app.cacheDir, url, target)
+                if (bitmap != null) {
+                    cache.put(cacheKey(url, target), bitmap)
+                    retainLocally(app, url, target, bitmap)
+                    break
+                }
             }
-            for (url in if (bitmap == null) urls else emptyList()) {
-                if (Thread.currentThread().isInterrupted || view.tag != requestKey) return@work
-                val key = cacheKey(url, target)
-                if (isNegative(key)) continue
-                bitmap = cache.get(key)?.takeIf { !it.isRecycled }
-                    ?: readDisk(app.cacheDir, url, target)?.also { cache.put(key, it) }
-                    ?: sharedDownload(url, Priority.VISIBLE, target).getOrNull()?.also {
-                        cache.put(key, it)
-                        resolvedUrl = url
-                    }
-                if (bitmap != null) break
-            }
-            if (Thread.currentThread().isInterrupted || view.tag != requestKey) return@work
-            val result = bitmap
+            val local = bitmap
             main.post {
-                if (view.tag == requestKey) {
-                    if (result != null && !result.isRecycled) show(view, requestKey, result)
-                    else view.setImageDrawable(skeleton())
+                if (viewRequests[view] !== request || view.tag != requestKey) return@post
+                if (local != null) {
+                    viewRequests.remove(view)
+                    show(view, requestKey, local)
+                } else {
+                    loadRemote(view, urls, target, requestKey, request, 0)
                 }
-            }
-            if (result != null) {
-                resolvedUrl?.let { url ->
-                    backgroundPool.execute { writeDisk(app.cacheDir, url, target, result) }
-                }
-            }
-        })
-        viewRequests[view] = task
-        coordinatorPool.execute {
-            try { task.run() } finally {
-                main.post { if (viewRequests[view] === task) viewRequests.remove(view) }
             }
         }
+        request.local = task
+        localPool.execute(task)
+    }
+
+    private fun loadRemote(view: ImageView, urls: List<String>, target: Target, requestKey: String, request: ViewRequest, index: Int) {
+        request.release?.invoke()
+        request.release = null
+        if (index >= urls.size) {
+            viewRequests.remove(view)
+            return
+        }
+        // Completion callbacks do not occupy a coordinator thread while a server is slow.
+        val lease = acquire(view.context.applicationContext, urls[index], Priority.VISIBLE, target) { result ->
+            main.post {
+                if (viewRequests[view] !== request || view.tag != requestKey) return@post
+                if (result != null && !result.isRecycled) {
+                    request.release?.invoke()
+                    viewRequests.remove(view)
+                    show(view, requestKey, result)
+                } else loadRemote(view, urls, target, requestKey, request, index + 1)
+            }
+        }
+        request.release = lease::close
     }
 
     class StorageFull : java.io.IOException("مساحة الجهاز غير كافية لحفظ المكتبة كاملة؛ وفر مساحة ثم استكمل الناقص")
@@ -156,16 +169,19 @@ object ArtworkLoader {
         return File(File(File(context.filesDir, "blofy_library_art"), id.take(2)), "$id.jpg")
     }
 
-    fun isPersisted(context: android.content.Context, url: String): Boolean =
+    fun isPersisted(context: android.content.Context, url: String): Boolean = synchronized(fileLock(url)) {
         pinnedFile(context.applicationContext, url).let { it.isFile && it.length() > 0L }
+    }
 
-    private fun readPinned(context: android.content.Context, url: String, target: Target): Bitmap? {
+    private fun readPinned(context: android.content.Context, url: String, target: Target): Bitmap? = synchronized(fileLock(url)) {
+        // Older Android AtomicFile implementations write directly to the base file.
+        // Readers must wait for finishWrite instead of decoding/deleting a partial image.
         val file = pinnedFile(context, url)
-        if (!file.isFile || file.length() == 0L) return null
+        if (!file.isFile || file.length() == 0L) return@synchronized null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { file.delete(); return null }
-        return BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply {
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { file.delete(); return@synchronized null }
+        BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply {
             inPreferredConfig = Bitmap.Config.RGB_565
             inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, target.width, target.height)
         }).also { if (it == null) file.delete() }
@@ -181,28 +197,66 @@ object ArtworkLoader {
         if (app.filesDir.usableSpace < 64L * 1024L * 1024L) throw StorageFull()
         val bitmap = cache.get(cacheKey(url, target))?.takeUnless { it.isRecycled }
             ?: readDisk(app.cacheDir, url, target)
-            ?: execute(url, target)
+            ?: awaitDownload(app, url, target)
             ?: return@withContext false
         currentCoroutineContext().ensureActive()
-        val file = pinnedFile(app, url)
-        check(file.parentFile?.isDirectory == true || file.parentFile?.mkdirs() == true) { "Unable to create artwork directory" }
+        writePinned(app, url, target, bitmap)
+        failedUntil.remove(cacheKey(url, target))
+        isPersisted(app, url)
+    }
+
+    private fun fileLock(url: String) = fileLocks[(url.hashCode() and Int.MAX_VALUE) % fileLocks.size]
+
+    private fun writePinned(context: android.content.Context, url: String, target: Target, bitmap: Bitmap, encoded: ByteArray? = null) {
+        synchronized(fileLock(url)) {
+            if (isPersisted(context, url)) return
+            if (context.filesDir.usableSpace < 64L * 1024L * 1024L) throw StorageFull()
+            val file = pinnedFile(context, url)
+            check(file.parentFile?.isDirectory == true || file.parentFile?.mkdirs() == true) { "Unable to create artwork directory" }
+            writeAtomic(file, target, bitmap, encoded)
+        }
+    }
+
+    private fun writeAtomic(file: File, target: Target, bitmap: Bitmap, encoded: ByteArray? = null) {
         val atomic = AtomicFile(file)
         val output = atomic.startWrite()
         try {
-            check(bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality(target), output)) { "Unable to encode artwork" }
+            if (encoded != null) output.write(encoded)
+            else check(bitmap.compress(if (bitmap.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG,
+                jpegQuality(target), output)) { "Unable to encode artwork" }
             atomic.finishWrite(output)
         } catch (error: Throwable) {
             atomic.failWrite(output)
             throw error
         }
-        failedUntil.remove(cacheKey(url, target))
-        isPersisted(app, url)
+    }
+
+    private fun retainLocally(context: android.content.Context, url: String, target: Target, bitmap: Bitmap) {
+        // Promote older disposable-cache hits without making the visible image wait for a write.
+        if (isPersisted(context, url)) return
+        synchronized(pendingWrites) {
+            // A fast scroll through legacy cache must not retain an unbounded bitmap queue.
+            if (pendingWrites.size >= 12 || !pendingWrites.add(url)) return
+        }
+        storagePool.execute {
+            try { saveDownloaded(context, url, target, bitmap) }
+            finally { pendingWrites.remove(url) }
+        }
+    }
+
+    private fun saveDownloaded(context: android.content.Context, url: String, target: Target, bitmap: Bitmap, encoded: ByteArray? = null) {
+        // No space or write permission must not turn a successfully decoded image into a failure.
+        if (runCatching { writePinned(context, url, target, bitmap, encoded) }.isFailure) {
+            writeDisk(context.cacheDir, url, target, bitmap, encoded)
+        }
     }
 
     fun cancel(view: ImageView) {
         view.animate().cancel()
-        // Cancel only this view's wait; a shared download may still serve another visible view.
-        viewRequests.remove(view)?.cancel(true)
+        viewRequests.remove(view)?.let { request ->
+            request.local?.cancel(true)
+            request.release?.invoke()
+        }
         view.tag = null
     }
 
@@ -212,13 +266,20 @@ object ArtworkLoader {
         urls.mapNotNull(::normalizeUrl).distinct().take(prefetchLimit(app)).forEach { url ->
             val key = cacheKey(url, target)
             if (cache.get(key) != null || isNegative(key)) return@forEach
+            // Repeated bindings must not enqueue the same offscreen work indefinitely.
+            synchronized(pendingPrefetch) {
+                if (pendingPrefetch.size >= 48 || !pendingPrefetch.add(key)) return@forEach
+            }
             backgroundPool.execute {
-                if (cache.get(key) != null || isPersisted(app, url) || diskFile(app.cacheDir, url, target).isFile || isNegative(key)) return@execute
-                val bmp = sharedDownload(url, Priority.PREFETCH, target).getOrNull()
-                if (bmp != null && !bmp.isRecycled) {
-                    cache.put(key, bmp)
-                    writeDisk(app.cacheDir, url, target, bmp)
-                }
+                try {
+                    if (cache.get(key) != null) return@execute
+                    val local = readPinned(app, url, target) ?: readDisk(app.cacheDir, url, target)
+                    val bmp = local ?: awaitDownload(app, url, target)
+                    if (bmp != null && !bmp.isRecycled) {
+                        cache.put(key, bmp)
+                        if (local != null) retainLocally(app, url, target, bmp)
+                    }
+                } finally { pendingPrefetch.remove(key) }
             }
         }
     }
@@ -235,37 +296,143 @@ object ArtworkLoader {
         if (fade) view.animate().alpha(1f).setDuration(120L).start() else view.alpha = 1f
     }
 
-    private fun sharedDownload(url: String, priority: Priority, target: Target): FutureTask<Bitmap?> {
+    private class Download(
+        val context: android.content.Context,
+        val url: String,
+        val target: Target,
+        var priority: Priority
+    ) : Runnable {
         val key = cacheKey(url, target)
-        if (isNegative(key)) return FutureTask<Bitmap?> { null }.apply { run() }
-        inFlight[key]?.let { return it }
-
-        val future = FutureTask<Bitmap?> {
-            val result = downloadWithRetry(url, target)
-            if (result == null) failedUntil.put(key, System.currentTimeMillis() + NEGATIVE_CACHE_MS) else failedUntil.remove(key)
-            result
+        val listeners = LinkedHashMap<Any, (Bitmap?) -> Unit>()
+        var users = 0
+        var started = false
+        var published = false
+        var result: Bitmap? = null
+        @Volatile var call: Call? = null
+        @Volatile var bodyComplete = false
+        val future = object : FutureTask<Bitmap?>({ performDownload(this@Download) }) {
+            override fun done() {
+                publish(this@Download, getOrNull())
+                synchronized(requestLock) {
+                    if (inFlight[key] === this@Download) inFlight.remove(key)
+                }
+            }
         }
-        val existing = inFlight.putIfAbsent(key, future)
-        if (existing != null) return existing
-
-        networkPool.execute(PriorityTask(priority, taskSequence.incrementAndGet()) {
-            try { future.run() } finally { inFlight.remove(key, future) }
-        })
-        return future
+        override fun run() {
+            synchronized(requestLock) { started = true }
+            future.run()
+        }
     }
 
-    private fun downloadWithRetry(url: String, target: Target): Bitmap? {
-        repeat(2) { runCatching { execute(url, target) }.getOrNull()?.let { return it } }
-        return null
+    private class Lease(val download: Download, val token: Any) {
+        private var closed = false
+        fun close(): Unit = synchronized(requestLock) {
+            if (closed) return@synchronized
+            closed = true
+            download.listeners.remove(token)
+            download.users--
+            if (download.users != 0 || download.published) return@synchronized
+            if (!download.started) {
+                networkPool.remove(download)
+                backgroundNetworkPool.remove(download)
+                download.future.cancel(false)
+            } else {
+                // Brief detach/attach cycles and another consumer can retain the same call.
+                cancellationPool.schedule({
+                    synchronized(requestLock) {
+                        if (download.users == 0 && !download.published && !download.bodyComplete) {
+                            download.call?.cancel()
+                            download.future.cancel(true)
+                        }
+                    }
+                }, 150, TimeUnit.MILLISECONDS)
+            }
+            Unit
+        }
     }
 
-    private fun execute(url: String, target: Target): Bitmap? {
-        val request = Request.Builder().url(url)
+    private fun acquire(
+        context: android.content.Context, url: String, priority: Priority, target: Target,
+        listener: ((Bitmap?) -> Unit)? = null
+    ): Lease = synchronized(requestLock) {
+        val key = cacheKey(url, target)
+        var download = inFlight[key]
+        val fresh = download == null
+        if (download == null) {
+            download = Download(context, url, target, priority)
+            inFlight[key] = download
+        }
+        val lease = Lease(download, Any())
+        download.users++
+        if (listener != null) {
+            if (download.published) listener(download.result)
+            else download.listeners[lease.token] = listener
+        }
+        if (fresh) {
+            (if (priority == Priority.VISIBLE) networkPool else backgroundNetworkPool).execute(download)
+        } else if (priority == Priority.VISIBLE && download.priority == Priority.PREFETCH &&
+            backgroundNetworkPool.remove(download)) {
+            // A queued library image that becomes visible must bypass the library backlog.
+            download.priority = Priority.VISIBLE
+            networkPool.execute(download)
+        }
+        lease
+    }
+
+    private fun publish(download: Download, bitmap: Bitmap?) {
+        val callbacks = synchronized(requestLock) {
+            if (download.published) return
+            download.published = true
+            download.result = bitmap
+            download.listeners.values.toList().also { download.listeners.clear() }
+        }
+        callbacks.forEach { it(bitmap) }
+    }
+
+    private fun awaitDownload(context: android.content.Context, url: String, target: Target): Bitmap? {
+        val lease = acquire(context, url, Priority.PREFETCH, target)
+        return try { lease.download.future.getOrNull() } finally { lease.close() }
+    }
+
+    private fun performDownload(download: Download): Bitmap? {
+        val (context, url, target) = Triple(download.context, download.url, download.target)
+        val key = download.key
+        if (isNegative(key) || download.future.isCancelled) return null
+        var encoded: ByteArray? = null
+        val bitmap = cache.get(key)?.takeUnless { it.isRecycled }
+            ?: readPinned(context, url, target)
+            ?: readDisk(context.cacheDir, url, target)
+            ?: runCatching { execute(download) }.getOrNull()?.let {
+                encoded = it.encoded
+                it.bitmap
+            }
+            ?: return null
+        cache.put(key, bitmap)
+        failedUntil.remove(key)
+        // Deliver to views now. Background persist still awaits the atomic durable write.
+        publish(download, bitmap)
+        saveDownloaded(context, url, target, bitmap, encoded)
+        return bitmap
+    }
+
+    private fun execute(download: Download): Downloaded? {
+        val request = Request.Builder().url(download.url)
             .header("User-Agent", "Mozilla/5.0 (Linux; Android TV) BLOFY-PLAYER/2.0")
-            .header("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
+            .header("Accept", "image/webp,image/jpeg,image/png,image/gif;q=0.8")
             .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
+        val call = client.newCall(request)
+        download.call = call
+        if (download.future.isCancelled) { call.cancel(); return null }
+        // OkHttp already retries recoverable connection failures. Do not repeat 404s,
+        // unsupported images, or ten-second timeouts before trying a valid fallback.
+        call.execute().use { response ->
+            if (!response.isSuccessful) {
+                if (response.code in setOf(400, 401, 403, 404, 410)) {
+                    failedUntil.put(download.key, System.currentTimeMillis() + NEGATIVE_CACHE_MS)
+                }
+                // Offline/timeout/5xx failures must not hide a recovered image for five minutes.
+                return null
+            }
             val body = response.body ?: return null
             val declared = body.contentLength()
             if (declared > MAX_IMAGE_BYTES) return null
@@ -275,41 +442,54 @@ object ArtworkLoader {
                 while (true) {
                     val read = input.read(buffer)
                     if (read < 0) break
+                    if (out.size() + read > MAX_IMAGE_BYTES) return null
                     out.write(buffer, 0, read)
-                    if (out.size() > MAX_IMAGE_BYTES) return null
                 }
                 out.toByteArray()
             }
+            download.bodyComplete = true
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply {
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply {
                 inPreferredConfig = Bitmap.Config.RGB_565
-                inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, target.width, target.height)
-            })
+                inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, download.target.width, download.target.height)
+            }) ?: return null
+            // Small web images can be copied without encoding. Compact large originals
+            // after display so permanent caching does not consume several MB per poster.
+            return Downloaded(bitmap, bytes.takeIf { it.size <= MAX_DIRECT_CACHE_BYTES })
         }
     }
 
-    private fun readDisk(cacheDir: File, url: String, target: Target): Bitmap? {
-        val file = diskFile(cacheDir, url, target)
-        if (!file.isFile || file.length() <= 0L) return null
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.absolutePath, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { file.delete(); return null }
-        val bmp = BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply {
-            inPreferredConfig = Bitmap.Config.RGB_565
-            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, target.width, target.height)
-        })
-        if (bmp == null) file.delete() else file.setLastModified(System.currentTimeMillis())
-        return bmp
+    private fun readDisk(cacheDir: File, url: String, target: Target): Bitmap? = synchronized(fileLock(url)) {
+        // Reuse existing artwork after an image-quality change or an upgrade from the old cache.
+        val dir = File(cacheDir, "blofy_posters")
+        val candidates = listOf(diskFile(cacheDir, url, target)) +
+            listOf(640, 420, 280).filter { it != target.diskBucket }
+                .map { File(dir, hash("$url@$it") + ".jpg") } + File(dir, hash(url) + ".jpg")
+        for (file in candidates) {
+            if (!file.isFile || file.length() <= 0L) continue
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { file.delete(); continue }
+            val bmp = BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.RGB_565
+                inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, target.width, target.height)
+            })
+            if (bmp == null) file.delete() else {
+                file.setLastModified(System.currentTimeMillis())
+                return@synchronized bmp
+            }
+        }
+        null
     }
 
-    private fun writeDisk(cacheDir: File, url: String, target: Target, bitmap: Bitmap) {
+    private fun writeDisk(cacheDir: File, url: String, target: Target, bitmap: Bitmap, encoded: ByteArray? = null) {
         if (bitmap.isRecycled) return
         val dir = File(cacheDir, "blofy_posters").apply { mkdirs() }
         val file = diskFile(cacheDir, url, target)
-        if (!file.isFile || file.length() <= 0L) runCatching {
-            file.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality(target), it) }
+        synchronized(fileLock(url)) {
+            if (!file.isFile || file.length() <= 0L) runCatching { writeAtomic(file, target, bitmap, encoded) }
         }
         if (trimCounter.incrementAndGet() % 32 == 0) trimDisk(dir)
     }
@@ -349,7 +529,7 @@ object ArtworkLoader {
     private fun cacheKey(url: String, target: Target) = "$url@${target.diskBucket}"
     private fun skeleton() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF21182D.toInt(), 0xFF30203F.toInt(), 0xFF17111F.toInt())).apply { cornerRadius = 18f }
     private fun diskFile(cacheDir: File, url: String, target: Target) = File(File(cacheDir, "blofy_posters"), hash(cacheKey(url, target)) + ".jpg")
-    private fun hash(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
+    private fun hash(value: String) = StableHash.sha256(value)
     private fun sampleSize(w: Int, h: Int, tw: Int, th: Int): Int { var s = 1; while (w / (s * 2) >= tw && h / (s * 2) >= th) s *= 2; return s }
 
     private fun normalizeUrl(raw: String?): String? {

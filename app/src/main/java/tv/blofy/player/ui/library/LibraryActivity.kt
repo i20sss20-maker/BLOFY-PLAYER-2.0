@@ -7,14 +7,21 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.KeyEvent
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
@@ -22,19 +29,24 @@ import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.data.ContentRepository
-import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
-import tv.blofy.player.data.local.WatchStateEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TwoPaneFocusGuard
+import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.ui.catalog.ArtworkLoader
+import tv.blofy.player.ui.catalog.PosterStreamAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
 
 class LibraryActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
+    private var favoritesGrid: RecyclerView? = null
+    private var favoritesAdapter: PosterStreamAdapter? = null
+    private var focusedFavoriteKey: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,10 +74,27 @@ class LibraryActivity : AppCompatActivity() {
             setPadding(0, 4, 0, 14)
         })
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(ScrollView(this).apply {
-            isFillViewport = true
-            addView(list)
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        if (mode == MODE_FAVORITES) {
+            root.addView(list)
+            val widthDp = resources.configuration.screenWidthDp
+            val tv = DeviceClass.detect(this) == DeviceClass.Kind.TV
+            val columns = ((widthDp - 48) / if (tv) 150 else 130).coerceIn(2, if (tv) 7 else 6)
+            favoritesGrid = RecyclerView(this).apply {
+                layoutManager = GridLayoutManager(this@LibraryActivity, columns)
+                itemAnimator = null
+                setHasFixedSize(true)
+                setItemViewCacheSize(columns * 2)
+                preserveFocusAfterLayout = true
+                clipToPadding = false
+                setPadding(4, 4, 4, 12)
+            }
+            root.addView(favoritesGrid, LinearLayout.LayoutParams(-1, 0, 1f))
+        } else {
+            root.addView(ScrollView(this).apply {
+                isFillViewport = true
+                addView(list)
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
         setContentView(root)
         load(mode)
     }
@@ -78,7 +107,7 @@ class LibraryActivity : AppCompatActivity() {
             list.removeAllViews()
             if (mode == MODE_CONTINUE) {
                 val states = withContext(Dispatchers.IO) { dao.continueWatching(provider.id).first() }
-                val entries = withContext(Dispatchers.IO) { resolveContinueWatching(dao, provider.id, states) }
+                val entries = withContext(Dispatchers.IO) { ContinueWatchingResolver.load(dao, provider.id, states) }
                 if (entries.isEmpty()) showMessage("لا يوجد محتوى للاستئناف")
                 entries.forEach { entry ->
                     when (entry) {
@@ -87,23 +116,51 @@ class LibraryActivity : AppCompatActivity() {
                     }
                 }
             } else {
-                val favorites = withContext(Dispatchers.IO) { ContentRepository(dao).favorites(provider.id).first() }
-                if (favorites.isEmpty()) showMessage("لا توجد عناصر في المفضلة")
-                favorites.forEach { stream -> addRow(provider.id, provider.liveFormat, stream, 0L) }
+                val grid = checkNotNull(favoritesGrid)
+                val adapter = PosterStreamAdapter(
+                    onClick = { stream -> open(provider.id, provider.liveFormat, stream, 0L) },
+                    onFocus = { stream, position ->
+                        focusedFavoriteKey = stream.key
+                        favoritesAdapter?.let { current ->
+                            ArtworkLoader.prefetch(applicationContext, (position + 1..position + 6)
+                                .mapNotNull { current.itemAt(it) }
+                                .map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
+                        }
+                    }
+                )
+                favoritesAdapter = adapter
+                grid.adapter = adapter
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    ContentRepository(dao).favorites(provider.id).distinctUntilChanged().collect { favorites ->
+                        list.removeAllViews()
+                        val previousPosition = focusedFavoriteKey?.let { key ->
+                            (0 until adapter.itemCount).firstOrNull { adapter.itemAt(it)?.key == key }
+                        } ?: 0
+                        adapter.replace(favorites)
+                        grid.visibility = if (favorites.isEmpty()) View.GONE else View.VISIBLE
+                        if (favorites.isEmpty()) {
+                            showMessage("لا توجد عناصر في المفضلة")
+                        } else {
+                            val position = favorites.indexOfFirst { it.key == focusedFavoriteKey }
+                                .takeIf { it >= 0 } ?: previousPosition.coerceAtMost(favorites.lastIndex)
+                            grid.post { TwoPaneFocusGuard.focusItem(grid, position) }
+                        }
+                    }
+                }
             }
             list.getChildAt(0)?.requestFocus()
         }
     }
 
-    private suspend fun resolveContinueWatching(dao: BlofyDao, providerId: String, states: List<WatchStateEntity>): List<ContinueWatchingEntry> {
-        val streams = LinkedHashMap<String, StreamEntity>()
-        val episodes = LinkedHashMap<String, EpisodeEntity>()
-        states.forEach { state ->
-            if (state.kind == "episode") dao.episode(state.contentKey)?.let { episodes[state.contentKey] = it } ?: dao.stream(state.contentKey)?.let { streams[state.contentKey] = it }
-            else dao.stream(state.contentKey)?.let { streams[state.contentKey] = it } ?: dao.episode(state.contentKey)?.let { episodes[state.contentKey] = it }
-        }
-        val parentSeries = if (episodes.isEmpty()) emptyList() else dao.streams(providerId, "series", null).first()
-        return ContinueWatchingResolver.resolve(states, streams, episodes, parentSeries)
+    override fun onDestroy() {
+        favoritesGrid?.adapter = null
+        super.onDestroy()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val grid = favoritesGrid
+        if (grid != null && TwoPaneFocusGuard.handleGrid(event, grid)) return true
+        return super.dispatchKeyEvent(event)
     }
 
     private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {

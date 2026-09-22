@@ -100,7 +100,7 @@ class SmartCollectionsActivity : AppCompatActivity() {
             }
             adapter.replace(items)
             countView.text = "${items.size} عنوان"
-            ArtworkLoader.prefetch(this@SmartCollectionsActivity, items.take(24).map { it.icon ?: it.backdrop })
+            ArtworkLoader.prefetch(this@SmartCollectionsActivity, items.take(24).map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
             grid.post { if (adapter.itemCount > 0) grid.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
         }
     }
