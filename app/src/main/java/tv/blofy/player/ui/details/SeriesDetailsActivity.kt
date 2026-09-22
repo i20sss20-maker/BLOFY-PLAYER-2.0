@@ -173,16 +173,17 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(BlofyTvDesign.Mint)
                     gravity = Gravity.START
-                })
+                    background = BlofyTvDesign.badge(dp(10).toFloat())
+                    setPadding(dp(10), dp(5), dp(10), dp(5))
+                }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(7) })
                 if (currentResume.durationMs > 0) {
                     panel.addView(ProgressBar(this@SeriesDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
                         max = 100
                         this.progress = progress
                         progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
                         progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF3B2B4B.toInt())
-                    }, LinearLayout.LayoutParams(-1, dp(5)).apply {
-                        topMargin = dp(6)
-                        bottomMargin = dp(10)
+                    }, LinearLayout.LayoutParams(-1, dp(6)).apply {
+                        bottomMargin = dp(12)
                     })
                 }
             }
