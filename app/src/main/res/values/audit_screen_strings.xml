@@ -520,4 +520,26 @@
     <string name="category_manager_hide">Hide</string>
     <string name="category_manager_pin_top">Pin to top</string>
 
+
+    <string name="parental_title">Parental protection</string>
+    <string name="parental_subtitle">Use a 4–8 digit PIN to unlock locked channels or content.</string>
+    <string name="parental_enabled">● Protection enabled</string>
+    <string name="parental_not_set">○ No PIN set</string>
+    <string name="parental_set_pin">Set PIN</string>
+    <string name="parental_change_pin">Change PIN</string>
+    <string name="parental_clear_pin">Remove PIN</string>
+    <string name="parental_disable_title">Remove protection</string>
+    <string name="parental_disable_message">The PIN will be removed. Locked content will no longer ask for a protection code until you set a new PIN.</string>
+    <string name="parental_back">Back</string>
+    <string name="parental_new_pin_hint">New PIN</string>
+    <string name="parental_enter_digits">Enter 4 to 8 digits</string>
+    <string name="parental_next">Next</string>
+    <string name="parental_cancel">Cancel</string>
+    <string name="parental_invalid_pin">PIN must be 4 to 8 digits</string>
+    <string name="parental_confirm_pin_hint">Confirm PIN</string>
+    <string name="parental_confirm_title">Confirm PIN</string>
+    <string name="parental_save">Save</string>
+    <string name="parental_mismatch">The two PINs do not match</string>
+    <string name="parental_save_failed">Could not save PIN</string>
+
 </resources>
