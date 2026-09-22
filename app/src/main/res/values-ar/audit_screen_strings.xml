@@ -257,4 +257,45 @@
     <string name="profile_watchlist_saved">✓ في قائمتي</string>
     <string name="profile_watchlist_add">+ قائمتي</string>
 
+
+    <string name="profiles_title">الملفات الشخصية</string>
+    <string name="profiles_current">الملف الحالي: %1$s  •  %2$d/8</string>
+    <string name="profiles_guest_meta">ملف ضيف • تفضيلات مستقلة</string>
+    <string name="profiles_kids_locked_meta">وضع أطفال • محمي برمز PIN</string>
+    <string name="profiles_kids_meta">وضع أطفال • يمكن إضافة PIN خاص للملف</string>
+    <string name="profiles_standard_meta">المشاهدة والمفضلة والإعدادات الرئيسية</string>
+    <string name="profiles_add">＋ إضافة ملف</string>
+    <string name="profiles_delete_current">حذف الملف الحالي</string>
+    <string name="profiles_current_security">حماية الملف الحالي</string>
+    <string name="profiles_pin_change_hint">اكتب PIN جديد لتغييره</string>
+    <string name="profiles_pin_hint">PIN من 4 إلى 8 أرقام</string>
+    <string name="profiles_save_profile_pin">حفظ PIN للملف</string>
+    <string name="profiles_profile_pin_saved">تم حفظ PIN لملف %1$s</string>
+    <string name="profiles_pin_invalid">اكتب من 4 إلى 8 أرقام</string>
+    <string name="profiles_clear_profile_pin">إلغاء PIN للملف</string>
+    <string name="profiles_profile_pin_cleared">تم إلغاء PIN للملف</string>
+    <string name="profiles_content_pin_title">PIN المحتوى المقفل</string>
+    <string name="profiles_save_content_pin">حفظ PIN للمحتوى</string>
+    <string name="profiles_content_pin_saved">تم حفظ PIN المحتوى</string>
+    <string name="profiles_clear_content_pin">إلغاء PIN المحتوى</string>
+    <string name="profiles_content_pin_cleared">تم إلغاء PIN المحتوى</string>
+    <string name="profiles_name_hint">اسم الملف</string>
+    <string name="profiles_kids_mode">وضع أطفال</string>
+    <string name="profiles_guest_mode">ملف ضيف</string>
+    <string name="profiles_create_title">إضافة ملف شخصي</string>
+    <string name="profiles_cancel">إلغاء</string>
+    <string name="profiles_create">إضافة</string>
+    <string name="profiles_create_failed">تعذر إنشاء الملف</string>
+    <string name="profiles_last_delete_blocked">لا يمكن حذف آخر ملف</string>
+    <string name="profiles_delete_title">حذف %1$s؟</string>
+    <string name="profiles_delete_message">سيتم حذف إعدادات Watchlist وترتيب الواجهة الخاصة بهذا الملف فقط.</string>
+    <string name="profiles_delete">حذف</string>
+    <string name="profiles_adult_required">اختر ملف بالغ لإدارة الحماية والملفات</string>
+    <string name="profiles_open_title">فتح ملف %1$s</string>
+    <string name="profiles_adult_pin_title">رمز حماية ملف بالغ</string>
+    <string name="profiles_enter_pin">أدخل رمز PIN الخاص بهذا الملف</string>
+    <string name="profiles_open">فتح</string>
+    <string name="profiles_pin_wrong">PIN غير صحيح</string>
+    <string name="profiles_selected">تم اختيار %1$s</string>
+
 </resources>
