@@ -78,6 +78,7 @@ class InterfaceRefinementTest {
                     val title = root.findViewWithTag<TextView>("blofy_trial_title")
                     assertEquals(activity.getString(if (expired) R.string.trial_ended else R.string.trial_remaining), title.text.toString())
                     val qr = root.findViewWithTag<View>("blofy_login_qr_panel")
+                    assertTrue("QR panel must keep its premium frame", qr.background is android.graphics.drawable.GradientDrawable)
                     val status = root.findViewWithTag<View>("blofy_trial_status")
                     val qrPosition = IntArray(2).also(qr::getLocationOnScreen)
                     val statusPosition = IntArray(2).also(status::getLocationOnScreen)
@@ -121,8 +122,12 @@ class InterfaceRefinementTest {
                     .putExtra("provider_id", id).putExtra("content_key", "$id:$kind:7")) { scenario ->
                     await { scenario.onActivity { activity ->
                         val root = activity.window.decorView
-                        assertEquals("وصف تجريبي من السيرفر", root.findViewWithTag<TextView>("blofy_details_overview")?.text?.toString())
-                        assertTrue(root.findViewWithTag<TextView>("blofy_details_stats").text.contains("8.4/10"))
+                        val overview = root.findViewWithTag<TextView>("blofy_details_overview")
+                        val stats = root.findViewWithTag<TextView>("blofy_details_stats")
+                        assertEquals("وصف تجريبي من السيرفر", overview?.text?.toString())
+                        assertTrue(stats.text.contains("8.4/10"))
+                        assertNotNull("Details overview must keep its readable surface", overview.background)
+                        assertNotNull("Details metadata must keep its badge surface", stats.background)
                         val actor = root.findViewWithTag<View>("blofy_cast_ممثل تجريبي")
                         assertNotNull(actor)
                         assertTrue(descendants(actor).filterIsInstance<android.widget.ImageView>()
