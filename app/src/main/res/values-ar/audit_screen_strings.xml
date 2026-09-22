@@ -373,7 +373,7 @@
     <string name="provider_manager_fetching">جاري جلب القوائم وبياناتها من الموقع…</string>
     <string name="provider_manager_empty">ما عندك سيرفرات محفوظة حتى الآن\nأضف مشترك BLOFY أو Xtream</string>
     <string name="provider_manager_active">● القائمة النشطة</string>
-    <string name="provider_manager_saved">○ قائمة محفوظة</string>
+    <string name="provider_manager_saved">○ قائمة محفوظة</string>\n    <string name="provider_manager_source_format">%1$s  •  %2$s</string>
     <string name="provider_manager_summary_loading">قراءة حالة المكتبة…</string>
     <string name="provider_manager_connect">▶  اتصال</string>
     <string name="provider_manager_connect_plain">اتصال</string>
