@@ -21,6 +21,7 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import kotlin.math.exp
 
 data class PlaylistSyncResult(
     val freshItemCount: Int,
@@ -155,8 +156,11 @@ class PlaylistManager(
             if (direct) clearDirectSection(provider.id, "movie")
             throw failure
         }
-        onProgress(88)
         finishSection(provider.id, "movie", previousCount, categories.size, categoryRows, parsed, direct)
+        // Only publish the section's terminal progress after its durable DB work is finished.
+        // Publishing 88 first made the loading UI appear frozen at 27% while replaceCatalog/FTS
+        // was still working on large movie libraries.
+        onProgress(88)
         return parsed.itemCount
     }
 
@@ -344,7 +348,7 @@ class PlaylistManager(
                         val fraction = if (declaredBytes > 0L) {
                             (counting.bytesRead.toDouble() / declaredBytes.toDouble()).coerceIn(0.0, 1.0)
                         } else {
-                            (sourceCount.toDouble() / (sourceCount + 2000.0)).coerceIn(0.0, 0.96)
+                            unknownLengthCatalogFraction(sourceCount)
                         }
                         onProgress(progressStart + (fraction * span).toInt())
                     }
@@ -423,9 +427,23 @@ class PlaylistManager(
     }
 
     private companion object {
-        const val DIRECT_STREAM_BATCH = 700
-        const val DIRECT_CATEGORY_BATCH = 500
+        // Fewer WAL transactions materially improve first-import time on 100k+ catalogs while
+        // keeping each in-memory batch small enough for low-RAM TV boxes.
+        const val DIRECT_STREAM_BATCH = 2000
+        const val DIRECT_CATEGORY_BATCH = 1000
     }
+}
+
+/**
+ * When a panel uses chunked transfer encoding there is no Content-Length. The old formula reached
+ * 96% after only ~48k rows, so a 150k+ movie library spent most of its real work showing the same
+ * percentage. Use a much slower asymptotic estimate and let the explicit section-complete callback
+ * publish 100% of the section once parsing + DB persistence actually finish.
+ */
+internal fun unknownLengthCatalogFraction(sourceCount: Int): Double {
+    if (sourceCount <= 0) return 0.0
+    val estimate = 1.0 - exp(-sourceCount.toDouble() / 60_000.0)
+    return estimate.coerceIn(0.0, 0.95)
 }
 
 private class CountingInputStream(input: InputStream) : FilterInputStream(input) {
