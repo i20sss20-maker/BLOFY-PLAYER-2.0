@@ -1,0 +1,85 @@
+name: Apply and verify isolated account import repair
+on:
+  push:
+    branches: [qa/apply-rc0755-account-import-recovery]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: blofy-apply-account-import-recovery
+  cancel-in-progress: false
+jobs:
+  repair:
+    if: github.ref == 'refs/heads/qa/apply-rc0755-account-import-recovery'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply exact reviewed patch to isolated branch only
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode tools/qa/account-import-recovery.patch.gz.b64 | gzip -d > "$RUNNER_TEMP/recovery.patch"
+          printf '%s  %s\n' a5eaa0b65d82155b9e895657c4cb6a5015ee0c7159705b6f552abc224cf1937b "$RUNNER_TEMP/recovery.patch" | sha256sum --check
+          git fetch --depth=1 origin refs/heads/fix/rc0755-account-import-recovery
+          test "$(git rev-parse FETCH_HEAD)" = 9973b10f36e1c658e890e5c7ac710ecfc3fc326a
+          git checkout --detach FETCH_HEAD
+          git apply --check --index "$RUNNER_TEMP/recovery.patch"
+          git apply --index "$RUNNER_TEMP/recovery.patch"
+          git diff --cached --check
+          python3 - <<'PY'
+          import subprocess
+          paths = set(subprocess.check_output(['git','diff','--cached','--name-only'], text=True).splitlines())
+          prefix = 'app/src/main/java/tv/blofy/player/'
+          allowed = {prefix+p for p in ['data/CatalogImportFailure.kt','data/LocalStorageManager.kt','data/PlaylistManager.kt','data/local/BlofyDao.kt','data/preparation/CatalogLoadPersistence.kt','ui/login/CatalogLoadingActivity.kt']}
+          allowed |= {'app/src/main/res/'+locale+'/catalog_recovery.xml' for locale in ['values','values-ar','values-en','values-de','values-fr','values-es','values-it','values-pt','values-tr']}
+          allowed |= {'app/src/test/java/tv/blofy/player/data/'+name for name in ['AccountImportRecoveryRegressionTest.kt','CatalogImportFailureTest.kt','FirstImportStorageReserveTest.kt']}
+          assert paths == allowed, (paths - allowed, allowed - paths)
+          print('All 18 changed files match the reviewed allowlist; no playback, theme, build-version, deployment or signing changes.')
+          PY
+          git -c user.name='BLOFY Recovery QA' -c user.email='qa@users.noreply.github.com' commit -m 'fix: preserve account import across metadata updates and keep original storage failures'
+          git push origin HEAD:refs/heads/fix/rc0755-account-import-recovery
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git rev-parse HEAD > verified-source-head.txt
+          git diff HEAD^ HEAD --stat > repair-scope.txt
+          git archive --format=zip --output=account-recovery-source.zip HEAD
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses >/dev/null || true
+          "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Verify catalog query bounds
+        run: python3 tools/check_catalog_queries.py
+      - name: Full unit tests, lint, app and instrumentation assembly
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --console=plain \
+            -PBLOFY_ACTIVATION_BASE_URL=https://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=https://127.0.0.1:9 \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest \
+            2>&1 | tee account-recovery-validation.log
+      - name: Upload exact source and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-account-recovery-verified-${{ steps.apply.outputs.head }}
+          path: |
+            verified-source-head.txt
+            repair-scope.txt
+            account-recovery-source.zip
+            account-recovery-validation.log
+            app/build/test-results/testDebugUnitTest/*.xml
+            app/build/reports/lint-results-debug.*
+          retention-days: 14
+          if-no-files-found: warn
