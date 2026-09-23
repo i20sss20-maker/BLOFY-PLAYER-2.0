@@ -113,6 +113,14 @@ class ProviderDetailsRepositoryTest {
         assertNotEquals("GB", iso.countries.single())
     }
 
+    @Test fun countryOnlyProviderResponseStillBuildsMetadata() {
+        val result = XtreamMetadataFallback.parseResponse(provider, stream(), mapOf(
+            "info" to mapOf("origin_country" to listOf("SA"))
+        ), "movie")
+        assertNotNull(result)
+        assertTrue(result!!.countries.isNotEmpty())
+    }
+
     @Test fun partialRefreshRetainsRatingArtworkAndRichActorFields() = runBlocking(Dispatchers.IO) {
         server.enqueue(MockResponse().setBody("""{"info":{"rating":8.3,"cover":"https://example.test/poster.jpg","cast":[{"name":"Actor","role":"Captain","photo":"https://example.test/actor.jpg"}]}}"""))
         val saved = ProviderDetailsRepository.refresh(context, provider, stream()).metadata!!
