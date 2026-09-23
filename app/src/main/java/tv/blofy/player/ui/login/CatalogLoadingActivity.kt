@@ -28,6 +28,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogImportFailure
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
@@ -112,10 +113,15 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
     }
 
-    private fun preparationMessage(error: Throwable): String = when (error) {
-        is FullCatalogPreparer.Incomplete -> error.message.orEmpty()
-        is ArtworkLoader.StorageFull -> error.message.orEmpty()
-        else -> getString(R.string.catalog_prepare_failed)
+    private fun preparationMessage(error: Throwable): String {
+        // No raw provider URLs, credentials or SQL values are written to the support log.
+        android.util.Log.w("BLOFY_CATALOG", "failure progress=$displayedPercent type=${error.javaClass.simpleName} storage=${CatalogImportFailure.isStorageFailure(error)}")
+        if (CatalogImportFailure.isStorageFailure(error)) return getString(R.string.catalog_storage_unavailable)
+        return when (error) {
+            is FullCatalogPreparer.Incomplete -> error.message.orEmpty()
+            is ArtworkLoader.StorageFull -> error.message.orEmpty()
+            else -> getString(R.string.catalog_prepare_failed)
+        }
     }
 
     private fun buildUi() {
@@ -299,11 +305,23 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
         // A staged refresh temporarily duplicates catalog rows. Clean disposable cache first and
         // refuse the refresh if there is not enough disk headroom; the existing catalog stays safe.
-        if (!firstLoad) {
+        if (firstLoad) {
+            val storageReady = withContext(Dispatchers.IO) {
+                LocalStorageManager.prepareForFirstImport(applicationContext)
+            }
+            if (!storageReady) {
+                fail(getString(R.string.catalog_storage_unavailable))
+                return
+            }
+        } else {
             val storageReady = withContext(Dispatchers.IO) {
                 LocalStorageManager.prepareForCatalogRefresh(applicationContext)
             }
             if (!storageReady) {
+                if (explicitSourceReplacement) {
+                    fail(getString(R.string.catalog_storage_unavailable))
+                    return
+                }
                 render(30, getString(R.string.catalog_refresh_kept))
                 stage.setTextColor(BlofyTvDesign.Mint)
                 Toast.makeText(this, getString(R.string.storage_cleanup_message), Toast.LENGTH_LONG).show()
@@ -364,22 +382,25 @@ class CatalogLoadingActivity : AppCompatActivity() {
             delay(120L)
             openHome(providerId)
         } catch (cancelled: CancellationException) {
-            persistence.discardIfUncommitted()
+            CatalogImportFailure.cleanupPreserving(cancelled) { persistence.discardIfUncommitted() }
             throw cancelled
         } catch (error: Throwable) {
             if (persistence.catalogCommitted) {
                 fail(preparationMessage(error))
                 return
             }
-            persistence.discardIfUncommitted()
-            if (!firstLoad) {
+            CatalogImportFailure.cleanupPreserving(error) { persistence.discardIfUncommitted() }
+            if (CatalogImportFailure.canReopenPrevious(firstLoad, explicitSourceReplacement, error)) {
                 render(30, getString(R.string.catalog_refresh_kept))
                 stage.setTextColor(BlofyTvDesign.Mint)
                 Toast.makeText(this, getString(R.string.catalog_kept_opening), Toast.LENGTH_SHORT).show()
                 if (!CatalogSyncState.isEntryReady(applicationContext, providerId)) awaitEntryReadyCache(providerId)
                 openHome(providerId)
             } else {
-                fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
+                val message = preparationMessage(error)
+                fail(if (explicitSourceReplacement && !CatalogImportFailure.isStorageFailure(error)) {
+                    getString(R.string.catalog_replacement_retry)
+                } else message)
             }
         } finally {
             if (persistence.catalogCommitted) forceRefreshOnRetry = false

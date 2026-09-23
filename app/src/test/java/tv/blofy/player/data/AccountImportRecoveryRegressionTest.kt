@@ -130,6 +130,31 @@ class AccountImportRecoveryRegressionTest {
         assertNotNull(db.dao().stream(row(previous, "movie", "saved").key))
     }
 
+    @Test fun interruptedAccountReplacementKeepsOldCatalogThenRetryCommitsNewAccount(): Unit = runBlocking(Dispatchers.IO) {
+        val oldEpoch = CatalogSyncState.lastUpdatedAt(app, previous.id)
+        val replacement = previous.copy(username = "replacement-user", password = "replacement-pass", updatedAt = 600L)
+        val firstStage = replacement.copy(id = UUID.randomUUID().toString())
+        db.dao().replaceCatalog(firstStage.id, "movie", emptyList(), listOf(row(firstStage, "movie", "incomplete")))
+        val interrupted = CatalogLoadPersistence(app, db.dao(), previous, firstStage.id, false)
+        interrupted.discardIfUncommitted()
+        assertEquals(previous.username, db.dao().provider(previous.id)?.username)
+        assertEquals(oldEpoch, CatalogSyncState.lastUpdatedAt(app, previous.id))
+        assertNotNull(db.dao().stream(row(previous, "movie", "saved").key))
+        assertFalse(db.dao().hasCatalog(firstStage.id))
+
+        val retryStage = replacement.copy(id = UUID.randomUUID().toString())
+        db.dao().replaceCatalog(retryStage.id, "movie", emptyList(), listOf(row(retryStage, "movie", "new-library")))
+        val retry = CatalogLoadPersistence(app, db.dao(), previous, retryStage.id, false)
+        retry.commit { db.dao().promoteExplicitSourceReplacement(retryStage.id, replacement, previous) }
+        retry.discardIfUncommitted()
+        assertTrue(retry.catalogCommitted)
+        assertEquals(replacement.username, db.dao().provider(previous.id)?.username)
+        assertNotNull(db.dao().stream(row(previous, "movie", "new-library").key))
+        assertNull(db.dao().stream(row(previous, "movie", "saved").key))
+        assertTrue(CatalogLoadPersistence.hasCommittedCatalog(app, db.dao(), previous.id))
+        assertTrue(CatalogSyncState.isEntryReady(app, previous.id))
+    }
+
     @Test fun cancellationDoesNotRunTheFollowingSection(): Unit = runBlocking(Dispatchers.IO) {
         var laterSections = 0
         val result = runCatching { runXtreamSections(listOf(

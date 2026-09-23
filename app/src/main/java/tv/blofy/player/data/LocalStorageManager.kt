@@ -57,6 +57,12 @@ object LocalStorageManager {
         return app.filesDir.usableSpace >= systemReserve + overlapEstimate
     }
 
+    /** First/second-account imports need a write reserve too; never clear saved library data. */
+    fun prepareForFirstImport(context: Context): Boolean {
+        trimTemporaryIfNeeded(context)
+        return hasHealthyFreeSpace(context)
+    }
+
     /** Trim only disposable cache, then decide whether a safe staged refresh can start. */
     fun prepareForCatalogRefresh(context: Context): Boolean {
         trimTemporaryIfNeeded(context)
