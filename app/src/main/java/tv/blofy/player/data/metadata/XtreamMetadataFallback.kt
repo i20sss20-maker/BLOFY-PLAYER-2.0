@@ -96,7 +96,7 @@ object XtreamMetadataFallback {
             ?: stream.backdrop?.takeIf(String::isNotBlank)
         val logo = imageUrl(text(source, "logo", "logo_url", "logo_path"), provider)
             ?: imageUrl(firstBackdrop(images["logos"]), provider)
-        val country = splitValues(text(source, "country", "production_countries"))
+        val country = countryValues(source)
         val language = text(source, "language", "original_language").ifBlank { null }
         val status = text(source, "status").ifBlank { null }
 
@@ -196,6 +196,27 @@ object XtreamMetadataFallback {
         .map { cleanText(it).trim().trim('"') }
         .filter { it.isNotBlank() && !it.equals("null", true) }
         .distinctBy { it.lowercase(java.util.Locale.ROOT) }
+
+    private fun countryValues(source: Map<String, Any?>): List<String> =
+        splitValues(
+            text(
+                source,
+                "country",
+                "countries",
+                "country_name",
+                "production_country",
+                "production_countries",
+                "origin_country"
+            )
+        ).map { value ->
+            val code = value.trim()
+            if (code.length == 2 && code.all(Char::isLetter)) {
+                java.util.Locale("", code.uppercase(java.util.Locale.ROOT))
+                    .getDisplayCountry(java.util.Locale.getDefault())
+                    .takeIf(String::isNotBlank)
+                    ?: code.uppercase(java.util.Locale.ROOT)
+            } else value
+        }.distinctBy { it.lowercase(java.util.Locale.ROOT) }
 
     private fun number(value: Any?): Double? = when (value) {
         is Number -> value.toDouble().takeIf { it > 0.0 }
