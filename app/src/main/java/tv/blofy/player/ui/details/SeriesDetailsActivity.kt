@@ -56,6 +56,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             val metadata = withContext(Dispatchers.IO) {
                 XtreamMetadataFallback.series(provider, stream)
             }
+            var resolvedMetadata = metadata
 
             ArtworkLoader.loadPriority(backdrop, listOf(metadata?.backdropUrl, stream.backdrop, stream.icon))
             ArtworkLoader.loadPriority(poster, listOf(metadata?.posterUrl, stream.icon, stream.backdrop))
@@ -198,8 +199,8 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, providerId)
                     putExtra(EpisodesActivity.EXTRA_SERIES_ID, stream.remoteId)
                     putExtra(EpisodesActivity.EXTRA_SERIES_NAME, stream.name)
-                    putExtra(EpisodesActivity.EXTRA_SERIES_ART, metadata?.backdropUrl ?: stream.backdrop ?: stream.icon)
-                    putExtra(EpisodesActivity.EXTRA_SERIES_COUNTRY, metadata?.countries?.filter(String::isNotBlank)?.take(2)?.joinToString(" / ").orEmpty())
+                    putExtra(EpisodesActivity.EXTRA_SERIES_ART, resolvedMetadata?.backdropUrl ?: stream.backdrop ?: stream.icon)
+                    putExtra(EpisodesActivity.EXTRA_SERIES_COUNTRY, resolvedMetadata?.countries?.filter(String::isNotBlank)?.take(2)?.joinToString(" / ").orEmpty())
                 })
             }
             if (primary == null) primary = episodes
@@ -227,6 +228,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             panel.addView(castContainer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
             ProviderDetailsBinding(this@SeriesDetailsActivity, overviewView, crewView,
                 castContainer, provider, stream) { updated ->
+                    resolvedMetadata = updated ?: resolvedMetadata
                     DetailsMetadataChips.update(statsView, metadataStats(updated))
                     titleView.text = ContentPresentation.title(updated?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
                     ArtworkLoader.loadPriority(backdrop, listOf(updated?.backdropUrl, stream.backdrop, stream.icon))
