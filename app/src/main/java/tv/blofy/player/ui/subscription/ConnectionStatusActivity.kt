@@ -18,8 +18,7 @@ import tv.blofy.player.core.diagnostics.SubscriptionHealth
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
-import java.text.DateFormat
-import java.util.Date
+import tv.blofy.player.ui.common.DeviceLocalTime
 
 class ConnectionStatusActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,7 +74,7 @@ class ConnectionStatusActivity : AppCompatActivity() {
                         val result = SubscriptionHealth.check(provider)
                         row.text = buildString {
                             append(provider.name).append("\n").append(message(result.state))
-                            result.expiresAt?.let { append("\nانتهاء اشتراك البث: ").append(DateFormat.getDateTimeInstance().format(Date(it))) }
+                            result.expiresAt?.let { append("\nانتهاء اشتراك البث: ").append(DeviceLocalTime.format(this@ConnectionStatusActivity, it, "dd/MM/yyyy • HH:mm")) }
                             if (result.connections != null && result.limit != null) append("\nالاتصالات المستخدمة: ${result.connections} من ${result.limit}")
                         }
                     }
