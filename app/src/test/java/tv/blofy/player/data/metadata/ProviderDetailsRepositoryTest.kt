@@ -97,6 +97,24 @@ class ProviderDetailsRepositoryTest {
         assertEquals(server.url("/director.jpg").toString(), result.crew.single().profileUrl)
     }
 
+    @Test fun providerCountrySupportsStructuredAndIsoValues() {
+        val structured = XtreamMetadataFallback.parseResponse(provider, stream(), mapOf(
+            "info" to mapOf(
+                "description" to "Story",
+                "production_countries" to listOf(mapOf("name" to "Saudi Arabia"))
+            )
+        ), "movie")
+        assertEquals(listOf("Saudi Arabia"), structured?.countries)
+
+        val iso = XtreamMetadataFallback.parseResponse(provider, stream("series"), mapOf(
+            "info" to mapOf(
+                "description" to "Series story",
+                "origin_country" to listOf("US")
+            )
+        ), "tv")
+        assertTrue(iso?.countries?.firstOrNull()?.isNotBlank() == true)
+    }
+
     @Test fun partialRefreshRetainsRatingArtworkAndRichActorFields() = runBlocking(Dispatchers.IO) {
         server.enqueue(MockResponse().setBody("""{"info":{"rating":8.3,"cover":"https://example.test/poster.jpg","cast":[{"name":"Actor","role":"Captain","photo":"https://example.test/actor.jpg"}]}}"""))
         val saved = ProviderDetailsRepository.refresh(context, provider, stream()).metadata!!
