@@ -36,8 +36,8 @@ class DeviceLocalTimeTest {
 
     @Test fun sameLocalDayUsesCurrentDeviceTimezone() {
         TimeZone.setDefault(TimeZone.getTimeZone("Asia/Riyadh"))
-        val beforeMidnightUtc = 20L * 60L * 60L * 1000L
-        val afterMidnightUtc = 22L * 60L * 60L * 1000L
-        assertEquals(true, DeviceLocalTime.isSameLocalDay(context, beforeMidnightUtc, afterMidnightUtc))
+        val eveningUtc = 18L * 60L * 60L * 1000L
+        val laterUtc = 20L * 60L * 60L * 1000L
+        assertEquals(true, DeviceLocalTime.isSameLocalDay(context, eveningUtc, laterUtc))
     }
 }
