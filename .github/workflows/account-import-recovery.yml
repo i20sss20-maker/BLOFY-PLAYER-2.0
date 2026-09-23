@@ -1,0 +1,53 @@
+name: BLOFY account import recovery regression
+
+on:
+  push:
+    branches: [fix/rc0755-account-import-recovery]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: blofy-account-import-recovery
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses >/dev/null || true
+          "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Run real Room account and storage regressions
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --console=plain \
+            -PBLOFY_ACTIVATION_BASE_URL=https://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=https://127.0.0.1:9 \
+            :app:testDebugUnitTest --tests tv.blofy.player.data.AccountImportRecoveryRegressionTest \
+            2>&1 | tee account-import-regression.log
+      - name: Upload regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-account-import-regression-${{ github.sha }}
+          path: |
+            account-import-regression.log
+            app/build/test-results/testDebugUnitTest/*.xml
+            app/build/reports/tests/testDebugUnitTest/
+          retention-days: 14
+          if-no-files-found: warn
