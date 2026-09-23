@@ -114,7 +114,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     val genres = metadata?.genres?.filter(String::isNotBlank).orEmpty()
                     if (genres.isNotEmpty()) add(genres.take(3).joinToString(" / "))
                     else stream.genre?.takeIf(String::isNotBlank)?.let(::add)
-                    metadata?.countries?.filter(String::isNotBlank)?.takeIf { it.isNotEmpty() }?.let { add("🌐 " + it.take(2).joinToString(" / ")) }
+                    metadata?.countries?.filter(String::isNotBlank)?.takeIf { it.isNotEmpty() }?.let { add(getString(R.string.details_country, it.take(2).joinToString(" / "))) }
                     metadata?.originalLanguage?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
                 }
             val statsView = DetailsMetadataChips.build(this@SeriesDetailsActivity, metadataStats(metadata))
