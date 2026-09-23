@@ -23,7 +23,7 @@ object AppUpdatePrompt {
             if (force) runCatching {
                 activity.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(
                     "https://play.google.com/store/apps/details?id=${BuildConfig.APPLICATION_ID}")))
-            }.onFailure { Toast.makeText(activity, "Google Play is unavailable", Toast.LENGTH_SHORT).show() }
+            }.onFailure { Toast.makeText(activity, activity.getString(tv.blofy.player.R.string.update_play_unavailable), Toast.LENGTH_SHORT).show() }
             return
         }
         if (!force && !processCheckStarted.compareAndSet(false, true)) return
@@ -35,7 +35,7 @@ object AppUpdatePrompt {
                 if (force) {
                     Toast.makeText(
                         activity,
-                        "تعذر قراءة معلومات التحديث الآن",
+                        activity.getString(tv.blofy.player.R.string.update_metadata_unavailable),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -46,7 +46,7 @@ object AppUpdatePrompt {
                 if (force) {
                     Toast.makeText(
                         activity,
-                        "أنت على أحدث إصدار: ${BuildConfig.VERSION_NAME}",
+                        activity.getString(tv.blofy.player.R.string.update_already_latest, BuildConfig.VERSION_NAME),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -57,7 +57,7 @@ object AppUpdatePrompt {
                 if (force) {
                     Toast.makeText(
                         activity,
-                        "يوجد إصدار ${release.versionName} لكن رابط التحديث غير مضبوط",
+                        activity.getString(tv.blofy.player.R.string.update_link_missing, release.versionName),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -80,26 +80,27 @@ object AppUpdatePrompt {
     ) {
         val notes = release.releaseNotes
             ?.takeIf(String::isNotBlank)
-            ?.let { "\n\nأبرز التغييرات:\n$it" }
+            ?.let { "\n\n" + activity.getString(tv.blofy.player.R.string.update_whats_new) + ":\n" + it }
             .orEmpty()
         val message = buildString {
-            append("الإصدار الحالي: ${BuildConfig.VERSION_NAME}\n")
-            append("الإصدار الجديد: ${release.versionName}")
-            if (required) append("\n\nهذا التحديث مهم لاستمرار أفضل توافق مع الخدمة.")
+            append(activity.getString(tv.blofy.player.R.string.update_current_version, BuildConfig.VERSION_NAME))
+            append("\n")
+            append(activity.getString(tv.blofy.player.R.string.update_new_version, release.versionName))
+            if (required) append("\n\n").append(activity.getString(tv.blofy.player.R.string.update_required_note))
             append(notes)
         }
 
         val dialog = AlertDialog.Builder(activity)
-            .setTitle(if (required) "تحديث BLOFY مهم" else "يتوفر تحديث جديد")
+            .setTitle(activity.getString(if (required) tv.blofy.player.R.string.update_required_title else tv.blofy.player.R.string.update_available_title))
             .setMessage(message)
-            .setPositiveButton("تحديث الآن") { _, _ ->
+            .setPositiveButton(activity.getString(tv.blofy.player.R.string.update_now)) { _, _ ->
                 activity.startActivity(Intent(activity, AppUpdateActivity::class.java)
                     .putExtra(AppUpdateWorker.VERSION, release.versionCode)
                     .putExtra(AppUpdateWorker.URL, release.downloadUrl)
                     .putExtra("name", release.versionName)
                     .putExtra("notes", release.releaseNotes))
             }
-            .setNegativeButton(if (required) "لاحقًا" else "ليس الآن", null)
+            .setNegativeButton(activity.getString(if (required) tv.blofy.player.R.string.update_later else tv.blofy.player.R.string.update_not_now), null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.requestFocus()
