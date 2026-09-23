@@ -30,7 +30,6 @@ class RuntimeSettingsTest {
         assertEquals(18f, RuntimeSettings.subtitleSizeSp(app), 0f)
         assertEquals(RuntimeSettings.CatalogDensity.COMFORTABLE, RuntimeSettings.catalogDensity(app))
         assertFalse(RuntimeSettings.preferStereoTrack(app))
-        assertEquals(RuntimeSettings.CatalogDensity.COMFORTABLE, RuntimeSettings.catalogDensity(app))
     }
 
     @Test fun storedChoicesDriveRuntimePolicy() {
@@ -63,5 +62,6 @@ class RuntimeSettingsTest {
         assertEquals(RuntimeSettings.AutoNext.ASK, RuntimeSettings.autoNext(app))
         assertEquals(AspectRatioFrameLayout.RESIZE_MODE_FIT, RuntimeSettings.aspectResizeMode(app))
         assertEquals(18f, RuntimeSettings.subtitleSizeSp(app), 0f)
+        assertEquals(RuntimeSettings.CatalogDensity.COMFORTABLE, RuntimeSettings.catalogDensity(app))
     }
 }
