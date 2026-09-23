@@ -19,4 +19,14 @@
     <string name="update_new_version">الجديد • %1$s</string>
     <string name="update_whats_new">الجديد في الإصدار</string>
     <string name="update_progress_detailed">جارٍ التنزيل • %1$d%% • %2$s / %3$s</string>
+    <string name="update_play_unavailable">Google Play غير متاح على هذا الجهاز.</string>
+    <string name="update_metadata_unavailable">تعذر قراءة معلومات التحديث الآن.</string>
+    <string name="update_already_latest">أنت على أحدث إصدار: %1$s</string>
+    <string name="update_link_missing">يوجد إصدار %1$s لكن رابط التحديث غير مضبوط.</string>
+    <string name="update_required_note">هذا التحديث مهم لاستمرار أفضل توافق مع الخدمة.</string>
+    <string name="update_required_title">تحديث BLOFY مهم</string>
+    <string name="update_available_title">يتوفر تحديث جديد</string>
+    <string name="update_now">تحديث الآن</string>
+    <string name="update_later">لاحقًا</string>
+    <string name="update_not_now">ليس الآن</string>
 </resources>
