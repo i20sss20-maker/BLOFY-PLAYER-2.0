@@ -99,9 +99,11 @@ object XtreamMetadataFallback {
         val country = countryValues(source)
         val language = text(source, "language", "original_language").ifBlank { null }
         val status = text(source, "status").ifBlank { null }
+        val networks = splitValues(text(source, "network", "networks"))
 
         val hasUsefulData = cast.isNotEmpty() || crew.isNotEmpty() || !plot.isNullOrBlank() ||
-            genres.isNotEmpty() || rating != null || !poster.isNullOrBlank() || !backdrop.isNullOrBlank() || logo != null
+            genres.isNotEmpty() || rating != null || !poster.isNullOrBlank() || !backdrop.isNullOrBlank() || logo != null ||
+            country.isNotEmpty() || !language.isNullOrBlank() || !status.isNullOrBlank() || networks.isNotEmpty()
         if (!hasUsefulData) return null
 
         return ProviderMetadata.Metadata(
@@ -121,7 +123,7 @@ object XtreamMetadataFallback {
             countries = country,
             originalLanguage = language,
             status = status,
-            networks = splitValues(text(source, "network", "networks")),
+            networks = networks,
         )
     }
 
