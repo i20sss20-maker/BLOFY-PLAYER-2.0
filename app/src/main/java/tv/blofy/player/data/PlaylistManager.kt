@@ -343,7 +343,7 @@ class PlaylistManager(
                             }
                         }
                     }
-                    if (sourceCount % 256 == 0) {
+                    if (sourceCount % PROGRESS_REPORT_ROWS == 0) {
                         val span = (progressEnd - progressStart).coerceAtLeast(1)
                         val fraction = if (declaredBytes > 0L) {
                             (counting.bytesRead.toDouble() / declaredBytes.toDouble()).coerceIn(0.0, 1.0)
@@ -431,6 +431,9 @@ class PlaylistManager(
         // keeping each in-memory batch small enough for low-RAM TV boxes.
         const val DIRECT_STREAM_BATCH = 2000
         const val DIRECT_CATEGORY_BATCH = 1000
+        // UI only has a few dozen visible percentage steps; avoid hundreds of Main dispatcher
+        // hops while parsing 100k+ entries.
+        const val PROGRESS_REPORT_ROWS = 1024
     }
 }
 
