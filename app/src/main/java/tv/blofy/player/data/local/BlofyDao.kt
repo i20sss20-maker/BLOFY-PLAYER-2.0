@@ -311,6 +311,9 @@ interface BlofyDao {
             username = targetProvider.username,
             password = targetProvider.password,
             providerType = targetProvider.providerType,
+            // Credentials and their portal token belong to the same account. A same-source
+            // refresh must retain a newer token already saved while this request was running.
+            subscriberToken = if (sameCatalogSource(current, targetProvider)) current.subscriberToken else targetProvider.subscriberToken,
             updatedAt = maxOf(current.updatedAt, targetProvider.updatedAt)
         ) else targetProvider
         val previous = CatalogRefreshIntegrityPolicy.Counts(
@@ -343,6 +346,7 @@ interface BlofyDao {
             username = refreshedProvider.username,
             password = refreshedProvider.password,
             providerType = refreshedProvider.providerType,
+            subscriberToken = if (sameCatalogSource(current, refreshedProvider)) current.subscriberToken else refreshedProvider.subscriberToken,
             updatedAt = maxOf(current.updatedAt, refreshedProvider.updatedAt)
         )
         promoteStagedRefresh(stagedProviderId, target, activateTarget = false)
@@ -370,6 +374,7 @@ interface BlofyDao {
             username = targetProvider.username,
             password = targetProvider.password,
             providerType = targetProvider.providerType,
+            subscriberToken = targetProvider.subscriberToken,
             updatedAt = maxOf(current.updatedAt, targetProvider.updatedAt)
         )
         promoteStagedCatalog(stagedProviderId, target, activateTarget = true, preserveEpisodes = false)
