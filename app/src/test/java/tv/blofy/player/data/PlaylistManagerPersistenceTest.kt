@@ -90,6 +90,20 @@ class PlaylistManagerPersistenceTest {
         assertEquals(2, db.dao().streamCountForProvider(provider.id))
     }
 
+    @Test fun movieTerminalProgressIsPublishedOnlyAfterRowsAreDurable(): Unit = runBlocking(Dispatchers.IO) {
+        val manager = PlaylistManager(FixtureApi(), db.dao())
+        var rowsWhenTerminalProgressArrived = -1
+
+        val count = manager.syncVod(provider) { progress ->
+            if (progress == 88) {
+                rowsWhenTerminalProgressArrived = db.dao().catalogCountAll(provider.id, "movie")
+            }
+        }
+
+        assertEquals(1, count)
+        assertEquals("88% must mean the movie section is already durable", 1, rowsWhenTerminalProgressArrived)
+    }
+
     @Test fun interruptedBodyRetriesOnlyItsSectionAndRemovesPartialRows(): Unit = runBlocking(Dispatchers.IO) {
         okhttp3.mockwebserver.MockWebServer().use { server ->
             val calls = java.util.concurrent.ConcurrentHashMap<String, Int>()
