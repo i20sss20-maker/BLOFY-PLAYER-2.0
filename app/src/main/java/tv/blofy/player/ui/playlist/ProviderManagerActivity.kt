@@ -33,10 +33,9 @@ import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
-import java.text.DateFormat
-import java.util.Date
 import java.util.UUID
 
 class ProviderManagerActivity : AppCompatActivity() {
@@ -346,7 +345,7 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun formatShortTime(value: Long): String =
-        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(value))
+        DeviceLocalTime.format(this, value, "dd/MM/yyyy • HH:mm")
 
     private fun restoreFocus() {
         if (!isTv || refreshingFromWebsite || changingProvider) return

@@ -12,8 +12,14 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.ScrollView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import tv.blofy.player.R
+import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.catalog.SmartCollectionsActivity
+import tv.blofy.player.ui.common.ContentPresentation
+import tv.blofy.player.ui.details.MovieDetailsActivity
+import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.guide.LiveGuideActivity
 import tv.blofy.player.ui.home.ForYouActivity
 import tv.blofy.player.ui.library.LibraryActivity
@@ -27,7 +33,7 @@ import tv.blofy.player.ui.settings.SettingsActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
 
-/** Lightweight TV overlay-style hub. It never touches playback/catalog state. */
+/** Lightweight TV overlay-style hub with optional actions for the currently focused catalog item. */
 class QuickMenuActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +78,13 @@ class QuickMenuActivity : AppCompatActivity() {
             setPadding(0, dp(3), 0, dp(10))
         })
 
+        val contextHost = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        panel.addView(contextHost, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(7) })
+        bindFocusedContentActions(contextHost)
+
         addAction(panel, "✦", getString(R.string.quick_for_you), getString(R.string.quick_for_you_subtitle), Intent(this, ForYouActivity::class.java), true)
         addAction(panel, "▤", getString(R.string.quick_guide), getString(R.string.quick_guide_subtitle), Intent(this, LiveGuideActivity::class.java))
         addAction(panel, "⌕", getString(R.string.quick_search), getString(R.string.quick_search_subtitle), Intent(this, SearchActivity::class.java))
@@ -86,61 +99,148 @@ class QuickMenuActivity : AppCompatActivity() {
         addAction(panel, "⚙", getString(R.string.quick_settings), getString(R.string.quick_settings_subtitle), Intent(this, SettingsActivity::class.java))
 
         setContentView(root)
-        panel.post { panel.getChildAt(2)?.requestFocus() }
+        panel.post {
+            (0 until panel.childCount)
+                .map(panel::getChildAt)
+                .firstOrNull { it.isFocusable }
+                ?.requestFocus()
+        }
+    }
+
+    private fun bindFocusedContentActions(host: LinearLayout) {
+        val contentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
+        if (contentKey.isBlank()) return
+
+        lifecycleScope.launch {
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            val stream = dao.stream(contentKey) ?: return@launch
+            if (stream.kind != "movie" && stream.kind != "series") return@launch
+            if (isFinishing || isDestroyed) return@launch
+
+            host.removeAllViews()
+            host.visibility = View.VISIBLE
+            host.addView(TextView(this@QuickMenuActivity).apply {
+                text = getString(R.string.quick_context_title, ContentPresentation.of(stream).title)
+                textSize = 11.8f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(BlofyTvDesign.PurpleSoft)
+                gravity = Gravity.START
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(dp(4), dp(2), dp(4), dp(6))
+            })
+
+            addCommand(
+                host,
+                "▶",
+                getString(R.string.quick_open_details),
+                getString(R.string.quick_open_details_subtitle),
+                true
+            ) {
+                val target = if (stream.kind == "series") SeriesDetailsActivity::class.java
+                    else MovieDetailsActivity::class.java
+                startActivity(Intent(this@QuickMenuActivity, target).apply {
+                    putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, stream.providerId)
+                    putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, stream.key)
+                })
+                finish()
+            }
+
+            addCommand(
+                host,
+                "★",
+                getString(if (stream.favorite) R.string.quick_remove_favorite else R.string.quick_add_favorite),
+                getString(R.string.quick_favorite_subtitle)
+            ) {
+                lifecycleScope.launch {
+                    dao.setFavorite(stream.key, !stream.favorite)
+                    finish()
+                }
+            }
+
+            host.post { host.getChildAt(1)?.requestFocus() }
+        }
+    }
+
+    private fun addCommand(
+        parent: LinearLayout,
+        icon: String,
+        title: String,
+        subtitle: String,
+        primary: Boolean = false,
+        action: () -> Unit
+    ) {
+        parent.addView(
+            actionRow(icon, title, subtitle, primary, action),
+            LinearLayout.LayoutParams(-1, dp(58)).apply { bottomMargin = dp(5) }
+        )
+    }
+
+    private fun actionRow(
+        icon: String,
+        title: String,
+        subtitle: String,
+        primary: Boolean,
+        action: () -> Unit
+    ) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        layoutDirection = resources.configuration.layoutDirection
+        gravity = Gravity.CENTER_VERTICAL
+        isFocusable = true
+        isFocusableInTouchMode = true
+        isClickable = true
+        setPadding(dp(14), dp(4), dp(14), dp(4))
+        background = itemBackground(false, primary)
+
+        addView(TextView(this@QuickMenuActivity).apply {
+            text = icon
+            textSize = 19f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(0xFFB574FF.toInt())
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(9) })
+
+        val copy = LinearLayout(this@QuickMenuActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            addView(TextView(this@QuickMenuActivity).apply {
+                text = title
+                textSize = 14.6f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                gravity = Gravity.START
+            })
+            addView(TextView(this@QuickMenuActivity).apply {
+                text = subtitle
+                textSize = 10.4f
+                setTextColor(0xFFB2A7BE.toInt())
+                gravity = Gravity.START
+            })
+        }
+        addView(copy, LinearLayout.LayoutParams(0, dp(49), 1f))
+
+        setOnFocusChangeListener { view, focused ->
+            view.background = itemBackground(focused, primary)
+            view.animate().cancel()
+            val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.014f) else 1f
+            view.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(10).toFloat()) else 0f)
+                .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                .start()
+        }
+        setOnClickListener { action() }
     }
 
     private fun addAction(parent: LinearLayout, icon: String, title: String, subtitle: String, intent: Intent, primary: Boolean = false) {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutDirection = resources.configuration.layoutDirection
-            gravity = Gravity.CENTER_VERTICAL
-            isFocusable = true
-            isFocusableInTouchMode = true
-            isClickable = true
-            setPadding(dp(14), dp(4), dp(14), dp(4))
-            background = itemBackground(false, primary)
-
-            addView(TextView(this@QuickMenuActivity).apply {
-                text = icon
-                textSize = 19f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(0xFFB574FF.toInt())
-                gravity = Gravity.CENTER
-            }, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(9) })
-
-            val copy = LinearLayout(this@QuickMenuActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                addView(TextView(this@QuickMenuActivity).apply {
-                    text = title
-                    textSize = 14.6f
-                    typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.WHITE)
-                    gravity = Gravity.START
-                })
-                addView(TextView(this@QuickMenuActivity).apply {
-                    text = subtitle
-                    textSize = 10.4f
-                    setTextColor(0xFFB2A7BE.toInt())
-                    gravity = Gravity.START
-                })
-            }
-            addView(copy, LinearLayout.LayoutParams(0, dp(49), 1f))
-
-            setOnFocusChangeListener { view, focused ->
-                view.background = itemBackground(focused, primary)
-                view.animate().cancel()
-                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.014f) else 1f
-                view.animate()
-                    .scaleX(targetScale)
-                    .scaleY(targetScale)
-                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(10).toFloat()) else 0f)
-                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
-                    .start()
-            }
-            setOnClickListener { startActivity(intent); finish() }
-        }
-        parent.addView(row, LinearLayout.LayoutParams(-1, dp(58)).apply { bottomMargin = dp(5) })
+        parent.addView(
+            actionRow(icon, title, subtitle, primary) {
+                startActivity(intent)
+                finish()
+            },
+            LinearLayout.LayoutParams(-1, dp(58)).apply { bottomMargin = dp(5) }
+        )
     }
 
     private fun itemBackground(focused: Boolean, primary: Boolean) = GradientDrawable(
@@ -156,4 +256,10 @@ class QuickMenuActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    companion object {
+        const val EXTRA_CONTENT_KEY = "quick_content_key"
+        const val EXTRA_CONTEXT_LABEL = "quick_context_label"
+    }
 }
+

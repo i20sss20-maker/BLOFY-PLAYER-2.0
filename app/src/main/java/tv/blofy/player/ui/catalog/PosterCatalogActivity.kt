@@ -30,6 +30,7 @@ import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.search.SearchActivity
+import tv.blofy.player.ui.settings.RuntimeSettings
 
 class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var categoryAdapter: FocusTextAdapter<CategoryEntity>
@@ -57,10 +58,17 @@ class PosterCatalogActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val deviceKind = DeviceClass.detect(this)
         val widthDp = resources.configuration.screenWidthDp.takeIf { it > 0 } ?: resources.configuration.smallestScreenWidthDp
+        val compactCatalog = RuntimeSettings.catalogDensity(this) == RuntimeSettings.CatalogDensity.COMPACT
         gridColumns = when (deviceKind) {
-            DeviceClass.Kind.TV -> if (widthDp >= 1600) 7 else if (widthDp >= 1000) 6 else 5
-            DeviceClass.Kind.TABLET -> if (widthDp >= 900) 5 else 4
-            DeviceClass.Kind.PHONE -> if (widthDp >= 600) 3 else 2
+            DeviceClass.Kind.TV -> if (compactCatalog) {
+                if (widthDp >= 1600) 7 else if (widthDp >= 1000) 6 else 5
+            } else 5
+            DeviceClass.Kind.TABLET -> if (compactCatalog) {
+                if (widthDp >= 900) 6 else 5
+            } else if (widthDp >= 900) 5 else 4
+            DeviceClass.Kind.PHONE -> if (compactCatalog) {
+                if (widthDp >= 600) 4 else 3
+            } else if (widthDp >= 600) 3 else 2
         }
         val outerPadding = when (deviceKind) {
             DeviceClass.Kind.TV -> 22
@@ -79,9 +87,13 @@ class PosterCatalogActivity : AppCompatActivity() {
         }
         // Size columns from the space left after the category rail, not the whole screen.
         val contentWidthDp = (widthDp - outerPadding * 2 - railWidth - railGap - 10).coerceAtLeast(1)
-        val minimumCardWidthDp = if (deviceKind == DeviceClass.Kind.PHONE) 108 else 132
-        gridColumns = if (deviceKind == DeviceClass.Kind.TV) 5
-            else (contentWidthDp / minimumCardWidthDp).coerceIn(1, gridColumns)
+        val minimumCardWidthDp = when {
+            compactCatalog && deviceKind == DeviceClass.Kind.PHONE -> 92
+            compactCatalog -> 108
+            deviceKind == DeviceClass.Kind.PHONE -> 108
+            else -> 132
+        }
+        gridColumns = (contentWidthDp / minimumCardWidthDp).coerceIn(1, gridColumns)
 
         val root = LinearLayout(this).apply {
             // Own focus while the local categories are loading; search must not flash selected.

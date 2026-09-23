@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
@@ -31,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
 
 class AppUpdateActivity : AppCompatActivity() {
@@ -48,20 +50,75 @@ class AppUpdateActivity : AppCompatActivity() {
         val url = intent.getStringExtra(AppUpdateWorker.URL).orEmpty()
         if (version <= BuildConfig.VERSION_CODE || !AppUpdateWorker.safeUrl(url)) { finish(); return }
         val page = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(30), dp(36), dp(30), dp(30)); setBackgroundColor(0xFF08080B.toInt())
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(34), dp(34), dp(34), dp(30))
+            background = AppCompatResources.getDrawable(this@AppUpdateActivity, R.drawable.blofy_home_background)
         }
-        fun text(value: String, size: Float) = TextView(this).apply {
-            text = value; textSize = size; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-            setPadding(0, dp(10), 0, dp(10))
+        fun text(value: String, size: Float, gravityValue: Int = Gravity.CENTER) = TextView(this).apply {
+            text = value
+            textSize = size
+            setTextColor(Color.WHITE)
+            gravity = gravityValue
+            setPadding(0, dp(8), 0, dp(8))
         }
-        page.addView(text(getString(R.string.update_title), 25f).apply { typeface = Typeface.DEFAULT_BOLD })
-        page.addView(text(intent.getStringExtra("name").orEmpty(), 16f))
-        page.addView(text(intent.getStringExtra("notes").orEmpty(), 14f))
-        status = text(getString(R.string.update_preparing), 15f)
-        page.addView(status)
-        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100; isIndeterminate = true }
-        page.addView(progress, LinearLayout.LayoutParams(-1, dp(8)).apply { topMargin = dp(12); bottomMargin = dp(24) })
+
+        page.addView(text(getString(R.string.update_badge), 11.5f).apply {
+            typeface = BlofyTvDesign.HeadingTypeface
+            letterSpacing = .12f
+            setTextColor(BlofyTvDesign.PurpleBright)
+        })
+        page.addView(text(getString(R.string.update_title), 28f).apply {
+            typeface = BlofyTvDesign.HeadingTypeface
+        })
+
+        val newVersion = intent.getStringExtra("name").orEmpty()
+        val versionCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = CinemaStyle.surface(this@AppUpdateActivity)
+        }
+        versionCard.addView(text(getString(R.string.update_current_version, BuildConfig.VERSION_NAME), 13f),
+            LinearLayout.LayoutParams(0, dp(48), 1f))
+        versionCard.addView(text("→", 18f), LinearLayout.LayoutParams(dp(44), dp(48)))
+        versionCard.addView(text(getString(R.string.update_new_version, newVersion), 13f).apply {
+            setTextColor(BlofyTvDesign.Mint)
+            typeface = Typeface.DEFAULT_BOLD
+        }, LinearLayout.LayoutParams(0, dp(48), 1f))
+        page.addView(versionCard, LinearLayout.LayoutParams(-1, dp(68)).apply {
+            topMargin = dp(8)
+            bottomMargin = dp(10)
+        })
+
+        val notes = intent.getStringExtra("notes").orEmpty().trim()
+        if (notes.isNotBlank()) {
+            page.addView(text(getString(R.string.update_whats_new), 12f, Gravity.START).apply {
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(BlofyTvDesign.PurpleSoft)
+            }, LinearLayout.LayoutParams(-1, -2))
+            page.addView(text(notes, 13.5f, Gravity.START).apply {
+                setTextColor(BlofyTvDesign.TextSecondary)
+                setLineSpacing(0f, 1.15f)
+                background = CinemaStyle.surface(this@AppUpdateActivity)
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        }
+
+        status = text(getString(R.string.update_preparing), 14.5f)
+        status.setTextColor(BlofyTvDesign.TextSecondary)
+        page.addView(status, LinearLayout.LayoutParams(-1, -2))
+
+        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            isIndeterminate = true
+            progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF34253F.toInt())
+        }
+        page.addView(progress, LinearLayout.LayoutParams(-1, dp(8)).apply {
+            topMargin = dp(10)
+            bottomMargin = dp(20)
+        })
         action = Button(this).apply {
             text = getString(R.string.update_downloading); isEnabled = false
             CinemaStyle.styleButton(this)
@@ -93,7 +150,14 @@ class AppUpdateActivity : AppCompatActivity() {
                     val bytes = work.progress.getLong(AppUpdateWorker.BYTES, 0)
                     progress.isIndeterminate = total <= 0
                     progress.progress = if (total > 0) (bytes * 100 / total).toInt() else 0
-                    status.text = if (total > 0) getString(R.string.update_progress, progress.progress) else getString(R.string.update_downloading)
+                    status.text = if (total > 0) {
+                        getString(
+                            R.string.update_progress_detailed,
+                            progress.progress,
+                            formatBytes(bytes),
+                            formatBytes(total)
+                        )
+                    } else getString(R.string.update_downloading)
                     action.text = getString(R.string.update_downloading); action.isEnabled = false
                 }
             }
@@ -168,5 +232,13 @@ class AppUpdateActivity : AppCompatActivity() {
         }
     }
 
+    private fun formatBytes(value: Long): String {
+        if (value <= 0L) return "0 MB"
+        val mb = value.toDouble() / (1024.0 * 1024.0)
+        return if (mb >= 10.0) String.format(java.util.Locale.US, "%.0f MB", mb)
+        else String.format(java.util.Locale.US, "%.1f MB", mb)
+    }
+
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
+

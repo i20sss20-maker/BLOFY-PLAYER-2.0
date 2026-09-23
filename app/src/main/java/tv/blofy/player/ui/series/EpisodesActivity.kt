@@ -7,12 +7,14 @@ import tv.blofy.player.ui.common.CinemaStyle
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
 import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -69,11 +71,35 @@ class EpisodesActivity : ContentAccessActivity() {
         seriesId = intent.getStringExtra(EXTRA_SERIES_ID).orEmpty()
         val seriesName = intent.getStringExtra(EXTRA_SERIES_NAME).orEmpty()
         val seriesArt = intent.getStringExtra(EXTRA_SERIES_ART)
+        val seriesCountry = intent.getStringExtra(EXTRA_SERIES_COUNTRY).orEmpty()
         if (providerId.isBlank() || seriesId.isBlank()) { finish(); return }
 
         val compact = deviceKind == DeviceClass.Kind.PHONE
         val tablet = deviceKind == DeviceClass.Kind.TABLET
         val uiDirection = resources.configuration.layoutDirection
+        val sceneRoot = FrameLayout(this).apply {
+            background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
+        }
+        val cinematicBackdrop = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            alpha = .34f
+            setBackgroundColor(CinemaStyle.Background)
+        }
+        sceneRoot.addView(cinematicBackdrop, FrameLayout.LayoutParams(-1, -1))
+        if (!seriesArt.isNullOrBlank()) ArtworkLoader.load(cinematicBackdrop, seriesArt)
+        sceneRoot.addView(View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(0xA9181021.toInt(), 0x7E241334.toInt(), 0xD808060D.toInt())
+            )
+        }, FrameLayout.LayoutParams(-1, -1))
+        sceneRoot.addView(View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(0xF508060D.toInt(), 0x9C08060D.toInt(), 0x1808060D)
+            )
+        }, FrameLayout.LayoutParams(-1, -1))
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = uiDirection
@@ -83,7 +109,7 @@ class EpisodesActivity : ContentAccessActivity() {
                 dp(if (compact) 14 else if (tablet) 22 else 30),
                 dp(if (compact) 16 else 24)
             )
-            background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
+            setBackgroundColor(Color.TRANSPARENT)
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -126,6 +152,17 @@ class EpisodesActivity : ContentAccessActivity() {
                 includeFontPadding = false
                 maxLines = 2
             })
+            if (seriesCountry.isNotBlank()) {
+                addView(TextView(this@EpisodesActivity).apply {
+                    text = getString(R.string.details_country, seriesCountry)
+                    textSize = if (compact) 10.5f else 11.5f
+                    typeface = BlofyTvDesign.MediumTypeface
+                    setTextColor(BlofyTvDesign.PurpleSoft)
+                    gravity = Gravity.START
+                    background = ContentScreenStyle.chip(this@EpisodesActivity)
+                    setPadding(dp(8), dp(3), dp(8), dp(3))
+                }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
+            }
             status = TextView(this@EpisodesActivity).apply {
                 text = getString(R.string.episodes_preparing)
                 textSize = if (compact) 11.5f else 12.5f
@@ -187,7 +224,8 @@ class EpisodesActivity : ContentAccessActivity() {
             0,
             1f
         ))
-        setContentView(root)
+        sceneRoot.addView(root, FrameLayout.LayoutParams(-1, -1))
+        setContentView(sceneRoot)
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -477,5 +515,6 @@ class EpisodesActivity : ContentAccessActivity() {
         const val EXTRA_SERIES_ID = "series_id"
         const val EXTRA_SERIES_NAME = "series_name"
         const val EXTRA_SERIES_ART = "series_art"
+        const val EXTRA_SERIES_COUNTRY = "series_country"
     }
 }

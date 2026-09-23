@@ -22,6 +22,7 @@ import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.R
 import java.text.SimpleDateFormat
@@ -132,7 +133,7 @@ class CatchupActivity : ContentAccessActivity() {
         })
     }
 
-    private fun time(ms: Long): String = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(ms))
+    private fun time(ms: Long): String = DeviceLocalTime.format(this, ms, "dd/MM HH:mm")
 
     private fun rowBackground(focused: Boolean) =
         CinemaStyle.surface(this, focused = focused, radiusDp = 15)

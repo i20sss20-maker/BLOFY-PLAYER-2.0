@@ -33,8 +33,7 @@ import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
-import java.text.DateFormat
-import java.util.Date
+import tv.blofy.player.ui.common.DeviceLocalTime
 
 /**
  * Safe support diagnostics. This screen only reads local app/device state; it never probes playback,
@@ -288,7 +287,7 @@ class SystemStatusActivity : AppCompatActivity() {
     }
 
     private fun formatTime(value: Long): String =
-        if (value <= 0L) "—" else DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(value))
+        if (value <= 0L) "—" else DeviceLocalTime.format(this, value, "dd/MM/yyyy • HH:mm")
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 

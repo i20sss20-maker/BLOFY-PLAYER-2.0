@@ -28,6 +28,7 @@ class RuntimeSettingsTest {
         assertEquals(RuntimeSettings.SubtitleLanguage.ARABIC_FIRST, RuntimeSettings.subtitleLanguage(app))
         assertEquals(AspectRatioFrameLayout.RESIZE_MODE_FIT, RuntimeSettings.aspectResizeMode(app))
         assertEquals(18f, RuntimeSettings.subtitleSizeSp(app), 0f)
+        assertEquals(RuntimeSettings.CatalogDensity.COMFORTABLE, RuntimeSettings.catalogDensity(app))
         assertFalse(RuntimeSettings.preferStereoTrack(app))
     }
 
@@ -40,6 +41,7 @@ class RuntimeSettingsTest {
             .putString(RuntimeSettings.KEY_SUBTITLE_SIZE, "large")
             .putString(RuntimeSettings.KEY_ASPECT, "zoom")
             .putString(RuntimeSettings.KEY_AUDIO_OUTPUT, "stereo")
+            .putString(RuntimeSettings.KEY_CATALOG_DENSITY, "compact")
             .commit()
         assertFalse(RuntimeSettings.autoplayLive(app))
         assertFalse(RuntimeSettings.askBeforeResume(app)) // EpisodesActivity resumes directly when false.
@@ -48,15 +50,18 @@ class RuntimeSettingsTest {
         assertEquals(26f, RuntimeSettings.subtitleSizeSp(app), 0f)
         assertEquals(AspectRatioFrameLayout.RESIZE_MODE_ZOOM, RuntimeSettings.aspectResizeMode(app))
         assertTrue(RuntimeSettings.preferStereoTrack(app))
+        assertEquals(RuntimeSettings.CatalogDensity.COMPACT, RuntimeSettings.catalogDensity(app))
     }
 
     @Test fun invalidValuesFallBackSafely() {
         prefs.edit().putString(RuntimeSettings.KEY_AUTO_NEXT, "broken")
             .putString(RuntimeSettings.KEY_ASPECT, "broken")
             .putString(RuntimeSettings.KEY_SUBTITLE_SIZE, "broken")
+            .putString(RuntimeSettings.KEY_CATALOG_DENSITY, "broken")
             .commit()
         assertEquals(RuntimeSettings.AutoNext.ASK, RuntimeSettings.autoNext(app))
         assertEquals(AspectRatioFrameLayout.RESIZE_MODE_FIT, RuntimeSettings.aspectResizeMode(app))
         assertEquals(18f, RuntimeSettings.subtitleSizeSp(app), 0f)
+        assertEquals(RuntimeSettings.CatalogDensity.COMFORTABLE, RuntimeSettings.catalogDensity(app))
     }
 }

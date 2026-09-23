@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.player
 
 import tv.blofy.player.ui.common.ContentPresentation
+import tv.blofy.player.ui.common.DeviceLocalTime
 
 import android.app.AlertDialog
 import android.content.res.Configuration
@@ -1267,8 +1268,8 @@ open class PlayerActivity : ContentAccessActivity() {
         }
     }
 
-    private fun time(ms: Long): String =
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
+    // UI-only conversion: EPG epochs remain untouched; display follows the device time zone.
+    private fun time(ms: Long): String = DeviceLocalTime.format(this, ms, "HH:mm")
 
     private fun showHudBriefly() {
         keepHudVisible()

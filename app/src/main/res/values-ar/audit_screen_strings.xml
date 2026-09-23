@@ -601,4 +601,13 @@
     <string name="system_status_report_copied">تم نسخ تقرير التشخيص</string>
 
     <string name="login_playlist_default_name">قائمة %1$s</string>
+    <string name="quick_context_title">إجراءات سريعة • %1$s</string>
+    <string name="quick_open_details">فتح التفاصيل</string>
+    <string name="quick_open_details_subtitle">افتح صفحة العمل بدون ما تفقد مكانك</string>
+    <string name="quick_add_favorite">إضافة للمفضلة</string>
+    <string name="quick_remove_favorite">إزالة من المفضلة</string>
+    <string name="quick_favorite_subtitle">حدّث هذا العمل في قائمة المفضلة</string>
+    <string name="category_manager_subtitle">اختر الفئات اللي تظهر لك ورتّب المهم منها فوق.</string>
+    <string name="category_manager_show_all">إظهار كل المخفي</string>
+    <string name="details_country">الدولة: %1$s</string>
 </resources>

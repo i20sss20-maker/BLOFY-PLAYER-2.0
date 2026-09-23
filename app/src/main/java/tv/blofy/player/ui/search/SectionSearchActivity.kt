@@ -35,6 +35,7 @@ import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
+import tv.blofy.player.ui.settings.RuntimeSettings
 
 /** Search that is intentionally locked to the catalog section that opened it. */
 class SectionSearchActivity : AppCompatActivity() {
@@ -133,10 +134,17 @@ class SectionSearchActivity : AppCompatActivity() {
                 recycledViewPool.setMaxRecycledViews(0, 28)
             } else {
                 val widthDp = resources.configuration.screenWidthDp.coerceAtLeast(320)
+                val compact = RuntimeSettings.catalogDensity(this@SectionSearchActivity) == RuntimeSettings.CatalogDensity.COMPACT
                 val columns = when (device) {
-                    DeviceClass.Kind.TV -> if (widthDp >= 1500) 7 else if (widthDp >= 1000) 6 else 5
-                    DeviceClass.Kind.TABLET -> if (widthDp >= 900) 5 else 4
-                    DeviceClass.Kind.PHONE -> if (widthDp >= 600) 3 else 2
+                    DeviceClass.Kind.TV -> if (compact) {
+                        if (widthDp >= 1500) 8 else if (widthDp >= 1000) 7 else 6
+                    } else if (widthDp >= 1500) 7 else if (widthDp >= 1000) 6 else 5
+                    DeviceClass.Kind.TABLET -> if (compact) {
+                        if (widthDp >= 900) 6 else 5
+                    } else if (widthDp >= 900) 5 else 4
+                    DeviceClass.Kind.PHONE -> if (compact) {
+                        if (widthDp >= 600) 4 else 3
+                    } else if (widthDp >= 600) 3 else 2
                 }
                 layoutManager = GridLayoutManager(this@SectionSearchActivity, columns)
                 setItemViewCacheSize(18)

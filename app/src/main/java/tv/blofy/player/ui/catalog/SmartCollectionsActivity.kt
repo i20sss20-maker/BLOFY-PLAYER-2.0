@@ -17,11 +17,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
+import tv.blofy.player.ui.settings.RuntimeSettings
 
 class SmartCollectionsActivity : AppCompatActivity() {
     private lateinit var adapter: PosterStreamAdapter
@@ -73,14 +75,29 @@ class SmartCollectionsActivity : AppCompatActivity() {
         header.addView(countView, LinearLayout.LayoutParams(-2, dp(38)))
         root.addView(header)
 
+        val device = DeviceClass.detect(this)
+        val widthDp = resources.configuration.screenWidthDp.coerceAtLeast(320)
+        val compact = RuntimeSettings.catalogDensity(this) == RuntimeSettings.CatalogDensity.COMPACT
+        val columns = when (device) {
+            DeviceClass.Kind.TV -> if (compact) {
+                if (widthDp >= 1500) 8 else if (widthDp >= 1000) 7 else 6
+            } else if (widthDp >= 1500) 7 else if (widthDp >= 1000) 6 else 5
+            DeviceClass.Kind.TABLET -> if (compact) {
+                if (widthDp >= 900) 6 else 5
+            } else if (widthDp >= 900) 5 else 4
+            DeviceClass.Kind.PHONE -> if (compact) {
+                if (widthDp >= 600) 4 else 3
+            } else if (widthDp >= 600) 3 else 2
+        }
+
         val grid = RecyclerView(this).apply {
-            layoutManager = GridLayoutManager(this@SmartCollectionsActivity, 5)
+            layoutManager = GridLayoutManager(this@SmartCollectionsActivity, columns)
             setPadding(dp(4), dp(8), dp(4), dp(24))
             clipChildren = false
             clipToPadding = false
             itemAnimator = null
             setHasFixedSize(true)
-            setItemViewCacheSize(20)
+            setItemViewCacheSize(columns * 3)
         }
         adapter = PosterStreamAdapter(::openItem)
         grid.adapter = adapter

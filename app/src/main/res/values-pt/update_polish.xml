@@ -1,0 +1,17 @@
+<resources>
+    <string name="update_badge">ATUALIZAÇÃO BLOFY</string>
+    <string name="update_current_version">Atual · %1$s</string>
+    <string name="update_new_version">Nova · %1$s</string>
+    <string name="update_whats_new">Novidades</string>
+    <string name="update_progress_detailed">A transferir · %1$d%% · %2$s / %3$s</string>
+    <string name="update_play_unavailable">O Google Play não está disponível neste dispositivo.</string>
+    <string name="update_metadata_unavailable">As informações da atualização não estão disponíveis neste momento.</string>
+    <string name="update_already_latest">Já está a utilizar a versão mais recente: %1$s</string>
+    <string name="update_link_missing">A versão %1$s está disponível, mas o respetivo link de transferência não está configurado.</string>
+    <string name="update_required_note">Esta atualização é importante para manter a compatibilidade com o serviço.</string>
+    <string name="update_required_title">Atualização BLOFY importante</string>
+    <string name="update_available_title">Está disponível uma nova atualização</string>
+    <string name="update_now">Atualizar agora</string>
+    <string name="update_later">Mais tarde</string>
+    <string name="update_not_now">Agora não</string>
+</resources>

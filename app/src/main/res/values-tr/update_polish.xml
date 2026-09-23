@@ -1,0 +1,17 @@
+<resources>
+    <string name="update_badge">BLOFY GÜNCELLEMESİ</string>
+    <string name="update_current_version">Mevcut · %1$s</string>
+    <string name="update_new_version">Yeni · %1$s</string>
+    <string name="update_whats_new">Yenilikler</string>
+    <string name="update_progress_detailed">İndiriliyor · %1$d%% · %2$s / %3$s</string>
+    <string name="update_play_unavailable">Google Play bu cihazda kullanılamıyor.</string>
+    <string name="update_metadata_unavailable">Güncelleme bilgileri şu anda kullanılamıyor.</string>
+    <string name="update_already_latest">Zaten en yeni sürümü kullanıyorsunuz: %1$s</string>
+    <string name="update_link_missing">%1$s sürümü mevcut ancak indirme bağlantısı yapılandırılmamış.</string>
+    <string name="update_required_note">Bu güncelleme, hizmetle uyumluluğun devam etmesi için önemlidir.</string>
+    <string name="update_required_title">Önemli BLOFY güncellemesi</string>
+    <string name="update_available_title">Yeni bir güncelleme mevcut</string>
+    <string name="update_now">Şimdi güncelle</string>
+    <string name="update_later">Daha sonra</string>
+    <string name="update_not_now">Şimdi değil</string>
+</resources>

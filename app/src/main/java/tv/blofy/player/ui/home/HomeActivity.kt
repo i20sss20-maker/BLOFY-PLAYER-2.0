@@ -55,6 +55,7 @@ import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.catalog.PosterCatalogActivity
 import tv.blofy.player.ui.catalog.SmartCollectionsActivity
+import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.library.LibraryActivity
@@ -109,8 +110,7 @@ class HomeActivity : AppCompatActivity() {
     private val refreshScheduler = HomeRefreshScheduler(
         uiHandler, 30_000L, HERO_ROTATION_MS,
         refreshClock = {
-            clockLabel?.text = SimpleDateFormat("EEE  d MMM   •   h:mm a",
-                ConfigurationCompat.getLocales(resources.configuration)[0] ?: Locale.getDefault()).format(Date())
+            clockLabel?.text = DeviceLocalTime.format(this, System.currentTimeMillis(), "EEE  d MMM   •   h:mm a")
         },
         rotateHero = {
             if (remote && heroCandidates.size > 1 && !isFinishing && heroContent?.hasFocus() != true) {

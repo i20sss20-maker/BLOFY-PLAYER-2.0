@@ -25,6 +25,7 @@ import tv.blofy.player.ui.common.CinemaStyle
 class CategoryManagerActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
     private lateinit var status: TextView
+    private lateinit var showAllButton: Button
     private var providerId: String? = null
     private var currentKind = "live"
     private var currentItems: List<CategoryEntity> = emptyList()
@@ -51,6 +52,14 @@ class CategoryManagerActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             gravity = Gravity.START
         })
+        root.addView(TextView(this).apply {
+            text = getString(R.string.category_manager_subtitle)
+            textSize = 12.5f
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.START
+            setPadding(0, dp(3), 0, dp(6))
+        })
         status = TextView(this).apply {
             text = getString(R.string.category_manager_loading)
             textSize = 13f
@@ -72,6 +81,17 @@ class CategoryManagerActivity : AppCompatActivity() {
             }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(6) })
         }
         root.addView(tabs, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(8) })
+
+        showAllButton = actionButton(getString(R.string.category_manager_show_all)) {
+            showAllCategories()
+        }.apply {
+            isEnabled = false
+            alpha = .55f
+        }
+        root.addView(showAllButton, LinearLayout.LayoutParams(if (isTv) dp(150) else -1, dp(44)).apply {
+            gravity = Gravity.START
+            bottomMargin = dp(8)
+        })
 
         list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -116,6 +136,10 @@ class CategoryManagerActivity : AppCompatActivity() {
         list.removeAllViews()
         val hidden = items.count { it.hidden }
         status.text = getString(R.string.category_manager_status, kindLabel(kind), items.size, hidden)
+        if (::showAllButton.isInitialized) {
+            showAllButton.isEnabled = hidden > 0
+            showAllButton.alpha = if (hidden > 0) 1f else .55f
+        }
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
                 text = getString(R.string.category_manager_empty)
@@ -181,6 +205,19 @@ class CategoryManagerActivity : AppCompatActivity() {
             })
         }
         addView(actions, if (isTv) LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(54)) else LinearLayout.LayoutParams(-1, dp(54)))
+    }
+
+    private fun showAllCategories() {
+        val hidden = currentItems.filter { it.hidden }
+        if (hidden.isEmpty()) return
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                BlofyDatabase.get(applicationContext).dao().upsertCategories(
+                    hidden.map { it.copy(hidden = false) }
+                )
+            }
+            loadCategories()
+        }
     }
 
     private fun toggleHidden(category: CategoryEntity) {

@@ -24,9 +24,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.subscription.SubscriptionClient
 import tv.blofy.player.ui.common.BlofyTvDesign
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import tv.blofy.player.ui.common.DeviceLocalTime
 
 class SubscriptionActivity : AppCompatActivity() {
     private lateinit var content: LinearLayout
@@ -276,6 +274,6 @@ class SubscriptionActivity : AppCompatActivity() {
         background = BlofyTvDesign.elevatedSurface(dp(18).toFloat())
     }
 
-    private fun formatDate(value: Long): String = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(value))
+    private fun formatDate(value: Long): String = DeviceLocalTime.format(this, value, "dd MMM yyyy")
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }

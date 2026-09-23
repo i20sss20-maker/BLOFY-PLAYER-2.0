@@ -35,6 +35,7 @@ import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
+import tv.blofy.player.ui.settings.RuntimeSettings
 
 class MobileContentActivity : AppCompatActivity() {
     private lateinit var provider: ProviderEntity
@@ -81,11 +82,21 @@ class MobileContentActivity : AppCompatActivity() {
 
         if (isPosterKind) {
             val widthDp = resources.configuration.screenWidthDp.takeIf { it > 0 } ?: 360
-            val columns = when {
-                widthDp >= 900 -> 5
-                widthDp >= 700 -> 4
-                widthDp >= 520 -> 3
-                else -> 2
+            val compactPosters = RuntimeSettings.catalogDensity(this) == RuntimeSettings.CatalogDensity.COMPACT
+            val columns = if (compactPosters) {
+                when {
+                    widthDp >= 900 -> 6
+                    widthDp >= 700 -> 5
+                    widthDp >= 520 -> 4
+                    else -> 3
+                }
+            } else {
+                when {
+                    widthDp >= 900 -> 5
+                    widthDp >= 700 -> 4
+                    widthDp >= 520 -> 3
+                    else -> 2
+                }
             }
             posterAdapter = PosterStreamAdapter(::openStream)
             posterGrid = RecyclerView(this).apply {
@@ -95,7 +106,7 @@ class MobileContentActivity : AppCompatActivity() {
                 clipToPadding = false
                 clipChildren = false
                 setPadding(0, dp(10), 0, dp(18))
-                setItemViewCacheSize(16)
+                setItemViewCacheSize(columns * 4)
                 recycledViewPool.setMaxRecycledViews(0, 24)
             }.also { root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)) }
         } else {
