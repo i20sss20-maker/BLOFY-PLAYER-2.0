@@ -327,7 +327,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 LocalStorageManager.prepareForCatalogRefresh(applicationContext)
             }
             if (!storageReady) {
-                render(30, getString(R.string.catalog_refresh_kept))
+                render(CatalogLoadingProgress.CONTENT_DONE, getString(R.string.catalog_refresh_kept))
                 stage.setTextColor(BlofyTvDesign.Mint)
                 Toast.makeText(this, getString(R.string.storage_cleanup_message), Toast.LENGTH_LONG).show()
                 openHome(providerId)
@@ -356,7 +356,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             check(result.freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
             check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
             val savingLabel = getString(if (firstLoad) R.string.catalog_finishing else R.string.catalog_saving_refresh)
-            render(30, savingLabel)
+            render(CatalogLoadingProgress.CONTENT_DONE, savingLabel)
             // SQLite commit has no measurable percentage. Keep the completed download checkpoint internally,
             // but replace the frozen number with an explicit indeterminate state until measurable preparation resumes.
             progress.isIndeterminate = true
@@ -397,7 +397,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             }
             persistence.discardIfUncommitted()
             if (!firstLoad) {
-                render(30, getString(R.string.catalog_refresh_kept))
+                render(CatalogLoadingProgress.CONTENT_DONE, getString(R.string.catalog_refresh_kept))
                 stage.setTextColor(BlofyTvDesign.Mint)
                 Toast.makeText(this, getString(R.string.catalog_kept_opening), Toast.LENGTH_SHORT).show()
                 if (!CatalogSyncState.isEntryReady(applicationContext, providerId)) awaitEntryReadyCache(providerId)
@@ -421,7 +421,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 in 96..99 -> getString(R.string.catalog_preflight)
                 else -> getString(R.string.catalog_complete)
             }
-            withContext(Dispatchers.Main.immediate) { render(update.percent, label) }
+            withContext(Dispatchers.Main.immediate) {
+                render(CatalogLoadingProgress.preparation(update.percent), label)
+            }
         }
     }
 
@@ -433,7 +435,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
         val status = if (p.retryAttempt > 0) "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)" else label
-        render((p.percent.coerceIn(0, 95) * 30 / 95), status)
+        render(CatalogLoadingProgress.download(p), status)
         progressMeta.text = getString(R.string.catalog_progress_steps, p.step.coerceAtLeast(1), p.totalSteps.coerceAtLeast(1))
         progressMeta.visibility = View.VISIBLE
     }
@@ -446,21 +448,24 @@ class CatalogLoadingActivity : AppCompatActivity() {
         progress.progress = safe
         percent.text = getString(R.string.catalog_percent, safe)
         stage.text = label
-        val serverDone = safe >= 10
-        val contentDone = safe >= 30
+        val serverDone = safe >= CatalogLoadingProgress.SERVER_DONE
+        val contentDone = safe >= CatalogLoadingProgress.CONTENT_DONE
         val prepareDone = safe >= 100
         val readyDone = safe >= 100
-        serverStep.setTextColor(if (serverDone) BlofyTvDesign.Mint else if (safe in 1..9) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        contentStep.setTextColor(if (contentDone) BlofyTvDesign.Mint else if (safe in 10..29) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        prepareStep.setTextColor(if (prepareDone) BlofyTvDesign.Mint else if (safe in 30..99) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        val serverActive = safe in 1 until CatalogLoadingProgress.SERVER_DONE
+        val contentActive = safe in CatalogLoadingProgress.SERVER_DONE until CatalogLoadingProgress.CONTENT_DONE
+        val prepareActive = safe in CatalogLoadingProgress.CONTENT_DONE..99
+        serverStep.setTextColor(if (serverDone) BlofyTvDesign.Mint else if (serverActive) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        contentStep.setTextColor(if (contentDone) BlofyTvDesign.Mint else if (contentActive) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
+        prepareStep.setTextColor(if (prepareDone) BlofyTvDesign.Mint else if (prepareActive) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
         readyStep.setTextColor(if (readyDone) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
-        serverStep.background = stepBackground(serverDone, safe in 1..9)
-        contentStep.background = stepBackground(contentDone, safe in 10..29)
-        prepareStep.background = stepBackground(prepareDone, safe in 30..99)
+        serverStep.background = stepBackground(serverDone, serverActive)
+        contentStep.background = stepBackground(contentDone, contentActive)
+        prepareStep.background = stepBackground(prepareDone, prepareActive)
         readyStep.background = stepBackground(readyDone, safe >= 100)
-        serverStep.text = getString(R.string.catalog_step_state, if (serverDone) "✓" else if (safe in 1..9) "●" else "○", getString(R.string.catalog_step_server))
-        contentStep.text = getString(R.string.catalog_step_state, if (contentDone) "✓" else if (safe in 10..29) "●" else "○", getString(R.string.catalog_step_content))
-        prepareStep.text = getString(R.string.catalog_step_state, if (prepareDone) "✓" else if (safe in 30..99) "●" else "○", getString(R.string.catalog_step_prepare))
+        serverStep.text = getString(R.string.catalog_step_state, if (serverDone) "✓" else if (serverActive) "●" else "○", getString(R.string.catalog_step_server))
+        contentStep.text = getString(R.string.catalog_step_state, if (contentDone) "✓" else if (contentActive) "●" else "○", getString(R.string.catalog_step_content))
+        prepareStep.text = getString(R.string.catalog_step_state, if (prepareDone) "✓" else if (prepareActive) "●" else "○", getString(R.string.catalog_step_prepare))
         readyStep.text = getString(R.string.catalog_step_state, if (readyDone) "✓" else "○", getString(R.string.catalog_step_ready))
     }
 
