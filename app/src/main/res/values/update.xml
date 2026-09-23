@@ -19,4 +19,14 @@
     <string name="update_new_version">New · %1$s</string>
     <string name="update_whats_new">What’s new</string>
     <string name="update_progress_detailed">Downloading · %1$d%% · %2$s / %3$s</string>
+    <string name="update_play_unavailable">Google Play is unavailable on this device.</string>
+    <string name="update_metadata_unavailable">Update information is unavailable right now.</string>
+    <string name="update_already_latest">You’re on the latest version: %1$s</string>
+    <string name="update_link_missing">Version %1$s is available, but its download link is not configured.</string>
+    <string name="update_required_note">This update is important for continued compatibility with the service.</string>
+    <string name="update_required_title">Important BLOFY update</string>
+    <string name="update_available_title">A new update is available</string>
+    <string name="update_now">Update now</string>
+    <string name="update_later">Later</string>
+    <string name="update_not_now">Not now</string>
 </resources>
