@@ -107,8 +107,8 @@ class PlaylistManagerPersistenceTest {
     @Test fun interruptedBodyRetriesOnlyItsSectionAndRemovesPartialRows(): Unit = runBlocking(Dispatchers.IO) {
         okhttp3.mockwebserver.MockWebServer().use { server ->
             val calls = java.util.concurrent.ConcurrentHashMap<String, Int>()
-            // Exceed the 700-row batch so the failed response has already reached Room/FTS.
-            val partial = (1..1000).joinToString(",") { "{\"stream_id\":$it,\"name\":\"Partial $it\"}" }
+            // Exceed the current 2000-row batch so the failed response has already reached Room/FTS.
+            val partial = (1..2600).joinToString(",") { "{\"stream_id\":$it,\"name\":\"Partial $it\"}" }
             server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
                 override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): okhttp3.mockwebserver.MockResponse {
                     val action = request.requestUrl!!.queryParameter("action")!!
