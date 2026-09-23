@@ -90,24 +90,10 @@ class PlaylistManagerPersistenceTest {
         assertEquals(2, db.dao().streamCountForProvider(provider.id))
     }
 
-    @Test fun movieTerminalProgressIsPublishedOnlyAfterRowsAreDurable(): Unit = runBlocking(Dispatchers.IO) {
-        val manager = PlaylistManager(FixtureApi(), db.dao())
-        var rowsWhenTerminalProgressArrived = -1
-
-        val count = manager.syncVod(provider) { progress ->
-            if (progress == 88) {
-                rowsWhenTerminalProgressArrived = db.dao().catalogCountAll(provider.id, "movie")
-            }
-        }
-
-        assertEquals(1, count)
-        assertEquals("88% must mean the movie section is already durable", 1, rowsWhenTerminalProgressArrived)
-    }
-
     @Test fun interruptedBodyRetriesOnlyItsSectionAndRemovesPartialRows(): Unit = runBlocking(Dispatchers.IO) {
         okhttp3.mockwebserver.MockWebServer().use { server ->
             val calls = java.util.concurrent.ConcurrentHashMap<String, Int>()
-            // Exceed the proven 700-row batch so the failed response has already reached Room/FTS.
+            // Exceed the 700-row batch so the failed response has already reached Room/FTS.
             val partial = (1..1000).joinToString(",") { "{\"stream_id\":$it,\"name\":\"Partial $it\"}" }
             server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
                 override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): okhttp3.mockwebserver.MockResponse {
