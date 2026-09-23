@@ -199,6 +199,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     putExtra(EpisodesActivity.EXTRA_SERIES_ID, stream.remoteId)
                     putExtra(EpisodesActivity.EXTRA_SERIES_NAME, stream.name)
                     putExtra(EpisodesActivity.EXTRA_SERIES_ART, metadata?.backdropUrl ?: stream.backdrop ?: stream.icon)
+                    putExtra(EpisodesActivity.EXTRA_SERIES_COUNTRY, metadata?.countries?.filter(String::isNotBlank)?.take(2)?.joinToString(" / ").orEmpty())
                 })
             }
             if (primary == null) primary = episodes
