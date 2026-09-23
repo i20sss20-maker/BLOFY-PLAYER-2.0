@@ -123,7 +123,9 @@ class PlaylistManager(
                 )
             }
         } catch (failure: Throwable) {
-            if (direct) clearDirectSection(provider.id, "live")
+            if (direct) CatalogImportFailure.cleanupPreserving(failure) {
+                clearDirectSection(provider.id, "live")
+            }
             throw failure
         }
         finishSection(provider.id, "live", previousCount, categories.size, categoryRows, parsed, direct)
@@ -152,7 +154,9 @@ class PlaylistManager(
                 onBatch = directBatchSink(direct)
             ) { row -> vodEntity(provider, row)?.let(previousFlags::applyTo) }
         } catch (failure: Throwable) {
-            if (direct) clearDirectSection(provider.id, "movie")
+            if (direct) CatalogImportFailure.cleanupPreserving(failure) {
+                clearDirectSection(provider.id, "movie")
+            }
             throw failure
         }
         onProgress(88)
@@ -237,7 +241,9 @@ class PlaylistManager(
                 )
             }
         } catch (failure: Throwable) {
-            if (direct) clearDirectSection(provider.id, "series")
+            if (direct) CatalogImportFailure.cleanupPreserving(failure) {
+                clearDirectSection(provider.id, "series")
+            }
             throw failure
         }
         finishSection(provider.id, "series", previousCount, categories.size, categoryRows, parsed, direct)
@@ -514,6 +520,9 @@ internal suspend fun runXtreamSections(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
+            // Continuing other sections after SQLite cannot write only adds more failed work and
+            // used to hide the original storage exception behind the aggregate section count.
+            if (CatalogImportFailure.isStorageFailure(failure)) throw failure
             failures += failure
         }
     }

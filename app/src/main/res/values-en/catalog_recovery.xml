@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="catalog_storage_unavailable">Local storage could not save the library. Your saved library is kept. Check internal storage and retry. [CAT-STORAGE]</string>
+    <string name="catalog_replacement_retry">The new account could not be prepared. Your previous library is kept; retry to finish switching accounts. [CAT-ACCOUNT]</string>
+</resources>

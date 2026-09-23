@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="catalog_storage_unavailable">تعذّر حفظ المكتبة في التخزين المحلي. مكتبتك المحفوظة باقية. تحقق من التخزين الداخلي ثم أعد المحاولة. [CAT-STORAGE]</string>
+    <string name="catalog_replacement_retry">لم يكتمل تجهيز الحساب الجديد. مكتبتك السابقة محفوظة؛ أعد المحاولة لإكمال تبديل الحساب. [CAT-ACCOUNT]</string>
+</resources>

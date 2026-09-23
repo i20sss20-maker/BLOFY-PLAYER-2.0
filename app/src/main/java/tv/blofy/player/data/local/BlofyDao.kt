@@ -124,6 +124,21 @@ interface BlofyDao {
         return true
     }
 
+    /**
+     * Begin a new attempt under the caller's provider lock. A name/selection timestamp update is
+     * not an account change. Re-read that metadata in this transaction, while retaining the strict
+     * timestamp guard for cleanup from an older/cancelled attempt.
+     */
+    @Transaction suspend fun prepareUncommittedCatalogIfSourceUnchanged(
+        expectedSource: ProviderEntity,
+        completedSections: Set<String>,
+        canDiscard: () -> Boolean
+    ): Boolean {
+        val current = provider(expectedSource.id) ?: return false
+        if (!sameCatalogSource(current, expectedSource) || !canDiscard()) return false
+        return discardUncommittedCatalogIfSourceUnchanged(current, completedSections, canDiscard)
+    }
+
     @Transaction suspend fun discardUncommittedCatalogIfSourceUnchanged(
         expectedSource: ProviderEntity,
         completedSections: Set<String> = emptySet(),

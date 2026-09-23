@@ -40,7 +40,7 @@ internal class CatalogLoadPersistence(
             val verified = saved.completed.filterTo(linkedSetOf()) {
                 dao.catalogCountAll(providerId, it) > 0
             }
-            check(dao.discardUncommittedCatalogIfSourceUnchanged(expectedSource, verified) {
+            check(dao.prepareUncommittedCatalogIfSourceUnchanged(expectedSource, verified) {
                 !CatalogSyncState.isReady(context, providerId)
             }) {
                 "Playlist source changed while starting the import"
