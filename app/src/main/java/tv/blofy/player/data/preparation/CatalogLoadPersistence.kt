@@ -40,12 +40,15 @@ internal class CatalogLoadPersistence(
             val verified = saved.completed.filterTo(linkedSetOf()) {
                 dao.catalogCountAll(providerId, it) > 0
             }
+            // Keep the verified resume boundary even if the cleanup below throws. The outer
+            // failure handler also calls discardIfUncommitted(); an empty set there would delete
+            // completed sections along with the unfinished one on the next recovery attempt.
+            completedSections = verified
             check(dao.discardUncommittedCatalogIfSourceUnchanged(expectedSource, verified) {
                 !CatalogSyncState.isReady(context, providerId)
             }) {
                 "Playlist source changed while starting the import"
             }
-            completedSections = verified
         }
     }
 
