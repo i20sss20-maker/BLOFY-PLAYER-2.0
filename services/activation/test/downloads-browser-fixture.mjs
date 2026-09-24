@@ -38,7 +38,7 @@ http.createServer(async (req, res) => {
     if (data.deviceId!=='BLOFY-TEST-TEST' || data.activationCode!=='123456' || !data.message) {res.writeHead(400);res.end('{}');return;}
     res.writeHead(201,{'content-type':'application/json'});res.end('{"received":true}');return;
   }
-  const assets = { '/premium.css': 'text/css', '/release-manager.css': 'text/css',
+  const assets = { '/premium.css': 'text/css', '/release-manager.css': 'text/css', '/site-polish.css': 'text/css',
     '/blofy-logo.png': 'image/png', '/IBMPlexSansArabic-Regular.ttf': 'font/ttf', '/IBMPlexSansArabic-Medium.ttf': 'font/ttf' };
   if (assets[path]) {
     res.setHeader('Content-Type', assets[path]);
