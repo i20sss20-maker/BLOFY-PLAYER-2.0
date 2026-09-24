@@ -93,6 +93,8 @@ function html(res, body) {
     'x-frame-options': 'DENY',
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+    'strict-transport-security': 'max-age=31536000',
     'x-robots-tag': 'noindex',
     'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://www.google.com; connect-src 'self'; frame-ancestors 'none'"
   });
@@ -106,7 +108,9 @@ function asset(res, body, type) {
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
     'x-frame-options': 'DENY',
-    'referrer-policy': 'no-referrer'
+    'referrer-policy': 'no-referrer',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+    'strict-transport-security': 'max-age=31536000'
   });
   res.end(body);
 }
