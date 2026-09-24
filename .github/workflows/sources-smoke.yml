@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      BASE: https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io
+      BASE: https://blofyplayer.com
     steps:
       - name: Wait for BLOFY Sources deployment
         shell: bash
