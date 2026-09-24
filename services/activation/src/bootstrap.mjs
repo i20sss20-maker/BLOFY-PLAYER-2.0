@@ -1,7 +1,6 @@
 // Install the persisted production data key before any crypto-aware handler is imported.
 import { installPersistedDataKey } from './data-key-state.mjs';
 await installPersistedDataKey();
-await import('./railway-db-audit.mjs');
 
 await import('./migration-export-hook.mjs');
 await import('./migration-import-hook.mjs');
