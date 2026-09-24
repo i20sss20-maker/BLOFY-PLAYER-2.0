@@ -81,6 +81,7 @@ http.createServer = function withAdminConsole(listener) {
         const body = await readFile(new URL('../web/' + file, import.meta.url));
         res.writeHead(200, { 'content-type': type, 'content-length': body.length, 'cache-control': 'no-store',
           'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer',
+          'permissions-policy': 'camera=(), microphone=(), geolocation=()', 'strict-transport-security': 'max-age=31536000',
           'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'" });
         res.end(body); return;
       }
