@@ -1,122 +1,91 @@
 # BLOFY PLAYER 2.0 — Production deployment runbook
 
-This is the current production runbook for the BLOFY activation and playlist portal. The active stack is **Vercel + Neon Postgres**; Railway is not part of the production topology.
-
-The product behavior and regression rules remain defined by [`BLOFY_2_FINAL_REFERENCE_AR.md`](BLOFY_2_FINAL_REFERENCE_AR.md). This runbook only covers deployment and release verification.
+This runbook reflects the current temporary production topology after the Railway cutover.
 
 ## 1. Current production topology
 
-- Public origin: `https://blofy-player-2-0.vercel.app`
-- Vercel project: `blofy-player-2-0`
-- Git source: the production branch of this repository
-- Vercel Root Directory: `services/activation`
-- Vercel configuration: `services/activation/vercel.json`
-- Database: a dedicated Neon Postgres database connected to the Vercel project
-- Android activation base URL: the public origin above, without an API path
+- Public activation/API origin: `https://api.blofyplayer.com`
+- Public portal/root origin: `https://blofyplayer.com`
+- Public update origin: `https://updates.blofyplayer.com`
+- Railway project: `BLOFY-Update-Distribution`
+- Activation service: `blofy-activation-portal`
+- Update service: `blofy-update-distribution`
+- Database: Railway Postgres in the same production environment
+- Git repository: `i20sss20-maker/BLOFY-PLAYER-2.0`
+- Activation service root directory: `services/activation`
 
-Do not create a second production database for routine redeployments. Reuse the existing Neon database so device activation, encrypted playlists and provider profiles remain intact.
+Vercel + Neon remains available as the previous production source/fallback during the transition, but signed Android production builds must use the BLOFY custom domain above.
 
-## 2. Vercel and Neon environment variables
+## 2. Activation service requirements
 
-The activation service reads these exact variable names:
+The activation service requires these production variables:
 
-- `DATABASE_URL`: the Neon Postgres connection string. The Vercel/Neon integration may expose several generated connection variables; ensure the service also has the exact `DATABASE_URL` key.
-- `BLOFY_ADMIN_TOKEN`: a production-only secret containing at least 24 random characters. Never package it in Android or expose it to the portal.
-- `BLOFY_PLAYLIST_ENCRYPTION_KEY`: one stable 32-byte key encoded as exactly 64 hexadecimal characters. Back it up securely. Changing it makes existing saved playlist credentials unreadable.
-- `BLOFY_TRIAL_DAYS=7`, unless product policy deliberately changes.
+- `DATABASE_URL` — Railway reference to the production Postgres service.
+- `BLOFY_ADMIN_TOKEN` — production-only secret, at least 24 characters.
+- `BLOFY_PLAYLIST_ENCRYPTION_KEY` — stable 64-character hexadecimal wrapping key.
+- `BLOFY_TRIAL_DAYS` — current product trial duration.
+- `PORT=3000` when required by Railway runtime configuration.
+- `PGSSLMODE=disable` only because the activation service connects to Postgres through Railway's private network.
 
-Optional protection tuning variables are documented in `services/activation/.env.example`. Keep their production defaults unless measurements justify a provider-specific change.
+Migration-only variables must remain disabled/blank after cutover.
 
-Apply the required variables to **Production** and **Preview** when preview deployments are used for end-to-end QA. A local-development value is optional. Leave `PGSSLMODE` unset for Neon/Vercel; `PGSSLMODE=disable` is only for a trusted local Postgres instance. Do not add `PORT` in Vercel—the platform supplies its runtime behavior.
+## 3. Production health gate
 
-After creating or changing any environment variable, redeploy the project. Existing deployments do not receive changed values retroactively.
+Before publishing Android or changing DNS, verify:
 
-## 3. Deploy through Vercel
+- `GET https://api.blofyplayer.com/health` returns HTTP 200.
+- Response contains `ok: true`, `database: "ready"`, and `playlistEncryption: "ready"`.
+- Railway deployment for `blofy-activation-portal` is `SUCCESS`.
+- Railway Postgres is healthy and has persistent storage.
+- `updates.blofyplayer.com` is attached to `blofy-update-distribution`.
 
-Production normally deploys from the connected Git production branch. Before merging or promoting:
+Do not change Media3, FFmpeg, player fallback behavior, stream paths, or theme as part of backend deployment work.
 
-1. Confirm the Vercel project Root Directory is `services/activation`.
-2. Confirm the Neon integration is attached to this Vercel project and `DATABASE_URL` is present.
-3. Confirm all required secrets are present in the target environment.
-4. Deploy the exact commit that passed Android, activation and FFmpeg checks.
-5. Wait for Vercel to report `Ready`; do not promote a deployment with build or runtime errors.
+## 4. Android production build
 
-Do not point Android at a preview URL. Preview deployments are for backend/portal QA; the signed production build must use the stable production origin.
+Signed production builds must use:
 
-## 4. Production health and portal gates
+`-PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com`
 
-Verify the deployed origin before building or publishing Android:
+The Android client appends the `/api/v1/...` paths itself. Do not append `/portal`, `/health`, or a specific API route.
 
-- `GET https://blofy-player-2-0.vercel.app/health` returns HTTP 200.
-- The JSON response contains `ok: true`, `database: "ready"` and `playlistEncryption: "ready"`.
-- `GET /` loads the BLOFY portal and the BLOFY logo without a 404.
-- Vercel runtime logs show no database initialization or request failures.
-- No database URL, admin token, playlist credentials or raw provider URL appears in logs or API error responses.
+Verify before release:
 
-The database schema initializes idempotently from `services/activation/schema.sql`; do not delete or recreate the Neon database during a normal deployment.
+- application ID remains `tv.blofy.player.v2`;
+- production signing certificate is unchanged;
+- FFmpeg bundle verification passes;
+- activation health gate passes;
+- the APK embeds `https://api.blofyplayer.com`, not the old Vercel origin.
 
-## 5. Activation and playlist smoke test
+## 5. Database safety
 
-Run the service smoke test against the production origin or reproduce the sequence manually:
+The Railway production database contains the migrated activation/playlist state. Never recreate or replace it during a normal deploy.
 
-1. New device plus matching six-digit code returns `trial`.
-2. Repeating the same device/code preserves the entitlement instead of creating a second trial.
-3. A wrong code for an existing device is rejected.
-4. Admin activation changes the device to `active` with the requested expiry.
-5. Admin block changes the device to `blocked` and Connect is denied.
-6. An expired trial/activation returns `expired`.
-7. Portal sign-in, playlist save, list, update and delete succeed.
-8. A valid `http://` or `https://` provider/playlist URL is accepted; malformed, local/private, `file://` and `ftp://` URLs are rejected.
-9. Playlist credentials remain encrypted at rest and are never returned in logs.
+The persisted BLOFY data-key state must remain present so migrated encrypted playlists continue to decrypt correctly.
 
-## 6. Build Android against production
+Before any future VPS/OVH cutover:
 
-Build the signed release candidate with:
+1. Take a database backup.
+2. Compare source and target table counts.
+3. Verify the persisted data-key state.
+4. Switch the custom domains only after the new target passes the health gate.
+5. Keep the last healthy Railway deployment available for rollback.
 
-`-PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app`
+## 6. Update distribution
 
-The Android client appends `/api/v1/...` paths itself. Do not append `/portal`, `/health` or `/api/v1/activation/check` to the Gradle property.
+The production update origin is:
 
-Also supply the approved Media3 1.6.1-compatible FFmpeg AAR and the production signing identity. Verify:
+`https://updates.blofyplayer.com`
 
-- application ID is `tv.blofy.player.v2`;
-- version is the approved release-candidate version;
-- signing certificate matches the pinned production certificate;
-- Settings reports FFmpeg as bundled;
-- the APK embeds the stable Vercel production origin, not a preview origin.
+The live update service is `blofy-update-distribution`. The separate `blofy-downloads-preview` service is a non-production preview service and is not attached to a public domain.
 
-`tv.blofy.player.v2` is intentionally a clean, independent install beside the legacy app. It is not an in-place update of the legacy package.
+## 7. Rollback
 
-## 7. Physical-device QA gate
+If Railway activation fails:
 
-Test at least one Android TV/box and one Android phone/tablet. For each provider profile test:
+1. Keep the Postgres volume intact.
+2. Roll back to the last healthy `blofy-activation-portal` deployment.
+3. Do not modify Android playback engines to compensate for a backend issue.
+4. Use the previous Vercel deployment only as a controlled fallback while investigating.
 
-- Xtream Live TS and HLS.
-- M3U/M3U8 direct streams.
-- SD/HD/4K/HEVC where the device supports them.
-- AC3/EAC3 and an available DTS-class sample using the FFmpeg build.
-- Mini preview to fullscreen transition.
-- CH+/CH-, numeric channel entry, EPG and Catch-up.
-- Movie resume/start-over.
-- Series seasons, episode loading, resume and next/previous.
-- Audio/subtitle/quality menus.
-- Server switch without losing favorites, locks or watch state.
-- Cold app start using local Room data without forced sync.
-- Manual refresh and failure recovery without erasing a valid cached catalog.
-
-On terminal playback failure, BLOFY must remain in the app and show its controlled error/retry state. Opening Kodi, VLC, LocalPlayer or the Android app chooser is **never automatic**. The external-player action is available only when the user explicitly selects the manual `خارجي` control.
-
-Record TTFF, buffering count and terminal errors from BLOFY diagnostics for every failed case. Preserve the proven first-live-channel fast path; do not introduce global retries or redirects to solve one provider.
-
-## 8. Production release gate
-
-Do not publish the release candidate until all are true:
-
-1. Android CI, Activation CI and FFmpeg Native CI are green on the same commit.
-2. The production Vercel health gate passes against the connected Neon database.
-3. Portal add/update/delete passes against production without leaking credentials.
-4. The same real-device provider matrix in `ALPHA_QA_MATRIX.md` has no unresolved P0/P1 failures.
-5. APK/AAB package, version, signature, FFmpeg ABIs and SHA-256 files are verified.
-6. The signed APK is downloaded and installed on a clean device before its link is shared.
-
-If Vercel or Neon fails, roll back/promote the last healthy Vercel deployment and investigate the backend. Never compensate for a deployment problem by changing Android provider or playback rules globally.
+Product behavior remains governed by `BLOFY_2_FINAL_REFERENCE_AR.md`.
