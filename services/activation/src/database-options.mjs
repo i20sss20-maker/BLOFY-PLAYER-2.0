@@ -3,8 +3,10 @@ export function databaseOptions(connectionString, overrides = {}, env = process.
   const url = new URL(connectionString);
   if (!['postgres:', 'postgresql:'].includes(url.protocol)) throw new Error('invalid_database_protocol');
   const local = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname);
+  const railwayPrivate = url.hostname.endsWith('.railway.internal');
+  const trustedPrivate = local || railwayPrivate;
   const disable = env.PGSSLMODE === 'disable' || url.searchParams.get('sslmode') === 'disable';
-  if (disable && !local) throw new Error('remote_database_requires_verified_tls');
+  if (disable && !trustedPrivate) throw new Error('remote_database_requires_verified_tls');
   // node-postgres merges these URL parameters over the supplied ssl object.
   for (const name of ['sslmode', 'ssl', 'sslcert', 'sslkey', 'sslrootcert', 'uselibpqcompat']) url.searchParams.delete(name);
   const ca = String(env.BLOFY_DATABASE_CA || '').trim();
