@@ -66,6 +66,14 @@ jobs:
           grep -Fq 'rel="canonical" href="https://blofyplayer.com/privacy"' "$tmp/privacy.html"
           grep -Fq 'rel="canonical" href="https://updates.blofyplayer.com/"' "$tmp/updates.html"
 
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 "https://updates.blofyplayer.com/robots.txt" > "$tmp/updates-robots.txt"
+          grep -Fq "Sitemap: https://updates.blofyplayer.com/sitemap.xml" "$tmp/updates-robots.txt"
+
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 "https://updates.blofyplayer.com/sitemap.xml" > "$tmp/updates-sitemap.xml"
+          grep -Fq "<loc>https://updates.blofyplayer.com/</loc>" "$tmp/updates-sitemap.xml"
+
           echo "BLOFY web surfaces OK"
 
       - name: Verify stable download and health endpoints
