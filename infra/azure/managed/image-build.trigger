@@ -1,1 +1,2 @@
-2026-09-15T12:11:57Z
+2026-09-24T15:52:00Z
+restore blofy Azure Container Apps production revisions
