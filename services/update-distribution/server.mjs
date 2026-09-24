@@ -91,6 +91,17 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://localhost');
     const pathname = url.pathname;
     const method = req.method || '';
+    const host = String(req.headers.host || '').toLowerCase().replace(/:\\d+$/, '');
+
+    if (host === 'www.blofyplayer.com') {
+      const location = 'https://blofyplayer.com' + pathname + url.search;
+      res.writeHead(308, {
+        ...securityHeaders,
+        location,
+        'cache-control': 'public, max-age=3600'
+      });
+      return res.end();
+    }
 
     if (pathname === '/admin' || pathname === '/admin/') {
       if (!['GET', 'HEAD'].includes(method)) {
