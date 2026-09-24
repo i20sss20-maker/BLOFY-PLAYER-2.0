@@ -1,0 +1,53 @@
+name: BLOFY Web Surfaces Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - services/activation/web/**
+      - services/activation/src/public-downloads.mjs
+      - services/activation/src/admin-console-hook.mjs
+      - .github/workflows/web-surfaces-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify public BLOFY web surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/blofy-web"
+          mkdir -p "$tmp"
+
+          check_html() {
+            url="$1"; marker="$2"; out="$3"
+            curl --fail --silent --show-error --location --proto '=https' --tlsv1.2               --connect-timeout 8 --max-time 30 "$url" > "$out"
+            grep -Eiq "$marker" "$out"
+          }
+
+          check_html "https://blofyplayer.com/" "BLOFY" "$tmp/root.html"
+          check_html "https://blofyplayer.com/connect" "BLOFY" "$tmp/connect.html"
+          check_html "https://blofyplayer.com/downloads" "BLOFY|تحميل" "$tmp/downloads.html"
+          check_html "https://blofyplayer.com/privacy" "BLOFY|الخصوصية" "$tmp/privacy.html"
+          check_html "https://blofyplayer.com/admin" "BLOFY|الإدارة|المشرف" "$tmp/admin.html"
+
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "https://blofyplayer.com/site-polish.css" > "$tmp/site-polish.css"
+          grep -Fq -- "--blofy-accent" "$tmp/site-polish.css"
+
+          check_html "https://updates.blofyplayer.com/" "BLOFY|تحميل" "$tmp/updates.html"
+
+          echo "BLOFY web surfaces OK"
+
+      - name: Verify stable download and health endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 https://api.blofyplayer.com/health | python3 -c "import json,sys; p=json.load(sys.stdin); assert p.get('ok') is True"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 https://updates.blofyplayer.com/health | python3 -c "import json,sys; p=json.load(sys.stdin); assert p.get('ok') is True"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 45 --range 0-0 --output /dev/null             https://updates.blofyplayer.com/download/latest.apk
