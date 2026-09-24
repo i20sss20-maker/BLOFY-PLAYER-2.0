@@ -4,20 +4,11 @@ import path from 'node:path';
 const STORE_PATH = process.env.RELEASE_STORE_PATH || '/data/releases.json';
 const RELEASE_STAGES = Object.freeze(['draft', 'qa', 'public']);
 
-const DEFAULT_RELEASE = {
-  versionCode: 2000060,
-  versionName: '2.0.0-rc07.49',
-  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.49/BLOFY-PLAYER-2.0-rc07.49-signed.apk',
-  releaseNotes: 'BLOFY PLAYER 49 — النسخة المستقرة المبنية على كود الإصدار 46 مع رفع رقم الإصدار فقط للتحديث فوق الإصدارات السابقة دون حذف بيانات العميل.',
-  minSupportedVersionCode: 1,
-  stage: 'public'
-};
-
-const RC0750_RELEASE = {
-  versionCode: 2000061,
-  versionName: '2.0.0-rc07.50',
-  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.50/BLOFY-PLAYER-2.0-rc07.50-signed.apk',
-  releaseNotes: 'BLOFY PLAYER 50 — جسر فصل قناة التحديث الخارجي. التفعيل والبوابة يبقيان على Vercel كما هما، بينما فحص تحديث النسخة الخارجية يستخدم Railway. لم يتم تغيير Media3 أو FFmpeg أو fallback أو مسارات ومحركات التشغيل أو الثيم.',
+const CURRENT_RECOVERY_RELEASE = {
+  versionCode: 2000068,
+  versionName: '2.0.0-rc07.56',
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.56/BLOFY-PLAYER-2.0-rc07.56-PRODUCTION-SIGNED.apk',
+  releaseNotes: 'BLOFY PLAYER 56 — النسخة الإنتاجية الموقعة والمتحقق منها بعد نقل التفعيل والتحديثات إلى نطاقات BLOFY على Railway، بدون تغيير Media3 أو FFmpeg أو fallback أو محركات التشغيل.',
   minSupportedVersionCode: 1,
   stage: 'public'
 };
@@ -53,7 +44,8 @@ function cleanRelease(raw, fallbackStage = 'draft') {
 }
 
 function initialState() {
-  return { activeVersionCode: DEFAULT_RELEASE.versionCode, releases: [cleanRelease(DEFAULT_RELEASE, 'public')] };
+  const release = cleanRelease(CURRENT_RECOVERY_RELEASE, 'public');
+  return { activeVersionCode: release.versionCode, releases: [release] };
 }
 
 async function save() {
@@ -67,17 +59,18 @@ async function save() {
   await writeChain;
 }
 
-function seedRc0750Once() {
-  const existing = state.releases.find((r) => r.versionCode === RC0750_RELEASE.versionCode);
+function seedCurrentRecoveryOnce() {
+  const existing = state.releases.find((r) => r.versionCode === CURRENT_RECOVERY_RELEASE.versionCode);
   if (existing) {
-    // Existing production installations predate the staged release flow. Preserve them as public
-    // instead of unexpectedly hiding a release that customers already received.
     if (existing.stage !== 'public') existing.stage = 'public';
     return false;
   }
-  state.releases.push(cleanRelease(RC0750_RELEASE, 'public'));
+  state.releases.push(cleanRelease(CURRENT_RECOVERY_RELEASE, 'public'));
   state.releases.sort((a, b) => b.versionCode - a.versionCode);
-  state.activeVersionCode = RC0750_RELEASE.versionCode;
+  const newerPublic = state.releases.some(
+    (r) => r.stage === 'public' && r.versionCode > CURRENT_RECOVERY_RELEASE.versionCode
+  );
+  if (!newerPublic) state.activeVersionCode = CURRENT_RECOVERY_RELEASE.versionCode;
   return true;
 }
 
@@ -110,7 +103,7 @@ export async function initReleaseStore() {
     needsSave = true;
   }
 
-  if (seedRc0750Once()) needsSave = true;
+  if (seedCurrentRecoveryOnce()) needsSave = true;
   if (needsSave) await save();
 }
 
