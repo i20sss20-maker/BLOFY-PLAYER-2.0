@@ -1,14 +1,10 @@
 # Re-audit after the production gateway revision was promoted successfully from main.
-name: BLOFY Azure Security Audit
+name: BLOFY Azure Security Audit (Manual Only)
+
+# Legacy Azure workflow retained for reference/manual recovery only.
+# Railway is the active BLOFY production platform; this workflow never runs automatically.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/azure-security-audit.yml'
-      - 'infra/azure/managed/security-audit.sh'
-      - 'infra/azure/managed/main.bicep'
-      - 'infra/azure/managed/gateway/**'
   workflow_dispatch:
 
 permissions:
