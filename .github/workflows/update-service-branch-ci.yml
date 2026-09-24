@@ -1,0 +1,33 @@
+name: BLOFY Update Service Branch CI
+
+on:
+  push:
+    branches:
+      - infra/railway-update-distribution
+      - feature/tv-app-library-preview
+    paths:
+      - 'services/update-distribution/**'
+      - '.github/workflows/update-service-branch-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: services/update-distribution
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install runtime dependencies
+        run: npm install --omit=dev
+      - name: Syntax and module checks
+        run: npm run check
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
