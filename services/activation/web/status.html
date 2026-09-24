@@ -62,7 +62,8 @@
       </section>
 
       <div class="actions">
-        <a class="primary" href="https://updates.blofyplayer.com/download/latest.apk">تحميل آخر إصدار</a>
+        <a class="primary" href="/apk">تحميل آخر إصدار</a>
+        <button id="refreshStatus" class="secondary" type="button">إعادة الفحص</button>
         <a class="secondary" href="/connect">إدارة جهازك</a>
         <a class="secondary" href="https://updates.blofyplayer.com" rel="noopener">مركز الإصدارات</a>
       </div>
@@ -78,37 +79,65 @@
     (function(){
       var overall=document.getElementById('overall');
       var overallText=document.getElementById('overallText');
+      var refreshButton=document.getElementById('refreshStatus');
+      var timer=null;
       function set(id,text,ok){
         var el=document.getElementById(id);
         el.textContent=text;
         el.classList.toggle('good',ok===true);
         el.classList.toggle('warn',ok===false);
       }
-      fetch('/health',{cache:'no-store',headers:{accept:'application/json'}})
-        .then(function(r){if(!r.ok) throw new Error('health_'+r.status);return r.json();})
-        .then(function(p){
-          var healthy=p && p.ok===true && p.database==='ready' && p.playlistEncryption==='ready';
-          set('apiState',p.ok===true?'متصل':'غير متاح',p.ok===true);
-          set('dbState',p.database==='ready'?'جاهزة':'غير متاحة',p.database==='ready');
-          set('cryptoState',p.playlistEncryption==='ready'?'جاهز':'غير متاح',p.playlistEncryption==='ready');
-          var app=(p.release&&p.release.app)||p.release||{};
-          var version=app.versionName||'—';
-          var code=app.versionCode;
-          document.getElementById('releaseState').textContent=version;
-          document.getElementById('releaseMeta').textContent=code?'Version Code '+code:'آخر إصدار معلن من BLOFY';
-          overall.classList.add(healthy?'ok':'bad');
-          overallText.textContent=healthy?'جميع الخدمات الأساسية تعمل بشكل طبيعي':'يوجد خلل في إحدى الخدمات الأساسية';
-          var ts=p.time?new Date(p.time):new Date();
-          document.getElementById('checkedAt').textContent='آخر فحص: '+ts.toLocaleString('ar-SA');
-        })
-        .catch(function(){
-          set('apiState','تعذر الاتصال',false);
-          set('dbState','غير معروف',false);
-          set('cryptoState','غير معروف',false);
-          overall.classList.add('bad');
-          overallText.textContent='تعذر الوصول إلى خدمة الحالة';
-          document.getElementById('checkedAt').textContent='آخر محاولة: '+new Date().toLocaleString('ar-SA');
-        });
+      function resetOverall(){
+        overall.classList.remove('ok','bad');
+        overallText.textContent='جارٍ الفحص…';
+      }
+      function setBusy(busy){
+        refreshButton.disabled=busy;
+        refreshButton.classList.toggle('refreshing',busy);
+        refreshButton.textContent=busy?'جارٍ الفحص…':'إعادة الفحص';
+      }
+      function schedule(){
+        clearTimeout(timer);
+        timer=setTimeout(check,60000);
+      }
+      function check(){
+        resetOverall();
+        setBusy(true);
+        return fetch('/health',{cache:'no-store',headers:{accept:'application/json'}})
+          .then(function(r){if(!r.ok) throw new Error('health_'+r.status);return r.json();})
+          .then(function(p){
+            var healthy=p && p.ok===true && p.database==='ready' && p.playlistEncryption==='ready';
+            set('apiState',p.ok===true?'متصل':'غير متاح',p.ok===true);
+            set('dbState',p.database==='ready'?'جاهزة':'غير متاحة',p.database==='ready');
+            set('cryptoState',p.playlistEncryption==='ready'?'جاهز':'غير متاح',p.playlistEncryption==='ready');
+            var app=(p.release&&p.release.app)||p.release||{};
+            var version=app.versionName||'—';
+            var code=app.versionCode;
+            document.getElementById('releaseState').textContent=version;
+            document.getElementById('releaseMeta').textContent=code?'Version Code '+code:'آخر إصدار معلن من BLOFY';
+            overall.classList.add(healthy?'ok':'bad');
+            overallText.textContent=healthy?'جميع الخدمات الأساسية تعمل بشكل طبيعي':'يوجد خلل في إحدى الخدمات الأساسية';
+            var ts=p.time?new Date(p.time):new Date();
+            document.getElementById('checkedAt').textContent='آخر فحص: '+ts.toLocaleString('ar-SA');
+          })
+          .catch(function(){
+            set('apiState','تعذر الاتصال',false);
+            set('dbState','غير معروف',false);
+            set('cryptoState','غير معروف',false);
+            overall.classList.add('bad');
+            overallText.textContent='تعذر الوصول إلى خدمة الحالة';
+            document.getElementById('checkedAt').textContent='آخر محاولة: '+new Date().toLocaleString('ar-SA');
+          })
+          .finally(function(){
+            setBusy(false);
+            schedule();
+          });
+      }
+      refreshButton.addEventListener('click',check);
+      document.addEventListener('visibilitychange',function(){
+        if(document.visibilityState==='visible') check();
+      });
+      check();
     })();
   </script>
 </body>
