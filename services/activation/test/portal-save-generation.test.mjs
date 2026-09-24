@@ -124,6 +124,7 @@ function harness({ transport, whatsapp = true, authenticated = true } = {}) {
     constructor(type, options = {}) { this.type = type; Object.assign(this, options); }
     preventDefault() { this.defaultPrevented = true; }
     stopImmediatePropagation() { this.stopped = true; }
+    stopPropagation() { this.stopped = true; }
   }
   const body = new Element('body');
   const actions = new Element(); actions.className = 'actions'; body.appendChild(actions);
