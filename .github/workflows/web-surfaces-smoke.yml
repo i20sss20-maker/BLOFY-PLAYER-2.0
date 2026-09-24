@@ -52,6 +52,20 @@ jobs:
 
           check_html "https://updates.blofyplayer.com/" "BLOFY|تحميل" "$tmp/updates.html"
 
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 "https://blofyplayer.com/manifest.webmanifest" > "$tmp/manifest.json"
+          python3 - "$tmp/manifest.json" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert p.get('name') == 'BLOFY PLAYER'
+          assert p.get('start_url') == '/'
+          assert p.get('display') == 'standalone'
+          PY
+
+          grep -Fq 'rel="canonical" href="https://blofyplayer.com/"' "$tmp/root.html"
+          grep -Fq 'rel="canonical" href="https://blofyplayer.com/privacy"' "$tmp/privacy.html"
+          grep -Fq 'rel="canonical" href="https://updates.blofyplayer.com/"' "$tmp/updates.html"
+
           echo "BLOFY web surfaces OK"
 
       - name: Verify stable download and health endpoints
