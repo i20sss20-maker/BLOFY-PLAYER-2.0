@@ -11,8 +11,8 @@
 - Updates: `https://updates.blofyplayer.com`
 - Strict TLS and production smoke checks: passing
 - Railway activation, update distribution, and Postgres deployments: healthy
-- Final website recovery branch: `baseline/websites-complete-final-20260925`
-- Final update-service recovery branch: `baseline/update-center-complete-final-20260925`
+- Final website recovery branch: `baseline/websites-complete-final-v2-20260925`
+- Final update-service recovery branch: `baseline/update-center-complete-final-v2-20260925`
 - Final downloads-preview recovery branch: `baseline/downloads-preview-production-final-20260925`
 - Public web smoke coverage: root, device portal, downloads, privacy, status, admin, sources admin, manifest, robots, sitemap, update center, stable APK link
 
