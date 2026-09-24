@@ -3,6 +3,7 @@ import http from 'node:http';
 import { gzipSync } from 'node:zlib';
 import pg from 'pg';
 import { databaseOptions } from './database-options.mjs';
+import { MIGRATION_EXPORT_PUBLIC_KEY, MIGRATION_EXPORT_EXPIRES_AT } from './migration-export-config.mjs';
 
 const ROOT = '/api/v1/internal/migration-export';
 const WINDOW_URL = String(process.env.BLOFY_MIGRATION_EXPORT_WINDOW_URL ||
@@ -37,32 +38,36 @@ function validSubscriberHost(value) {
       !url.username && !url.password && !url.search && !url.hash;
   } catch { return false; }
 }
-async function exportWindow({ requireMigrationContext = true } = {}) {
-  // Both export paths are source-only. Full database migration additionally
-  // requires the source database and production data key. The subscriber-host
-  // transfer does not need either secret and must not be coupled to their shape.
-  if (!VERCEL_RUNTIME) return null;
-  if (requireMigrationContext && (!pool || !/^[a-fA-F0-9]{64}$/.test(sourceKey))) return null;
-  let parsed;
-  try {
-    const url = new URL(WINDOW_URL);
-    if (url.protocol !== 'https:' || url.hostname !== 'raw.githubusercontent.com') return null;
-    url.searchParams.set('blofyMigrationWindow', String(Date.now()));
-    const response = await fetch(url, {
-      redirect:'error', cache:'no-store', signal:AbortSignal.timeout(8000),
-      headers:{accept:'application/json','cache-control':'no-cache'}
-    });
-    if (!response.ok) return null;
-    const text = await response.text();
-    if (Buffer.byteLength(text) > 16_384) return null;
-    parsed = JSON.parse(text);
-  } catch { return null; }
+function validatedWindow(parsed) {
   const publicKeyPem = typeof parsed?.publicKeyPem === 'string' ? parsed.publicKeyPem.trim() : '';
   const expiresAt = Number(parsed?.expiresAt || 0);
   const fingerprint = publicKeyFingerprint(publicKeyPem);
-  // A committed window is deliberately short. A stale or far-future file fails closed.
   if (!fingerprint || !Number.isSafeInteger(expiresAt) || expiresAt <= Date.now() || expiresAt > Date.now()+30*60*1000) return null;
   return { publicKeyPem, expiresAt, fingerprint };
+}
+
+async function exportWindow({ requireMigrationContext = true } = {}) {
+  if (!VERCEL_RUNTIME) return null;
+  if (requireMigrationContext && (!pool || !/^[a-fA-F0-9]{64}$/.test(sourceKey))) return null;
+  let parsed = null;
+  try {
+    const url = new URL(WINDOW_URL);
+    if (url.protocol === 'https:' && url.hostname === 'raw.githubusercontent.com') {
+      url.searchParams.set('blofyMigrationWindow', String(Date.now()));
+      const response = await fetch(url, {
+        redirect:'error', cache:'no-store', signal:AbortSignal.timeout(8000),
+        headers:{accept:'application/json','cache-control':'no-cache'}
+      });
+      if (response.ok) {
+        const text = await response.text();
+        if (Buffer.byteLength(text) <= 16_384) parsed = JSON.parse(text);
+      }
+    }
+  } catch {}
+  return validatedWindow(parsed) || validatedWindow({
+    publicKeyPem:MIGRATION_EXPORT_PUBLIC_KEY,
+    expiresAt:MIGRATION_EXPORT_EXPIRES_AT
+  });
 }
 function sendJson(res, status, body) {
   const payload = JSON.stringify(body);
