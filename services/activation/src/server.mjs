@@ -267,6 +267,22 @@ async function servePortal(res, connectOnly = false) {
   res.end(file);
 }
 
+async function serveStatusPage(res) {
+  const file = await readFile(new URL('../web/status.html', import.meta.url));
+  res.writeHead(200, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': file.length,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'no-referrer',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+    'strict-transport-security': 'max-age=31536000',
+    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
+  });
+  res.end(file);
+}
+
 function serveRobots(res) {
   const body = [
     'User-agent: *',
@@ -292,6 +308,7 @@ function serveSitemap(res) {
   <url><loc>https://blofyplayer.com/connect</loc></url>
   <url><loc>https://blofyplayer.com/downloads</loc></url>
   <url><loc>https://blofyplayer.com/privacy</loc></url>
+  <url><loc>https://blofyplayer.com/status</loc></url>
 </urlset>`;
   res.writeHead(200, {
     'content-type': 'application/xml; charset=utf-8',
@@ -660,6 +677,7 @@ const server = http.createServer(async (req, res) => {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
+    if (req.method === 'GET' && requestUrl.pathname === '/status') return await serveStatusPage(res);
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (req.method === 'GET' && requestUrl.pathname === '/robots.txt') return serveRobots(res);
