@@ -67,6 +67,7 @@ jobs:
           agent-browser snapshot -i
           agent-browser click '#newBtn'
           agent-browser select '#providerType' 'blofy'
+          agent-browser eval "new Promise((resolve,reject)=>{let n=0;const t=setInterval(()=>{const button=document.getElementById('saveBtn');const select=document.getElementById('providerType');if(button&&select&&select.value==='blofy'&&button.dataset.blofySubscriberInterceptorV6==='1'){clearInterval(t);resolve('BLOFY subscriber interceptor ready');return;}if(++n>50){clearInterval(t);reject(new Error('BLOFY subscriber interceptor not ready'));}},100);})"
           agent-browser snapshot -i
           agent-browser eval "if(document.getElementById('blofyRenewBtn')||document.querySelector('[data-plan]')||document.querySelector('a[href=\"/\"]'))throw new Error('Play portal exposes purchasing navigation'); if(getComputedStyle(document.getElementById('username').closest('.field')).display==='none'||getComputedStyle(document.getElementById('password').closest('.field')).display==='none')throw new Error('Subscriber credentials hidden'); 'Play subscriber form available'"
           agent-browser fill '#name' 'Play QA'
