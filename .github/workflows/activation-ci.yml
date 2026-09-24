@@ -73,7 +73,7 @@ jobs:
           agent-browser fill '#username' 'fixture-user'
           agent-browser fill '#password' 'fixture-password'
           agent-browser click '#saveBtn'
-          agent-browser wait --text 'Play QA'
+          agent-browser eval "new Promise((resolve,reject)=>{let n=0;const t=setInterval(()=>{const names=[...document.querySelectorAll('.playlist h3')].map(x=>x.textContent.trim());const status=document.getElementById('editorStatus')?.textContent?.trim()||'';if(names.includes('Play QA')){clearInterval(t);resolve('Play QA saved and rendered');return;}if(++n>100){clearInterval(t);reject(new Error('Subscriber save did not render; status='+status+'; names='+names.join(',')));}},100);})"
           agent-browser screenshot downloads-evidence/play-connect-saved.png
           agent-browser errors
           agent-browser close
