@@ -70,6 +70,8 @@ export async function servePublicDownloads(req, res, pathname, { list, onError =
     'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(body),
     'cache-control': 'no-store, max-age=0', 'x-content-type-options': 'nosniff',
     'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+    'strict-transport-security': 'max-age=31536000',
     'content-security-policy': "default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'",
     ...(unavailable ? { 'retry-after': '15' } : {})
   });
