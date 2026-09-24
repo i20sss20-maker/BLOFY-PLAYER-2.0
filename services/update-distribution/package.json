@@ -1,7 +1,7 @@
 {
   "name": "blofy-update-distribution",
   "private": true,
-  "version": "3.0.0-azure",
+  "version": "3.0.0-preview",
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
