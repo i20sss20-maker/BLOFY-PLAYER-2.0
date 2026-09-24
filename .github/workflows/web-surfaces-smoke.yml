@@ -7,6 +7,7 @@ on:
       - services/activation/web/**
       - services/activation/src/public-downloads.mjs
       - services/activation/src/admin-console-hook.mjs
+      - services/activation/src/server.mjs
       - .github/workflows/web-surfaces-smoke.yml
   workflow_dispatch:
 
@@ -36,6 +37,15 @@ jobs:
           check_html "https://blofyplayer.com/downloads" "BLOFY|تحميل" "$tmp/downloads.html"
           check_html "https://blofyplayer.com/privacy" "BLOFY|الخصوصية" "$tmp/privacy.html"
           check_html "https://blofyplayer.com/admin" "BLOFY|الإدارة|المشرف" "$tmp/admin.html"
+          check_html "https://blofyplayer.com/sources-admin" "BLOFY|المصادر|Xtream" "$tmp/sources-admin.html"
+
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 "https://blofyplayer.com/robots.txt" > "$tmp/robots.txt"
+          grep -Fq "Sitemap: https://blofyplayer.com/sitemap.xml" "$tmp/robots.txt"
+
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 "https://blofyplayer.com/sitemap.xml" > "$tmp/sitemap.xml"
+          grep -Fq "<loc>https://blofyplayer.com/privacy</loc>" "$tmp/sitemap.xml"
 
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "https://blofyplayer.com/site-polish.css" > "$tmp/site-polish.css"
           grep -Fq -- "--blofy-accent" "$tmp/site-polish.css"
