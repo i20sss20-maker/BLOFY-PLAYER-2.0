@@ -88,7 +88,7 @@ http.createServer = function withAdminConsole(listener) {
       if (req.method === 'GET' && url.pathname === '/api/v1/releases') {
         const { items } = await catalog.list(); json(res, 200, { items }); return;
       }
-      if (['GET','HEAD'].includes(req.method) && ['/download/latest.apk','/latest.apk'].includes(url.pathname)) {
+      if (['GET','HEAD'].includes(req.method) && ['/download/latest.apk','/latest.apk','/apk'].includes(url.pathname)) {
         const release = await catalog.primary();
         if (!release) { json(res, 404, { error: 'release_not_found' }); return; }
         res.writeHead(302, { location: release.downloadUrl, 'cache-control': 'no-store, max-age=0', 'referrer-policy': 'no-referrer' });
