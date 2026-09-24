@@ -1,0 +1,80 @@
+name: Publish BLOFY rc07.56 Railway Cutover
+
+on:
+  push:
+    branches: [release/rc0756-railway-cutover]
+    paths:
+      - .github/workflows/publish-rc0756.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: blofy-publish-rc0756
+  cancel-in-progress: false
+
+env:
+  VERIFIED_RUN_ID: "36053605149"
+  VERIFIED_SHA: eb7fa6266a1e17dc1c29c12bc4ba30ed5e44981a
+  VERIFIED_ARTIFACT: BLOFY-PLAYER-2.0-rc07.56-PRODUCTION-SIGNED-eb7fa6266a1e17dc1c29c12bc4ba30ed5e44981a
+  RELEASE_TAG: v2.0.0-rc07.56
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for verified production-signed build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 160); do
+            json="$(gh run view "$VERIFIED_RUN_ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion,headSha)"
+            status="$(jq -r '.status' <<<"$json")"
+            conclusion="$(jq -r '.conclusion // ""' <<<"$json")"
+            sha="$(jq -r '.headSha' <<<"$json")"
+            [[ "$sha" == "$VERIFIED_SHA" ]] || { echo "::error::Verified run SHA mismatch"; exit 1; }
+            if [[ "$status" == "completed" ]]; then
+              [[ "$conclusion" == "success" ]] || { echo "::error::Verified build concluded $conclusion"; exit 1; }
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Timed out waiting for signed verification run"
+          exit 1
+
+      - name: Download and verify signed artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p publish
+          gh run download "$VERIFIED_RUN_ID"             --repo "$GITHUB_REPOSITORY"             --name "$VERIFIED_ARTIFACT"             --dir publish
+          apk="$(find publish -type f -name 'BLOFY-PLAYER-2.0-rc07.56-PRODUCTION-SIGNED.apk' -print -quit)"
+          aab="$(find publish -type f -name 'BLOFY-PLAYER-2.0-rc07.56-PRODUCTION-SIGNED.aab' -print -quit)"
+          test -s "$apk"
+          test -s "$aab"
+          (cd publish && sha256sum BLOFY-PLAYER-2.0-rc07.56-PRODUCTION-SIGNED.apk BLOFY-PLAYER-2.0-rc07.56-PRODUCTION-SIGNED.aab > RC0756-SHA256SUMS.txt)
+
+      - name: Publish verified rc07.56
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="publish/BLOFY-PLAYER-2.0-rc07.56-PRODUCTION-SIGNED.apk"
+          AAB="publish/BLOFY-PLAYER-2.0-rc07.56-PRODUCTION-SIGNED.aab"
+          SUMS="publish/RC0756-SHA256SUMS.txt"
+          NOTES='BLOFY PLAYER 2.0.0-rc07.56 — نقل نقاط الاتصال الإنتاجية إلى نطاقات BLOFY على Railway: التفعيل عبر api.blofyplayer.com والتحديثات عبر updates.blofyplayer.com. مبني مباشرة فوق rc07.55 بدون تغيير Media3 أو FFmpeg أو fallback أو مسارات ومحركات التشغيل أو الثيم. نفس حزمة التطبيق ووظائف rc07.55 مع رفع versionCode إلى 2000068 لتثبيته كتحديث فوق النسخة الحالية.'
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK" "$AAB" "$SUMS" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$APK" "$AAB" "$SUMS"               --repo "$GITHUB_REPOSITORY"               --target "$VERIFIED_SHA"               --title 'BLOFY PLAYER 2.0.0-rc07.56'               --notes "$NOTES"               --latest
+          fi
