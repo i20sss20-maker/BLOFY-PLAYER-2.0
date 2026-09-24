@@ -282,7 +282,7 @@ ${allowRenewal ? renewalStyles : ''}
       if (select.value === 'blofy') {
         if (event) {
           if (typeof event.preventDefault === 'function') event.preventDefault();
-          if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+          if (typeof event.stopPropagation === 'function') event.stopPropagation();
         }
         await saveSubscriber();
         return false;
