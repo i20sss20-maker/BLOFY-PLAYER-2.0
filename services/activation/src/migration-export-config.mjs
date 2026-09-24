@@ -1,13 +1,5 @@
-// Temporary migration export gate. Public key only; no database credential is committed.
-export const MIGRATION_EXPORT_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAmk9f6XQrqJ6n4aEmNzSL
-uDnYdePREyT5rjPxMIP+Zo6ovrf7SZ0dNeEVY8ZrU7DNzYqk0WKtemd1H2OrDZzr
-QHLp2joeN/XHXk+2HYVuXrDObxR6dHBeF46KzG8t7js2o9rUrb7yhXMLj9E12k5w
-+23DCUYBx2w8AJpFv9yj1ETqv8N52BAWI8wQF8UIo9s86dmUMVAZ3uc7Oxe2sk7u
-2EOJVrFpE6u1hiTSNzqvK9xGiURD186KixBxg1Eeae4Jhw2Qyf8RkCEEIdE18G+j
-3fJcAI5V9kZWeNxB0GixQK1REgA2bcfgbTepfRreVQV5KFpDVcZ1t0e9hjN9NhpH
-3QpcbpGNMjn/JHUMAoKK3cLeP4+vXDBMLjvL9imueVh4TBNi7U+9d7roF631fnzy
-hjtBTxbgaYgb9I/DiSMiSt3vPZYsoyLLv8II9dE9fHJ8KKNVT7V574egkYDCbaxs
-7hk4770JNoTSu5S13hpXP+IIqS9RFI0l6S1OPVoqvi1zAgMBAAE=
------END PUBLIC KEY-----`;
-export const MIGRATION_EXPORT_EXPIRES_AT = 1790279069221;
+// Temporary migration export gate. The production migration workflow writes an
+// ephemeral PUBLIC key here, then restores this file to the disabled state.
+// No private key or database credential is ever committed.
+export const MIGRATION_EXPORT_PUBLIC_KEY = '';
+export const MIGRATION_EXPORT_EXPIRES_AT = 0;
