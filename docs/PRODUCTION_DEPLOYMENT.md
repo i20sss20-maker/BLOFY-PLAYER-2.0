@@ -22,6 +22,10 @@ This runbook reflects the current temporary production topology after the Railwa
 
 - Public activation/API origin: `https://api.blofyplayer.com`
 - Public portal/root origin: `https://blofyplayer.com` (DNS + TLS verified)
+- Public status page: `https://blofyplayer.com/status`
+- Public downloads page: `https://blofyplayer.com/downloads`
+- Public privacy page: `https://blofyplayer.com/privacy`
+- Stable APK URL: `https://updates.blofyplayer.com/download/latest.apk`
 - Public update origin: `https://updates.blofyplayer.com`
 - Railway project: `BLOFY-Update-Distribution`
 - Activation service: `blofy-activation-portal`
