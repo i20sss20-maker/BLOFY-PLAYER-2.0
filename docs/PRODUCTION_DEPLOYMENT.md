@@ -11,8 +11,9 @@
 - Updates: `https://updates.blofyplayer.com`
 - Strict TLS and production smoke checks: passing
 - Railway activation, update distribution, and Postgres deployments: healthy
-- Final website recovery branch: `baseline/websites-final-20260925`
-- Final update-center recovery branch: `baseline/update-center-final-20260925`
+- Final website recovery branch: `baseline/websites-final-20260924`
+- Final update-service recovery branch: `baseline/update-service-final-20260924`
+- Final downloads-preview recovery branch: `baseline/downloads-preview-final-20260924`
 - Public web smoke coverage: root, device portal, downloads, privacy, admin, sources admin, manifest, robots, sitemap, update center, stable APK link
 
 This runbook reflects the current temporary production topology after the Railway cutover.
@@ -29,7 +30,7 @@ This runbook reflects the current temporary production topology after the Railwa
 - Git repository: `i20sss20-maker/BLOFY-PLAYER-2.0`
 - Activation service root directory: `services/activation`
 
-Vercel + Neon remains available as the previous production source/fallback during the transition, but signed Android production builds must use the BLOFY custom domain above.
+The Railway + PostgreSQL stack above is the active production source of truth. Older hosting stacks are not part of the production path. Signed Android production builds must use the BLOFY custom domains above.
 
 ## 2. Activation service requirements
 
@@ -62,6 +63,8 @@ Signed production builds must use:
 
 `-PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com`
 
+`-PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com`
+
 The Android client appends the `/api/v1/...` paths itself. Do not append `/portal`, `/health`, or a specific API route.
 
 Verify before release:
@@ -70,7 +73,7 @@ Verify before release:
 - production signing certificate is unchanged;
 - FFmpeg bundle verification passes;
 - activation health gate passes;
-- the APK embeds `https://api.blofyplayer.com`, not the old Vercel origin.
+- the APK embeds `https://api.blofyplayer.com` and `https://updates.blofyplayer.com`.
 
 ## 5. Database safety
 
@@ -92,7 +95,7 @@ The production update origin is:
 
 `https://updates.blofyplayer.com`
 
-The live update service is `blofy-update-distribution`. The separate `blofy-downloads-preview` service is a non-production preview service and is not attached to a public domain.
+The live update service is `blofy-update-distribution`. The separate `blofy-downloads-preview` service is a healthy non-production preview service and is intentionally not attached to a public domain.
 
 ## 7. Rollback
 
@@ -101,6 +104,35 @@ If Railway activation fails:
 1. Keep the Postgres volume intact.
 2. Roll back to the last healthy `blofy-activation-portal` deployment.
 3. Do not modify Android playback engines to compensate for a backend issue.
-4. Use the previous Vercel deployment only as a controlled fallback while investigating.
+4. Do not change DNS or switch hosting stacks during an incident unless a tested rollback target has been explicitly prepared.
 
 Product behavior remains governed by `BLOFY_2_FINAL_REFERENCE_AR.md`.
+
+
+## 8. Public website surfaces
+
+The production web surfaces are:
+
+- `https://blofyplayer.com/` — main BLOFY portal.
+- `https://blofyplayer.com/connect` — device pairing and playlist management.
+- `https://blofyplayer.com/downloads` — branded public download center.
+- `https://blofyplayer.com/privacy` — privacy and deletion requests.
+- `https://blofyplayer.com/admin` — protected device/release administration.
+- `https://blofyplayer.com/sources-admin` — protected source/Xtream administration.
+- `https://updates.blofyplayer.com/` — official release/download center.
+- `https://updates.blofyplayer.com/download/latest.apk` — stable Downloader-compatible APK URL.
+
+Public pages use the BLOFY identity, responsive layouts, canonical metadata, manifest metadata, robots/sitemap support, branded 404 handling, strict TLS, HSTS, frame protection, and restrictive permissions policies.
+
+The permanent GitHub Actions gate `BLOFY Web Surfaces Smoke` verifies the public pages, health endpoints, release consistency, security headers, branded 404 behavior, and stable APK routes.
+
+## 9. Railway service state
+
+The production Railway project should have all four services healthy:
+
+- `blofy-activation-portal` — production activation/API and web portal.
+- `blofy-update-distribution` — production release distribution.
+- `Postgres` — production database with persistent volume.
+- `blofy-downloads-preview` — non-public preview service.
+
+The preview service must stay without a public/custom domain unless it is deliberately promoted.
