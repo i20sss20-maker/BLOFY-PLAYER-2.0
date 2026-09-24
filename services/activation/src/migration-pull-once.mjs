@@ -48,7 +48,8 @@ async function pullOnce() {
   });
   try {
     if (await alreadyApplied(pool, tokenHash)) return { skipped:true, reason:'already_applied' };
-    const response = await fetch(`${sourceUrl}/api/v1/internal/migration-export/pull`, {
+    const envelopeUrl = sourceUrl.endsWith('.json') ? sourceUrl : `${sourceUrl}/api/v1/internal/migration-export/pull`;
+    const response = await fetch(envelopeUrl, {
       method:'GET', redirect:'error', cache:'no-store', signal:AbortSignal.timeout(180000),
       headers:{accept:'application/json','cache-control':'no-cache'}
     });
