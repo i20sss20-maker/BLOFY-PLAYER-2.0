@@ -1,10 +1,10 @@
-name: BLOFY Azure Subscriber Host Transfer V2
+name: BLOFY Azure Subscriber Host Transfer V2 (Manual Only)
+
+# Legacy Azure workflow retained for reference/manual recovery only.
+# Railway is the active BLOFY production platform; this workflow never runs automatically.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/azure-subscriber-host-transfer-v2.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
