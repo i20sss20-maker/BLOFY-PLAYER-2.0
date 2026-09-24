@@ -1,8 +1,10 @@
 package tv.blofy.player.ui.settings
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -16,6 +18,8 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.login.LoginActivity
+import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import java.text.DateFormat
 import java.util.Date
 
@@ -69,6 +73,31 @@ class SystemStatusActivity : AppCompatActivity() {
         }
         card.addView(body)
         content.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(18), 0, 0)
+        }
+        fun action(label: String, intent: Intent) = Button(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 15f
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            BlofyTvDesign.installTvFocus(this, dp(18).toFloat(), 1.03f, false)
+            setOnClickListener { startActivity(intent) }
+        }
+        actions.addView(
+            action("▣  ربط الجهاز", Intent(this, LoginActivity::class.java)),
+            LinearLayout.LayoutParams(0, dp(58), 1f).apply { marginStart = dp(8) }
+        )
+        actions.addView(
+            action("▤  إدارة القوائم", Intent(this, ProviderManagerActivity::class.java)),
+            LinearLayout.LayoutParams(0, dp(58), 1f)
+        )
+        content.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
 
         lifecycleScope.launch {
@@ -89,6 +118,7 @@ class SystemStatusActivity : AppCompatActivity() {
                 appendLine("نوع الجهاز: ${device.name}")
                 appendLine("FFmpeg: ${if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "مدمج وجاهز" else "غير مدمج"}")
                 appendLine("خدمة التفعيل: ${if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) "غير مضبوطة" else "متصلة"}")
+                appendLine("خدمة التحديث: ${if (BuildConfig.UPDATE_BASE_URL.isBlank()) "غير مضبوطة" else "متصلة"}")
                 appendLine("حالة التفعيل: $activationText")
                 appendLine("آخر تحقق: ${activation?.lastCheckAt?.let(::formatTime) ?: "—"}")
                 appendLine()
