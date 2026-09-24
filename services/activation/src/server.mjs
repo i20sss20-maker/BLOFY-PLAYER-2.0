@@ -264,6 +264,41 @@ async function servePortal(res, connectOnly = false) {
   res.end(file);
 }
 
+function serveRobots(res) {
+  const body = [
+    'User-agent: *',
+    'Allow: /',
+    'Disallow: /admin',
+    'Disallow: /sources-admin',
+    'Sitemap: https://blofyplayer.com/sitemap.xml',
+    ''
+  ].join('\n');
+  res.writeHead(200, {
+    'content-type': 'text/plain; charset=utf-8',
+    'content-length': Buffer.byteLength(body),
+    'cache-control': 'public, max-age=3600',
+    'x-content-type-options': 'nosniff'
+  });
+  res.end(body);
+}
+
+function serveSitemap(res) {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://blofyplayer.com/</loc></url>
+  <url><loc>https://blofyplayer.com/connect</loc></url>
+  <url><loc>https://blofyplayer.com/downloads</loc></url>
+  <url><loc>https://blofyplayer.com/privacy</loc></url>
+</urlset>`;
+  res.writeHead(200, {
+    'content-type': 'application/xml; charset=utf-8',
+    'content-length': Buffer.byteLength(body),
+    'cache-control': 'public, max-age=3600',
+    'x-content-type-options': 'nosniff'
+  });
+  res.end(body);
+}
+
 async function servePortalLogo(res) {
   const file = await readFile(new URL('../web/blofy-logo.png', import.meta.url));
   res.writeHead(200, {
@@ -624,6 +659,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
+    if (req.method === 'GET' && requestUrl.pathname === '/robots.txt') return serveRobots(res);
+    if (req.method === 'GET' && requestUrl.pathname === '/sitemap.xml') return serveSitemap(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (await commercial(req, res, requestUrl)) return;
     if (await cloud(req, res)) return;
