@@ -48,8 +48,8 @@ async function pullOnce() {
   });
   try {
     if (await alreadyApplied(pool, tokenHash)) return { skipped:true, reason:'already_applied' };
-    const response = await fetch(`${sourceUrl}/api/v1/internal/migration-export`, {
-      method:'POST', redirect:'error', cache:'no-store', signal:AbortSignal.timeout(180000),
+    const response = await fetch(`${sourceUrl}/api/v1/internal/migration-export/pull`, {
+      method:'GET', redirect:'error', cache:'no-store', signal:AbortSignal.timeout(180000),
       headers:{accept:'application/json','cache-control':'no-cache'}
     });
     if (!response.ok) throw new Error(`migration_source_http_${response.status}`);
