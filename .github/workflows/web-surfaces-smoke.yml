@@ -76,6 +76,13 @@ jobs:
             --connect-timeout 8 --max-time 30 "https://updates.blofyplayer.com/sitemap.xml" > "$tmp/updates-sitemap.xml"
           grep -Fq "<loc>https://updates.blofyplayer.com/</loc>" "$tmp/updates-sitemap.xml"
 
+          status="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 -o "$tmp/updates-404.html" -w '%{http_code}' \
+            https://updates.blofyplayer.com/__blofy_missing_route__)"
+          test "$status" = "404"
+          grep -Fq 'BLOFY PLAYER' "$tmp/updates-404.html"
+          grep -Fq 'الصفحة غير موجودة' "$tmp/updates-404.html"
+
           echo "BLOFY web surfaces OK"
 
       - name: Verify security headers and branded 404
@@ -140,6 +147,8 @@ jobs:
 
           for url in \
             https://updates.blofyplayer.com/download/latest.apk \
+            https://updates.blofyplayer.com/latest.apk \
+            https://updates.blofyplayer.com/apk \
             https://blofyplayer.com/download/latest.apk \
             https://blofyplayer.com/latest.apk
           do
