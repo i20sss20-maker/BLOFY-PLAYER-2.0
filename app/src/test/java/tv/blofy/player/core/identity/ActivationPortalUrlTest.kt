@@ -6,11 +6,11 @@ import org.junit.Test
 
 class ActivationPortalUrlTest {
     @Test
-    fun productionUrlIncludesDeviceCredentials() {
+    fun productionApiUrlOpensCanonicalConnectPortal() {
         assertEquals(
-            "https://blofy-player-2-0.vercel.app/#deviceId=BLOFY-66HL-GB09&code=123456",
+            "https://blofyplayer.com/connect#deviceId=BLOFY-66HL-GB09&code=123456",
             ActivationPortalUrl.create(
-                "https://blofy-player-2-0.vercel.app/",
+                "https://api.blofyplayer.com/",
                 "BLOFY-66HL-GB09",
                 "123456"
             )
@@ -18,13 +18,25 @@ class ActivationPortalUrlTest {
     }
 
     @Test
-    fun portalUsesProductionOriginEvenWhenBaseContainsApiPath() {
+    fun apiSubdomainUsesMatchingPublicOriginAndDropsApiPath() {
         assertEquals(
-            "https://example.com/#deviceId=BLOFY-ABCD-EF12&code=000042",
+            "https://example.com/connect#deviceId=BLOFY-ABCD-EF12&code=000042",
             ActivationPortalUrl.create(
-                "https://example.com/api/v1/",
+                "https://api.example.com/api/v1/?stale=1",
                 "BLOFY-ABCD-EF12",
                 "000042"
+            )
+        )
+    }
+
+    @Test
+    fun regularHttpsOriginUsesConnectPath() {
+        assertEquals(
+            "https://portal.example.com/connect#deviceId=BLOFY-ABCD-EF12&code=654321",
+            ActivationPortalUrl.create(
+                "https://portal.example.com/api/",
+                "BLOFY-ABCD-EF12",
+                "654321"
             )
         )
     }
