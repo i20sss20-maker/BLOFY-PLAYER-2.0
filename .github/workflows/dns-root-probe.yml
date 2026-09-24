@@ -1,0 +1,28 @@
+name: BLOFY Root DNS Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/dns-root-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe root DNS
+        shell: bash
+        run: |
+          set -u
+          echo "A:"; dig +short A blofyplayer.com || true
+          echo "CNAME:"; dig +short CNAME blofyplayer.com || true
+          echo "root TXT:"; dig +short TXT blofyplayer.com || true
+          echo "_railway-verify TXT:"; dig +short TXT _railway-verify.blofyplayer.com || true
+          echo "api TXT:"; dig +short TXT _railway-verify.api.blofyplayer.com || true
+          echo "updates TXT:"; dig +short TXT _railway-verify.updates.blofyplayer.com || true
+          echo "TLS cert subject/SAN:"
+          timeout 12 openssl s_client -connect blofyplayer.com:443 -servername blofyplayer.com </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -dates -ext subjectAltName || true
