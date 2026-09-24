@@ -1,11 +1,11 @@
-# RC07.55 QA: favorites posters and durable local-first artwork
+# RC07.56 QA: exact rc07.55 app with Railway production endpoint cutover
 name: BLOFY rc07.56 Railway Cutover Production-Signed Test
 
 on:
   push:
-    branches: [fix/rc0756-favorites-artwork]
+    branches: [release/rc0756-railway-cutover]
     paths:
-      - .github/workflows/rc0756-signed-test.yml
+      - .github/workflows/rc0756-railway-cutover-test.yml
       - app/**
   workflow_dispatch:
 
