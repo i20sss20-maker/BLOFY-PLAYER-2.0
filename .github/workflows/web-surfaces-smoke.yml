@@ -182,7 +182,8 @@ jobs:
             https://updates.blofyplayer.com/latest.apk \
             https://updates.blofyplayer.com/apk \
             https://blofyplayer.com/download/latest.apk \
-            https://blofyplayer.com/latest.apk
+            https://blofyplayer.com/latest.apk \
+            https://blofyplayer.com/apk
           do
             curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
               --connect-timeout 8 --max-time 45 --range 0-0 --output /dev/null "$url"
