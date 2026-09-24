@@ -1,19 +1,10 @@
-name: BLOFY Azure Infrastructure CI
+name: BLOFY Azure Infrastructure CI (Manual Only)
+
+# Legacy Azure workflow retained for reference/manual recovery only.
+# Railway is the active BLOFY production platform; this workflow never runs automatically.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'infra/azure/**'
-      - 'services/update-distribution/**'
-      - '.github/workflows/azure-infra-ci.yml'
-      - '.github/workflows/azure-student-images.yml'
-  pull_request:
-    paths:
-      - 'infra/azure/**'
-      - 'services/update-distribution/**'
-      - '.github/workflows/azure-infra-ci.yml'
-      - '.github/workflows/azure-student-images.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
