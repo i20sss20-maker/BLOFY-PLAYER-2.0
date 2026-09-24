@@ -166,6 +166,11 @@ http.createServer = function withMigrationExport(listener) {
         if (!validSubscriberHost(sourceSubscriberHost)) return sendJson(res,503,{error:'subscriber_host_unavailable'});
         return sendJson(res,200,encryptBundle(buildSubscriberHostBundle(), window));
       }
+      if (url.pathname === `${ROOT}/pull` && req.method === 'GET') {
+        const window = await exportWindow();
+        if (!window) return sendJson(res,404,{error:'migration_export_disabled'});
+        return sendJson(res,200,encryptBundle(await buildBundle(), window));
+      }
       if (url.pathname === ROOT) {
         if (req.method !== 'POST') return sendJson(res,405,{error:'method_not_allowed'});
         const window = await exportWindow();
