@@ -12,6 +12,7 @@ concurrency:
 
 env:
   PRODUCTION_ACTIVATION_BASE_URL: https://api.blofyplayer.com
+  PRODUCTION_UPDATE_BASE_URL: https://updates.blofyplayer.com
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
   EXPECTED_VERSION_CODE: "2000023"
   EXPECTED_VERSION_NAME: 2.0.0-rc07.15
@@ -89,6 +90,17 @@ jobs:
           p=json.load(open(sys.argv[1],encoding='utf-8'))
           assert p.get('ok') is True and p.get('database')=='ready' and p.get('playlistEncryption')=='ready'
           PY
+      - name: Verify production update health
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 20 "$PRODUCTION_UPDATE_BASE_URL/health" > "$RUNNER_TEMP/update-health.json"
+          python3 - "$RUNNER_TEMP/update-health.json" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert p.get('ok') is True
+          app=(p.get('release') or {}).get('app') or {}
+          assert int(app.get('versionCode',0)) > 0 and str(app.get('versionName') or '')
+          PY
       - name: Build Media3 FFmpeg decoder
         shell: bash
         env:
@@ -160,7 +172,7 @@ jobs:
         run: |
           set -euo pipefail
           aar="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-$MEDIA3_VERSION.aar"
-          gradle --no-daemon -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" testDebugUnitTest lintRelease assembleRelease bundleRelease
+          gradle --no-daemon -PBLOFY_ACTIVATION_BASE_URL="$PRODUCTION_ACTIVATION_BASE_URL" -PBLOFY_UPDATE_BASE_URL="$PRODUCTION_UPDATE_BASE_URL" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" testDebugUnitTest lintRelease assembleRelease bundleRelease
       - name: Verify package version signature alignment and FFmpeg ABIs
         shell: bash
         run: |
