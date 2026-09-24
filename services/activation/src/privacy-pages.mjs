@@ -11,6 +11,7 @@ export async function servePrivacyPage(req,res,url) {
   const body=await readFile(new URL('../web/'+name,import.meta.url));
   res.writeHead(200,{'content-type':type,'content-length':body.length,'cache-control':'no-store',
     'x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY',
+    'permissions-policy':'camera=(), microphone=(), geolocation=()','strict-transport-security':'max-age=31536000',
     'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"});
   res.end(req.method==='HEAD'?undefined:body);return true;
 }
