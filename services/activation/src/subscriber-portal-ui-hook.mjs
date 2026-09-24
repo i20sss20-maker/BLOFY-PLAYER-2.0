@@ -287,7 +287,7 @@ ${allowRenewal ? renewalStyles : ''}
         if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
         else if (typeof event.stopPropagation === 'function') event.stopPropagation();
       }
-      void saveSubscriber();
+      return saveSubscriber();
     }, true);
   }
 ${allowRenewal ? renewalScript : ''}
