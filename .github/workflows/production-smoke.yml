@@ -74,7 +74,20 @@ jobs:
           print(f"download={update_app['downloadUrl']}")
           PY
 
-      - name: Verify active APK is reachable
+      - name: Verify public portal and stable updater URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          portal="$RUNNER_TEMP/blofy-portal.html"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 "$PORTAL_BASE_URL/" > "$portal"
+          grep -Eiq 'BLOFY|بلوفي' "$portal"
+
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 45 --range 0-0 --output /dev/null \
+            "$UPDATE_BASE_URL/download/latest.apk"
+
+      - name: Verify active GitHub release asset is reachable
         shell: bash
         run: |
           set -euo pipefail
