@@ -121,9 +121,9 @@ jobs:
           set -euo pipefail
           curl -fsS --max-time 15 "$BASE/sources-admin" -o /tmp/panel.html
           grep -Eq 'المصادر و Xtream|لوحة المصادر' /tmp/panel.html
-          grep -Eq 'Xtream Servers|سيرفر Xtream' /tmp/panel.html
+          grep -Eq 'سيرفرك الخاص|إضافة مصدر Xtream' /tmp/panel.html
           grep -q 'الكتالوج' /tmp/panel.html
-          grep -q 'سيرفر Xtream الخاص بك' /tmp/panel.html
+          grep -q 'بيانات السيرفر التي ستستخدمها في التطبيقات' /tmp/panel.html
           curl -fsS --max-time 15 "$BASE/sources-admin.js" -o /dev/null
           curl -fsS --max-time 15 "$BASE/xtream-gateway-admin.js" -o /dev/null
           curl -fsS --max-time 15 "$BASE/sources-admin.css" -o /dev/null
