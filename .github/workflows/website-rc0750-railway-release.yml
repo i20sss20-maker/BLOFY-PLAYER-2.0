@@ -81,22 +81,36 @@ jobs:
           u=json.loads((root/'update-health.json').read_text())
           assert a['ok'] is True
           assert u['ok'] is True
-          assert int(u['release']['app']['versionCode']) == 2000060
-          assert u['release']['app']['versionName'] == '2.0.0-rc07.49'
+          code=int(u['release']['app']['versionCode'])
+          name=u['release']['app']['versionName']
+          assert (code,name) in ((2000060,'2.0.0-rc07.49'),(2000061,'2.0.0-rc07.50'))
+          with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as handle:
+              handle.write(f"CURRENT_UPDATE_VERSION_CODE={code}\n")
           PY
 
-      - name: Reject already published rc07.50
+      - name: Detect already published rc07.50
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'Release 50 already exists; refusing overwrite.' >&2
-            exit 1
+            [[ "$CURRENT_UPDATE_VERSION_CODE" == "$RELEASE_VERSION_CODE" ]] || {
+              echo 'Release 50 exists but Railway is not serving it; refusing inconsistent state.' >&2
+              exit 1
+            }
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "$RELEASE_APK"
+            echo 'SKIP_RC0750_PUBLISH=1' >> "$GITHUB_ENV"
+            echo 'Release 50 already exists and Railway is already serving it; verification-only success path.'
+          else
+            [[ "$CURRENT_UPDATE_VERSION_CODE" != "$RELEASE_VERSION_CODE" ]] || {
+              echo 'Railway serves release 50 but the GitHub release is missing; refusing inconsistent state.' >&2
+              exit 1
+            }
           fi
 
       - name: Install Android native and signing toolchain
+        if: env.SKIP_RC0750_PUBLISH != '1'
         shell: bash
         run: |
           set -euo pipefail
@@ -106,6 +120,7 @@ jobs:
           command -v ninja >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y ninja-build; }
 
       - name: Decode and verify production signing key
+        if: env.SKIP_RC0750_PUBLISH != '1'
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
@@ -124,6 +139,7 @@ jobs:
           [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
 
       - name: Build unchanged Media3 FFmpeg decoder
+        if: env.SKIP_RC0750_PUBLISH != '1'
         shell: bash
         env:
           ENABLED_DECODERS: ${{ env.FFMPEG_DECODERS }}
@@ -137,6 +153,7 @@ jobs:
           test -s "$aar" && sha256sum --check "$aar.sha256"
 
       - name: Test lint and build signed rc07.50 APK
+        if: env.SKIP_RC0750_PUBLISH != '1'
         shell: bash
         env:
           BLOFY_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/blofy-production.keystore
@@ -156,6 +173,7 @@ jobs:
             testReleaseUnitTest lintRelease assembleRelease
 
       - name: Verify identity signature and direct update over rc07.49
+        if: env.SKIP_RC0750_PUBLISH != '1'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -184,6 +202,7 @@ jobs:
           (cd release && sha256sum "$RELEASE_APK" > SHA256SUMS && sha256sum --check SHA256SUMS)
 
       - uses: actions/upload-artifact@v4
+        if: env.SKIP_RC0750_PUBLISH != '1'
         with:
           name: BLOFY-PLAYER-2.0-rc07.50-railway-updater-${{ env.SOURCE_SHA }}
           path: release/
@@ -191,6 +210,7 @@ jobs:
           retention-days: 30
 
       - name: Publish verified rc07.50 external APK
+        if: env.SKIP_RC0750_PUBLISH != '1'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
