@@ -11,6 +11,9 @@
 - Updates: `https://updates.blofyplayer.com`
 - Strict TLS and production smoke checks: passing
 - Railway activation, update distribution, and Postgres deployments: healthy
+- Final website recovery branch: `baseline/websites-final-20260925`
+- Final update-center recovery branch: `baseline/update-center-final-20260925`
+- Public web smoke coverage: root, device portal, downloads, privacy, admin, sources admin, manifest, robots, sitemap, update center, stable APK link
 
 This runbook reflects the current temporary production topology after the Railway cutover.
 
