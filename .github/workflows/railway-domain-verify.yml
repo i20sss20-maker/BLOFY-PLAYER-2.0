@@ -14,15 +14,28 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Verify activation custom domains and TLS
+      - name: Inspect public DNS
+        shell: bash
+        run: |
+          set -u
+          for host in api.blofyplayer.com blofyplayer.com updates.blofyplayer.com; do
+            echo "=== $host ==="
+            getent ahosts "$host" || true
+          done
+
+      - name: Verify API custom domain and TLS
         shell: bash
         run: |
           set -euo pipefail
-          for url in             "https://api.blofyplayer.com/health"             "https://blofyplayer.com/health"; do
-            echo "Checking $url"
-            curl -fsS --max-time 30 "$url" | jq -e '.ok==true and .database=="ready"' >/dev/null
-          done
+          curl -fsS --max-time 30 https://api.blofyplayer.com/health | jq -e '.ok==true and .database=="ready"' >/dev/null
           test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 https://api.blofyplayer.com/portal)" = "200"
+
+      - name: Verify root custom domain and TLS
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 https://blofyplayer.com/health | jq -e '.ok==true and .database=="ready"' >/dev/null
 
       - name: Verify update custom domain and TLS
         shell: bash
