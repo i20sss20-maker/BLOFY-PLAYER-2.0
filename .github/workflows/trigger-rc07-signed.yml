@@ -3,6 +3,15 @@ name: Trigger BLOFY RC07 Signed Release
 on:
   push:
     branches: [rc07-commercial-stability]
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/rc07-release.yml'
 
 permissions:
   actions: write
