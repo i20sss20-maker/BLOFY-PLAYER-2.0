@@ -277,12 +277,18 @@ ${allowRenewal ? renewalStyles : ''}
     var select = qs('providerType');
     if (!button || !select || button.dataset.blofySubscriberInterceptorV5) return;
     button.dataset.blofySubscriberInterceptorV5 = '1';
-    button.addEventListener('click', async function (event) {
-      if (select.value !== 'blofy') return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      await saveSubscriber();
-    }, true);
+    var originalOnclick = button.onclick;
+    button.onclick = async function (event) {
+      if (select.value === 'blofy') {
+        if (event) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        await saveSubscriber();
+        return false;
+      }
+      if (typeof originalOnclick === 'function') return originalOnclick.call(this, event);
+    };
   }
 ${allowRenewal ? renewalScript : ''}
   function install() {
