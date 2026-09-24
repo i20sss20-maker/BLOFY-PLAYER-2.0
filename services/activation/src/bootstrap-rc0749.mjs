@@ -1,6 +1,7 @@
 // Vercel/rollback bootstrap. Load a persisted production data key when present.
 import { installPersistedDataKey } from './data-key-state.mjs';
 await installPersistedDataKey();
+await import('./railway-db-audit.mjs');
 
 await import('./migration-export-hook.mjs');
 await import('./migration-import-hook.mjs');
