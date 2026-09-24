@@ -131,6 +131,12 @@ jobs:
           grep -Eiq '^permissions-policy:.*camera=\(\).*microphone=\(\).*geolocation=\(\)' "$tmp/root.headers"
           grep -Eiq '^x-frame-options: *DENY' "$tmp/root.headers"
 
+          api_root_status="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 -D "$tmp/api-root.headers" -o /dev/null -w '%{http_code}' \
+            https://api.blofyplayer.com/)"
+          test "$api_root_status" = "308"
+          grep -Eiq '^location: *https://blofyplayer\.com/' "$tmp/api-root.headers"
+
           status="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 -o "$tmp/404.html" -w '%{http_code}' \
             https://blofyplayer.com/__blofy_missing_route__)"
