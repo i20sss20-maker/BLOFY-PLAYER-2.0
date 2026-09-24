@@ -48,11 +48,16 @@ jobs:
           echo "login_server=$LOGIN_SERVER" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
 
-      - name: Login to ACR without ACR Tasks
+      - name: Restore ACR network access and login
         shell: bash
         run: |
           set -euo pipefail
-          az acr login --name '${{ steps.azure.outputs.acr }}'
+          ACR='${{ steps.azure.outputs.acr }}'
+          # main.bicep declares the production registry public with the default
+          # network action Allow. Re-assert that desired state before a hosted
+          # GitHub runner pushes the replacement images.
+          az acr update --name "$ACR" --public-network-enabled true --default-action Allow --only-show-errors >/dev/null
+          az acr login --name "$ACR"
 
       - name: Build and push BLOFY images
         shell: bash
