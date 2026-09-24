@@ -21,6 +21,12 @@ test('Vercel metadata contains only public service and app fields', () => {
   assert.equal(JSON.stringify(metadata).includes('must-not-be-exposed'),false);
   assert.deepEqual(Object.keys(metadata.app).sort(),['downloadUrl','minSupportedVersionCode','releaseNotes','versionCode','versionName']);
 });
+test('Railway metadata exposes only the public deployment commit', () => {
+  const commitSha='1234567890abcdef1234567890abcdef12345678';
+  const metadata=activationReleaseMetadata({RAILWAY_GIT_COMMIT_SHA:commitSha.toUpperCase(),DATABASE_URL:'postgresql://user:secret@example.invalid/db'});
+  assert.deepEqual(metadata,{service:'blofy-activation',version:ACTIVATION_SERVICE_VERSION,platform:'railway',commitSha,app:appReleaseMetadata({})});
+  assert.equal(JSON.stringify(metadata).includes('secret'),false);
+});
 test('self-hosted metadata includes the published default app without leaking environment', () => {
   const commitSha='fedcba9876543210fedcba9876543210fedcba98';
   assert.deepEqual(activationReleaseMetadata({BLOFY_RELEASE_COMMIT_SHA:commitSha}),{service:'blofy-activation',version:ACTIVATION_SERVICE_VERSION,platform:'self-hosted',commitSha,app:appReleaseMetadata({})});
