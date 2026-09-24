@@ -32,9 +32,9 @@ export function renderPublicDownloads(items = [], { unavailable = false } = {}) 
   return `<!doctype html>
 <html lang="ar" dir="rtl"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#07070d">
-<title>BLOFY | مركز التحميل</title><link rel="stylesheet" href="/premium.css"><link rel="stylesheet" href="/release-manager.css">
+<meta name="description" content="مركز BLOFY PLAYER الرسمي لتحميل التطبيق ومعرفة آخر إصدار وطريقة التثبيت."><title>BLOFY | مركز التحميل</title><link rel="stylesheet" href="/premium.css"><link rel="stylesheet" href="/release-manager.css"><link rel="stylesheet" href="/site-polish.css">
 </head><body data-page="downloads-static"><div class="wrap">
-<header class="nav"><a class="brand" href="/downloads"><img src="/blofy-logo.png" alt="">BLOFY PLAYER</a><nav class="nav-links" aria-label="روابط الموقع"><a href="/connect">ربط جهازك</a><a href="/privacy">الخصوصية</a></nav></header>
+<header class="nav"><a class="brand" href="/"><img src="/blofy-logo.png" alt="">BLOFY PLAYER</a><nav class="nav-links" aria-label="روابط الموقع"><a href="/">الرئيسية</a><a href="/connect">ربط جهازك</a><a href="/privacy">الخصوصية</a><a class="btn primary" href="https://updates.blofyplayer.com" rel="noopener">آخر إصدار</a></nav></header>
 <main class="download-page"><section class="download-hero" aria-labelledby="download-title"><span class="eyebrow">OFFICIAL DOWNLOAD CENTER</span>
 <h1 id="download-title">نزّل BLOFY PLAYER</h1><p class="download-intro">نسخة أندرويد الرسمية للتلفزيون والرسيفر والجوال، من مكان واحد واضح.</p>
 ${primary && !unavailable ? `<a id="download-primary" class="btn primary download-main" href="/download/latest.apk"><span>تنزيل التطبيق الآن</span><span class="download-version" dir="ltr">${escapeHtml(primary.versionName)} · APK</span></a><p class="download-assurance">للتحديث: ثبّت فوق النسخة الحالية ولا تحذف التطبيق القديم.</p>` : ''}
@@ -47,7 +47,7 @@ ${primary && !unavailable ? `<a id="download-primary" class="btn primary downloa
 <section id="install-phone" class="card section"><h3>جوال / تابلت أندرويد</h3><ol><li>حمّل ملف APK من الإصدار الذي تختاره أعلاه.</li><li>افتح الملف وامنح إذن التثبيت عند الطلب.</li><li>ثبّت التطبيق أو حدّث نسختك الحالية، ثم افتح BLOFY.</li></ol></section>
 <section id="install-computer" class="card section"><h3>كمبيوتر</h3><p>هذه نسخة أندرويد APK وليست برنامج ويندوز. تشغيلها على الكمبيوتر يحتاج محاكي أندرويد.</p></section>
 </section><div class="notice">تفعيل تطبيق BLOFY وصلاحية اشتراك البث منفصلان.</div></main>
-<footer class="foot"><a href="/downloads">BLOFY PLAYER</a><a href="/privacy">الخصوصية وحذف البيانات</a><a href="/connect">إدارة جهازك</a></footer></div></body></html>`;
+<footer class="foot"><a href="/">BLOFY PLAYER</a><a href="/downloads">التحميل</a><a href="/privacy">الخصوصية وحذف البيانات</a><a href="/connect">إدارة جهازك</a><a href="https://updates.blofyplayer.com" rel="noopener">مركز الإصدارات</a></footer></div></body></html>`;
 }
 
 export async function servePublicDownloads(req, res, pathname, { list, onError = () => {}, timeoutMs = 8000 }) {
