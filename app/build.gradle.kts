@@ -1,6 +1,8 @@
 import java.net.URI
 import com.android.build.gradle.internal.tasks.L8DexDesugarLibTask
 
+// RC07.56 Railway cutover build: endpoints are injected by CI; playback code is unchanged.
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
