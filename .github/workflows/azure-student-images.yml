@@ -1,14 +1,10 @@
-name: BLOFY Azure Student Images
+name: BLOFY Legacy Azure Images (Manual Only)
+
+# Legacy fallback only. Railway is the active BLOFY production platform.
+# This workflow must never deploy automatically from main.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/azure-student-images.yml'
-      - 'infra/azure/managed/image-build.trigger'
-      - 'services/activation/**'
-      - 'services/update-distribution/**'
-      - 'infra/azure/managed/gateway/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -113,7 +109,7 @@ jobs:
             --mode multiple \
             --only-show-errors >/dev/null
 
-          az containerapp update --resource-group "$AZURE_RG" --name blofy-activation --image "$REG/blofy/activation:$TAG" --set-env-vars BLOFY_SUBSCRIBER_BOOTSTRAP_URL=https://blofy-player-2-0.vercel.app BLOFY_RENEWAL_WHATSAPP=966568941484 --only-show-errors >/dev/null
+          az containerapp update --resource-group "$AZURE_RG" --name blofy-activation --image "$REG/blofy/activation:$TAG" --set-env-vars BLOFY_SUBSCRIBER_BOOTSTRAP_URL=https://blofyplayer.com BLOFY_RENEWAL_WHATSAPP=966568941484 --only-show-errors >/dev/null
           az containerapp update --resource-group "$AZURE_RG" --name blofy-releases --image "$REG/blofy/releases:$TAG" --only-show-errors >/dev/null
           az containerapp update --resource-group "$AZURE_RG" --name blofy-gateway --image "$REG/blofy/gateway:$TAG" --only-show-errors >/dev/null
 
