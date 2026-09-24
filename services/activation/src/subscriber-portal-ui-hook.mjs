@@ -281,8 +281,8 @@ ${allowRenewal ? renewalStyles : ''}
     button.onclick = async function (event) {
       if (select.value === 'blofy') {
         if (event) {
-          event.preventDefault();
-          event.stopPropagation();
+          if (typeof event.preventDefault === 'function') event.preventDefault();
+          if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
         }
         await saveSubscriber();
         return false;
