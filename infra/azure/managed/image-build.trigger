@@ -1,2 +1,2 @@
-2026-09-24T15:52:00Z
-restore blofy Azure Container Apps production revisions
+2026-09-24T16:15:00Z
+retry after Azure subscription payment method update
