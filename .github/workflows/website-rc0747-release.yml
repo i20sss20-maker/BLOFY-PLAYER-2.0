@@ -15,7 +15,7 @@ concurrency:
 
 env:
   SOURCE_BRANCH: release/rc0749-stable46
-  PRODUCTION_ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
+  PRODUCTION_ACTIVATION_BASE_URL: https://api.blofyplayer.com
   RELEASE_VERSION_CODE: "2000060"
   RELEASE_VERSION_NAME: 2.0.0-rc07.49
   RELEASE_TAG: v2.0.0-rc07.49
