@@ -1,10 +1,10 @@
-name: BLOFY Azure Post Migration Verify
+name: BLOFY Azure Post Migration Verify (Manual Only)
+
+# Legacy Azure workflow retained for reference/manual recovery only.
+# Railway is the active BLOFY production platform; this workflow never runs automatically.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'ops/azure-post-migration-verify.run'
+  workflow_dispatch:
 
 permissions:
   contents: write
