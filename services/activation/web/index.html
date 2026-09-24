@@ -1253,7 +1253,7 @@
       try { window[kind].removeItem(key); } catch (_) {}
     }
     function activationFromLink() {
-      // QR credentials live in the URL fragment so they never reach HTTP/Vercel logs.
+      // QR credentials live in the URL fragment so they never reach HTTP server logs.
       const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
       const hasActivationParams = params.has("deviceId") || params.has("code") || params.has("activationCode");
       if (!hasActivationParams) return undefined;
