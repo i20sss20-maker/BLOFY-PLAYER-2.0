@@ -35,7 +35,10 @@ async function markApplied(pool, tokenHash) {
 }
 
 async function pullOnce() {
-  if (!enabled()) return { skipped:true, reason:'disabled' };
+  if (!enabled()) {
+    console.log(`BLOFY Railway migration pull config: source=${Boolean(sourceUrl)} tokenLength=${pullToken.length} database=${Boolean(databaseUrl)}`);
+    return { skipped:true, reason:'disabled' };
+  }
   const tokenHash = crypto.createHash('sha256').update(pullToken).digest('hex');
   const pool = new Pool({
     ...databaseOptions(databaseUrl),
