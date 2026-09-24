@@ -1,11 +1,23 @@
 # BLOFY PLAYER 2.0 — Production deployment runbook
 
+## 0. Current verified baseline
+
+- Verified release: `2.0.0-rc07.56`
+- Version code: `2000068`
+- Git tag: `v2.0.0-rc07.56`
+- Recovery branch: `baseline/rc0756-railway-cutover`
+- Activation/API: `https://api.blofyplayer.com`
+- Portal/root: `https://blofyplayer.com`
+- Updates: `https://updates.blofyplayer.com`
+- Strict TLS and production smoke checks: passing
+- Railway activation, update distribution, and Postgres deployments: healthy
+
 This runbook reflects the current temporary production topology after the Railway cutover.
 
 ## 1. Current production topology
 
 - Public activation/API origin: `https://api.blofyplayer.com`
-- Public portal/root origin: `https://blofyplayer.com`
+- Public portal/root origin: `https://blofyplayer.com` (DNS + TLS verified)
 - Public update origin: `https://updates.blofyplayer.com`
 - Railway project: `BLOFY-Update-Distribution`
 - Activation service: `blofy-activation-portal`
