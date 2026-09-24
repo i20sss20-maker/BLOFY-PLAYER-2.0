@@ -56,7 +56,7 @@ jobs:
           # main.bicep declares the production registry public with the default
           # network action Allow. Re-assert that desired state before a hosted
           # GitHub runner pushes the replacement images.
-          az acr update --name "$ACR" --public-network-enabled true --default-action Allow --only-show-errors >/dev/null
+          az acr update --name "$ACR" --public-network-enabled true --only-show-errors >/dev/null
           az acr login --name "$ACR"
 
       - name: Build and push BLOFY images
