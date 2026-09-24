@@ -3,6 +3,7 @@ package tv.blofy.player.ui.settings
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -21,13 +22,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.update.BlofyUpdateClient
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.login.LoginActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 
 class SettingsActivity : AppCompatActivity() {
@@ -116,6 +120,8 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting("▶  الحلقة التالية", KEY_AUTO_NEXT, arrayOf("ask", "on", "off"), arrayOf("اسألني", "تلقائي", "إيقاف")))
         addCard(cycleSetting("✦  حركة الواجهة", KEY_MOTION, arrayOf("smooth", "reduced"), arrayOf("سلسة", "خفيفة")))
         addCard(actionCard("🌐  لغة التطبيق", currentLanguageLabel()) { chooseLanguage() })
+        addCard(actionCard("▣  ربط الجهاز", "QR ورقم الجهاز ورمز الربط") { startActivity(Intent(this, LoginActivity::class.java)) })
+        addCard(actionCard("⇧  فحص التحديث", "تحقق من آخر إصدار رسمي") { checkForUpdate() })
         addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
         addCard(actionCard("↻  تحديث المحتوى", "يدوي عند الحاجة فقط") { refreshLibrary() })
         storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
@@ -203,6 +209,59 @@ class SettingsActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(active) }
             }.onSuccess { status.text = "✓  اكتمل تحديث القنوات والأفلام والمسلسلات" }
                 .onFailure { status.text = "تعذر التحديث — البيانات المحفوظة بقيت كما هي" }
+        }
+    }
+
+    private fun checkForUpdate() {
+        val endpoint = BuildConfig.UPDATE_BASE_URL.trim()
+        if (endpoint.isBlank()) {
+            status.text = "خدمة التحديث غير مضبوطة"
+            return
+        }
+        status.text = "جاري فحص آخر إصدار رسمي..."
+        lifecycleScope.launch {
+            runCatching { BlofyUpdateClient.fetch(endpoint) }
+                .onSuccess { info ->
+                    if (BlofyUpdateClient.isUpdateAvailable(BuildConfig.VERSION_CODE, info)) {
+                        status.text = "يتوفر تحديث • " + info.versionName
+                        val notes = info.releaseNotes?.take(900)?.takeIf { it.isNotBlank() }
+                        val message = buildString {
+                            append("نسختك الحالية: ")
+                            append(BuildConfig.VERSION_NAME)
+                            append("\nالإصدار الجديد: ")
+                            append(info.versionName)
+                            if (notes != null) {
+                                append("\n\n")
+                                append(notes)
+                            }
+                        }
+                        AlertDialog.Builder(this@SettingsActivity)
+                            .setTitle("تحديث BLOFY PLAYER متوفر")
+                            .setMessage(message)
+                            .setPositiveButton("تحميل التحديث") { _, _ -> openWeb(info.downloadUrl) }
+                            .setNeutralButton("مركز التحميل") { _, _ -> openWeb("https://blofyplayer.com/downloads") }
+                            .setNegativeButton("لاحقًا", null)
+                            .show()
+                    } else {
+                        status.text = "✓  أنت على أحدث إصدار • " + BuildConfig.VERSION_NAME
+                        AlertDialog.Builder(this@SettingsActivity)
+                            .setTitle("BLOFY PLAYER محدّث")
+                            .setMessage("نسختك الحالية هي أحدث إصدار رسمي متاح.")
+                            .setPositiveButton("حسنًا", null)
+                            .show()
+                    }
+                }
+                .onFailure {
+                    status.text = "تعذر فحص التحديث • حاول مرة أخرى"
+                }
+        }
+    }
+
+    private fun openWeb(url: String) {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.onFailure {
+            status.text = "تعذر فتح الرابط على هذا الجهاز"
         }
     }
 
