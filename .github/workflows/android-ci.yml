@@ -128,7 +128,7 @@ jobs:
         run: |
           set -o pipefail
           gradle --no-daemon \
-            -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
             testDebugUnitTest lintDebug assembleDebug 2>&1 | tee gradle-ci.log
       - name: Upload Gradle diagnostics
         if: always()
@@ -153,7 +153,7 @@ jobs:
             echo "commit=$GITHUB_SHA"
             echo "run=$GITHUB_RUN_NUMBER"
             echo "ffmpeg=false"
-            echo "activation=https://blofy-player-2-0.vercel.app"
+            echo "activation=https://api.blofyplayer.com"
             echo "home_snapshot=true"
             echo "home_bounded_cache=true"
             echo "catalog_streaming=true"
