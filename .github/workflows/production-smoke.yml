@@ -1,0 +1,70 @@
+name: BLOFY Production Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/production-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blofy-production-smoke
+  cancel-in-progress: true
+
+env:
+  ACTIVATION_BASE_URL: https://api.blofyplayer.com
+  PORTAL_BASE_URL: https://blofyplayer.com
+  UPDATE_BASE_URL: https://updates.blofyplayer.com
+  EXPECTED_VERSION_CODE: "2000068"
+  EXPECTED_VERSION_NAME: 2.0.0-rc07.56
+  EXPECTED_RELEASE_APK: BLOFY-PLAYER-2.0-rc07.56-PRODUCTION-SIGNED.apk
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify activation portal and update distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/blofy-smoke"
+          mkdir -p "$tmp"
+
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "$ACTIVATION_BASE_URL/health" > "$tmp/api.json"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "$PORTAL_BASE_URL/health" > "$tmp/root.json"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "$UPDATE_BASE_URL/health" > "$tmp/updates.json"
+
+          python3 - "$tmp/api.json" "$tmp/root.json" "$tmp/updates.json" <<'PY'
+          import json, os, sys
+          api=json.load(open(sys.argv[1],encoding='utf-8'))
+          root=json.load(open(sys.argv[2],encoding='utf-8'))
+          upd=json.load(open(sys.argv[3],encoding='utf-8'))
+
+          for payload in (api, root):
+              assert payload.get('ok') is True
+              assert payload.get('database') == 'ready'
+              assert payload.get('playlistEncryption') == 'ready'
+
+          assert upd.get('ok') is True
+          app=(upd.get('release') or {}).get('app') or {}
+          assert int(app.get('versionCode',0)) == int(os.environ['EXPECTED_VERSION_CODE'])
+          assert app.get('versionName') == os.environ['EXPECTED_VERSION_NAME']
+          url=str(app.get('downloadUrl') or '')
+          assert url.startswith('https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/')
+          assert url.endswith('/'+os.environ['EXPECTED_RELEASE_APK'])
+          print('BLOFY production smoke OK')
+          print('activation=ready')
+          print('portal=ready')
+          print(f"update={app.get('versionName')} ({app.get('versionCode')})")
+          PY
+
+      - name: Verify current release asset is reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.56/$EXPECTED_RELEASE_APK"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 45 --range 0-0 --output /dev/null "$url"
