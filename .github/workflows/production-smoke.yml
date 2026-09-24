@@ -1,10 +1,6 @@
 name: BLOFY Production Smoke
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/production-smoke.yml
   workflow_dispatch:
 
 permissions:
@@ -18,37 +14,13 @@ env:
   ACTIVATION_BASE_URL: https://api.blofyplayer.com
   PORTAL_BASE_URL: https://blofyplayer.com
   UPDATE_BASE_URL: https://updates.blofyplayer.com
-  EXPECTED_VERSION_CODE: "2000068"
-  EXPECTED_VERSION_NAME: 2.0.0-rc07.56
-  EXPECTED_RELEASE_APK: BLOFY-PLAYER-2.0-rc07.56-PRODUCTION-SIGNED.apk
 
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Diagnose public DNS and root routing
-        shell: bash
-        run: |
-          set -u
-          for host in api.blofyplayer.com blofyplayer.com updates.blofyplayer.com; do
-            echo "=== $host ==="
-            getent ahosts "$host" || true
-            curl --silent --show-error --max-time 10 \
-              -H 'accept: application/dns-json' \
-              "https://cloudflare-dns.com/dns-query?name=$host&type=A" || true
-            echo
-            curl --silent --show-error --max-time 10 \
-              -H 'accept: application/dns-json' \
-              "https://cloudflare-dns.com/dns-query?name=$host&type=CNAME" || true
-            echo
-          done
-          echo "=== root HTTPS routing while certificate provisions ==="
-          curl --insecure --silent --show-error --max-time 15 \
-            --write-out '\nHTTP_STATUS=%{http_code}\n' \
-            "$PORTAL_BASE_URL/health" || true
-
-      - name: Verify activation portal and update distribution
+      - name: Verify BLOFY production endpoints
         shell: bash
         run: |
           set -euo pipefail
@@ -57,49 +29,53 @@ jobs:
 
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "$ACTIVATION_BASE_URL/health" > "$tmp/api.json"
-
-          portal_ok=0
-          for attempt in $(seq 1 20); do
-            if curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-              --connect-timeout 8 --max-time 30 "$PORTAL_BASE_URL/health" > "$tmp/root.json"; then
-              portal_ok=1
-              break
-            fi
-            echo "Root TLS is still provisioning (attempt $attempt/20); retrying in 30s..."
-            sleep 30
-          done
-          [[ "$portal_ok" -eq 1 ]] || { echo "::error::Root domain TLS did not become ready within 10 minutes"; exit 1; }
-
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 "$PORTAL_BASE_URL/health" > "$tmp/root.json"
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "$UPDATE_BASE_URL/health" > "$tmp/updates.json"
 
           python3 - "$tmp/api.json" "$tmp/root.json" "$tmp/updates.json" <<'PY'
-          import json, os, sys
+          import json, sys
+
           api=json.load(open(sys.argv[1],encoding='utf-8'))
           root=json.load(open(sys.argv[2],encoding='utf-8'))
-          upd=json.load(open(sys.argv[3],encoding='utf-8'))
+          updates=json.load(open(sys.argv[3],encoding='utf-8'))
 
-          for payload in (api, root):
-              assert payload.get('ok') is True
-              assert payload.get('database') == 'ready'
-              assert payload.get('playlistEncryption') == 'ready'
+          for name,payload in (('api',api),('root',root)):
+              assert payload.get('ok') is True, f'{name}: ok != true'
+              assert payload.get('database') == 'ready', f'{name}: database not ready'
+              assert payload.get('playlistEncryption') == 'ready', f'{name}: playlist encryption not ready'
 
-          assert upd.get('ok') is True
-          app=(upd.get('release') or {}).get('app') or {}
-          assert int(app.get('versionCode',0)) == int(os.environ['EXPECTED_VERSION_CODE'])
-          assert app.get('versionName') == os.environ['EXPECTED_VERSION_NAME']
-          url=str(app.get('downloadUrl') or '')
-          assert url.startswith('https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/')
-          assert url.endswith('/'+os.environ['EXPECTED_RELEASE_APK'])
+          assert updates.get('ok') is True, 'updates: ok != true'
+
+          api_app=(api.get('release') or {}).get('app') or {}
+          root_app=(root.get('release') or {}).get('app') or {}
+          update_app=(updates.get('release') or {}).get('app') or {}
+
+          for app in (api_app,root_app,update_app):
+              assert int(app.get('versionCode',0)) > 0
+              assert str(app.get('versionName') or '')
+              assert str(app.get('downloadUrl') or '').startswith(
+                  'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/'
+              )
+
+          expected=(update_app['versionCode'],update_app['versionName'],update_app['downloadUrl'])
+          assert (api_app['versionCode'],api_app['versionName'],api_app['downloadUrl']) == expected
+          assert (root_app['versionCode'],root_app['versionName'],root_app['downloadUrl']) == expected
+
           print('BLOFY production smoke OK')
           print('activation=ready')
           print('portal=ready')
-          print(f"update={app.get('versionName')} ({app.get('versionCode')})")
+          print(f"update={update_app['versionName']} ({update_app['versionCode']})")
+          print(f"download={update_app['downloadUrl']}")
           PY
 
-      - name: Verify current release asset is reachable
+      - name: Verify active APK is reachable
         shell: bash
         run: |
           set -euo pipefail
-          url="https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.56/$EXPECTED_RELEASE_APK"
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 45 --range 0-0 --output /dev/null "$url"
+          release_url="$(curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 "$UPDATE_BASE_URL/health" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['release']['app']['downloadUrl'])")"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 45 --range 0-0 --output /dev/null "$release_url"
