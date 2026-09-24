@@ -4,7 +4,6 @@ await installPersistedDataKey();
 
 await import('./migration-export-hook.mjs');
 await import('./migration-import-hook.mjs');
-await import('./migration-pull-once.mjs');
 await import('./subscriber-proxy-hook.mjs');
 await import('./portal-existing-device-login.mjs');
 await import('./subscriber-portal-ui-hook.mjs');
