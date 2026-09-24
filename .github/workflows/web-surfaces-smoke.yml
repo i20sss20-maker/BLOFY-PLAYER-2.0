@@ -12,6 +12,7 @@ on:
       - services/activation/src/server.mjs
       - services/activation/src/sources-admin-hook.mjs
       - services/activation/src/privacy-pages.mjs
+      - services/activation/src/release-metadata.mjs
       - .github/workflows/web-surfaces-smoke.yml
   workflow_dispatch:
 
@@ -23,6 +24,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - name: Wait for Railway production commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          health="$RUNNER_TEMP/railway-health.json"
+          for attempt in $(seq 1 36); do
+            if curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              --connect-timeout 8 --max-time 20 https://api.blofyplayer.com/health > "$health"
+            then
+              live="$(python3 - "$health" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          print((p.get('release') or {}).get('commitSha') or '')
+          PY
+              )"
+              if [ "$live" = "$GITHUB_SHA" ]; then
+                echo "Railway production is on $live"
+                exit 0
+              fi
+              echo "Waiting for Railway deployment: live=$live expected=$GITHUB_SHA attempt=$attempt/36"
+            fi
+            sleep 5
+          done
+          echo "::error::Railway production did not reach commit $GITHUB_SHA"
+          test -f "$health" && cat "$health" || true
+          exit 1
+
       - name: Verify public BLOFY web surfaces
         shell: bash
         run: |
