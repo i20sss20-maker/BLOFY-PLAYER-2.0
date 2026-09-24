@@ -11,6 +11,8 @@ test('remote PostgreSQL always verifies TLS even when URL options request weaker
   assert.throws(()=>databaseOptions('postgres://db.example.test/data?sslmode=disable',{},{}),/requires_verified_tls/);
   assert.throws(()=>databaseOptions('postgres://db.example.test/data',{}, {PGSSLMODE:'disable'}),/requires_verified_tls/);
   assert.equal(databaseOptions('postgres://127.0.0.1/test',{}, {PGSSLMODE:'disable'}).ssl,false);
+  assert.equal(databaseOptions('postgres://postgres:secret@Postgres.railway.internal:5432/railway',{}, {PGSSLMODE:'disable'}).ssl,false);
+  assert.throws(()=>databaseOptions('postgres://evilrailway.internal.example/data',{}, {PGSSLMODE:'disable'}),/requires_verified_tls/);
 });
 test('CA configuration is explicit and cannot be disabled through overrides',()=>{
   const ca='-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----';
