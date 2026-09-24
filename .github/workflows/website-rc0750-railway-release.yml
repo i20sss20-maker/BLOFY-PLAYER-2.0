@@ -15,8 +15,8 @@ concurrency:
 
 env:
   SOURCE_BRANCH: release/rc0750-railway-updater
-  PRODUCTION_ACTIVATION_BASE_URL: https://blofy-player-2-0.vercel.app
-  PRODUCTION_UPDATE_BASE_URL: https://blofy-update-distribution-production.up.railway.app
+  PRODUCTION_ACTIVATION_BASE_URL: https://api.blofyplayer.com
+  PRODUCTION_UPDATE_BASE_URL: https://updates.blofyplayer.com
   RELEASE_VERSION_CODE: "2000061"
   RELEASE_VERSION_NAME: 2.0.0-rc07.50
   RELEASE_TAG: v2.0.0-rc07.50
@@ -198,7 +198,7 @@ jobs:
           set -euo pipefail
           remote_source="$(git ls-remote origin "refs/heads/$SOURCE_BRANCH" | awk '{print $1}')"
           [[ "$remote_source" == "$SOURCE_SHA" ]] || { echo 'Source branch advanced; refusing stale publication' >&2; exit 1; }
-          notes='BLOFY PLAYER 50 — جسر فصل قناة التحديث الخارجي. التفعيل والبوابة يبقيان على Vercel كما هما، بينما فحص تحديث النسخة الخارجية يستخدم Railway. لم يتم تغيير Media3 أو FFmpeg أو fallback أو مسارات ومحركات التشغيل أو الثيم. تم التحقق من اسم الحزمة وشهادة الإنتاج وأن النسخة تثبت كتحديث فوق 49.'
+          notes='BLOFY PLAYER 50 — جسر فصل قناة التحديث الخارجي. التفعيل والبوابة يستخدمان نطاق BLOFY على Railway مؤقتًا، وقناة التحديث الخارجية تستخدم نطاق BLOFY المخصص على Railway. لم يتم تغيير Media3 أو FFmpeg أو fallback أو مسارات ومحركات التشغيل أو الثيم. تم التحقق من اسم الحزمة وشهادة الإنتاج وأن النسخة تثبت كتحديث فوق 49.'
           gh release create "$RELEASE_TAG" "release/$RELEASE_APK" release/SHA256SUMS release/apk-badging.txt release/apk-signature.txt release/apk-alignment.txt \
             --title 'BLOFY PLAYER 50 — Railway Updater Bridge' --notes "$notes" --target "$SOURCE_SHA" --latest --repo "$GITHUB_REPOSITORY"
 
