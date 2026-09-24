@@ -11,9 +11,9 @@
 - Updates: `https://updates.blofyplayer.com`
 - Strict TLS and production smoke checks: passing
 - Railway activation, update distribution, and Postgres deployments: healthy
-- Final website recovery branch: `baseline/websites-final-20260924`
-- Final update-service recovery branch: `baseline/update-service-final-20260924`
-- Final downloads-preview recovery branch: `baseline/downloads-preview-final-20260924`
+- Final website recovery branch: `baseline/websites-final-v2-20260924`
+- Final update-service recovery branch: `baseline/update-service-final-v2-20260924`
+- Final downloads-preview recovery branch: `baseline/downloads-preview-final-v2-20260924`
 - Public web smoke coverage: root, device portal, downloads, privacy, admin, sources admin, manifest, robots, sitemap, update center, stable APK link
 
 This runbook reflects the current temporary production topology after the Railway cutover.
@@ -30,7 +30,7 @@ This runbook reflects the current temporary production topology after the Railwa
 - Git repository: `i20sss20-maker/BLOFY-PLAYER-2.0`
 - Activation service root directory: `services/activation`
 
-The Railway + PostgreSQL stack above is the active production source of truth. Older hosting stacks are not part of the production path. Signed Android production builds must use the BLOFY custom domains above.
+The Railway + PostgreSQL stack above is the active production source of truth. Older hosting stacks are not part of the production path. Legacy Azure workflows are manual-only and cannot deploy automatically from `main`. Signed Android production builds must use the BLOFY custom domains above.
 
 ## 2. Activation service requirements
 
@@ -121,6 +121,7 @@ The production web surfaces are:
 - `https://blofyplayer.com/sources-admin` — protected source/Xtream administration.
 - `https://updates.blofyplayer.com/` — official release/download center.
 - `https://updates.blofyplayer.com/download/latest.apk` — stable Downloader-compatible APK URL.
+- Stable APK aliases: `https://updates.blofyplayer.com/latest.apk` and `https://updates.blofyplayer.com/apk`.
 
 Public pages use the BLOFY identity, responsive layouts, canonical metadata, manifest metadata, robots/sitemap support, branded 404 handling, strict TLS, HSTS, frame protection, and restrictive permissions policies.
 
