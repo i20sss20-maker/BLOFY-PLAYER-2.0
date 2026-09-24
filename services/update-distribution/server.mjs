@@ -57,6 +57,10 @@ function healthPayload() {
   };
 }
 
+function notFoundPage() {
+  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#08070e"><meta name="robots" content="noindex,nofollow"><link rel="icon" type="image/png" href="https://blofyplayer.com/blofy-logo.png"><title>BLOFY PLAYER | الصفحة غير موجودة</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#08070e;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif}.box{width:min(560px,calc(100% - 32px));padding:38px;border:1px solid rgba(185,145,255,.18);border-radius:26px;background:linear-gradient(145deg,rgba(27,21,40,.92),rgba(11,9,16,.96));text-align:center;box-shadow:0 28px 90px rgba(0,0,0,.35)}.mark{width:58px;height:58px;display:grid;place-items:center;margin:auto;border-radius:18px;background:linear-gradient(145deg,#a777ff,#6037c7);font-weight:900;font-size:22px}.code{margin:22px 0 4px;color:#b58cff;font-weight:900;letter-spacing:.14em}.muted{color:#aaa1b6;line-height:1.8}.actions{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:24px}.actions a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 15px;border-radius:13px;text-decoration:none;color:#fff;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);font-weight:800}.actions a.primary{background:linear-gradient(115deg,#9a5cff,#7440e8);border-color:transparent}</style></head><body><main class="box"><div class="mark">B</div><div class="code">404</div><h1>الصفحة غير موجودة</h1><p class="muted">الرابط غير صحيح أو تم نقله. تقدر ترجع لمركز الإصدارات أو للبوابة الرئيسية.</p><div class="actions"><a class="primary" href="/">مركز الإصدارات</a><a href="https://blofyplayer.com">الرئيسية</a><a href="/download/latest.apk">تحميل مباشر</a></div></main></body></html>`;
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -126,7 +130,7 @@ const server = http.createServer(async (req, res) => {
       return res.end(body);
     }
 
-    if (pathname === '/download/latest.apk') {
+    if (['/download/latest.apk', '/latest.apk', '/apk'].includes(pathname)) {
       res.writeHead(302, {
         ...securityHeaders,
         location: getActiveRelease().downloadUrl,
@@ -139,7 +143,7 @@ const server = http.createServer(async (req, res) => {
       return sendHtml(req, res, 200, downloadPage(req));
     }
 
-    return sendJson(req, res, 404, { ok: false, error: 'not_found' });
+    return sendHtml(req, res, 404, notFoundPage());
   } catch (error) {
     console.error('Request failed:', error?.message || error);
     if ((req.url || '').startsWith('/admin')) {
