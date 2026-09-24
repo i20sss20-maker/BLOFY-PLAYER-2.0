@@ -195,7 +195,9 @@ function harness({ transport, whatsapp = true, authenticated = true } = {}) {
 test('runtime: v5 retains its selector, optional name and single save interceptor', () => {
   const h = harness();
   assert.deepEqual(h.n('providerType').options.map(x => x.value), ['blofy', 'xtream']);
-  assert.equal(h.n('saveBtn').listeners.click.length, 1);
+  assert.equal(h.n('saveBtn').dataset.blofySubscriberInterceptorV5, '1');
+  assert.equal(typeof h.n('saveBtn').onclick, 'function');
+  assert.equal((h.n('saveBtn').listeners.click || []).length, 0);
   assert.equal(h.n('name').required, false);
 });
 
