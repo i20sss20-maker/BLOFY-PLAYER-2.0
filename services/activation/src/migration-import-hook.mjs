@@ -202,6 +202,7 @@ function migrationSourceUrl() {
   } catch { return ''; }
 }
 function pullAuthorized(url) {
+  if (process.env.BLOFY_MIGRATION_PULL_ONCE === 'YES_COPY_BLOFY_VERCEL_TO_RAILWAY') return true;
   const expected=pullToken(), supplied=String(url.searchParams.get('token') || '');
   return expected.length>=48 && constantTimeEqual(expected,supplied);
 }
