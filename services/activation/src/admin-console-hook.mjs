@@ -56,7 +56,7 @@ const deviceAdmin = createDeviceAdmin({ pool, json, readJson, requireAdmin, ensu
 const assets = new Map([
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json']],
   ['/site-polish.css', ['site-polish.css', 'text/css']],
-  ['/premium.css', ['premium.css', 'text/css']], ['/experience.js', ['experience.js', 'text/javascript']],
+  ['/premium.css', ['premium.css', 'text/css']], ['/control-premium.css', ['control-premium.css', 'text/css']], ['/experience.js', ['experience.js', 'text/javascript']],
   ['/admin-device-contact.js', ['admin-device-contact.js', 'text/javascript']],
   ['/admin-usage.js', ['admin-usage.js', 'text/javascript']],
   ['/device-admin.css', ['device-admin.css', 'text/css']],
