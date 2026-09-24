@@ -272,6 +272,7 @@ ${allowRenewal ? renewalStyles : ''}
       button.dataset.blofyBusy = '0';
     }
   }
+  // Keep BLOFY subscriber credentials on a single deterministic save path.
   function installSaveInterceptor() {
     var button = qs('saveBtn');
     var select = qs('providerType');
