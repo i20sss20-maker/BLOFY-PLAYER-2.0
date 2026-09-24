@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0b0712" />
-  <meta name="description" content="BLOFY PLAYER device portal" />
+  <meta name="description" content="بوابة BLOFY PLAYER لإدارة الجهاز والقوائم والتفعيل بشكل آمن." />
   <link rel="icon" type="image/png" href="/blofy-logo.png" />
   <link rel="apple-touch-icon" href="/blofy-logo.png" />
   <title>BLOFY PLAYER — بوابة الجهاز</title>
@@ -771,6 +771,7 @@
       *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
     }
   </style>
+  <link rel="stylesheet" href="/site-polish.css">
 </head>
 <body>
   <header class="topbar">
@@ -778,6 +779,12 @@
       <img class="brand-logo" src="/blofy-logo.png" alt="" />
       <span class="brand-copy"><strong>BLOFY</strong><span>PLAYER</span></span>
     </a>
+
+    <nav class="site-links" aria-label="روابط BLOFY">
+      <a class="site-primary" href="/downloads">التحميل</a>
+      <a href="/privacy">الخصوصية</a>
+      <a href="https://updates.blofyplayer.com" rel="noopener">الإصدارات</a>
+    </nav>
 
     <div class="language-control">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
