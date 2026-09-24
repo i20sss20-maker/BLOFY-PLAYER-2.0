@@ -37,7 +37,7 @@ jobs:
             -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
             testDebugUnitTest 2>&1 | tee gradle-ci.log
           gradle --no-daemon \
-            -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
             lintDebug assembleDebug 2>&1 | tee -a gradle-ci.log
       - name: Upload Gradle diagnostics
         if: always()
@@ -58,7 +58,7 @@ jobs:
             echo "commit=$GITHUB_SHA"
             echo "run=$GITHUB_RUN_NUMBER"
             echo "ffmpeg=false"
-            echo "activation=https://blofy-player-2-0.vercel.app"
+            echo "activation=https://api.blofyplayer.com"
           } > app/build/outputs/apk/debug/build-info.txt
           sha256sum "$APK" | tee app/build/outputs/apk/debug/app-debug.apk.sha256
       - uses: actions/upload-artifact@v4
