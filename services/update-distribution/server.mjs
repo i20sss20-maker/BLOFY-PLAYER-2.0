@@ -111,6 +111,20 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/health' || pathname === '/release.json') return sendJson(req, res, 200, healthPayload());
 
+    if (pathname === '/robots.txt') {
+      const body = 'User-agent: *\nAllow: /\nDisallow: /admin\nSitemap: https://updates.blofyplayer.com/sitemap.xml\n';
+      res.writeHead(200, { ...securityHeaders, 'content-type': 'text/plain; charset=utf-8', 'content-length': Buffer.byteLength(body), 'cache-control': 'public, max-age=3600' });
+      if (method === 'HEAD') return res.end();
+      return res.end(body);
+    }
+
+    if (pathname === '/sitemap.xml') {
+      const body = '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://updates.blofyplayer.com/</loc></url></urlset>';
+      res.writeHead(200, { ...securityHeaders, 'content-type': 'application/xml; charset=utf-8', 'content-length': Buffer.byteLength(body), 'cache-control': 'public, max-age=3600' });
+      if (method === 'HEAD') return res.end();
+      return res.end(body);
+    }
+
     if (pathname === '/download/latest.apk') {
       res.writeHead(302, {
         ...securityHeaders,
