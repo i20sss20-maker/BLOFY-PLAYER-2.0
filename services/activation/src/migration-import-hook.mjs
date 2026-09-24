@@ -191,6 +191,49 @@ async function applyBundle(bundle) {
   finally { client.release(); }
 }
 
+function pullToken() { return String(process.env.BLOFY_MIGRATION_PULL_TOKEN || '').trim(); }
+function migrationSourceUrl() {
+  const raw=String(process.env.BLOFY_MIGRATION_SOURCE_URL || '').trim();
+  if (!raw) return '';
+  try {
+    const url=new URL(raw);
+    if (url.protocol!=='https:' || url.hostname!=='blofy-player-2-0.vercel.app' || url.username || url.password || url.search || url.hash) return '';
+    return url.origin;
+  } catch { return ''; }
+}
+function pullAuthorized(url) {
+  const expected=pullToken(), supplied=String(url.searchParams.get('token') || '');
+  return expected.length>=48 && constantTimeEqual(expected,supplied);
+}
+async function fetchSourceEnvelope() {
+  const source=migrationSourceUrl();
+  if (!source) throw new Error('migration_source_url_invalid');
+  const response=await fetch(source + '/api/v1/internal/migration-export', {
+    method:'POST', redirect:'error', cache:'no-store', signal:AbortSignal.timeout(180000),
+    headers:{accept:'application/json','cache-control':'no-store'}
+  });
+  if (!response.ok) throw new Error('migration_source_export_failed');
+  const text=await response.text();
+  if (Buffer.byteLength(text)>16*1024*1024) throw new Error('migration_envelope_too_large');
+  return JSON.parse(text);
+}
+async function validateAgainstTarget(bundle) {
+  const compatibility=keyCompatibility(bundle.sourcePlaylistEncryptionKey);
+  const client=await pool.connect();
+  try {
+    const targetCountsBefore=await counts(client);
+    await client.query('BEGIN');
+    try {
+      await ensureTargetSchema(client);
+      const schemaIssues=await compatibilityIssues(client,bundle);
+      return {mode:'validated',...compatibility,source:bundle.source,sourceCounts:bundle.counts,
+        targetCountsBefore,schemaCompatible:schemaIssues.length===0,schemaIssues};
+    } finally {
+      await client.query('ROLLBACK').catch(()=>{});
+    }
+  } finally { client.release(); }
+}
+
 const previousCreateServer=http.createServer.bind(http);
 http.createServer=function withMigrationImport(listener) {
   if (typeof listener!=='function') return previousCreateServer(listener);
@@ -198,6 +241,15 @@ http.createServer=function withMigrationImport(listener) {
     try {
       const url=new URL(req.url||'/','http://blofy.local');
       if (url.pathname===`${ROOT}/status` && req.method==='GET') return sendJson(res,200,{protocol:'blofy-migration-v1',available:available()});
+      if (url.pathname===`${ROOT}/pull` && req.method==='GET') {
+        if (!available()) return sendJson(res,404,{error:'migration_import_disabled'});
+        if (!pullAuthorized(url)) return sendJson(res,401,{error:'unauthorized'});
+        const mode=String(url.searchParams.get('mode') || 'validate');
+        if (!['validate','apply'].includes(mode)) return sendJson(res,400,{error:'invalid_mode'});
+        const bundle=validateBundle(decryptEnvelope(await fetchSourceEnvelope()));
+        if (mode==='validate') return sendJson(res,200,await validateAgainstTarget(bundle));
+        return sendJson(res,200,await applyBundle(bundle));
+      }
       if (url.pathname===ROOT || url.pathname===`${ROOT}/validate`) {
         if (req.method!=='POST') return sendJson(res,405,{error:'method_not_allowed'});
         if (!available()) return sendJson(res,404,{error:'migration_import_disabled'});
