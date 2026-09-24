@@ -191,6 +191,12 @@ async function applyBundle(bundle) {
   finally { client.release(); }
 }
 
+export async function importEncryptedMigrationEnvelope(envelope) {
+  if (!available()) throw new Error('migration_import_disabled');
+  const bundle=validateBundle(decryptEnvelope(envelope));
+  return applyBundle(bundle);
+}
+
 const previousCreateServer=http.createServer.bind(http);
 http.createServer=function withMigrationImport(listener) {
   if (typeof listener!=='function') return previousCreateServer(listener);
