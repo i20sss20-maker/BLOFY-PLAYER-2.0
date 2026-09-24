@@ -27,18 +27,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Diagnose public DNS
+      - name: Diagnose public DNS and root routing
         shell: bash
         run: |
           set -u
           for host in api.blofyplayer.com blofyplayer.com updates.blofyplayer.com; do
             echo "=== $host ==="
             getent ahosts "$host" || true
-            curl --silent --show-error --max-time 10               -H 'accept: application/dns-json'               "https://cloudflare-dns.com/dns-query?name=$host&type=A" || true
+            curl --silent --show-error --max-time 10 \
+              -H 'accept: application/dns-json' \
+              "https://cloudflare-dns.com/dns-query?name=$host&type=A" || true
             echo
-            curl --silent --show-error --max-time 10               -H 'accept: application/dns-json'               "https://cloudflare-dns.com/dns-query?name=$host&type=CNAME" || true
+            curl --silent --show-error --max-time 10 \
+              -H 'accept: application/dns-json' \
+              "https://cloudflare-dns.com/dns-query?name=$host&type=CNAME" || true
             echo
           done
+          echo "=== root HTTPS routing while certificate provisions ==="
+          curl --insecure --silent --show-error --max-time 15 \
+            --write-out '\nHTTP_STATUS=%{http_code}\n' \
+            "$PORTAL_BASE_URL/health" || true
 
       - name: Verify activation portal and update distribution
         shell: bash
@@ -47,9 +55,23 @@ jobs:
           tmp="$RUNNER_TEMP/blofy-smoke"
           mkdir -p "$tmp"
 
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "$ACTIVATION_BASE_URL/health" > "$tmp/api.json"
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "$PORTAL_BASE_URL/health" > "$tmp/root.json"
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "$UPDATE_BASE_URL/health" > "$tmp/updates.json"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 "$ACTIVATION_BASE_URL/health" > "$tmp/api.json"
+
+          portal_ok=0
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              --connect-timeout 8 --max-time 30 "$PORTAL_BASE_URL/health" > "$tmp/root.json"; then
+              portal_ok=1
+              break
+            fi
+            echo "Root TLS is still provisioning (attempt $attempt/20); retrying in 30s..."
+            sleep 30
+          done
+          [[ "$portal_ok" -eq 1 ]] || { echo "::error::Root domain TLS did not become ready within 10 minutes"; exit 1; }
+
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 "$UPDATE_BASE_URL/health" > "$tmp/updates.json"
 
           python3 - "$tmp/api.json" "$tmp/root.json" "$tmp/updates.json" <<'PY'
           import json, os, sys
