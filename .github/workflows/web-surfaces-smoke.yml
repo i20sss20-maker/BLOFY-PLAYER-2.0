@@ -10,6 +10,8 @@ on:
       - services/activation/src/public-downloads.mjs
       - services/activation/src/admin-console-hook.mjs
       - services/activation/src/server.mjs
+      - services/activation/src/sources-admin-hook.mjs
+      - services/activation/src/privacy-pages.mjs
       - .github/workflows/web-surfaces-smoke.yml
   workflow_dispatch:
 
@@ -84,6 +86,33 @@ jobs:
           grep -Fq 'الصفحة غير موجودة' "$tmp/updates-404.html"
 
           echo "BLOFY web surfaces OK"
+
+      - name: Verify linked static assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/blofy-assets"
+          mkdir -p "$tmp"
+          for path in \
+            /site-polish.css \
+            /premium.css \
+            /control-premium.css \
+            /device-admin.css \
+            /release-manager.css \
+            /experience.js \
+            /release-manager.js \
+            /privacy-actions.js \
+            /sources-admin.css \
+            /sources-admin.js \
+            /xtream-gateway-admin.js \
+            /blofy-logo.png \
+            /manifest.webmanifest
+          do
+            file="$tmp/$(echo "$path" | tr '/.' '__')"
+            curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              --connect-timeout 8 --max-time 30 "https://blofyplayer.com$path" > "$file"
+            test -s "$file"
+          done
 
       - name: Verify security headers and branded 404
         shell: bash
