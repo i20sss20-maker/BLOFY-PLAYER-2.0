@@ -9,7 +9,7 @@ const TABLES = [
   'support_tickets','device_audit','app_release_catalog','app_release_selection','app_release_audit'
 ];
 
-if (process.env.RAILWAY_ENVIRONMENT && process.env.DATABASE_URL) {
+if ((process.env.RAILWAY_ENVIRONMENT || process.env.VERCEL === '1') && process.env.DATABASE_URL) {
   const pool = new Pool({
     ...databaseOptions(process.env.DATABASE_URL),
     max:1,
@@ -42,7 +42,7 @@ if (process.env.RAILWAY_ENVIRONMENT && process.env.DATABASE_URL) {
         fingerprint:String(rows.rows[0]?.data_key_fingerprint || '')
       };
     }
-    console.log('BLOFY_DB_AUDIT '+JSON.stringify({database:db,counts,cryptoState}));
+    console.log('BLOFY_DB_AUDIT '+JSON.stringify({platform:process.env.VERCEL==='1'?'vercel':'railway',database:db,counts,cryptoState}));
   } catch (error) {
     console.error('BLOFY_DB_AUDIT_ERROR '+String(error?.message || error));
   } finally {
