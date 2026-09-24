@@ -108,6 +108,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 https://api.blofyplayer.com/health | python3 -c "import json,sys; p=json.load(sys.stdin); assert p.get('ok') is True"
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 https://updates.blofyplayer.com/health | python3 -c "import json,sys; p=json.load(sys.stdin); assert p.get('ok') is True"
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 45 --range 0-0 --output /dev/null             https://updates.blofyplayer.com/download/latest.apk
+          tmp="$RUNNER_TEMP/blofy-health"
+          mkdir -p "$tmp"
+
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 https://api.blofyplayer.com/health > "$tmp/api.json"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 https://blofyplayer.com/health > "$tmp/root.json"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 https://updates.blofyplayer.com/health > "$tmp/updates.json"
+
+          python3 - "$tmp/api.json" "$tmp/root.json" "$tmp/updates.json" <<'PY'
+          import json,sys
+          api=json.load(open(sys.argv[1],encoding='utf-8'))
+          root=json.load(open(sys.argv[2],encoding='utf-8'))
+          updates=json.load(open(sys.argv[3],encoding='utf-8'))
+          for p in (api,root,updates):
+              assert p.get('ok') is True
+          for p in (api,root):
+              assert p.get('database') == 'ready'
+              assert p.get('playlistEncryption') == 'ready'
+          aa=(api.get('release') or {}).get('app') or {}
+          ra=(root.get('release') or {}).get('app') or {}
+          ua=(updates.get('release') or {}).get('app') or {}
+          expected=(ua.get('versionCode'),ua.get('versionName'),ua.get('downloadUrl'))
+          assert all(expected)
+          assert (aa.get('versionCode'),aa.get('versionName'),aa.get('downloadUrl')) == expected
+          assert (ra.get('versionCode'),ra.get('versionName'),ra.get('downloadUrl')) == expected
+          print(f"release={ua.get('versionName')} ({ua.get('versionCode')})")
+          PY
+
+          for url in \
+            https://updates.blofyplayer.com/download/latest.apk \
+            https://blofyplayer.com/download/latest.apk \
+            https://blofyplayer.com/latest.apk
+          do
+            curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              --connect-timeout 8 --max-time 45 --range 0-0 --output /dev/null "$url"
+          done
