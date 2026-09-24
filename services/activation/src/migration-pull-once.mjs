@@ -65,4 +65,6 @@ async function pullOnce() {
   }
 }
 
-await pullOnce();
+const pullResult = await pullOnce();
+if (pullResult?.skipped) console.log(`BLOFY Railway migration pull skipped: ${pullResult.reason}`);
+
