@@ -74,12 +74,18 @@ export function appReleaseMetadata(env = process.env) {
 
 export function activationReleaseMetadata(env = process.env) {
   const vercelCommitSha = sanitizeCommitSha(env.VERCEL_GIT_COMMIT_SHA);
+  const railwayCommitSha = sanitizeCommitSha(env.RAILWAY_GIT_COMMIT_SHA);
   const fallbackCommitSha = sanitizeCommitSha(env.BLOFY_RELEASE_COMMIT_SHA);
+  const platform = env.VERCEL === '1' || vercelCommitSha
+    ? 'vercel'
+    : railwayCommitSha
+      ? 'railway'
+      : 'self-hosted';
   return {
     service: 'blofy-activation',
     version: ACTIVATION_SERVICE_VERSION,
-    platform: env.VERCEL === '1' || vercelCommitSha ? 'vercel' : 'self-hosted',
-    commitSha: vercelCommitSha || fallbackCommitSha,
+    platform,
+    commitSha: vercelCommitSha || railwayCommitSha || fallbackCommitSha,
     app: appReleaseMetadata(env)
   };
 }
