@@ -675,6 +675,22 @@ async function adminProviderProfileUpdate(req, res, providerKey) {
 const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
+    const requestHost = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+    if (
+      requestHost === 'api.blofyplayer.com' &&
+      ['GET', 'HEAD'].includes(req.method || '') &&
+      requestUrl.pathname !== '/health' &&
+      !requestUrl.pathname.startsWith('/api/')
+    ) {
+      const location = 'https://blofyplayer.com' + requestUrl.pathname + requestUrl.search;
+      res.writeHead(308, {
+        location,
+        'cache-control': 'public, max-age=3600',
+        'x-content-type-options': 'nosniff',
+        'strict-transport-security': 'max-age=31536000'
+      });
+      return res.end();
+    }
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (req.method === 'GET' && requestUrl.pathname === '/status') return await serveStatusPage(res);
