@@ -1,0 +1,31 @@
+name: BLOFY Railway Domain Verify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/railway-domain-verify.run'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Verify activation custom domains and TLS
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in             "https://api.blofyplayer.com/health"             "https://blofyplayer.com/health"; do
+            echo "Checking $url"
+            curl -fsS --max-time 30 "$url" | jq -e '.ok==true and .database=="ready"' >/dev/null
+          done
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 https://api.blofyplayer.com/portal)" = "200"
+
+      - name: Verify update custom domain and TLS
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 https://updates.blofyplayer.com/health | jq -e '.ok==true and .release.service=="blofy-update-distribution"' >/dev/null
