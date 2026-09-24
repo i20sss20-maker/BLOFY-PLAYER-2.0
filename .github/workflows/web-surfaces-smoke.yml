@@ -78,6 +78,32 @@ jobs:
 
           echo "BLOFY web surfaces OK"
 
+      - name: Verify security headers and branded 404
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/blofy-web-security"
+          mkdir -p "$tmp"
+
+          curl --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 -D "$tmp/root.headers" -o /dev/null \
+            https://blofyplayer.com/
+          grep -Eiq '^strict-transport-security: *max-age=31536000' "$tmp/root.headers"
+          grep -Eiq '^permissions-policy:.*camera=\(\).*microphone=\(\).*geolocation=\(\)' "$tmp/root.headers"
+          grep -Eiq '^x-frame-options: *DENY' "$tmp/root.headers"
+
+          status="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 -o "$tmp/404.html" -w '%{http_code}' \
+            https://blofyplayer.com/__blofy_missing_route__)"
+          test "$status" = "404"
+          grep -Fq 'BLOFY PLAYER' "$tmp/404.html"
+          grep -Fq 'الصفحة غير موجودة' "$tmp/404.html"
+
+          curl --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 -D "$tmp/updates.headers" -o /dev/null \
+            https://updates.blofyplayer.com/
+          grep -Eiq '^strict-transport-security: *max-age=31536000' "$tmp/updates.headers"
+
       - name: Verify stable download and health endpoints
         shell: bash
         run: |
