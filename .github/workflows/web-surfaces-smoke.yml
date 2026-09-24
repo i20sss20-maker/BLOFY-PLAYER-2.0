@@ -1,5 +1,7 @@
 name: BLOFY Web Surfaces Smoke
 
+# Final all-site production gate for BLOFY public/admin web surfaces.
+
 on:
   push:
     branches: [main]
