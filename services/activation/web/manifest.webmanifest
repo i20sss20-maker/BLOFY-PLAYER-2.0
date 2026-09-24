@@ -16,5 +16,48 @@
       "type": "image/png",
       "purpose": "any"
     }
-  ]
+  ],
+  "id": "/",
+  "shortcuts": [
+    {
+      "name": "ربط الجهاز",
+      "short_name": "ربط",
+      "description": "افتح بوابة ربط وإدارة جهاز BLOFY PLAYER",
+      "url": "/connect",
+      "icons": [
+        {
+          "src": "/blofy-logo.png",
+          "sizes": "any",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "تحميل BLOFY PLAYER",
+      "short_name": "تحميل",
+      "description": "افتح مركز التحميل الرسمي",
+      "url": "/downloads",
+      "icons": [
+        {
+          "src": "/blofy-logo.png",
+          "sizes": "any",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "حالة الخدمات",
+      "short_name": "الحالة",
+      "description": "تحقق من حالة خدمات BLOFY PLAYER",
+      "url": "/status",
+      "icons": [
+        {
+          "src": "/blofy-logo.png",
+          "sizes": "any",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false
 }
