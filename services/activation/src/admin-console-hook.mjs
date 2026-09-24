@@ -54,6 +54,7 @@ function ensureAdmin() {
 const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice: async () => null });
 const deviceAdmin = createDeviceAdmin({ pool, json, readJson, requireAdmin, ensureAdmin });
 const assets = new Map([
+  ['/site-polish.css', ['site-polish.css', 'text/css']],
   ['/premium.css', ['premium.css', 'text/css']], ['/experience.js', ['experience.js', 'text/javascript']],
   ['/admin-device-contact.js', ['admin-device-contact.js', 'text/javascript']],
   ['/admin-usage.js', ['admin-usage.js', 'text/javascript']],
