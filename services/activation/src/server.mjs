@@ -686,6 +686,22 @@ const server = http.createServer(async (req, res) => {
     if (match && req.method === 'GET') return await adminGet(req, res, decodeURIComponent(match[1]));
     if (match && req.method === 'PATCH') return await adminUpdate(req, res, decodeURIComponent(match[1]));
 
+    if (req.method === 'GET' && !requestUrl.pathname.startsWith('/api/')) {
+      const file = await readFile(new URL('../web/404.html', import.meta.url));
+      res.writeHead(404, {
+        'content-type': 'text/html; charset=utf-8',
+        'content-length': file.length,
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'x-frame-options': 'DENY',
+        'referrer-policy': 'no-referrer',
+        'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+        'strict-transport-security': 'max-age=31536000',
+        'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"
+      });
+      res.end(file);
+      return;
+    }
     return json(res, 404, { error: 'not_found' });
   } catch (error) {
     console.error('request failed:', safeErrorSummary(error));
