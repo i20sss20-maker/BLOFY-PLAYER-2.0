@@ -1,5 +1,8 @@
 import http from 'node:http';
 import { Readable } from 'node:stream';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdir, rename, stat, unlink } from 'node:fs/promises';
+import path from 'node:path';
 import { initReleaseStore, getActiveRelease } from './release-store.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
 import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload, openRemoteApk } from './app-library.mjs';
@@ -9,6 +12,8 @@ import { recordDownloadCompletion } from './app-library.mjs';
 const PORT = Number(process.env.PORT || 3000);
 const APP_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const PUBLIC_ADMIN_PREFIX = `/${String(process.env.PUBLIC_ADMIN_PREFIX || '/admin').trim().replace(/^\/+|\/+$/g, '')}`;
+const RELEASE_UPLOAD_TOKEN = String(process.env.RELEASE_UPLOAD_TOKEN || '');
+const LOCAL_RELEASE_DIR = '/data/releases';
 
 const securityHeaders = Object.freeze({
   'x-content-type-options': 'nosniff',
@@ -49,7 +54,114 @@ function safeApkFilename(value) {
   return base.toLowerCase().endsWith('.apk') ? base : `${base}.apk`;
 }
 
+function localReleaseFilename(value) {
+  const name = String(value || '').trim();
+  if (!/^[a-z0-9][a-z0-9._-]*\.apk$/i.test(name)) throw new Error('invalid_release_filename');
+  return name;
+}
+
+function localReleasePath(filename) {
+  return path.join(LOCAL_RELEASE_DIR, localReleaseFilename(filename));
+}
+
+function constantTimeEqual(a, b) {
+  const aa = Buffer.from(String(a || ''));
+  const bb = Buffer.from(String(b || ''));
+  if (aa.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aa.length; i++) diff |= aa[i] ^ bb[i];
+  return diff === 0;
+}
+
+async function streamLocalApk(req, res, filename, downloadName, metricKey) {
+  const filePath = localReleasePath(filename);
+  const info = await stat(filePath);
+  const total = info.size;
+  const rawRange = String(req.headers.range || '').trim();
+  let start = 0;
+  let end = total - 1;
+  let status = 200;
+  if (rawRange) {
+    const match = rawRange.match(/^bytes=(\d*)-(\d*)$/);
+    if (!match) {
+      res.writeHead(416, { ...securityHeaders, 'content-range': `bytes */${total}` });
+      return res.end();
+    }
+    if (match[1]) start = Number(match[1]);
+    if (match[2]) end = Number(match[2]);
+    if (!match[1] && match[2]) {
+      const suffix = Number(match[2]);
+      start = Math.max(0, total - suffix);
+      end = total - 1;
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= total) {
+      res.writeHead(416, { ...securityHeaders, 'content-range': `bytes */${total}` });
+      return res.end();
+    }
+    end = Math.min(end, total - 1);
+    status = 206;
+  }
+  const length = end - start + 1;
+  const headers = {
+    ...securityHeaders,
+    'content-type': 'application/vnd.android.package-archive',
+    'content-disposition': `attachment; filename="${safeApkFilename(downloadName)}"`,
+    'content-length': String(length),
+    'accept-ranges': 'bytes',
+    'cache-control': 'public, max-age=300'
+  };
+  if (status === 206) headers['content-range'] = `bytes ${start}-${end}/${total}`;
+  res.writeHead(status, headers);
+  if (req.method === 'HEAD') return res.end();
+  const body = createReadStream(filePath, { start, end });
+  observeDownloadCompletion({ req, res, body, status, length: String(length), contentRange: headers['content-range'] || '',
+    onComplete: () => recordDownloadCompletion(metricKey),
+    onError: error => console.error('Local APK completion metric failed:', error?.message || error) });
+  res.once('close', () => { if (!res.writableFinished) body.destroy(); });
+  body.pipe(res);
+}
+
+async function receiveReleaseUpload(req, res, requestUrl) {
+  if (!RELEASE_UPLOAD_TOKEN) return sendJson(req, res, 503, { ok: false, error: 'release_upload_disabled' });
+  const auth = String(req.headers.authorization || '');
+  if (!auth.startsWith('Bearer ') || !constantTimeEqual(auth.slice(7), RELEASE_UPLOAD_TOKEN)) {
+    return sendJson(req, res, 401, { ok: false, error: 'unauthorized' });
+  }
+  const filename = localReleaseFilename(requestUrl.searchParams.get('filename'));
+  const length = Number(req.headers['content-length'] || 0);
+  if (!Number.isFinite(length) || length < 1024 || length > 100 * 1024 * 1024) {
+    return sendJson(req, res, 413, { ok: false, error: 'invalid_release_size' });
+  }
+  await mkdir(LOCAL_RELEASE_DIR, { recursive: true });
+  const finalPath = localReleasePath(filename);
+  const tempPath = finalPath + '.part';
+  await unlink(tempPath).catch(() => {});
+  await new Promise((resolve, reject) => {
+    const out = createWriteStream(tempPath, { flags: 'wx' });
+    let received = 0;
+    req.on('data', chunk => {
+      received += chunk.length;
+      if (received > 100 * 1024 * 1024) req.destroy(new Error('release_too_large'));
+    });
+    req.pipe(out);
+    out.on('finish', () => received === length ? resolve() : reject(new Error('release_size_mismatch')));
+    out.on('error', reject);
+    req.on('error', reject);
+  });
+  await rename(tempPath, finalPath);
+  const info = await stat(finalPath);
+  return sendJson(req, res, 201, { ok: true, filename, size: info.size });
+}
+
 async function streamApkDownload(req, res, sourceUrl, filename, metricKey) {
+  try {
+    const parsed = new URL(sourceUrl);
+    if (parsed.protocol === 'https:' &&
+        parsed.hostname === 'updates.blofyplayer.com' &&
+        parsed.pathname.startsWith('/files/releases/')) {
+      return await streamLocalApk(req, res, decodeURIComponent(parsed.pathname.split('/').pop() || ''), filename, metricKey);
+    }
+  } catch {}
   const rawRange = String(req.headers.range || '').trim();
   const range = /^bytes=\d*-\d*$/.test(rawRange) ? rawRange : '';
   const opened = await openRemoteApk(sourceUrl, { method: req.method, range });
@@ -551,6 +663,19 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://localhost');
     const pathname = url.pathname;
     const method = req.method || '';
+
+    if (method === 'POST' && pathname === '/api/internal/releases/upload') {
+      return await receiveReleaseUpload(req, res, url);
+    }
+
+    const localReleaseMatch = pathname.match(/^\/files\/releases\/([a-z0-9._-]+\.apk)$/i);
+    if (localReleaseMatch) {
+      if (!['GET', 'HEAD'].includes(method)) {
+        res.writeHead(405, { ...securityHeaders, allow: 'GET, HEAD', 'cache-control': 'no-store' });
+        return res.end();
+      }
+      return await streamLocalApk(req, res, localReleaseMatch[1], localReleaseMatch[1], 'direct-release');
+    }
 
     if (pathname === '/admin' || pathname === '/admin/' || pathname === PUBLIC_ADMIN_PREFIX || pathname === `${PUBLIC_ADMIN_PREFIX}/`) {
       if (!['GET', 'HEAD'].includes(method)) {
