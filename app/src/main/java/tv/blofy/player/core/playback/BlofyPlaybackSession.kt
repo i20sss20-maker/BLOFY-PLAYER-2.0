@@ -157,12 +157,11 @@ class BlofyPlaybackSession(
 
         val now = SystemClock.elapsedRealtime()
         val position = player.currentPosition.coerceAtLeast(0L)
-        val positionAdvanced = lastObservedLivePositionMs != Long.MIN_VALUE &&
-            position - lastObservedLivePositionMs >= LIVE_MIN_POSITION_ADVANCE_MS
-        val silentlyStalled = player.playbackState == Player.STATE_BUFFERING ||
-            (player.playbackState == Player.STATE_READY && !positionAdvanced)
 
-        if (!silentlyStalled) {
+        // Live TS/HLS providers do not all expose a monotonic currentPosition.
+        // READY means the player has usable media; never recycle a healthy
+        // fullscreen session just because its reported position is flat.
+        if (player.playbackState != Player.STATE_BUFFERING) {
             resetLiveStallTimer(keepPosition = true)
             lastObservedLivePositionMs = position
             return
@@ -171,11 +170,6 @@ class BlofyPlaybackSession(
         if (lastObservedLivePositionMs == Long.MIN_VALUE) {
             lastObservedLivePositionMs = position
             liveStallStartedAtMs = now
-            return
-        }
-        if (positionAdvanced) {
-            lastObservedLivePositionMs = position
-            liveStallStartedAtMs = 0L
             return
         }
         if (liveStallStartedAtMs == 0L) liveStallStartedAtMs = now
@@ -231,7 +225,6 @@ class BlofyPlaybackSession(
         const val LIVE_STALL_WATCHDOG_INTERVAL_MS = 4_000L
         const val LIVE_STALL_RECOVERY_THRESHOLD_MS = 12_000L
         const val LIVE_STALL_RECOVERY_COOLDOWN_MS = 60_000L
-        const val LIVE_MIN_POSITION_ADVANCE_MS = 1_000L
         const val MAX_LIVE_STALL_RECOVERIES_PER_ITEM = 3
     }
 
