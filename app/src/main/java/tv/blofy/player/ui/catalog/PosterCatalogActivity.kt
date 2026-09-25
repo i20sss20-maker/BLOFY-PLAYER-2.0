@@ -166,8 +166,10 @@ class PosterCatalogActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 38 else 44)))
         categoryList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@PosterCatalogActivity)
-            clipChildren = false
-            clipToPadding = false
+            // Poster cards have enough internal padding for focus treatment; clip
+            // RecyclerView children so recycled rows never paint above the grid bounds.
+            clipChildren = true
+            clipToPadding = true
             itemAnimator = null
             setHasFixedSize(true)
             setItemViewCacheSize(18)
@@ -178,8 +180,10 @@ class PosterCatalogActivity : AppCompatActivity() {
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            clipChildren = false
-            clipToPadding = false
+            // Keep recycled poster rows inside the catalog pane. With clipping disabled,
+            // a whole off-screen row can draw over the title/search area while scrolling.
+            clipChildren = true
+            clipToPadding = true
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
