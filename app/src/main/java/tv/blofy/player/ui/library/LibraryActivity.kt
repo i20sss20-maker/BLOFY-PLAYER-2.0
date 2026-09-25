@@ -5,14 +5,20 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
@@ -23,28 +29,58 @@ import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.WatchStateEntity
+import tv.blofy.player.ui.catalog.PosterStreamAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
 
 class LibraryActivity : AppCompatActivity() {
-    private lateinit var list: LinearLayout
+    private lateinit var root: LinearLayout
+    private var list: LinearLayout? = null
+    private var posterGrid: RecyclerView? = null
+    private var favoriteAdapter: PosterStreamAdapter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_FAVORITES
-        val root = LinearLayout(this).apply {
+        root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(50, 38, 50, 38)
-            setBackgroundColor(Color.rgb(5, 5, 10))
+            setPadding(dp(34), dp(28), dp(34), dp(30))
+            background = AppCompatResources.getDrawable(this@LibraryActivity, R.drawable.blofy_home_background)
+            clipChildren = false
+            clipToPadding = false
         }
         root.addView(TextView(this).apply {
             text = if (mode == MODE_CONTINUE) "متابعة المشاهدة" else "المفضلة"
             textSize = 29f
             setTextColor(Color.WHITE)
+            setPadding(dp(6), 0, 0, dp(16))
         })
-        list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(list)
+
+        if (mode == MODE_FAVORITES) {
+            posterGrid = RecyclerView(this).apply {
+                layoutManager = GridLayoutManager(this@LibraryActivity, favoriteColumns())
+                setPadding(dp(4), dp(4), dp(8), dp(26))
+                clipChildren = false
+                clipToPadding = false
+                itemAnimator = null
+                setHasFixedSize(true)
+                recycledViewPool.setMaxRecycledViews(0, 24)
+            }
+            root.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        } else {
+            list = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, dp(4), 0, dp(24))
+            }
+            val scroll = ScrollView(this).apply {
+                isFillViewport = true
+                isVerticalScrollBarEnabled = false
+                addView(list)
+            }
+            root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+
         setContentView(root)
         load(mode)
     }
@@ -57,23 +93,38 @@ class LibraryActivity : AppCompatActivity() {
                 showMessage("أضف قائمة تشغيل أولاً")
                 return@launch
             }
-            list.removeAllViews()
+
             if (mode == MODE_CONTINUE) {
+                list?.removeAllViews()
                 val states = withContext(Dispatchers.IO) { dao.continueWatching(provider.id).first() }
                 val entries = withContext(Dispatchers.IO) { resolveContinueWatching(dao, provider.id, states) }
-                if (entries.isEmpty()) showMessage("لا يوجد محتوى للاستئناف")
+                if (entries.isEmpty()) {
+                    showMessage("لا يوجد محتوى للاستئناف")
+                    return@launch
+                }
                 entries.forEach { entry ->
                     when (entry) {
                         is ContinueWatchingEntry.StreamEntry -> addRow(provider.id, provider.liveFormat, entry.stream, entry.state.positionMs)
                         is ContinueWatchingEntry.EpisodeEntry -> addEpisodeRow(provider, entry)
                     }
                 }
+                list?.getChildAt(0)?.requestFocus()
             } else {
                 val favorites = withContext(Dispatchers.IO) { ContentRepository(dao).favorites(provider.id).first() }
-                if (favorites.isEmpty()) showMessage("لا توجد عناصر في المفضلة")
-                favorites.forEach { stream -> addRow(provider.id, provider.liveFormat, stream, 0L) }
+                if (favorites.isEmpty()) {
+                    showMessage("لا توجد عناصر في المفضلة")
+                    return@launch
+                }
+                val adapter = PosterStreamAdapter(
+                    onClick = { stream -> open(provider.id, provider.liveFormat, stream, 0L) }
+                )
+                favoriteAdapter = adapter
+                posterGrid?.adapter = adapter
+                adapter.submit(favorites)
+                posterGrid?.post {
+                    posterGrid?.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+                }
             }
-            list.getChildAt(0)?.requestFocus()
         }
     }
 
@@ -113,7 +164,7 @@ class LibraryActivity : AppCompatActivity() {
             }
             setOnClickListener { open(providerId, liveFormat, stream, resumeMs) }
         }
-        list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
+        list?.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(66)).apply { topMargin = dp(7) })
     }
 
     private fun addEpisodeRow(provider: ProviderEntity, entry: ContinueWatchingEntry.EpisodeEntry) {
@@ -135,7 +186,7 @@ class LibraryActivity : AppCompatActivity() {
             }
             setOnClickListener { openEpisode(provider, episode, entry.state.positionMs, seriesName) }
         }
-        list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 66).apply { topMargin = 7 })
+        list?.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(66)).apply { topMargin = dp(7) })
     }
 
     private fun open(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
@@ -207,13 +258,33 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun showMessage(text: String) {
-        list.addView(TextView(this).apply {
+        val message = TextView(this).apply {
             this.text = text
             textSize = 18f
             setTextColor(Color.LTGRAY)
-            setPadding(0, 24, 0, 0)
-        })
+            gravity = Gravity.CENTER
+            setPadding(0, dp(28), 0, dp(28))
+        }
+        val linear = list
+        if (linear != null) {
+            linear.removeAllViews()
+            linear.addView(message, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        } else {
+            posterGrid?.visibility = android.view.View.GONE
+            root.addView(message, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
     }
+
+    private fun favoriteColumns(): Int {
+        val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
+        return when {
+            widthDp < 520f -> 2
+            widthDp < 900f -> 4
+            else -> 5
+        }
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
         const val EXTRA_MODE = "mode"
