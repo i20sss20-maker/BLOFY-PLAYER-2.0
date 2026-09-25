@@ -104,7 +104,7 @@ class LibraryActivity : AppCompatActivity() {
                 }
                 entries.forEach { entry ->
                     when (entry) {
-                        is ContinueWatchingEntry.StreamEntry -> addRow(provider.id, provider.liveFormat, entry.stream, entry.state.positionMs)
+                        is ContinueWatchingEntry.StreamEntry -> addRow(provider.id, provider.liveFormat, entry.stream, entry.state)
                         is ContinueWatchingEntry.EpisodeEntry -> addEpisodeRow(provider, entry)
                     }
                 }
@@ -148,13 +148,15 @@ class LibraryActivity : AppCompatActivity() {
         return ContinueWatchingResolver.resolve(states, streams, episodes, parentSeries)
     }
 
-    private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
+    private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, state: WatchStateEntity) {
         val row = TextView(this).apply {
-            text = "${kindLabel(stream.kind)}   •   ${stream.name}"
-            textSize = 18f
+            text = "${kindLabel(stream.kind)}   •   ${stream.name}\n${watchProgressLabel(state)}"
+            textSize = 17f
             setTextColor(Color.WHITE)
-            setPadding(24, 17, 24, 17)
+            setPadding(dp(24), dp(10), dp(24), dp(10))
             gravity = Gravity.CENTER_VERTICAL
+            maxLines = 2
+            setLineSpacing(dp(2).toFloat(), 1.05f)
             isFocusable = true
             isClickable = true
             background = rowBackground(false)
@@ -162,9 +164,9 @@ class LibraryActivity : AppCompatActivity() {
                 view.background = rowBackground(focused)
                 view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(100).start()
             }
-            setOnClickListener { open(providerId, liveFormat, stream, resumeMs) }
+            setOnClickListener { open(providerId, liveFormat, stream, state.positionMs) }
         }
-        list?.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(66)).apply { topMargin = dp(7) })
+        list?.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(76)).apply { topMargin = dp(7) })
     }
 
     private fun addEpisodeRow(provider: ProviderEntity, entry: ContinueWatchingEntry.EpisodeEntry) {
@@ -172,11 +174,13 @@ class LibraryActivity : AppCompatActivity() {
         val parent = entry.parentSeries
         val seriesName = parent?.name?.takeIf(String::isNotBlank) ?: "مسلسل"
         val row = TextView(this).apply {
-            text = "EPISODE   •   $seriesName   •   S${episode.season} E${episode.episode}   •   ${episode.title}"
-            textSize = 18f
+            text = "EPISODE   •   $seriesName   •   S${episode.season} E${episode.episode}   •   ${episode.title}\n${watchProgressLabel(entry.state)}"
+            textSize = 17f
             setTextColor(Color.WHITE)
-            setPadding(24, 17, 24, 17)
+            setPadding(dp(24), dp(10), dp(24), dp(10))
             gravity = Gravity.CENTER_VERTICAL
+            maxLines = 2
+            setLineSpacing(dp(2).toFloat(), 1.05f)
             isFocusable = true
             isClickable = true
             background = rowBackground(false)
@@ -186,7 +190,15 @@ class LibraryActivity : AppCompatActivity() {
             }
             setOnClickListener { openEpisode(provider, episode, entry.state.positionMs, seriesName) }
         }
-        list?.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(66)).apply { topMargin = dp(7) })
+        list?.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(76)).apply { topMargin = dp(7) })
+    }
+
+    private fun watchProgressLabel(state: WatchStateEntity): String {
+        val positionMinutes = (state.positionMs.coerceAtLeast(0L) / 60_000L)
+        if (state.durationMs <= 0L) return "استئناف من الدقيقة $positionMinutes"
+        val percent = ((state.positionMs.coerceAtLeast(0L) * 100L) / state.durationMs).coerceIn(0, 99)
+        val remainingMinutes = ((state.durationMs - state.positionMs).coerceAtLeast(0L) / 60_000L)
+        return if (remainingMinutes > 0L) "شاهدت $percent%  •  متبقي تقريبًا $remainingMinutes د" else "شاهدت $percent%"
     }
 
     private fun open(providerId: String, liveFormat: String, stream: StreamEntity, resumeMs: Long) {
