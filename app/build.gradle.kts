@@ -6,7 +6,7 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
+val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("https://api.blofyplayer.com").get().trim()
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse("https://updates.blofyplayer.com").get().trim()
 val updateBaseUrlEscaped = updateBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
