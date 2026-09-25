@@ -1,4 +1,5 @@
 # RC07.55.2 QA: stable rc07.55 baseline with BLOFY production domains
+# publish-trigger: rc07.55.2
 name: BLOFY rc07.55.2 Production-Signed Test
 
 on:
