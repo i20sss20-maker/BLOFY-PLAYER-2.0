@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import tv.blofy.player.core.security.ContentAccessActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
@@ -65,15 +66,17 @@ class CatchupActivity : ContentAccessActivity() {
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = withContext(Dispatchers.IO) {
-                runCatching {
-                    PortalPlaylistClient.ensureSubscriberConnection(
-                        applicationContext,
-                        BuildConfig.ACTIVATION_BASE_URL,
-                        dao,
-                        providerId
-                    )
-                }.getOrNull() ?: dao.provider(providerId)
+            val provider = try {
+                PortalPlaylistClient.ensureSubscriberConnection(
+                    applicationContext,
+                    BuildConfig.ACTIVATION_BASE_URL,
+                    dao,
+                    providerId
+                )
+            } catch (_: Throwable) {
+                Toast.makeText(this@CatchupActivity, "تعذر تحديث اتصال مشترك BLOFY. أعد فتح القائمة.", Toast.LENGTH_LONG).show()
+                finish()
+                return@launch
             } ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
             if (!stream.archiveEnabled || provider.providerType.equals("m3u", true)) {
