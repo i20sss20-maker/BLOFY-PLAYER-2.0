@@ -1687,7 +1687,7 @@
     if (linkedDevice && linkedDevice.deviceId) {
       $("deviceId").value = linkedDevice.deviceId;
       $("activationCode").value = linkedDevice.activationCode;
-      $("loginBtn").focus();
+      login();
     } else if (linkedDevice === undefined) {
       try {
         const saved = JSON.parse(storageGet("sessionStorage", "blofyDevice") || "null");
