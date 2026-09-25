@@ -123,12 +123,17 @@ object BlofySubscriberClient {
         val base = endpoint.trim().trimEnd('/').toHttpUrlOrNull() ?: return false
         val url = provider.baseUrl.toHttpUrlOrNull() ?: return false
         val legacyPath = url.encodedPath.trimEnd('/')
-        val firstPartyHost = url.host == base.host ||
-            url.host.equals("blofyplayer.com", true) ||
-            url.host.equals("api.blofyplayer.com", true)
+        val configuredPath = base.encodedPath.trimEnd('/') + "/api/v1/subscribers/xtream"
+        val sameConfiguredOrigin =
+            url.scheme == base.scheme && url.host == base.host && url.port == base.port &&
+                legacyPath == configuredPath
+        val officialHosts = setOf("blofyplayer.com", "api.blofyplayer.com")
+        val officialAlias =
+            base.scheme == "https" && base.port == 443 && base.host.lowercase() in officialHosts &&
+                url.scheme == "https" && url.port == 443 && url.host.lowercase() in officialHosts &&
+                legacyPath == "/api/v1/subscribers/xtream"
         return provider.providerType.equals("xtream", true) && provider.subscriberToken.isBlank() &&
-            url.scheme == "https" && firstPartyHost &&
-            legacyPath == "/api/v1/subscribers/xtream" &&
+            (sameConfiguredOrigin || officialAlias) &&
             url.query == null && url.fragment == null && url.encodedUsername.isEmpty() && url.encodedPassword.isEmpty()
     }
 
