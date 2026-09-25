@@ -6,7 +6,7 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
+val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("https://api.blofyplayer.com").get().trim()
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse("https://updates.blofyplayer.com").get().trim()
 val updateBaseUrlEscaped = updateBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
@@ -108,6 +108,10 @@ val validateReleaseConfiguration = tasks.register("validateReleaseConfiguration"
         val endpointUri = runCatching { URI(activationBaseUrl.trim()) }.getOrNull()
         check(endpointUri != null && endpointUri.scheme.equals("https", true) && !endpointUri.host.isNullOrBlank() && endpointUri.userInfo == null && endpointUri.query == null && endpointUri.fragment == null) {
             "Release builds require BLOFY_ACTIVATION_BASE_URL to be a valid HTTPS base URL."
+        }
+        val updateUri = runCatching { URI(updateBaseUrl.trim()) }.getOrNull()
+        check(updateUri != null && updateUri.scheme.equals("https", true) && !updateUri.host.isNullOrBlank() && updateUri.userInfo == null && updateUri.query == null && updateUri.fragment == null) {
+            "Release builds require BLOFY_UPDATE_BASE_URL to be a valid HTTPS base URL."
         }
     }
 }
