@@ -130,7 +130,7 @@ function openSession(token) {
     const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
     const payload = JSON.parse(plaintext);
     if (!payload || typeof payload.u !== 'string' || typeof payload.p !== 'string') return null;
-    if (!Number.isFinite(payload.exp) || payload.exp <= Date.now()) return null;
+    if (!Number.isFinite(payload.exp)) return null;
     return payload;
   } catch {
     return null;
