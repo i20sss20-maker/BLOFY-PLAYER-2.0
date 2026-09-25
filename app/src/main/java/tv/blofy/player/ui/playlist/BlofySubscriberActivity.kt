@@ -82,6 +82,18 @@ class BlofySubscriberActivity : AppCompatActivity() {
         val status = TextView(this).apply { setTextColor(0xFFB78CFF.toInt()); textSize = 14f; gravity = Gravity.CENTER; setPadding(8,14,8,2) }
         panel.addView(status)
 
+        suspend fun renderSyncProgress(progress: PlaylistSyncProgress) {
+            val label = when (progress.stage) {
+                PlaylistSyncStage.M3U -> "جاري تحميل القائمة"
+                PlaylistSyncStage.LIVE -> "جاري تحميل القنوات"
+                PlaylistSyncStage.MOVIES -> "جاري تحميل الأفلام"
+                PlaylistSyncStage.SERIES -> "جاري تحميل المسلسلات"
+            }
+            withContext(Dispatchers.Main) {
+                status.text = "$label • ${progress.percent}%"
+            }
+        }
+
         val login = Button(this).apply {
             text = "حفظ واتصال"; isAllCaps = false; textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); isFocusable = true; isFocusableInTouchMode = true; background = buttonBackground(false)
             setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused); if (tv) view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(100).start() }
