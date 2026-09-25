@@ -34,6 +34,7 @@ import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.core.device.DeviceClass
@@ -254,13 +255,8 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun kindLabel(kind: String) = when (kind) { "live" -> "LIVE"; "movie" -> "MOVIE"; "series" -> "SERIES"; else -> kind.uppercase() }
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF68409A.toInt(), 0xFF3D2858.toInt(), 0xFF24182F.toInt())
-        else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
-    ).apply {
-        cornerRadius = dp(16).toFloat()
-        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF463455.toInt())
-    }
+    private fun rowBackground(focused: Boolean) =
+        CinemaStyle.surface(this, focused = focused, radiusDp = 16)
 
     private fun showMessage(text: String) {
         list.addView(TextView(this).apply { this.text = text; textSize = 18f; setTextColor(BlofyTvDesign.TextMuted); setPadding(0, dp(24), 0, 0) })
