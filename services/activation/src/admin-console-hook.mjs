@@ -59,6 +59,7 @@ const assets = new Map([
   ['/premium.css', ['premium.css', 'text/css']], ['/control-premium.css', ['control-premium.css', 'text/css']], ['/experience.js', ['experience.js', 'text/javascript']],
   ['/admin-device-contact.js', ['admin-device-contact.js', 'text/javascript']],
   ['/admin-usage.js', ['admin-usage.js', 'text/javascript']],
+  ['/admin-service-health.js', ['admin-service-health.js', 'text/javascript']],
   ['/device-admin.css', ['device-admin.css', 'text/css']],
   ['/release-manager.js', ['release-manager.js', 'text/javascript']], ['/release-manager.css', ['release-manager.css', 'text/css']],
   ['/IBMPlexSansArabic-Regular.ttf', ['IBMPlexSansArabic-Regular.ttf', 'font/ttf']],
