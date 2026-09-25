@@ -21,6 +21,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
@@ -410,15 +411,16 @@ class SearchActivity : AppCompatActivity() {
             })
             KIND_LIVE -> lifecycleScope.launch {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val provider = withContext(Dispatchers.IO) {
-                    runCatching {
-                        PortalPlaylistClient.ensureSubscriberConnection(
-                            applicationContext,
-                            BuildConfig.ACTIVATION_BASE_URL,
-                            dao,
-                            providerId
-                        )
-                    }.getOrNull() ?: dao.provider(providerId)
+                val provider = try {
+                    PortalPlaylistClient.ensureSubscriberConnection(
+                        applicationContext,
+                        BuildConfig.ACTIVATION_BASE_URL,
+                        dao,
+                        providerId
+                    )
+                } catch (_: Throwable) {
+                    Toast.makeText(this@SearchActivity, "تعذر تحديث اتصال مشترك BLOFY. أعد فتح القائمة.", Toast.LENGTH_LONG).show()
+                    return@launch
                 } ?: return@launch
                 val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (format.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
                 startActivity(Intent(this@SearchActivity, PlayerActivity::class.java).apply {
