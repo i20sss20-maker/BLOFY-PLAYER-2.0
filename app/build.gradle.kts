@@ -116,6 +116,9 @@ dependencies {
     implementation("androidx.media3:media3-session:1.6.1")
     implementation("androidx.media3:media3-datasource-cronet:1.6.1")
     implementation("androidx.media3:media3-database:1.6.1")
+    // 4K/HEVC compatibility fallback only. Media3 remains the primary player.
+    // 3.7.x carries VideoLAN's 16 KB page-alignment support required by modern Android/Play.
+    implementation("org.videolan.android:libvlc-all:3.7.6")
     implementation("com.google.android.gms:play-services-cronet:18.1.0")
     if (ffmpegAar != null) implementation(files(ffmpegAar))
     implementation("androidx.room:room-runtime:2.7.0")
