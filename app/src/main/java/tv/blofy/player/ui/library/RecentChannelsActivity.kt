@@ -10,12 +10,15 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
@@ -65,7 +68,15 @@ class RecentChannelsActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = dao.providers().first().firstOrNull() ?: return@launch
+            val rawProvider = dao.providers().first().firstOrNull() ?: return@launch
+            val provider = try {
+                PortalPlaylistClient.ensureSubscriberConnection(
+                    applicationContext, BuildConfig.ACTIVATION_BASE_URL, dao, rawProvider.id
+                )
+            } catch (_: Throwable) {
+                Toast.makeText(this@RecentChannelsActivity, R.string.subscriber_service_unavailable, Toast.LENGTH_LONG).show()
+                return@launch
+            } ?: return@launch
             val keys = RecentChannelStore.keys(this@RecentChannelsActivity, provider.id)
             val streams = keys.mapNotNull { dao.stream(it) }
             if (streams.isEmpty()) {
