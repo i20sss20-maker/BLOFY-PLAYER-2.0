@@ -15,6 +15,7 @@ import androidx.core.view.doOnLayout
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.ContentScreenStyle
 
 /** Touch screens keep the primary action outside the scrolling synopsis. */
 internal class DetailsLayout(private val activity: AppCompatActivity) {
@@ -24,7 +25,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
     val root = FrameLayout(activity).apply { setBackgroundColor(CinemaStyle.Background) }
     val backdrop = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
-        alpha = .82f
+        alpha = .88f
         // A subtle cinematic blur also makes poster fallbacks look intentional instead of stretched.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val blur = dp(if (isTv) 5 else 3).toFloat()
@@ -49,7 +50,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
             dp(if (shortTv) 14 else if (isTv) 22 else 14),
             dp(if (shortTv) 22 else if (isTv) 34 else 18)
         )
-        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        background = ContentScreenStyle.detailsPanel(activity)
     }
     private val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
     private val profileActions = LinearLayout(activity).apply {
@@ -64,7 +65,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         root.addView(View(activity).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                intArrayOf(0x66251438.toInt(), 0x2E140D20.toInt(), 0x5207050B.toInt())
+                intArrayOf(0x592C1742.toInt(), 0x28160D22.toInt(), 0x4807050B.toInt())
             )
         }, FrameLayout.LayoutParams(-1, -1))
         val darkEdge = if (activity.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
@@ -75,7 +76,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         root.addView(View(activity).apply {
             background = GradientDrawable(
                 if (stacked) GradientDrawable.Orientation.TOP_BOTTOM else darkEdge,
-                intArrayOf(0xF507050B.toInt(), 0xCE0A0710.toInt(), 0x760B0711.toInt(), 0x1807050B)
+                intArrayOf(0xE907050B.toInt(), 0xC10B0712.toInt(), 0x64130A1C.toInt(), 0x1207050B)
             )
         }, FrameLayout.LayoutParams(-1, -1))
         root.addView(View(activity).apply {
