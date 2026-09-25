@@ -27,6 +27,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.search.SearchActivity
@@ -134,12 +135,26 @@ class PosterCatalogActivity : AppCompatActivity() {
                     requestSelectedCategoryFocus()
                 } else false
             }
-            setOnFocusChangeListener { _, focused ->
+            setOnFocusChangeListener { view, focused ->
                 background = CinemaStyle.surface(this@PosterCatalogActivity, focused, filledFocus = true)
                 setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
+                view.animate().cancel()
+                val scale = if (focused) TvUiTuning.focusScale(this@PosterCatalogActivity, 1.012f) else 1f
+                view.animate()
+                    .scaleX(scale)
+                    .scaleY(scale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(this@PosterCatalogActivity, 6f) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(this@PosterCatalogActivity, focused))
+                    .start()
             }
         }
-        root.addView(searchBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 38)).apply {
+        root.addView(searchBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(
+            when (deviceKind) {
+                DeviceClass.Kind.PHONE -> 46
+                DeviceClass.Kind.TABLET -> 42
+                DeviceClass.Kind.TV -> 42
+            }
+        )).apply {
             bottomMargin = dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 10)
         })
 
@@ -216,7 +231,12 @@ class PosterCatalogActivity : AppCompatActivity() {
         val manager = GridLayoutManager(this, gridColumns)
         posterGrid = RecyclerView(this).apply {
             layoutManager = manager
-            setPadding(dp(4), dp(4), dp(if (deviceKind == DeviceClass.Kind.PHONE) 2 else 6), dp(if (deviceKind == DeviceClass.Kind.PHONE) 10 else 18))
+            setPadding(
+                dp(4),
+                dp(if (deviceKind == DeviceClass.Kind.TV) 8 else 4),
+                dp(if (deviceKind == DeviceClass.Kind.PHONE) 2 else 6),
+                dp(if (deviceKind == DeviceClass.Kind.PHONE) 10 else 18)
+            )
             clipChildren = false
             clipToPadding = false
             itemAnimator = null
