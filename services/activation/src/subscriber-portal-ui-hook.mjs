@@ -102,14 +102,15 @@ ${allowRenewal ? renewalStyles : ''}
   function configureProviderOptions() {
     var select = qs('providerType');
     if (!select) return;
-    Array.from(select.options).forEach(function (option) { if (option.value === 'm3u') option.remove(); });
     var xtream = select.querySelector('option[value="xtream"]');
     if (xtream) xtream.textContent = 'Xtream Codes';
+    var m3u = select.querySelector('option[value="m3u"]');
+    if (m3u) m3u.textContent = 'M3U / M3U8';
     if (!select.querySelector('option[value="blofy"]')) {
       var option = document.createElement('option');
       option.value = 'blofy';
       option.textContent = 'مشتركين BLOFY';
-      select.insertBefore(option, select.firstChild);
+      select.appendChild(option);
     }
     if (!qs('blofySubscriberHint')) {
       var hint = document.createElement('div');
@@ -131,8 +132,10 @@ ${allowRenewal ? renewalStyles : ''}
     var pass = qs('password');
     var hint = qs('blofySubscriberHint');
     setHidden(fieldWrapper(base), blofy);
-    setHidden(fieldWrapper(user), false);
-    setHidden(fieldWrapper(pass), false);
+    if (blofy) {
+      setHidden(fieldWrapper(user), false);
+      setHidden(fieldWrapper(pass), false);
+    }
     if (hint) hint.style.display = blofy ? 'block' : 'none';
     if (blofy) {
       if (base) { base.value = ''; base.setCustomValidity(''); }
@@ -157,7 +160,7 @@ ${allowRenewal ? renewalStyles : ''}
     typeUi = function () {
       editorGeneration++;
       var select = qs('providerType');
-      if (!select || select.value === 'xtream') originalTypeUi.apply(this, arguments);
+      if (!select || select.value !== 'blofy') originalTypeUi.apply(this, arguments);
       applyMode();
     };
     var select = qs('providerType');
@@ -177,6 +180,8 @@ ${allowRenewal ? renewalStyles : ''}
         editingSubscriberId = null;
         originalOpenEditor.apply(this, arguments);
         configureProviderOptions();
+        if (qs('providerType')) qs('providerType').value = 'xtream';
+        if (typeof originalTypeUi === 'function') originalTypeUi();
         applyMode();
       };
       if (qs('newBtn')) qs('newBtn').onclick = openEditor;
