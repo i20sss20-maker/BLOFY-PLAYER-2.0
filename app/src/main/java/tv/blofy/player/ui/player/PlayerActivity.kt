@@ -95,6 +95,7 @@ open class PlayerActivity : ContentAccessActivity() {
     private var lastCheckpointAt = 0L
     private var defaultTextDisabled = false
     private var pendingNetworkRecovery = false
+    private var vlcFallbackLaunched = false
     private lateinit var connectionNotice: TextView
     private lateinit var controlHint: TextView
     private var networkRegistered = false
@@ -247,19 +248,23 @@ open class PlayerActivity : ContentAccessActivity() {
     }
 
     internal open fun createPlaybackSession(): BlofyPlaybackSession = BlofyPlaybackSession(
-            context = this,
-            profile = profileFromIntent(),
-            contentKind = kind.ifBlank { "unknown" }
-        ) {
+        context = this,
+        profile = profileFromIntent(),
+        contentKind = kind.ifBlank { "unknown" },
+        onTerminalError = { failedUrl ->
             saveResume()
             pendingNetworkRecovery = !online()
-            val message = when {
-                pendingNetworkRecovery -> R.string.player_offline
-                session.usedUltraHdCompatibilityFallback() -> R.string.player_4k_compatibility_failed
-                else -> R.string.player_retry_error
+            if (!pendingNetworkRecovery &&
+                kind != KIND_LIVE &&
+                session.usedUltraHdCompatibilityFallback()
+            ) {
+                launchVlcCompatibilityFallback(failedUrl)
+            } else {
+                val message = if (pendingNetworkRecovery) R.string.player_offline else R.string.player_retry_error
+                showConnectionNotice(getString(message))
             }
-            showConnectionNotice(getString(message))
         }
+    )
 
     private fun initializePlaybackSession() {
         session = createPlaybackSession()
@@ -1543,6 +1548,31 @@ open class PlayerActivity : ContentAccessActivity() {
         connectionNotice.text = message
         connectionNotice.visibility = View.VISIBLE
         if (isTv && session.player.playerError != null) connectionNotice.requestFocus()
+    }
+
+    private fun launchVlcCompatibilityFallback(failedUrl: String) {
+        if (vlcFallbackLaunched || isFinishing || failedUrl.isBlank() || sessionReleased) return
+        vlcFallbackLaunched = true
+        val resume = maxOf(
+            checkpoint.positionMs,
+            runCatching { session.player.currentPosition }.getOrDefault(0L).coerceAtLeast(0L)
+        )
+        // PlayerReturnNavigationLifecycle must not synthesize an extra details destination while
+        // we replace this failed Media3 fullscreen Activity with the internal compatibility player.
+        intent.putExtra(PlayerReturnNavigationLifecycle.EXTRA_RETURN_ALREADY_ROUTED, true)
+        releasePlaybackSession()
+        startActivity(Intent(this, VlcFallbackActivity::class.java).apply {
+            putExtra(EXTRA_URL, failedUrl)
+            putExtra(EXTRA_CONTENT_KEY, currentContentKey)
+            putExtra(EXTRA_PROVIDER_ID, providerId)
+            putExtra(EXTRA_KIND, kind)
+            putExtra(EXTRA_TITLE, currentTitle)
+            putExtra(EXTRA_RESUME_MS, resume)
+            putExtra(EXTRA_SERIES_ID, seriesId)
+            putExtra(EXTRA_SEASON, currentSeason)
+            putExtra(EXTRA_EPISODE, currentEpisode)
+        })
+        finish()
     }
 
     private fun retryPlayback() {
