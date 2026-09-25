@@ -36,6 +36,8 @@ class BlofyPlaybackSession(
     private var playStartedAtMs = 0L
     private var automaticRetries = 0
     private var alternateLiveFormatAttempted = false
+    private var ultraHdCompatibilityFallbackAttempted = false
+    private var compatibilityTrackParameters: androidx.media3.common.TrackSelectionParameters? = null
     private var lastObservedLivePositionMs = Long.MIN_VALUE
     private var liveStallStartedAtMs = 0L
     private var lastLiveStallRecoveryAtMs = 0L
@@ -116,6 +118,19 @@ class BlofyPlaybackSession(
                     // Media3 can synchronously report a timeout while detaching a surface or
                     // releasing. It must never restart this session or penalize the provider.
                     if (closing) return
+                    if (!contentKind.isLiveContent() &&
+                        !ultraHdCompatibilityFallbackAttempted &&
+                        PlaybackFailureDetails.isUltraHdDecoderFailure(error, videoFormat)
+                    ) {
+                        ultraHdCompatibilityFallbackAttempted = true
+                        compatibilityTrackParameters = player.trackSelectionParameters
+                        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                            .setMaxVideoSize(1920, 1080)
+                            .build()
+                        automaticRetries = MAX_AUTOMATIC_RETRIES
+                        retryHandler.post { retrySameUrl() }
+                        return
+                    }
                     val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
                     if (failedUrl.isNotBlank()) {
                         PlaybackIntelligence.recordFailure(appContext, profile.providerKey, contentKind, failedUrl)
@@ -157,8 +172,13 @@ class BlofyPlaybackSession(
         if (closing) return
         retryHandler.removeCallbacksAndMessages(null)
         seekRecoveryGeneration++
+        compatibilityTrackParameters?.let {
+            player.trackSelectionParameters = it
+            compatibilityTrackParameters = null
+        }
         automaticRetries = 0
         alternateLiveFormatAttempted = false
+        ultraHdCompatibilityFallbackAttempted = false
         liveStallRecoveries = 0
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
@@ -281,6 +301,8 @@ class BlofyPlaybackSession(
 
     fun isStarted(): Boolean = !closing && player.playbackState == Player.STATE_READY && player.playWhenReady
 
+    fun usedUltraHdCompatibilityFallback(): Boolean = ultraHdCompatibilityFallbackAttempted
+
     /** In-memory state only: stream URLs must never be persisted to diagnostics or saved bundles. */
     fun resumeState(): PlaybackResumeState? {
         if (closing) return null
@@ -320,8 +342,11 @@ class BlofyPlaybackSession(
 @OptIn(markerClass = [UnstableApi::class])
 private fun createPlaybackPlayer(context: Context, profile: ProviderProfile): ExoPlayer =
     ExoPlayer.Builder(context)
-        .setRenderersFactory(DefaultRenderersFactory(context)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER))
+        .setRenderersFactory(
+            DefaultRenderersFactory(context)
+                .setEnableDecoderFallback(true)
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        )
         .setMediaSourceFactory(DefaultMediaSourceFactory(TransportFactory.create(context, profile)))
         .build()
 
