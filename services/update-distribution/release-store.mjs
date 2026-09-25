@@ -94,6 +94,15 @@ const RC07552_RELEASE = {
   stage: 'public'
 };
 
+const RC07553_RELEASE = {
+  versionCode: 2000071,
+  versionName: '2.0.0-rc07.55.3',
+  downloadUrl: 'https://updates.blofyplayer.com/files/releases/BLOFY-PLAYER-2.0-rc07.55.3-PRODUCTION-SIGNED.apk',
+  releaseNotes: 'BLOFY PLAYER 55.3 — آخر تحسين أمان لمشتركين BLOFY: لا رجوع للبروكسي القديم إذا فشل Direct، مع الحفاظ على إصلاح 456، وتحويل القوائم القديمة إلى Direct Xtream، وإصلاح تداخل البوسترات. محركات Media3 وFFmpeg وfallback الأساسية كما هي. التحديث يُثبت فوق النسخة الحالية بدون حذف التطبيق.',
+  minSupportedVersionCode: 1,
+  stage: 'public'
+};
+
 let state;
 let writeChain = Promise.resolve();
 
@@ -161,7 +170,7 @@ async function save(nextState = state) {
 
 function seedRc0750Once() {
   let changed = false;
-  for (const candidate of [RC0750_RELEASE, RC0751_RELEASE, RC0752_RELEASE, RC0753_RELEASE, RC0754_RELEASE, RC0755_RELEASE, RC07551_RELEASE, RC07552_RELEASE]) {
+  for (const candidate of [RC0750_RELEASE, RC0751_RELEASE, RC0752_RELEASE, RC0753_RELEASE, RC0754_RELEASE, RC0755_RELEASE, RC07551_RELEASE, RC07552_RELEASE, RC07553_RELEASE]) {
     const existing = state.releases.find((r) => r.versionCode === candidate.versionCode);
     if (existing) {
       if (existing.stage !== 'public') {
@@ -176,8 +185,8 @@ function seedRc0750Once() {
 
   state.releases.sort((a, b) => b.versionCode - a.versionCode);
   const active = state.releases.find((r) => r.versionCode === state.activeVersionCode && r.stage === 'public');
-  if (!active || active.versionCode < RC07552_RELEASE.versionCode) {
-    state.activeVersionCode = RC07552_RELEASE.versionCode;
+  if (!active || active.versionCode < RC07553_RELEASE.versionCode) {
+    state.activeVersionCode = RC07553_RELEASE.versionCode;
     changed = true;
   }
   return changed;
