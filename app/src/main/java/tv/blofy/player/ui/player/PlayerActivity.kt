@@ -253,7 +253,12 @@ open class PlayerActivity : ContentAccessActivity() {
         ) {
             saveResume()
             pendingNetworkRecovery = !online()
-            showConnectionNotice(getString(if (pendingNetworkRecovery) R.string.player_offline else R.string.player_retry_error))
+            val message = when {
+                pendingNetworkRecovery -> R.string.player_offline
+                session.usedUltraHdCompatibilityFallback() -> R.string.player_4k_compatibility_failed
+                else -> R.string.player_retry_error
+            }
+            showConnectionNotice(getString(message))
         }
 
     private fun initializePlaybackSession() {
