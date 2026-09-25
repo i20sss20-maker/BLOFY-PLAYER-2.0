@@ -43,14 +43,14 @@ internal object DetailsMetadataChips {
             .forEach { value ->
                 row.addView(TextView(host.context).apply {
                     text = value
-                    textSize = 11.8f
+                    textSize = 12f
                     typeface = BlofyTvDesign.MediumTypeface
-                    setTextColor(BlofyTvDesign.Lavender)
+                    setTextColor(BlofyTvDesign.PurpleSoft)
                     gravity = Gravity.CENTER
                     textDirection = View.TEXT_DIRECTION_LOCALE
                     includeFontPadding = false
                     background = ContentScreenStyle.chip(host.context)
-                    setPadding(dp(host.context, 10), dp(host.context, 5), dp(host.context, 10), dp(host.context, 5))
+                    setPadding(dp(host.context, 11), dp(host.context, 6), dp(host.context, 11), dp(host.context, 6))
                 }, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
