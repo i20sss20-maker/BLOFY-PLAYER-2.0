@@ -40,3 +40,11 @@ body[data-page="admin"]{background:radial-gradient(circle at 85% 0,rgba(126,87,1
 
 .usage-card{margin:0 0 20px}.usage-card h2{margin:0 0 16px}.usage-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.usage-metric{display:grid;gap:5px;padding:18px;border:1px solid #35303f;border-radius:13px;background:#15111e}.usage-metric strong{font-size:32px;color:#e1caff;font-variant-numeric:tabular-nums}.usage-metric span{font-size:14px}.usage-metric small{font-size:11px;color:#a79db5;line-height:1.7}.usage-card>.caption{line-height:1.9;margin-bottom:0}.usage-card details{margin-top:12px}.usage-card summary{cursor:pointer;color:#cbb5ff}.registration-note{max-width:250px;min-width:150px;line-height:1.8;margin-top:5px}.badge.pending{background:#292139;border-color:#55436c;color:#dac2fa}
 @media(max-width:680px){.usage-metrics{grid-template-columns:1fr}.usage-metric{padding:14px}.usage-metric strong{font-size:27px}.usage-card{padding:17px!important}}
+
+.device-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.device-row-actions .copy-device-id{min-height:34px;padding:6px 9px;font-size:11px;white-space:nowrap}
+.active-playlist-caption{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#a999bc}
+.badge.stale{display:inline-flex;margin-top:6px;background:#251d16;border-color:#5b4631;color:#ddb988}
+#customer-rows tr.is-inactive td:first-child{box-shadow:inset -2px 0 0 #5d4b37}
+#customer-rows tr.is-inactive{background:linear-gradient(90deg,rgba(97,77,50,.08),transparent 55%)}
+@media(max-width:680px){.device-row-actions{min-width:124px}.device-row-actions>*{flex:1 1 auto}.active-playlist-caption{max-width:150px}}
