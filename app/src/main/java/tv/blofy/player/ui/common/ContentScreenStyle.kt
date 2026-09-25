@@ -81,22 +81,22 @@ object ContentScreenStyle {
     fun detailsPanel(context: Context) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         intArrayOf(
-            0x7A241631.toInt(),
-            0x5C160F20.toInt(),
-            0x36100B18.toInt()
+            0x86291A38.toInt(),
+            0x661A1026.toInt(),
+            0x42110B19.toInt()
         )
     ).apply {
         val d = context.resources.displayMetrics.density
         cornerRadius = 22f * d
-        setStroke((1f * d).toInt().coerceAtLeast(1), 0x2ECAA7FF)
+        setStroke((1f * d).toInt().coerceAtLeast(1), 0x42D8BCFF)
     }
 
     fun chip(context: Context) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0x5A2E1D3F, 0x3B160E20)
+        intArrayOf(0x702F1E41, 0x4A180F23)
     ).apply {
         val d = context.resources.displayMetrics.density
         cornerRadius = 12f * d
-        setStroke((1f * d).toInt().coerceAtLeast(1), 0x3DFFFFFF)
+        setStroke((1f * d).toInt().coerceAtLeast(1), 0x52E2D1FF)
     }
 }
