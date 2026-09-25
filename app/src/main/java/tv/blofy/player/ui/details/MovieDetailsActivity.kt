@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -105,10 +106,23 @@ class MovieDetailsActivity : AppCompatActivity() {
             val durationMs = watch?.durationMs ?: 0L
             if (resumeMs > 30_000L && durationMs > 0L) {
                 val percent = ((resumeMs * 100L) / durationMs).coerceIn(1, 99)
+                val remainingMinutes = ((durationMs - resumeMs).coerceAtLeast(0L) / 60_000L)
                 info.addView(TextView(this@MovieDetailsActivity).apply {
-                    text = "متابعة المشاهدة  •  $percent%"
+                    text = buildString {
+                        append("متابعة المشاهدة  •  $percent%")
+                        if (remainingMinutes > 0) append("  •  متبقي تقريبًا $remainingMinutes د")
+                    }
                     textSize = 15f; setTextColor(0xFFBCA8D7.toInt()); gravity = Gravity.END
-                    setPadding(0, 0, 0, dp(12))
+                    setPadding(0, 0, 0, dp(7))
+                })
+                info.addView(ProgressBar(this@MovieDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    max = 100
+                    progress = percent.toInt()
+                    progressTintList = android.content.res.ColorStateList.valueOf(0xFF9A5CFF.toInt())
+                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF2D243A.toInt())
+                    contentDescription = "تقدم مشاهدة الفيلم $percent بالمئة"
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(8)).apply {
+                    bottomMargin = dp(14)
                 })
             }
 
