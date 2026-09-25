@@ -22,10 +22,8 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
-import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
-import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
@@ -246,13 +244,10 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun refresh(provider: ProviderEntity) {
-        status.text = "جاري مزامنة ${provider.name}..."
-        lifecycleScope.launch {
-            runCatching {
-                PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(provider)
-            }.onSuccess { status.text = "تمت مزامنة ${provider.name}" }
-                .onFailure { status.text = "فشلت المزامنة • حاول مرة أخرى" }
-        }
+        status.text = "فتح التحديث الآمن لـ ${provider.name}..."
+        startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
+            putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)
+        })
     }
 
     private fun remove(provider: ProviderEntity) {
