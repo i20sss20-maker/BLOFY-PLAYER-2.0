@@ -1,10 +1,10 @@
-name: Publish verified BLOFY rc07.55.1
+name: Publish verified BLOFY rc07.55.2
 
 on:
   push:
     branches: [main]
     paths:
-      - .github/workflows/publish-rc07551.yml
+      - .github/workflows/publish-rc07552.yml
   workflow_dispatch:
 
 permissions:
@@ -12,7 +12,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: blofy-publish-rc07551
+  group: blofy-publish-rc07552
   cancel-in-progress: false
 
 jobs:
@@ -21,29 +21,29 @@ jobs:
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
-      SIGNED_RUN: '36090111828'
-      SIGNED_COMMIT: 578c5d668696d4dec21af67f60b201442fb82bc8
-      EXPECTED_VERSION: 2.0.0-rc07.55.1
-      EXPECTED_VERSION_CODE: "2000069"
+      SIGNED_RUN: '36162220372'
+      SIGNED_COMMIT: 867a6c7022618e2b75ceff7318ef1c251cb4f849
+      EXPECTED_VERSION: 2.0.0-rc07.55.2
+      EXPECTED_VERSION_CODE: "2000070"
       EXPECTED_ACTIVATION: https://api.blofyplayer.com
       EXPECTED_UPDATES: https://updates.blofyplayer.com
-      APK_NAME: BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.apk
-      AAB_NAME: BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.aab
-      RELEASE_TAG: v2.0.0-rc07.55.1
+      APK_NAME: BLOFY-PLAYER-2.0-rc07.55.2-PRODUCTION-SIGNED.apk
+      AAB_NAME: BLOFY-PLAYER-2.0-rc07.55.2-PRODUCTION-SIGNED.aab
+      RELEASE_TAG: v2.0.0-rc07.55.2
     steps:
       - name: Verify successful signed source run
         shell: bash
         run: |
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SIGNED_RUN" > signed-run.json
-          jq -e --arg sha "$SIGNED_COMMIT"             '.status=="completed" and .conclusion=="success" and .head_sha==$sha and .name=="BLOFY rc07.55.1 Production-Signed Test"' signed-run.json
+          jq -e --arg sha "$SIGNED_COMMIT"             '.status=="completed" and .conclusion=="success" and .head_sha==$sha and .name=="BLOFY rc07.55.2 Production-Signed Test"' signed-run.json
 
       - name: Download exact signed artifact
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p publish
-          gh run download "$SIGNED_RUN" --repo "$GITHUB_REPOSITORY"             --name "BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED-$SIGNED_COMMIT"             --dir publish
+          gh run download "$SIGNED_RUN" --repo "$GITHUB_REPOSITORY"             --name "BLOFY-PLAYER-2.0-rc07.55.2-PRODUCTION-SIGNED-$SIGNED_COMMIT"             --dir publish
           test -s "publish/$APK_NAME"
           test -s "publish/$AAB_NAME"
           grep -Fxq "version=$EXPECTED_VERSION" publish/build-info.txt
@@ -60,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > release-notes.md <<'NOTES'
-          BLOFY PLAYER 2.0.0-rc07.55.1
+          BLOFY PLAYER 2.0.0-rc07.55.2
 
           مبني على rc07.55 المستقرة، وليس على rc07.56.
 
@@ -72,12 +72,12 @@ jobs:
           - توقيت الرياض ودبي ولندن ونيويورك.
           - Media3 وFFmpeg وfallback ومحركات التشغيل الأساسية محفوظة.
 
-          versionCode: 2000069
+          versionCode: 2000070
           NOTES
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "publish/$APK_NAME" "publish/$AAB_NAME" publish/SHA256SUMS               --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$RELEASE_TAG" "publish/$APK_NAME" "publish/$AAB_NAME" publish/SHA256SUMS               --repo "$GITHUB_REPOSITORY" --target "$SIGNED_COMMIT"               --title 'BLOFY PLAYER 2.0.0-rc07.55.1' --notes-file release-notes.md --latest
+            gh release create "$RELEASE_TAG" "publish/$APK_NAME" "publish/$AAB_NAME" publish/SHA256SUMS               --repo "$GITHUB_REPOSITORY" --target "$SIGNED_COMMIT"               --title 'BLOFY PLAYER 2.0.0-rc07.55.2' --notes-file release-notes.md --latest
           fi
 
       - name: Verify public APK bytes
