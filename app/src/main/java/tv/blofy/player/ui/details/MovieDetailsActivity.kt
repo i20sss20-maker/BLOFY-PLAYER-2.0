@@ -20,10 +20,12 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
@@ -50,7 +52,14 @@ class MovieDetailsActivity : ContentAccessActivity() {
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = dao.provider(providerId) ?: run { finish(); return@launch }
+            val provider = runCatching {
+                PortalPlaylistClient.ensureSubscriberConnection(
+                    applicationContext,
+                    BuildConfig.ACTIVATION_BASE_URL,
+                    dao,
+                    providerId
+                )
+            }.getOrNull() ?: dao.provider(providerId) ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
             val watch = dao.watchState(contentKey)
             val url = ContentUrlResolver.movie(provider, stream)
