@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
@@ -280,7 +281,7 @@ class HomeActivity : AppCompatActivity() {
         row.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginStart = dp(6); marginEnd = dp(6) })
     }
 
-    private fun buildCompactHome(): LinearLayout {
+    private fun buildCompactHome(): View {
         val phone = deviceKind == DeviceClass.Kind.PHONE
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -303,7 +304,13 @@ class HomeActivity : AppCompatActivity() {
         addCompactAction(secondary, "favorites", "المفضلة", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addCompactAction(secondary, "settings", "الإعدادات", Intent(this, SettingsActivity::class.java))
         root.addView(secondary)
-        return root
+        return ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            setBackgroundColor(theme.background)
+            addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        }
     }
 
     private fun contentIntent(kind: String): Intent = if (deviceKind == DeviceClass.Kind.TV) {
