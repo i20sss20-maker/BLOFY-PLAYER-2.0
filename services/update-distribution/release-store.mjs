@@ -103,6 +103,15 @@ const RC07553_RELEASE = {
   stage: 'public'
 };
 
+const RC07554_RELEASE = {
+  versionCode: 2000072,
+  versionName: '2.0.0-rc07.55.4',
+  downloadUrl: 'https://updates.blofyplayer.com/files/releases/BLOFY-PLAYER-2.0-rc07.55.4-PRODUCTION-SIGNED.apk',
+  releaseNotes: 'BLOFY PLAYER 55.4 — تحسين توافق أفلام 4K/HEVC عبر تفعيل decoder fallback داخل Media3 ومحاولة توافق UHD محدودة عند فشل فك الترميز، مع رسالة أوضح عند عدم دعم الجهاز. تحسين أداء صفحة التفاصيل على Android TV بإزالة blur الكامل المكلف، وتحسين زجاج التفاصيل والبيانات، وفوكس البحث ومسافات البوسترات. مبني فوق إصلاحات مشتركين BLOFY وDirect Xtream السابقة. التحديث يُثبت فوق النسخة الحالية بدون حذف التطبيق.',
+  minSupportedVersionCode: 1,
+  stage: 'public'
+};
+
 let state;
 let writeChain = Promise.resolve();
 
@@ -170,7 +179,7 @@ async function save(nextState = state) {
 
 function seedRc0750Once() {
   let changed = false;
-  for (const candidate of [RC0750_RELEASE, RC0751_RELEASE, RC0752_RELEASE, RC0753_RELEASE, RC0754_RELEASE, RC0755_RELEASE, RC07551_RELEASE, RC07552_RELEASE, RC07553_RELEASE]) {
+  for (const candidate of [RC0750_RELEASE, RC0751_RELEASE, RC0752_RELEASE, RC0753_RELEASE, RC0754_RELEASE, RC0755_RELEASE, RC07551_RELEASE, RC07552_RELEASE, RC07553_RELEASE, RC07554_RELEASE]) {
     const existing = state.releases.find((r) => r.versionCode === candidate.versionCode);
     if (existing) {
       if (existing.stage !== 'public') {
@@ -185,8 +194,8 @@ function seedRc0750Once() {
 
   state.releases.sort((a, b) => b.versionCode - a.versionCode);
   const active = state.releases.find((r) => r.versionCode === state.activeVersionCode && r.stage === 'public');
-  if (!active || active.versionCode < RC07553_RELEASE.versionCode) {
-    state.activeVersionCode = RC07553_RELEASE.versionCode;
+  if (!active || active.versionCode < RC07554_RELEASE.versionCode) {
+    state.activeVersionCode = RC07554_RELEASE.versionCode;
     changed = true;
   }
   return changed;
