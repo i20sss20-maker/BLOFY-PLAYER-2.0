@@ -107,6 +107,17 @@ class PlaylistActivity : AppCompatActivity() {
 
         var confirmedHttpUrl: String? = null
         var busy = false
+        suspend fun renderSyncProgress(progress: PlaylistSyncProgress) {
+            val label = when (progress.stage) {
+                PlaylistSyncStage.M3U -> "جاري تحميل ملف M3U"
+                PlaylistSyncStage.LIVE -> "جاري تحميل القنوات"
+                PlaylistSyncStage.MOVIES -> "جاري تحميل الأفلام"
+                PlaylistSyncStage.SERIES -> "جاري تحميل المسلسلات"
+            }
+            withContext(Dispatchers.Main) {
+                status.text = "$label • ${progress.percent}%"
+            }
+        }
         suspend fun persist(connectAfter: Boolean) {
             val baseUrl = url.text.toString().trim(); val user = username.text.toString().trim(); val pass = password.text.toString()
             val isM3u = user.isBlank() && pass.isBlank(); val partialXtream = user.isBlank() xor pass.isBlank()
