@@ -137,7 +137,7 @@ class HomeActivity : AppCompatActivity() {
                 text = getString(R.string.home_preparing_library)
                 BlofyTvDesign.applyBody(this)
                 gravity = Gravity.CENTER
-                setPadding(24, 24, 24, 24)
+                setPadding(dp(24), dp(24), dp(24), dp(24))
             })
         })
         lifecycleScope.launch {
