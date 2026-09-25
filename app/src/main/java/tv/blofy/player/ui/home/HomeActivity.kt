@@ -65,6 +65,7 @@ import tv.blofy.player.ui.settings.SettingsActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 class HomeActivity : AppCompatActivity() {
     internal var savedEntryDeadlineMillis = 8_000L
@@ -110,7 +111,7 @@ class HomeActivity : AppCompatActivity() {
     private val refreshScheduler = HomeRefreshScheduler(
         uiHandler, 30_000L, HERO_ROTATION_MS,
         refreshClock = {
-            clockLabel?.text = DeviceLocalTime.format(this, System.currentTimeMillis(), "EEE  d MMM   •   h:mm a")
+            clockLabel?.text = worldClockText()
         },
         rotateHero = {
             if (remote && heroCandidates.size > 1 && !isFinishing && heroContent?.hasFocus() != true) {
@@ -771,11 +772,18 @@ class HomeActivity : AppCompatActivity() {
         }
         header.addView(serverLabel, LinearLayout.LayoutParams(0, -2, 1f))
         clockLabel = TextView(this).apply {
-            textSize = 10f; setTextColor(TEXT_MUTED)
-            gravity = Gravity.END; isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
+            textSize = if (layoutSpec.width < 900) 9f else 9.5f
+            setTextColor(TEXT_SECONDARY)
+            gravity = Gravity.END
+            maxLines = 2
+            isSingleLine = false
+            ellipsize = TextUtils.TruncateAt.END
+            includeFontPadding = false
+            setLineSpacing(0f, 1.05f)
+            text = worldClockText()
         }
-        header.addView(clockLabel, LinearLayout.LayoutParams(dp(if (layoutSpec.width < 800) 120 else 166), -2).apply { marginStart = dp(10) })
-        main.addView(header, LinearLayout.LayoutParams(-1, dp(58)))
+        header.addView(clockLabel, LinearLayout.LayoutParams(dp(if (layoutSpec.width < 900) 188 else 330), -2).apply { marginStart = dp(10) })
+        main.addView(header, LinearLayout.LayoutParams(-1, dp(64)))
         val scroll = ScrollView(this).apply {
             tag = "blofy_home_feed_scroll"
             isVerticalScrollBarEnabled = false
@@ -794,6 +802,20 @@ class HomeActivity : AppCompatActivity() {
         scroll.addView(feed, FrameLayout.LayoutParams(-1, -2))
         main.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
+    }
+
+    private fun worldClockText(): String {
+        val now = Date()
+        fun time(zone: String): String = SimpleDateFormat("HH:mm", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone(zone)
+        }.format(now)
+
+        return if (layoutSpec.width < 900) {
+            "الرياض ${time("Asia/Riyadh")}  •  لندن ${time("Europe/London")}"
+        } else {
+            "الرياض ${time("Asia/Riyadh")}  •  دبي ${time("Asia/Dubai")}\n" +
+                "لندن ${time("Europe/London")}  •  نيويورك ${time("America/New_York")}"
+        }
     }
 
     private fun buildSidebar() = LinearLayout(this).apply {
