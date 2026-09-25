@@ -1,5 +1,6 @@
 package tv.blofy.player.ui.player
 
+import android.content.Intent
 import tv.blofy.player.ui.common.ContentPresentation
 
 import android.app.AlertDialog
