@@ -109,6 +109,10 @@ val validateReleaseConfiguration = tasks.register("validateReleaseConfiguration"
         check(endpointUri != null && endpointUri.scheme.equals("https", true) && !endpointUri.host.isNullOrBlank() && endpointUri.userInfo == null && endpointUri.query == null && endpointUri.fragment == null) {
             "Release builds require BLOFY_ACTIVATION_BASE_URL to be a valid HTTPS base URL."
         }
+        val updateUri = runCatching { URI(updateBaseUrl.trim()) }.getOrNull()
+        check(updateUri != null && updateUri.scheme.equals("https", true) && !updateUri.host.isNullOrBlank() && updateUri.userInfo == null && updateUri.query == null && updateUri.fragment == null) {
+            "Release builds require BLOFY_UPDATE_BASE_URL to be a valid HTTPS base URL."
+        }
     }
 }
 
