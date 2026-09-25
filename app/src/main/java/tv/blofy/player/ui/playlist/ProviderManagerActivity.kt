@@ -121,11 +121,22 @@ class ProviderManagerActivity : AppCompatActivity() {
         setContentView(root)
 
         lifecycleScope.launch {
-            BlofyDatabase.get(applicationContext).dao().allProviders().collect { render(it) }
+            val dao = BlofyDatabase.get(applicationContext).dao()
+            dao.allProviders().collect { providers ->
+                val readiness = withContext(Dispatchers.IO) {
+                    providers.associate { provider ->
+                        provider.id to (
+                            CatalogSyncState.isReady(applicationContext, provider.id) &&
+                                dao.hasStreamsForProvider(provider.id)
+                            )
+                    }
+                }
+                render(providers, readiness)
+            }
         }
     }
 
-    private fun render(items: List<ProviderEntity>) {
+    private fun render(items: List<ProviderEntity>, readiness: Map<String, Boolean>) {
         focusButtons.keys.filter { it !in setOf("add", "subscriber") }.toList().forEach { focusButtons.remove(it) }
         list.removeAllViews()
         if (items.isEmpty()) {
@@ -177,9 +188,18 @@ class ProviderManagerActivity : AppCompatActivity() {
                 gravity = Gravity.RIGHT
                 setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
             })
+            info.addView(TextView(this).apply {
+                val ready = readiness[provider.id] == true
+                text = if (ready) "✓ جاهزة محليًا" else "↻ تحتاج تحميل أو تحديث"
+                textSize = 12.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                gravity = Gravity.RIGHT
+                setTextColor(if (ready) 0xFF79E1BA.toInt() else 0xFFE3B86D.toInt())
+                setPadding(0, dp(3), 0, 0)
+            })
 
             if (isPhone) {
-                row.addView(info, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
+                row.addView(info, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)))
                 val phoneActions = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -190,14 +210,14 @@ class ProviderManagerActivity : AppCompatActivity() {
                 phoneActions.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
                 phoneActions.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f))
                 row.addView(phoneActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(5) })
-                list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(132)).apply { bottomMargin = dp(9) })
+                list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(146)).apply { bottomMargin = dp(9) })
             } else {
-                row.addView(info, LinearLayout.LayoutParams(0, dp(66), 1f))
+                row.addView(info, LinearLayout.LayoutParams(0, dp(72), 1f))
                 row.addView(actionButton("${provider.id}:connect", "▶  اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(dp(140), dp(56)).apply { marginStart = dp(8) })
                 row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(dp(116), dp(56)).apply { marginStart = dp(8) })
                 row.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(dp(120), dp(56)).apply { marginStart = dp(8) })
                 row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(dp(104), dp(56)))
-                list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(90)).apply { bottomMargin = dp(9) })
+                list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(96)).apply { bottomMargin = dp(9) })
             }
         }
         restoreFocus()
