@@ -104,8 +104,7 @@ ${allowRenewal ? renewalStyles : ''}
     if (!select) return;
     var xtream = select.querySelector('option[value="xtream"]');
     if (xtream) xtream.textContent = 'Xtream Codes';
-    var m3u = select.querySelector('option[value="m3u"]');
-    if (m3u) m3u.textContent = 'M3U / M3U8';
+    Array.from(select.options).forEach(function (option) { if (option.value === 'm3u') option.remove(); });
     if (!select.querySelector('option[value="blofy"]')) {
       var option = document.createElement('option');
       option.value = 'blofy';
