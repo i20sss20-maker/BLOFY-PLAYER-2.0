@@ -122,9 +122,13 @@ object BlofySubscriberClient {
     internal fun isLegacyProxy(provider: ProviderEntity, endpoint: String): Boolean {
         val base = endpoint.trim().trimEnd('/').toHttpUrlOrNull() ?: return false
         val url = provider.baseUrl.toHttpUrlOrNull() ?: return false
+        val legacyPath = url.encodedPath.trimEnd('/')
+        val firstPartyHost = url.host == base.host ||
+            url.host.equals("blofyplayer.com", true) ||
+            url.host.equals("api.blofyplayer.com", true)
         return provider.providerType.equals("xtream", true) && provider.subscriberToken.isBlank() &&
-            url.scheme == base.scheme && url.host == base.host && url.port == base.port &&
-            url.encodedPath.trimEnd('/') == base.encodedPath.trimEnd('/') + "/api/v1/subscribers/xtream" &&
+            url.scheme == "https" && firstPartyHost &&
+            legacyPath == "/api/v1/subscribers/xtream" &&
             url.query == null && url.fragment == null && url.encodedUsername.isEmpty() && url.encodedPassword.isEmpty()
     }
 
