@@ -189,14 +189,14 @@ class HomeActivity : AppCompatActivity() {
         setPadding(dp(38), dp(20), dp(38), dp(20))
         background = heroBackground()
         addView(TextView(this@HomeActivity).apply {
-            text = "حلقة جديدة"
+            text = "BLOFY PLAYER"
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(0xFF54E5C6.toInt())
             gravity = Gravity.RIGHT
         })
         addView(TextView(this@HomeActivity).apply {
-            text = "أحدث محتواك"
+            text = "كل محتواك في مكان واحد"
             textSize = 36f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
@@ -204,7 +204,7 @@ class HomeActivity : AppCompatActivity() {
             setPadding(0, dp(6), 0, 0)
         })
         addView(TextView(this@HomeActivity).apply {
-            text = "الأفلام والمسلسلات والقنوات في واجهة واحدة سريعة وواضحة."
+            text = "البث المباشر والأفلام والمسلسلات والمفضلة في واجهة واحدة سريعة وواضحة."
             textSize = 17f
             setTextColor(0xFFC8BCD4.toInt())
             gravity = Gravity.RIGHT
@@ -215,8 +215,8 @@ class HomeActivity : AppCompatActivity() {
             gravity = Gravity.RIGHT
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
-        actions.addView(heroButton("شاهد الآن", "hero_watch", contentIntent("series"), true), LinearLayout.LayoutParams(dp(180), dp(58)).apply { marginStart = dp(10) })
-        actions.addView(heroButton("التفاصيل", "hero_details", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(160), dp(58)))
+        actions.addView(heroButton("تصفح المسلسلات", "hero_watch", contentIntent("series"), true), LinearLayout.LayoutParams(dp(190), dp(58)).apply { marginStart = dp(10) })
+        actions.addView(heroButton("تصفح الأفلام", "hero_details", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(170), dp(58)))
         addView(actions)
     }
 
