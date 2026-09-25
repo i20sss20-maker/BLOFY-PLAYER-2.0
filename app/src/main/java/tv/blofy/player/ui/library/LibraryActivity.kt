@@ -176,7 +176,7 @@ class LibraryActivity : AppCompatActivity() {
             isFocusable = true; isClickable = true
             background = rowBackground(false)
             setOnFocusChangeListener { view, focused ->
-                setTextColor(Color.WHITE)
+                setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextPrimary)
                 view.background = rowBackground(focused)
                 view.animate().cancel()
                 val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
@@ -205,7 +205,7 @@ class LibraryActivity : AppCompatActivity() {
             isFocusable = true; isClickable = true
             background = rowBackground(false)
             setOnFocusChangeListener { view, focused ->
-                setTextColor(Color.WHITE)
+                setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextPrimary)
                 view.background = rowBackground(focused)
                 view.animate().cancel()
                 val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
