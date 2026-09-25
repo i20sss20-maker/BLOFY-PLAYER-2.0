@@ -26,9 +26,10 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
     val backdrop = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
         alpha = .88f
-        // A subtle cinematic blur also makes poster fallbacks look intentional instead of stretched.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val blur = dp(if (isTv) 5 else 3).toFloat()
+        // Full-screen RenderEffect is expensive on many TV SoCs. Phones/tablets keep the
+        // subtle blur; TV uses the cinematic tint/edge gradients below with zero extra GPU blur.
+        if (!isTv && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val blur = dp(3).toFloat()
             setRenderEffect(RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP))
         }
     }
