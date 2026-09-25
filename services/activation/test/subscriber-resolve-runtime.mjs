@@ -62,10 +62,10 @@ try {
   response=await post('/api/v1/subscribers/resolve',{...credentials,sessionTokens:[remoteSubscriber.username,token({exp:Date.now()-60000})]});
   assert.equal(response.status,200);assert.match(response.headers.get('cache-control'),/no-store/);
   assert.equal(response.data.items.length,2);
-  for(const item of response.data.items) {
-    assert.equal(item.delivery,'direct');assert.equal(item.baseUrl,'https://subscriber.example/base');
-    assert.equal(item.username,'ci-provider-user');assert.equal(item.password,'ci-only-provider-password');assert.ok(item.sessionToken);
-  }
+  const [validResolved, expiredResolved] = response.data.items;
+  assert.equal(validResolved.delivery,'direct');assert.equal(validResolved.baseUrl,'https://subscriber.example/base');
+  assert.equal(validResolved.username,'ci-provider-user');assert.equal(validResolved.password,'ci-only-provider-password');assert.ok(validResolved.sessionToken);
+  assert.equal(expiredResolved.error,'subscriber_session_expired');assert.equal(expiredResolved.delivery,undefined);
   assert.deepEqual((await pool.query('SELECT activation_code,status,expires_at FROM devices WHERE device_id=$1',[deviceId])).rows[0],deviceBefore);
   assert.deepEqual((await pool.query('SELECT * FROM device_playlists WHERE device_id=$1 ORDER BY id',[deviceId])).rows,rowsBefore);
   response=await post('/api/v1/subscribers/resolve',{...credentials,sessionTokens:[token({d:'BLOFY-ANOTHER-DEVICE'}),'invalid-token',sessionToken]});
