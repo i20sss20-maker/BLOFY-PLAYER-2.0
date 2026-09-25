@@ -2,4 +2,5 @@
     <string name="player_toggle_controls">Show or hide playback controls</string>
     <string name="player_seek_position">Playback position</string>
     <string name="login_saved_playlists_failed">Saved playlists could not be read. Retry; your saved data has not been removed.</string>
+    <string name="player_4k_compatibility_failed">This 4K/HEVC video could not be decoded on this device • retry or choose another quality</string>
 </resources>
