@@ -1,4 +1,4 @@
-name: Verify rc07.55.3 Production
+name: Verify rc07.55.4 Production
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
     env:
       UPDATE_BASE: https://updates.blofyplayer.com
       ACTIVATION_BASE: https://api.blofyplayer.com
-      EXPECTED_APK_SHA256: 1080407ca1b8fde1658ebaec1942e04734ac8b2c7872c8337f8ff9cde83f61ae
+      EXPECTED_APK_SHA256: 9dcf28af8dcf3d4b6a5c6bc29e30c67df9fbc502aed5ee8d362741667f01717f
     steps:
       - name: Verify activation service
         shell: bash
@@ -41,15 +41,15 @@ jobs:
           test "$status" -ge 400
           test "$status" -lt 500
 
-      - name: Verify active update release is 55.3
+      - name: Verify active update release is 55.4
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "$UPDATE_BASE/health" -o update.json
-          jq -e '.ok == true and .release.app.versionCode == 2000071 and .release.app.versionName == "2.0.0-rc07.55.3"' update.json >/dev/null
+          jq -e '.ok == true and .release.app.versionCode == 2000072 and .release.app.versionName == "2.0.0-rc07.55.4"' update.json >/dev/null
 
-      - name: Verify latest APK bytes match signed 55.3
+      - name: Verify latest APK bytes match signed 55.4
         shell: bash
         run: |
           set -euo pipefail
@@ -64,4 +64,4 @@ jobs:
           set -euo pipefail
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "$UPDATE_BASE/downloads" -o downloads.html
-          grep -Fq '2.0.0-rc07.55.3' downloads.html
+          grep -Fq '2.0.0-rc07.55.4' downloads.html
