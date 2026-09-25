@@ -106,9 +106,20 @@ if(page==='admin'){
     try{const params=new URLSearchParams(new FormData(searchForm));params.set('page',String(devicePage));const data=await api('/api/v1/admin/device-insights?'+params);if(current!==customerGeneration)return;deviceItems=data.items||[];$('customer-rows').replaceChildren();
       const count=data.counts||{};counters.textContent='أول تسجيل خلال 24 ساعة: '+(count.new24h||0)+' · خلال 7 أيام: '+(count.new7d||0)+' · تواصل حديثًا: '+(count.recent||0)+' · كل الأجهزة: '+(count.total||0);
       for(const item of deviceItems){const row=node('tr');const name=node('td');name.append(node('strong',item.name||item.deviceId));if(item.name)name.append(node('div',item.deviceId,'caption'));
-        if(item.isNew)name.append(node('span','جديد · 24 ساعة','badge active'));name.append(node('div','أول تسجيل: '+date(item.firstSeenAt),'caption'),node('div','القوائم: '+item.playlistCount,'caption'));
-        const state=node('td');state.append(badge(item.status));if(item.registrationNote)state.append(node('div',item.registrationNote,'caption registration-note'));const action=node('td');const button=node('button','إدارة ←');button.setAttribute('aria-label','إدارة '+item.deviceId);button.onclick=()=>openRecord(item.deviceId);action.append(button);
-        row.append(name,state,node('td',expiry(item.expiresAt,item.status)),node('td',date(item.lastSeenAt)),node('td',item.clientVersion||'غير متاح','version-cell'),action);$('customer-rows').append(row);}
+        if(item.isNew)name.append(node('span','جديد · 24 ساعة','badge active'));
+        name.append(node('div','أول تسجيل: '+date(item.firstSeenAt),'caption'),node('div','القوائم: '+item.playlistCount,'caption'));
+        if(item.activePlaylist)name.append(node('div','النشطة: '+item.activePlaylist,'caption active-playlist-caption'));
+        const state=node('td');state.append(badge(item.status));if(item.registrationNote)state.append(node('div',item.registrationNote,'caption registration-note'));
+        const lastSeen=node('td',date(item.lastSeenAt));
+        if(item.lastSeenAt&&Date.now()-item.lastSeenAt>7*86400000){lastSeen.append(node('div','لم يتواصل منذ 7+ أيام','badge stale'));row.classList.add('is-inactive');}
+        const versionCell=node('td',item.clientVersion||'غير متاح','version-cell');
+        if(item.platform)versionCell.append(node('div',item.platform,'caption'));
+        const action=node('td');const actions=node('div',null,'device-row-actions');
+        const button=node('button','إدارة ←');button.setAttribute('aria-label','إدارة '+item.deviceId);button.onclick=()=>openRecord(item.deviceId);
+        const copyButton=node('button','نسخ ID','ghost copy-device-id');copyButton.type='button';copyButton.setAttribute('aria-label','نسخ رقم الجهاز '+item.deviceId);
+        copyButton.onclick=async()=>{try{await navigator.clipboard.writeText(item.deviceId);copyButton.textContent='تم النسخ';setTimeout(()=>{copyButton.textContent='نسخ ID';},1200);}catch{setStatus('admin-status','رقم الجهاز: '+item.deviceId);}};
+        actions.append(button,copyButton);action.append(actions);
+        row.append(name,state,node('td',expiry(item.expiresAt,item.status)),lastSeen,versionCell,action);$('customer-rows').append(row);}
       if(!deviceItems.length){const row=node('tr'),cell=node('td','لا توجد أجهزة مطابقة.','empty');cell.colSpan=6;row.append(cell);$('customer-rows').append(row);}
       pageInfo.textContent='صفحة '+data.page+' · '+data.total+' نتيجة';previous.disabled=devicePage<=1;next.disabled=devicePage*data.pageSize>=data.total;exportButton.disabled=!deviceItems.length;setStatus('admin-status','');
     }catch(error){if(current===customerGeneration){previous.disabled=devicePage<=1;setStatus('admin-status',error.message,true);}}}
