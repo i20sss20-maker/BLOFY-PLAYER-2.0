@@ -149,9 +149,10 @@ tr:hover td{background:rgba(154,92,255,.035)}
   body .topbar{flex-wrap:wrap;height:auto!important;min-height:74px;padding-block:10px}
   .admin-shell,.source-shell{display:block!important}
   .admin-rail,.source-rail{
-    position:sticky!important;
-    top:0;
-    z-index:60;
+    position:relative!important;
+    inset:auto!important;
+    top:auto!important;
+    z-index:5;
     width:100%!important;
     min-height:0!important;
     height:auto!important;
