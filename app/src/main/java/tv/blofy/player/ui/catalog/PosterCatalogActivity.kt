@@ -27,6 +27,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.search.SearchActivity
@@ -134,12 +135,26 @@ class PosterCatalogActivity : AppCompatActivity() {
                     requestSelectedCategoryFocus()
                 } else false
             }
-            setOnFocusChangeListener { _, focused ->
+            setOnFocusChangeListener { view, focused ->
                 background = CinemaStyle.surface(this@PosterCatalogActivity, focused, filledFocus = true)
                 setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
+                view.animate().cancel()
+                val scale = if (focused) TvUiTuning.focusScale(this@PosterCatalogActivity, 1.012f) else 1f
+                view.animate()
+                    .scaleX(scale)
+                    .scaleY(scale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(this@PosterCatalogActivity, 6f) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(this@PosterCatalogActivity, focused))
+                    .start()
             }
         }
-        root.addView(searchBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 38)).apply {
+        root.addView(searchBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(
+            when (deviceKind) {
+                DeviceClass.Kind.PHONE -> 46
+                DeviceClass.Kind.TABLET -> 42
+                DeviceClass.Kind.TV -> 42
+            }
+        )).apply {
             bottomMargin = dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 10)
         })
 
@@ -166,8 +181,10 @@ class PosterCatalogActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 38 else 44)))
         categoryList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@PosterCatalogActivity)
-            clipChildren = false
-            clipToPadding = false
+            // Poster cards have enough internal padding for focus treatment; clip
+            // RecyclerView children so recycled rows never paint above the grid bounds.
+            clipChildren = true
+            clipToPadding = true
             itemAnimator = null
             setHasFixedSize(true)
             setItemViewCacheSize(18)
@@ -178,8 +195,10 @@ class PosterCatalogActivity : AppCompatActivity() {
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            clipChildren = false
-            clipToPadding = false
+            // Keep recycled poster rows inside the catalog pane. With clipping disabled,
+            // a whole off-screen row can draw over the title/search area while scrolling.
+            clipChildren = true
+            clipToPadding = true
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -212,8 +231,15 @@ class PosterCatalogActivity : AppCompatActivity() {
         val manager = GridLayoutManager(this, gridColumns)
         posterGrid = RecyclerView(this).apply {
             layoutManager = manager
-            setPadding(dp(4), dp(4), dp(if (deviceKind == DeviceClass.Kind.PHONE) 2 else 6), dp(if (deviceKind == DeviceClass.Kind.PHONE) 10 else 18))
-            clipChildren = false
+            setPadding(
+                dp(4),
+                dp(if (deviceKind == DeviceClass.Kind.TV) 8 else 4),
+                dp(if (deviceKind == DeviceClass.Kind.PHONE) 2 else 6),
+                dp(if (deviceKind == DeviceClass.Kind.PHONE) 10 else 18)
+            )
+            // Focused posters may scale inside the grid padding, but must never paint
+            // over the catalog header/search area.
+            clipChildren = true
             clipToPadding = false
             itemAnimator = null
             setHasFixedSize(true)

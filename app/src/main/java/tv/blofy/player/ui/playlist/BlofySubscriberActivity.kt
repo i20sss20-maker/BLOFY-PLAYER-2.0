@@ -65,14 +65,14 @@ class BlofySubscriberActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = getString(R.string.subscriber_title)
             textSize = if (phone) 27f else 32f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.DisplayTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
         })
         root.addView(TextView(this).apply {
             text = getString(R.string.subscriber_subtitle)
             textSize = if (phone) 14f else 15f
-            setTextColor(0xFFB8ABC7.toInt())
+            setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER
             setPadding(0, dp(6), 0, dp(20))
         })
@@ -91,8 +91,8 @@ class BlofySubscriberActivity : AppCompatActivity() {
         fun label(textValue: String) = TextView(this).apply {
             text = textValue
             textSize = if (phone) 13f else 14f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(0xFFEADDF7.toInt())
+            typeface = BlofyTvDesign.LabelTypeface
+            setTextColor(BlofyTvDesign.Lavender)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setPadding(dp(4), dp(4), dp(4), dp(6))
         }
@@ -144,7 +144,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
         panel.addView(password, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 66)))
 
         val status = TextView(this).apply {
-            setTextColor(0xFFB78CFF.toInt())
+            setTextColor(BlofyTvDesign.PurpleBright)
             textSize = 14f
             gravity = Gravity.CENTER
             minHeight = dp(36)

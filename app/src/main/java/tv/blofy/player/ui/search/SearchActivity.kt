@@ -21,6 +21,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
@@ -30,7 +31,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
@@ -142,7 +145,17 @@ class SearchActivity : AppCompatActivity() {
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             isFocusable = true
-            setOnFocusChangeListener { _, focused -> background = searchField(focused) }
+            setOnFocusChangeListener { view, focused ->
+                background = searchField(focused)
+                view.animate().cancel()
+                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+                view.animate()
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(7).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                    .start()
+            }
             setOnEditorActionListener { _, _, _ ->
                 val q = text?.toString().orEmpty()
                 RecentSearchStore.record(this@SearchActivity, q)
@@ -408,7 +421,17 @@ class SearchActivity : AppCompatActivity() {
             })
             KIND_LIVE -> lifecycleScope.launch {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val provider = withContext(Dispatchers.IO) { dao.provider(providerId) } ?: return@launch
+                val provider = try {
+                    PortalPlaylistClient.ensureSubscriberConnection(
+                        applicationContext,
+                        BuildConfig.ACTIVATION_BASE_URL,
+                        dao,
+                        providerId
+                    )
+                } catch (_: Throwable) {
+                    Toast.makeText(this@SearchActivity, "تعذر تحديث اتصال مشترك BLOFY. أعد فتح القائمة.", Toast.LENGTH_LONG).show()
+                    return@launch
+                } ?: return@launch
                 val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (format.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
                 startActivity(Intent(this@SearchActivity, PlayerActivity::class.java).apply {
                     putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.live(provider, profile, stream)); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)

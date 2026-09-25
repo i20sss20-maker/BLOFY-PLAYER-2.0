@@ -12,12 +12,12 @@ import android.widget.TextView
  */
 object BlofyTvDesign {
     val Background = CinemaStyle.Background
-    val BackgroundRaised = Color.rgb(18, 10, 32)
+    val BackgroundRaised = Color.rgb(22, 13, 34)
     val Surface = CinemaStyle.Surface
-    val SurfaceRaised = Color.rgb(42, 24, 62)
-    val SurfaceFocused = Color.rgb(104, 61, 154)
-    val FocusStroke = Color.rgb(235, 219, 255)
-    val FocusGlow = Color.rgb(176, 126, 236)
+    val SurfaceRaised = Color.rgb(50, 30, 72)
+    val SurfaceFocused = Color.rgb(112, 69, 161)
+    val FocusStroke = Color.rgb(242, 230, 255)
+    val FocusGlow = Color.rgb(188, 140, 244)
 
     val Purple = Color.rgb(127, 73, 209)
     val PurpleBright = CinemaStyle.Accent
@@ -45,9 +45,9 @@ object BlofyTvDesign {
     const val RailWidth = 250
     const val CategoryRowHeight = 60
     const val LiveListWidth = 455
-    const val CardRadius = 8
-    const val PanelRadius = 10
-    const val ButtonRadius = 6
+    const val CardRadius = 10
+    const val PanelRadius = 14
+    const val ButtonRadius = 8
     const val BadgeRadius = 10
     const val StandardGap = 18
     const val FocusInMs = 95L

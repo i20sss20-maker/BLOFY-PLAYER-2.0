@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
@@ -23,8 +24,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
@@ -122,7 +125,18 @@ class ContentBrowserActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val activeId = dao.activeProviderId() ?: run { finish(); return@launch }
-            provider = dao.provider(activeId) ?: run { finish(); return@launch }
+            provider = try {
+                PortalPlaylistClient.ensureSubscriberConnection(
+                    applicationContext,
+                    BuildConfig.ACTIVATION_BASE_URL,
+                    dao,
+                    activeId
+                )
+            } catch (_: Throwable) {
+                Toast.makeText(this@ContentBrowserActivity, "تعذر تحديث اتصال مشترك BLOFY. أعد فتح القائمة.", Toast.LENGTH_LONG).show()
+                finish()
+                return@launch
+            } ?: run { finish(); return@launch }
             dao.categories(provider.id, kind).collect { items ->
                 // All content kinds expose a stable synthetic All entry. For Live this prevents a
                 // stale/empty saved provider category from becoming the only entry path to channels.

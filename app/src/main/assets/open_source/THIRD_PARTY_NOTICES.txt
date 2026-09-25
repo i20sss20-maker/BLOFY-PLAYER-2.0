@@ -33,3 +33,14 @@ BLOFY PLAYER modifies only Media3's shared Android build configuration to pin
 Android NDK 28.0.13004108 for the JNI build. The matching compliance archive
 contains the prominent modification notice and exact patch as
 androidx-media-changes.diff.
+
+
+LibVLC Android
+--------------
+BLOFY PLAYER uses org.videolan.android:libvlc-all:3.7.6 as a compatibility
+fallback for UHD/HEVC content after the primary Media3 decoder path fails.
+
+LibVLC is provided by the VideoLAN project under the GNU Lesser General Public
+License version 2.1 or later. License and notice files are provided in:
+  open_source/libvlc/NOTICE.md
+  open_source/libvlc/COPYING.LGPLv2.1

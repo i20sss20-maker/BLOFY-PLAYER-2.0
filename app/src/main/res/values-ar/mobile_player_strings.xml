@@ -2,4 +2,12 @@
     <string name="player_toggle_controls">إظهار أو إخفاء أدوات التشغيل</string>
     <string name="player_seek_position">موضع المشاهدة</string>
     <string name="login_saved_playlists_failed">تعذر قراءة القوائم المحفوظة. أعد المحاولة؛ بياناتك المحفوظة لم تُحذف.</string>
+    <string name="player_4k_compatibility_failed">تعذر فك ترميز فيديو 4K/HEVC على هذا الجهاز • أعد المحاولة أو اختر جودة أخرى</string>
+    <string name="player_4k_compatibility_title">وضع توافق 4K</string>
+    <string name="player_4k_compatibility_starting">جاري تشغيل وضع توافق 4K…</string>
+    <string name="player_4k_compatibility_software">تعذر فك الترميز العتادي • جاري تجربة فك HEVC برمجيًا…</string>
+    <string name="player_4k_compatibility_paused">متوقف مؤقتًا</string>
+    <string name="player_4k_compatibility_controls">OK: تشغيل/إيقاف • ◀ ▶: تقديم أو ترجيع 10 ث • رجوع: إغلاق</string>
+    <string name="player_4k_compatibility_failed_vlc">تعذر فك ملف 4K/HEVC حتى في وضع التوافق</string>
+    <string name="player_4k_compatibility_back">اضغط رجوع للعودة</string>
 </resources>

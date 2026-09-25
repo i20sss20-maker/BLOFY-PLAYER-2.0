@@ -2,4 +2,12 @@
     <string name="player_toggle_controls">Wiedergabesteuerung anzeigen oder ausblenden</string>
     <string name="player_seek_position">Wiedergabeposition</string>
     <string name="login_saved_playlists_failed">Gespeicherte Listen konnten nicht gelesen werden. Erneut versuchen; Ihre Daten wurden nicht gelöscht.</string>
+    <string name="player_4k_compatibility_failed">Dieses 4K/HEVC-Video konnte auf diesem Gerät nicht dekodiert werden • erneut versuchen oder eine andere Qualität wählen</string>
+    <string name="player_4k_compatibility_title">4K-Kompatibilitätsmodus</string>
+    <string name="player_4k_compatibility_starting">4K-Kompatibilitätsmodus wird gestartet…</string>
+    <string name="player_4k_compatibility_software">Hardware-Decoder fehlgeschlagen • Software-HEVC-Decodierung wird versucht…</string>
+    <string name="player_4k_compatibility_paused">Pausiert</string>
+    <string name="player_4k_compatibility_controls">OK: Wiedergabe/Pause • ◀ ▶: 10 Sek. suchen • Zurück: Schließen</string>
+    <string name="player_4k_compatibility_failed_vlc">Diese 4K/HEVC-Datei konnte auch im Kompatibilitätsmodus nicht dekodiert werden</string>
+    <string name="player_4k_compatibility_back">Zurück drücken, um zurückzukehren</string>
 </resources>

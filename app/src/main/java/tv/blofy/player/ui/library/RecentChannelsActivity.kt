@@ -10,12 +10,15 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
@@ -23,6 +26,7 @@ import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.player.PlayerActivity
 
@@ -64,7 +68,15 @@ class RecentChannelsActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = dao.providers().first().firstOrNull() ?: return@launch
+            val rawProvider = dao.providers().first().firstOrNull() ?: return@launch
+            val provider = try {
+                PortalPlaylistClient.ensureSubscriberConnection(
+                    applicationContext, BuildConfig.ACTIVATION_BASE_URL, dao, rawProvider.id
+                )
+            } catch (_: Throwable) {
+                Toast.makeText(this@RecentChannelsActivity, R.string.subscriber_service_unavailable, Toast.LENGTH_LONG).show()
+                return@launch
+            } ?: return@launch
             val keys = RecentChannelStore.keys(this@RecentChannelsActivity, provider.id)
             val streams = keys.mapNotNull { dao.stream(it) }
             if (streams.isEmpty()) {
@@ -137,10 +149,6 @@ class RecentChannelsActivity : AppCompatActivity() {
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF7139BE.toInt(), 0xFF402461.toInt()) else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
-    ).apply {
-        cornerRadius = dp(18).toFloat()
-        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF463455.toInt())
-    }
+    private fun rowBackground(focused: Boolean) =
+        CinemaStyle.surface(this, focused = focused, radiusDp = 18)
 }

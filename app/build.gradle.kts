@@ -11,8 +11,8 @@ plugins {
 // Staged name obfuscation. Existing release jobs remain unchanged until acceptance.
 val securityR8Enabled = providers.gradleProperty("BLOFY_SECURITY_R8")
     .map { it.toBooleanStrict() }.orElse(false).get()
-val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
-val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse(activationBaseUrl).get()
+val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("https://api.blofyplayer.com").get().trim()
+val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse("https://updates.blofyplayer.com").get().trim()
 val distribution = providers.gradleProperty("BLOFY_DISTRIBUTION").orElse("website").get()
 check(distribution in setOf("website", "play")) { "BLOFY_DISTRIBUTION must be website or play" }
 val googlePlayBuild = distribution == "play"
@@ -42,8 +42,8 @@ android {
         applicationId = "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2000067
-        versionName = "2.0.0-rc07.55"
+        versionCode = 2000073
+        versionName = "2.0.0-rc07.55.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
@@ -116,6 +116,9 @@ dependencies {
     implementation("androidx.media3:media3-session:1.6.1")
     implementation("androidx.media3:media3-datasource-cronet:1.6.1")
     implementation("androidx.media3:media3-database:1.6.1")
+    // 4K/HEVC compatibility fallback only. Media3 remains the primary player.
+    // 3.7.x carries VideoLAN's 16 KB page-alignment support required by modern Android/Play.
+    implementation("org.videolan.android:libvlc-all:3.7.6")
     implementation("com.google.android.gms:play-services-cronet:18.1.0")
     if (ffmpegAar != null) implementation(files(ffmpegAar))
     implementation("androidx.room:room-runtime:2.7.0")

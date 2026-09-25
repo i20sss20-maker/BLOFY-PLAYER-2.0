@@ -14,11 +14,11 @@ import android.widget.LinearLayout
 
 /** Shared cinematic actions: compact visuals and a distinct remote focus state. */
 object CinemaStyle {
-    val Background = 0xFF07050B.toInt()
-    val Surface = 0xFF211332.toInt()
+    val Background = 0xFF08060D.toInt()
+    val Surface = 0xFF241536.toInt()
     val White = 0xFFF3F4F6.toInt()
-    val Muted = 0xFFC4B6D8.toInt()
-    val Accent = 0xFFC9A6FF.toInt()
+    val Muted = 0xFFC9BCD9.toInt()
+    val Accent = 0xFFD0B2FF.toInt()
     const val ActionHeight = 34
 
     fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 8) = GradientDrawable(

@@ -55,6 +55,26 @@ object PlaybackFailureDetails {
         return fields.joinToString(";").take(512)
     }
 
+    fun isUltraHdFormat(format: Format?): Boolean {
+        if (format == null) return false
+        val codec = format.codecs.orEmpty().lowercase()
+        val hevcLike = codec.contains("hvc1") || codec.contains("hev1") ||
+            codec.contains("hevc") || codec.contains("h265") ||
+            codec.contains("dvhe") || codec.contains("dvh1")
+        val ultraHd = format.height >= 2160 || format.width >= 3840
+        return ultraHd || hevcLike && (format.height >= 1440 || format.width >= 2560)
+    }
+
+    fun isUltraHdDecoderFailure(error: Throwable, videoFormat: Format? = null): Boolean {
+        val causes = generateSequence(error) { it.cause }.take(6).toList()
+        val playback = error as? androidx.media3.common.PlaybackException
+        val decoderFailure = causes.any {
+            it is MediaCodecDecoderException || it is DecoderInitializationException
+        } || playback?.errorCodeName?.contains("DECOD", ignoreCase = true) == true
+        val rendererFormat = (error as? ExoPlaybackException)?.rendererFormat ?: videoFormat
+        return decoderFailure && isUltraHdFormat(rendererFormat)
+    }
+
     fun requestErrorCode(error: Throwable): String {
         val causes = generateSequence(error) { it.cause }.take(6).toList()
         return when {

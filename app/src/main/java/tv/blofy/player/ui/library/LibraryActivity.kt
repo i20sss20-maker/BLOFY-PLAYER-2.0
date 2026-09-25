@@ -24,7 +24,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
@@ -34,6 +36,7 @@ import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.core.device.DeviceClass
@@ -103,8 +106,16 @@ class LibraryActivity : AppCompatActivity() {
     private fun load(mode: String) {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
-            if (provider == null) { showMessage(getString(R.string.login_add_playlist_first)); return@launch }
+            val rawProvider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
+            if (rawProvider == null) { showMessage(getString(R.string.login_add_playlist_first)); return@launch }
+            val provider = try {
+                PortalPlaylistClient.ensureSubscriberConnection(
+                    applicationContext, BuildConfig.ACTIVATION_BASE_URL, dao, rawProvider.id
+                )
+            } catch (_: Throwable) {
+                showMessage(getString(R.string.subscriber_service_unavailable))
+                return@launch
+            } ?: return@launch
             list.removeAllViews()
             if (mode == MODE_CONTINUE) {
                 val states = withContext(Dispatchers.IO) { dao.continueWatching(provider.id).first() }
@@ -175,7 +186,7 @@ class LibraryActivity : AppCompatActivity() {
             isFocusable = true; isClickable = true
             background = rowBackground(false)
             setOnFocusChangeListener { view, focused ->
-                setTextColor(Color.WHITE)
+                setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextPrimary)
                 view.background = rowBackground(focused)
                 view.animate().cancel()
                 val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
@@ -204,7 +215,7 @@ class LibraryActivity : AppCompatActivity() {
             isFocusable = true; isClickable = true
             background = rowBackground(false)
             setOnFocusChangeListener { view, focused ->
-                setTextColor(Color.WHITE)
+                setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextPrimary)
                 view.background = rowBackground(focused)
                 view.animate().cancel()
                 val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
@@ -226,7 +237,14 @@ class LibraryActivity : AppCompatActivity() {
             "series" -> startActivity(Intent(this, SeriesDetailsActivity::class.java).apply { putExtra(SeriesDetailsActivity.EXTRA_PROVIDER_ID, providerId); putExtra(SeriesDetailsActivity.EXTRA_CONTENT_KEY, stream.key) })
             "live" -> lifecycleScope.launch {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val provider = withContext(Dispatchers.IO) { dao.provider(providerId) } ?: return@launch
+                val provider = try {
+                    PortalPlaylistClient.ensureSubscriberConnection(
+                        applicationContext, BuildConfig.ACTIVATION_BASE_URL, dao, providerId
+                    )
+                } catch (_: Throwable) {
+                    showMessage(getString(R.string.subscriber_service_unavailable))
+                    return@launch
+                } ?: return@launch
                 val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (liveFormat.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
                 startActivity(Intent(this@LibraryActivity, PlayerActivity::class.java).apply {
                     putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.live(provider, profile, stream)); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
@@ -254,13 +272,8 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun kindLabel(kind: String) = when (kind) { "live" -> "LIVE"; "movie" -> "MOVIE"; "series" -> "SERIES"; else -> kind.uppercase() }
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF68409A.toInt(), 0xFF3D2858.toInt(), 0xFF24182F.toInt())
-        else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
-    ).apply {
-        cornerRadius = dp(16).toFloat()
-        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF463455.toInt())
-    }
+    private fun rowBackground(focused: Boolean) =
+        CinemaStyle.surface(this, focused = focused, radiusDp = 16)
 
     private fun showMessage(text: String) {
         list.addView(TextView(this).apply { this.text = text; textSize = 18f; setTextColor(BlofyTvDesign.TextMuted); setPadding(0, dp(24), 0, 0) })

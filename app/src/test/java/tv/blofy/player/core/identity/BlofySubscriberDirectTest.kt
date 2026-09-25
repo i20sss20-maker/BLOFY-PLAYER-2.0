@@ -49,6 +49,22 @@ class BlofySubscriberDirectTest {
         assertFalse(BlofySubscriberClient.isLegacyProxy(provider.copy(subscriberToken = "already-direct"), endpoint))
     }
 
+    @Test fun productionLegacyPortalHostMigratesToApiGateway() {
+        val endpoint = "https://api.blofyplayer.com"
+        val legacy = ProviderEntity(
+            "legacy", "BLOFY", "https://blofyplayer.com/api/v1/subscribers/xtream", "token", "blofy"
+        )
+        assertTrue(BlofySubscriberClient.isLegacyProxy(legacy, endpoint))
+        assertTrue(BlofySubscriberClient.isLegacyProxy(
+            legacy.copy(baseUrl = "https://api.blofyplayer.com/api/v1/subscribers/xtream"),
+            endpoint
+        ))
+        assertFalse(BlofySubscriberClient.isLegacyProxy(
+            legacy.copy(baseUrl = "https://evil.example/api/v1/subscribers/xtream"),
+            endpoint
+        ))
+    }
+
     @Test fun invalidDirectResponsesAndLegacyResponsesCannotSilentlyRestoreProxyPlayback() {
         for (host in listOf("file:///private", "http://127.0.0.1", "https://user:password@origin.example.test", "$endpoint/api/v1/subscribers/xtream", "https://origin.example.test?password=bad")) {
             assertThrows(IllegalStateException::class.java) { BlofySubscriberClient.parseDirectSession(payload(host)) }

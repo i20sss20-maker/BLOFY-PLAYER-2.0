@@ -2,4 +2,12 @@
     <string name="player_toggle_controls">Oynatma kontrollerini göster veya gizle</string>
     <string name="player_seek_position">Oynatma konumu</string>
     <string name="login_saved_playlists_failed">Kayıtlı listeler okunamadı. Tekrar deneyin; kayıtlı verileriniz silinmedi.</string>
+    <string name="player_4k_compatibility_failed">Bu 4K/HEVC video bu cihazda çözülemedi • yeniden deneyin veya başka bir kalite seçin</string>
+    <string name="player_4k_compatibility_title">4K uyumluluk modu</string>
+    <string name="player_4k_compatibility_starting">4K uyumluluk modu başlatılıyor…</string>
+    <string name="player_4k_compatibility_software">Donanım kod çözücü başarısız oldu • yazılımsal HEVC çözme deneniyor…</string>
+    <string name="player_4k_compatibility_paused">Duraklatıldı</string>
+    <string name="player_4k_compatibility_controls">OK: Oynat/Duraklat • ◀ ▶: 10 sn ileri/geri • Geri: Kapat</string>
+    <string name="player_4k_compatibility_failed_vlc">Bu 4K/HEVC dosyası uyumluluk modunda da çözülemedi</string>
+    <string name="player_4k_compatibility_back">Dönmek için Geri tuşuna basın</string>
 </resources>

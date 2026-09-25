@@ -20,10 +20,12 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
@@ -50,7 +52,18 @@ class MovieDetailsActivity : ContentAccessActivity() {
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = dao.provider(providerId) ?: run { finish(); return@launch }
+            val provider = try {
+                PortalPlaylistClient.ensureSubscriberConnection(
+                    applicationContext,
+                    BuildConfig.ACTIVATION_BASE_URL,
+                    dao,
+                    providerId
+                )
+            } catch (_: Throwable) {
+                Toast.makeText(this@MovieDetailsActivity, "تعذر تحديث اتصال مشترك BLOFY. أعد فتح القائمة.", Toast.LENGTH_LONG).show()
+                finish()
+                return@launch
+            } ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
             val watch = dao.watchState(contentKey)
             val url = ContentUrlResolver.movie(provider, stream)
@@ -104,7 +117,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
                     val genres = metadata?.genres?.filter(String::isNotBlank).orEmpty()
                     if (genres.isNotEmpty()) add(genres.take(3).joinToString(" / "))
                     else stream.genre?.takeIf(String::isNotBlank)?.let(::add)
-                    metadata?.countries?.takeIf { it.isNotEmpty() }?.let { add(it.take(2).joinToString(" / ")) }
+                    metadata?.countries?.takeIf { it.isNotEmpty() }?.let { add(getString(R.string.details_country, it.take(2).joinToString(" / "))) }
                     metadata?.originalLanguage?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
                     stream.extension?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
                 }

@@ -36,6 +36,8 @@ class BlofyPlaybackSession(
     private var playStartedAtMs = 0L
     private var automaticRetries = 0
     private var alternateLiveFormatAttempted = false
+    private var ultraHdCompatibilityFallbackAttempted = false
+    private var compatibilityTrackParameters: androidx.media3.common.TrackSelectionParameters? = null
     private var lastObservedLivePositionMs = Long.MIN_VALUE
     private var liveStallStartedAtMs = 0L
     private var lastLiveStallRecoveryAtMs = 0L
@@ -116,6 +118,19 @@ class BlofyPlaybackSession(
                     // Media3 can synchronously report a timeout while detaching a surface or
                     // releasing. It must never restart this session or penalize the provider.
                     if (closing) return
+                    if (!contentKind.isLiveContent() &&
+                        !ultraHdCompatibilityFallbackAttempted &&
+                        PlaybackFailureDetails.isUltraHdDecoderFailure(error, videoFormat)
+                    ) {
+                        ultraHdCompatibilityFallbackAttempted = true
+                        compatibilityTrackParameters = player.trackSelectionParameters
+                        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                            .setMaxVideoSize(1920, 1080)
+                            .build()
+                        automaticRetries = MAX_AUTOMATIC_RETRIES
+                        retryHandler.post { retrySameUrl() }
+                        return
+                    }
                     val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
                     if (failedUrl.isNotBlank()) {
                         PlaybackIntelligence.recordFailure(appContext, profile.providerKey, contentKind, failedUrl)
@@ -157,8 +172,13 @@ class BlofyPlaybackSession(
         if (closing) return
         retryHandler.removeCallbacksAndMessages(null)
         seekRecoveryGeneration++
+        compatibilityTrackParameters?.let {
+            player.trackSelectionParameters = it
+            compatibilityTrackParameters = null
+        }
         automaticRetries = 0
         alternateLiveFormatAttempted = false
+        ultraHdCompatibilityFallbackAttempted = false
         liveStallRecoveries = 0
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
@@ -214,12 +234,11 @@ class BlofyPlaybackSession(
 
         val now = SystemClock.elapsedRealtime()
         val position = player.currentPosition.coerceAtLeast(0L)
-        val positionAdvanced = lastObservedLivePositionMs != Long.MIN_VALUE &&
-            position - lastObservedLivePositionMs >= LIVE_MIN_POSITION_ADVANCE_MS
-        val silentlyStalled = player.playbackState == Player.STATE_BUFFERING ||
-            (player.playbackState == Player.STATE_READY && !positionAdvanced)
 
-        if (!silentlyStalled) {
+        // Some healthy live TS/HLS streams expose a flat or non-monotonic
+        // currentPosition. READY is healthy playback and must never trigger
+        // a timed recycle of the fullscreen session.
+        if (player.playbackState != Player.STATE_BUFFERING) {
             resetLiveStallTimer(keepPosition = true)
             lastObservedLivePositionMs = position
             return
@@ -228,11 +247,6 @@ class BlofyPlaybackSession(
         if (lastObservedLivePositionMs == Long.MIN_VALUE) {
             lastObservedLivePositionMs = position
             liveStallStartedAtMs = now
-            return
-        }
-        if (positionAdvanced) {
-            lastObservedLivePositionMs = position
-            liveStallStartedAtMs = 0L
             return
         }
         if (liveStallStartedAtMs == 0L) liveStallStartedAtMs = now
@@ -287,6 +301,8 @@ class BlofyPlaybackSession(
 
     fun isStarted(): Boolean = !closing && player.playbackState == Player.STATE_READY && player.playWhenReady
 
+    fun usedUltraHdCompatibilityFallback(): Boolean = ultraHdCompatibilityFallbackAttempted
+
     /** In-memory state only: stream URLs must never be persisted to diagnostics or saved bundles. */
     fun resumeState(): PlaybackResumeState? {
         if (closing) return null
@@ -317,7 +333,6 @@ class BlofyPlaybackSession(
         const val LIVE_STALL_WATCHDOG_INTERVAL_MS = 4_000L
         const val LIVE_STALL_RECOVERY_THRESHOLD_MS = 12_000L
         const val LIVE_STALL_RECOVERY_COOLDOWN_MS = 60_000L
-        const val LIVE_MIN_POSITION_ADVANCE_MS = 1_000L
         const val MAX_LIVE_STALL_RECOVERIES_PER_ITEM = 3
     }
 
@@ -327,8 +342,11 @@ class BlofyPlaybackSession(
 @OptIn(markerClass = [UnstableApi::class])
 private fun createPlaybackPlayer(context: Context, profile: ProviderProfile): ExoPlayer =
     ExoPlayer.Builder(context)
-        .setRenderersFactory(DefaultRenderersFactory(context)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER))
+        .setRenderersFactory(
+            DefaultRenderersFactory(context)
+                .setEnableDecoderFallback(true)
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        )
         .setMediaSourceFactory(DefaultMediaSourceFactory(TransportFactory.create(context, profile)))
         .build()
 
