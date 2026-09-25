@@ -1,9 +1,11 @@
 name: Publish verified BLOFY rc07.55.2
 
 on:
-  workflow_run:
-    workflows: ["BLOFY rc07.55.2 Production-Signed Test"]
-    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-rc07551.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,13 +17,12 @@ concurrency:
 
 jobs:
   publish:
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'dev/rc0755-stable-new-domain'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
+      SIGNED_RUN: '36162220372'
+      SIGNED_COMMIT: 867a6c7022618e2b75ceff7318ef1c251cb4f849
       EXPECTED_VERSION: 2.0.0-rc07.55.2
       EXPECTED_VERSION_CODE: "2000070"
       EXPECTED_ACTIVATION: https://api.blofyplayer.com
@@ -34,24 +35,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          run_id="${{ github.event.workflow_run.id }}"
-          sha="${{ github.event.workflow_run.head_sha }}"
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" > signed-run.json
-          jq -e --arg sha "$sha"             '.status=="completed" and .conclusion=="success" and .head_sha==$sha and .name=="BLOFY rc07.55.2 Production-Signed Test"' signed-run.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SIGNED_RUN" > signed-run.json
+          jq -e --arg sha "$SIGNED_COMMIT"             '.status=="completed" and .conclusion=="success" and .head_sha==$sha and .name=="BLOFY rc07.55.2 Production-Signed Test"' signed-run.json
 
       - name: Download exact signed artifact
         shell: bash
         run: |
           set -euo pipefail
-          run_id="${{ github.event.workflow_run.id }}"
-          sha="${{ github.event.workflow_run.head_sha }}"
           mkdir -p publish
-          gh run download "$run_id" --repo "$GITHUB_REPOSITORY"             --name "BLOFY-PLAYER-2.0-rc07.55.2-PRODUCTION-SIGNED-$sha"             --dir publish
+          gh run download "$SIGNED_RUN" --repo "$GITHUB_REPOSITORY"             --name "BLOFY-PLAYER-2.0-rc07.55.2-PRODUCTION-SIGNED-$SIGNED_COMMIT"             --dir publish
           test -s "publish/$APK_NAME"
           test -s "publish/$AAB_NAME"
           grep -Fxq "version=$EXPECTED_VERSION" publish/build-info.txt
           grep -Fxq "versionCode=$EXPECTED_VERSION_CODE" publish/build-info.txt
-          grep -Fxq "commit=$sha" publish/build-info.txt
+          grep -Fxq "commit=$SIGNED_COMMIT" publish/build-info.txt
           grep -Fxq "activation=$EXPECTED_ACTIVATION" publish/build-info.txt
           grep -Fxq "updates=$EXPECTED_UPDATES" publish/build-info.txt
           grep -Fxq 'production_signed=true' publish/build-info.txt
@@ -62,15 +59,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha="${{ github.event.workflow_run.head_sha }}"
           cat > release-notes.md <<'NOTES'
           BLOFY PLAYER 2.0.0-rc07.55.2
 
           مبني على rc07.55 المستقرة.
 
-          - إصلاح مشتركين BLOFY للقوائم القديمة: تحويل تلقائي من Proxy إلى Direct Xtream.
-          - دعم انتقال القوائم بين blofyplayer.com و api.blofyplayer.com.
-          - منع HTTP 456 الناتج عن تمرير البث عبر Proxy.
+          - إصلاح مشتركين BLOFY للقوائم القديمة بتحويل تلقائي من Proxy إلى Direct Xtream.
+          - دعم الانتقال بين blofyplayer.com و api.blofyplayer.com.
+          - منع HTTP 456 الناتج عن Proxy القديم.
           - إصلاح تداخل صف البوسترات فوق عناوين المكتبة.
           - إبقاء Media3 وFFmpeg وfallback ومحركات التشغيل الأساسية كما هي.
 
@@ -79,7 +75,7 @@ jobs:
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "publish/$APK_NAME" "publish/$AAB_NAME" publish/SHA256SUMS               --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$RELEASE_TAG" "publish/$APK_NAME" "publish/$AAB_NAME" publish/SHA256SUMS               --repo "$GITHUB_REPOSITORY" --target "$sha"               --title 'BLOFY PLAYER 2.0.0-rc07.55.2' --notes-file release-notes.md --latest
+            gh release create "$RELEASE_TAG" "publish/$APK_NAME" "publish/$AAB_NAME" publish/SHA256SUMS               --repo "$GITHUB_REPOSITORY" --target "$SIGNED_COMMIT"               --title 'BLOFY PLAYER 2.0.0-rc07.55.2' --notes-file release-notes.md --latest
           fi
 
       - name: Verify public APK bytes
