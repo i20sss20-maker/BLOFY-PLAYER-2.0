@@ -11,8 +11,8 @@ plugins {
 // Staged name obfuscation. Existing release jobs remain unchanged until acceptance.
 val securityR8Enabled = providers.gradleProperty("BLOFY_SECURITY_R8")
     .map { it.toBooleanStrict() }.orElse(false).get()
-val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("").get()
-val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse(activationBaseUrl).get()
+val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("https://api.blofyplayer.com").get().trim()
+val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse("https://updates.blofyplayer.com").get().trim()
 val distribution = providers.gradleProperty("BLOFY_DISTRIBUTION").orElse("website").get()
 check(distribution in setOf("website", "play")) { "BLOFY_DISTRIBUTION must be website or play" }
 val googlePlayBuild = distribution == "play"
