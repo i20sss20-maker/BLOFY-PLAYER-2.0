@@ -230,6 +230,12 @@ class MobileContentActivity : AppCompatActivity() {
     }
 }
 
+private data class MobileLiveRowHolder(
+    val artwork: ImageView,
+    val title: TextView,
+    val meta: TextView
+)
+
 private class MobileLiveAdapter(private val activity: MobileContentActivity) : BaseAdapter() {
     private var items: List<StreamEntity> = emptyList()
 
@@ -244,50 +250,58 @@ private class MobileLiveAdapter(private val activity: MobileContentActivity) : B
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
         val stream = getItem(position)
-        val row = (convertView as? LinearLayout) ?: LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(16).toFloat()
-                setColor(0xE8181321.toInt())
-                setStroke(dp(1), 0x554D376B)
-            }
+        val existing = convertView as? LinearLayout
+        val row: LinearLayout
+        val holder: MobileLiveRowHolder
 
-            addView(ImageView(activity).apply {
-                tag = "artwork"
+        if (existing != null && existing.tag is MobileLiveRowHolder) {
+            row = existing
+            holder = existing.tag as MobileLiveRowHolder
+        } else {
+            row = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(16).toFloat()
+                    setColor(0xE8181321.toInt())
+                    setStroke(dp(1), 0x554D376B)
+                }
+            }
+            val artwork = ImageView(activity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setBackgroundColor(0xFF17111F.toInt())
-            }, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginStart = dp(12) })
+            }
+            row.addView(artwork, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginStart = dp(12) })
 
-            addView(LinearLayout(activity).apply {
+            val textBox = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-                addView(TextView(activity).apply {
-                    tag = "title"
-                    textSize = 16.5f
-                    setTextColor(Color.WHITE)
-                    gravity = Gravity.RIGHT
-                    maxLines = 1
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                })
-                addView(TextView(activity).apply {
-                    tag = "meta"
-                    textSize = 12.5f
-                    setTextColor(0xFFB7A8C9.toInt())
-                    gravity = Gravity.RIGHT
-                    setPadding(0, dp(3), 0, 0)
-                })
-            }, LinearLayout.LayoutParams(0, dp(58), 1f))
+            }
+            val title = TextView(activity).apply {
+                textSize = 16.5f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.RIGHT
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }
+            val meta = TextView(activity).apply {
+                textSize = 12.5f
+                setTextColor(0xFFB7A8C9.toInt())
+                gravity = Gravity.RIGHT
+                setPadding(0, dp(3), 0, 0)
+            }
+            textBox.addView(title)
+            textBox.addView(meta)
+            row.addView(textBox, LinearLayout.LayoutParams(0, dp(58), 1f))
+            holder = MobileLiveRowHolder(artwork, title, meta)
+            row.tag = holder
         }
 
-        val artwork = row.findViewWithTag<ImageView>("artwork")
-        val title = row.findViewWithTag<TextView>("title")
-        val meta = row.findViewWithTag<TextView>("meta")
-        title.text = stream.name
-        meta.text = if (stream.archiveEnabled) "بث مباشر  •  أرشيف متاح ⏱" else "بث مباشر"
-        ArtworkLoader.load(artwork, stream.icon)
+        holder.title.text = stream.name
+        holder.meta.text = if (stream.archiveEnabled) "بث مباشر  •  أرشيف متاح ⏱" else "بث مباشر"
+        ArtworkLoader.load(holder.artwork, stream.icon)
         row.contentDescription = if (stream.archiveEnabled) "${stream.name}، أرشيف متاح" else stream.name
         return row
     }
