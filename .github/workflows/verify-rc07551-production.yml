@@ -1,4 +1,4 @@
-name: Verify rc07.55.1 Production
+name: Verify rc07.55.2 Production
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
     env:
       UPDATE_BASE: https://updates.blofyplayer.com
       ACTIVATION_BASE: https://api.blofyplayer.com
-      RELEASE_APK: https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.55.1/BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.apk
+            EXPECTED_APK_SHA256: 82303a50a531e884b952676b54ac40adebc6b71629d0f0563d39942fda5cc0da
     steps:
       - name: Verify activation service
         shell: bash
@@ -26,26 +26,25 @@ jobs:
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "$ACTIVATION_BASE/health" -o activation.json
           jq -e '.ok == true and .database == "ready" and .playlistEncryption == "ready"' activation.json >/dev/null
 
-      - name: Verify active update release is 55.1
+      - name: Verify active update release is 55.2
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "$UPDATE_BASE/health" -o update.json
-          jq -e '.ok == true and .release.app.versionCode == 2000069 and .release.app.versionName == "2.0.0-rc07.55.1"' update.json >/dev/null
+          jq -e '.ok == true and .release.app.versionCode == 2000070 and .release.app.versionName == "2.0.0-rc07.55.2"' update.json >/dev/null
 
-      - name: Verify latest APK bytes match published 55.1
+      - name: Verify latest APK bytes match signed 55.2
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location --retry 3 --max-time 180             "$UPDATE_BASE/download/latest.apk" -o latest.apk
-          curl --fail --silent --show-error --location --retry 3 --max-time 180             "$RELEASE_APK" -o release.apk
+          curl --fail --silent --show-error --location --retry 3 --max-time 180 \
+            "$UPDATE_BASE/download/latest.apk" -o latest.apk
           test -s latest.apk
-          test -s release.apk
-          test "$(sha256sum latest.apk | awk '{print $1}')" = "$(sha256sum release.apk | awk '{print $1}')"
+          test "$(sha256sum latest.apk | awk '{print $1}')" = "$EXPECTED_APK_SHA256"
 
       - name: Verify public download page
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "$UPDATE_BASE/downloads" -o downloads.html
-          grep -Fq '2.0.0-rc07.55.1' downloads.html
+          grep -Fq '2.0.0-rc07.55.2' downloads.html
