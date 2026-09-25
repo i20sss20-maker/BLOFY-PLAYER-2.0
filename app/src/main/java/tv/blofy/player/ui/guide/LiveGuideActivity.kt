@@ -30,7 +30,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.PlayerPreference
@@ -308,8 +310,20 @@ class LiveGuideActivity : AppCompatActivity() {
 
     private fun loadInitialData() {
         lifecycleScope.launch {
-            provider = dao.providers().first().firstOrNull() ?: run {
+            val rawProvider = dao.providers().first().firstOrNull() ?: run {
                 Toast.makeText(this@LiveGuideActivity, getString(R.string.login_add_playlist_first), Toast.LENGTH_SHORT).show()
+                finish()
+                return@launch
+            }
+            provider = try {
+                PortalPlaylistClient.ensureSubscriberConnection(
+                    applicationContext, BuildConfig.ACTIVATION_BASE_URL, dao, rawProvider.id
+                )
+            } catch (_: Throwable) {
+                Toast.makeText(this@LiveGuideActivity, R.string.subscriber_service_unavailable, Toast.LENGTH_LONG).show()
+                finish()
+                return@launch
+            } ?: run {
                 finish()
                 return@launch
             }
