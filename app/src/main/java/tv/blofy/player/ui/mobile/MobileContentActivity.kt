@@ -79,15 +79,15 @@ class MobileContentActivity : AppCompatActivity() {
         })
 
         if (posterMode) {
-            val adapter = PosterStreamAdapter(onClick = ::openStream)
-            posterAdapter = adapter
+            val posters = PosterStreamAdapter(onClick = ::openStream)
+            posterAdapter = posters
             posterGrid = RecyclerView(this).apply {
                 layoutManager = GridLayoutManager(this@MobileContentActivity, posterColumns())
                 setPadding(dp(2), dp(4), dp(2), dp(26))
                 clipChildren = false
                 clipToPadding = false
                 itemAnimator = null
-                adapter = adapter
+                adapter = posters
             }
             root.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
