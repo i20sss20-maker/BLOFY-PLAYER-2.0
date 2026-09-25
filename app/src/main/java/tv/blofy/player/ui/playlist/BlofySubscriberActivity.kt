@@ -29,6 +29,8 @@ import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
+import tv.blofy.player.data.PlaylistSyncProgress
+import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
@@ -101,7 +103,11 @@ class BlofySubscriberActivity : AppCompatActivity() {
                                 dao.clearProviderCatalog(providerId)
                                 dao.upsertProvider(next)
                                 try {
-                                    val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(next) }
+                                    val result = PlaylistSyncPolicy.run {
+                                        PlaylistManager(XtreamClient.api, dao).syncAll(next) { progress ->
+                                            withContext(Dispatchers.Main) { status.text = syncProgressText(progress) }
+                                        }
+                                    }
                                     check(result.freshItemCount > 0) { "لم يرجع الاشتراك أي محتوى" }
                                     check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الاشتراك" }
                                     dao.saveAndActivateProvider(next)
@@ -136,6 +142,16 @@ class BlofySubscriberActivity : AppCompatActivity() {
         panel.addView(login, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 330, if (phone) 64 else 68).apply { topMargin = 14 })
         panel.addView(TextView(this).apply { text = "عنوان الخدمة الخاص مخفي داخل التطبيق"; textSize = 12f; setTextColor(0xFF857B91.toInt()); gravity = Gravity.CENTER; setPadding(10,12,10,0) })
         setContentView(scroll); username.requestFocus()
+    }
+
+    private fun syncProgressText(progress: PlaylistSyncProgress): String {
+        val stage = when (progress.stage) {
+            PlaylistSyncStage.M3U -> "M3U"
+            PlaylistSyncStage.LIVE -> "البث المباشر"
+            PlaylistSyncStage.MOVIES -> "الأفلام"
+            PlaylistSyncStage.SERIES -> "المسلسلات"
+        }
+        return "جاري تحميل $stage  •  ${progress.percent}%"
     }
 
     private fun panelBackground() = GradientDrawable().apply { cornerRadius = 26f; setColor(0xEE151020.toInt()); setStroke(1, 0xFF67458E.toInt()) }
