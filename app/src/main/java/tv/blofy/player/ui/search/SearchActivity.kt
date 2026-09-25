@@ -9,6 +9,7 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -29,6 +30,7 @@ import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
@@ -129,28 +131,72 @@ class SearchActivity : AppCompatActivity() {
                 return@launch
             }
             val visibleItems = items.take(100)
-            resultInfo.text = if (items.size > visibleItems.size) {
-                "عرض أول ${visibleItems.size} من ${items.size} نتيجة"
-            } else {
-                "${items.size} نتيجة"
+            val liveCount = items.count { it.kind == "live" }
+            val movieCount = items.count { it.kind == "movie" }
+            val seriesCount = items.count { it.kind == "series" }
+            resultInfo.text = buildString {
+                append(if (items.size > visibleItems.size) "عرض أول ${visibleItems.size} من ${items.size}" else "${items.size}")
+                append(" نتيجة")
+                if (liveCount > 0) append("  •  $liveCount قناة")
+                if (movieCount > 0) append("  •  $movieCount فيلم")
+                if (seriesCount > 0) append("  •  $seriesCount مسلسل")
             }
             visibleItems.forEach { stream ->
-                val row = TextView(this@SearchActivity).apply {
-                    text = "${if (stream.locked) "🔒 " else ""}${kindLabel(stream.kind)}   •   ${stream.name}"
-                    textSize = 18f
-                    setTextColor(Color.WHITE)
-                    setPadding(24, 17, 24, 17)
+                val row = LinearLayout(this@SearchActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
                     gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(12), dp(8), dp(12), dp(8))
                     isFocusable = true
+                    isFocusableInTouchMode = true
                     isClickable = true
                     background = rowBackground(false)
                     setOnFocusChangeListener { view, focused ->
                         view.background = rowBackground(focused)
-                        view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(100).start()
+                        view.animate().cancel()
+                        view.animate()
+                            .scaleX(if (focused) 1.018f else 1f)
+                            .scaleY(if (focused) 1.018f else 1f)
+                            .translationZ(if (focused) 8f else 0f)
+                            .setDuration(90)
+                            .start()
                     }
                     setOnClickListener { guardedOpen(provider.id, provider.liveFormat, stream) }
                 }
-                results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(66)).apply { topMargin = dp(7) })
+                val artwork = ImageView(this@SearchActivity).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setBackgroundColor(0xFF16101F.toInt())
+                    contentDescription = stream.name
+                }
+                ArtworkLoader.load(artwork, stream.icon)
+                row.addView(artwork, LinearLayout.LayoutParams(dp(54), dp(66)).apply { marginStart = dp(14) })
+
+                val textBox = LinearLayout(this@SearchActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+                }
+                textBox.addView(TextView(this@SearchActivity).apply {
+                    text = (if (stream.locked) "🔒  " else "") + stream.name
+                    textSize = 17.5f
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.RIGHT
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                })
+                textBox.addView(TextView(this@SearchActivity).apply {
+                    text = when (stream.kind) {
+                        "live" -> "بث مباشر"
+                        "movie" -> "فيلم"
+                        "series" -> "مسلسل"
+                        else -> kindLabel(stream.kind)
+                    }
+                    textSize = 12.5f
+                    setTextColor(Color.rgb(183, 168, 201))
+                    gravity = Gravity.RIGHT
+                    setPadding(0, dp(4), 0, 0)
+                })
+                row.addView(textBox, LinearLayout.LayoutParams(0, dp(66), 1f))
+                results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(82)).apply { topMargin = dp(7) })
             }
             if (moveFocus) results.getChildAt(0)?.requestFocus()
         }
