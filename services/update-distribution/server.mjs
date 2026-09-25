@@ -3,6 +3,8 @@ import { Readable } from 'node:stream';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rename, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { initReleaseStore, getActiveRelease } from './release-store.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
 import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload, openRemoteApk } from './app-library.mjs';
@@ -14,6 +16,9 @@ const APP_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const PUBLIC_ADMIN_PREFIX = `/${String(process.env.PUBLIC_ADMIN_PREFIX || '/admin').trim().replace(/^\/+|\/+$/g, '')}`;
 const RELEASE_UPLOAD_TOKEN = String(process.env.RELEASE_UPLOAD_TOKEN || '');
 const LOCAL_RELEASE_DIR = '/data/releases';
+const RELEASE_ARTIFACT_ZIP_URL = String(process.env.BLOFY_RELEASE_ARTIFACT_ZIP_URL || '').trim();
+const RELEASE_ARTIFACT_ENTRY = String(process.env.BLOFY_RELEASE_ARTIFACT_ENTRY || '').trim();
+const RELEASE_ARTIFACT_SHA256 = String(process.env.BLOFY_RELEASE_APK_SHA256 || '').trim().toLowerCase();
 
 const securityHeaders = Object.freeze({
   'x-content-type-options': 'nosniff',
@@ -119,6 +124,75 @@ async function streamLocalApk(req, res, filename, downloadName, metricKey) {
     onError: error => console.error('Local APK completion metric failed:', error?.message || error) });
   res.once('close', () => { if (!res.writableFinished) body.destroy(); });
   body.pipe(res);
+}
+
+async function sha256File(filePath) {
+  return await new Promise((resolve, reject) => {
+    const hash = createHash('sha256');
+    const input = createReadStream(filePath);
+    input.on('data', chunk => hash.update(chunk));
+    input.on('end', () => resolve(hash.digest('hex')));
+    input.on('error', reject);
+  });
+}
+
+async function importReleaseArtifactIfConfigured() {
+  if (!RELEASE_ARTIFACT_ZIP_URL || !RELEASE_ARTIFACT_ENTRY || !RELEASE_ARTIFACT_SHA256) return;
+  const filename = localReleaseFilename(path.basename(RELEASE_ARTIFACT_ENTRY));
+  const finalPath = localReleasePath(filename);
+  const existing = await stat(finalPath).catch(() => null);
+  if (existing?.size > 1024) {
+    const digest = await sha256File(finalPath).catch(() => '');
+    if (digest === RELEASE_ARTIFACT_SHA256) {
+      console.log(`release artifact ready: ${filename} (${existing.size} bytes)`);
+      return;
+    }
+  }
+
+  const archivePath = '/tmp/blofy-release-artifact.zip';
+  await unlink(archivePath).catch(() => {});
+  await mkdir(LOCAL_RELEASE_DIR, { recursive: true });
+
+  const response = await fetch(RELEASE_ARTIFACT_ZIP_URL, {
+    redirect: 'follow',
+    signal: AbortSignal.timeout(120_000),
+    headers: { accept: 'application/zip' }
+  });
+  if (!response.ok || !response.body) throw new Error(`release_artifact_http_${response.status}`);
+  const length = Number(response.headers.get('content-length') || 0);
+  if (length && length > 80 * 1024 * 1024) throw new Error('release_artifact_too_large');
+
+  const archiveOut = createWriteStream(archivePath, { flags: 'wx' });
+  await new Promise((resolve, reject) => {
+    Readable.fromWeb(response.body).pipe(archiveOut);
+    archiveOut.on('finish', resolve);
+    archiveOut.on('error', reject);
+  });
+
+  const tempPath = finalPath + '.part';
+  await unlink(tempPath).catch(() => {});
+  await new Promise((resolve, reject) => {
+    const unzip = spawn('unzip', ['-p', archivePath, RELEASE_ARTIFACT_ENTRY], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const out = createWriteStream(tempPath, { flags: 'wx' });
+    let stderr = '';
+    unzip.stderr.on('data', chunk => { stderr += chunk.toString().slice(0, 512); });
+    unzip.stdout.pipe(out);
+    unzip.on('error', reject);
+    unzip.on('close', code => {
+      if (code === 0) resolve();
+      else reject(new Error(`release_unzip_failed_${code}:${stderr.slice(0,120)}`));
+    });
+    out.on('error', reject);
+  });
+  await rename(tempPath, finalPath);
+  const digest = await sha256File(finalPath);
+  if (digest !== RELEASE_ARTIFACT_SHA256) {
+    await unlink(finalPath).catch(() => {});
+    throw new Error('release_artifact_sha256_mismatch');
+  }
+  const info = await stat(finalPath);
+  console.log(`release artifact imported: ${filename} (${info.size} bytes)`);
+  await unlink(archivePath).catch(() => {});
 }
 
 async function receiveReleaseUpload(req, res, requestUrl) {
@@ -744,6 +818,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 await Promise.all([initReleaseStore(), initAppLibrary()]);
+await importReleaseArtifactIfConfigured().catch(error => {
+  console.error('release artifact import failed:', error?.message || error);
+});
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`BLOFY Azure update distribution listening on ${PORT}`);
   scheduleManagedAppRefresh();
