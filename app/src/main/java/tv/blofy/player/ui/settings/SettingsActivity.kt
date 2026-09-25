@@ -126,7 +126,7 @@ class SettingsActivity : AppCompatActivity() {
         storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
         addCard(storageCard)
         addCard(actionCard("✓  حالة النظام", "معلومات النسخة والجهاز") { startActivity(Intent(this, SystemStatusActivity::class.java)) })
-        addCard(actionCard("⟲  استعادة الإعدادات", "العودة للوضع الافتراضي") { restoreDefaults() })
+        addCard(actionCard("⟲  استعادة الإعدادات", "العودة للوضع الافتراضي") { confirmRestoreDefaults() })
 
         linkFocus(back)
         page.addView(grid, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -192,6 +192,15 @@ class SettingsActivity : AppCompatActivity() {
             item.nextFocusLeftId = if (col + 1 < columns && i + 1 < count) grid.getChildAt(i + 1).id else item.id
             item.nextFocusRightId = if (col > 0) grid.getChildAt(i - 1).id else item.id
         }
+    }
+
+    private fun confirmRestoreDefaults() {
+        AlertDialog.Builder(this)
+            .setTitle("استعادة الإعدادات الافتراضية؟")
+            .setMessage("سيتم إعادة خيارات المشاهدة والترجمة والصوت والواجهة للوضع الافتراضي. قوائم التشغيل والمفضلة لن تُحذف.")
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("استعادة") { _, _ -> restoreDefaults() }
+            .show()
     }
 
     private fun restoreDefaults() {

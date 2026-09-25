@@ -6,10 +6,14 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -29,6 +33,8 @@ import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
+import tv.blofy.player.data.PlaylistSyncProgress
+import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
@@ -43,13 +49,20 @@ class PlaylistActivity : AppCompatActivity() {
             startActivity(Intent(this, ProviderManagerActivity::class.java)); finish(); return
         }
 
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         val phone = DeviceClass.detect(this) == DeviceClass.Kind.PHONE
         val tv = DeviceClass.isTv(this)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(if (phone) 22 else 54, if (phone) 24 else 28, if (phone) 22 else 54, if (phone) 24 else 28)
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            overScrollMode = android.view.View.OVER_SCROLL_NEVER
             background = AppCompatResources.getDrawable(this@PlaylistActivity, R.drawable.blofy_home_background)
         }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+            setPadding(if (phone) 22 else 54, if (phone) 24 else 28, if (phone) 22 else 54, if (phone) 34 else 28)
+        }
+        scroll.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(if (phone) 150 else 170, if (phone) 72 else 76))
         root.addView(TextView(this).apply {
             text = if (editingProviderId == null) "إضافة قائمة تشغيل" else "تعديل قائمة التشغيل"; textSize = if (phone) 25f else 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
@@ -72,6 +85,10 @@ class PlaylistActivity : AppCompatActivity() {
         val url = field("رابط السيرفر أو رابط M3U")
         val username = field("اسم المستخدم — اتركه فارغًا لـ M3U")
         val password = field("كلمة المرور — اتركها فارغة لـ M3U", true)
+        name.imeOptions = EditorInfo.IME_ACTION_NEXT
+        url.imeOptions = EditorInfo.IME_ACTION_NEXT
+        username.imeOptions = EditorInfo.IME_ACTION_NEXT
+        password.imeOptions = EditorInfo.IME_ACTION_DONE
         listOf(name, url).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 9 }) }
 
         val transportNotice = TextView(this).apply { text = "يفضل HTTPS • HTTP متاح عند الحاجة"; textSize = if (phone) 12f else 13f; setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.RIGHT; setPadding(8,8,8,1) }
@@ -118,7 +135,11 @@ class PlaylistActivity : AppCompatActivity() {
                         dao.upsertProvider(next)
                         try {
                             if (hasCatalog) dao.clearProviderCatalog(id)
-                            val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(next) }
+                            val result = PlaylistSyncPolicy.run {
+                                PlaylistManager(XtreamClient.api, dao).syncAll(next) { progress ->
+                                    withContext(Dispatchers.Main) { status.text = syncProgressText(progress) }
+                                }
+                            }
                             check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }; check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
                             dao.saveAndActivateProvider(next)
                         } catch (error: Throwable) {
@@ -128,7 +149,11 @@ class PlaylistActivity : AppCompatActivity() {
                     } else if (existing != null && (existing.baseUrl != next.baseUrl || existing.username != next.username || existing.password != next.password || existing.providerType != next.providerType)) {
                         val staging = next.copy(id = UUID.randomUUID().toString(), enabled = false); var promoted = false
                         try {
-                            val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(staging) }
+                            val result = PlaylistSyncPolicy.run {
+                                PlaylistManager(XtreamClient.api, dao).syncAll(staging) { progress ->
+                                    withContext(Dispatchers.Main) { status.text = syncProgressText(progress) }
+                                }
+                            }
                             check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }; check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
                             dao.promoteStagedCatalog(staging.id, next); promoted = true
                         } finally { if (!promoted) withContext(NonCancellable) { dao.discardStagedCatalog(staging.id) } }
@@ -150,15 +175,31 @@ class PlaylistActivity : AppCompatActivity() {
         }
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER }
         val saveConnect = action("حفظ واتصال", true, true); val saveOnly = action("حفظ", false, false)
+        password.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                saveConnect.performClick()
+                true
+            } else false
+        }
         actions.addView(saveConnect, LinearLayout.LayoutParams(if (phone) 0 else 300, if (phone) 62 else 66, if (phone) 1f else 0f).apply { marginStart = 8 })
         actions.addView(saveOnly, LinearLayout.LayoutParams(if (phone) 0 else 220, if (phone) 62 else 66, if (phone) 1f else 0f))
         panel.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, if (phone) 72 else 76).apply { topMargin = 12 })
-        setContentView(root); name.requestFocus()
+        setContentView(scroll); name.requestFocus()
 
         if (editingProviderId != null) lifecycleScope.launch {
             val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: return@launch
             name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password); status.text = "${provider.providerType.uppercase()} • ${provider.name}"
         }
+    }
+
+    private fun syncProgressText(progress: PlaylistSyncProgress): String {
+        val stage = when (progress.stage) {
+            PlaylistSyncStage.M3U -> "M3U"
+            PlaylistSyncStage.LIVE -> "البث المباشر"
+            PlaylistSyncStage.MOVIES -> "الأفلام"
+            PlaylistSyncStage.SERIES -> "المسلسلات"
+        }
+        return "جاري تحميل $stage  •  ${progress.percent}%"
     }
 
     private fun panelBackground() = GradientDrawable().apply { cornerRadius = 24f; setColor(0xEA151020.toInt()); setStroke(1, 0xFF67458E.toInt()) }

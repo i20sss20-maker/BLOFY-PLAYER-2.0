@@ -6,10 +6,14 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
@@ -26,6 +30,8 @@ import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
+import tv.blofy.player.data.PlaylistSyncProgress
+import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
@@ -35,16 +41,23 @@ import java.util.UUID
 class BlofySubscriberActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         val kind = DeviceClass.detect(this)
         val phone = kind == DeviceClass.Kind.PHONE
         val tv = kind == DeviceClass.Kind.TV
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            overScrollMode = android.view.View.OVER_SCROLL_NEVER
+            background = AppCompatResources.getDrawable(this@BlofySubscriberActivity, R.drawable.blofy_home_background)
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(if (phone) 22 else 54, if (phone) 24 else 34, if (phone) 22 else 54, if (phone) 24 else 34)
-            background = AppCompatResources.getDrawable(this@BlofySubscriberActivity, R.drawable.blofy_home_background)
+            setPadding(if (phone) 22 else 54, if (phone) 24 else 34, if (phone) 22 else 54, if (phone) 34 else 34)
         }
+        scroll.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(if (phone) 150 else 170, if (phone) 72 else 76))
         root.addView(TextView(this).apply { text = "مشتركين BLOFY"; textSize = if (phone) 27f else 32f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER })
         root.addView(TextView(this).apply { text = "اسم المستخدم وكلمة المرور فقط"; textSize = if (phone) 14f else 15f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, 6, 0, 20) })
@@ -62,6 +75,8 @@ class BlofySubscriberActivity : AppCompatActivity() {
         }
         val username = field("اسم المستخدم")
         val password = field("كلمة المرور", true)
+        username.imeOptions = EditorInfo.IME_ACTION_NEXT
+        password.imeOptions = EditorInfo.IME_ACTION_DONE
         panel.addView(username, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 8 })
         panel.addView(password, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 10 })
         val status = TextView(this).apply { setTextColor(0xFFB78CFF.toInt()); textSize = 14f; gravity = Gravity.CENTER; setPadding(8,14,8,2) }
@@ -89,7 +104,11 @@ class BlofySubscriberActivity : AppCompatActivity() {
                                 dao.clearProviderCatalog(providerId)
                                 dao.upsertProvider(next)
                                 try {
-                                    val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(next) }
+                                    val result = PlaylistSyncPolicy.run {
+                                        PlaylistManager(XtreamClient.api, dao).syncAll(next) { progress ->
+                                            withContext(Dispatchers.Main) { status.text = syncProgressText(progress) }
+                                        }
+                                    }
                                     check(result.freshItemCount > 0) { "لم يرجع الاشتراك أي محتوى" }
                                     check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الاشتراك" }
                                     dao.saveAndActivateProvider(next)
@@ -115,9 +134,25 @@ class BlofySubscriberActivity : AppCompatActivity() {
                 }
             }
         }
+        password.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                login.performClick()
+                true
+            } else false
+        }
         panel.addView(login, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 330, if (phone) 64 else 68).apply { topMargin = 14 })
         panel.addView(TextView(this).apply { text = "عنوان الخدمة الخاص مخفي داخل التطبيق"; textSize = 12f; setTextColor(0xFF857B91.toInt()); gravity = Gravity.CENTER; setPadding(10,12,10,0) })
-        setContentView(root); username.requestFocus()
+        setContentView(scroll); username.requestFocus()
+    }
+
+    private fun syncProgressText(progress: PlaylistSyncProgress): String {
+        val stage = when (progress.stage) {
+            PlaylistSyncStage.M3U -> "M3U"
+            PlaylistSyncStage.LIVE -> "البث المباشر"
+            PlaylistSyncStage.MOVIES -> "الأفلام"
+            PlaylistSyncStage.SERIES -> "المسلسلات"
+        }
+        return "جاري تحميل $stage  •  ${progress.percent}%"
     }
 
     private fun panelBackground() = GradientDrawable().apply { cornerRadius = 26f; setColor(0xEE151020.toInt()); setStroke(1, 0xFF67458E.toInt()) }
