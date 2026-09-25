@@ -754,27 +754,6 @@ const server = http.createServer(async (req, res) => {
 
 async function start() {
   await initializeDatabase();
-  try {
-    const inventory = (await pool.query(`
-      SELECT
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE status='active')::int AS active,
-        COUNT(*) FILTER (WHERE status='trial')::int AS trial,
-        COUNT(*) FILTER (WHERE status='expired')::int AS expired,
-        COUNT(*) FILTER (WHERE status='blocked')::int AS blocked,
-        COUNT(*) FILTER (WHERE last_seen_at > NOW() - INTERVAL '1 day')::int AS seen_1d,
-        COUNT(*) FILTER (WHERE last_seen_at > NOW() - INTERVAL '7 days')::int AS seen_7d,
-        COUNT(*) FILTER (WHERE last_seen_at > NOW() - INTERVAL '30 days')::int AS seen_30d,
-        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days')::int AS created_30d
-      FROM devices
-    `)).rows[0];
-    const linkedScopes = (await pool.query("SELECT COUNT(*)::int AS count FROM device_trial_claims")).rows[0]?.count || 0;
-    const playlistDevices = (await pool.query("SELECT COUNT(DISTINCT device_id)::int AS count FROM device_playlists")).rows[0]?.count || 0;
-    const paidDevices = (await pool.query("SELECT COUNT(DISTINCT device_id)::int AS count FROM device_subscriptions WHERE status='active' AND (expires_at IS NULL OR expires_at > NOW())")).rows[0]?.count || 0;
-    console.log(`BLOFY device inventory: ${JSON.stringify({...inventory,linked_scopes:linkedScopes,playlist_devices:playlistDevices,paid_subscription_devices:paidDevices})}`);
-  } catch (error) {
-    console.error('BLOFY device inventory unavailable:', safeErrorSummary(error));
-  }
   server.listen(PORT, '0.0.0.0', () => console.log(`BLOFY activation service listening on :${PORT}`));
 }
 
