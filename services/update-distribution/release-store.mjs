@@ -76,6 +76,15 @@ const RC0755_RELEASE = {
   stage: 'public'
 };
 
+const RC07551_RELEASE = {
+  versionCode: 2000069,
+  versionName: '2.0.0-rc07.55.1',
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.55.1/BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.apk',
+  releaseNotes: 'BLOFY PLAYER 55.1 — مبني على rc07.55 المستقرة: الدومينات الجديدة، إصلاح خروج البث المباشر من Fullscreen، تحسين الثيم والفوكس وتفاصيل الأفلام والمسلسلات وتوقيت الدول، مع إبقاء Media3 وFFmpeg وfallback ومحركات التشغيل الأساسية كما هي.',
+  minSupportedVersionCode: 1,
+  stage: 'public'
+};
+
 let state;
 let writeChain = Promise.resolve();
 
@@ -143,7 +152,7 @@ async function save(nextState = state) {
 
 function seedRc0750Once() {
   let changed = false;
-  for (const candidate of [RC0750_RELEASE, RC0751_RELEASE, RC0752_RELEASE, RC0753_RELEASE, RC0754_RELEASE, RC0755_RELEASE]) {
+  for (const candidate of [RC0750_RELEASE, RC0751_RELEASE, RC0752_RELEASE, RC0753_RELEASE, RC0754_RELEASE, RC0755_RELEASE, RC07551_RELEASE]) {
     const existing = state.releases.find((r) => r.versionCode === candidate.versionCode);
     if (existing) {
       if (existing.stage !== 'public') {
@@ -158,8 +167,8 @@ function seedRc0750Once() {
 
   state.releases.sort((a, b) => b.versionCode - a.versionCode);
   const active = state.releases.find((r) => r.versionCode === state.activeVersionCode && r.stage === 'public');
-  if (!active || active.versionCode < RC0755_RELEASE.versionCode) {
-    state.activeVersionCode = RC0755_RELEASE.versionCode;
+  if (!active || active.versionCode < RC07551_RELEASE.versionCode) {
+    state.activeVersionCode = RC07551_RELEASE.versionCode;
     changed = true;
   }
   return changed;
