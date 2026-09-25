@@ -26,11 +26,10 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.update.BlofyUpdateClient
 import tv.blofy.player.data.LocalStorageManager
-import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
-import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.login.LoginActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 
@@ -203,13 +202,10 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun refreshLibrary() {
         val active = provider ?: run { status.text = "لا توجد قائمة تشغيل نشطة"; return }
-        status.text = "جاري التحديث اليدوي..."
-        lifecycleScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncAll(active) }
-            }.onSuccess { status.text = "✓  اكتمل تحديث القنوات والأفلام والمسلسلات" }
-                .onFailure { status.text = "تعذر التحديث — البيانات المحفوظة بقيت كما هي" }
-        }
+        status.text = "فتح شاشة التحديث الآمن..."
+        startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
+            putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
+        })
     }
 
     private fun checkForUpdate() {

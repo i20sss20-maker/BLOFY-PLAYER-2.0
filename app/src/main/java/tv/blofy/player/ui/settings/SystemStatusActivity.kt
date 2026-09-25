@@ -11,9 +11,11 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.update.BlofyUpdateClient
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.local.BlofyDatabase
@@ -102,8 +104,13 @@ class SystemStatusActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
+            val releaseRequest = async {
+                val endpoint = BuildConfig.UPDATE_BASE_URL.trim()
+                if (endpoint.isBlank()) null else runCatching { BlofyUpdateClient.fetch(endpoint) }.getOrNull()
+            }
             val provider = dao.providers().first().firstOrNull()
             val activation = dao.activation()
+            val officialRelease = releaseRequest.await()
             val device = DeviceClass.detect(this@SystemStatusActivity)
             val activationText = when {
                 activation == null -> "غير موجودة"
@@ -117,8 +124,12 @@ class SystemStatusActivity : AppCompatActivity() {
                 appendLine("البناء: ${BuildConfig.BUILD_SHA.take(12)}")
                 appendLine("نوع الجهاز: ${device.name}")
                 appendLine("FFmpeg: ${if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "مدمج وجاهز" else "غير مدمج"}")
-                appendLine("خدمة التفعيل: ${if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) "غير مضبوطة" else "متصلة"}")
-                appendLine("خدمة التحديث: ${if (BuildConfig.UPDATE_BASE_URL.isBlank()) "غير مضبوطة" else "متصلة"}")
+                appendLine("خدمة التفعيل: ${if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) "غير مضبوطة" else "مضبوطة"}")
+                appendLine("خدمة التحديث: ${if (BuildConfig.UPDATE_BASE_URL.isBlank()) "غير مضبوطة" else if (officialRelease != null) "متصلة" else "تعذر التحقق الآن"}")
+                if (officialRelease != null) {
+                    val updateState = if (BlofyUpdateClient.isUpdateAvailable(BuildConfig.VERSION_CODE, officialRelease)) " • يتوفر تحديث" else " • أنت محدّث"
+                    appendLine("الإصدار الرسمي: ${officialRelease.versionName} (${officialRelease.versionCode})$updateState")
+                }
                 appendLine("حالة التفعيل: $activationText")
                 appendLine("آخر تحقق: ${activation?.lastCheckAt?.let(::formatTime) ?: "—"}")
                 appendLine()
