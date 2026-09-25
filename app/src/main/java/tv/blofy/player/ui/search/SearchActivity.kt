@@ -30,7 +30,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
@@ -408,7 +410,16 @@ class SearchActivity : AppCompatActivity() {
             })
             KIND_LIVE -> lifecycleScope.launch {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val provider = withContext(Dispatchers.IO) { dao.provider(providerId) } ?: return@launch
+                val provider = withContext(Dispatchers.IO) {
+                    runCatching {
+                        PortalPlaylistClient.ensureSubscriberConnection(
+                            applicationContext,
+                            BuildConfig.ACTIVATION_BASE_URL,
+                            dao,
+                            providerId
+                        )
+                    }.getOrNull() ?: dao.provider(providerId)
+                } ?: return@launch
                 val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (format.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
                 startActivity(Intent(this@SearchActivity, PlayerActivity::class.java).apply {
                     putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.live(provider, profile, stream)); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
