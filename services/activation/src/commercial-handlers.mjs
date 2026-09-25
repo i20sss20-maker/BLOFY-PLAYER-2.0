@@ -87,16 +87,57 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
       const source = rows.find(row => row.device_id === sourceDeviceId);
       const target = rows.find(row => row.device_id === targetDeviceId);
       if (!source) throw new CommercialError('source_device_missing',404);
-      if (target) throw new CommercialError('target_device_exists',409);
+      if (source.status === 'blocked') throw new CommercialError('source_device_blocked',409);
 
       const targetProof = credentials.proof(targetDeviceId,targetActivationCode);
-      await client.query(`INSERT INTO devices(
-        device_id,activation_code,status,trial_started_at,expires_at,created_at,updated_at,last_seen_at,
-        last_app_version,last_platform,auth_failed_attempts,last_auth_failure_at,auth_locked_until,
-        previous_activation_code_proof,activation_rotated_at,session_version,data_deleted_at,trial_registration_pending
-      ) SELECT $2,$3,status,trial_started_at,expires_at,created_at,NOW(),last_seen_at,
-        last_app_version,last_platform,0,NULL,NULL,NULL,NULL,session_version+1,data_deleted_at,trial_registration_pending
-        FROM devices WHERE device_id=$1`,[sourceDeviceId,targetDeviceId,targetProof]);
+      if (target) {
+        if (target.status === 'blocked' || !credentials.matches(target,targetActivationCode)) {
+          throw new CommercialError('target_device_conflict',409);
+        }
+        // The caller has authenticated both identities. Merge a previously-created stable
+        // placeholder instead of stranding the paid/trial entitlement on the legacy ID.
+        const preserveTargetPaid = target.status === 'active' && entitled(target);
+        await client.query(`UPDATE devices SET
+          status=$2,
+          trial_started_at=$3,
+          expires_at=$4,
+          created_at=LEAST(created_at,$5),
+          updated_at=NOW(),
+          session_version=GREATEST(session_version,$6)+1,
+          data_deleted_at=$7,
+          trial_registration_pending=$8
+          WHERE device_id=$1`,[
+            targetDeviceId,
+            preserveTargetPaid ? target.status : source.status,
+            preserveTargetPaid ? target.trial_started_at : source.trial_started_at,
+            preserveTargetPaid ? target.expires_at : source.expires_at,
+            source.created_at,
+            Number(source.session_version || 0),
+            source.data_deleted_at,
+            source.trial_registration_pending
+          ]);
+
+        if ((await client.query("SELECT to_regclass('device_playlists') AS name")).rows[0]?.name) {
+          await client.query('UPDATE device_playlists SET active=FALSE WHERE device_id=$1',[targetDeviceId]);
+        }
+        if ((await client.query("SELECT to_regclass('profile_cloud_snapshots') AS name")).rows[0]?.name) {
+          await client.query(`DELETE FROM profile_cloud_snapshots t USING profile_cloud_snapshots s
+            WHERE t.device_id=$2 AND s.device_id=$1 AND t.profile_id=s.profile_id`,[sourceDeviceId,targetDeviceId]);
+        }
+        for (const table of ['device_customers','license_recovery_keys','device_admin_metadata']) {
+          if ((await client.query('SELECT to_regclass($1) AS name',[table])).rows[0]?.name) {
+            await client.query(`DELETE FROM ${table} WHERE device_id=$1`,[targetDeviceId]);
+          }
+        }
+      } else {
+        await client.query(`INSERT INTO devices(
+          device_id,activation_code,status,trial_started_at,expires_at,created_at,updated_at,last_seen_at,
+          last_app_version,last_platform,auth_failed_attempts,last_auth_failure_at,auth_locked_until,
+          previous_activation_code_proof,activation_rotated_at,session_version,data_deleted_at,trial_registration_pending
+        ) SELECT $2,$3,status,trial_started_at,expires_at,created_at,NOW(),last_seen_at,
+          last_app_version,last_platform,0,NULL,NULL,NULL,NULL,session_version+1,data_deleted_at,trial_registration_pending
+          FROM devices WHERE device_id=$1`,[sourceDeviceId,targetDeviceId,targetProof]);
+      }
 
       const directTables = [
         'device_playlists','playback_diagnostics','license_recovery_keys','profile_cloud_snapshots',
