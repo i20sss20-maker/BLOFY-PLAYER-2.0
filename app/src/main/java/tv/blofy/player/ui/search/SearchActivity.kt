@@ -145,7 +145,17 @@ class SearchActivity : AppCompatActivity() {
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             isFocusable = true
-            setOnFocusChangeListener { _, focused -> background = searchField(focused) }
+            setOnFocusChangeListener { view, focused ->
+                background = searchField(focused)
+                view.animate().cancel()
+                val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
+                view.animate()
+                    .scaleX(targetScale)
+                    .scaleY(targetScale)
+                    .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(7).toFloat()) else 0f)
+                    .setDuration(TvUiTuning.focusDuration(view.context, focused))
+                    .start()
+            }
             setOnEditorActionListener { _, _, _ ->
                 val q = text?.toString().orEmpty()
                 RecentSearchStore.record(this@SearchActivity, q)
