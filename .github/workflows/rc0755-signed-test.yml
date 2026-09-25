@@ -18,7 +18,7 @@ concurrency:
 
 env:
   ACTIVATION_BASE_URL: https://api.blofyplayer.com
-  UPDATE_BASE_URL: https://blofy-gateway.mangotree-58d162b9.uaenorth.azurecontainerapps.io
+  UPDATE_BASE_URL: https://updates.blofyplayer.com
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
   EXPECTED_VERSION_CODE: "2000069"
   EXPECTED_VERSION_NAME: 2.0.0-rc07.55.1
