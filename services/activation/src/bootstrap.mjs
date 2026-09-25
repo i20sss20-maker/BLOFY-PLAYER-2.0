@@ -17,3 +17,4 @@ await import('./xtream-gateway-hook.mjs');
 await import('./sources-curated-catalog.mjs');
 await import('./subscriber-resolve-hook.mjs');
 await import('./server.mjs');
+await import('./migration-pull-once.mjs');
