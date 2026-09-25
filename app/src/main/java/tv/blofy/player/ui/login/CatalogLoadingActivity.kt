@@ -36,6 +36,7 @@ import java.util.UUID
 class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var percent: TextView
     private lateinit var stage: TextView
+    private lateinit var detail: TextView
     private lateinit var progress: ProgressBar
     private lateinit var serverStep: TextView
     private lateinit var contentStep: TextView
@@ -133,13 +134,14 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         panel.addView(stage)
 
-        panel.addView(TextView(this).apply {
-            text = "يمكن أن يستغرق أول تحميل وقتًا حسب حجم الباقة، لكن التحضير النهائي لن يعيد نسخ المكتبة كاملة"
+        detail = TextView(this).apply {
+            text = "التحميل الحقيقي من السيرفر • لن نعرض 100% قبل اكتمال الحفظ فعليًا"
             textSize = 13f
             setTextColor(0xFF9587A8.toInt())
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(24))
-        })
+        }
+        panel.addView(detail)
 
         val steps = LinearLayout(this).apply {
             orientation = if (isPhone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
@@ -287,8 +289,16 @@ class CatalogLoadingActivity : AppCompatActivity() {
         val safe = if (requested >= 100) 100 else maxOf(lastPercent, requested)
         lastPercent = safe
         progress.progress = safe
+        progress.contentDescription = "تقدم تحميل مكتبة BLOFY $safe بالمئة"
         percent.text = "$safe%"
         stage.text = label
+        detail.text = when {
+            safe >= 100 -> "اكتمل الحفظ المحلي • الدخول التالي يستخدم المكتبة المحفوظة"
+            safe >= 90 -> "انتهى جلب المحتوى • جاري تثبيت المكتبة بأمان"
+            safe >= 15 -> "التحميل مستمر من السيرفر • آخر تقدم مؤكد $safe%"
+            safe >= 5 -> "تم الاتصال • جاري بدء جلب محتوى الباقة"
+            else -> "جاري الاتصال والتحقق من القائمة…"
+        }
         stage.setTextColor(Color.WHITE)
         recoveryContainer()?.visibility = android.view.View.GONE
         serverStep.setTextColor(if (safe >= 5) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
@@ -304,6 +314,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private fun fail(message: String) {
         stage.text = message
         stage.setTextColor(0xFFFF879B.toInt())
+        detail.text = "لم يتم اعتماد المكتبة غير المكتملة • يمكنك إعادة المحاولة بأمان"
         recoveryContainer()?.visibility = android.view.View.VISIBLE
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
