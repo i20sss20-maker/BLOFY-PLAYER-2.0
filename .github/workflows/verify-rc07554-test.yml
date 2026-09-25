@@ -1,0 +1,43 @@
+name: Verify rc07.55.4 Test APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-rc07554-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      UPDATE_BASE: https://updates.blofyplayer.com
+      TEST_APK: https://updates.blofyplayer.com/files/releases/BLOFY-PLAYER-2.0-rc07.55.4-PRODUCTION-SIGNED.apk
+      EXPECTED_TEST_SHA256: 9dcf28af8dcf3d4b6a5c6bc29e30c67df9fbc502aed5ee8d362741667f01717f
+      EXPECTED_LATEST_SHA256: 1080407ca1b8fde1658ebaec1942e04734ac8b2c7872c8337f8ff9cde83f61ae
+    steps:
+      - name: Verify 55.4 test APK bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --max-time 180 "$TEST_APK" -o test.apk
+          test "$(stat -c '%s' test.apk)" -gt 10000000
+          test "$(sha256sum test.apk | awk '{print $1}')" = "$EXPECTED_TEST_SHA256"
+
+      - name: Verify public latest remains 55.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --max-time 180 "$UPDATE_BASE/download/latest.apk" -o latest.apk
+          test "$(sha256sum latest.apk | awk '{print $1}')" = "$EXPECTED_LATEST_SHA256"
+
+      - name: Verify active release metadata remains 55.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --max-time 30 "$UPDATE_BASE/health" -o health.json
+          jq -e '.ok == true and .release.app.versionCode == 2000071 and .release.app.versionName == "2.0.0-rc07.55.3"' health.json >/dev/null
