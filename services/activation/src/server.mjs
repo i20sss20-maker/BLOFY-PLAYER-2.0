@@ -768,7 +768,10 @@ async function start() {
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days')::int AS created_30d
       FROM devices
     `)).rows[0];
-    console.log(`BLOFY device inventory: ${JSON.stringify(inventory)}`);
+    const linkedScopes = (await pool.query("SELECT COUNT(*)::int AS count FROM device_trial_claims")).rows[0]?.count || 0;
+    const playlistDevices = (await pool.query("SELECT COUNT(DISTINCT device_id)::int AS count FROM device_playlists")).rows[0]?.count || 0;
+    const paidDevices = (await pool.query("SELECT COUNT(DISTINCT device_id)::int AS count FROM device_subscriptions WHERE status='active' AND (expires_at IS NULL OR expires_at > NOW())")).rows[0]?.count || 0;
+    console.log(`BLOFY device inventory: ${JSON.stringify({...inventory,linked_scopes:linkedScopes,playlist_devices:playlistDevices,paid_subscription_devices:paidDevices})}`);
   } catch (error) {
     console.error('BLOFY device inventory unavailable:', safeErrorSummary(error));
   }
