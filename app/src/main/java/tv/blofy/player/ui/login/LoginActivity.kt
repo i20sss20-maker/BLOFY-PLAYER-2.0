@@ -17,7 +17,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -97,8 +99,9 @@ class LoginActivity : AppCompatActivity() {
             background = panelBackground()
         }
         activation.addView(TextView(this).apply { text = "تفعيل الجهاز"; textSize = 21f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER })
-        activation.addView(TextView(this).apply { text = "امسح QR أو استخدم رقم الجهاز والرمز"; textSize = 12.5f; setTextColor(0xFFB9A9C8.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(10)) })
-        activation.addView(qrView, LinearLayout.LayoutParams(dp(190), dp(190)))
+        activation.addView(TextView(this).apply { text = "امسح QR بالجوال — يفتح بوابة الربط الرسمية مباشرة"; textSize = 12.5f; setTextColor(0xFFB9A9C8.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(10)) })
+        activation.addView(qrView, LinearLayout.LayoutParams(dp(204), dp(204)))
+        activation.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(6) })
         activation.addView(label("رقم الجهاز"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)).apply { topMargin = dp(10) })
         deviceView.apply { textSize = 18f; gravity = Gravity.CENTER; setPadding(dp(12),0,dp(12),0); background = fieldBackground() }
         activation.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)))
@@ -107,7 +110,7 @@ class LoginActivity : AppCompatActivity() {
         activation.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(60)))
         status.apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(0xFFE9E0EF.toInt()); background = statusBackground(); setPadding(dp(12),0,dp(12),0) }
         activation.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { topMargin = dp(10) })
-        refreshCodeButton = actionButton("↻  تحديث التفعيل") { lifecycleScope.launch { refreshIdentityAndProvider() } }
+        refreshCodeButton = actionButton("↻  تحديث حالة الجهاز") { lifecycleScope.launch { refreshIdentityAndProvider() } }
         activation.addView(refreshCodeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(10) })
 
         val playlistsPanel = LinearLayout(this).apply {
@@ -151,8 +154,17 @@ class LoginActivity : AppCompatActivity() {
         createIdentityViews(true)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; setPadding(dp(24),dp(24),dp(24),dp(24)); setBackgroundColor(theme.background) }
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(150),dp(82)))
-        root.addView(title("BLOFY PLAYER",29f)); root.addView(subtitle("فعّل جهازك ثم اختر قائمة التشغيل"))
-        root.addView(deviceView); root.addView(codeView); root.addView(qrView, LinearLayout.LayoutParams(dp(180),dp(180))); root.addView(status)
+        root.addView(title("BLOFY PLAYER",29f)); root.addView(subtitle("اربط جهازك ثم اختر قائمة التشغيل"))
+        root.addView(label("رقم الجهاز"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)))
+        deviceView.apply { background = fieldBackground(); setPadding(dp(12),0,dp(12),0) }
+        root.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)))
+        root.addView(label("رمز الربط"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)).apply { topMargin = dp(8) })
+        codeView.apply { background = fieldBackground(); letterSpacing = .14f }
+        root.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
+        root.addView(TextView(this).apply { text = "امسح QR بالجوال لفتح بوابة BLOFY مباشرة"; textSize = 13f; setTextColor(0xFFB9A9C8.toInt()); gravity = Gravity.CENTER; setPadding(0,dp(14),0,dp(8)) })
+        root.addView(qrView, LinearLayout.LayoutParams(dp(210),dp(210)))
+        root.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)))
+        root.addView(status)
         addPlaylist = actionButton("إضافة / إدارة القوائم") { startActivity(Intent(this, PlaylistActivity::class.java)) }
         connectButton = actionButton("تشغيل القائمة النشطة") { startOrCancelConnect() }
         refreshCodeButton = actionButton("تحديث") { lifecycleScope.launch { refreshIdentityAndProvider() } }
@@ -164,7 +176,12 @@ class LoginActivity : AppCompatActivity() {
     private fun createIdentityViews(phone: Boolean) {
         deviceView = TextView(this).apply { text = "جاري إنشاء هوية الجهاز..."; textSize = if(phone)17f else 21f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = if(phone)Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL }
         codeView = TextView(this).apply { textSize = if(phone)25f else 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(0xFFB78CFF.toInt()); gravity = if(phone)Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL }
-        qrView = ImageView(this).apply { contentDescription = "رمز تفعيل BLOFY"; setBackgroundColor(Color.WHITE); setPadding(dp(10),dp(10),dp(10),dp(10)) }
+        qrView = ImageView(this).apply {
+            contentDescription = "رمز ربط BLOFY"
+            background = qrBackground()
+            setPadding(dp(12),dp(12),dp(12),dp(12))
+            elevation = dp(6).toFloat()
+        }
         status = TextView(this).apply { textSize = 14f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0,dp(8),0,dp(8)) }
     }
 
@@ -249,13 +266,55 @@ class LoginActivity : AppCompatActivity() {
     private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) { CatalogSyncState.isReady(applicationContext,providerId) && dao.hasStreamsForProvider(providerId) }
     private suspend fun <T> runSuspendCatching(block: suspend () -> T): Result<T> = try { Result.success(block()) } catch (c: CancellationException) { throw c } catch (e: Throwable) { Result.failure(e) }
 
-    private fun renderIdentity(deviceId: String, activationCode: String) { deviceView.text = deviceId; codeView.text = activationCode; val url = ActivationPortalUrl.create(BuildConfig.ACTIVATION_BASE_URL,deviceId,activationCode); if(url!=null) qrView.setImageBitmap(createQr(url)) else qrView.setImageDrawable(null) }
+    private fun renderIdentity(deviceId: String, activationCode: String) {
+        deviceView.text = deviceId
+        codeView.text = activationCode
+        val url = ActivationPortalUrl.create(BuildConfig.ACTIVATION_BASE_URL,deviceId,activationCode)
+        if (url != null) {
+            qrView.setImageBitmap(createQr(url))
+            qrView.alpha = 1f
+        } else {
+            qrView.setImageDrawable(null)
+            qrView.alpha = .35f
+        }
+    }
     private suspend fun applyRemoteProviderProfile(endpoint: String, dao: BlofyDao, providerId: String) { val current = dao.provider(providerId) ?: return; val updated = RemoteProviderProfileClient.applyIfAvailable(applicationContext,endpoint,current); if(updated != current) dao.upsertProvider(updated) }
     private fun activationLabel(remote: ActivationCheckResponse) = when(remote.state()) { ActivationCheckResponse.State.TRIAL -> "الفترة التجريبية فعالة"; ActivationCheckResponse.State.ACTIVE -> "الجهاز مفعل"; ActivationCheckResponse.State.EXPIRED -> "انتهت صلاحية الجهاز"; ActivationCheckResponse.State.BLOCKED -> "الجهاز موقوف"; ActivationCheckResponse.State.UNKNOWN -> remote.message ?: "حالة التفعيل غير معروفة" }
     private fun openHome() { startActivity(Intent(this,HomeActivity::class.java)); finish() }
     override fun onResume() { super.onResume(); if(::status.isInitialized && connectJob?.isActive != true) lifecycleScope.launch { refreshIdentityAndProvider() } }
     private suspend fun refreshProviderStatus() { if(connectJob?.isActive == true) return; val provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull(); status.text = if(provider==null) "في انتظار إضافة قائمة" else "جاهز • ${provider.name}" }
-    private fun createQr(value: String): Bitmap { val matrix = QRCodeWriter().encode(value,BarcodeFormat.QR_CODE,360,360); return Bitmap.createBitmap(matrix.width,matrix.height,Bitmap.Config.RGB_565).apply { for(y in 0 until matrix.height) for(x in 0 until matrix.width) setPixel(x,y,if(matrix[x,y])Color.BLACK else Color.WHITE) } }
+    private fun createQr(value: String): Bitmap {
+        val matrix = QRCodeWriter().encode(
+            value,
+            BarcodeFormat.QR_CODE,
+            420,
+            420,
+            mapOf(
+                EncodeHintType.MARGIN to 1,
+                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
+                EncodeHintType.CHARACTER_SET to "UTF-8"
+            )
+        )
+        return Bitmap.createBitmap(matrix.width,matrix.height,Bitmap.Config.ARGB_8888).apply {
+            for(y in 0 until matrix.height) for(x in 0 until matrix.width) {
+                setPixel(x,y,if(matrix[x,y])Color.BLACK else Color.WHITE)
+            }
+        }
+    }
+
+    private fun pairingLinkHint() = TextView(this).apply {
+        text = "blofyplayer.com/connect"
+        textSize = 12.5f
+        typeface = Typeface.DEFAULT_BOLD
+        setTextColor(0xFFCDB3FF.toInt())
+        gravity = Gravity.CENTER
+        letterSpacing = .02f
+    }
+    private fun qrBackground() = GradientDrawable().apply {
+        cornerRadius = dp(18).toFloat()
+        setColor(Color.WHITE)
+        setStroke(dp(2),0xFFDBC7F5.toInt())
+    }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply { val tv = deviceKind == DeviceClass.Kind.TV; text = label; isAllCaps = false; textSize = 14.5f; setTextColor(Color.WHITE); isFocusable = tv; isFocusableInTouchMode = tv; background = buttonBackground(false); setOnFocusChangeListener { v,f -> if(tv){ v.background = buttonBackground(f); v.animate().scaleX(if(f)1.025f else 1f).scaleY(if(f)1.025f else 1f).setDuration(90).start() } }; setOnClickListener { action() } }
     private fun primaryActionButton(label: String, action: () -> Unit) = Button(this).apply { val tv = deviceKind == DeviceClass.Kind.TV; text = label; isAllCaps = false; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); isFocusable = tv; isFocusableInTouchMode = tv; background = primaryButtonBackground(false); setOnFocusChangeListener { v,f -> if(tv){ v.background = primaryButtonBackground(f); v.animate().scaleX(if(f)1.03f else 1f).scaleY(if(f)1.03f else 1f).setDuration(95).start() } }; setOnClickListener { action() } }

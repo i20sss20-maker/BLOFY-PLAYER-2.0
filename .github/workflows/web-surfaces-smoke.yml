@@ -70,6 +70,8 @@ jobs:
           check_html "https://blofyplayer.com/privacy" "BLOFY|الخصوصية" "$tmp/privacy.html"
           check_html "https://blofyplayer.com/status" "BLOFY|حالة الخدمات" "$tmp/status.html"
           check_html "https://blofyplayer.com/admin" "BLOFY|الإدارة|المشرف" "$tmp/admin.html"
+          grep -Fq 'id="admin-live-service"' "$tmp/admin.html"
+          grep -Fq 'href="/connect"' "$tmp/admin.html"
           check_html "https://blofyplayer.com/sources-admin" "BLOFY|المصادر|Xtream" "$tmp/sources-admin.html"
 
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \

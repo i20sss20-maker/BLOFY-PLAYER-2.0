@@ -1,8 +1,9 @@
 package tv.blofy.player.core.identity
 
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
-/** Builds the public activation-portal URL encoded by the login-screen QR code. */
+/** Builds the public device-management URL encoded by the login-screen QR code. */
 object ActivationPortalUrl {
     fun create(baseUrl: String, deviceId: String, activationCode: String): String? {
         val normalizedDeviceId = deviceId.trim()
@@ -12,19 +13,26 @@ object ActivationPortalUrl {
         val activationEndpoint = baseUrl.trim().toHttpUrlOrNull() ?: return null
         if (!activationEndpoint.isHttps) return null
 
-        // The API and portal share the same production origin. Resolving `/` avoids
-        // accidentally encoding an API path or stale query from the build setting.
-        val portal = activationEndpoint.resolve("/") ?: return null
-        val activationFragment = buildString {
-            append("deviceId=")
-            append(normalizedDeviceId)
-            append("&code=")
-            append(normalizedCode)
-        }
+        val portal = publicPortal(activationEndpoint) ?: return null
         return portal.newBuilder()
-            // A fragment is never sent to Vercel or included in HTTP access logs.
-            .fragment(activationFragment)
+            // Credentials stay in the fragment, so they are never sent in the HTTP request.
+            .fragment("deviceId=$normalizedDeviceId&code=$normalizedCode")
             .build()
             .toString()
+    }
+
+    private fun publicPortal(endpoint: HttpUrl): HttpUrl? {
+        val host = endpoint.host
+        val canonicalHost = when {
+            host.equals("api.blofyplayer.com", ignoreCase = true) -> "blofyplayer.com"
+            host.startsWith("api.", ignoreCase = true) && host.length > 4 -> host.substring(4)
+            else -> host
+        }
+        return endpoint.newBuilder()
+            .host(canonicalHost)
+            .encodedPath("/connect")
+            .query(null)
+            .fragment(null)
+            .build()
     }
 }

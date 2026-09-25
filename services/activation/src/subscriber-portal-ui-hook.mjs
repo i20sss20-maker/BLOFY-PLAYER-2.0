@@ -273,23 +273,22 @@ ${allowRenewal ? renewalStyles : ''}
     }
   }
   // Keep BLOFY subscriber credentials on a single deterministic save path.
+  // Capture phase wins over the portal's normal onclick handler even if script
+  // installation order changes or another hook reassigns onclick later.
   function installSaveInterceptor() {
     var button = qs('saveBtn');
     var select = qs('providerType');
-    if (!button || !select || button.dataset.blofySubscriberInterceptorV5) return;
-    button.dataset.blofySubscriberInterceptorV5 = '1';
-    var originalOnclick = button.onclick;
-    button.onclick = async function (event) {
-      if (select.value === 'blofy') {
-        if (event) {
-          if (typeof event.preventDefault === 'function') event.preventDefault();
-          if (typeof event.stopPropagation === 'function') event.stopPropagation();
-        }
-        await saveSubscriber();
-        return false;
+    if (!button || !select || button.dataset.blofySubscriberInterceptorV6) return;
+    button.dataset.blofySubscriberInterceptorV6 = '1';
+    button.addEventListener('click', function (event) {
+      if (select.value !== 'blofy') return;
+      if (event) {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+        else if (typeof event.stopPropagation === 'function') event.stopPropagation();
       }
-      if (typeof originalOnclick === 'function') return originalOnclick.call(this, event);
-    };
+      return saveSubscriber();
+    }, true);
   }
 ${allowRenewal ? renewalScript : ''}
   function install() {

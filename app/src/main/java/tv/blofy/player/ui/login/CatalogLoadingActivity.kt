@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -19,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
@@ -39,31 +41,36 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var contentStep: TextView
     private lateinit var prepareStep: TextView
     private lateinit var readyStep: TextView
+    private lateinit var retryButton: Button
+    private lateinit var backButton: Button
+    private var currentProviderId: String = ""
+    private var lastPercent = 0
+    private val isPhone by lazy { DeviceClass.detect(this) == DeviceClass.Kind.PHONE }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
-        val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
-        if (providerId.isBlank()) {
+        currentProviderId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
+        if (currentProviderId.isBlank()) {
             fail("تعذر تحديد قائمة التشغيل")
             return
         }
-        CatalogSyncState.markPending(applicationContext, providerId)
-        lifecycleScope.launch { sync(providerId) }
+        CatalogSyncState.markPending(applicationContext, currentProviderId)
+        startSync()
     }
 
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(80), dp(44), dp(80), dp(44))
+            setPadding(if (isPhone) dp(18) else dp(80), if (isPhone) dp(22) else dp(44), if (isPhone) dp(18) else dp(80), if (isPhone) dp(22) else dp(44))
             background = AppCompatResources.getDrawable(this@CatalogLoadingActivity, R.drawable.blofy_home_background)
         }
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(54), dp(34), dp(54), dp(32))
+            setPadding(if (isPhone) dp(24) else dp(54), if (isPhone) dp(24) else dp(34), if (isPhone) dp(24) else dp(54), if (isPhone) dp(24) else dp(32))
             background = GradientDrawable().apply {
                 cornerRadius = dp(28).toFloat()
                 setColor(0xE8151024.toInt())
@@ -79,7 +86,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
         panel.addView(TextView(this).apply {
             text = "جاري تجهيز مكتبتك"
-            textSize = 28f
+            textSize = if (isPhone) 24f else 28f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -108,7 +115,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         progressRow.addView(progress, LinearLayout.LayoutParams(0, dp(14), 1f).apply { marginEnd = dp(22) })
         percent = TextView(this).apply {
             text = "0%"
-            textSize = 34f
+            textSize = if (isPhone) 28f else 34f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -135,7 +142,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         })
 
         val steps = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (isPhone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
         }
@@ -147,9 +154,24 @@ class CatalogLoadingActivity : AppCompatActivity() {
         steps.addView(contentStep, stepParams())
         steps.addView(prepareStep, stepParams())
         steps.addView(readyStep, stepParams())
-        panel.addView(steps, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
+        panel.addView(steps, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (isPhone) LinearLayout.LayoutParams.WRAP_CONTENT else dp(58)))
 
-        root.addView(panel, LinearLayout.LayoutParams(dp(980), LinearLayout.LayoutParams.WRAP_CONTENT))
+        val recoveryActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER
+            visibility = android.view.View.GONE
+        }
+        retryButton = recoveryButton("↻  إعادة المحاولة") {
+            recoveryActions.visibility = android.view.View.GONE
+            startSync()
+        }
+        backButton = recoveryButton("رجوع") { finish() }
+        recoveryActions.addView(retryButton, LinearLayout.LayoutParams(0, dp(56), 1f).apply { marginStart = dp(8) })
+        recoveryActions.addView(backButton, LinearLayout.LayoutParams(0, dp(56), 1f))
+        panel.addView(recoveryActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)).apply { topMargin = dp(12) })
+
+        root.addView(panel, LinearLayout.LayoutParams(if (isPhone) LinearLayout.LayoutParams.MATCH_PARENT else dp(980), LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
     }
 
@@ -160,10 +182,41 @@ class CatalogLoadingActivity : AppCompatActivity() {
         gravity = Gravity.CENTER
     }
 
-    private fun stepParams() = LinearLayout.LayoutParams(0, dp(50), 1f).apply {
-        marginStart = dp(5)
-        marginEnd = dp(5)
+    private fun stepParams() = if (isPhone) {
+        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)).apply {
+            topMargin = dp(2)
+            bottomMargin = dp(2)
+        }
+    } else {
+        LinearLayout.LayoutParams(0, dp(50), 1f).apply {
+            marginStart = dp(5)
+            marginEnd = dp(5)
+        }
     }
+
+    private fun recoveryButton(label: String, action: () -> Unit) = Button(this).apply {
+        text = label
+        isAllCaps = false
+        textSize = 15f
+        setTextColor(Color.WHITE)
+        background = GradientDrawable().apply {
+            cornerRadius = dp(16).toFloat()
+            setColor(0xFF21172D.toInt())
+            setStroke(dp(1), 0xFF76509B.toInt())
+        }
+        setOnClickListener { action() }
+    }
+
+    private fun startSync() {
+        lastPercent = 0
+        render(0, "جاري الاتصال بالخادم...")
+        recoveryContainer()?.visibility = android.view.View.GONE
+        CatalogSyncState.markPending(applicationContext, currentProviderId)
+        lifecycleScope.launch { sync(currentProviderId) }
+    }
+
+    private fun recoveryContainer(): LinearLayout? =
+        if (::retryButton.isInitialized) retryButton.parent as? LinearLayout else null
 
     private suspend fun sync(providerId: String) {
         val dao = BlofyDatabase.get(applicationContext).dao()
@@ -225,14 +278,19 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.MOVIES -> "جاري تحميل الأفلام"
             PlaylistSyncStage.SERIES -> "جاري تحميل المسلسلات"
         }
-        render(p.percent.coerceAtMost(95), label)
+        val detail = if (p.totalSteps > 1) label + " • " + p.step.coerceAtMost(p.totalSteps) + "/" + p.totalSteps else label
+        render(p.percent.coerceAtMost(95), detail)
     }
 
     private fun render(value: Int, label: String) {
-        val safe = value.coerceIn(0, 100)
+        val requested = value.coerceIn(0, 100)
+        val safe = if (requested >= 100) 100 else maxOf(lastPercent, requested)
+        lastPercent = safe
         progress.progress = safe
         percent.text = "$safe%"
         stage.text = label
+        stage.setTextColor(Color.WHITE)
+        recoveryContainer()?.visibility = android.view.View.GONE
         serverStep.setTextColor(if (safe >= 5) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
         contentStep.setTextColor(if (safe >= 15) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
         prepareStep.setTextColor(if (safe >= 90) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
@@ -246,6 +304,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private fun fail(message: String) {
         stage.text = message
         stage.setTextColor(0xFFFF879B.toInt())
+        recoveryContainer()?.visibility = android.view.View.VISIBLE
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 

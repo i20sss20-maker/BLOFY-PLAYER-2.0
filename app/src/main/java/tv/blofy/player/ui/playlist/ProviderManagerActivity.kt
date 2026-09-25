@@ -10,6 +10,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
@@ -35,20 +36,21 @@ class ProviderManagerActivity : AppCompatActivity() {
     private lateinit var addButton: Button
     private val focusButtons = linkedMapOf<String, Button>()
     private val isTv by lazy { DeviceClass.isTv(this) }
+    private val isPhone by lazy { DeviceClass.detect(this) == DeviceClass.Kind.PHONE }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(58), dp(34), dp(58), dp(34))
+            setPadding(if (isPhone) dp(20) else dp(58), if (isPhone) dp(20) else dp(34), if (isPhone) dp(20) else dp(58), if (isPhone) dp(20) else dp(34))
             background = AppCompatResources.getDrawable(this@ProviderManagerActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
         }
 
         root.addView(TextView(this).apply {
-            text = "قوائم BLOFY"
+            text = "إدارة قوائم BLOFY"
             BlofyTvDesign.applyTitle(this)
             gravity = Gravity.RIGHT
         })
@@ -85,11 +87,19 @@ class ProviderManagerActivity : AppCompatActivity() {
         addButton = actionButton("add", "+  Xtream / M3U") {
             startActivity(Intent(this, PlaylistActivity::class.java).putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true))
         }
-        actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(310), dp(64)).apply { marginStart = dp(12) })
-        actions.addView(addButton, LinearLayout.LayoutParams(dp(270), dp(64)))
-        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(70)).apply {
-            bottomMargin = dp(18); gravity = Gravity.RIGHT
-        })
+        if (isPhone) {
+            actions.addView(subscriberButton, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginStart = dp(8) })
+            actions.addView(addButton, LinearLayout.LayoutParams(0, dp(60), 1f))
+            root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(68)).apply {
+                bottomMargin = dp(14)
+            })
+        } else {
+            actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(310), dp(64)).apply { marginStart = dp(12) })
+            actions.addView(addButton, LinearLayout.LayoutParams(dp(270), dp(64)))
+            root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(70)).apply {
+                bottomMargin = dp(18); gravity = Gravity.RIGHT
+            })
+        }
 
         root.addView(TextView(this).apply {
             text = "القوائم المحفوظة"
@@ -137,10 +147,10 @@ class ProviderManagerActivity : AppCompatActivity() {
 
         items.forEach { provider ->
             val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
+                orientation = if (isPhone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(18), dp(10), dp(18), dp(10))
+                setPadding(dp(if (isPhone) 14 else 18), dp(if (isPhone) 10 else 10), dp(if (isPhone) 14 else 18), dp(if (isPhone) 10 else 10))
                 background = if (provider.enabled) BlofyTvDesign.surface(dp(20).toFloat(), true) else BlofyTvDesign.surface(dp(20).toFloat(), false)
                 clipChildren = false
             }
@@ -152,10 +162,11 @@ class ProviderManagerActivity : AppCompatActivity() {
             }
             info.addView(TextView(this).apply {
                 text = provider.name
-                textSize = 18f
+                textSize = if (isPhone) 16f else 18f
                 typeface = Typeface.create("sans-serif", Typeface.BOLD)
                 gravity = Gravity.RIGHT
                 setTextColor(Color.WHITE)
+                maxLines = 1
             })
             info.addView(TextView(this).apply {
                 text = buildString {
@@ -168,13 +179,28 @@ class ProviderManagerActivity : AppCompatActivity() {
                 gravity = Gravity.RIGHT
                 setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
             })
-            row.addView(info, LinearLayout.LayoutParams(0, dp(66), 1f))
 
-            row.addView(actionButton("${provider.id}:connect", "▶  اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(dp(140), dp(56)).apply { marginStart = dp(8) })
-            row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(dp(116), dp(56)).apply { marginStart = dp(8) })
-            row.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(dp(120), dp(56)).apply { marginStart = dp(8) })
-            row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(dp(104), dp(56)))
-            list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(90)).apply { bottomMargin = dp(9) })
+            if (isPhone) {
+                row.addView(info, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
+                val phoneActions = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutDirection = View.LAYOUT_DIRECTION_RTL
+                    gravity = Gravity.CENTER
+                }
+                phoneActions.addView(actionButton("${provider.id}:connect", "اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                phoneActions.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                phoneActions.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                phoneActions.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f))
+                row.addView(phoneActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(5) })
+                list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(132)).apply { bottomMargin = dp(9) })
+            } else {
+                row.addView(info, LinearLayout.LayoutParams(0, dp(66), 1f))
+                row.addView(actionButton("${provider.id}:connect", "▶  اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(dp(140), dp(56)).apply { marginStart = dp(8) })
+                row.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(dp(116), dp(56)).apply { marginStart = dp(8) })
+                row.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(dp(120), dp(56)).apply { marginStart = dp(8) })
+                row.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(dp(104), dp(56)))
+                list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(90)).apply { bottomMargin = dp(9) })
+            }
         }
         restoreFocus()
     }
@@ -230,6 +256,15 @@ class ProviderManagerActivity : AppCompatActivity() {
     }
 
     private fun remove(provider: ProviderEntity) {
+        AlertDialog.Builder(this)
+            .setTitle("حذف القائمة؟")
+            .setMessage("سيتم حذف «${provider.name}» من هذا الجهاز. التفعيل وبقية القوائم لن تتأثر.")
+            .setPositiveButton("حذف") { _, _ -> removeConfirmed(provider) }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun removeConfirmed(provider: ProviderEntity) {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             dao.deleteProvider(provider.id)

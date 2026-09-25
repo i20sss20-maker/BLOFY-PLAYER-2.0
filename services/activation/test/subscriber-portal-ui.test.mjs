@@ -53,6 +53,13 @@ test('subscriber save uses a fresh secure session and writes directly to the por
   assert.match(html, /id: editingSubscriberId \|\| undefined/);
 });
 
+test('subscriber save interception runs in capture phase before the normal portal save handler', () => {
+  const html = injected();
+  assert.match(html, /blofySubscriberInterceptorV6/);
+  assert.match(html, /addEventListener\('click',[\s\S]*true\)/);
+  assert.match(html, /stopImmediatePropagation/);
+});
+
 test('uses authenticated page state rather than cleared visible device inputs', () => {
   const html = injected();
   assert.match(html, /typeof auth !== 'undefined' && auth/);
