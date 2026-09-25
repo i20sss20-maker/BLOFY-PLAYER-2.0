@@ -24,11 +24,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
       - name: Wait for Railway production commit
         shell: bash
         run: |
           set -euo pipefail
           health="$RUNNER_TEMP/railway-health.json"
+
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            changed="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA")"
+            if ! grep -q '^services/activation/' <<<"$changed"; then
+              curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+                --connect-timeout 8 --max-time 20 https://api.blofyplayer.com/health > "$health"
+              python3 - "$health" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert p.get('ok') is True
+          PY
+              echo "No activation deploy expected for this commit; current production is healthy"
+              exit 0
+            fi
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              --connect-timeout 8 --max-time 20 https://api.blofyplayer.com/health > "$health"
+            python3 - "$health" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert p.get('ok') is True
+          PY
+            echo "Manual smoke uses the current healthy production deployment"
+            exit 0
+          fi
+
           for attempt in $(seq 1 36); do
             if curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
               --connect-timeout 8 --max-time 20 https://api.blofyplayer.com/health > "$health"
@@ -69,8 +99,10 @@ jobs:
           check_html "https://blofyplayer.com/downloads" "BLOFY|تحميل" "$tmp/downloads.html"
           check_html "https://blofyplayer.com/privacy" "BLOFY|الخصوصية" "$tmp/privacy.html"
           check_html "https://blofyplayer.com/status" "BLOFY|حالة الخدمات" "$tmp/status.html"
-          check_html "https://blofyplayer.com/admin" "BLOFY|الإدارة|المشرف" "$tmp/admin.html"
-          grep -Fq 'id="admin-live-service"' "$tmp/admin.html"
+          check_html "https://blofyplayer.com/admin" "BLOFY|دخول الإدارة|تسجيل دخول المشرف" "$tmp/admin.html"
+          grep -Fq 'id="admin-login"' "$tmp/admin.html"
+          grep -Fq 'name="username"' "$tmp/admin.html"
+          grep -Fq 'name="password"' "$tmp/admin.html"
           grep -Fq 'href="/connect"' "$tmp/admin.html"
           check_html "https://blofyplayer.com/sources-admin" "BLOFY|المصادر|Xtream" "$tmp/sources-admin.html"
 
