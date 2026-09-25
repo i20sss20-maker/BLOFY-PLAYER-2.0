@@ -47,10 +47,7 @@ const post=async(path,body,method='POST')=>{
   return {status:response.status,headers:response.headers,data:await response.json()};
 };
 try {
-  await start(true);
-  const before=await post('/api/v1/subscribers/resolve',{...credentials,sessionTokens:[token()]});
-  assert.equal(before.status,404,'reproduce the missing endpoint on the pre-fix website stack');
-  await stop();await start();
+  await start();
   assert.equal((await fetch(base+'/api/v1/subscribers/resolve')).status,405);
   let response=await post('/api/v1/activation/check',{...credentials,appVersion:'2.0.0-rc07.40',platform:'android'});
   assert.equal(response.status,200);assert.equal(response.data.status,'trial');
@@ -81,7 +78,7 @@ try {
   assert.equal((await post('/api/v1/portal/playlists',{...credentials,...direct,name:'تعديل عربي محفوظ'})).status,200);
   const refreshed=await post('/api/v1/portal/playlists/list',credentials);assert.equal(refreshed.data.items.find(x=>x.id===direct.id).name,'تعديل عربي محفوظ');
   assert.equal((await fetch(base+'/portal')).status,200);assert.equal((await fetch(base+'/admin')).status,200);assert.equal((await fetch(base+'/releases')).status,200);
-  console.log('PASS: reproduced baseline 404; rc07.40 mixed Xtream/BLOFY portal list and authenticated direct resolution succeed; existing device and playlist records preserved; cross-device, blocked and expired access denied.');
+  console.log('PASS: mixed Xtream/BLOFY portal list and authenticated direct resolution succeed; existing device and playlist records preserved; cross-device, blocked and expired access denied.');
 } finally {
   await stop();
   await pool.query('DELETE FROM devices WHERE device_id=$1',[deviceId]).catch(()=>{});await pool.end();
