@@ -378,8 +378,11 @@ async function resolveSubscriberSessions(req, res) {
     }
     const session = openSession(sessionToken);
     const sameDevice = session?.d && session.d.toUpperCase() === deviceId.toUpperCase();
-    const valid = sameDevice && await subscriberSessionValid(pool, session);
-    if (!valid) {
+    if (!session || !sameDevice) {
+      items.push({ sessionToken, error: 'invalid_subscriber_session' });
+      continue;
+    }
+    if (!await subscriberSessionValid(pool, session)) {
       items.push({ sessionToken, error: 'subscriber_session_expired' });
       continue;
     }
