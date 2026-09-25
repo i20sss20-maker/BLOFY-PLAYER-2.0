@@ -23,6 +23,8 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,6 +59,7 @@ class LoginActivity : AppCompatActivity() {
     private var playlistRow: LinearLayout? = null
     private var connectJob: Job? = null
     private var playlistJob: Job? = null
+    private var pairingWatcherJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,8 +102,8 @@ class LoginActivity : AppCompatActivity() {
             background = panelBackground()
         }
         activation.addView(TextView(this).apply { text = "تفعيل الجهاز"; textSize = 21f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER })
-        activation.addView(TextView(this).apply { text = "امسح QR بالجوال — يفتح بوابة الربط الرسمية مباشرة"; textSize = 12.5f; setTextColor(0xFFB9A9C8.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(10)) })
-        activation.addView(qrView, LinearLayout.LayoutParams(dp(204), dp(204)))
+        activation.addView(TextView(this).apply { text = "امسح QR بالجوال — الربط يتحدث تلقائيًا على هذه الشاشة"; textSize = 12.5f; setTextColor(0xFFB9A9C8.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(10)) })
+        activation.addView(qrView, LinearLayout.LayoutParams(dp(216), dp(216)))
         activation.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(6) })
         activation.addView(label("رقم الجهاز"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)).apply { topMargin = dp(10) })
         deviceView.apply { textSize = 18f; gravity = Gravity.CENTER; setPadding(dp(12),0,dp(12),0); background = fieldBackground() }
@@ -110,7 +113,7 @@ class LoginActivity : AppCompatActivity() {
         activation.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(60)))
         status.apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(0xFFE9E0EF.toInt()); background = statusBackground(); setPadding(dp(12),0,dp(12),0) }
         activation.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { topMargin = dp(10) })
-        refreshCodeButton = actionButton("↻  تحديث حالة الجهاز") { lifecycleScope.launch { refreshIdentityAndProvider() } }
+        refreshCodeButton = actionButton("↻  فحص الآن") { lifecycleScope.launch { refreshIdentityAndProvider() } }
         activation.addView(refreshCodeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(10) })
 
         val playlistsPanel = LinearLayout(this).apply {
@@ -161,8 +164,8 @@ class LoginActivity : AppCompatActivity() {
         root.addView(label("رمز الربط"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)).apply { topMargin = dp(8) })
         codeView.apply { background = fieldBackground(); letterSpacing = .14f }
         root.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
-        root.addView(TextView(this).apply { text = "امسح QR بالجوال لفتح بوابة BLOFY مباشرة"; textSize = 13f; setTextColor(0xFFB9A9C8.toInt()); gravity = Gravity.CENTER; setPadding(0,dp(14),0,dp(8)) })
-        root.addView(qrView, LinearLayout.LayoutParams(dp(210),dp(210)))
+        root.addView(TextView(this).apply { text = "امسح QR بالجوال — التحديث يظهر تلقائيًا هنا"; textSize = 13f; setTextColor(0xFFB9A9C8.toInt()); gravity = Gravity.CENTER; setPadding(0,dp(14),0,dp(8)) })
+        root.addView(qrView, LinearLayout.LayoutParams(dp(228),dp(228)))
         root.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)))
         root.addView(status)
         addPlaylist = actionButton("إضافة / إدارة القوائم") { startActivity(Intent(this, PlaylistActivity::class.java)) }
@@ -281,17 +284,38 @@ class LoginActivity : AppCompatActivity() {
     private suspend fun applyRemoteProviderProfile(endpoint: String, dao: BlofyDao, providerId: String) { val current = dao.provider(providerId) ?: return; val updated = RemoteProviderProfileClient.applyIfAvailable(applicationContext,endpoint,current); if(updated != current) dao.upsertProvider(updated) }
     private fun activationLabel(remote: ActivationCheckResponse) = when(remote.state()) { ActivationCheckResponse.State.TRIAL -> "الفترة التجريبية فعالة"; ActivationCheckResponse.State.ACTIVE -> "الجهاز مفعل"; ActivationCheckResponse.State.EXPIRED -> "انتهت صلاحية الجهاز"; ActivationCheckResponse.State.BLOCKED -> "الجهاز موقوف"; ActivationCheckResponse.State.UNKNOWN -> remote.message ?: "حالة التفعيل غير معروفة" }
     private fun openHome() { startActivity(Intent(this,HomeActivity::class.java)); finish() }
-    override fun onResume() { super.onResume(); if(::status.isInitialized && connectJob?.isActive != true) lifecycleScope.launch { refreshIdentityAndProvider() } }
+    override fun onResume() {
+        super.onResume()
+        startPairingWatcher()
+    }
+
+    override fun onPause() {
+        pairingWatcherJob?.cancel()
+        pairingWatcherJob = null
+        super.onPause()
+    }
+
+    private fun startPairingWatcher() {
+        if (!::status.isInitialized || pairingWatcherJob?.isActive == true) return
+        pairingWatcherJob = lifecycleScope.launch {
+            while (isActive) {
+                if (connectJob?.isActive != true && playlistJob?.isActive != true) {
+                    runSuspendCatching { refreshIdentityAndProvider() }
+                }
+                delay(PAIRING_REFRESH_MS)
+            }
+        }
+    }
     private suspend fun refreshProviderStatus() { if(connectJob?.isActive == true) return; val provider = BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull(); status.text = if(provider==null) "في انتظار إضافة قائمة" else "جاهز • ${provider.name}" }
     private fun createQr(value: String): Bitmap {
         val matrix = QRCodeWriter().encode(
             value,
             BarcodeFormat.QR_CODE,
-            420,
-            420,
+            512,
+            512,
             mapOf(
                 EncodeHintType.MARGIN to 1,
-                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
+                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.Q,
                 EncodeHintType.CHARACTER_SET to "UTF-8"
             )
         )
@@ -303,7 +327,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun pairingLinkHint() = TextView(this).apply {
-        text = "blofyplayer.com/connect"
+        text = "blofyplayer.com/connect  •  تحديث تلقائي"
         textSize = 12.5f
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(0xFFCDB3FF.toInt())
@@ -328,4 +352,8 @@ class LoginActivity : AppCompatActivity() {
     private fun buttonBackground(focused:Boolean)=GradientDrawable().apply{cornerRadius=dp(15).toFloat();setColor(if(focused)0xFF48236B.toInt() else 0xFF17111F.toInt());setStroke(if(focused)dp(2) else dp(1),if(focused)0xFFD7AAFF.toInt() else 0xFF4B365C.toInt())}
     private fun primaryButtonBackground(focused:Boolean)=GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,intArrayOf(if(focused)0xFF7A32DA.toInt() else 0xFF6030A7.toInt(),if(focused)0xFFC85BC7.toInt() else 0xFF8E3FA4.toInt())).apply{cornerRadius=dp(15).toFloat();setStroke(if(focused)dp(2) else dp(1),if(focused)Color.WHITE else 0xFFC98BE6.toInt())}
     private fun dp(value:Int)=(value*resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val PAIRING_REFRESH_MS = 10_000L
+    }
 }
