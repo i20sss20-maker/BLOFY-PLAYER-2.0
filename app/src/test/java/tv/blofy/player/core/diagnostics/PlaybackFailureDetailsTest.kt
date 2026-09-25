@@ -55,6 +55,19 @@ class PlaybackFailureDetailsTest {
         assertEquals("ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT", PlaybackFailureDetails.requestErrorCode(error))
     }
 
+    @Test fun ultraHdClassificationTargets4kAndHighResolutionHevcOnly() {
+        val fourK = Format.Builder().setSampleMimeType("video/hevc").setCodecs("hvc1.2.4.L150.90")
+            .setWidth(3840).setHeight(2160).build()
+        val highHevc = Format.Builder().setSampleMimeType("video/hevc").setCodecs("hev1.1.6.L123")
+            .setWidth(2560).setHeight(1440).build()
+        val fullHdHevc = Format.Builder().setSampleMimeType("video/hevc").setCodecs("hvc1.1.6.L120")
+            .setWidth(1920).setHeight(1080).build()
+        assertTrue(PlaybackFailureDetails.isUltraHdFormat(fourK))
+        assertTrue(PlaybackFailureDetails.isUltraHdFormat(highHevc))
+        assertFalse(PlaybackFailureDetails.isUltraHdFormat(fullHdHevc))
+        assertFalse(PlaybackFailureDetails.isUltraHdFormat(null))
+    }
+
     @Test fun previewIsReportedAsLiveInsteadOfUnknown() {
         assertEquals("live", DiagnosticsSanitizer.sanitizeContentKind("live_preview"))
     }
