@@ -52,14 +52,18 @@ class MovieDetailsActivity : ContentAccessActivity() {
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = runCatching {
+            val provider = try {
                 PortalPlaylistClient.ensureSubscriberConnection(
                     applicationContext,
                     BuildConfig.ACTIVATION_BASE_URL,
                     dao,
                     providerId
                 )
-            }.getOrNull() ?: dao.provider(providerId) ?: run { finish(); return@launch }
+            } catch (_: Throwable) {
+                Toast.makeText(this@MovieDetailsActivity, "تعذر تحديث اتصال مشترك BLOFY. أعد فتح القائمة.", Toast.LENGTH_LONG).show()
+                finish()
+                return@launch
+            } ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
             val watch = dao.watchState(contentKey)
             val url = ContentUrlResolver.movie(provider, stream)
