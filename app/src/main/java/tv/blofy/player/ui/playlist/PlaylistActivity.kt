@@ -35,6 +35,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.TvUiTuning
 import java.util.UUID
 
@@ -215,9 +216,11 @@ class PlaylistActivity : AppCompatActivity() {
         }
     }
 
-    private fun panelBackground() = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(0xEA151020.toInt()); setStroke(dp(1), 0xFF67458E.toInt()) }
-    private fun fieldBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(0xFF110F19.toInt()); setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF342C44.toInt()) }
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply { cornerRadius = dp(18).toFloat(); setColor(if (focused) 0xFF7D45D9.toInt() else if (primary) 0xFF5F2AB5.toInt() else 0xFF241A30.toInt()); setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF69468F.toInt()) }
+    private fun panelBackground() = BlofyTvDesign.glassSurface(dp(24).toFloat())
+    private fun fieldBackground(focused: Boolean) = CinemaStyle.surface(this, focused = focused, radiusDp = 16)
+    private fun buttonBackground(focused: Boolean, primary: Boolean) =
+        if (primary) BlofyTvDesign.primaryButton(dp(18).toFloat(), focused)
+        else BlofyTvDesign.secondaryButton(dp(18).toFloat(), focused)
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
