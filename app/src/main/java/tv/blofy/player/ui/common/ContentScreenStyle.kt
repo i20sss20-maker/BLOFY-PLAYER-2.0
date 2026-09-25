@@ -13,10 +13,10 @@ object ContentScreenStyle {
     fun actionBackground(context: Context, primary: Boolean, focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
-            primary && focused -> intArrayOf(0xFFF0E2FF.toInt(), 0xFFD9BDFF.toInt())
-            primary -> intArrayOf(0xFFD8B7FF.toInt(), 0xFFB77CEB.toInt())
-            focused -> intArrayOf(0xB3664188.toInt(), 0xA53A2455.toInt())
-            else -> intArrayOf(0x521A1126, 0x38120D19)
+            primary && focused -> intArrayOf(0xFFF4E9FF.toInt(), 0xFFDCC1FF.toInt())
+            primary -> intArrayOf(0xFFE0C7FF.toInt(), 0xFFB983EF.toInt())
+            focused -> intArrayOf(0xA06F48A0.toInt(), 0x7A452A63.toInt())
+            else -> intArrayOf(0x5A21142F, 0x3E120C1B)
         }
     ).apply {
         val d = context.resources.displayMetrics.density
@@ -65,9 +65,9 @@ object ContentScreenStyle {
     fun softSurface(context: Context, focused: Boolean = false, radiusDp: Int = 14) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) {
-            intArrayOf(0x8F4A3165.toInt(), 0x6B2B1B40.toInt(), 0x42150E20.toInt())
+            intArrayOf(0xA35A3B74.toInt(), 0x7B34204D.toInt(), 0x4A160F23.toInt())
         } else {
-            intArrayOf(0x23251A30, 0x18160F20, 0x10100B17)
+            intArrayOf(0x30291B39, 0x21171027, 0x16100B19)
         }
     ).apply {
         val d = context.resources.displayMetrics.density
@@ -78,9 +78,22 @@ object ContentScreenStyle {
         )
     }
 
+    fun detailsPanel(context: Context) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        intArrayOf(
+            0x7A241631.toInt(),
+            0x5C160F20.toInt(),
+            0x36100B18.toInt()
+        )
+    ).apply {
+        val d = context.resources.displayMetrics.density
+        cornerRadius = 22f * d
+        setStroke((1f * d).toInt().coerceAtLeast(1), 0x2ECAA7FF)
+    }
+
     fun chip(context: Context) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0x48231931, 0x32130D1B)
+        intArrayOf(0x5A2E1D3F, 0x3B160E20)
     ).apply {
         val d = context.resources.displayMetrics.density
         cornerRadius = 12f * d
