@@ -237,7 +237,9 @@ class PosterCatalogActivity : AppCompatActivity() {
                 dp(if (deviceKind == DeviceClass.Kind.PHONE) 2 else 6),
                 dp(if (deviceKind == DeviceClass.Kind.PHONE) 10 else 18)
             )
-            clipChildren = false
+            // Focused posters may scale inside the grid padding, but must never paint
+            // over the catalog header/search area.
+            clipChildren = true
             clipToPadding = false
             itemAnimator = null
             setHasFixedSize(true)
