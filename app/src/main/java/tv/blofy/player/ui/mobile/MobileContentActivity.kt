@@ -1,11 +1,15 @@
 package tv.blofy.player.ui.mobile
 
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.BaseAdapter
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.Spinner
@@ -27,6 +31,7 @@ import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catchup.CatchupActivity
+import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.catalog.PosterStreamAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -37,6 +42,8 @@ class MobileContentActivity : AppCompatActivity() {
     private lateinit var categorySpinner: Spinner
     private lateinit var countView: TextView
     private var list: ListView? = null
+    private var liveAdapter: MobileLiveAdapter? = null
+    private lateinit var emptyView: TextView
     private var posterGrid: RecyclerView? = null
     private var posterAdapter: PosterStreamAdapter? = null
     private var categories: List<CategoryEntity> = emptyList()
@@ -78,6 +85,16 @@ class MobileContentActivity : AppCompatActivity() {
             bottomMargin = dp(10)
         })
 
+        emptyView = TextView(this).apply {
+            text = "لا يوجد محتوى في هذا القسم"
+            textSize = 15f
+            setTextColor(0xFFB7A8C9.toInt())
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+            setPadding(0, dp(16), 0, dp(16))
+        }
+        root.addView(emptyView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
         if (posterMode) {
             val posters = PosterStreamAdapter(onClick = ::openStream)
             posterAdapter = posters
@@ -91,9 +108,14 @@ class MobileContentActivity : AppCompatActivity() {
             }
             root.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
+            val adapter = MobileLiveAdapter(this)
+            liveAdapter = adapter
             list = ListView(this).apply {
-                dividerHeight = 1
+                dividerHeight = 0
                 setBackgroundColor(Color.TRANSPARENT)
+                clipToPadding = false
+                setPadding(0, dp(2), 0, dp(20))
+                this.adapter = adapter
             }
             root.addView(list, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         }
@@ -136,12 +158,9 @@ class MobileContentActivity : AppCompatActivity() {
                     KIND_SERIES -> "${items.size} مسلسل"
                     else -> "${items.size} قناة"
                 }
+                emptyView.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
                 if (kind == KIND_LIVE) {
-                    list?.adapter = ArrayAdapter(
-                        this@MobileContentActivity,
-                        android.R.layout.simple_list_item_1,
-                        items.map { it.name + if (it.archiveEnabled) "  ⏱" else "" }
-                    )
+                    liveAdapter?.submit(items)
                 } else {
                     posterAdapter?.submit(items)
                 }
@@ -209,6 +228,71 @@ class MobileContentActivity : AppCompatActivity() {
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
     }
+}
+
+private class MobileLiveAdapter(private val activity: MobileContentActivity) : BaseAdapter() {
+    private var items: List<StreamEntity> = emptyList()
+
+    fun submit(next: List<StreamEntity>) {
+        items = next
+        notifyDataSetChanged()
+    }
+
+    override fun getCount(): Int = items.size
+    override fun getItem(position: Int): StreamEntity = items[position]
+    override fun getItemId(position: Int): Long = position.toLong()
+
+    override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+        val stream = getItem(position)
+        val row = (convertView as? LinearLayout) ?: LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(16).toFloat()
+                setColor(0xE8181321.toInt())
+                setStroke(dp(1), 0x554D376B)
+            }
+
+            addView(ImageView(activity).apply {
+                tag = "artwork"
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(0xFF17111F.toInt())
+            }, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginStart = dp(12) })
+
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+                addView(TextView(activity).apply {
+                    tag = "title"
+                    textSize = 16.5f
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.RIGHT
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                })
+                addView(TextView(activity).apply {
+                    tag = "meta"
+                    textSize = 12.5f
+                    setTextColor(0xFFB7A8C9.toInt())
+                    gravity = Gravity.RIGHT
+                    setPadding(0, dp(3), 0, 0)
+                })
+            }, LinearLayout.LayoutParams(0, dp(58), 1f))
+        }
+
+        val artwork = row.findViewWithTag<ImageView>("artwork")
+        val title = row.findViewWithTag<TextView>("title")
+        val meta = row.findViewWithTag<TextView>("meta")
+        title.text = stream.name
+        meta.text = if (stream.archiveEnabled) "بث مباشر  •  أرشيف متاح ⏱" else "بث مباشر"
+        ArtworkLoader.load(artwork, stream.icon)
+        row.contentDescription = if (stream.archiveEnabled) "${stream.name}، أرشيف متاح" else stream.name
+        return row
+    }
+
+    private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).toInt()
 }
 
 private class SimpleItemSelectedListener(private val onSelected: (Int) -> Unit) : android.widget.AdapterView.OnItemSelectedListener {
