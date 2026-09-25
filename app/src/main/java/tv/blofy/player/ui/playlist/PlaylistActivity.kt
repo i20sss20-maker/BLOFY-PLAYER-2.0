@@ -32,6 +32,8 @@ import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
+import tv.blofy.player.data.PlaylistSyncProgress
+import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
@@ -132,7 +134,11 @@ class PlaylistActivity : AppCompatActivity() {
                         dao.upsertProvider(next)
                         try {
                             if (hasCatalog) dao.clearProviderCatalog(id)
-                            val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(next) }
+                            val result = PlaylistSyncPolicy.run {
+                                PlaylistManager(XtreamClient.api, dao).syncAll(next) { progress ->
+                                    withContext(Dispatchers.Main) { status.text = syncProgressText(progress) }
+                                }
+                            }
                             check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }; check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
                             dao.saveAndActivateProvider(next)
                         } catch (error: Throwable) {
@@ -142,7 +148,11 @@ class PlaylistActivity : AppCompatActivity() {
                     } else if (existing != null && (existing.baseUrl != next.baseUrl || existing.username != next.username || existing.password != next.password || existing.providerType != next.providerType)) {
                         val staging = next.copy(id = UUID.randomUUID().toString(), enabled = false); var promoted = false
                         try {
-                            val result = PlaylistSyncPolicy.run { PlaylistManager(XtreamClient.api, dao).syncAll(staging) }
+                            val result = PlaylistSyncPolicy.run {
+                                PlaylistManager(XtreamClient.api, dao).syncAll(staging) { progress ->
+                                    withContext(Dispatchers.Main) { status.text = syncProgressText(progress) }
+                                }
+                            }
                             check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }; check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
                             dao.promoteStagedCatalog(staging.id, next); promoted = true
                         } finally { if (!promoted) withContext(NonCancellable) { dao.discardStagedCatalog(staging.id) } }
@@ -179,6 +189,16 @@ class PlaylistActivity : AppCompatActivity() {
             val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().provider(editingProviderId) } ?: return@launch
             name.setText(provider.name); url.setText(provider.baseUrl); username.setText(provider.username); password.setText(provider.password); status.text = "${provider.providerType.uppercase()} • ${provider.name}"
         }
+    }
+
+    private fun syncProgressText(progress: PlaylistSyncProgress): String {
+        val stage = when (progress.stage) {
+            PlaylistSyncStage.M3U -> "M3U"
+            PlaylistSyncStage.LIVE -> "البث المباشر"
+            PlaylistSyncStage.MOVIES -> "الأفلام"
+            PlaylistSyncStage.SERIES -> "المسلسلات"
+        }
+        return "جاري تحميل $stage  •  ${progress.percent}%"
     }
 
     private fun panelBackground() = GradientDrawable().apply { cornerRadius = 24f; setColor(0xEA151020.toInt()); setStroke(1, 0xFF67458E.toInt()) }
