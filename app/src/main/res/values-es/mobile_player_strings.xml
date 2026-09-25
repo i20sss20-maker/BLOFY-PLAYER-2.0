@@ -2,4 +2,5 @@
     <string name="player_toggle_controls">Mostrar u ocultar controles de reproducción</string>
     <string name="player_seek_position">Posición de reproducción</string>
     <string name="login_saved_playlists_failed">No se pudieron leer las listas guardadas. Reintenta; tus datos no se han eliminado.</string>
+    <string name="player_4k_compatibility_failed">No se pudo decodificar este vídeo 4K/HEVC en este dispositivo • inténtalo de nuevo o elige otra calidad</string>
 </resources>
