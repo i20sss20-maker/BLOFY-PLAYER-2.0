@@ -24,7 +24,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
@@ -104,8 +106,16 @@ class LibraryActivity : AppCompatActivity() {
     private fun load(mode: String) {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
-            if (provider == null) { showMessage(getString(R.string.login_add_playlist_first)); return@launch }
+            val rawProvider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
+            if (rawProvider == null) { showMessage(getString(R.string.login_add_playlist_first)); return@launch }
+            val provider = try {
+                PortalPlaylistClient.ensureSubscriberConnection(
+                    applicationContext, BuildConfig.ACTIVATION_BASE_URL, dao, rawProvider.id
+                )
+            } catch (_: Throwable) {
+                showMessage(getString(R.string.subscriber_service_unavailable))
+                return@launch
+            } ?: return@launch
             list.removeAllViews()
             if (mode == MODE_CONTINUE) {
                 val states = withContext(Dispatchers.IO) { dao.continueWatching(provider.id).first() }
@@ -227,7 +237,14 @@ class LibraryActivity : AppCompatActivity() {
             "series" -> startActivity(Intent(this, SeriesDetailsActivity::class.java).apply { putExtra(SeriesDetailsActivity.EXTRA_PROVIDER_ID, providerId); putExtra(SeriesDetailsActivity.EXTRA_CONTENT_KEY, stream.key) })
             "live" -> lifecycleScope.launch {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val provider = withContext(Dispatchers.IO) { dao.provider(providerId) } ?: return@launch
+                val provider = try {
+                    PortalPlaylistClient.ensureSubscriberConnection(
+                        applicationContext, BuildConfig.ACTIVATION_BASE_URL, dao, providerId
+                    )
+                } catch (_: Throwable) {
+                    showMessage(getString(R.string.subscriber_service_unavailable))
+                    return@launch
+                } ?: return@launch
                 val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (liveFormat.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
                 startActivity(Intent(this@LibraryActivity, PlayerActivity::class.java).apply {
                     putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.live(provider, profile, stream)); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
