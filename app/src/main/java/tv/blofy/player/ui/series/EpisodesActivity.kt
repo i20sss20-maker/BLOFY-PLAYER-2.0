@@ -215,7 +215,15 @@ class EpisodesActivity : AppCompatActivity() {
     private fun updateStatus() {
         if (allEpisodes.isNotEmpty()) {
             val seasons = allEpisodes.map { it.season }.distinct().size
-            status.text = if (syncInProgress) "جاري تحديث الحلقات...  •  ${allEpisodes.size} حلقة محفوظة" else "$seasons موسم  •  ${allEpisodes.size} حلقة"
+            val currentSeasonCount = selectedSeason?.let { season -> allEpisodes.count { it.season == season } } ?: 0
+            status.text = if (syncInProgress) {
+                "جاري تحديث الحلقات...  •  ${allEpisodes.size} حلقة محفوظة"
+            } else {
+                buildString {
+                    append("$seasons موسم  •  ${allEpisodes.size} حلقة")
+                    selectedSeason?.let { append("  •  الموسم $it: $currentSeasonCount حلقة") }
+                }
+            }
             return
         }
         status.text = when (loadState) {
