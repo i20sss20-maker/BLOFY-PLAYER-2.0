@@ -6,12 +6,15 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.R
 import tv.blofy.player.core.playback.CatchupUrlResolver
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
@@ -36,8 +39,10 @@ class CatchupActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(46, 34, 46, 34)
-            setBackgroundColor(Color.rgb(5, 5, 10))
+            setPadding(dp(34), dp(28), dp(34), dp(30))
+            background = AppCompatResources.getDrawable(this@CatchupActivity, R.drawable.blofy_home_background)
+            clipChildren = false
+            clipToPadding = false
         }
         root.addView(TextView(this).apply {
             text = "أرشيف BLOFY"
@@ -51,8 +56,18 @@ class CatchupActivity : AppCompatActivity() {
             setPadding(0, 5, 0, 18)
         }
         root.addView(status)
-        list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(list)
+        list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(2), 0, dp(24))
+            clipChildren = false
+        }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            overScrollMode = android.view.View.OVER_SCROLL_NEVER
+            addView(list)
+        }
+        root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
         lifecycleScope.launch {
@@ -83,19 +98,30 @@ class CatchupActivity : AppCompatActivity() {
             status.text = "لا توجد برامج سابقة متاحة لهذه القناة"
             return
         }
+        status.text = "${stream.name}  •  ${items.size} برنامج سابق  •  أرشيف ${stream.archiveDurationDays.coerceAtLeast(1)} يوم"
         items.forEach { item ->
             list.addView(TextView(this).apply {
-                text = "${time(item.startMs)}–${time(item.endMs)}   •   ${item.title}"
-                textSize = 17f
+                text = "${item.title}\n${time(item.startMs)} — ${time(item.endMs)}"
+                textSize = 16.5f
                 setTextColor(Color.WHITE)
-                setPadding(22, 16, 22, 16)
+                setPadding(dp(22), dp(10), dp(22), dp(10))
                 gravity = Gravity.CENTER_VERTICAL
+                maxLines = 2
+                setLineSpacing(dp(2).toFloat(), 1.05f)
                 isFocusable = true
                 isClickable = true
                 background = rowBackground(false)
-                setOnFocusChangeListener { view, focused -> view.background = rowBackground(focused) }
+                setOnFocusChangeListener { view, focused ->
+                    view.background = rowBackground(focused)
+                    view.animate().cancel()
+                    view.animate()
+                        .scaleX(if (focused) 1.015f else 1f)
+                        .scaleY(if (focused) 1.015f else 1f)
+                        .setDuration(90)
+                        .start()
+                }
                 setOnClickListener { playCatchup(provider, stream, item) }
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 64).apply { topMargin = 6 })
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(76)).apply { topMargin = dp(7) })
         }
         list.getChildAt(0)?.requestFocus()
     }
@@ -114,10 +140,12 @@ class CatchupActivity : AppCompatActivity() {
     private fun time(ms: Long): String = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(ms))
 
     private fun rowBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 15f
+        cornerRadius = dp(16).toFloat()
         setColor(if (focused) Color.rgb(70, 34, 118) else Color.rgb(18, 17, 28))
-        if (focused) setStroke(2, Color.rgb(190, 135, 255))
+        setStroke(dp(if (focused) 2 else 1), if (focused) Color.rgb(190, 135, 255) else 0x554D376B)
     }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"
