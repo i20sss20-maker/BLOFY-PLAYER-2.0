@@ -350,6 +350,54 @@ async function createSubscriberSession(req, res) {
   });
 }
 
+async function resolveSubscriberSessions(req, res) {
+  if (!baseReady()) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
+  const host = await restoreSubscriberHost();
+  if (!host) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
+
+  const body = await readJson(req);
+  const deviceId = String(body.deviceId || '').trim();
+  const activationCode = String(body.activationCode || '').trim();
+  const tokens = Array.isArray(body.sessionTokens) ? body.sessionTokens : [];
+  if (!deviceId || !activationCode || tokens.length < 1 || tokens.length > 20) {
+    return sendJson(res, 400, { error: 'invalid_subscriber_resolve_request' });
+  }
+
+  const authorization = await authorizeSession(req, deviceId, activationCode);
+  if (!authorization.allowed) {
+    return sendJson(res, authorization.status, { error: authorization.error },
+      authorization.retryAfterSeconds ? { 'retry-after': String(authorization.retryAfterSeconds) } : {});
+  }
+
+  const items = [];
+  for (const rawToken of tokens) {
+    const sessionToken = String(rawToken || '');
+    if (!sessionToken || sessionToken.length > 4096) {
+      items.push({ sessionToken, error: 'invalid_subscriber_session' });
+      continue;
+    }
+    const session = openSession(sessionToken);
+    const sameDevice = session?.d && session.d.toUpperCase() === deviceId.toUpperCase();
+    const valid = sameDevice && await subscriberSessionValid(pool, session);
+    if (!valid) {
+      items.push({ sessionToken, error: 'subscriber_session_expired' });
+      continue;
+    }
+    items.push({
+      providerName: 'مشتركين BLOFY',
+      providerType: 'xtream',
+      delivery: 'direct',
+      baseUrl: host,
+      username: session.u,
+      password: session.p,
+      sessionToken,
+      expiresAt: session.exp
+    });
+  }
+
+  return sendJson(res, 200, { items });
+}
+
 async function proxyPlayerApi(req, res, requestUrl) {
   const host = await restoreSubscriberHost();
   if (!host) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
@@ -422,6 +470,10 @@ async function handleSubscriberRequest(req, res) {
   }
   if (req.method === 'POST' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/session`) {
     await createSubscriberSession(req, res);
+    return true;
+  }
+  if (req.method === 'POST' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/resolve`) {
+    await resolveSubscriberSessions(req, res);
     return true;
   }
   if (req.method === 'GET' && requestUrl.pathname === `${XTREAM_PREFIX}/player_api.php`) {
