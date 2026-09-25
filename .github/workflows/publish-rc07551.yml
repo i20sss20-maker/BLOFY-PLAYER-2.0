@@ -1,0 +1,83 @@
+name: Publish BLOFY rc07.55.1 after signed verification
+
+on:
+  workflow_run:
+    workflows: ["BLOFY rc07.55.1 Production-Signed Test"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: blofy-publish-rc07551
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'dev/rc0755-stable-new-domain'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_VERSION: 2.0.0-rc07.55.1
+      EXPECTED_VERSION_CODE: "2000069"
+      EXPECTED_ACTIVATION: https://api.blofyplayer.com
+      EXPECTED_UPDATES: https://updates.blofyplayer.com
+      RELEASE_TAG: v2.0.0-rc07.55.1
+    steps:
+      - name: Download exact successful signed artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="${{ github.event.workflow_run.id }}"
+          sha="${{ github.event.workflow_run.head_sha }}"
+          mkdir -p publish
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY"             --name "BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED-$sha"             --dir publish
+          test -s publish/BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.apk
+          test -s publish/BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.aab
+          grep -Fxq "version=$EXPECTED_VERSION" publish/build-info.txt
+          grep -Fxq "versionCode=$EXPECTED_VERSION_CODE" publish/build-info.txt
+          grep -Fxq "commit=$sha" publish/build-info.txt
+          grep -Fxq "activation=$EXPECTED_ACTIVATION" publish/build-info.txt
+          grep -Fxq "updates=$EXPECTED_UPDATES" publish/build-info.txt
+          grep -Fxq "production_signed=true" publish/build-info.txt
+          grep -Fxq "ffmpeg=true" publish/build-info.txt
+          (cd publish && sha256sum --check SHA256SUMS)
+
+      - name: Publish verified 55.1 release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          BLOFY PLAYER 2.0.0-rc07.55.1
+
+          مبني على rc07.55 المستقرة، وليس على rc07.56.
+
+          يتضمن:
+          - ربط BLOFY بالدومينات الجديدة.
+          - إصلاح خروج البث المباشر من Fullscreen بسبب إنذار stall خاطئ.
+          - تحسين الثيم والفوكس والأسطح.
+          - تحسين تفاصيل الأفلام والمسلسلات والخلفية الخفيفة.
+          - تحسين عرض الدولة من بيانات Xtream.
+          - إضافة توقيت الرياض ودبي ولندن ونيويورك.
+          - الإبقاء على Media3 وFFmpeg وfallback ومحركات التشغيل كما هي.
+
+          versionCode: 2000069
+          NOTES
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG"               publish/BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.apk               publish/BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.aab               publish/SHA256SUMS               --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG"               publish/BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.apk               publish/BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.aab               publish/SHA256SUMS               --repo "$GITHUB_REPOSITORY"               --target "${{ github.event.workflow_run.head_sha }}"               --title "BLOFY PLAYER 2.0.0-rc07.55.1"               --notes-file release-notes.md               --latest
+          fi
+
+      - name: Verify public APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/BLOFY-PLAYER-2.0-rc07.55.1-PRODUCTION-SIGNED.apk"
+          curl --fail --location --retry 3 --max-time 180 "$url" -o verified.apk
+          expected="$(awk '/\.apk$/ {print $1; exit}' publish/SHA256SUMS)"
+          printf '%s  verified.apk\n' "$expected" | sha256sum --check
