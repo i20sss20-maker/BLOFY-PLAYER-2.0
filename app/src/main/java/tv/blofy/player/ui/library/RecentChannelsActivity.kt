@@ -23,6 +23,7 @@ import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.player.PlayerActivity
 
@@ -137,10 +138,6 @@ class RecentChannelsActivity : AppCompatActivity() {
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF7139BE.toInt(), 0xFF402461.toInt()) else intArrayOf(0xFF241A34.toInt(), 0xFF18111F.toInt())
-    ).apply {
-        cornerRadius = dp(18).toFloat()
-        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF463455.toInt())
-    }
+    private fun rowBackground(focused: Boolean) =
+        CinemaStyle.surface(this, focused = focused, radiusDp = 18)
 }
