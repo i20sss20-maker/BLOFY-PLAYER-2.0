@@ -2,4 +2,5 @@
     <string name="player_toggle_controls">Wiedergabesteuerung anzeigen oder ausblenden</string>
     <string name="player_seek_position">Wiedergabeposition</string>
     <string name="login_saved_playlists_failed">Gespeicherte Listen konnten nicht gelesen werden. Erneut versuchen; Ihre Daten wurden nicht gelöscht.</string>
+    <string name="player_4k_compatibility_failed">Dieses 4K/HEVC-Video konnte auf diesem Gerät nicht dekodiert werden • erneut versuchen oder eine andere Qualität wählen</string>
 </resources>
