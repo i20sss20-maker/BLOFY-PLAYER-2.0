@@ -3,4 +3,11 @@
     <string name="player_seek_position">Playback position</string>
     <string name="login_saved_playlists_failed">Saved playlists could not be read. Retry; your saved data has not been removed.</string>
     <string name="player_4k_compatibility_failed">This 4K/HEVC video could not be decoded on this device • retry or choose another quality</string>
+    <string name="player_4k_compatibility_title">4K compatibility mode</string>
+    <string name="player_4k_compatibility_starting">Starting 4K compatibility mode…</string>
+    <string name="player_4k_compatibility_software">Hardware decoder failed • trying software HEVC decoding…</string>
+    <string name="player_4k_compatibility_paused">Paused</string>
+    <string name="player_4k_compatibility_controls">OK: Play/Pause • ◀ ▶: Seek 10 sec • Back: Close</string>
+    <string name="player_4k_compatibility_failed_vlc">This 4K/HEVC file could not be decoded even in compatibility mode</string>
+    <string name="player_4k_compatibility_back">Press Back to return</string>
 </resources>
