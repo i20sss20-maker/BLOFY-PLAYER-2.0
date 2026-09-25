@@ -1,4 +1,4 @@
-name: Verify rc07.55.2 Production
+name: Verify rc07.55.3 Production
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
     env:
       UPDATE_BASE: https://updates.blofyplayer.com
       ACTIVATION_BASE: https://api.blofyplayer.com
-      EXPECTED_APK_SHA256: 82303a50a531e884b952676b54ac40adebc6b71629d0f0563d39942fda5cc0da
+      EXPECTED_APK_SHA256: 1080407ca1b8fde1658ebaec1942e04734ac8b2c7872c8337f8ff9cde83f61ae
     steps:
       - name: Verify activation service
         shell: bash
@@ -27,15 +27,29 @@ jobs:
             --connect-timeout 8 --max-time 30 "$ACTIVATION_BASE/health" -o activation.json
           jq -e '.ok == true and .database == "ready" and .playlistEncryption == "ready"' activation.json >/dev/null
 
-      - name: Verify active update release is 55.2
+      - name: Verify identity migration route is live and fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output migration.json --write-out '%{http_code}' \
+            --connect-timeout 8 --max-time 30 \
+            -H 'content-type: application/json' \
+            -d '{"deviceId":"BLOFY-TEST-TEST","activationCode":"000000","targetDeviceId":"BLOFY-TARG-ET01","targetActivationCode":"000001"}' \
+            "$ACTIVATION_BASE/api/v1/device/identity/migrate")"
+          test "$status" != "404"
+          test "$status" != "500"
+          test "$status" -ge 400
+          test "$status" -lt 500
+
+      - name: Verify active update release is 55.3
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "$UPDATE_BASE/health" -o update.json
-          jq -e '.ok == true and .release.app.versionCode == 2000070 and .release.app.versionName == "2.0.0-rc07.55.2"' update.json >/dev/null
+          jq -e '.ok == true and .release.app.versionCode == 2000071 and .release.app.versionName == "2.0.0-rc07.55.3"' update.json >/dev/null
 
-      - name: Verify latest APK bytes match signed 55.2
+      - name: Verify latest APK bytes match signed 55.3
         shell: bash
         run: |
           set -euo pipefail
@@ -50,4 +64,4 @@ jobs:
           set -euo pipefail
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "$UPDATE_BASE/downloads" -o downloads.html
-          grep -Fq '2.0.0-rc07.55.2' downloads.html
+          grep -Fq '2.0.0-rc07.55.3' downloads.html
