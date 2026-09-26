@@ -146,7 +146,7 @@ class PlayerActivity : AppCompatActivity() {
         root.addView(playerView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         channelNumberView = TextView(this).apply {
-            textSize = 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            textSize = 34f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER
             setPadding(24, 10, 24, 10)
             background = BlofyTvDesign.badge(18f, accent = true)
             visibility = View.GONE
@@ -162,13 +162,13 @@ class PlayerActivity : AppCompatActivity() {
 
         val eyebrow = TextView(this).apply {
             text = if (kind == "live") "BLOFY LIVE" else if (kind == "episode") "BLOFY SERIES" else "BLOFY CINEMA"
-            textSize = 12f; typeface = Typeface.DEFAULT_BOLD; setTextColor(BlofyTvDesign.PurpleSoft); letterSpacing = .08f
+            textSize = 12f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.PurpleSoft); letterSpacing = .08f
             setPadding(0, 0, 0, 5)
         }
         hud.addView(eyebrow)
 
         titleView = TextView(this).apply {
-            textSize = 25f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 1
+            textSize = 25f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); maxLines = 1
             setPadding(0, 0, 0, 8)
         }
         hud.addView(titleView)
@@ -176,16 +176,16 @@ class PlayerActivity : AppCompatActivity() {
         epgView = TextView(this).apply {
             textSize = 15f; setTextColor(BlofyTvDesign.TextSecondary); setPadding(0, 0, 0, 16)
             visibility = if (kind == "live") View.VISIBLE else View.GONE
-            background = if (kind == "live") GradientDrawable().apply { cornerRadius = 14f; setColor(0x4D281D39); setStroke(1, 0x554F3868) } else null
+            background = if (kind == "live") BlofyTvDesign.badge(14f, accent = false) else null
             if (kind == "live") setPadding(18, 12, 18, 12)
         }
         hud.addView(epgView)
 
         if (kind != "live") {
             val timeline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 4, 0, 14) }
-            positionView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(Color.WHITE); gravity = Gravity.CENTER_VERTICAL }
+            positionView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER_VERTICAL }
             durationView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER_VERTICAL }
-            progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progress = 0 }
+            progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progress = 0; progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright); progressBackgroundTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.SurfaceRaised) }
             timeline.addView(positionView, LinearLayout.LayoutParams(72, 36))
             timeline.addView(progressBar, LinearLayout.LayoutParams(0, 18, 1f).apply { marginEnd = 14; marginStart = 14 })
             timeline.addView(durationView, LinearLayout.LayoutParams(72, 36))
