@@ -41,10 +41,10 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var results: LinearLayout
     private lateinit var resultInfo: TextView
     private var searchJob: Job? = null
+    private val compact by lazy { resources.configuration.screenWidthDp < 600 }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val compact = resources.configuration.screenWidthDp < 600
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(if (compact) 16 else 34), dp(if (compact) 20 else 28), dp(if (compact) 16 else 34), dp(if (compact) 22 else 30))
