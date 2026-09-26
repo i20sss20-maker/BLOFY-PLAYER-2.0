@@ -22,6 +22,7 @@ import tv.blofy.player.data.local.EpgEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.player.PlayerActivity
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -46,13 +47,12 @@ class CatchupActivity : AppCompatActivity() {
         }
         root.addView(TextView(this).apply {
             text = "أرشيف BLOFY"
-            textSize = 30f
-            setTextColor(Color.WHITE)
+            BlofyTvDesign.applyTitle(this)
         })
         status = TextView(this).apply {
             text = "جاري تحميل البرامج السابقة..."
             textSize = 15f
-            setTextColor(Color.rgb(190, 145, 255))
+            setTextColor(BlofyTvDesign.PurpleSoft)
             setPadding(0, 5, 0, 18)
         }
         root.addView(status)
@@ -103,7 +103,7 @@ class CatchupActivity : AppCompatActivity() {
             list.addView(TextView(this).apply {
                 text = "${item.title}\n${time(item.startMs)} — ${time(item.endMs)}"
                 textSize = 16.5f
-                setTextColor(Color.WHITE)
+                setTextColor(BlofyTvDesign.TextPrimary)
                 setPadding(dp(22), dp(10), dp(22), dp(10))
                 gravity = Gravity.CENTER_VERTICAL
                 maxLines = 2
@@ -139,13 +139,7 @@ class CatchupActivity : AppCompatActivity() {
 
     private fun time(ms: Long): String = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(ms))
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat()
-        setColor(if (focused) Color.rgb(70, 34, 118) else Color.rgb(18, 17, 28))
-        setStroke(dp(if (focused) 2 else 1), if (focused) Color.rgb(190, 135, 255) else 0x554D376B)
-    }
-
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(16).toFloat(), focused)\n\n    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"
