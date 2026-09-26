@@ -559,6 +559,8 @@ class PlayerActivity : AppCompatActivity() {
         providerKind = ProviderKind.from(provider.providerType)
     )
 
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
     private fun Int.floorMod(size: Int): Int = ((this % size) + size) % size
     private data class TrackEntry(val group: Tracks.Group, val index: Int, val label: String)
 
