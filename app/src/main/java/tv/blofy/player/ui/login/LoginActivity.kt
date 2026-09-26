@@ -417,7 +417,7 @@ class LoginActivity : AppCompatActivity() {
         connectJob = lifecycleScope.launch {
             connectButton.text = "إلغاء"
             try { connectFlow() } catch (_: CancellationException) { }
-            finally { connectButton.text = if(deviceKind == DeviceClass.Kind.TV) "▶  اتصال بالنشطة" else "تشغيل القائمة النشطة"; connectJob = null }
+            finally { connectButton.text = if(deviceKind == DeviceClass.Kind.TV) "▶  تشغيل القائمة النشطة" else "تشغيل القائمة النشطة"; connectJob = null }
         }
     }
 
@@ -494,7 +494,7 @@ class LoginActivity : AppCompatActivity() {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; setPadding(dp(16),dp(7),dp(16),dp(7)); isFocusable = true; isFocusableInTouchMode = true; isClickable = true; background = playlistCardBackground(provider.enabled,false)
         val info = LinearLayout(this@LoginActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT }
         info.addView(TextView(this@LoginActivity).apply { text = provider.name; textSize = 15.5f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); maxLines = 1; gravity = Gravity.RIGHT })
-        info.addView(TextView(this@LoginActivity).apply { val type = if(provider.providerType.equals("xtream",true)) "Xtream" else "M3U"; text = if(provider.enabled) "● النشطة • $type" else "$type • OK للاتصال"; textSize = 11.5f; setTextColor(if(provider.enabled)BlofyTvDesign.Mint else BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
+        info.addView(TextView(this@LoginActivity).apply { val type = if(provider.providerType.equals("xtream",true)) "Xtream" else "M3U"; text = if(provider.enabled) "● النشطة • $type" else "$type • جاهزة للاتصال"; textSize = 11.5f; setTextColor(if(provider.enabled)BlofyTvDesign.Mint else BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
         addView(info, LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,1f))
         addView(TextView(this@LoginActivity).apply { text = "▶"; textSize = 18f; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(44),LinearLayout.LayoutParams.MATCH_PARENT))
         setOnFocusChangeListener { view, focused ->
