@@ -20,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -55,9 +56,9 @@ class PosterCatalogActivity : AppCompatActivity() {
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
         header.addView(TextView(this).apply {
             text = if (kind == KIND_SERIES) "المسلسلات" else "الأفلام"
-            textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.START
+            BlofyTvDesign.applyTitle(this); gravity = Gravity.START
         }, LinearLayout.LayoutParams(0, dp(58), 1f))
-        countView = TextView(this).apply { textSize = 14f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER_VERTICAL }
+        countView = TextView(this).apply { textSize = 14f; typeface = BlofyTvDesign.BodyTypeface; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.CENTER_VERTICAL; background = BlofyTvDesign.badge(dp(12).toFloat(), true); setPadding(dp(12),0,dp(12),0) }
         header.addView(countView)
         content.addView(header)
 
@@ -76,7 +77,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             setPadding(dp(10), dp(14), dp(10), dp(14)); background = categoryBackground()
         }
         rail.addView(TextView(this).apply {
-            text = "الفئات"; textSize = 20f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            text = "الفئات"; BlofyTvDesign.applyHeading(this); gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)))
         categoryList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@PosterCatalogActivity, RecyclerView.VERTICAL, false)
@@ -184,7 +185,7 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun allCategory() = CategoryEntity("$providerId:$kind:$ALL_CATEGORY_ID", providerId, ALL_CATEGORY_ID, kind, if (kind == KIND_SERIES) "كل المسلسلات" else "كل الأفلام", -1)
     private fun categoryRemoteId(category: CategoryEntity) = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
-    private fun categoryBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xE81A1429.toInt(), 0xF00C0A15.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0x594A355F) }
+    private fun categoryBackground() = BlofyTvDesign.glassPanel(dp(20).toFloat(), false)
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     override fun onDestroy() { streamsJob?.cancel(); super.onDestroy() }
 
