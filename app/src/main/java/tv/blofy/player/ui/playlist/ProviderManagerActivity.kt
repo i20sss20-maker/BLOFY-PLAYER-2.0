@@ -35,13 +35,14 @@ class ProviderManagerActivity : AppCompatActivity() {
     private val focusButtons = linkedMapOf<String, Button>()
     private val isTv by lazy { DeviceClass.isTv(this) }
     private val isPhone by lazy { DeviceClass.detect(this) == DeviceClass.Kind.PHONE }
+    private val compactPhone by lazy { isPhone && resources.configuration.screenWidthDp < 420 }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(if (isPhone) dp(20) else dp(58), if (isPhone) dp(20) else dp(34), if (isPhone) dp(20) else dp(58), if (isPhone) dp(20) else dp(34))
+            setPadding(if (compactPhone) dp(14) else if (isPhone) dp(20) else dp(58), if (isPhone) dp(18) else dp(34), if (compactPhone) dp(14) else if (isPhone) dp(20) else dp(58), if (isPhone) dp(18) else dp(34))
             background = AppCompatResources.getDrawable(this@ProviderManagerActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -74,7 +75,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         })
 
         val actions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (compactPhone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.RIGHT
             clipChildren = false
@@ -86,11 +87,15 @@ class ProviderManagerActivity : AppCompatActivity() {
             startActivity(Intent(this, PlaylistActivity::class.java).putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true))
         }
         if (isPhone) {
-            actions.addView(subscriberButton, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginStart = dp(8) })
-            actions.addView(addButton, LinearLayout.LayoutParams(0, dp(60), 1f))
-            root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(68)).apply {
-                bottomMargin = dp(14)
-            })
+            if (compactPhone) {
+                actions.addView(subscriberButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)))
+                actions.addView(addButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)).apply { topMargin = dp(8) })
+                root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(120)).apply { bottomMargin = dp(12) })
+            } else {
+                actions.addView(subscriberButton, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginStart = dp(8) })
+                actions.addView(addButton, LinearLayout.LayoutParams(0, dp(60), 1f))
+                root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(68)).apply { bottomMargin = dp(14) })
+            }
         } else {
             actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(310), dp(64)).apply { marginStart = dp(12) })
             actions.addView(addButton, LinearLayout.LayoutParams(dp(270), dp(64)))
@@ -172,7 +177,7 @@ class ProviderManagerActivity : AppCompatActivity() {
             info.addView(TextView(this).apply {
                 text = provider.name
                 textSize = if (isPhone) 16f else 18f
-                typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                typeface = BlofyTvDesign.HeadingTypeface
                 gravity = Gravity.RIGHT
                 setTextColor(BlofyTvDesign.TextPrimary)
                 maxLines = 1
@@ -200,17 +205,25 @@ class ProviderManagerActivity : AppCompatActivity() {
 
             if (isPhone) {
                 row.addView(info, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)))
-                val phoneActions = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    layoutDirection = View.LAYOUT_DIRECTION_RTL
-                    gravity = Gravity.CENTER
+                if (compactPhone) {
+                    val topActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER }
+                    val bottomActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER }
+                    topActions.addView(actionButton("${provider.id}:connect", "اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(5) })
+                    topActions.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(0, dp(48), 1f))
+                    bottomActions.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(5) })
+                    bottomActions.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(0, dp(48), 1f))
+                    row.addView(topActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(4) })
+                    row.addView(bottomActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(4) })
+                    list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190)).apply { bottomMargin = dp(9) })
+                } else {
+                    val phoneActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER }
+                    phoneActions.addView(actionButton("${provider.id}:connect", "اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                    phoneActions.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                    phoneActions.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                    phoneActions.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f))
+                    row.addView(phoneActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(5) })
+                    list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(146)).apply { bottomMargin = dp(9) })
                 }
-                phoneActions.addView(actionButton("${provider.id}:connect", "اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
-                phoneActions.addView(actionButton("${provider.id}:edit", "تعديل") { edit(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
-                phoneActions.addView(actionButton("${provider.id}:refresh", "مزامنة") { refresh(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
-                phoneActions.addView(actionButton("${provider.id}:delete", "حذف") { remove(provider) }, LinearLayout.LayoutParams(0, dp(50), 1f))
-                row.addView(phoneActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(5) })
-                list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(146)).apply { bottomMargin = dp(9) })
             } else {
                 row.addView(info, LinearLayout.LayoutParams(0, dp(72), 1f))
                 row.addView(actionButton("${provider.id}:connect", "▶  اتصال", primary = true) { connect(provider) }, LinearLayout.LayoutParams(dp(140), dp(56)).apply { marginStart = dp(8) })
