@@ -154,9 +154,16 @@ class LoginActivity : AppCompatActivity() {
         return root
     }
 
-    private fun buildPhoneLogin(): LinearLayout {
+    private fun buildPhoneLogin(): View {
         createIdentityViews(true)
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; setPadding(dp(24),dp(24),dp(24),dp(24)); setBackgroundColor(theme.background) }
+        val widthDp = resources.configuration.screenWidthDp
+        val compact = widthDp < 400
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            setPadding(dp(if (compact) 16 else 24), dp(20), dp(if (compact) 16 else 24), dp(28))
+            background = AppCompatResources.getDrawable(this@LoginActivity, R.drawable.blofy_home_background)
+        }
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(150),dp(82)))
         root.addView(title("BLOFY PLAYER",29f)); root.addView(subtitle("اربط جهازك ثم اختر قائمة التشغيل"))
         root.addView(label("رقم الجهاز"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)))
@@ -166,15 +173,36 @@ class LoginActivity : AppCompatActivity() {
         codeView.apply { background = fieldBackground(); letterSpacing = .14f }
         root.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
         root.addView(TextView(this).apply { text = "امسح QR بالجوال — التحديث يظهر تلقائيًا هنا"; textSize = 13f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0,dp(14),0,dp(8)) })
-        root.addView(qrView, LinearLayout.LayoutParams(dp(228),dp(228)))
+        root.addView(qrView, LinearLayout.LayoutParams(dp(if (compact) 196 else 228), dp(if (compact) 196 else 228)))
         root.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)))
-        root.addView(status)
+        status.apply {
+            background = statusBackground()
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        root.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(8); bottomMargin = dp(10)
+        })
         addPlaylist = actionButton("إضافة / إدارة القوائم") { startActivity(Intent(this, PlaylistActivity::class.java)) }
         connectButton = actionButton("تشغيل القائمة النشطة") { startOrCancelConnect() }
         refreshCodeButton = actionButton("تحديث") { lifecycleScope.launch { refreshIdentityAndProvider() } }
         root.addView(addPlaylist, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(64)))
-        root.addView(connectButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(64)).apply { topMargin = dp(10) })
-        return root
+        root.addView(connectButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(60)).apply { topMargin = dp(8) })
+        root.addView(refreshCodeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(56)).apply { topMargin = dp(8) })
+        root.addView(TextView(this).apply {
+            text = "🔒  بيانات القوائم محفوظة محليًا على جهازك"
+            textSize = 12f
+            setTextColor(BlofyTvDesign.TextDim)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(12), 0, 0)
+        })
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            background = AppCompatResources.getDrawable(this@LoginActivity, R.drawable.blofy_home_background)
+        }
+        scroll.addView(root, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
+        return scroll
     }
 
     private fun createIdentityViews(phone: Boolean) {
