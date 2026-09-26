@@ -91,6 +91,29 @@ object DeviceIdentity {
         }
     }
 
+    @Synchronized
+    internal fun adoptRecoveredCanonicalIdentity(
+        context: Context,
+        canonicalDeviceId: String,
+        recoveryActivationCode: String
+    ) {
+        require(validDeviceId(canonicalDeviceId)) { "Invalid recovered device ID" }
+        require(validActivationCode(recoveryActivationCode)) { "Invalid recovery activation code" }
+        val stable = stableIdentity(context)
+            ?: throw IllegalStateException("Stable system identity is unavailable")
+        check(stable.second == recoveryActivationCode) {
+            "Recovery credential does not belong to this Android identity"
+        }
+        check(
+            preferences(context).edit()
+                .putString(DEVICE_ID, canonicalDeviceId)
+                .putString(ACTIVE_CODE, recoveryActivationCode)
+                .putString(STABLE_ALIAS_BOUND_TO, canonicalDeviceId)
+                .remove(PENDING_CODE)
+                .commit()
+        ) { "Unable to adopt recovered BLOFY identity" }
+    }
+
     /** Commits a server-approved canonical identity recovery after a clean reinstall. */
     @Synchronized
     internal fun commitStableIdentity(context: Context, deviceId: String, activationCode: String) {
