@@ -248,11 +248,11 @@ class SystemStatusActivity : AppCompatActivity() {
         val network = manager.activeNetwork ?: return getString(R.string.system_status_disconnected)
         val capabilities = manager.getNetworkCapabilities(network) ?: return getString(R.string.system_status_disconnected)
         val transport = when {
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi‑Fi"
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Cellular"
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
-            else -> "Network"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> getString(R.string.system_transport_ethernet)
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> getString(R.string.system_transport_wifi)
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> getString(R.string.system_transport_cellular)
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> getString(R.string.system_transport_vpn)
+            else -> getString(R.string.system_transport_network)
         }
         val state = getString(if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) R.string.system_status_connected else R.string.system_status_unverified_internet)
         return getString(R.string.system_status_network_format, transport, state)
