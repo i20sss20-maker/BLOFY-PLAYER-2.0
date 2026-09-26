@@ -10,6 +10,7 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -48,6 +49,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private var currentProviderId: String = ""
     private var lastPercent = 0
     private val isPhone by lazy { DeviceClass.detect(this) == DeviceClass.Kind.PHONE }
+    private val compactPhone by lazy { isPhone && resources.configuration.screenHeightDp < 720 }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,7 +99,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
         panel.addView(TextView(this).apply {
             text = "يتم تحميل الباقة وحفظها محليًا مرة واحدة، وبعدها يكون الدخول مباشرًا"
-            textSize = 14f
+            textSize = if (compactPhone) 12.5f else 14f
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(if (compact) 10 else 18))
@@ -137,7 +139,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
         detail = TextView(this).apply {
             text = "التحميل الحقيقي من السيرفر • لن نعرض 100% قبل اكتمال الحفظ فعليًا"
-            textSize = 13f
+            textSize = if (compactPhone) 12f else 13f
             setTextColor(BlofyTvDesign.TextDim)
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(if (compact) 14 else 24))
@@ -175,7 +177,18 @@ class CatalogLoadingActivity : AppCompatActivity() {
         panel.addView(recoveryActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)).apply { topMargin = dp(12) })
 
         root.addView(panel, LinearLayout.LayoutParams(if (isPhone) LinearLayout.LayoutParams.MATCH_PARENT else dp(980), LinearLayout.LayoutParams.WRAP_CONTENT))
-        setContentView(root)
+        if (isPhone) {
+            val scroll = ScrollView(this).apply {
+                isFillViewport = true
+                isVerticalScrollBarEnabled = false
+                overScrollMode = android.view.View.OVER_SCROLL_NEVER
+                background = AppCompatResources.getDrawable(this@CatalogLoadingActivity, R.drawable.blofy_home_background)
+            }
+            scroll.addView(root, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
+            setContentView(scroll)
+        } else {
+            setContentView(root)
+        }
     }
 
     private fun step(value: String) = TextView(this).apply {
