@@ -67,7 +67,7 @@ class PlaylistActivity : AppCompatActivity() {
         root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else dp(760), LinearLayout.LayoutParams.WRAP_CONTENT))
 
         fun field(hintText: String, passwordField: Boolean = false) = EditText(this).apply {
-            hint = hintText; isSingleLine = true; gravity = Gravity.START or Gravity.CENTER_VERTICAL; setTextColor(Color.WHITE); setHintTextColor(BlofyTvDesign.TextDim); setPadding(dp(22), 0, dp(22), 0)
+            hint = hintText; isSingleLine = true; gravity = Gravity.START or Gravity.CENTER_VERTICAL; setTextColor(Color.WHITE); setHintTextColor(BlofyTvDesign.TextMuted); setPadding(dp(22), 0, dp(22), 0)
             background = fieldBackground(false); isFocusable = true; isFocusableInTouchMode = true
             setOnFocusChangeListener { view, focused ->
                 if (tv) {
