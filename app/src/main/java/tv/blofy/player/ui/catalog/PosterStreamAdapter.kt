@@ -25,17 +25,20 @@ internal class PosterStreamAdapter(
 
     fun submit(newItems: List<StreamEntity>) {
         val oldItems = items.toList()
-        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldListSize() = oldItems.size
-            override fun getNewListSize() = newItems.size
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition].key == newItems[newItemPosition].key
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition] == newItems[newItemPosition]
-        }, false)
+        val useDiff = oldItems.size <= MAX_DIFF_ITEMS && newItems.size <= MAX_DIFF_ITEMS
+        val diff = if (useDiff) {
+            DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                override fun getOldListSize() = oldItems.size
+                override fun getNewListSize() = newItems.size
+                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    oldItems[oldItemPosition].key == newItems[newItemPosition].key
+                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    oldItems[oldItemPosition] == newItems[newItemPosition]
+            }, false)
+        } else null
         items.clear()
         items.addAll(newItems)
-        diff.dispatchUpdatesTo(this)
+        if (diff != null) diff.dispatchUpdatesTo(this) else notifyDataSetChanged()
     }
 
     override fun getItemId(position: Int): Long = stableId64(items[position].key)
@@ -163,4 +166,8 @@ internal class PosterStreamAdapter(
 
     private fun dp(view: View, value: Int) =
         (value * view.resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val MAX_DIFF_ITEMS = 2_500
+    }
 }
