@@ -162,7 +162,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         val eyebrow = TextView(this).apply {
-            text = if (kind == "live") "BLOFY LIVE" else if (kind == "episode") "BLOFY SERIES" else "BLOFY CINEMA"
+            text = if (kind == "live") "BLOFY • مباشر" else if (kind == "episode") "BLOFY • مسلسلات" else "BLOFY • سينما"
             textSize = 12f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.PurpleSoft); letterSpacing = .08f
             setPadding(0, 0, 0, 5)
         }
@@ -377,7 +377,7 @@ class PlayerActivity : AppCompatActivity() {
             }
             if (automatic) markCurrentCompleted()
             currentContentKey = target.key; currentTitle = target.title; currentSeason = target.season; currentEpisode = target.episode
-            updateTitle("S${target.season} E${target.episode} • ${target.title}")
+            updateTitle("الموسم ${target.season} • الحلقة ${target.episode} • ${target.title}")
             session.play(url = ContentUrlResolver.episode(provider, target), resumeMs = 0L, fallbackUrl = ContentUrlResolver.directFallback(target))
             autoNextTriggered = false; showHudBriefly()
         }
@@ -511,7 +511,7 @@ class PlayerActivity : AppCompatActivity() {
         val entries = mutableListOf<TrackEntry>()
         session.player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO && it.length > 0 }.forEach { group -> for (index in 0 until group.length) if (group.isTrackSupported(index)) entries += TrackEntry(group, index, videoLabel(group.getTrackFormat(index))) }
         if (entries.isEmpty()) { AlertDialog.Builder(this).setMessage("لا توجد جودات فيديو متعددة").setPositiveButton("حسنًا", null).show(); return }
-        val labels = listOf("تلقائي (Auto)") + entries.map { it.label }
+        val labels = listOf("تلقائي") + entries.map { it.label }
         AlertDialog.Builder(this).setTitle("الجودة").setItems(labels.toTypedArray()) { dialog, which ->
             val builder = session.player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
             if (which == 0) builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO) else { val entry = entries[which - 1]; builder.setOverrideForType(TrackSelectionOverride(entry.group.mediaTrackGroup, listOf(entry.index))) }
@@ -520,13 +520,13 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun videoLabel(format: Format): String {
-        val resolution = when { format.height >= 2160 -> "4K"; format.height >= 1440 -> "1440p"; format.height >= 1080 -> "1080p"; format.height >= 720 -> "720p"; format.height > 0 -> "${format.height}p"; else -> "VIDEO" }
+        val resolution = when { format.height >= 2160 -> "4K"; format.height >= 1440 -> "1440p"; format.height >= 1080 -> "1080p"; format.height >= 720 -> "720p"; format.height > 0 -> "${format.height}p"; else -> "فيديو" }
         val fps = if (format.frameRate > 0) "${format.frameRate.toInt()}fps" else null; val bitrate = if (format.bitrate > 0) "${format.bitrate / 1_000_000.0}Mbps" else null
         return listOfNotNull(resolution, fps, bitrate, format.codecs).joinToString(" • ")
     }
 
     private fun trackLabel(format: Format, type: Int): String {
-        val language = format.language?.uppercase() ?: if (type == C.TRACK_TYPE_AUDIO) "AUDIO" else "SUB"; val label = format.label?.takeIf { it.isNotBlank() }; val codec = format.codecs?.takeIf { it.isNotBlank() }
+        val language = format.language?.uppercase() ?: if (type == C.TRACK_TYPE_AUDIO) "صوت" else "ترجمة"; val label = format.label?.takeIf { it.isNotBlank() }; val codec = format.codecs?.takeIf { it.isNotBlank() }
         return listOfNotNull(label, language, codec).distinct().joinToString(" • ")
     }
 

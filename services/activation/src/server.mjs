@@ -104,6 +104,15 @@ function validProviderKey(providerKey) {
   return /^[A-Za-z0-9._:-]{1,128}$/.test(providerKey);
 }
 
+function recoveryScopeHash(scope) {
+  const value = String(scope || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(value)) return null;
+  return crypto
+    .createHmac('sha256', Buffer.from(PLAYLIST_ENCRYPTION_KEY, 'hex'))
+    .update('blofy-device-recovery-v1:' + value)
+    .digest('hex');
+}
+
 function consumeDeviceAuthAttempt(req, deviceId) {
   const ipResult = authIpLimiter.consume(requestClientKey(req));
   const deviceResult = authDeviceLimiter.consume(String(deviceId || 'invalid').toUpperCase());
@@ -336,6 +345,7 @@ async function activationCheck(req, res) {
   const activationCode = String(body.activationCode || '').trim();
   const appVersion = String(body.appVersion || '').trim().slice(0, 64);
   const platform = String(body.platform || 'android').trim().slice(0, 32);
+  const recoveryHash = recoveryScopeHash(body.recoveryScope);
 
   consumeDeviceAuthAttempt(req, deviceId);
   if (!validIdentity(deviceId, activationCode)) {
@@ -346,31 +356,81 @@ async function activationCheck(req, res) {
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['blofy-register:' + deviceId]);
+    if (recoveryHash) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['blofy-recovery:' + recoveryHash]);
+    }
+
     let result = await client.query('SELECT * FROM devices WHERE device_id = $1 FOR UPDATE', [deviceId]);
     let row = result.rows[0];
+    let recovered = false;
+
+    if (!row && recoveryHash) {
+      const recoveredResult = await client.query(
+        'SELECT * FROM devices WHERE recovery_scope_hash=$1 FOR UPDATE',
+        [recoveryHash]
+      );
+      const existing = recoveredResult.rows[0];
+      if (existing && !existing.data_deleted_at && existing.status !== 'blocked') {
+        // Clean reinstall on the same Android device: keep the original canonical record,
+        // entitlement and playlists, but bind the newly generated local PIN to it.
+        const nextProof = activationCredentials.proof(existing.device_id, activationCode);
+        await client.query(
+          `UPDATE devices
+           SET activation_code=$2,previous_activation_code_proof=activation_code,
+               activation_rotated_at=NOW(),auth_failed_attempts=0,last_auth_failure_at=NULL,
+               auth_locked_until=NULL,last_seen_at=NOW(),last_app_version=$3,last_platform=$4,
+               updated_at=NOW()
+           WHERE device_id=$1`,
+          [existing.device_id, nextProof, appVersion, platform]
+        );
+        row = { ...existing, activation_code: nextProof };
+        recovered = true;
+      }
+    }
 
     if (!row) {
       row = await registerDeviceTrial(client, {
         deviceId, proof: activationCredentials.proof(deviceId, activationCode), appVersion, platform,
         trialScope: body.trialScope, trialDays: TRIAL_DAYS, keyHex: PLAYLIST_ENCRYPTION_KEY,
-        // Existing registered devices keep their exact entitlement. Legacy new installs can
-        // opt into trials only in explicitly configured isolated compatibility tests.
         requireScope: process.env.BLOFY_ALLOW_LEGACY_TRIAL !== 'true'
       });
-    } else if (!await verifyDeviceCredential(client, row, activationCode)) {
-      await client.query('COMMIT');
-      return json(res, 403, { status: 'blocked', serverTime: Date.now(), message: 'unauthorized_device' });
+      if (recoveryHash) {
+        await client.query(
+          'UPDATE devices SET recovery_scope_hash=$2,updated_at=NOW() WHERE device_id=$1 AND recovery_scope_hash IS NULL',
+          [row.device_id, recoveryHash]
+        );
+        row.recovery_scope_hash = recoveryHash;
+      }
+    } else if (!recovered) {
+      if (!await verifyDeviceCredential(client, row, activationCode)) {
+        await client.query('COMMIT');
+        return json(res, 403, { status: 'blocked', serverTime: Date.now(), message: 'unauthorized_device' });
+      }
+      if (recoveryHash) {
+        if (row.recovery_scope_hash && row.recovery_scope_hash !== recoveryHash) {
+          await client.query('COMMIT');
+          return json(res, 409, { status: normalizeStatus(row), serverTime: Date.now(), message: 'recovery_scope_conflict' });
+        }
+        if (!row.recovery_scope_hash) {
+          await client.query(
+            'UPDATE devices SET recovery_scope_hash=$2,updated_at=NOW() WHERE device_id=$1',
+            [row.device_id, recoveryHash]
+          );
+          row.recovery_scope_hash = recoveryHash;
+        }
+      }
     }
 
     await bindExistingTrial(client, row, body.trialScope, TRIAL_DAYS, PLAYLIST_ENCRYPTION_KEY);
     row = await completePendingTrial(client, row, body.trialScope, PLAYLIST_ENCRYPTION_KEY);
+    const canonicalDeviceId = row.device_id;
     const status = normalizeStatus(row);
     if (status === 'expired' && row.status !== 'blocked') {
-      await client.query("UPDATE devices SET status='expired', updated_at=NOW() WHERE device_id=$1", [deviceId]);
+      await client.query("UPDATE devices SET status='expired', updated_at=NOW() WHERE device_id=$1", [canonicalDeviceId]);
     }
     await client.query(
       'UPDATE devices SET last_seen_at=NOW(), last_app_version=$2, last_platform=$3 WHERE device_id=$1',
-      [deviceId, appVersion, platform]
+      [canonicalDeviceId, appVersion, platform]
     );
     await client.query('COMMIT');
 
@@ -379,7 +439,9 @@ async function activationCheck(req, res) {
       status,
       expiresAt,
       serverTime: Date.now(),
-      message: status === 'trial' ? 'trial_active' : undefined
+      canonicalDeviceId,
+      recovered,
+      message: recovered ? 'device_recovered' : status === 'trial' ? 'trial_active' : undefined
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
@@ -388,7 +450,6 @@ async function activationCheck(req, res) {
     client.release();
   }
 }
-
 async function activationRotate(req, res) {
   const body = await readJson(req);
   const deviceId = String(body.deviceId || '').trim();
