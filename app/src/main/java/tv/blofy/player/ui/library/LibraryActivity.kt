@@ -44,9 +44,10 @@ class LibraryActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_FAVORITES
+        val compact = resources.configuration.screenWidthDp < 600
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(34), dp(28), dp(34), dp(30))
+            setPadding(dp(if (compact) 16 else 34), dp(if (compact) 20 else 28), dp(if (compact) 16 else 34), dp(if (compact) 22 else 30))
             background = AppCompatResources.getDrawable(this@LibraryActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -54,7 +55,8 @@ class LibraryActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = if (mode == MODE_CONTINUE) "متابعة المشاهدة" else "المفضلة"
             BlofyTvDesign.applyTitle(this)
-            setPadding(dp(6), 0, 0, dp(16))
+            if (compact) textSize = 27f
+            setPadding(dp(6), 0, 0, dp(if (compact) 10 else 16))
         })
 
         if (mode == MODE_FAVORITES) {
@@ -151,9 +153,9 @@ class LibraryActivity : AppCompatActivity() {
     private fun addRow(providerId: String, liveFormat: String, stream: StreamEntity, state: WatchStateEntity) {
         val row = TextView(this).apply {
             text = "${kindLabel(stream.kind)}   •   ${stream.name}\n${watchProgressLabel(state)}"
-            textSize = 17f
+            textSize = if (resources.configuration.screenWidthDp < 600) 15.5f else 17f
             setTextColor(BlofyTvDesign.TextPrimary)
-            setPadding(dp(24), dp(10), dp(24), dp(10))
+            setPadding(dp(if (resources.configuration.screenWidthDp < 600) 16 else 24), dp(10), dp(if (resources.configuration.screenWidthDp < 600) 16 else 24), dp(10))
             gravity = Gravity.CENTER_VERTICAL
             maxLines = 2
             setLineSpacing(dp(2).toFloat(), 1.05f)
@@ -166,7 +168,7 @@ class LibraryActivity : AppCompatActivity() {
             }
             setOnClickListener { open(providerId, liveFormat, stream, state.positionMs) }
         }
-        list?.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(76)).apply { topMargin = dp(7) })
+        list?.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (resources.configuration.screenWidthDp < 600) 72 else 76)).apply { topMargin = dp(if (resources.configuration.screenWidthDp < 600) 5 else 7) })
     }
 
     private fun addEpisodeRow(provider: ProviderEntity, entry: ContinueWatchingEntry.EpisodeEntry) {
