@@ -470,7 +470,7 @@ async function migrateDeviceIdentity(req, res) {
       );
       await client.query(
         `INSERT INTO device_audit(device_id,actor,action,details)
-         VALUES($1,'device','recovery_alias_bound',jsonb_build_object('aliasDeviceId',$2))`,
+         VALUES($1,'device','recovery_alias_bound',jsonb_build_object('aliasDeviceId',$2::text))`,
         [deviceId, targetDeviceId]
       );
     }
