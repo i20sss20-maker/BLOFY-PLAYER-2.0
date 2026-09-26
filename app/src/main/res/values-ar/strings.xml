@@ -143,4 +143,19 @@
     <string name="login_qr_description">رمز QR لربط الجهاز</string>
     <string name="login_qr_loading">جاري إعداد رمز الربط…</string>
     <string name="login_qr_unavailable">ربط الجهاز غير متاح في هذه النسخة. يمكنك إضافة قائمة مباشرة.</string>
+
+    <string name="trial_remaining">المتبقي من التجربة المجانية</string>
+    <string name="trial_time_remaining">%1$d يوم · %2$d ساعة · %3$d دقيقة</string>
+    <string name="trial_ended">انتهت التجربة المجانية</string>
+    <string name="activation_ended">انتهى تفعيل التطبيق</string>
+    <string name="trial_renew_qr">جدّد من رمز QR أو من الموقع</string>
+    <string name="activation_active">تفعيل التطبيق ساري</string>
+    <string name="activation_no_expiry">بدون تاريخ انتهاء</string>
+    <string name="trial_blocked">تم إيقاف التفعيل</string>
+    <string name="trial_contact_support">تواصل مع الدعم من الموقع</string>
+    <string name="trial_status_unknown">حالة التجربة والتفعيل</string>
+    <string name="trial_refresh_status">حدّث من الموقع لعرض الوقت المتبقي</string>
+    <string name="details_metadata_loading">جاري تحميل طاقم العمل والوصف…</string>
+    <string name="details_metadata_retry">تعذر تحديث التفاصيل · حاول مرة أخرى</string>
+    <string name="setting_cycle_hint">اضغط للتغيير</string>
 </resources>
