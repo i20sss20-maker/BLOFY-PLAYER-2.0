@@ -61,23 +61,23 @@ class PlaylistActivity : AppCompatActivity() {
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(if (phone) 22 else 54, if (phone) 24 else 28, if (phone) 22 else 54, if (phone) 34 else 28)
+            setPadding(dp(if (phone) 22 else 54), dp(if (phone) 24 else 28), dp(if (phone) 22 else 54), dp(if (phone) 34 else 28))
         }
         scroll.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-        root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(if (phone) 150 else 170, if (phone) 72 else 76))
+        root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(if (phone) 150 else 170), dp(if (phone) 72 else 76)))
         root.addView(TextView(this).apply {
             text = if (editingProviderId == null) "إضافة قائمة تشغيل" else "تعديل قائمة التشغيل"; BlofyTvDesign.applyTitle(this); textSize = if (phone) 25f else 30f; gravity = Gravity.CENTER
         })
-        root.addView(TextView(this).apply { text = "Xtream / M3U"; textSize = if (phone) 13f else 15f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0, 5, 0, 16) })
+        root.addView(TextView(this).apply { text = "Xtream / M3U"; textSize = if (phone) 13f else 15f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0, dp(5), 0, dp(16)) })
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(if (phone) 18 else 28, if (phone) 18 else 22, if (phone) 18 else 28, if (phone) 18 else 22); background = panelBackground()
+            setPadding(dp(if (phone) 18 else 28), dp(if (phone) 18 else 22), dp(if (phone) 18 else 28), dp(if (phone) 18 else 22)); background = panelBackground()
         }
-        root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 760, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else dp(760), LinearLayout.LayoutParams.WRAP_CONTENT))
 
         fun field(hintText: String, passwordField: Boolean = false) = EditText(this).apply {
-            hint = hintText; isSingleLine = true; gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; setTextColor(BlofyTvDesign.TextPrimary); setHintTextColor(BlofyTvDesign.TextDim); setPadding(22,0,22,0)
+            hint = hintText; isSingleLine = true; gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; setTextColor(BlofyTvDesign.TextPrimary); setHintTextColor(BlofyTvDesign.TextDim); setPadding(dp(22), 0, dp(22), 0)
             background = fieldBackground(false); isFocusable = true; isFocusableInTouchMode = true
             setOnFocusChangeListener { view, focused -> if (tv) view.background = fieldBackground(focused) }
             if (passwordField) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -90,9 +90,9 @@ class PlaylistActivity : AppCompatActivity() {
         url.imeOptions = EditorInfo.IME_ACTION_NEXT
         username.imeOptions = EditorInfo.IME_ACTION_NEXT
         password.imeOptions = EditorInfo.IME_ACTION_DONE
-        listOf(name, url).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 9 }) }
+        listOf(name, url).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 64)).apply { topMargin = dp(9) }) }
 
-        val transportNotice = TextView(this).apply { text = "يفضل HTTPS • HTTP متاح عند الحاجة"; textSize = if (phone) 12f else 13f; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.RIGHT; setPadding(8,8,8,1) }
+        val transportNotice = TextView(this).apply { text = "يفضل HTTPS • HTTP متاح عند الحاجة"; textSize = if (phone) 12f else 13f; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.RIGHT; setPadding(dp(8), dp(8), dp(8), dp(1)) }
         panel.addView(transportNotice)
         url.doAfterTextChanged { value ->
             val candidate = value?.toString()?.trim().orEmpty()
@@ -102,8 +102,8 @@ class PlaylistActivity : AppCompatActivity() {
                 else -> { transportNotice.text = "يفضل HTTPS • HTTP متاح عند الحاجة"; transportNotice.setTextColor(BlofyTvDesign.PurpleSoft) }
             }
         }
-        listOf(username, password).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 9 }) }
-        val status = TextView(this).apply { setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.RIGHT; setPadding(0,12,0,2) }
+        listOf(username, password).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 64)).apply { topMargin = dp(9) }) }
+        val status = TextView(this).apply { setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.RIGHT; setPadding(0, dp(12), 0, dp(2)) }
         panel.addView(status)
 
         var confirmedHttpUrl: String? = null
@@ -182,9 +182,9 @@ class PlaylistActivity : AppCompatActivity() {
                 true
             } else false
         }
-        actions.addView(saveConnect, LinearLayout.LayoutParams(if (phone) 0 else 300, if (phone) 62 else 66, if (phone) 1f else 0f).apply { marginStart = 8 })
-        actions.addView(saveOnly, LinearLayout.LayoutParams(if (phone) 0 else 220, if (phone) 62 else 66, if (phone) 1f else 0f))
-        panel.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, if (phone) 72 else 76).apply { topMargin = 12 })
+        actions.addView(saveConnect, LinearLayout.LayoutParams(if (phone) 0 else dp(300), dp(if (phone) 62 else 66), if (phone) 1f else 0f).apply { marginStart = dp(8) })
+        actions.addView(saveOnly, LinearLayout.LayoutParams(if (phone) 0 else dp(220), dp(if (phone) 62 else 66), if (phone) 1f else 0f))
+        panel.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(if (phone) 72 else 76)).apply { topMargin = dp(12) })
         setContentView(scroll); name.requestFocus()
 
         if (editingProviderId != null) lifecycleScope.launch {
@@ -203,9 +203,11 @@ class PlaylistActivity : AppCompatActivity() {
         return "جاري تحميل $stage  •  ${progress.percent}%"
     }
 
-    private fun panelBackground() = BlofyTvDesign.elevatedSurface(24f, emphasis = true)
-    private fun fieldBackground(focused: Boolean) = BlofyTvDesign.inputField(16f, focused)
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = if (primary) BlofyTvDesign.primaryButton(18f, focused) else BlofyTvDesign.secondaryButton(18f, focused)
+    private fun panelBackground() = BlofyTvDesign.elevatedSurface(dp(24).toFloat(), emphasis = true)
+    private fun fieldBackground(focused: Boolean) = BlofyTvDesign.inputField(dp(16).toFloat(), focused)
+    private fun buttonBackground(focused: Boolean, primary: Boolean) = if (primary) BlofyTvDesign.primaryButton(dp(18).toFloat(), focused) else BlofyTvDesign.secondaryButton(dp(18).toFloat(), focused)
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object { const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_DIRECT_FORM = "direct_form" }
 }

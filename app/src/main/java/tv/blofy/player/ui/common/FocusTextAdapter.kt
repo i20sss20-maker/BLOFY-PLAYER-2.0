@@ -79,28 +79,32 @@ class FocusTextAdapter<T>(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
+        val density = parent.resources.displayMetrics.density
+        val horizontalPadding = (22f * density).toInt()
+        val focusLift = 18f * density
+        val restLift = 2f * density
         val view = TextView(parent.context).apply {
             textSize = BlofyTvDesign.BodySp
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(22, 0, 22, 0)
+            setPadding(horizontalPadding, 0, horizontalPadding, 0)
             isFocusable = true
             isClickable = true
             isLongClickable = true
             stateListAnimator = null
-            background = background(false)
+            background = background(false, density)
             setOnFocusChangeListener { v, focused ->
                 (v as TextView).setTextColor(if (focused) BlofyTvDesign.TextPrimary else BlofyTvDesign.TextSecondary)
                 v.animate().cancel()
                 v.animate()
                     .scaleX(if (focused) 1.025f else 1f)
                     .scaleY(if (focused) 1.025f else 1f)
-                    .translationZ(if (focused) 18f else 2f)
+                    .translationZ(if (focused) focusLift else restLift)
                     .alpha(if (focused) 1f else .96f)
                     .setDuration(if (focused) 105L else 85L)
                     .start()
-                v.background = background(focused)
+                v.background = background(focused, density)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
                         items.getOrNull(pos)?.let { item ->
@@ -138,5 +142,5 @@ class FocusTextAdapter<T>(
 
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
 
-    private fun background(focused: Boolean) = BlofyTvDesign.surface(16f, focused)
+    private fun background(focused: Boolean, density: Float) = BlofyTvDesign.surface(16f * density, focused)
 }
