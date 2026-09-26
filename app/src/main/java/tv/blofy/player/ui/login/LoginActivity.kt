@@ -74,84 +74,278 @@ class LoginActivity : AppCompatActivity() {
 
     private fun buildApprovedTvLogin(): LinearLayout {
         createIdentityViews(false)
+        val widthDp = resources.configuration.screenWidthDp
+        val heightDp = resources.configuration.screenHeightDp
+        val compact = heightDp < 650 || widthDp < 900
+        val pagePad = if (compact) 28 else 42
+        val panelGap = if (compact) 12 else 18
+        val qrSize = if (compact) 174 else 196
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(42), dp(16), dp(42), dp(18))
+            setPadding(dp(pagePad), dp(if (compact) 12 else 18), dp(pagePad), dp(if (compact) 14 else 20))
             background = AppCompatResources.getDrawable(this@LoginActivity, R.drawable.blofy_home_background)
+            clipChildren = false
+            clipToPadding = false
         }
-        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
-        header.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(112), dp(70)))
-        val headerText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT; layoutDirection = View.LAYOUT_DIRECTION_RTL }
-        headerText.addView(TextView(this).apply { text = "BLOFY PLAYER"; textSize = 13f; letterSpacing = .12f; setTextColor(BlofyTvDesign.PurpleBright); gravity = Gravity.RIGHT })
-        headerText.addView(TextView(this).apply { text = "جاهز للمشاهدة"; textSize = 30f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.RIGHT; includeFontPadding = false })
-        headerText.addView(TextView(this).apply { text = "فعّل الجهاز من اليسار، وأدر قوائمك واتصل بها من اليمين"; textSize = 14.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
-        header.addView(headerText, LinearLayout.LayoutParams(0, dp(76), 1f).apply { marginEnd = dp(12) })
-        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(80)))
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        header.addView(
+            ImageView(this).apply {
+                setImageResource(R.drawable.blofy_logo)
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                contentDescription = "شعار BLOFY PLAYER"
+            },
+            LinearLayout.LayoutParams(dp(if (compact) 86 else 98), dp(if (compact) 58 else 66))
+        )
+        val headerText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        headerText.addView(TextView(this).apply {
+            text = "BLOFY PLAYER"
+            textSize = 11.5f
+            letterSpacing = .14f
+            setTextColor(BlofyTvDesign.PurpleBright)
+            gravity = Gravity.RIGHT
+        })
+        headerText.addView(TextView(this).apply {
+            text = "إعداد الجهاز"
+            textSize = if (compact) 25f else 29f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            gravity = Gravity.RIGHT
+            includeFontPadding = false
+        })
+        headerText.addView(TextView(this).apply {
+            text = "اربط جهازك مرة واحدة، ثم اختر قائمتك وابدأ المشاهدة"
+            textSize = if (compact) 12.5f else 13.5f
+            setTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.RIGHT
+            maxLines = 1
+        })
+        header.addView(
+            headerText,
+            LinearLayout.LayoutParams(0, dp(if (compact) 66 else 74), 1f).apply { marginEnd = dp(10) }
+        )
+        header.addView(
+            TextView(this).apply {
+                text = "●  جاهز"
+                textSize = 12.5f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.Mint)
+                gravity = Gravity.CENTER
+                background = BlofyTvDesign.statusPill(dp(16).toFloat(), true)
+                setPadding(dp(14), 0, dp(14), 0)
+            },
+            LinearLayout.LayoutParams(dp(96), dp(36))
+        )
+        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 72 else 82)))
 
         val workspace = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             gravity = Gravity.CENTER
             clipChildren = false
+            clipToPadding = false
         }
 
         val activation = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(24), dp(18), dp(24), dp(18))
-            background = panelBackground()
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            setPadding(dp(if (compact) 18 else 22), dp(if (compact) 14 else 18), dp(if (compact) 18 else 22), dp(if (compact) 14 else 18))
+            background = BlofyTvDesign.glassPanel(dp(22).toFloat(), false)
+            clipChildren = false
         }
-        activation.addView(TextView(this).apply { text = "تفعيل الجهاز"; textSize = 21f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER })
-        activation.addView(TextView(this).apply { text = "امسح QR بالجوال — الربط يتحدث تلقائيًا على هذه الشاشة"; textSize = 12.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(10)) })
-        activation.addView(qrView, LinearLayout.LayoutParams(dp(216), dp(216)))
-        activation.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(6) })
-        activation.addView(label("رقم الجهاز"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)).apply { topMargin = dp(10) })
-        deviceView.apply { textSize = 18f; gravity = Gravity.CENTER; setPadding(dp(12),0,dp(12),0); background = fieldBackground() }
-        activation.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)))
-        activation.addView(label("رمز الربط"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)).apply { topMargin = dp(8) })
-        codeView.apply { textSize = 30f; letterSpacing = .16f; gravity = Gravity.CENTER; setTextColor(BlofyTvDesign.TextPrimary); background = fieldBackground() }
-        activation.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(60)))
-        status.apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(BlofyTvDesign.TextSecondary); background = statusBackground(); setPadding(dp(12),0,dp(12),0) }
-        activation.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { topMargin = dp(10) })
-        refreshCodeButton = actionButton("↻  فحص الآن") { lifecycleScope.launch { refreshIdentityAndProvider() } }
-        activation.addView(refreshCodeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(10) })
+        activation.addView(TextView(this).apply {
+            text = "تفعيل الجهاز"
+            textSize = if (compact) 18.5f else 20.5f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            gravity = Gravity.CENTER
+        })
+        activation.addView(TextView(this).apply {
+            text = "امسح الرمز بالجوال لإدارة الجهاز والقوائم"
+            textSize = 12f
+            setTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(3), 0, dp(if (compact) 7 else 10))
+        })
+        activation.addView(qrView, LinearLayout.LayoutParams(dp(qrSize), dp(qrSize)))
+        activation.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(26)).apply { topMargin = dp(4) })
+
+        val identityRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER
+        }
+        val deviceBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = fieldBackground()
+        }
+        deviceBox.addView(TextView(this).apply {
+            text = "رقم الجهاز"
+            textSize = 10.5f
+            setTextColor(BlofyTvDesign.TextDim)
+            gravity = Gravity.CENTER
+        })
+        deviceView.apply {
+            textSize = if (compact) 14f else 15f
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 0)
+            background = null
+            maxLines = 1
+        }
+        deviceBox.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)))
+
+        val codeBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = fieldBackground()
+        }
+        codeBox.addView(TextView(this).apply {
+            text = "رمز الربط"
+            textSize = 10.5f
+            setTextColor(BlofyTvDesign.TextDim)
+            gravity = Gravity.CENTER
+        })
+        codeView.apply {
+            textSize = if (compact) 20f else 23f
+            letterSpacing = .12f
+            gravity = Gravity.CENTER
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            background = null
+        }
+        codeBox.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)))
+
+        identityRow.addView(deviceBox, LinearLayout.LayoutParams(0, dp(58), 1.35f).apply { marginStart = dp(5) })
+        identityRow.addView(codeBox, LinearLayout.LayoutParams(0, dp(58), .85f).apply { marginEnd = dp(5) })
+        activation.addView(identityRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { topMargin = dp(if (compact) 7 else 10) })
+
+        status.apply {
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(BlofyTvDesign.TextSecondary)
+            background = statusBackground()
+            setPadding(dp(10), 0, dp(10), 0)
+            maxLines = 1
+        }
+        activation.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { topMargin = dp(8) })
+        refreshCodeButton = actionButton("↻  تحديث الحالة") { lifecycleScope.launch { refreshIdentityAndProvider() } }
+        activation.addView(refreshCodeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 44 else 48)).apply { topMargin = dp(8) })
 
         val playlistsPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.TOP
-            setPadding(dp(24), dp(18), dp(24), dp(18))
-            background = panelBackground()
+            setPadding(dp(if (compact) 20 else 24), dp(if (compact) 16 else 20), dp(if (compact) 20 else 24), dp(if (compact) 16 else 20))
+            background = BlofyTvDesign.elevatedSurface(dp(22).toFloat(), emphasis = false)
+            clipChildren = false
         }
-        val playlistHeader = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER_VERTICAL }
-        playlistHeader.addView(TextView(this).apply { text = "قوائم التشغيل"; textSize = 23f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.RIGHT }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        playlistHeader.addView(TextView(this).apply { text = "اتصال مباشر"; textSize = 12.5f; setTextColor(BlofyTvDesign.Mint); gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL }, LinearLayout.LayoutParams(dp(130), dp(40)))
+        val playlistHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val playlistTitle = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+        }
+        playlistTitle.addView(TextView(this).apply {
+            text = "قوائم التشغيل"
+            textSize = if (compact) 20f else 23f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            gravity = Gravity.RIGHT
+        })
+        playlistTitle.addView(TextView(this).apply {
+            text = "اختر القائمة التي تريد تشغيلها، أو أضف قائمة جديدة"
+            textSize = 12.5f
+            setTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.RIGHT
+        })
+        playlistHeader.addView(playlistTitle, LinearLayout.LayoutParams(0, dp(52), 1f))
+        playlistHeader.addView(TextView(this).apply {
+            text = "●  اتصال مباشر"
+            textSize = 11.5f
+            setTextColor(BlofyTvDesign.Mint)
+            gravity = Gravity.CENTER
+            background = BlofyTvDesign.statusPill(dp(14).toFloat(), true)
+            setPadding(dp(10), 0, dp(10), 0)
+        }, LinearLayout.LayoutParams(dp(126), dp(34)))
         playlistsPanel.addView(playlistHeader)
-        playlistsPanel.addView(TextView(this).apply { text = "اختر أي قائمة للاتصال، أو افتح إدارة القوائم للإضافة والتعديل"; textSize = 13.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT; setPadding(0,0,0,dp(10)) })
 
-        val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER }
+        val scroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isFillViewport = true
+        }
         playlistRow = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.TOP
-            addView(emptyPlaylistView("بعد إضافة القوائم ستظهر هنا، وكل قائمة يمكن تشغيلها مباشرة"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(70)))
+            addView(
+                emptyPlaylistView("لا توجد قوائم بعد  •  اختر «إضافة / إدارة» للبدء"),
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 72 else 82))
+            )
         }
-        scroll.addView(playlistRow, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
-        playlistsPanel.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        scroll.addView(
+            playlistRow,
+            android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        playlistsPanel.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+            topMargin = dp(8)
+            bottomMargin = dp(8)
+        })
 
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER; setPadding(0,dp(10),0,0) }
-        addPlaylist = primaryActionButton("＋  إضافة / إدارة") { startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java)) }
-        connectButton = actionButton("▶  اتصال بالنشطة") { startOrCancelConnect() }
-        actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(56), 1f).apply { marginStart = dp(8) })
-        actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(56), 1f))
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER
+        }
+        addPlaylist = primaryActionButton("＋  إضافة / إدارة القوائم") {
+            startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java))
+        }
+        connectButton = actionButton("▶  تشغيل القائمة النشطة") { startOrCancelConnect() }
+        actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(if (compact) 50 else 54), 1.08f).apply { marginStart = dp(6) })
+        actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(if (compact) 50 else 54), .92f).apply { marginEnd = dp(6) })
         playlistsPanel.addView(actions)
 
-        workspace.addView(activation, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, .82f).apply { marginEnd = dp(10) })
-        workspace.addView(playlistsPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.18f).apply { marginStart = dp(10) })
-        root.addView(workspace, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(8) })
-        root.addView(TextView(this).apply { text = "🔒  بيانات القوائم محفوظة محليًا • الدخول التالي يستخدم الكاش الجاهز مباشرة"; textSize = 12f; setTextColor(BlofyTvDesign.TextDim); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(26)).apply { topMargin = dp(4) })
+        workspace.addView(
+            activation,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, .78f).apply { marginEnd = dp(panelGap / 2) }
+        )
+        workspace.addView(
+            playlistsPanel,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.22f).apply { marginStart = dp(panelGap / 2) }
+        )
+        root.addView(
+            workspace,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(6) }
+        )
+
+        root.addView(TextView(this).apply {
+            text = "تظل هوية الجهاز والقوائم محفوظة عند تحديث التطبيق"
+            textSize = 11.5f
+            setTextColor(BlofyTvDesign.TextDim)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(24)).apply { topMargin = dp(3) })
+
         return root
     }
 
