@@ -56,11 +56,15 @@ class SearchActivity : AppCompatActivity() {
         })
         input = EditText(this).apply {
             hint = "اكتب اسم قناة أو فيلم أو مسلسل"
-            setTextColor(Color.WHITE)
+            setTextColor(BlofyTvDesign.TextPrimary)
             setHintTextColor(BlofyTvDesign.TextDim)
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
-            isFocusable = true\n            background = BlofyTvDesign.inputField(dp(18).toFloat(), false)\n            setPadding(dp(18), 0, dp(18), 0)\n            setOnFocusChangeListener { view, focused -> view.background = BlofyTvDesign.inputField(dp(18).toFloat(), focused) }\n            setOnEditorActionListener { _, _, _ ->
+            isFocusable = true
+            background = BlofyTvDesign.inputField(dp(18).toFloat(), false)
+            setPadding(dp(18), 0, dp(18), 0)
+            setOnFocusChangeListener { view, focused -> view.background = BlofyTvDesign.inputField(dp(18).toFloat(), focused) }
+            setOnEditorActionListener { _, _, _ ->
                 searchJob?.cancel()
                 runSearch(text?.toString().orEmpty(), moveFocus = true)
                 true
@@ -164,7 +168,7 @@ class SearchActivity : AppCompatActivity() {
                 }
                 val artwork = ImageView(this@SearchActivity).apply {
                     scaleType = ImageView.ScaleType.CENTER_CROP
-                    setBackgroundColor(0xFF16101F.toInt())
+                    setBackgroundColor(BlofyTvDesign.Surface)
                     contentDescription = stream.name
                 }
                 ArtworkLoader.load(artwork, stream.icon)
@@ -190,7 +194,7 @@ class SearchActivity : AppCompatActivity() {
                         else -> kindLabel(stream.kind)
                     }
                     textSize = 12.5f
-                    setTextColor(Color.rgb(183, 168, 201))
+                    setTextColor(BlofyTvDesign.TextMuted)
                     gravity = Gravity.RIGHT
                     setPadding(0, dp(4), 0, 0)
                 })
@@ -251,7 +255,9 @@ class SearchActivity : AppCompatActivity() {
         else -> kind.uppercase()
     }
 
-    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(16).toFloat(), focused)\n\n    private fun showMessage(text: String) {
+    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(16).toFloat(), focused)
+
+    private fun showMessage(text: String) {
         results.removeAllViews()
         results.addView(TextView(this).apply {
             this.text = text
