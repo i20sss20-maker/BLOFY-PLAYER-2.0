@@ -55,9 +55,10 @@ class MobileContentActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val posterMode = kind == KIND_MOVIE || kind == KIND_SERIES
+        val compact = resources.configuration.screenWidthDp < 400
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(18))
+            setPadding(dp(if (compact) 12 else 18), dp(if (compact) 14 else 18), dp(if (compact) 12 else 18), dp(if (compact) 14 else 18))
             background = AppCompatResources.getDrawable(this@MobileContentActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -69,7 +70,7 @@ class MobileContentActivity : AppCompatActivity() {
         }
         header.addView(TextView(this).apply {
             text = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
-            textSize = 25f
+            textSize = if (compact) 22f else 25f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -83,8 +84,8 @@ class MobileContentActivity : AppCompatActivity() {
         root.addView(header)
 
         categorySpinner = Spinner(this)
-        root.addView(categorySpinner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply {
-            bottomMargin = dp(10)
+        root.addView(categorySpinner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 48 else 52)).apply {
+            bottomMargin = dp(if (compact) 8 else 10)
         })
 
         emptyView = TextView(this).apply {
@@ -93,7 +94,7 @@ class MobileContentActivity : AppCompatActivity() {
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
             visibility = View.GONE
-            setPadding(0, dp(16), 0, dp(16))
+            setPadding(0, dp(if (compact) 12 else 16), 0, dp(if (compact) 12 else 16))
         }
         root.addView(emptyView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 

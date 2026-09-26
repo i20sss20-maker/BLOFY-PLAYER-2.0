@@ -62,17 +62,21 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun buildUi() {
+        val compact = isPhone && (
+            resources.configuration.screenWidthDp < 400 ||
+                resources.configuration.screenHeightDp < 700
+            )
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(if (isPhone) dp(18) else dp(80), if (isPhone) dp(22) else dp(44), if (isPhone) dp(18) else dp(80), if (isPhone) dp(22) else dp(44))
+            setPadding(if (compact) dp(12) else if (isPhone) dp(18) else dp(80), if (compact) dp(12) else if (isPhone) dp(22) else dp(44), if (compact) dp(12) else if (isPhone) dp(18) else dp(80), if (compact) dp(12) else if (isPhone) dp(22) else dp(44))
             background = AppCompatResources.getDrawable(this@CatalogLoadingActivity, R.drawable.blofy_home_background)
         }
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(if (isPhone) dp(24) else dp(54), if (isPhone) dp(24) else dp(34), if (isPhone) dp(24) else dp(54), if (isPhone) dp(24) else dp(32))
+            setPadding(if (compact) dp(16) else if (isPhone) dp(24) else dp(54), if (compact) dp(16) else if (isPhone) dp(24) else dp(34), if (compact) dp(16) else if (isPhone) dp(24) else dp(54), if (compact) dp(16) else if (isPhone) dp(24) else dp(32))
             background = BlofyTvDesign.elevatedSurface(dp(28).toFloat(), emphasis = true)
         }
 
@@ -80,11 +84,11 @@ class CatalogLoadingActivity : AppCompatActivity() {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
-        }, LinearLayout.LayoutParams(dp(170), dp(96)))
+        }, LinearLayout.LayoutParams(dp(if (compact) 130 else 170), dp(if (compact) 72 else 96)))
 
         panel.addView(TextView(this).apply {
             text = "جاري تجهيز مكتبتك"
-            textSize = if (isPhone) 24f else 28f
+            textSize = if (compact) 21f else if (isPhone) 24f else 28f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
@@ -96,7 +100,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             textSize = 14f
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(18))
+            setPadding(0, 0, 0, dp(if (compact) 10 else 18))
         })
 
         val progressRow = LinearLayout(this).apply {
@@ -113,21 +117,21 @@ class CatalogLoadingActivity : AppCompatActivity() {
         progressRow.addView(progress, LinearLayout.LayoutParams(0, dp(14), 1f).apply { marginEnd = dp(22) })
         percent = TextView(this).apply {
             text = "0%"
-            textSize = if (isPhone) 28f else 34f
+            textSize = if (compact) 24f else if (isPhone) 28f else 34f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
         }
-        progressRow.addView(percent, LinearLayout.LayoutParams(dp(120), dp(54)))
-        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(62)))
+        progressRow.addView(percent, LinearLayout.LayoutParams(dp(if (compact) 88 else 120), dp(if (compact) 46 else 54)))
+        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 52 else 62)))
 
         stage = TextView(this).apply {
             text = "جاري الاتصال بالخادم..."
-            textSize = 19f
+            textSize = if (compact) 17f else 19f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
-            setPadding(0, dp(12), 0, dp(4))
+            setPadding(0, dp(if (compact) 8 else 12), 0, dp(4))
         }
         panel.addView(stage)
 
@@ -136,7 +140,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             textSize = 13f
             setTextColor(BlofyTvDesign.TextDim)
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(24))
+            setPadding(0, 0, 0, dp(if (compact) 14 else 24))
         }
         panel.addView(detail)
 

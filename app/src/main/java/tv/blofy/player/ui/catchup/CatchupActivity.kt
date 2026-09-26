@@ -37,10 +37,11 @@ class CatchupActivity : AppCompatActivity() {
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         val contentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
         if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }
+        val compact = resources.configuration.screenWidthDp < 600
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(34), dp(28), dp(34), dp(30))
+            setPadding(dp(if (compact) 16 else 34), dp(if (compact) 20 else 28), dp(if (compact) 16 else 34), dp(if (compact) 22 else 30))
             background = AppCompatResources.getDrawable(this@CatchupActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -48,10 +49,11 @@ class CatchupActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = "أرشيف BLOFY"
             BlofyTvDesign.applyTitle(this)
+            if (compact) textSize = 27f
         })
         status = TextView(this).apply {
             text = "جاري تحميل البرامج السابقة..."
-            textSize = 15f
+            textSize = if (compact) 13.5f else 15f
             setTextColor(BlofyTvDesign.PurpleSoft)
             setPadding(0, 5, 0, 18)
         }
@@ -102,9 +104,9 @@ class CatchupActivity : AppCompatActivity() {
         items.forEach { item ->
             list.addView(TextView(this).apply {
                 text = "${item.title}\n${time(item.startMs)} — ${time(item.endMs)}"
-                textSize = 16.5f
+                textSize = if (resources.configuration.screenWidthDp < 600) 15f else 16.5f
                 setTextColor(BlofyTvDesign.TextPrimary)
-                setPadding(dp(22), dp(10), dp(22), dp(10))
+                setPadding(dp(if (resources.configuration.screenWidthDp < 600) 16 else 22), dp(9), dp(if (resources.configuration.screenWidthDp < 600) 16 else 22), dp(9))
                 gravity = Gravity.CENTER_VERTICAL
                 maxLines = 2
                 setLineSpacing(dp(2).toFloat(), 1.05f)
@@ -121,7 +123,7 @@ class CatchupActivity : AppCompatActivity() {
                         .start()
                 }
                 setOnClickListener { playCatchup(provider, stream, item) }
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(76)).apply { topMargin = dp(7) })
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (resources.configuration.screenWidthDp < 600) 70 else 76)).apply { topMargin = dp(if (resources.configuration.screenWidthDp < 600) 5 else 7) })
         }
         list.getChildAt(0)?.requestFocus()
     }
