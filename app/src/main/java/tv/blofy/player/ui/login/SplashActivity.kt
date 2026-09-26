@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 
 class SplashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,19 +34,19 @@ class SplashActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = "BLOFY PLAYER"
             textSize = 24f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            typeface = BlofyTvDesign.HeadingTypeface
             letterSpacing = 0.08f
-            setTextColor(Color.WHITE)
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(54)))
         root.addView(ProgressBar(this).apply {
             isIndeterminate = true
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFFB96CFF.toInt())
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
         }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { topMargin = dp(14) })
         root.addView(TextView(this).apply {
             text = "جاري تجهيز BLOFY..."
             textSize = 13.5f
-            setTextColor(0xFFB8ABC7.toInt())
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { topMargin = dp(8) })
         setContentView(root)
