@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
@@ -35,12 +36,18 @@ class SeriesDetailsActivity : AppCompatActivity() {
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         val contentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
         if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }
+        val compact = resources.configuration.screenWidthDp < 700
 
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(54), dp(38), dp(54), dp(38))
+            gravity = if (compact) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.CENTER_VERTICAL
+            setPadding(
+                dp(if (compact) 18 else 54),
+                dp(if (compact) 20 else 38),
+                dp(if (compact) 18 else 54),
+                dp(if (compact) 28 else 38)
+            )
             background = AppCompatResources.getDrawable(this@SeriesDetailsActivity, R.drawable.blofy_home_background)
         }
         val poster = ImageView(this).apply {
@@ -48,15 +55,40 @@ class SeriesDetailsActivity : AppCompatActivity() {
             background = BlofyTvDesign.elevatedSurface(dp(20).toFloat(), emphasis = true)
             clipToOutline = true
         }
-        root.addView(poster, LinearLayout.LayoutParams(dp(310), dp(465)).apply { marginEnd = dp(42) })
+        root.addView(
+            poster,
+            LinearLayout.LayoutParams(dp(if (compact) 205 else 310), dp(if (compact) 305 else 465)).apply {
+                if (compact) {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    bottomMargin = dp(20)
+                } else {
+                    marginEnd = dp(42)
+                }
+            }
+        )
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
-        root.addView(panel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-        setContentView(root)
+        root.addView(
+            panel,
+            if (compact) LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            else LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+        )
+        if (compact) {
+            val scroll = ScrollView(this).apply {
+                isFillViewport = true
+                isVerticalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+                background = AppCompatResources.getDrawable(this@SeriesDetailsActivity, R.drawable.blofy_home_background)
+            }
+            scroll.addView(root, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
+            setContentView(scroll)
+        } else {
+            setContentView(root)
+        }
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -71,7 +103,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val seasons = allEpisodes.map { it.season }.distinct().size
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = stream.name; BlofyTvDesign.applyHeroTitle(this); textSize = 38f; gravity = Gravity.RIGHT
+                text = stream.name; BlofyTvDesign.applyHeroTitle(this); textSize = if (compact) 29f else 38f; gravity = Gravity.RIGHT
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = buildList {
@@ -86,7 +118,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.plot?.takeIf(String::isNotBlank) ?: "اختر الموسم والحلقة لبدء المشاهدة."
-                textSize = 17f; maxLines = 5; setTextColor(BlofyTvDesign.TextSecondary); gravity = Gravity.RIGHT; setPadding(0, 0, 0, dp(24))
+                textSize = 17f; maxLines = if (compact) 10 else 5; setTextColor(BlofyTvDesign.TextSecondary); gravity = Gravity.RIGHT; setPadding(0, 0, 0, dp(24))
             })
 
             resume?.let { r ->
@@ -97,16 +129,23 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 })
                 if (r.durationMs > 0) panel.addView(ProgressBar(this@SeriesDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
                     max = 100; progress = pct
+                    progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.SurfaceRaised)
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(8)).apply { topMargin = dp(8); bottomMargin = dp(18) })
             }
 
-            val row = LinearLayout(this@SeriesDetailsActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.RIGHT }
+            val row = LinearLayout(this@SeriesDetailsActivity).apply { orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL; gravity = Gravity.RIGHT }
+            fun actionParams(width: Int) = if (compact) {
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { bottomMargin = dp(8) }
+            } else {
+                LinearLayout.LayoutParams(dp(width), dp(74)).apply { marginStart = dp(10) }
+            }
             var primary: Button? = null
             resume?.let { r ->
                 val resumeButton = actionButton("▶ استئناف الحلقة") { launchEpisode(provider, r.episode, r.positionMs) }
                 primary = resumeButton
-                row.addView(resumeButton, LinearLayout.LayoutParams(dp(230), dp(74)).apply { marginStart = dp(10) })
-                row.addView(actionButton("من البداية") { launchEpisode(provider, r.episode, 0L) }, LinearLayout.LayoutParams(dp(180), dp(74)).apply { marginStart = dp(10) })
+                row.addView(resumeButton, actionParams(230))
+                row.addView(actionButton("من البداية") { launchEpisode(provider, r.episode, 0L) }, actionParams(180))
             }
             val episodes = actionButton("المواسم والحلقات") {
                 startActivity(Intent(this@SeriesDetailsActivity, EpisodesActivity::class.java).apply {
@@ -116,7 +155,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 })
             }
             if (primary == null) primary = episodes
-            row.addView(episodes, LinearLayout.LayoutParams(dp(230), dp(74)).apply { marginStart = dp(10) })
+            row.addView(episodes, actionParams(230))
 
             favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
                 lifecycleScope.launch {
@@ -125,7 +164,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
+            row.addView(favoriteButton, actionParams(175))
             panel.addView(row)
             primary?.requestFocus()
         }
