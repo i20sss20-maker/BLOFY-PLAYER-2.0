@@ -152,7 +152,7 @@ class LibraryActivity : AppCompatActivity() {
         val row = TextView(this).apply {
             text = "${kindLabel(stream.kind)}   •   ${stream.name}\n${watchProgressLabel(state)}"
             textSize = 17f
-            setTextColor(Color.WHITE)
+            setTextColor(BlofyTvDesign.TextPrimary)
             setPadding(dp(24), dp(10), dp(24), dp(10))
             gravity = Gravity.CENTER_VERTICAL
             maxLines = 2
@@ -162,7 +162,7 @@ class LibraryActivity : AppCompatActivity() {
             background = rowBackground(false)
             setOnFocusChangeListener { view, focused ->
                 view.background = rowBackground(focused)
-                view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(100).start()
+                view.animate().scaleX(if (focused) 1.018f else 1f).scaleY(if (focused) 1.018f else 1f).translationZ(if (focused) dp(14).toFloat() else dp(2).toFloat()).setDuration(100).start()
             }
             setOnClickListener { open(providerId, liveFormat, stream, state.positionMs) }
         }
@@ -176,7 +176,7 @@ class LibraryActivity : AppCompatActivity() {
         val row = TextView(this).apply {
             text = "EPISODE   •   $seriesName   •   S${episode.season} E${episode.episode}   •   ${episode.title}\n${watchProgressLabel(entry.state)}"
             textSize = 17f
-            setTextColor(Color.WHITE)
+            setTextColor(BlofyTvDesign.TextPrimary)
             setPadding(dp(24), dp(10), dp(24), dp(10))
             gravity = Gravity.CENTER_VERTICAL
             maxLines = 2
