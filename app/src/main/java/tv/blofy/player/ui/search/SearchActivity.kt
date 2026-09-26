@@ -369,7 +369,7 @@ class SearchActivity : AppCompatActivity() {
 
             val art = ImageView(this@SearchActivity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0xFF17111F.toInt()) }
+                background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0xFF171419.toInt()) }
             }
             addView(art, LinearLayout.LayoutParams(dp(58), dp(68)).apply { marginStart = dp(14) })
             ArtworkLoader.load(art, listOf(stream.icon, stream.backdrop))
