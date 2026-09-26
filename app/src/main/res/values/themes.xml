@@ -4,9 +4,14 @@
         <item name="android:windowBackground">@color/blofy_black</item>
         <item name="android:colorAccent">@color/blofy_purple</item>
         <item name="colorPrimary">@color/blofy_purple</item>
-        <item name="colorSecondary">@color/blofy_purple_soft</item>
+        <item name="colorPrimaryVariant">@color/blofy_surface_alt</item>
+        <item name="colorSecondary">@color/blofy_purple_bright</item>
+        <item name="colorSurface">@color/blofy_surface</item>
+        <item name="colorOnSurface">@color/blofy_white</item>
         <item name="android:navigationBarColor">@color/blofy_black</item>
         <item name="android:statusBarColor">@color/blofy_black</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>
