@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.stableId64
 
 internal class PosterStreamAdapter(
     private val onClick: (StreamEntity) -> Unit,
@@ -24,20 +25,23 @@ internal class PosterStreamAdapter(
 
     fun submit(newItems: List<StreamEntity>) {
         val oldItems = items.toList()
-        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldListSize() = oldItems.size
-            override fun getNewListSize() = newItems.size
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition].key == newItems[newItemPosition].key
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition] == newItems[newItemPosition]
-        }, false)
+        val useDiff = oldItems.size <= MAX_DIFF_ITEMS && newItems.size <= MAX_DIFF_ITEMS
+        val diff = if (useDiff) {
+            DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                override fun getOldListSize() = oldItems.size
+                override fun getNewListSize() = newItems.size
+                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    oldItems[oldItemPosition].key == newItems[newItemPosition].key
+                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    oldItems[oldItemPosition] == newItems[newItemPosition]
+            }, false)
+        } else null
         items.clear()
         items.addAll(newItems)
-        diff.dispatchUpdatesTo(this)
+        if (diff != null) diff.dispatchUpdatesTo(this) else notifyDataSetChanged()
     }
 
-    override fun getItemId(position: Int): Long = items[position].key.hashCode().toLong()
+    override fun getItemId(position: Int): Long = stableId64(items[position].key)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val density = parent.resources.displayMetrics.density
@@ -50,7 +54,7 @@ internal class PosterStreamAdapter(
             isClickable = true
             stateListAnimator = null
             setPadding(dp(7), dp(7), dp(7), dp(10))
-            background = card(false)
+            background = card(this, false)
             clipToOutline = true
         }
 
@@ -127,12 +131,12 @@ internal class PosterStreamAdapter(
 
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
-            view.background = card(focused)
+            view.background = card(view, focused)
             view.animate().cancel()
             view.animate()
                 .scaleX(if (focused) 1.045f else 1f)
                 .scaleY(if (focused) 1.045f else 1f)
-                .translationZ(if (focused) 22f else 3f)
+                .translationZ(if (focused) dp(view, 22).toFloat() else dp(view, 3).toFloat())
                 .alpha(if (focused) 1f else .97f)
                 .setDuration(if (focused) 110L else 90L)
                 .start()
@@ -157,5 +161,13 @@ internal class PosterStreamAdapter(
         val rating: TextView
     ) : RecyclerView.ViewHolder(itemView)
 
-    private fun card(focused: Boolean) = BlofyTvDesign.posterCard(20f, focused)
+    private fun card(view: View, focused: Boolean) =
+        BlofyTvDesign.posterCard(dp(view, 20).toFloat(), focused)
+
+    private fun dp(view: View, value: Int) =
+        (value * view.resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val MAX_DIFF_ITEMS = 2_500
+    }
 }

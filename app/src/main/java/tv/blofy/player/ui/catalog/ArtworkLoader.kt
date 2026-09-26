@@ -12,6 +12,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -21,10 +22,13 @@ object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
     private const val MAX_DISK_BYTES = 260L * 1024L * 1024L
     private const val DISK_TRIM_INTERVAL_MS = 30_000L
+    private const val MAX_PREFETCH_PENDING = 48
     private val main = Handler(Looper.getMainLooper())
     private val pool = Executors.newFixedThreadPool(8)
     private val placeholder = ColorDrawable(Color.rgb(24, 16, 34))
     private val lastDiskTrimAt = AtomicLong(0L)
+    private val fetchLocks = Array(64) { Any() }
+    private val queuedPrefetch = ConcurrentHashMap<String, Boolean>()
     private val client = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(9, TimeUnit.SECONDS)
@@ -54,12 +58,7 @@ object ArtworkLoader {
         pool.execute {
             var result: Bitmap? = null
             for (url in urls) {
-                result = cache.get(url)?.takeIf { !it.isRecycled }
-                    ?: readDisk(app.cacheDir, url)?.also { bmp -> cache.put(url, bmp) }
-                    ?: downloadWithRetry(url)?.also { bmp ->
-                        cache.put(url, bmp)
-                        writeDisk(app.cacheDir, url, bmp)
-                    }
+                result = cachedOrFetch(app.cacheDir, url)
                 if (result != null) break
             }
             main.post {
@@ -72,13 +71,31 @@ object ArtworkLoader {
     }
 
     fun prefetch(context: android.content.Context, urls: List<String?>) {
+        val app = context.applicationContext
         urls.mapNotNull(::normalizeUrl).distinct().take(24).forEach { url ->
-            if (cache.get(url) != null) return@forEach
-            val app = context.applicationContext
+            if (cache.get(url)?.isRecycled == false) return@forEach
+            if (queuedPrefetch.size >= MAX_PREFETCH_PENDING) return@forEach
+            if (queuedPrefetch.putIfAbsent(url, true) != null) return@forEach
             pool.execute {
-                val bmp = readDisk(app.cacheDir, url) ?: downloadWithRetry(url)?.also { writeDisk(app.cacheDir, url, it) }
-                if (bmp != null) cache.put(url, bmp)
+                try {
+                    cachedOrFetch(app.cacheDir, url)
+                } finally {
+                    queuedPrefetch.remove(url)
+                }
             }
+        }
+    }
+
+    private fun cachedOrFetch(cacheDir: File, url: String): Bitmap? {
+        cache.get(url)?.takeIf { !it.isRecycled }?.let { return it }
+        val stripe = fetchLocks[(url.hashCode() and Int.MAX_VALUE) % fetchLocks.size]
+        return synchronized(stripe) {
+            cache.get(url)?.takeIf { !it.isRecycled }
+                ?: readDisk(cacheDir, url)?.also { cache.put(url, it) }
+                ?: downloadWithRetry(url)?.also {
+                    cache.put(url, it)
+                    writeDisk(cacheDir, url, it)
+                }
         }
     }
 

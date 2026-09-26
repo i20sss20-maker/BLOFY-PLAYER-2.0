@@ -61,6 +61,8 @@ class LoginActivity : AppCompatActivity() {
     private var connectJob: Job? = null
     private var playlistJob: Job? = null
     private var pairingWatcherJob: Job? = null
+    private var renderedQrUrl: String? = null
+    private var renderedProviders: List<ProviderEntity> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,7 +70,6 @@ class LoginActivity : AppCompatActivity() {
         deviceKind = DeviceClass.detect(this)
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildApprovedTvLogin() else buildPhoneLogin())
         if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
-        lifecycleScope.launch { refreshIdentityAndProvider() }
     }
 
     private fun buildApprovedTvLogin(): LinearLayout {
@@ -273,9 +274,26 @@ class LoginActivity : AppCompatActivity() {
     private suspend fun loadPortalProviders(endpoint: String, dao: BlofyDao): List<ProviderEntity> = if (endpoint.isBlank()) dao.allProviders().first() else runSuspendCatching { PortalPlaylistClient.sync(applicationContext,endpoint,dao).providers }.getOrElse { dao.allProviders().first() }
 
     private fun renderPortalPlaylists(providers: List<ProviderEntity>) {
-        val row = playlistRow ?: return; row.removeAllViews()
-        if (providers.isEmpty()) { row.addView(emptyPlaylistView("لا توجد قوائم • استخدم إضافة / إدارة"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(70))); return }
-        providers.sortedWith(compareByDescending<ProviderEntity>{it.enabled}.thenByDescending{it.updatedAt}).forEach { provider -> row.addView(playlistCard(provider), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(72)).apply { bottomMargin = dp(8) }) }
+        val row = playlistRow ?: return
+        val sorted = providers.sortedWith(compareByDescending<ProviderEntity> { it.enabled }.thenByDescending { it.updatedAt })
+        if (sorted == renderedProviders) return
+        renderedProviders = sorted.toList()
+        row.removeAllViews()
+        if (sorted.isEmpty()) {
+            row.addView(
+                emptyPlaylistView("لا توجد قوائم • استخدم إضافة / إدارة"),
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(70))
+            )
+            return
+        }
+        sorted.forEach { provider ->
+            row.addView(
+                playlistCard(provider),
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply {
+                    bottomMargin = dp(8)
+                }
+            )
+        }
     }
 
     private fun playlistCard(provider: ProviderEntity) = LinearLayout(this).apply {
@@ -285,7 +303,15 @@ class LoginActivity : AppCompatActivity() {
         info.addView(TextView(this@LoginActivity).apply { val type = if(provider.providerType.equals("xtream",true)) "Xtream" else "M3U"; text = if(provider.enabled) "● النشطة • $type" else "$type • OK للاتصال"; textSize = 11.5f; setTextColor(if(provider.enabled)BlofyTvDesign.Mint else BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
         addView(info, LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,1f))
         addView(TextView(this@LoginActivity).apply { text = "▶"; textSize = 18f; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(44),LinearLayout.LayoutParams.MATCH_PARENT))
-        setOnFocusChangeListener { view, focused -> view.background = playlistCardBackground(provider.enabled,focused); view.animate().scaleX(if(focused)1.025f else 1f).scaleY(if(focused)1.025f else 1f).translationZ(if(focused)14f else 2f).setDuration(100).start() }
+        setOnFocusChangeListener { view, focused ->
+            view.background = playlistCardBackground(provider.enabled, focused)
+            view.animate()
+                .scaleX(if (focused) 1.025f else 1f)
+                .scaleY(if (focused) 1.025f else 1f)
+                .translationZ(if (focused) dp(14).toFloat() else dp(2).toFloat())
+                .setDuration(100)
+                .start()
+        }
         setOnClickListener { selectPortalProvider(provider) }
     }
 
@@ -298,14 +324,21 @@ class LoginActivity : AppCompatActivity() {
     private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) { CatalogSyncState.isReady(applicationContext,providerId) && dao.hasStreamsForProvider(providerId) }
     private suspend fun <T> runSuspendCatching(block: suspend () -> T): Result<T> = try { Result.success(block()) } catch (c: CancellationException) { throw c } catch (e: Throwable) { Result.failure(e) }
 
-    private fun renderIdentity(deviceId: String, activationCode: String) {
+    private suspend fun renderIdentity(deviceId: String, activationCode: String) {
         deviceView.text = deviceId
         codeView.text = activationCode
-        val url = ActivationPortalUrl.create(BuildConfig.ACTIVATION_BASE_URL,deviceId,activationCode)
+        val url = ActivationPortalUrl.create(BuildConfig.ACTIVATION_BASE_URL, deviceId, activationCode)
         if (url != null) {
-            qrView.setImageBitmap(createQr(url))
+            if (url != renderedQrUrl || qrView.drawable == null) {
+                val bitmap = withContext(Dispatchers.Default) { createQr(url) }
+                if (!isFinishing && !isDestroyed) {
+                    qrView.setImageBitmap(bitmap)
+                    renderedQrUrl = url
+                }
+            }
             qrView.alpha = 1f
         } else {
+            renderedQrUrl = null
             qrView.setImageDrawable(null)
             qrView.alpha = .35f
         }

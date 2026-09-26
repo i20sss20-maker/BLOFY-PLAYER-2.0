@@ -30,19 +30,22 @@ class FocusTextAdapter<T>(
         val oldItems = items.toList()
         val nextItems = newItems.toList()
         val keyOf = itemKey
-        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldListSize(): Int = oldItems.size
-            override fun getNewListSize(): Int = nextItems.size
+        val useDiff = oldItems.size <= MAX_DIFF_ITEMS && nextItems.size <= MAX_DIFF_ITEMS
+        val diff = if (useDiff) {
+            DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                override fun getOldListSize(): Int = oldItems.size
+                override fun getNewListSize(): Int = nextItems.size
 
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                val oldItem = oldItems[oldItemPosition]
-                val newItem = nextItems[newItemPosition]
-                return if (keyOf != null) keyOf(oldItem) == keyOf(newItem) else oldItem == newItem
-            }
+                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                    val oldItem = oldItems[oldItemPosition]
+                    val newItem = nextItems[newItemPosition]
+                    return if (keyOf != null) keyOf(oldItem) == keyOf(newItem) else oldItem == newItem
+                }
 
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition] == nextItems[newItemPosition]
-        }, false)
+                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    oldItems[oldItemPosition] == nextItems[newItemPosition]
+            }, false)
+        } else null
 
         items.clear()
         items.addAll(nextItems)
@@ -53,7 +56,7 @@ class FocusTextAdapter<T>(
         }
         if (focusedPosition < 0) focusedPosition = RecyclerView.NO_POSITION
         restorePending = listOwnedFocus && focusedPosition != RecyclerView.NO_POSITION
-        diff.dispatchUpdatesTo(this)
+        if (diff != null) diff.dispatchUpdatesTo(this) else notifyDataSetChanged()
     }
 
     fun clearFocusMemory() {
@@ -64,7 +67,7 @@ class FocusTextAdapter<T>(
 
     override fun getItemId(position: Int): Long {
         val key = itemKey ?: return super.getItemId(position)
-        return key(items[position]).hashCode().toLong()
+        return stableId64(key(items[position]))
     }
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
@@ -84,23 +87,23 @@ class FocusTextAdapter<T>(
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(22, 0, 22, 0)
+            setPadding(dp(this, 22), 0, dp(this, 22), 0)
             isFocusable = true
             isClickable = true
             isLongClickable = true
             stateListAnimator = null
-            background = background(false)
+            background = background(this, false)
             setOnFocusChangeListener { v, focused ->
                 (v as TextView).setTextColor(if (focused) BlofyTvDesign.TextPrimary else BlofyTvDesign.TextSecondary)
                 v.animate().cancel()
                 v.animate()
                     .scaleX(if (focused) 1.025f else 1f)
                     .scaleY(if (focused) 1.025f else 1f)
-                    .translationZ(if (focused) 18f else 2f)
+                    .translationZ(if (focused) dp(v, 18).toFloat() else dp(v, 2).toFloat())
                     .alpha(if (focused) 1f else .96f)
                     .setDuration(if (focused) 105L else 85L)
                     .start()
-                v.background = background(focused)
+                v.background = background(v, focused)
                 if (focused) {
                     (v.tag as? Int)?.let { pos ->
                         items.getOrNull(pos)?.let { item ->
@@ -138,5 +141,13 @@ class FocusTextAdapter<T>(
 
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
 
-    private fun background(focused: Boolean) = BlofyTvDesign.surface(16f, focused)
+    private fun background(view: View, focused: Boolean) =
+        BlofyTvDesign.surface(dp(view, 16).toFloat(), focused)
+
+    private fun dp(view: View, value: Int) =
+        (value * view.resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val MAX_DIFF_ITEMS = 2_500
+    }
 }

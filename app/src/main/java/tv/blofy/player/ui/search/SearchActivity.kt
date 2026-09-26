@@ -68,7 +68,9 @@ class SearchActivity : AppCompatActivity() {
             setOnFocusChangeListener { view, focused -> view.background = BlofyTvDesign.inputField(dp(18).toFloat(), focused) }
             setOnEditorActionListener { _, _, _ ->
                 searchJob?.cancel()
-                runSearch(text?.toString().orEmpty(), moveFocus = true)
+                searchJob = lifecycleScope.launch {
+                    runSearch(text?.toString().orEmpty(), moveFocus = true)
+                }
                 true
             }
             addTextChangedListener(object : TextWatcher {
@@ -113,28 +115,27 @@ class SearchActivity : AppCompatActivity() {
         input.requestFocus()
     }
 
-    private fun runSearch(query: String, moveFocus: Boolean) {
+    private suspend fun runSearch(query: String, moveFocus: Boolean) {
         val normalized = query.trim()
         if (normalized.isEmpty()) {
             results.removeAllViews()
             resultInfo.text = "ابدأ بالكتابة للبحث في القنوات والأفلام والمسلسلات"
             return
         }
-        lifecycleScope.launch {
-            val dao = BlofyDatabase.get(applicationContext).dao()
-            val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
-            if (provider == null) {
-                showMessage("أضف قائمة تشغيل أولاً")
-                return@launch
-            }
-            val items = withContext(Dispatchers.IO) { ContentRepository(dao).search(provider.id, normalized) }
-            if (input.text?.toString()?.trim() != normalized) return@launch
-            results.removeAllViews()
-            if (items.isEmpty()) {
-                resultInfo.text = "لا توجد نتائج لـ «$normalized»"
-                showMessage("جرّب كتابة اسم مختلف أو جزء من الاسم")
-                return@launch
-            }
+        val dao = BlofyDatabase.get(applicationContext).dao()
+        val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
+        if (provider == null) {
+            showMessage("أضف قائمة تشغيل أولاً")
+            return
+        }
+        val items = withContext(Dispatchers.IO) { ContentRepository(dao).search(provider.id, normalized) }
+        if (input.text?.toString()?.trim() != normalized) return
+        results.removeAllViews()
+        if (items.isEmpty()) {
+            resultInfo.text = "لا توجد نتائج لـ «$normalized»"
+            showMessage("جرّب كتابة اسم مختلف أو جزء من الاسم")
+            return
+        }
             val visibleItems = items.take(100)
             val liveCount = items.count { it.kind == "live" }
             val movieCount = items.count { it.kind == "movie" }
@@ -162,7 +163,7 @@ class SearchActivity : AppCompatActivity() {
                         view.animate()
                             .scaleX(if (focused) 1.018f else 1f)
                             .scaleY(if (focused) 1.018f else 1f)
-                            .translationZ(if (focused) 8f else 0f)
+                            .translationZ(if (focused) dp(8).toFloat() else 0f)
                             .setDuration(90)
                             .start()
                     }
@@ -203,8 +204,7 @@ class SearchActivity : AppCompatActivity() {
                 row.addView(textBox, LinearLayout.LayoutParams(0, dp(if (compact) 58 else 66), 1f))
                 results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 72 else 82)).apply { topMargin = dp(if (compact) 5 else 7) })
             }
-            if (moveFocus) results.getChildAt(0)?.requestFocus()
-        }
+        if (moveFocus) results.getChildAt(0)?.requestFocus()
     }
 
     private fun guardedOpen(providerId: String, liveFormat: String, stream: StreamEntity) {
