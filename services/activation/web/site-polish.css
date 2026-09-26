@@ -1,14 +1,14 @@
 /* BLOFY unified web polish — public portal, downloads, privacy and admin surfaces */
 :root{
-  --blofy-bg:#08070e;
-  --blofy-panel:rgba(18,15,29,.9);
-  --blofy-panel-2:rgba(28,22,43,.92);
-  --blofy-line:rgba(190,145,255,.18);
-  --blofy-line-strong:rgba(190,145,255,.34);
+  --blofy-bg:#05040a;
+  --blofy-panel:rgba(17,14,23,.92);
+  --blofy-panel-2:rgba(25,20,34,.92);
+  --blofy-line:rgba(190,145,255,.12);
+  --blofy-line-strong:rgba(190,145,255,.26);
   --blofy-accent:#9a5cff;
   --blofy-accent-2:#7440e8;
-  --blofy-text:#fff;
-  --blofy-muted:#aaa2b5;
+  --blofy-text:#faf8fc;
+  --blofy-muted:#a49baa;
   --blofy-success:#72e2ad;
   --blofy-danger:#ff7b8b;
   --blofy-shadow:0 24px 80px rgba(0,0,0,.34);
@@ -31,7 +31,7 @@ img{max-width:100%}
   z-index:50;
   min-height:72px;
   padding-inline:2px;
-  background:linear-gradient(180deg,rgba(8,7,14,.96),rgba(8,7,14,.72));
+  background:linear-gradient(180deg,rgba(5,4,10,.97),rgba(5,4,10,.76));
   backdrop-filter:blur(18px);
   -webkit-backdrop-filter:blur(18px)
 }
@@ -52,7 +52,7 @@ img{max-width:100%}
 .site-links{margin-inline:auto}
 .site-links .site-primary{
   border:1px solid rgba(181,139,255,.25);
-  background:rgba(133,73,231,.12);
+  background:rgba(133,73,231,.09);
   color:#d8c0ff
 }
 .site-links .site-primary:hover{background:rgba(133,73,231,.2)}
@@ -64,7 +64,7 @@ img{max-width:100%}
 }
 input,select,textarea{
   border-color:rgba(190,145,255,.16)!important;
-  background:rgba(8,7,14,.72)!important
+  background:rgba(7,6,11,.82)!important
 }
 input:hover,select:hover,textarea:hover{border-color:rgba(255,255,255,.18)!important}
 input:focus,select:focus,textarea:focus{
@@ -108,11 +108,11 @@ body .topbar{position:relative;z-index:20}
 .privacy-form button,.delete-button{min-height:48px}
 /* Admin */
 .admin-shell,.source-shell{background:
-  radial-gradient(circle at 88% -12%,rgba(126,54,232,.16),transparent 34rem),
-  linear-gradient(145deg,#08070e,#0c0912 55%,#08070e)}
+  radial-gradient(circle at 88% -12%,rgba(126,54,232,.11),transparent 34rem),
+  linear-gradient(145deg,#05040a,#0a0810 55%,#05040a)}
 .admin-rail,.source-rail{
   border-inline-end:1px solid rgba(190,145,255,.13)!important;
-  background:rgba(10,8,15,.94)!important;
+  background:rgba(7,6,11,.96)!important;
   backdrop-filter:blur(18px)
 }
 .admin-rail .brand,.source-brand{padding:10px;border-radius:14px}
@@ -125,7 +125,7 @@ body .topbar{position:relative;z-index:20}
 }
 .table-wrap{border-radius:16px;overflow:auto}
 table{border-collapse:separate;border-spacing:0}
-thead th{position:sticky;top:0;z-index:2;background:#14101d}
+thead th{position:sticky;top:0;z-index:2;background:#100d16}
 tr:hover td{background:rgba(154,92,255,.035)}
 /* Source admin */
 .source-main .panel,.gateway-panel,.form-panel{
@@ -427,4 +427,21 @@ button,.btn,input,select,textarea{min-height:44px}
 @media(pointer:coarse){
   .status-nav a,.status-wrap .actions a,.status-wrap .actions button,
   .source-main .tab,.source-main .button,.source-main button,.not-found .actions a{min-height:46px!important}
+}
+
+
+/* BLOFY final visual normalization — dark surfaces, restrained purple, Arabic-first rhythm */
+html[dir="rtl"] body{font-feature-settings:"kern" 1;text-align:start}
+body{background-color:var(--blofy-bg)!important}
+.card,.auth-card,.dashboard-panel,.editor-card,.privacy-form,.policy-grid article,.info,.release-card,
+.admin-main .panel,.source-main .panel,.repo-card,.gateway-panel,.form-panel{
+  border-color:var(--blofy-line)!important;
+  background-color:rgba(17,14,23,.88)
+}
+.eyebrow,.section-label,.panel-kicker{letter-spacing:.035em!important}
+h1,h2,h3,strong{letter-spacing:0!important}
+button,.btn,.primary,.secondary,.ghost{font-weight:800}
+@media(max-width:700px){
+  h1{line-height:1.22}
+  .card,.auth-card,.dashboard-panel,.editor-card,.privacy-form{border-radius:20px!important}
 }
