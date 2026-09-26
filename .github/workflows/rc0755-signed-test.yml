@@ -21,7 +21,7 @@ env:
   ACTIVATION_BASE_URL: https://api.blofyplayer.com
   UPDATE_BASE_URL: https://updates.blofyplayer.com
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
-  EXPECTED_VERSION_CODE: "2000074"
+  EXPECTED_VERSION_CODE: "2000075"
   EXPECTED_VERSION_NAME: 2.0.0-rc07.55.5
   EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
   MEDIA3_VERSION: "1.6.1"
@@ -61,7 +61,7 @@ jobs:
             [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
           done
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
-          grep -Fq 'versionCode = 2000074' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000075' app/build.gradle.kts
           grep -Fq 'versionName = "2.0.0-rc07.55.5"' app/build.gradle.kts
 
       - name: Install Android native and signing toolchain
