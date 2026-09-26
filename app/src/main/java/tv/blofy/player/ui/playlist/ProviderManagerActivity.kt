@@ -102,8 +102,8 @@ class ProviderManagerActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = "القوائم المحفوظة"
             textSize = 20f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
 
@@ -174,7 +174,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                 textSize = if (isPhone) 16f else 18f
                 typeface = Typeface.create("sans-serif", Typeface.BOLD)
                 gravity = Gravity.RIGHT
-                setTextColor(Color.WHITE)
+                setTextColor(BlofyTvDesign.TextPrimary)
                 maxLines = 1
             })
             info.addView(TextView(this).apply {
@@ -194,7 +194,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                 textSize = 12.5f
                 typeface = BlofyTvDesign.BodyTypeface
                 gravity = Gravity.RIGHT
-                setTextColor(if (ready) 0xFF79E1BA.toInt() else 0xFFE3B86D.toInt())
+                setTextColor(if (ready) BlofyTvDesign.Mint else BlofyTvDesign.Amber)
                 setPadding(0, dp(3), 0, 0)
             })
 
@@ -296,7 +296,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         isAllCaps = false
         textSize = 14f
         typeface = BlofyTvDesign.BodyTypeface
-        setTextColor(Color.WHITE)
+        setTextColor(BlofyTvDesign.TextPrimary)
         stateListAnimator = null
         BlofyTvDesign.installTvFocus(this, dp(17).toFloat(), 1.04f, primary) {
             if (isTv) FocusMemory.save(this@ProviderManagerActivity, SCREEN_KEY, key)
