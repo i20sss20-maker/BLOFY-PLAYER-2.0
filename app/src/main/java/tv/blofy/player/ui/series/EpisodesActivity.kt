@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.remote.FocusMemory
@@ -63,11 +64,11 @@ class EpisodesActivity : AppCompatActivity() {
         }
         root.addView(TextView(this).apply {
             text = seriesName.ifBlank { "الحلقات" }
-            textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
+            BlofyTvDesign.applyTitle(this); gravity = Gravity.RIGHT
             setPadding(dp(8), 0, 0, dp(4))
         })
         status = TextView(this).apply {
-            text = "جاري تحميل الحلقات..."; textSize = 14f; setTextColor(SOFT); gravity = Gravity.RIGHT
+            text = "جاري تحميل الحلقات..."; textSize = 14f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT
             setPadding(dp(8), 0, 0, dp(12))
         }
         root.addView(status)
@@ -282,12 +283,16 @@ class EpisodesActivity : AppCompatActivity() {
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused); view.animate().scaleX(if (focused) 1.03f else 1f).scaleY(if (focused) 1.03f else 1f).setDuration(90).start() }
+        text = label
+        isAllCaps = false
+        textSize = 15f
+        typeface = BlofyTvDesign.BodyTypeface
+        setTextColor(BlofyTvDesign.TextPrimary)
+        stateListAnimator = null
+        BlofyTvDesign.installTvFocus(this, dp(15).toFloat(), 1.04f, false)
         setOnClickListener { action() }
     }
-    private fun panelBackground() = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xD9141020.toInt()); setStroke(dp(1), 0x554A355F) }
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (focused) PURPLE else 0xC51B1528.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x554A355F) }
+    private fun panelBackground() = BlofyTvDesign.glassPanel(dp(20).toFloat(), false)
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun seasonMemoryKey() = "episodes:$providerId:$seriesId:season"
     private fun episodeMemoryKey() = "episodes:$providerId:$seriesId:episode"
