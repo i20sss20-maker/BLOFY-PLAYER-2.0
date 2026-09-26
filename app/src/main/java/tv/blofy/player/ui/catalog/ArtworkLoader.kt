@@ -22,12 +22,13 @@ object ArtworkLoader {
     private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
     private const val MAX_DISK_BYTES = 260L * 1024L * 1024L
     private const val DISK_TRIM_INTERVAL_MS = 30_000L
+    private const val MAX_PREFETCH_PENDING = 48
     private val main = Handler(Looper.getMainLooper())
     private val pool = Executors.newFixedThreadPool(8)
     private val placeholder = ColorDrawable(Color.rgb(24, 16, 34))
     private val lastDiskTrimAt = AtomicLong(0L)
     private val fetchLocks = Array(64) { Any() }
-    private val queuedPrefetch = ConcurrentHashMap.newKeySet<String>()
+    private val queuedPrefetch = ConcurrentHashMap<String, Boolean>()
     private val client = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(9, TimeUnit.SECONDS)
@@ -73,7 +74,8 @@ object ArtworkLoader {
         val app = context.applicationContext
         urls.mapNotNull(::normalizeUrl).distinct().take(24).forEach { url ->
             if (cache.get(url)?.isRecycled == false) return@forEach
-            if (!queuedPrefetch.add(url)) return@forEach
+            if (queuedPrefetch.size >= MAX_PREFETCH_PENDING) return@forEach
+            if (queuedPrefetch.putIfAbsent(url, true) != null) return@forEach
             pool.execute {
                 try {
                     cachedOrFetch(app.cacheDir, url)
