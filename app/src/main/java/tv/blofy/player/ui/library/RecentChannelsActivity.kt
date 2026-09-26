@@ -93,7 +93,7 @@ class RecentChannelsActivity : AppCompatActivity() {
                 view.animate()
                     .scaleX(if (focused) 1.018f else 1f)
                     .scaleY(if (focused) 1.018f else 1f)
-                    .translationZ(if (focused) 10f else 0f)
+                    .translationZ(if (focused) dp(10).toFloat() else 0f)
                     .setDuration(90)
                     .start()
             }
