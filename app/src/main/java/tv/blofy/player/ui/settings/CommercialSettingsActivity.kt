@@ -11,6 +11,7 @@ import android.widget.LinearLayout
 import android.widget.GridLayout
 import android.widget.TextView
 import android.widget.ScrollView
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
