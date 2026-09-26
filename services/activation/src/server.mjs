@@ -286,6 +286,7 @@ async function activationCheck(req, res) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`blofy-device:${deviceId.toUpperCase()}`]);
     let result = await client.query('SELECT * FROM devices WHERE device_id = $1 FOR UPDATE', [deviceId]);
     let row = result.rows[0];
 
@@ -318,6 +319,132 @@ async function activationCheck(req, res) {
       expiresAt,
       serverTime: Date.now(),
       message: status === 'trial' ? 'trial_active' : undefined
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+
+async function migrateDeviceIdentity(req, res) {
+  const body = await readJson(req);
+  const deviceId = String(body.deviceId || '').trim();
+  const activationCode = String(body.activationCode || '').trim();
+  const targetDeviceId = String(body.targetDeviceId || '').trim();
+  const targetActivationCode = String(body.targetActivationCode || '').trim();
+
+  consumeDeviceAuthAttempt(req, deviceId);
+  if (!validIdentity(deviceId, activationCode) || !validIdentity(targetDeviceId, targetActivationCode)) {
+    return json(res, 400, { migrated: false, alreadyStable: false, error: 'invalid_device_identity' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Register/check and migration must serialize on both identities so an uninstall/reinstall
+    // cannot race a one-time upgrade and accidentally create a second server-side device.
+    for (const id of [deviceId, targetDeviceId].map((value) => value.toUpperCase()).sort()) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`blofy-device:${id}`]);
+    }
+
+    if (deviceId.toUpperCase() === targetDeviceId.toUpperCase()) {
+      const same = await client.query('SELECT * FROM devices WHERE device_id=$1 FOR UPDATE', [deviceId]);
+      const row = same.rows[0];
+      if (!row || !await verifyDeviceCredential(client, row, activationCode)) {
+        await client.query('COMMIT');
+        return json(res, 403, { migrated: false, alreadyStable: false, error: 'unauthorized_device' });
+      }
+      await client.query('COMMIT');
+      return json(res, 200, { migrated: false, alreadyStable: true, deviceId: row.device_id });
+    }
+
+    const locked = await client.query(
+      'SELECT * FROM devices WHERE device_id = ANY($1::text[]) ORDER BY device_id FOR UPDATE',
+      [[deviceId, targetDeviceId]]
+    );
+    const source = locked.rows.find((row) => row.device_id === deviceId);
+    const target = locked.rows.find((row) => row.device_id === targetDeviceId);
+
+    // Lost-response retry: the source row has already been removed and the target is live.
+    if (!source) {
+      if (target && await verifyDeviceCredential(client, target, targetActivationCode)) {
+        await client.query('COMMIT');
+        return json(res, 200, { migrated: false, alreadyStable: true, deviceId: target.device_id });
+      }
+      await client.query('COMMIT');
+      return json(res, 403, { migrated: false, alreadyStable: false, error: 'unauthorized_device' });
+    }
+
+    if (!await verifyDeviceCredential(client, source, activationCode)) {
+      await client.query('COMMIT');
+      return json(res, 403, { migrated: false, alreadyStable: false, error: 'unauthorized_device' });
+    }
+
+    // A pre-existing target can belong to a separate installation. Never merge two populated
+    // device records automatically; keep the old working identity instead of risking data loss.
+    if (target) {
+      await client.query('COMMIT');
+      return json(res, 409, { migrated: false, alreadyStable: false, error: 'target_identity_exists' });
+    }
+
+    await client.query(
+      `INSERT INTO devices(
+         device_id,activation_code,status,trial_started_at,expires_at,created_at,updated_at,
+         last_seen_at,last_app_version,last_platform,auth_failed_attempts,last_auth_failure_at,
+         auth_locked_until,previous_activation_code_proof,activation_rotated_at
+       )
+       VALUES($1,$2,$3,$4,$5,$6,NOW(),$7,$8,$9,0,NULL,NULL,NULL,NULL)`,
+      [
+        targetDeviceId,
+        activationCredentials.proof(targetDeviceId, targetActivationCode),
+        source.status,
+        source.trial_started_at,
+        source.expires_at,
+        source.created_at,
+        source.last_seen_at,
+        source.last_app_version,
+        source.last_platform
+      ]
+    );
+
+    // Transfer every device-owned record before removing the old parent row. The target row is
+    // intentionally new, so the existing child primary keys and one-active-playlist invariant
+    // remain valid without destructive merges.
+    const transfers = [
+      ['device_customers', 'device_id'],
+      ['playback_diagnostics', 'device_id'],
+      ['device_playlists', 'device_id'],
+      ['profile_cloud_snapshots', 'device_id'],
+      ['cloud_pair_codes', 'source_device_id'],
+      ['subscription_orders', 'device_id'],
+      ['device_subscriptions', 'device_id'],
+      ['coupon_redemptions', 'device_id'],
+      ['device_audit', 'device_id'],
+      ['support_tickets', 'device_id']
+    ];
+    for (const [table, column] of transfers) {
+      await client.query(
+        `UPDATE ${table} SET ${column}=$2 WHERE ${column}=$1`,
+        [deviceId, targetDeviceId]
+      );
+    }
+
+    await client.query('DELETE FROM devices WHERE device_id=$1', [deviceId]);
+    await client.query(
+      `INSERT INTO device_audit(device_id,actor,action,details)
+       VALUES($1,'device','identity_migrated',jsonb_build_object('previousDeviceId',$2))`,
+      [targetDeviceId, deviceId]
+    );
+    await client.query('COMMIT');
+
+    return json(res, 200, {
+      migrated: true,
+      alreadyStable: false,
+      deviceId: targetDeviceId
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
@@ -618,6 +745,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
+    if (req.method === 'POST' && requestUrl.pathname === '/api/v1/device/identity/migrate') return await migrateDeviceIdentity(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/rotate') return await activationRotate(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/provider-profile') return await providerProfile(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/diagnostics/playback') return await playbackDiagnostic(req, res);
