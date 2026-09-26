@@ -1,234 +1,301 @@
 import http from 'node:http';
 
-const PORTAL_PATHS = new Set(['/', '/portal']);
+const PORTAL_PATHS = new Set(['/', '/portal', '/connect']);
+const WHATSAPP_NUMBER = String(process.env.BLOFY_RENEWAL_WHATSAPP || '').replace(/\D/g, '');
 
-export function injectSubscriberPortalUi(html) {
+export function injectSubscriberPortalUi(html, { allowRenewal = true } = {}) {
   const source = String(html || '');
-  if (source.includes('data-page="home"')) return source;
-  if (!source.includes('</body>') || source.includes('data-blofy-subscriber-ui="1"')) return source;
+  if (!source.includes('</body>') || source.includes('data-blofy-subscriber-ui="5"')) return source;
 
+  const whatsappNumber = JSON.stringify(WHATSAPP_NUMBER);
+  const renewalStyles = String.raw`  #blofyRenewBtn{min-height:48px;padding:0 18px;border:1px solid rgba(82,223,154,.30);border-radius:15px;background:rgba(82,223,154,.10);color:#9ff1cb;font-weight:800;cursor:pointer}
+  #blofyRenewBtn:hover{background:rgba(82,223,154,.16)}
+  .blofy-renew-modal{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.72);backdrop-filter:blur(8px)}
+  .blofy-renew-modal.hidden{display:none!important}
+  .blofy-renew-card{width:min(470px,100%);padding:24px;border:1px solid var(--line-accent,rgba(164,97,255,.34));border-radius:24px;background:linear-gradient(155deg,rgba(27,22,42,.98),rgba(12,10,19,.98));box-shadow:0 30px 90px rgba(0,0,0,.55)}
+  .blofy-renew-card h3{margin:0 0 8px;font-size:24px}.blofy-renew-card p{margin:0 0 18px;color:var(--muted,#aaa4b7);font-size:13px;line-height:1.7}
+  .blofy-renew-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .blofy-renew-option{min-height:62px;border:1px solid var(--line,rgba(184,140,255,.19));border-radius:14px;background:#100d18;color:#fff;font-weight:800;cursor:pointer;display:grid;place-items:center;gap:3px}
+  .blofy-renew-option:hover{border-color:var(--accent,#8b37ff);background:#171122}.blofy-renew-option small{color:#9ff1cb;font-size:12px;font-weight:900}
+  .blofy-renew-close{width:100%;min-height:46px;margin-top:12px;border:1px solid var(--line,rgba(184,140,255,.19));border-radius:13px;background:transparent;color:#c8c1cf;font-weight:800;cursor:pointer}
+  @media(max-width:640px){.blofy-renew-options{grid-template-columns:1fr}.dashboard-head .actions{gap:8px}#blofyRenewBtn{flex:1}}`;
+  const renewalScript = String.raw`
+  var whatsappNumber = ${whatsappNumber};
+  function installRenewalUi() {
+    var actions = document.querySelector('.dashboard-head .actions');
+    if (!actions || qs('blofyRenewBtn')) return;
+    var button = document.createElement('button');
+    button.id = 'blofyRenewBtn'; button.type = 'button'; button.textContent = '↻ تجديد الاشتراك';
+    actions.insertBefore(button, actions.firstChild);
+    var modal = document.createElement('div');
+    modal.id = 'blofyRenewModal'; modal.className = 'blofy-renew-modal hidden';
+    modal.innerHTML = '<div class="blofy-renew-card" role="dialog" aria-modal="true"><h3>تجديد BLOFY PLAYER</h3><p>اختر مدة التجديد وسيتم فتح واتساب برسالة جاهزة تحتوي على رقم جهازك والمدة والسعر.</p><div class="blofy-renew-options"><button class="blofy-renew-option" data-plan="3 شهور" data-price="10 ريال"><span>3 شهور</span><small>10 ريال</small></button><button class="blofy-renew-option" data-plan="6 شهور" data-price="18 ريال"><span>6 شهور</span><small>18 ريال</small></button><button class="blofy-renew-option" data-plan="سنة" data-price="25 ريال"><span>سنة</span><small>25 ريال</small></button><button class="blofy-renew-option" data-plan="مدى الحياة" data-price="40 ريال"><span>مدى الحياة</span><small>40 ريال</small></button></div><button class="blofy-renew-close" type="button">إلغاء</button></div>';
+    document.body.appendChild(modal);
+    button.onclick = function () { modal.classList.remove('hidden'); };
+    modal.querySelector('.blofy-renew-close').onclick = function () { modal.classList.add('hidden'); };
+    modal.addEventListener('click', function (event) { if (event.target === modal) modal.classList.add('hidden'); });
+    modal.querySelectorAll('[data-plan]').forEach(function (planButton) {
+      planButton.addEventListener('click', function () {
+        var state = deviceAuth();
+        var deviceId = state.deviceId || String(qs('deviceLabel') && qs('deviceLabel').textContent || '').trim() || 'غير معروف';
+        var plan = planButton.getAttribute('data-plan');
+        var price = planButton.getAttribute('data-price');
+        if (!whatsappNumber) { alert('رقم واتساب التجديد غير مضاف بعد.'); return; }
+        var message = 'السلام عليكم، أحتاج تجديد اشتراك BLOFY PLAYER.\n\nرقم جهازي: ' + deviceId + '\nمدة التجديد المطلوبة: ' + plan + '\nالسعر: ' + price + '\n\nأرجو تأكيد التجديد.';
+        window.open('https://wa.me/' + whatsappNumber + '?text=' + encodeURIComponent(message), '_blank', 'noopener');
+      });
+    });
+  }
+`;
   const injection = String.raw`
-<style data-blofy-subscriber-ui="1">
-  .editor-card{border-radius:22px!important;border-color:rgba(177,108,255,.20)!important;box-shadow:0 26px 70px rgba(0,0,0,.34)!important;background:linear-gradient(155deg,rgba(24,19,36,.96),rgba(10,8,16,.97))!important}
-  .editor-card .form-grid{gap:14px 16px!important}
-  .editor-card .field{margin-top:10px!important}
-  .editor-card .field label{margin-bottom:7px!important;font-size:12.5px!important;color:#d8d2df!important}
-  .editor-card input,.editor-card select{height:50px!important;border-radius:13px!important;border-color:rgba(184,140,255,.16)!important;background:#0b0911!important;box-shadow:none!important}
-  .editor-card input:focus,.editor-card select:focus{border-color:#9a4fff!important;box-shadow:0 0 0 3px rgba(139,55,255,.12)!important;background:#0e0b16!important}
-  #blofySubscriberHint{grid-column:1/-1!important;border-radius:12px!important;margin-top:2px!important;padding:10px 12px!important;background:rgba(139,55,255,.075)!important;border-color:rgba(177,108,255,.24)!important}
-  #saveBtn{border-radius:14px!important;min-height:52px!important;box-shadow:0 12px 28px rgba(111,35,229,.24)!important}
-  #cancelBtn{border-radius:13px!important;min-height:46px!important;background:rgba(255,255,255,.025)!important;border:1px solid rgba(184,140,255,.14)!important;color:#c8c1cf!important}
-  #editorStatus{min-height:18px!important;margin-top:8px!important}
-  @media(max-width:640px){.editor-card{border-radius:19px!important}.editor-card .form-grid{gap:10px!important}.editor-card .field{margin-top:7px!important}.editor-card input,.editor-card select{height:48px!important}#saveBtn{margin-top:16px!important}}
+<style data-blofy-subscriber-ui="5">
+  #blofySubscriberHint{grid-column:1/-1!important;border-radius:13px!important;margin-top:2px!important;padding:11px 13px!important;background:rgba(139,55,255,.09)!important;border:1px solid var(--line-accent,rgba(164,97,255,.34))!important;color:#d9c4ff!important;line-height:1.65!important}
+${allowRenewal ? renewalStyles : ''}
 </style>
 <script>
 (function () {
-  var rememberedDeviceId = '';
-  var rememberedActivationCode = '';
+  var editingSubscriberId = null;
+  var editorGeneration = 0;
 
   function qs(id) { return document.getElementById(id); }
   function fieldWrapper(input) { return input && input.closest ? input.closest('.field') : null; }
-  function setHidden(node, hidden) { if (node) node.style.display = hidden ? 'none' : ''; }
+  function setHidden(node, hidden) {
+    if (!node) return;
+    node.classList.toggle('hidden', hidden);
+    node.style.display = hidden ? 'none' : '';
+  }
   function status(message, bad) {
     var node = qs('editorStatus');
     if (!node) return;
     node.textContent = message || '';
     node.classList.toggle('bad', !!bad);
+    node.classList.toggle('good', !bad && !!message);
   }
-  function rememberDeviceAuth() {
-    var device = qs('deviceId');
-    var code = qs('activationCode');
-    var deviceId = device && device.value ? device.value.trim() : '';
-    var activationCode = code && code.value ? code.value.trim() : '';
-    if (deviceId) rememberedDeviceId = deviceId;
-    if (activationCode) rememberedActivationCode = activationCode;
+  function deviceAuth() {
+    var state = typeof auth !== 'undefined' && auth;
+    return {
+      deviceId: String(state && state.deviceId || '').trim(),
+      activationCode: String(state && state.activationCode || '').trim()
+    };
   }
-  function resolvedDeviceAuth() {
-    rememberDeviceAuth();
-    return { deviceId: rememberedDeviceId, activationCode: rememberedActivationCode };
-  }
-  function dispatchValue(node, value) {
-    if (!node) return;
-    node.value = value == null ? '' : String(value);
-    node.dispatchEvent(new Event('input', { bubbles: true }));
-    node.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-  function installAuthCapture() {
-    ['deviceId', 'activationCode'].forEach(function (id) {
-      var node = qs(id);
-      if (!node || node.dataset.blofyAuthCapture) return;
-      node.dataset.blofyAuthCapture = '1';
-      node.addEventListener('input', rememberDeviceAuth, true);
-      node.addEventListener('change', rememberDeviceAuth, true);
-    });
-    rememberDeviceAuth();
-  }
-  /** A saved subscriber list stores an opaque session token, never the typed credentials. */
   function isSubscriberPlaylist(item) {
     if (!item || !item.baseUrl) return false;
     try { return new URL(item.baseUrl).pathname.replace(/\/+$/, '') === '/api/v1/subscribers/xtream'; }
     catch (_) { return false; }
   }
-
+  function installOptionalName() {
+    var input = qs('name');
+    if (!input || input.dataset.blofyOptionalName === '1') return;
+    input.dataset.blofyOptionalName = '1';
+    input.required = false;
+    var labels = {
+      ar: 'اسم القائمة (اختياري)', en: 'Playlist name (optional)', fr: 'Nom de la playlist (facultatif)',
+      es: 'Nombre de la lista (opcional)', pt: 'Nome da playlist (opcional)', de: 'Playlist-Name (optional)',
+      it: 'Nome della playlist (facoltativo)', tr: 'Oynatma listesi adı (isteğe bağlı)', nl: 'Naam van afspeellijst (optioneel)',
+      ru: 'Название плейлиста (необязательно)', fa: 'نام فهرست (اختیاری)', ur: 'پلے لسٹ کا نام (اختیاری)',
+      hi: 'प्लेलिस्ट का नाम (वैकल्पिक)', id: 'Nama daftar putar (opsional)', zh: '播放列表名称（可选）'
+    };
+    if (typeof translations !== 'undefined') Object.keys(labels).forEach(function (code) { if (translations[code]) translations[code].playlistNameLabel = labels[code]; });
+    var label = input.labels && input.labels[0];
+    if (label) label.textContent = typeof t === 'function' ? t('playlistNameLabel') : labels.ar;
+  }
+  function configureProviderOptions() {
+    var select = qs('providerType');
+    if (!select) return;
+    Array.from(select.options).forEach(function (option) { if (option.value === 'm3u') option.remove(); });
+    var xtream = select.querySelector('option[value="xtream"]');
+    if (xtream) xtream.textContent = 'Xtream Codes';
+    if (!select.querySelector('option[value="blofy"]')) {
+      var option = document.createElement('option');
+      option.value = 'blofy';
+      option.textContent = 'مشتركين BLOFY';
+      select.insertBefore(option, select.firstChild);
+    }
+    if (!qs('blofySubscriberHint')) {
+      var hint = document.createElement('div');
+      hint.id = 'blofySubscriberHint';
+      hint.className = 'full';
+      hint.style.display = 'none';
+      hint.textContent = 'أدخل اسم المستخدم وكلمة المرور فقط. عنوان السيرفر محفوظ داخل BLOFY.';
+      var grid = select.closest('.form-grid');
+      if (grid) grid.appendChild(hint);
+    }
+  }
   function applyMode() {
+    configureProviderOptions();
     var select = qs('providerType');
     if (!select) return;
     var blofy = select.value === 'blofy';
     var base = qs('baseUrl');
-    var name = qs('name');
     var user = qs('username');
     var pass = qs('password');
     var hint = qs('blofySubscriberHint');
     setHidden(fieldWrapper(base), blofy);
+    setHidden(fieldWrapper(user), false);
+    setHidden(fieldWrapper(pass), false);
     if (hint) hint.style.display = blofy ? 'block' : 'none';
-    if (!blofy) {
-      if (user) user.required = false;
-      if (pass) pass.required = false;
-      return;
+    if (blofy) {
+      if (base) { base.value = ''; base.setCustomValidity(''); }
+      if (user) { user.placeholder = 'اسم المستخدم'; user.required = true; }
+      if (pass) { pass.placeholder = 'كلمة المرور'; pass.required = true; }
+      status('أدخل اسم المستخدم وكلمة المرور فقط ثم اضغط حفظ.', false);
+    } else {
+      editingSubscriberId = null;
+      if (user) user.required = true;
+      if (pass) pass.required = true;
     }
-    // The page's own typeUi() hides these for anything that is not "xtream"; a subscriber
-    // list needs exactly these two fields, so undo both the class and the inline style.
-    [user, pass].forEach(function (input) {
-      var wrapper = fieldWrapper(input);
-      if (!wrapper) return;
-      setHidden(wrapper, false);
-      wrapper.classList.remove('hidden');
-    });
-    if (name && !name.value.trim()) name.value = 'مشتركين BLOFY';
-    if (base) base.value = '';
-    if (user) { user.placeholder = 'اسم المستخدم'; user.required = true; }
-    if (pass) { pass.placeholder = 'كلمة المرور'; pass.required = true; }
   }
-
-  function addSubscriberOption() {
-    var select = qs('providerType');
-    if (!select || select.querySelector('option[value="blofy"]')) return;
-    var option = document.createElement('option');
-    option.value = 'blofy';
-    option.textContent = 'مشتركين BLOFY';
-    option.dataset.blofySubscriber = '1';
-    select.insertBefore(option, select.firstChild);
-
-    var badge = document.createElement('div');
-    badge.id = 'blofySubscriberHint';
-    badge.style.cssText = 'display:none;margin-top:12px;padding:12px 14px;border:1px solid rgba(177,108,255,.35);border-radius:14px;background:rgba(139,55,255,.10);color:#d9c4ff;font-size:13px;line-height:1.65';
-    badge.textContent = 'أدخل اسم المستخدم وكلمة المرور فقط. عنوان السيرفر محفوظ داخل BLOFY.';
-    var grid = select.closest('.form-grid');
-    if (grid) grid.appendChild(badge);
-
-    select.addEventListener('change', function () { requestAnimationFrame(applyMode); });
-    applyMode();
-  }
-
-  /** The page rebuilds the form through these globals, so the subscriber mode has to
-   *  travel with them instead of racing them from a change listener. */
   function installFormOverrides() {
-    if (window.blofySubscriberOverrides) return;
-    var originalTypeUi = window.typeUi;
-    var originalEdit = window.edit;
-    if (typeof originalTypeUi !== 'function' || typeof originalEdit !== 'function') return;
-    window.blofySubscriberOverrides = true;
+    if (window.blofySubscriberOverridesV5) return;
+    var originalTypeUi = typeof typeUi === 'function' ? typeUi : null;
+    var originalEdit = typeof edit === 'function' ? edit : null;
+    var originalClearEditor = typeof clearEditor === 'function' ? clearEditor : null;
+    var originalOpenEditor = typeof openEditor === 'function' ? openEditor : null;
+    if (!originalTypeUi || !originalEdit) return;
+    window.blofySubscriberOverridesV5 = true;
 
-    window.typeUi = function () {
-      var node = qs('providerType');
-      // The original clears username/password whenever the type is not "xtream",
-      // which would wipe what the subscriber was in the middle of typing.
-      if (!node || node.value !== 'blofy') originalTypeUi.apply(this, arguments);
+    typeUi = function () {
+      editorGeneration++;
+      var select = qs('providerType');
+      if (!select || select.value === 'xtream') originalTypeUi.apply(this, arguments);
       applyMode();
     };
-    // The select captured the original function by reference when the page wired it up,
-    // so the override only reaches it by re-pointing the handler.
     var select = qs('providerType');
-    if (select) select.onchange = window.typeUi;
+    if (select) select.onchange = typeUi;
 
-    window.edit = function (item) {
-      originalEdit.apply(this, arguments);
-      if (!isSubscriberPlaylist(item)) return;
-      var select = qs('providerType');
-      if (select) select.value = 'blofy';
-      // What is stored is a session token, not the subscriber's own credentials:
-      // showing it would print an unreadable blob into the username box.
-      dispatchValue(qs('username'), '');
-      dispatchValue(qs('password'), '');
+    if (originalClearEditor) clearEditor = function () {
+      editorGeneration++;
+      editingSubscriberId = null;
+      originalClearEditor.apply(this, arguments);
+      configureProviderOptions();
+      if (qs('providerType')) qs('providerType').value = 'xtream';
       applyMode();
-      status('اكتب اسم المستخدم وكلمة المرور من جديد لتحديث الاشتراك.', false);
+    };
+    if (originalOpenEditor) {
+      openEditor = function () {
+        editorGeneration++;
+        editingSubscriberId = null;
+        originalOpenEditor.apply(this, arguments);
+        configureProviderOptions();
+        applyMode();
+      };
+      if (qs('newBtn')) qs('newBtn').onclick = openEditor;
+    }
+    edit = function (item) {
+      editorGeneration++;
+      originalEdit.apply(this, arguments);
+      configureProviderOptions();
+      if (!isSubscriberPlaylist(item)) { editingSubscriberId = null; applyMode(); return; }
+      editingSubscriberId = item.id;
+      if (qs('providerType')) qs('providerType').value = 'blofy';
+      if (qs('baseUrl')) qs('baseUrl').value = '';
+      if (qs('username')) qs('username').value = '';
+      if (qs('password')) qs('password').value = '';
+      applyMode();
+      status('اكتب اسم المستخدم وكلمة المرور من جديد لتحديث اشتراك BLOFY.', false);
     };
   }
-
-  async function createSubscriberSession() {
-    var deviceAuth = resolvedDeviceAuth();
-    var deviceId = deviceAuth.deviceId;
-    var activationCode = deviceAuth.activationCode;
-    var username = (qs('username') && qs('username').value || '').trim();
-    var password = (qs('password') && qs('password').value || '');
+  async function createSubscriberSession(state) {
+    var username = String(qs('username') && qs('username').value || '').trim();
+    var password = String(qs('password') && qs('password').value || '');
     if (!username || !password) throw new Error('أدخل اسم المستخدم وكلمة المرور');
-    if (!deviceId || !activationCode) throw new Error('بيانات الجهاز غير مكتملة. ارجع لصفحة الربط ثم ادخل مرة أخرى.');
-
+    if (!state.deviceId || !state.activationCode) throw new Error('بيانات الجهاز غير مكتملة. أعد الدخول إلى البوابة.');
     var response = await fetch('/api/v1/subscribers/session', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ deviceId: deviceId, activationCode: activationCode, username: username, password: password })
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ deviceId: state.deviceId, activationCode: state.activationCode, username: username, password: password })
     });
     var payload = {};
     try { payload = await response.json(); } catch (_) {}
     if (!response.ok) {
       var code = payload && payload.error;
-      if (code === 'invalid_subscriber_credentials') throw new Error('أدخل اسم المستخدم وكلمة المرور');
       if (code === 'subscriber_login_failed') throw new Error('اسم المستخدم أو كلمة المرور غير صحيحة');
       if (code === 'unauthorized_device') throw new Error('الجهاز غير مفعل أو بيانات الربط غير صحيحة');
-      if (code === 'subscriber_service_unavailable') throw new Error('خدمة مشتركين BLOFY تحتاج تفعيل إعدادات السيرفر');
+      if (code === 'subscriber_service_unavailable') throw new Error('خدمة مشتركين BLOFY غير متاحة حاليًا');
       if (code === 'subscriber_upstream_unavailable') throw new Error('سيرفر المشتركين لا يستجيب حاليًا');
       throw new Error('تعذر تسجيل الدخول إلى مشتركين BLOFY');
     }
-    if (!payload || !payload.providerId || !payload.baseUrl || !payload.username || !payload.password) {
-      throw new Error('تعذر تجهيز بيانات مشترك BLOFY. حاول مرة أخرى.');
-    }
+    if (!payload.baseUrl || !payload.username || !payload.password) throw new Error('تعذر تجهيز بيانات مشترك BLOFY. حاول مرة أخرى.');
     return payload;
   }
-
+  async function saveSubscriber() {
+    var button = qs('saveBtn');
+    if (!button || button.dataset.blofyBusy === '1') return;
+    button.dataset.blofyBusy = '1';
+    button.disabled = true;
+    // Capture the selected device and editor before either asynchronous request.
+    var saved = {
+      auth: deviceAuth(), authReference: typeof auth !== 'undefined' && auth,
+      generation: editorGeneration, id: editingSubscriberId || undefined,
+      name: String(qs('name') && qs('name').value || '').trim(),
+      active: !qs('active') || qs('active').checked
+    };
+    function sameDevice() {
+      var current = deviceAuth();
+      return saved.authReference === (typeof auth !== 'undefined' && auth) &&
+        saved.auth.deviceId === current.deviceId && saved.auth.activationCode === current.activationCode;
+    }
+    function stillCurrent() { return sameDevice() && saved.generation === editorGeneration; }
+    status('جاري التحقق من اشتراك BLOFY…', false);
+    try {
+      var session = await createSubscriberSession(saved.auth);
+      if (!stillCurrent()) return;
+      var response = await fetch('/api/v1/portal/playlists', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          deviceId: saved.auth.deviceId, activationCode: saved.auth.activationCode,
+          id: saved.id,
+          name: saved.name || session.providerName || 'مشتركين BLOFY',
+          providerType: 'xtream', baseUrl: session.baseUrl, username: session.username, password: session.password,
+          active: saved.active
+        })
+      });
+      if (!response.ok) throw new Error('تعذر حفظ اشتراك BLOFY. حاول مرة أخرى.');
+      // A completed old write must not close, clear or refresh a newer editor.
+      if (!stillCurrent()) return;
+      status('تم حفظ اشتراك BLOFY بنجاح.', false);
+      editingSubscriberId = null;
+      if (qs('editor')) qs('editor').classList.add('hidden');
+      if (typeof clearEditor === 'function') clearEditor();
+      var refreshGeneration = editorGeneration;
+      if (typeof load === 'function') {
+        try { await load(); }
+        catch (_) {
+          if (sameDevice() && refreshGeneration === editorGeneration) {
+            status('تم الحفظ، لكن تعذر تحديث العرض. حدّث الصفحة لعرض القائمة.', true);
+          }
+        }
+      }
+    } catch (error) {
+      if (stillCurrent()) status(error && error.message ? error.message : 'تعذر الحفظ', true);
+    } finally {
+      button.disabled = false;
+      button.dataset.blofyBusy = '0';
+    }
+  }
   function installSaveInterceptor() {
     var button = qs('saveBtn');
     var select = qs('providerType');
-    if (!button || !select || button.dataset.blofySubscriberInterceptor) return;
-    button.dataset.blofySubscriberInterceptor = '1';
+    if (!button || !select || button.dataset.blofySubscriberInterceptorV5) return;
+    button.dataset.blofySubscriberInterceptorV5 = '1';
     button.addEventListener('click', async function (event) {
       if (select.value !== 'blofy') return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (button.dataset.blofyBusy === '1') return;
-      button.dataset.blofyBusy = '1';
-      button.disabled = true;
-      status('جاري التحقق من اشتراك BLOFY…', false);
-      try {
-        var session = await createSubscriberSession();
-        dispatchValue(qs('name'), session.providerName || 'مشتركين BLOFY');
-        dispatchValue(qs('baseUrl'), session.baseUrl);
-        dispatchValue(qs('username'), session.username);
-        dispatchValue(qs('password'), session.password);
-        select.value = 'xtream';
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        status('تم التحقق. جاري حفظ القائمة على جهازك…', false);
-        button.disabled = false;
-        button.dataset.blofyBusy = '0';
-        button.click();
-      } catch (error) {
-        button.disabled = false;
-        button.dataset.blofyBusy = '0';
-        status(error && error.message ? error.message : 'تعذر تسجيل الدخول', true);
-      }
+      await saveSubscriber();
     }, true);
   }
-
+${allowRenewal ? renewalScript : ''}
   function install() {
-    installAuthCapture();
-    addSubscriberOption();
+    installOptionalName();
+    configureProviderOptions();
     installFormOverrides();
     installSaveInterceptor();
+${allowRenewal ? '    installRenewalUi();' : ''}
+    applyMode();
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
-  var observer = new MutationObserver(function () { install(); });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
 })();
 </script>`;
 
@@ -252,22 +319,41 @@ http.createServer = function patchedPortalCreateServer(listener) {
 
     res.writeHead = function interceptedWriteHead(code, messageOrHeaders, maybeHeaders) {
       statusCode = code;
-      if (typeof messageOrHeaders === 'string') { statusMessage = messageOrHeaders; headers = { ...(maybeHeaders || {}) }; }
-      else headers = { ...(messageOrHeaders || {}) };
+      if (typeof messageOrHeaders === 'string') {
+        statusMessage = messageOrHeaders;
+        headers = { ...(maybeHeaders || {}) };
+      } else {
+        headers = { ...(messageOrHeaders || {}) };
+      }
       wroteHead = true;
       return res;
     };
 
     res.end = function interceptedEnd(chunk, encoding, callback) {
+      if (typeof chunk === 'function') { callback = chunk; chunk = undefined; }
+      if (typeof encoding === 'function') { callback = encoding; encoding = undefined; }
       const body = chunk == null ? '' : Buffer.isBuffer(chunk) ? chunk.toString(encoding || 'utf8') : String(chunk);
-      const modified = injectSubscriberPortalUi(body);
-      if (wroteHead) {
-        for (const key of Object.keys(headers)) if (key.toLowerCase() === 'content-length') delete headers[key];
-        headers['content-length'] = Buffer.byteLength(modified);
-        if (statusMessage) originalWriteHead(statusCode, statusMessage, headers); else originalWriteHead(statusCode, headers);
+      const modified = injectSubscriberPortalUi(body, { allowRenewal: pathname !== '/connect' });
+      // end() may invoke writeHead implicitly. Restore the real method before
+      // flushing so setHeader()+end() cannot emit body bytes without HTTP headers.
+      res.writeHead = originalWriteHead;
+      if (!wroteHead) {
+        statusCode = res.statusCode;
+        statusMessage = res.statusMessage;
       }
+      // This buffered response now has a known UTF-8 length; do not leave stale
+      // lengths or combine Content-Length with Transfer-Encoding.
+      res.removeHeader('content-length');
+      res.removeHeader('transfer-encoding');
+      for (const key of Object.keys(headers)) {
+        if (['content-length', 'transfer-encoding'].includes(key.toLowerCase())) delete headers[key];
+      }
+      headers['content-length'] = Buffer.byteLength(modified);
+      if (statusMessage) originalWriteHead(statusCode, statusMessage, headers);
+      else originalWriteHead(statusCode, headers);
       return originalEnd(modified, 'utf8', callback);
     };
+
     return listener(req, res);
   });
 };

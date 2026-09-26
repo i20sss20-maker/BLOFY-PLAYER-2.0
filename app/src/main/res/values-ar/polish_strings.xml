@@ -1,0 +1,15 @@
+<resources>
+    <string name="ui_search_brand">BLOFY • بحث</string>
+    <string name="player_brand_live">BLOFY • بث مباشر</string>
+    <string name="player_brand_series">BLOFY • مسلسلات</string>
+    <string name="player_brand_cinema">BLOFY • سينما</string>
+    <string name="player_track_auto">تلقائي</string>
+    <string name="player_track_video">فيديو</string>
+    <string name="player_track_audio">صوت</string>
+    <string name="player_track_subtitles">ترجمة</string>
+    <string name="provider_blofy_secure">BLOFY آمن</string>
+    <string name="playlist_default_server">سيرفر BLOFY</string>
+    <string name="home_top10_label">أفضل 10</string>
+    <string name="home_featured_label">BLOFY • مميز</string>
+    <string name="home_spotlight_label">BLOFY • مختارات</string>
+</resources>

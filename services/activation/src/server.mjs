@@ -286,17 +286,61 @@ async function activationCheck(req, res) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`blofy-device:${deviceId.toUpperCase()}`]);
+
     let result = await client.query('SELECT * FROM devices WHERE device_id = $1 FOR UPDATE', [deviceId]);
     let row = result.rows[0];
+    let canonicalDeviceId = deviceId;
+    let recovered = false;
 
     if (!row) {
-      const expiresAt = new Date(Date.now() + TRIAL_DAYS * 86_400_000);
-      result = await client.query(
-        `INSERT INTO devices(device_id, activation_code, status, trial_started_at, expires_at, last_seen_at, last_app_version, last_platform)
-         VALUES($1,$2,'trial',NOW(),$3,NOW(),$4,$5) RETURNING *`,
-        [deviceId, activationCredentials.proof(deviceId, activationCode), expiresAt, appVersion, platform]
+      const aliasResult = await client.query(
+        'SELECT * FROM device_identity_aliases WHERE alias_device_id=$1 FOR UPDATE',
+        [deviceId]
       );
-      row = result.rows[0];
+      const alias = aliasResult.rows[0];
+
+      if (alias) {
+        const aliasCredentialRow = {
+          device_id: alias.alias_device_id,
+          activation_code: alias.alias_activation_code_proof
+        };
+        if (!activationCredentials.matches(aliasCredentialRow, activationCode)) {
+          await client.query('COMMIT');
+          return json(res, 403, { status: 'blocked', serverTime: Date.now(), message: 'unauthorized_device' });
+        }
+
+        canonicalDeviceId = alias.canonical_device_id;
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`blofy-device:${canonicalDeviceId.toUpperCase()}`]);
+        result = await client.query('SELECT * FROM devices WHERE device_id=$1 FOR UPDATE', [canonicalDeviceId]);
+        row = result.rows[0];
+        if (!row) throw new Error('identity_alias_orphaned');
+
+        // A clean reinstall owns the stable alias credential. Rebind the canonical credential
+        // to that code so every existing playlist/subscription remains under the same device ID.
+        const previousProof = row.activation_code;
+        const nextProof = activationCredentials.proof(canonicalDeviceId, activationCode);
+        await client.query(
+          `UPDATE devices
+           SET activation_code=$2,previous_activation_code_proof=$3,activation_rotated_at=NOW(),
+               auth_failed_attempts=0,last_auth_failure_at=NULL,auth_locked_until=NULL,
+               last_seen_at=NOW(),last_app_version=$4,last_platform=$5,updated_at=NOW()
+           WHERE device_id=$1`,
+          [canonicalDeviceId, nextProof, previousProof, appVersion, platform]
+        );
+        row.activation_code = nextProof;
+        row.last_app_version = appVersion;
+        row.last_platform = platform;
+        recovered = true;
+      } else {
+        const expiresAt = new Date(Date.now() + TRIAL_DAYS * 86_400_000);
+        result = await client.query(
+          `INSERT INTO devices(device_id, activation_code, status, trial_started_at, expires_at, last_seen_at, last_app_version, last_platform)
+           VALUES($1,$2,'trial',NOW(),$3,NOW(),$4,$5) RETURNING *`,
+          [deviceId, activationCredentials.proof(deviceId, activationCode), expiresAt, appVersion, platform]
+        );
+        row = result.rows[0];
+      }
     } else if (!await verifyDeviceCredential(client, row, activationCode)) {
       await client.query('COMMIT');
       return json(res, 403, { status: 'blocked', serverTime: Date.now(), message: 'unauthorized_device' });
@@ -304,12 +348,14 @@ async function activationCheck(req, res) {
 
     const status = normalizeStatus(row);
     if (status === 'expired' && row.status !== 'blocked') {
-      await client.query("UPDATE devices SET status='expired', updated_at=NOW() WHERE device_id=$1", [deviceId]);
+      await client.query("UPDATE devices SET status='expired', updated_at=NOW() WHERE device_id=$1", [canonicalDeviceId]);
     }
-    await client.query(
-      'UPDATE devices SET last_seen_at=NOW(), last_app_version=$2, last_platform=$3 WHERE device_id=$1',
-      [deviceId, appVersion, platform]
-    );
+    if (!recovered) {
+      await client.query(
+        'UPDATE devices SET last_seen_at=NOW(), last_app_version=$2, last_platform=$3 WHERE device_id=$1',
+        [canonicalDeviceId, appVersion, platform]
+      );
+    }
     await client.query('COMMIT');
 
     const expiresAt = row.expires_at ? new Date(row.expires_at).getTime() : null;
@@ -317,7 +363,124 @@ async function activationCheck(req, res) {
       status,
       expiresAt,
       serverTime: Date.now(),
-      message: status === 'trial' ? 'trial_active' : undefined
+      canonicalDeviceId: recovered ? canonicalDeviceId : undefined,
+      recovered,
+      message: recovered ? 'device_recovered' : status === 'trial' ? 'trial_active' : undefined
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function migrateDeviceIdentity(req, res) {
+  const body = await readJson(req);
+  const deviceId = String(body.deviceId || '').trim();
+  const activationCode = String(body.activationCode || '').trim();
+  const targetDeviceId = String(body.targetDeviceId || '').trim();
+  const targetActivationCode = String(body.targetActivationCode || '').trim();
+
+  consumeDeviceAuthAttempt(req, deviceId);
+  if (!validIdentity(deviceId, activationCode) || !validIdentity(targetDeviceId, targetActivationCode)) {
+    return json(res, 400, {
+      migrated: false,
+      alreadyStable: false,
+      aliasBound: false,
+      error: 'invalid_device_identity'
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Always lock the stable alias first, then the canonical source. Recovery follows the same
+    // order, preventing an update/reinstall race from creating a duplicate canonical device.
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`blofy-device:${targetDeviceId.toUpperCase()}`]);
+    if (deviceId.toUpperCase() !== targetDeviceId.toUpperCase()) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`blofy-device:${deviceId.toUpperCase()}`]);
+    }
+
+    const sourceResult = await client.query('SELECT * FROM devices WHERE device_id=$1 FOR UPDATE', [deviceId]);
+    const source = sourceResult.rows[0];
+    if (!source || !await verifyDeviceCredential(client, source, activationCode)) {
+      await client.query('COMMIT');
+      return json(res, 403, {
+        migrated: false,
+        alreadyStable: false,
+        aliasBound: false,
+        error: 'unauthorized_device'
+      });
+    }
+
+    if (deviceId.toUpperCase() === targetDeviceId.toUpperCase()) {
+      await client.query('COMMIT');
+      return json(res, 200, {
+        migrated: false,
+        alreadyStable: false,
+        aliasBound: true,
+        deviceId: source.device_id
+      });
+    }
+
+    // A real canonical row at the deterministic target predates this alias claim. Never merge it
+    // automatically; that could combine two customers or destroy independent subscriptions.
+    const targetResult = await client.query('SELECT device_id FROM devices WHERE device_id=$1 FOR UPDATE', [targetDeviceId]);
+    if (targetResult.rows[0]) {
+      await client.query('COMMIT');
+      return json(res, 409, {
+        migrated: false,
+        alreadyStable: false,
+        aliasBound: false,
+        error: 'target_identity_exists'
+      });
+    }
+
+    const existingAlias = await client.query(
+      'SELECT * FROM device_identity_aliases WHERE alias_device_id=$1 FOR UPDATE',
+      [targetDeviceId]
+    );
+    const alias = existingAlias.rows[0];
+    if (alias && alias.canonical_device_id !== deviceId) {
+      await client.query('COMMIT');
+      return json(res, 409, {
+        migrated: false,
+        alreadyStable: false,
+        aliasBound: false,
+        error: 'target_identity_claimed'
+      });
+    }
+
+    const aliasProof = activationCredentials.proof(targetDeviceId, targetActivationCode);
+    if (alias) {
+      await client.query(
+        `UPDATE device_identity_aliases
+         SET alias_activation_code_proof=$2,updated_at=NOW()
+         WHERE alias_device_id=$1`,
+        [targetDeviceId, aliasProof]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO device_identity_aliases(
+           alias_device_id,canonical_device_id,alias_activation_code_proof
+         ) VALUES($1,$2,$3)`,
+        [targetDeviceId, deviceId, aliasProof]
+      );
+      await client.query(
+        `INSERT INTO device_audit(device_id,actor,action,details)
+         VALUES($1,'device','recovery_alias_bound',jsonb_build_object('aliasDeviceId',$2::text))`,
+        [deviceId, targetDeviceId]
+      );
+    }
+
+    await client.query('COMMIT');
+    return json(res, 200, {
+      migrated: false,
+      alreadyStable: false,
+      aliasBound: true,
+      deviceId
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
@@ -618,6 +781,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
+    if (req.method === 'POST' && requestUrl.pathname === '/api/v1/device/identity/migrate') return await migrateDeviceIdentity(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/rotate') return await activationRotate(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/provider-profile') return await providerProfile(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/diagnostics/playback') return await playbackDiagnostic(req, res);

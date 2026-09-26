@@ -174,7 +174,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
                     max = 100
                     this.progress = progress
                     progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
-                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF3B2B4B.toInt())
+                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF302A35.toInt())
                 }, LinearLayout.LayoutParams(-1, dp(6)).apply { bottomMargin = dp(12) })
             }
 

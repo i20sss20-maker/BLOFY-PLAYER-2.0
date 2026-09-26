@@ -104,7 +104,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             textDirection = View.TEXT_DIRECTION_LTR
             setTextColor(Color.WHITE)
-            setHintTextColor(0xFF8E829A.toInt())
+            setHintTextColor(BlofyTvDesign.TextDim)
             setPadding(dp(18), 0, dp(18), 0)
             background = fieldBackground(false)
             isFocusable = true
@@ -178,7 +178,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                 password.requestFocus()
                 return
             }
-            val selectedName = playlistName.text.toString().trim().ifBlank { "BLOFY Playlist" }
+            val selectedName = playlistName.text.toString().trim().ifBlank { getString(R.string.playlist_default_server) }
             val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
             if (endpoint.isBlank()) {
                 status.setText(R.string.subscriber_service_unavailable)
@@ -277,7 +277,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
         panel.addView(TextView(this).apply {
             text = getString(R.string.subscriber_auto_server_settings)
             textSize = 12f
-            setTextColor(0xFF857B91.toInt())
+            setTextColor(BlofyTvDesign.TextDim)
             gravity = Gravity.CENTER
             setPadding(dp(10), dp(12), dp(10), 0)
         })
@@ -288,20 +288,20 @@ class BlofySubscriberActivity : AppCompatActivity() {
 
     private fun panelBackground() = GradientDrawable().apply {
         cornerRadius = dp(26).toFloat()
-        setColor(0xEE151020.toInt())
-        setStroke(dp(1), 0xFF67458E.toInt())
+        setColor(0xEE171419.toInt())
+        setStroke(dp(1), 0xFF5E526B.toInt())
     }
 
     private fun fieldBackground(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = dp(17).toFloat()
-        setColor(0xFF110F19.toInt())
-        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF342C44.toInt())
+        setColor(0xFF111015.toInt())
+        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF3F3845.toInt())
     }
 
     private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = dp(18).toFloat()
-        setColor(if (focused) 0xFF7D45D9.toInt() else 0xFF5F2AB5.toInt())
-        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF8C59D8.toInt())
+        setColor(if (focused) BlofyTvDesign.Purple else BlofyTvDesign.PurpleDeep)
+        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF765F8F.toInt())
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

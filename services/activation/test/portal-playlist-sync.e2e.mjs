@@ -10,6 +10,11 @@ while (rotatedActivationCode === activationCode) {
   rotatedActivationCode = String(crypto.randomInt(100_000, 1_000_000));
 }
 const playlistId = crypto.randomUUID();
+const stableDeviceId = `BLOFY-${suffix.slice(0, 4)}-${suffix.slice(4, 8)}`;
+let stableActivationCode = String(crypto.randomInt(100_000, 1_000_000));
+while (stableActivationCode === rotatedActivationCode) {
+  stableActivationCode = String(crypto.randomInt(100_000, 1_000_000));
+}
 
 async function request(path, { method = 'POST', body, headers = {} } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -88,6 +93,53 @@ assert.equal(saved.json?.id, playlistId);
 assert.equal(saved.json?.active, true);
 assert.ok(Number.isInteger(saved.json?.revision) && saved.json.revision >= 1);
 assert.ok(Number.isFinite(saved.json?.updatedAt));
+
+// Upgrading an existing install binds a deterministic reinstall alias but keeps the
+// original canonical BLOFY device ID and all device-owned data exactly where it is.
+const aliasBound = await request('/api/v1/device/identity/migrate', {
+  body: {
+    deviceId: identity.deviceId,
+    activationCode: identity.activationCode,
+    targetDeviceId: stableDeviceId,
+    targetActivationCode: stableActivationCode
+  }
+});
+assert.equal(aliasBound.response.status, 200);
+assert.equal(aliasBound.json?.migrated, false);
+assert.equal(aliasBound.json?.aliasBound, true);
+assert.equal(aliasBound.json?.deviceId, deviceId);
+
+// A lost response is safe: rebinding the same alias to the same canonical device is idempotent.
+const aliasRetry = await request('/api/v1/device/identity/migrate', {
+  body: {
+    deviceId: identity.deviceId,
+    activationCode: identity.activationCode,
+    targetDeviceId: stableDeviceId,
+    targetActivationCode: stableActivationCode
+  }
+});
+assert.equal(aliasRetry.response.status, 200);
+assert.equal(aliasRetry.json?.aliasBound, true);
+
+// The old installation still works and still owns its playlist after the update.
+const beforeReinstall = await request('/api/v1/portal/playlists/list', { body: identity });
+assert.equal(beforeReinstall.response.status, 200);
+assert.ok(beforeReinstall.json?.items?.some((item) => item.id === playlistId));
+
+// Simulate a clean reinstall on the same Android identity. The stable alias resolves back to the
+// canonical old device and rotates that canonical credential to the recovered six-digit code.
+const recovered = await request('/api/v1/activation/check', {
+  body: {
+    deviceId: stableDeviceId,
+    activationCode: stableActivationCode,
+    appVersion: 'e2e-reinstall',
+    platform: 'ci'
+  }
+});
+assert.equal(recovered.response.status, 200);
+assert.equal(recovered.json?.recovered, true);
+assert.equal(recovered.json?.canonicalDeviceId, deviceId);
+identity = { deviceId, activationCode: stableActivationCode };
 
 // This is the exact endpoint and response shape consumed by PortalPlaylistClient.fetchRemote().
 const sync = await request('/api/v1/portal/playlists/list', { body: identity });

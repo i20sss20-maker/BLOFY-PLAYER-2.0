@@ -793,30 +793,30 @@ class LoginActivity : AppCompatActivity() {
 
     private fun premiumPanelBackground(accent: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (accent) intArrayOf(0xFF3A2252.toInt(), 0xFF21142F.toInt(), 0xFF120D1A.toInt())
-        else intArrayOf(0xFF2B1C3C.toInt(), 0xFF1A1225.toInt(), 0xFF100C17.toInt())
+        if (accent) intArrayOf(0xFF30283A.toInt(), 0xFF201B26.toInt(), 0xFF121015.toInt())
+        else intArrayOf(0xFF26212D.toInt(), 0xFF19161D.toInt(), 0xFF100E13.toInt())
     ).apply {
         cornerRadius = dp(26).toFloat()
-        setStroke(dp(1), if (accent) 0xFF8A5EB3.toInt() else 0xFF5A426D.toInt())
+        setStroke(dp(1), if (accent) 0xFF806A97.toInt() else 0xFF514857.toInt())
     }
 
     private fun premiumFieldBackground(accent: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        if (accent) intArrayOf(0xFF261533.toInt(), 0xFF1A1225.toInt()) else intArrayOf(0xFF1D1529.toInt(), 0xFF15101E.toInt())
+        if (accent) intArrayOf(0xFF251F2B.toInt(), 0xFF19161D.toInt()) else intArrayOf(0xFF1D1921.toInt(), 0xFF141217.toInt())
     ).apply {
         cornerRadius = dp(14).toFloat()
-        setStroke(if (accent) dp(2) else dp(1), if (accent) 0xFF8051B0.toInt() else 0xFF543D68.toInt())
+        setStroke(if (accent) dp(2) else dp(1), if (accent) 0xFF8569A5.toInt() else 0xFF4E4654.toInt())
     }
 
     private fun fieldBackground() = GradientDrawable().apply {
         cornerRadius = dp(14).toFloat()
-        setColor(0xFF1B1428.toInt())
-        setStroke(dp(1), 0xFF503C65.toInt())
+        setColor(0xFF19161D.toInt())
+        setStroke(dp(1), 0xFF4D4553.toInt())
     }
 
-    private fun statusBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF251A33.toInt(), 0xFF191220.toInt())).apply {
+    private fun statusBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF211C27.toInt(), 0xFF17141A.toInt())).apply {
         cornerRadius = dp(14).toFloat()
-        setStroke(dp(1), 0xFF65477C.toInt())
+        setStroke(dp(1), 0xFF5E526B.toInt())
     }
 
     private fun qrBackground() = GradientDrawable().apply {
@@ -826,7 +826,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun qrFrameBackground() = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xFFB987F3.toInt(), 0xFF7041B4.toInt(), 0xFF2B193E.toInt())
+        intArrayOf(0xFFC0A6DF.toInt(), 0xFF8669A8.toInt(), 0xFF3A3045.toInt())
     ).apply {
         cornerRadius = dp(22).toFloat()
         setStroke(dp(1), BlofyTvDesign.FocusStroke)
@@ -842,25 +842,25 @@ class LoginActivity : AppCompatActivity() {
 
     private fun miniCircle() = GradientDrawable().apply {
         shape = GradientDrawable.OVAL
-        setColor(0xFF2C1B3C.toInt())
-        setStroke(dp(1), 0xFF7650A2.toInt())
+        setColor(0xFF29222F.toInt())
+        setStroke(dp(1), 0xFF685878.toInt())
     }
 
-    private fun emptyBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF21172E.toInt(), 0xFF17101F.toInt())).apply {
+    private fun emptyBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF211C27.toInt(), 0xFF171419.toInt())).apply {
         cornerRadius = dp(17).toFloat()
-        setStroke(dp(1), 0xFF503A63.toInt())
+        setStroke(dp(1), 0xFF4C4351.toInt())
     }
 
     private fun playlistCardBackground(active: Boolean, focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
-            focused -> intArrayOf(0xFF7E42C8.toInt(), 0xFF48266E.toInt(), 0xFF2C183F.toInt())
-            active -> intArrayOf(0xFF2E2542.toInt(), 0xFF20192F.toInt())
-            else -> intArrayOf(0xFF241931.toInt(), 0xFF17111F.toInt())
+            focused -> intArrayOf(0xFF775C94.toInt(), 0xFF4A3A58.toInt(), 0xFF2A222F.toInt())
+            active -> intArrayOf(0xFF2C2632.toInt(), 0xFF201C25.toInt())
+            else -> intArrayOf(0xFF241F29.toInt(), 0xFF171419.toInt())
         }
     ).apply {
         cornerRadius = dp(17).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), when { focused -> BlofyTvDesign.FocusStroke; active -> 0xFF715A89.toInt(); else -> 0xFF49375E.toInt() })
+        setStroke(if (focused) dp(2) else dp(1), when { focused -> BlofyTvDesign.FocusStroke; active -> 0xFF675A72.toInt(); else -> 0xFF463F49.toInt() })
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

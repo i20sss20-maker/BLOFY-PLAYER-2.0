@@ -108,7 +108,7 @@ class PlaylistActivity : AppCompatActivity() {
         var busy = false
         suspend fun persist(connectAfter: Boolean) {
             val baseUrl = url.text.toString().trim(); val user = username.text.toString().trim(); val pass = password.text.toString()
-            val playlistName = name.text.toString().trim().ifBlank { "BLOFY Server" }
+            val playlistName = name.text.toString().trim().ifBlank { getString(R.string.playlist_default_server) }
             val validation = PlaylistUrlPolicy.validate(baseUrl)
             if (validation == PlaylistUrlPolicy.Result.EMPTY) { status.setText(R.string.playlist_form_url_required); return }
             if (validation == PlaylistUrlPolicy.Result.INVALID) { status.setText(R.string.playlist_form_url_invalid); return }

@@ -82,7 +82,7 @@ internal class LiveChannelAdapter(
             setPadding(dp(if (compact) 4 else 5), dp(if (compact) 4 else 5), dp(if (compact) 4 else 5), dp(if (compact) 4 else 5))
             background = GradientDrawable().apply {
                 cornerRadius = dp(if (compact) 9 else 10).toFloat()
-                setColor(if (translucent) 0x54211332.toInt() else BlofyTvDesign.BackgroundRaised)
+                setColor(if (translucent) 0x541F1B24.toInt() else BlofyTvDesign.BackgroundRaised)
                 setStroke(dp(1), if (translucent) 0x3FFFFFFF else BlofyTvDesign.Divider)
             }
         }
@@ -225,7 +225,7 @@ internal class LiveChannelAdapter(
         val density = contextForBackground.resources.displayMetrics.density
         return GradientDrawable().apply {
             cornerRadius = 10 * density
-            setColor(if (focused) 0xD35C3582.toInt() else 0x5E211332.toInt())
+            setColor(if (focused) 0xD3544664.toInt() else 0x5E1E1A22.toInt())
             setStroke(
                 ((if (focused) 2 else 1) * density).toInt(),
                 if (focused) BlofyTvDesign.FocusStroke else 0x38FFFFFF

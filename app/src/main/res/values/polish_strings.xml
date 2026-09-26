@@ -1,0 +1,15 @@
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="ui_search_brand">BLOFY SEARCH</string>
+    <string name="player_brand_live">BLOFY • LIVE</string>
+    <string name="player_brand_series">BLOFY • SERIES</string>
+    <string name="player_brand_cinema">BLOFY • CINEMA</string>
+    <string name="player_track_auto">Automatic</string>
+    <string name="player_track_video">Video</string>
+    <string name="player_track_audio">Audio</string>
+    <string name="player_track_subtitles">Subtitles</string>
+    <string name="provider_blofy_secure">BLOFY Secure</string>
+    <string name="playlist_default_server">BLOFY Server</string>
+    <string name="home_top10_label">TOP 10</string>
+    <string name="home_featured_label">BLOFY FEATURED</string>
+    <string name="home_spotlight_label">BLOFY SPOTLIGHT</string>
+</resources>
