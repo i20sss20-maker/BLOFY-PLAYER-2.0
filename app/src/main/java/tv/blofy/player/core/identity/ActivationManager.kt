@@ -1,6 +1,7 @@
 package tv.blofy.player.core.identity
 
 import android.content.Context
+import kotlinx.coroutines.CancellationException
 import tv.blofy.player.data.local.ActivationEntity
 import tv.blofy.player.data.local.BlofyDao
 
@@ -65,7 +66,16 @@ class ActivationManager(
 
     suspend fun refresh(api: ActivationApi, appVersion: String): ActivationCheckResponse {
         var current = ensureIdentity()
-        current = migrateStableIdentityIfNeeded(api, current)
+        current = try {
+            migrateStableIdentityIfNeeded(api, current)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Identity migration is an upgrade aid, never a prerequisite for playback.
+            // If the backend is temporarily older/unavailable, keep the already-authorized
+            // device identity and continue the normal activation check.
+            current
+        }
         // Retry a possibly-committed rotation before checking the old code. The
         // server endpoint is idempotent for this exact old/new pair.
         current = rotatePendingCode(api, current) ?: current
