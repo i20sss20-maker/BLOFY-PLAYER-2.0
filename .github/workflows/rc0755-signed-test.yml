@@ -4,7 +4,7 @@ name: BLOFY rc07.55.5 Production-Signed Test
 
 on:
   push:
-    branches: [dev/rc0755-stable-new-domain]
+    branches: [dev/rc0755-stable-new-domain, qa/rc0755-5-safe-polish-20260926]
     paths:
       - .github/workflows/rc0755-signed-test.yml
       - app/**
