@@ -7,7 +7,8 @@ data class ActivationCheckRequest(
     val deviceId: String,
     val activationCode: String,
     val appVersion: String,
-    val platform: String = "android"
+    val platform: String = "android",
+    val recoveryScope: String? = null
 )
 
 data class ActivationRotateRequest(
@@ -22,7 +23,9 @@ data class ActivationCheckResponse(
     val status: String,
     val expiresAt: Long? = null,
     val serverTime: Long? = null,
-    val message: String? = null
+    val message: String? = null,
+    val canonicalDeviceId: String? = null,
+    val recovered: Boolean = false
 ) {
     enum class State { TRIAL, ACTIVE, EXPIRED, BLOCKED, UNKNOWN }
 
