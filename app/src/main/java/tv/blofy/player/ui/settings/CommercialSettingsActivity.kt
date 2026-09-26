@@ -38,7 +38,7 @@ class CommercialSettingsActivity : AppCompatActivity() {
             textSize = 12f
             letterSpacing = .12f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(0xFFB574FF.toInt())
+            setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.START
         }, LinearLayout.LayoutParams(-1, dp(30)))
         page.addView(TextView(this).apply {
@@ -51,7 +51,7 @@ class CommercialSettingsActivity : AppCompatActivity() {
 
         status = TextView(this).apply {
             textSize = 13f
-            setTextColor(0xFFD9CBE8.toInt())
+            setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setPadding(dp(18), 0, dp(18), 0)
             background = card(false)
