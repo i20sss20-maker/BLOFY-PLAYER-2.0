@@ -561,7 +561,7 @@
     <string name="system_status_android_format">%1$s (SDK %2$d)</string>
     <string name="system_status_device">الجهاز</string>
     <string name="system_status_form_factor">نوع الواجهة</string>
-    <string name="system_status_tv">TV</string>
+    <string name="system_status_tv">تلفزيون</string>
     <string name="system_status_mobile">جوال / تابلت</string>
     <string name="system_status_activation_unknown">غير معروف</string>
     <string name="system_status_activation_active">مفعّل</string>
