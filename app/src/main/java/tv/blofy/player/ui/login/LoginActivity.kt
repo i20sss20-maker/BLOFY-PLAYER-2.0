@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationManager
@@ -81,9 +82,9 @@ class LoginActivity : AppCompatActivity() {
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
         header.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(112), dp(70)))
         val headerText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT; layoutDirection = View.LAYOUT_DIRECTION_RTL }
-        headerText.addView(TextView(this).apply { text = "BLOFY PLAYER"; textSize = 13f; letterSpacing = .12f; setTextColor(0xFFC987FF.toInt()); gravity = Gravity.RIGHT })
+        headerText.addView(TextView(this).apply { text = "BLOFY PLAYER"; textSize = 13f; letterSpacing = .12f; setTextColor(BlofyTvDesign.PurpleBright); gravity = Gravity.RIGHT })
         headerText.addView(TextView(this).apply { text = "جاهز للمشاهدة"; textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT; includeFontPadding = false })
-        headerText.addView(TextView(this).apply { text = "فعّل الجهاز من اليسار، وأدر قوائمك واتصل بها من اليمين"; textSize = 14.5f; setTextColor(0xFFC2B3D0.toInt()); gravity = Gravity.RIGHT })
+        headerText.addView(TextView(this).apply { text = "فعّل الجهاز من اليسار، وأدر قوائمك واتصل بها من اليمين"; textSize = 14.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
         header.addView(headerText, LinearLayout.LayoutParams(0, dp(76), 1f).apply { marginEnd = dp(12) })
         root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(80)))
 
@@ -102,7 +103,7 @@ class LoginActivity : AppCompatActivity() {
             background = panelBackground()
         }
         activation.addView(TextView(this).apply { text = "تفعيل الجهاز"; textSize = 21f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER })
-        activation.addView(TextView(this).apply { text = "امسح QR بالجوال — الربط يتحدث تلقائيًا على هذه الشاشة"; textSize = 12.5f; setTextColor(0xFFB9A9C8.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(10)) })
+        activation.addView(TextView(this).apply { text = "امسح QR بالجوال — الربط يتحدث تلقائيًا على هذه الشاشة"; textSize = 12.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(10)) })
         activation.addView(qrView, LinearLayout.LayoutParams(dp(216), dp(216)))
         activation.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(6) })
         activation.addView(label("رقم الجهاز"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)).apply { topMargin = dp(10) })
@@ -111,7 +112,7 @@ class LoginActivity : AppCompatActivity() {
         activation.addView(label("رمز الربط"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)).apply { topMargin = dp(8) })
         codeView.apply { textSize = 30f; letterSpacing = .16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); background = fieldBackground() }
         activation.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(60)))
-        status.apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(0xFFE9E0EF.toInt()); background = statusBackground(); setPadding(dp(12),0,dp(12),0) }
+        status.apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(BlofyTvDesign.TextSecondary); background = statusBackground(); setPadding(dp(12),0,dp(12),0) }
         activation.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { topMargin = dp(10) })
         refreshCodeButton = actionButton("↻  فحص الآن") { lifecycleScope.launch { refreshIdentityAndProvider() } }
         activation.addView(refreshCodeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(10) })
@@ -345,12 +346,17 @@ class LoginActivity : AppCompatActivity() {
     private fun label(value: String) = TextView(this).apply { text = value; textSize = 12.5f; setTextColor(0xFFAA9AB8.toInt()); gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL }
     private fun title(value: String,size:Float)=TextView(this).apply{text=value;textSize=size;typeface=Typeface.DEFAULT_BOLD;setTextColor(Color.WHITE);gravity=Gravity.CENTER}
     private fun subtitle(value:String)=TextView(this).apply{text=value;textSize=16f;setTextColor(theme.accent);gravity=Gravity.CENTER;setPadding(0,dp(8),0,dp(16))}
-    private fun panelBackground()=GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(0xF0181023.toInt(),0xF40A0710.toInt())).apply{cornerRadius=dp(24).toFloat();setStroke(dp(1),0xFF5F3B7B.toInt())}
-    private fun fieldBackground()=GradientDrawable().apply{cornerRadius=dp(14).toFloat();setColor(0xCC0B0811.toInt());setStroke(dp(1),0xFF392849.toInt())}
-    private fun statusBackground()=GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,intArrayOf(0xC81A1023.toInt(),0xC9110B18.toInt())).apply{cornerRadius=dp(14).toFloat();setStroke(dp(1),0xFF3D2A4B.toInt())}
-    private fun playlistCardBackground(active:Boolean,focused:Boolean)=GradientDrawable(GradientDrawable.Orientation.TL_BR,when{focused->intArrayOf(0xFF7131AF.toInt(),0xFF3B175D.toInt());active->intArrayOf(0xE72C1840.toInt(),0xEE171022.toInt());else->intArrayOf(0xE5161020.toInt(),0xEE0D0912.toInt())}).apply{cornerRadius=dp(15).toFloat();setStroke(if(focused)dp(2) else dp(1),if(focused)0xFFE4C5FF.toInt() else if(active)0xFF8D5DB5.toInt() else 0xFF463354.toInt())}
-    private fun buttonBackground(focused:Boolean)=GradientDrawable().apply{cornerRadius=dp(15).toFloat();setColor(if(focused)0xFF48236B.toInt() else 0xFF17111F.toInt());setStroke(if(focused)dp(2) else dp(1),if(focused)0xFFD7AAFF.toInt() else 0xFF4B365C.toInt())}
-    private fun primaryButtonBackground(focused:Boolean)=GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,intArrayOf(if(focused)0xFF7A32DA.toInt() else 0xFF6030A7.toInt(),if(focused)0xFFC85BC7.toInt() else 0xFF8E3FA4.toInt())).apply{cornerRadius=dp(15).toFloat();setStroke(if(focused)dp(2) else dp(1),if(focused)Color.WHITE else 0xFFC98BE6.toInt())}
+    private fun panelBackground() = BlofyTvDesign.elevatedSurface(dp(24).toFloat(), emphasis = true)
+    private fun fieldBackground() = BlofyTvDesign.inputField(dp(14).toFloat(), false)
+    private fun statusBackground() = BlofyTvDesign.statusPill(dp(14).toFloat(), false)
+    private fun playlistCardBackground(active:Boolean, focused:Boolean) =
+        when {
+            focused -> BlofyTvDesign.glassPanel(dp(15).toFloat(), true)
+            active -> BlofyTvDesign.statusPill(dp(15).toFloat(), true)
+            else -> BlofyTvDesign.surface(dp(15).toFloat(), false)
+        }
+    private fun buttonBackground(focused:Boolean) = BlofyTvDesign.secondaryButton(dp(15).toFloat(), focused)
+    private fun primaryButtonBackground(focused:Boolean) = BlofyTvDesign.primaryButton(dp(15).toFloat(), focused)
     private fun dp(value:Int)=(value*resources.displayMetrics.density).toInt()
 
     companion object {
