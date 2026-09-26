@@ -40,14 +40,29 @@ class PosterCatalogActivity : AppCompatActivity() {
     private var selectedCategoryId: String? = null
     private var categoryRows: List<CategoryEntity> = emptyList()
     private var initialFocusRequested = false
+    private var gridColumns = 5
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty().ifBlank { KIND_MOVIE } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val widthDp = resources.configuration.screenWidthDp
+        gridColumns = when {
+            widthDp >= 1400 -> 7
+            widthDp >= 1150 -> 6
+            widthDp >= 900 -> 5
+            widthDp >= 700 -> 4
+            else -> 3
+        }
+        val outerPadding = if (widthDp < 800) 16 else 28
+        val railWidth = when {
+            widthDp >= 1200 -> 270
+            widthDp >= 900 -> 250
+            else -> 220
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            setPadding(dp(28), dp(22), dp(28), dp(24))
+            setPadding(dp(outerPadding), dp(18), dp(outerPadding), dp(22))
             background = AppCompatResources.getDrawable(this@PosterCatalogActivity, R.drawable.blofy_home_background)
             clipChildren = false; clipToPadding = false
         }
@@ -63,7 +78,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         content.addView(header)
 
         posterGrid = RecyclerView(this).apply {
-            layoutManager = GridLayoutManager(this@PosterCatalogActivity, GRID_COLUMNS)
+            layoutManager = GridLayoutManager(this@PosterCatalogActivity, gridColumns)
             setPadding(dp(4), dp(4), dp(8), dp(22)); clipChildren = false; clipToPadding = false; itemAnimator = null
             setHasFixedSize(true)
             recycledViewPool.setMaxRecycledViews(0, 30)
@@ -84,7 +99,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             clipChildren = false; clipToPadding = false; itemAnimator = null; setHasFixedSize(true)
         }
         rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(rail, LinearLayout.LayoutParams(dp(250), LinearLayout.LayoutParams.MATCH_PARENT))
+        root.addView(rail, LinearLayout.LayoutParams(dp(railWidth), LinearLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
 
         posterAdapter = PosterStreamAdapter(onClick = ::openItem)
@@ -165,7 +180,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         val holder = posterGrid.findContainingViewHolder(focused) ?: return false
         val position = holder.bindingAdapterPosition
         if (position == RecyclerView.NO_POSITION) return false
-        return position % GRID_COLUMNS == GRID_COLUMNS - 1 || position == posterAdapter.itemCount - 1
+        return position % gridColumns == gridColumns - 1 || position == posterAdapter.itemCount - 1
     }
 
     private fun isFocusInside(parent: View): Boolean {
@@ -195,7 +210,6 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_KIND = "kind"; const val KIND_MOVIE = "movie"; const val KIND_SERIES = "series"
-        private const val GRID_COLUMNS = 5
         private const val ALL_CATEGORY_ID = "__all__"; private const val EXTRA_PROVIDER_ID_SHARED = "provider_id"; private const val EXTRA_CONTENT_KEY_SHARED = "content_key"
         private val PURPLE_SOFT = BlofyTvDesign.PurpleSoft
     }
