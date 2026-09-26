@@ -176,7 +176,7 @@ class LibraryActivity : AppCompatActivity() {
         val parent = entry.parentSeries
         val seriesName = parent?.name?.takeIf(String::isNotBlank) ?: "مسلسل"
         val row = TextView(this).apply {
-            text = "EPISODE   •   $seriesName   •   S${episode.season} E${episode.episode}   •   ${episode.title}\n${watchProgressLabel(entry.state)}"
+            text = "حلقة   •   $seriesName   •   الموسم ${episode.season} الحلقة ${episode.episode}   •   ${episode.title}\n${watchProgressLabel(entry.state)}"
             textSize = if (resources.configuration.screenWidthDp < 600) 15.5f else 17f
             setTextColor(BlofyTvDesign.TextPrimary)
             setPadding(dp(if (resources.configuration.screenWidthDp < 600) 16 else 24), dp(10), dp(if (resources.configuration.screenWidthDp < 600) 16 else 24), dp(10))
