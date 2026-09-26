@@ -12,6 +12,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -36,16 +37,34 @@ class MovieDetailsActivity : AppCompatActivity() {
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         val contentKey = intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
         if (providerId.isBlank() || contentKey.isBlank()) { finish(); return }
+        val compact = resources.configuration.screenWidthDp < 700
 
-        val root = FrameLayout(this).apply { background = AppCompatResources.getDrawable(this@MovieDetailsActivity, R.drawable.blofy_home_background) }
         val body = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(58), dp(44), dp(58), dp(44))
+            gravity = if (compact) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.CENTER_VERTICAL
+            setPadding(
+                dp(if (compact) 18 else 58),
+                dp(if (compact) 20 else 44),
+                dp(if (compact) 18 else 58),
+                dp(if (compact) 28 else 44)
+            )
+            background = AppCompatResources.getDrawable(this@MovieDetailsActivity, R.drawable.blofy_home_background)
         }
-        root.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        setContentView(root)
+        if (compact) {
+            val scroll = ScrollView(this).apply {
+                isFillViewport = true
+                isVerticalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+                background = AppCompatResources.getDrawable(this@MovieDetailsActivity, R.drawable.blofy_home_background)
+            }
+            scroll.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+            setContentView(scroll)
+        } else {
+            val root = FrameLayout(this).apply { background = AppCompatResources.getDrawable(this@MovieDetailsActivity, R.drawable.blofy_home_background) }
+            root.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            setContentView(root)
+        }
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -64,9 +83,19 @@ class MovieDetailsActivity : AppCompatActivity() {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setBackgroundColor(BlofyTvDesign.Surface)
             }
-            posterCard.addView(poster, LinearLayout.LayoutParams(dp(285), dp(425)))
+            posterCard.addView(poster, LinearLayout.LayoutParams(dp(if (compact) 190 else 285), dp(if (compact) 285 else 425)))
             ArtworkLoader.load(poster, stream.icon)
-            body.addView(posterCard, LinearLayout.LayoutParams(dp(310), dp(450)).apply { marginStart = dp(34) })
+            body.addView(
+                posterCard,
+                LinearLayout.LayoutParams(dp(if (compact) 210 else 310), dp(if (compact) 305 else 450)).apply {
+                    if (compact) {
+                        gravity = Gravity.CENTER_HORIZONTAL
+                        bottomMargin = dp(20)
+                    } else {
+                        marginStart = dp(34)
+                    }
+                }
+            )
 
             val info = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
@@ -75,7 +104,7 @@ class MovieDetailsActivity : AppCompatActivity() {
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.name
                 BlofyTvDesign.applyHeroTitle(this)
-                textSize = 38f
+                textSize = if (compact) 29f else 38f
                 gravity = Gravity.END
             })
             info.addView(TextView(this@MovieDetailsActivity).apply {
@@ -95,7 +124,7 @@ class MovieDetailsActivity : AppCompatActivity() {
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.plot?.takeIf { it.isNotBlank() } ?: "استمتع بالمشاهدة على BLOFY PLAYER"
                 textSize = 17f
-                maxLines = 6
+                maxLines = if (compact) 10 else 6
                 setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = Gravity.END
                 setLineSpacing(0f, 1.18f)
@@ -127,13 +156,18 @@ class MovieDetailsActivity : AppCompatActivity() {
             }
 
             val row = LinearLayout(this@MovieDetailsActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
+                orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.END
             }
+            fun actionParams(width: Int) = if (compact) {
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { bottomMargin = dp(8) }
+            } else {
+                LinearLayout.LayoutParams(dp(width), dp(74)).apply { marginStart = dp(10) }
+            }
             val play = actionButton(if (resumeMs > 30_000L) "▶ استئناف" else "▶ شاهد الآن") { openPlayer(provider, stream, url, resumeMs) }
-            row.addView(play, LinearLayout.LayoutParams(dp(195), dp(74)).apply { marginStart = dp(10) })
-            if (resumeMs > 30_000L) row.addView(actionButton("من البداية") { openPlayer(provider, stream, url, 0L) }, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
+            row.addView(play, actionParams(195))
+            if (resumeMs > 30_000L) row.addView(actionButton("من البداية") { openPlayer(provider, stream, url, 0L) }, actionParams(175))
 
             favoriteButton = actionButton(if (stream.favorite) "★ المفضلة" else "☆ المفضلة") {
                 lifecycleScope.launch {
@@ -142,14 +176,22 @@ class MovieDetailsActivity : AppCompatActivity() {
                     favoriteButton.text = if (!current.favorite) "★ المفضلة" else "☆ المفضلة"
                 }
             }
-            row.addView(favoriteButton, LinearLayout.LayoutParams(dp(175), dp(74)).apply { marginStart = dp(10) })
+            row.addView(favoriteButton, actionParams(175))
             info.addView(row)
 
             info.addView(actionButton("مشغل خارجي") {
                 if (!ExternalPlayerLauncher.launch(this@MovieDetailsActivity, url, stream.name)) Toast.makeText(this@MovieDetailsActivity, "لا يوجد مشغل خارجي مناسب", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(dp(180), dp(62)).apply { topMargin = dp(14); gravity = Gravity.END })
+            }, if (compact) {
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)).apply { topMargin = dp(6) }
+            } else {
+                LinearLayout.LayoutParams(dp(180), dp(62)).apply { topMargin = dp(14); gravity = Gravity.END }
+            })
 
-            body.addView(info, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+            body.addView(
+                info,
+                if (compact) LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                else LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            )
             play.requestFocus()
         }
     }
