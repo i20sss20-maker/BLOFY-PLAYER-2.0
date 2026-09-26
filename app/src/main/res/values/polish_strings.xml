@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="ui_search_brand">BLOFY SEARCH</string>
     <string name="player_brand_live">BLOFY • LIVE</string>
     <string name="player_brand_series">BLOFY • SERIES</string>
