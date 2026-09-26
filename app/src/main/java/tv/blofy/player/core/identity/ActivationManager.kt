@@ -136,10 +136,20 @@ class ActivationManager(
     private suspend fun rotatePendingCode(api: ActivationApi, current: ActivationEntity): ActivationEntity? {
         val pending = DeviceIdentity.pendingActivationCode(context) ?: return null
         if (pending == current.activationCode) {
-            DeviceIdentity.commitActivationCodeRotation(context, pending)
+            // The server/current in-memory credential is already the pending value. Finishing
+            // SharedPreferences cleanup is useful, but a locked preferences file must never turn
+            // a valid activation into a false [P-AUTH].
+            try {
+                DeviceIdentity.commitActivationCodeRotation(context, pending)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Best-effort local cleanup. A later refresh retries it.
+            }
             return current
         }
-        val response = runCatching {
+
+        val response = try {
             api.rotate(
                 ActivationRotateRequest(
                     deviceId = current.deviceId,
@@ -147,13 +157,51 @@ class ActivationManager(
                     newActivationCode = pending
                 )
             )
-        }.getOrNull() ?: return null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return null
+        }
         if (!response.rotated) return null
 
+        // From this point the BLOFY server has accepted the new credential. Treat that accepted
+        // server state as authoritative for this session even if Room/SharedPreferences is
+        // temporarily locked or corrupt. Both local stores are repaired independently.
         val updated = current.copy(activationCode = pending)
-        dao.upsertActivation(updated)
-        DeviceIdentity.commitActivationCodeRotation(context, pending)
-        return updated
+        return persistAcceptedRotation(
+            updated = updated,
+            persistRoom = { dao.upsertActivation(it) },
+            persistPreferences = { DeviceIdentity.commitActivationCodeRotation(context, pending) }
+        )
+    }
+
+    companion object {
+        /**
+         * After the backend accepts an activation-code rotation, local persistence is recovery
+         * state only. Never surface a local write failure as an authentication failure.
+         */
+        internal suspend fun persistAcceptedRotation(
+            updated: ActivationEntity,
+            persistRoom: suspend (ActivationEntity) -> Unit,
+            persistPreferences: () -> Unit
+        ): ActivationEntity {
+            try {
+                persistRoom(updated)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Room repair is retried by ensureIdentity/reconciliation on the next refresh.
+            }
+
+            try {
+                persistPreferences()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Pending rotation remains recoverable/idempotent on the next refresh.
+            }
+            return updated
+        }
     }
 
     suspend fun applyRemoteStatus(activated: Boolean, expiresAt: Long?): ActivationEntity {
