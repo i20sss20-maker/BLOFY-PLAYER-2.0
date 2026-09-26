@@ -9,7 +9,7 @@ const state = {
   activeTab: 'sources',
   pollTimer: null
 };
-const statusLabels = { 0: 'متوقف', 1: 'يعمل', 2: 'بطيء', 3: 'Beta' };
+const statusLabels = { 0: 'متوقف', 1: 'يعمل', 2: 'بطيء', 3: 'تجريبي' };
 const TAB_NAMES = new Set(['sources', 'xtream', 'catalog']);
 const tabFromHash = () => {
   const name = String(location.hash || '').replace(/^#/, '').trim().toLowerCase();
@@ -210,11 +210,13 @@ function serverCard(item) {
   const title = make('div');
   title.append(make('strong', '', item.name));
   title.append(make('code', 'server-url', item.baseUrl));
-  const status = make('span', `server-status ${xtStatusClass(item.syncing ? 'syncing' : item.status)}`, item.syncing ? 'Syncing' : item.status);
+  const statusKey = item.syncing ? 'syncing' : item.status;
+  const statusText = ({ online:'متصل', syncing:'جاري المزامنة', offline:'غير متصل', error:'خطأ', unknown:'غير معروف' })[statusKey] || statusKey;
+  const status = make('span', `server-status ${xtStatusClass(statusKey)}`, statusText);
   header.append(title, status);
 
   const metrics = make('div', 'server-metrics');
-  [['Live', item.counts?.live], ['Movies', item.counts?.movie], ['Series', item.counts?.series], ['Total', item.counts?.total]].forEach(([label, value]) => {
+  [['البث المباشر', item.counts?.live], ['الأفلام', item.counts?.movie], ['المسلسلات', item.counts?.series], ['الإجمالي', item.counts?.total]].forEach(([label, value]) => {
     const box = make('div');
     box.append(make('span', '', label), make('strong', '', String(Number(value || 0).toLocaleString())));
     metrics.append(box);
@@ -238,9 +240,9 @@ function serverCard(item) {
   const buttons = [
     ['فحص', 'test', 'button'],
     ['مزامنة الكل', 'sync-all', 'button primary'],
-    ['Live', 'sync-live', 'button ghost'],
-    ['Movies', 'sync-movie', 'button ghost'],
-    ['Series', 'sync-series', 'button ghost'],
+    ['البث المباشر', 'sync-live', 'button ghost'],
+    ['الأفلام', 'sync-movie', 'button ghost'],
+    ['المسلسلات', 'sync-series', 'button ghost'],
     ['حفظ', 'save', 'button'],
     ['حذف', 'delete', 'button danger']
   ];
@@ -252,8 +254,8 @@ function serverCard(item) {
   });
 
   const info = make('div', 'server-info');
-  if (item.accountInfo?.maxConnections != null) info.append(make('span', 'badge', `Max ${item.accountInfo.maxConnections}`));
-  if (item.accountInfo?.activeConnections != null) info.append(make('span', 'badge', `Active ${item.accountInfo.activeConnections}`));
+  if (item.accountInfo?.maxConnections != null) info.append(make('span', 'badge', `الحد ${item.accountInfo.maxConnections}`));
+  if (item.accountInfo?.activeConnections != null) info.append(make('span', 'badge', `النشط ${item.accountInfo.activeConnections}`));
   if (item.lastSyncAt) info.append(make('span', 'muted', `آخر مزامنة: ${new Date(item.lastSyncAt).toLocaleString('ar-SA')}`));
   if (item.lastError) info.append(make('span', 'error-text', `آخر خطأ: ${item.lastError}`));
 
@@ -275,7 +277,7 @@ function renderXtream() {
   el('xtSeries').textContent = Number(totals.series || 0).toLocaleString();
   const list = el('xtreamServers');
   list.replaceChildren();
-  if (!state.xtreamServers.length) list.append(make('div', 'empty', 'ما فيه سيرفرات Xtream مضافة للحين.'));
+  if (!state.xtreamServers.length) list.append(make('div', 'empty', 'لا توجد سيرفرات Xtream مضافة حتى الآن.'));
   state.xtreamServers.forEach(item => list.append(serverCard(item)));
   el('xtreamLoading').hidden = true;
   list.hidden = false;
@@ -301,7 +303,7 @@ async function loadXtream(silent = false) {
     renderXtream();
     scheduleXtreamPoll();
   } catch (error) {
-    if (!silent) showMessage(`تعذر تحميل Xtream: ${error.message}`, 'error');
+    if (!silent) showMessage(`تعذر تحميل سيرفرات Xtream: ${error.message}`, 'error');
   }
 }
 
@@ -333,7 +335,7 @@ async function addXtream(event) {
     el('xtreamForm').reset();
     el('xtEnabled').checked = true;
     el('xtPriority').value = '100';
-    showMessage('تمت إضافة السيرفر وفحصه وبدأ استيراد Live + Movies + Series.');
+    showMessage('تمت إضافة السيرفر وفحصه وبدأ استيراد البث المباشر والأفلام والمسلسلات.');
     await loadXtream();
   } catch (error) {
     showMessage(`تعذر إضافة السيرفر: ${error.message}`, 'error');
@@ -446,7 +448,8 @@ function catalogCard(item) {
   if (item.metadata?.year) meta.push(String(item.metadata.year));
   if (item.metadata?.rating) meta.push(`★ ${item.metadata.rating}`);
   if (item.containerExtension) meta.push(item.containerExtension.toUpperCase());
-  title.append(make('small', '', meta.join(' · ') || item.type));
+  const typeLabel = ({ live:'بث مباشر', movie:'فيلم', series:'مسلسل' })[item.type] || item.type;
+  title.append(make('small', '', meta.join(' · ') || typeLabel));
   media.append(poster, title);
   const toggle = make('button', item.enabled ? 'button ghost' : 'button', item.enabled ? 'تعطيل' : 'تفعيل');
   toggle.type = 'button';
