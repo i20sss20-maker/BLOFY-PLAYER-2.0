@@ -24,6 +24,9 @@ ALTER TABLE devices ADD COLUMN IF NOT EXISTS activation_rotated_at TIMESTAMPTZ;
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS data_deleted_at TIMESTAMPTZ;
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS trial_registration_pending BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS recovery_scope_hash TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_recovery_scope_hash ON devices(recovery_scope_hash)
+  WHERE recovery_scope_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_devices_auth_locked_until ON devices(auth_locked_until)
   WHERE auth_locked_until IS NOT NULL;
 
