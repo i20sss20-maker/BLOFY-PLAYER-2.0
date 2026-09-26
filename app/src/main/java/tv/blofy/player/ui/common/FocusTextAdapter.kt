@@ -30,19 +30,22 @@ class FocusTextAdapter<T>(
         val oldItems = items.toList()
         val nextItems = newItems.toList()
         val keyOf = itemKey
-        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldListSize(): Int = oldItems.size
-            override fun getNewListSize(): Int = nextItems.size
+        val useDiff = oldItems.size <= MAX_DIFF_ITEMS && nextItems.size <= MAX_DIFF_ITEMS
+        val diff = if (useDiff) {
+            DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                override fun getOldListSize(): Int = oldItems.size
+                override fun getNewListSize(): Int = nextItems.size
 
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                val oldItem = oldItems[oldItemPosition]
-                val newItem = nextItems[newItemPosition]
-                return if (keyOf != null) keyOf(oldItem) == keyOf(newItem) else oldItem == newItem
-            }
+                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                    val oldItem = oldItems[oldItemPosition]
+                    val newItem = nextItems[newItemPosition]
+                    return if (keyOf != null) keyOf(oldItem) == keyOf(newItem) else oldItem == newItem
+                }
 
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                oldItems[oldItemPosition] == nextItems[newItemPosition]
-        }, false)
+                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+                    oldItems[oldItemPosition] == nextItems[newItemPosition]
+            }, false)
+        } else null
 
         items.clear()
         items.addAll(nextItems)
@@ -53,7 +56,7 @@ class FocusTextAdapter<T>(
         }
         if (focusedPosition < 0) focusedPosition = RecyclerView.NO_POSITION
         restorePending = listOwnedFocus && focusedPosition != RecyclerView.NO_POSITION
-        diff.dispatchUpdatesTo(this)
+        if (diff != null) diff.dispatchUpdatesTo(this) else notifyDataSetChanged()
     }
 
     fun clearFocusMemory() {
@@ -143,4 +146,8 @@ class FocusTextAdapter<T>(
 
     private fun dp(view: View, value: Int) =
         (value * view.resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val MAX_DIFF_ITEMS = 2_500
+    }
 }
