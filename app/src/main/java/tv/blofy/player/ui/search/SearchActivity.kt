@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
@@ -50,18 +51,16 @@ class SearchActivity : AppCompatActivity() {
         }
         root.addView(TextView(this).apply {
             text = "بحث BLOFY"
-            textSize = 29f
-            setTextColor(Color.WHITE)
+            BlofyTvDesign.applyTitle(this)
             setPadding(0, 0, 0, dp(10))
         })
         input = EditText(this).apply {
             hint = "اكتب اسم قناة أو فيلم أو مسلسل"
             setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
+            setHintTextColor(BlofyTvDesign.TextDim)
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
-            isFocusable = true
-            setOnEditorActionListener { _, _, _ ->
+            isFocusable = true\n            background = BlofyTvDesign.inputField(dp(18).toFloat(), false)\n            setPadding(dp(18), 0, dp(18), 0)\n            setOnFocusChangeListener { view, focused -> view.background = BlofyTvDesign.inputField(dp(18).toFloat(), focused) }\n            setOnEditorActionListener { _, _, _ ->
                 searchJob?.cancel()
                 runSearch(text?.toString().orEmpty(), moveFocus = true)
                 true
@@ -87,7 +86,7 @@ class SearchActivity : AppCompatActivity() {
         resultInfo = TextView(this).apply {
             text = "ابدأ بالكتابة للبحث في القنوات والأفلام والمسلسلات"
             textSize = 13.5f
-            setTextColor(Color.rgb(183, 168, 201))
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.RIGHT
             setPadding(0, dp(10), 0, dp(8))
         }
@@ -252,18 +251,12 @@ class SearchActivity : AppCompatActivity() {
         else -> kind.uppercase()
     }
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 16f
-        setColor(if (focused) Color.rgb(65, 31, 110) else Color.rgb(18, 17, 28))
-        if (focused) setStroke(2, Color.rgb(185, 130, 255))
-    }
-
-    private fun showMessage(text: String) {
+    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(16).toFloat(), focused)\n\n    private fun showMessage(text: String) {
         results.removeAllViews()
         results.addView(TextView(this).apply {
             this.text = text
             textSize = 18f
-            setTextColor(Color.LTGRAY)
+            setTextColor(BlofyTvDesign.TextMuted)
             setPadding(0, dp(24), 0, 0)
         })
     }
