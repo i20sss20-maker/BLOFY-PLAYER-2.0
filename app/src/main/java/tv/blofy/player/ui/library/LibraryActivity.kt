@@ -263,7 +263,9 @@ class LibraryActivity : AppCompatActivity() {
         else -> kind.uppercase()
     }
 
-    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(16).toFloat(), focused)\n\n    private fun showMessage(text: String) {
+    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(16).toFloat(), focused)
+
+    private fun showMessage(text: String) {
         val message = TextView(this).apply {
             this.text = text
             textSize = 18f
