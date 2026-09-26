@@ -19,6 +19,7 @@ const LOCAL_RELEASE_DIR = '/data/releases';
 const RELEASE_ARTIFACT_ZIP_URL = String(process.env.BLOFY_RELEASE_ARTIFACT_ZIP_URL || '').trim();
 const RELEASE_ARTIFACT_ENTRY = String(process.env.BLOFY_RELEASE_ARTIFACT_ENTRY || '').trim();
 const RELEASE_ARTIFACT_SHA256 = String(process.env.BLOFY_RELEASE_APK_SHA256 || '').trim().toLowerCase();
+const QA_APK_URL = String(process.env.BLOFY_QA_APK_URL || 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/qa-20260926-stability/BLOFY-PLAYER-2.0-rc06-QA-PRODUCTION-SIGNED.apk').trim();
 
 const securityHeaders = Object.freeze({
   'x-content-type-options': 'nosniff',
@@ -839,6 +840,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/health' || pathname === '/release.json') return sendJson(req, res, 200, healthPayload());
+
+    if (pathname === '/download/qa.apk' || pathname === '/d/blofy-qa') {
+      if (method === 'GET') {
+        recordDownload('blofy-qa').catch(error => console.error('BLOFY QA download stat failed:', error?.message || error));
+      }
+      return await streamApkDownload(req, res, QA_APK_URL, 'BLOFY-PLAYER-QA-PRODUCTION-SIGNED.apk', 'blofy-qa');
+    }
 
     if (pathname === '/download/latest.apk' || pathname === '/d/blofy') {
       const release = getActiveRelease();

@@ -1,0 +1,92 @@
+name: Publish current BLOFY signed QA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-current-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: blofy-publish-current-qa
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SIGNED_RUN: '36237105351'
+      SIGNED_COMMIT: d2be6b77049bcfd79004e2fe91920b8880095933
+      ARTIFACT_NAME: BLOFY-PLAYER-2.0-rc06-QA-PRODUCTION-SIGNED-d2be6b77049bcfd79004e2fe91920b8880095933
+      APK_NAME: BLOFY-PLAYER-2.0-rc06-QA-PRODUCTION-SIGNED.apk
+      AAB_NAME: BLOFY-PLAYER-2.0-rc06-QA-PRODUCTION-SIGNED.aab
+      APK_SHA256: ee36357fb708d713bc4e8cec46820cdaa137f35b6790133a206c29d4fd753eff
+      RELEASE_TAG: qa-20260926-stability
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed source run
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SIGNED_RUN" > signed-run.json
+          jq -e --arg sha "$SIGNED_COMMIT" '.status=="completed" and .conclusion=="success" and .head_sha==$sha' signed-run.json
+
+      - name: Download exact signed artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p publish
+          gh run download "$SIGNED_RUN" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT_NAME" --dir publish
+          test -s "publish/$APK_NAME"
+          test -s "publish/$AAB_NAME"
+          grep -Fxq 'version=2.0.0-rc06' publish/build-info.txt
+          grep -Fxq 'versionCode=2000007' publish/build-info.txt
+          grep -Fxq "commit=$SIGNED_COMMIT" publish/build-info.txt
+          grep -Fxq 'activation=https://api.blofyplayer.com' publish/build-info.txt
+          grep -Fxq 'updates=https://updates.blofyplayer.com' publish/build-info.txt
+          grep -Fxq 'production_signed=true' publish/build-info.txt
+          grep -Fxq 'ffmpeg=true' publish/build-info.txt
+          (cd publish && sha256sum --check SHA256SUMS)
+          printf '%s  %s\n' "$APK_SHA256" "$APK_NAME" | (cd publish && sha256sum --check)
+
+      - name: Publish QA prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > qa-notes.md <<'NOTES'
+          BLOFY PLAYER — QA signed build
+
+          نسخة اختبار موقعة بشهادة الإنتاج الحالية، مخصصة للاختبار قبل اعتماد أي تحديث عام.
+
+          - package: tv.blofy.player.v2
+          - version: 2.0.0-rc06
+          - versionCode: 2000007
+          - production signing verified
+          - FFmpeg bundled
+          - activation: api.blofyplayer.com
+          - updates: updates.blofyplayer.com
+
+          لا تُعتبر هذه النسخة تحديثًا عامًا تلقائيًا.
+          NOTES
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "publish/$APK_NAME" "publish/$AAB_NAME" publish/SHA256SUMS publish/build-info.txt --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG" "publish/$APK_NAME" "publish/$AAB_NAME" publish/SHA256SUMS publish/build-info.txt \
+              --repo "$GITHUB_REPOSITORY" --target "$SIGNED_COMMIT" \
+              --title 'BLOFY PLAYER QA — 2026-09-26' --notes-file qa-notes.md --prerelease
+          fi
+
+      - name: Verify public APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --max-time 180 \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$APK_NAME" \
+            -o verified.apk
+          printf '%s  verified.apk\n' "$APK_SHA256" | sha256sum --check
