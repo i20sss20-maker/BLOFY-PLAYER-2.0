@@ -116,8 +116,8 @@ if(page==='admin'){
         if(item.platform)versionCell.append(node('div',item.platform,'caption'));
         const action=node('td');const actions=node('div',null,'device-row-actions');
         const button=node('button','إدارة ←');button.setAttribute('aria-label','إدارة '+item.deviceId);button.onclick=()=>openRecord(item.deviceId);
-        const copyButton=node('button','نسخ ID','ghost copy-device-id');copyButton.type='button';copyButton.setAttribute('aria-label','نسخ رقم الجهاز '+item.deviceId);
-        copyButton.onclick=async()=>{try{await navigator.clipboard.writeText(item.deviceId);copyButton.textContent='تم النسخ';setTimeout(()=>{copyButton.textContent='نسخ ID';},1200);}catch{setStatus('admin-status','رقم الجهاز: '+item.deviceId);}};
+        const copyButton=node('button','نسخ رقم الجهاز','ghost copy-device-id');copyButton.type='button';copyButton.setAttribute('aria-label','نسخ رقم الجهاز '+item.deviceId);
+        copyButton.onclick=async()=>{try{await navigator.clipboard.writeText(item.deviceId);copyButton.textContent='تم النسخ';setTimeout(()=>{copyButton.textContent='نسخ رقم الجهاز';},1200);}catch{setStatus('admin-status','رقم الجهاز: '+item.deviceId);}};
         actions.append(button,copyButton);action.append(actions);
         row.append(name,state,node('td',expiry(item.expiresAt,item.status)),lastSeen,versionCell,action);$('customer-rows').append(row);}
       if(!deviceItems.length){const row=node('tr'),cell=node('td','لا توجد أجهزة مطابقة.','empty');cell.colSpan=6;row.append(cell);$('customer-rows').append(row);}
