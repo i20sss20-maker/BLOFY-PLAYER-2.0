@@ -95,8 +95,8 @@ class HomeActivity : AppCompatActivity() {
         main.addView(TextView(this).apply {
             text = "قصص مختارة"
             textSize = 18f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)))
 
@@ -170,14 +170,14 @@ class HomeActivity : AppCompatActivity() {
         addView(TextView(this@HomeActivity).apply {
             text = label
             textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         addView(TextView(this@HomeActivity).apply {
             text = icon
             textSize = 22f
-            setTextColor(Color.WHITE)
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(dp(42), LinearLayout.LayoutParams.MATCH_PARENT))
     }.also { it.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(60)).apply { bottomMargin = dp(4) } }
@@ -191,15 +191,15 @@ class HomeActivity : AppCompatActivity() {
         addView(TextView(this@HomeActivity).apply {
             text = "BLOFY PLAYER"
             textSize = 13f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.Mint)
             gravity = Gravity.RIGHT
         })
         addView(TextView(this@HomeActivity).apply {
             text = "كل محتواك في مكان واحد"
             textSize = 36f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT
             setPadding(0, dp(6), 0, 0)
         })
@@ -246,9 +246,9 @@ class HomeActivity : AppCompatActivity() {
         isFocusable = true
         isFocusableInTouchMode = true
         isClickable = true
-        addView(TextView(this@HomeActivity).apply { text = title; textSize = 19f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT })
+        addView(TextView(this@HomeActivity).apply { text = title; textSize = 19f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.RIGHT })
         addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 13f; setTextColor(TEXT_MUTED); gravity = Gravity.RIGHT; setPadding(0, dp(4), 0, dp(10)) })
-        addView(TextView(this@HomeActivity).apply { text = buttonLabel; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_SOFT); gravity = Gravity.RIGHT })
+        addView(TextView(this@HomeActivity).apply { text = buttonLabel; textSize = 14f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(PURPLE_SOFT); gravity = Gravity.RIGHT })
         setOnFocusChangeListener { view, focused -> view.background = panelBackground(focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key) }
         setOnClickListener { startActivity(intent) }
         registerAction(key, this)
@@ -264,7 +264,7 @@ class HomeActivity : AppCompatActivity() {
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
-            addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT })
+            addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.RIGHT })
             addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 11f; setTextColor(TEXT_MUTED); gravity = Gravity.RIGHT })
             setOnFocusChangeListener { view, focused ->
                 view.background = storyBackground(focused)
