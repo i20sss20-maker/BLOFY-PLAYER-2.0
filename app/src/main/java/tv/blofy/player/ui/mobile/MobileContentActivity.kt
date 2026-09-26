@@ -54,6 +54,7 @@ class MobileContentActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val compact = resources.configuration.screenWidthDp < 420
         val posterMode = kind == KIND_MOVIE || kind == KIND_SERIES
         val compact = resources.configuration.screenWidthDp < 400
         val root = LinearLayout(this).apply {
@@ -74,13 +75,13 @@ class MobileContentActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(0, dp(48), 1f))
+        }, LinearLayout.LayoutParams(0, dp(if (compact) 44 else 48), 1f))
         countView = TextView(this).apply {
             textSize = 13f
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
         }
-        header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(48)))
+        header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(if (compact) 44 else 48)))
         root.addView(header)
 
         categorySpinner = Spinner(this)
@@ -103,7 +104,7 @@ class MobileContentActivity : AppCompatActivity() {
             posterAdapter = posters
             posterGrid = RecyclerView(this).apply {
                 layoutManager = GridLayoutManager(this@MobileContentActivity, posterColumns())
-                setPadding(dp(2), dp(4), dp(2), dp(26))
+                setPadding(dp(2), dp(4), dp(2), dp(if (compact) 18 else 26))
                 clipChildren = false
                 clipToPadding = false
                 itemAnimator = null
