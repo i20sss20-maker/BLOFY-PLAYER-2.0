@@ -44,14 +44,16 @@ class SearchActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val compact = resources.configuration.screenWidthDp < 600
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(34), dp(28), dp(34), dp(30))
+            setPadding(dp(if (compact) 16 else 34), dp(if (compact) 20 else 28), dp(if (compact) 16 else 34), dp(if (compact) 22 else 30))
             background = AppCompatResources.getDrawable(this@SearchActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
             text = "بحث BLOFY"
             BlofyTvDesign.applyTitle(this)
+            if (compact) textSize = 27f
             setPadding(0, 0, 0, dp(10))
         })
         input = EditText(this).apply {
@@ -104,8 +106,8 @@ class SearchActivity : AppCompatActivity() {
             overScrollMode = android.view.View.OVER_SCROLL_NEVER
             addView(results)
         }
-        root.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        root.addView(resultInfo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)))
+        root.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 56 else 62)))
+        root.addView(resultInfo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         input.requestFocus()
@@ -149,7 +151,7 @@ class SearchActivity : AppCompatActivity() {
                     orientation = LinearLayout.HORIZONTAL
                     layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
                     gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(12), dp(8), dp(12), dp(8))
+                    setPadding(dp(if (compact) 10 else 12), dp(if (compact) 6 else 8), dp(if (compact) 10 else 12), dp(if (compact) 6 else 8))
                     isFocusable = true
                     isFocusableInTouchMode = true
                     isClickable = true
@@ -172,7 +174,7 @@ class SearchActivity : AppCompatActivity() {
                     contentDescription = stream.name
                 }
                 ArtworkLoader.load(artwork, stream.icon)
-                row.addView(artwork, LinearLayout.LayoutParams(dp(54), dp(66)).apply { marginStart = dp(14) })
+                row.addView(artwork, LinearLayout.LayoutParams(dp(if (compact) 48 else 54), dp(if (compact) 58 else 66)).apply { marginStart = dp(if (compact) 10 else 14) })
 
                 val textBox = LinearLayout(this@SearchActivity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -180,7 +182,7 @@ class SearchActivity : AppCompatActivity() {
                 }
                 textBox.addView(TextView(this@SearchActivity).apply {
                     text = (if (stream.locked) "🔒  " else "") + stream.name
-                    textSize = 17.5f
+                    textSize = if (compact) 15.5f else 17.5f
                     setTextColor(BlofyTvDesign.TextPrimary)
                     gravity = Gravity.RIGHT
                     maxLines = 1
@@ -198,8 +200,8 @@ class SearchActivity : AppCompatActivity() {
                     gravity = Gravity.RIGHT
                     setPadding(0, dp(4), 0, 0)
                 })
-                row.addView(textBox, LinearLayout.LayoutParams(0, dp(66), 1f))
-                results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(82)).apply { topMargin = dp(7) })
+                row.addView(textBox, LinearLayout.LayoutParams(0, dp(if (compact) 58 else 66), 1f))
+                results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 72 else 82)).apply { topMargin = dp(if (compact) 5 else 7) })
             }
             if (moveFocus) results.getChildAt(0)?.requestFocus()
         }
