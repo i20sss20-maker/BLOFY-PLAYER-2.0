@@ -56,7 +56,6 @@ class MobileContentActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val compact = resources.configuration.screenWidthDp < 420
         val posterMode = kind == KIND_MOVIE || kind == KIND_SERIES
-        val compact = resources.configuration.screenWidthDp < 400
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(if (compact) 12 else 18), dp(if (compact) 14 else 18), dp(if (compact) 12 else 18), dp(if (compact) 14 else 18))
