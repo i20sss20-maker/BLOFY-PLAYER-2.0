@@ -212,18 +212,18 @@ class ContentBrowserActivity : AppCompatActivity() {
             text = "OK: ملء الشاشة   •   ضغط مطوّل: الأرشيف ⏱   •   ↑↓: القنوات"
             textSize = 14f
             setTextColor(BLOFY_PURPLE_SOFT)
-            setPadding(4, 14, 0, 0)
+            setPadding(dp(4), dp(14), 0, 0)
         })
     }
 
     private fun browserPanelBackground(emphasis: Boolean) =
-        if (emphasis) BlofyTvDesign.elevatedSurface(20f, emphasis = true)
-        else BlofyTvDesign.glassPanel(20f, false)
+        if (emphasis) BlofyTvDesign.elevatedSurface(dp(20).toFloat(), emphasis = true)
+        else BlofyTvDesign.glassPanel(dp(20).toFloat(), false)
 
-    private fun previewPanelBackground() = BlofyTvDesign.elevatedSurface(24f, emphasis = true)
+    private fun previewPanelBackground() = BlofyTvDesign.elevatedSurface(dp(24).toFloat(), emphasis = true)
 
     private fun catalogActionBackground(focused: Boolean) =
-        BlofyTvDesign.secondaryButton(16f, focused)
+        BlofyTvDesign.secondaryButton(dp(16).toFloat(), focused)
 
     private fun loadStreams(categoryId: String?) {
         if (!::provider.isInitialized) return
