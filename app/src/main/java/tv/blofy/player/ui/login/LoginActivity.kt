@@ -338,7 +338,7 @@ class LoginActivity : AppCompatActivity() {
     private fun qrBackground() = GradientDrawable().apply {
         cornerRadius = dp(18).toFloat()
         setColor(Color.WHITE)
-        setStroke(dp(2),0xFFDBC7F5.toInt())
+        setStroke(dp(2), BlofyTvDesign.FocusStroke)
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply { val tv = deviceKind == DeviceClass.Kind.TV; text = label; isAllCaps = false; textSize = 14.5f; setTextColor(BlofyTvDesign.TextPrimary); isFocusable = tv; isFocusableInTouchMode = tv; background = buttonBackground(false); setOnFocusChangeListener { v,f -> if(tv){ v.background = buttonBackground(f); v.animate().scaleX(if(f)1.025f else 1f).scaleY(if(f)1.025f else 1f).setDuration(90).start() } }; setOnClickListener { action() } }
