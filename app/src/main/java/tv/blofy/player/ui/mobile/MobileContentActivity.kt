@@ -33,6 +33,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catchup.CatchupActivity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.catalog.PosterStreamAdapter
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.player.PlayerActivity
@@ -69,12 +70,13 @@ class MobileContentActivity : AppCompatActivity() {
         header.addView(TextView(this).apply {
             text = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
             textSize = 25f
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(0, dp(48), 1f))
         countView = TextView(this).apply {
             textSize = 13f
-            setTextColor(0xFFB7A8C9.toInt())
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
         }
         header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(48)))
@@ -263,15 +265,11 @@ private class MobileLiveAdapter(private val activity: MobileContentActivity) : B
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(12), dp(8), dp(12), dp(8))
-                background = GradientDrawable().apply {
-                    cornerRadius = dp(16).toFloat()
-                    setColor(0xE8181321.toInt())
-                    setStroke(dp(1), 0x554D376B)
-                }
+                background = BlofyTvDesign.surface(dp(16).toFloat(), false)
             }
             val artwork = ImageView(activity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(0xFF17111F.toInt())
+                setBackgroundColor(BlofyTvDesign.Surface)
             }
             row.addView(artwork, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginStart = dp(12) })
 
@@ -281,7 +279,7 @@ private class MobileLiveAdapter(private val activity: MobileContentActivity) : B
             }
             val title = TextView(activity).apply {
                 textSize = 16.5f
-                setTextColor(Color.WHITE)
+                setTextColor(BlofyTvDesign.TextPrimary)
                 gravity = Gravity.RIGHT
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
