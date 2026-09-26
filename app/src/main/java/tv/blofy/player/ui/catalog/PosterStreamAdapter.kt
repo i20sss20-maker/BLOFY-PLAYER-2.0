@@ -56,13 +56,13 @@ internal class PosterStreamAdapter(
         val frame = FrameLayout(parent.context)
         val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(Color.rgb(20, 15, 31))
+            setBackgroundColor(BlofyTvDesign.Surface)
             clipToOutline = true
         }
         frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(245)))
         val rating = TextView(parent.context).apply {
             textSize = 11f
-            setTextColor(Color.WHITE)
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
             setPadding(dp(8), dp(4), dp(8), dp(4))
             background = GradientDrawable().apply {
@@ -87,7 +87,7 @@ internal class PosterStreamAdapter(
         root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         val meta = TextView(parent.context).apply {
             textSize = 11f
-            setTextColor(Color.rgb(183, 168, 201))
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.START
             maxLines = 1
             setPadding(dp(4), dp(2), dp(4), 0)
@@ -146,12 +146,4 @@ internal class PosterStreamAdapter(
         val rating: TextView
     ) : RecyclerView.ViewHolder(itemView)
 
-    private fun card(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF5D2498.toInt(), 0xFF241330.toInt())
-        else intArrayOf(0xED181321.toInt(), 0xF00C0A12.toInt())
-    ).apply {
-        cornerRadius = 20f
-        setStroke(if (focused) 3 else 1, if (focused) 0xFFE0B5FF.toInt() else 0x554D376B)
-    }
-}
+    private fun card(focused: Boolean) = BlofyTvDesign.posterCard(20f, focused)\n}
