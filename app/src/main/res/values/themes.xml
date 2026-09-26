@@ -12,5 +12,18 @@
         <item name="android:statusBarColor">@color/blofy_black</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
+        <item name="alertDialogTheme">@style/ThemeOverlay.Blofy.AlertDialog</item>
+        <item name="android:alertDialogTheme">@style/ThemeOverlay.Blofy.AlertDialog</item>
+    </style>
+
+    <style name="ThemeOverlay.Blofy.AlertDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorPrimary">@color/blofy_purple_bright</item>
+        <item name="colorSecondary">@color/blofy_purple_bright</item>
+        <item name="colorSurface">@color/blofy_surface_alt</item>
+        <item name="colorOnSurface">@color/blofy_white</item>
+        <item name="android:colorAccent">@color/blofy_purple_bright</item>
+        <item name="android:textColorPrimary">@color/blofy_white</item>
+        <item name="android:textColorSecondary">@color/blofy_text_secondary</item>
+        <item name="android:windowBackground">@color/blofy_surface_alt</item>
     </style>
 </resources>
