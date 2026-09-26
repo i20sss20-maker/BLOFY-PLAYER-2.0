@@ -529,16 +529,16 @@ class LiveGuideActivity : AppCompatActivity() {
 
     private fun panelBackground() = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xED21162D.toInt(), 0xF0130E1B.toInt())
+        intArrayOf(0xEE211C27.toInt(), 0xF0141218.toInt())
     ).apply {
         cornerRadius = dp(20).toFloat()
-        setStroke(dp(1), 0xFF4A355F.toInt())
+        setStroke(dp(1), 0xFF4B4351.toInt())
     }
 
     private fun badgeBackground() = GradientDrawable().apply {
         cornerRadius = dp(12).toFloat()
-        setColor(0x663A2350)
-        setStroke(dp(1), 0xFF68488A.toInt())
+        setColor(0x66352D3D)
+        setStroke(dp(1), 0xFF665875.toInt())
     }
 
     override fun onDestroy() {
@@ -592,7 +592,7 @@ private class GuideChannelAdapter(
             setImageResource(R.drawable.blofy_logo)
             background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
-                setColor(0xFF181020.toInt())
+                setColor(0xFF171419.toInt())
             }
         }
         root.addView(logo, LinearLayout.LayoutParams(dp(58), dp(58)).apply { marginStart = dp(12) })
@@ -628,7 +628,7 @@ private class GuideChannelAdapter(
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
-                setColor(0x553B2452)
+                setColor(0x55382F40)
             }
         }
         root.addView(number, LinearLayout.LayoutParams(dp(52), dp(34)))
@@ -678,11 +678,11 @@ private class GuideChannelAdapter(
     companion object {
         private fun rowBackground(focused: Boolean, radius: Int) = GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            if (focused) intArrayOf(0xFF6A3CA0.toInt(), 0xFF352047.toInt())
-            else intArrayOf(0xD923182F.toInt(), 0xE616101E.toInt())
+            if (focused) intArrayOf(0xFF705A87.toInt(), 0xFF3D3248.toInt())
+            else intArrayOf(0xDB241F29.toInt(), 0xE817141A.toInt())
         ).apply {
             cornerRadius = radius.toFloat()
-            setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF49365D.toInt())
+            setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF4A424F.toInt())
         }
     }
 }
