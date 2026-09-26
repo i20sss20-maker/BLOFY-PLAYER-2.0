@@ -160,7 +160,7 @@ async function importReleaseArtifactIfConfigured() {
   });
   if (!response.ok || !response.body) throw new Error(`release_artifact_http_${response.status}`);
   const length = Number(response.headers.get('content-length') || 0);
-  if (length && length > 80 * 1024 * 1024) throw new Error('release_artifact_too_large');
+  if (length && length > 512 * 1024 * 1024) throw new Error('release_artifact_too_large');
 
   const archiveOut = createWriteStream(archivePath, { flags: 'wx' });
   await new Promise((resolve, reject) => {
@@ -203,7 +203,7 @@ async function receiveReleaseUpload(req, res, requestUrl) {
   }
   const filename = localReleaseFilename(requestUrl.searchParams.get('filename'));
   const length = Number(req.headers['content-length'] || 0);
-  if (!Number.isFinite(length) || length < 1024 || length > 100 * 1024 * 1024) {
+  if (!Number.isFinite(length) || length < 1024 || length > 320 * 1024 * 1024) {
     return sendJson(req, res, 413, { ok: false, error: 'invalid_release_size' });
   }
   await mkdir(LOCAL_RELEASE_DIR, { recursive: true });
@@ -215,7 +215,7 @@ async function receiveReleaseUpload(req, res, requestUrl) {
     let received = 0;
     req.on('data', chunk => {
       received += chunk.length;
-      if (received > 100 * 1024 * 1024) req.destroy(new Error('release_too_large'));
+      if (received > 320 * 1024 * 1024) req.destroy(new Error('release_too_large'));
     });
     req.pipe(out);
     out.on('finish', () => received === length ? resolve() : reject(new Error('release_size_mismatch')));
