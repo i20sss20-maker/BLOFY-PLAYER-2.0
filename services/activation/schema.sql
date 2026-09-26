@@ -22,6 +22,19 @@ ALTER TABLE devices ADD COLUMN IF NOT EXISTS activation_rotated_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_devices_auth_locked_until ON devices(auth_locked_until)
   WHERE auth_locked_until IS NOT NULL;
 
+-- Stable reinstall aliases let an upgraded installation keep its original canonical BLOFY ID.
+-- The alias credential is independently keyed and can recover the canonical row after reinstall
+-- without moving playlists/subscriptions or creating a second device.
+CREATE TABLE IF NOT EXISTS device_identity_aliases (
+  alias_device_id TEXT PRIMARY KEY,
+  canonical_device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  alias_activation_code_proof TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_device_identity_aliases_canonical
+  ON device_identity_aliases(canonical_device_id);
+
 -- Customer records initialize with the shared schema, after their devices parent table.
 -- Startup waits for this schema before accepting requests through any HTTP hook.
 CREATE TABLE IF NOT EXISTS device_customers (
