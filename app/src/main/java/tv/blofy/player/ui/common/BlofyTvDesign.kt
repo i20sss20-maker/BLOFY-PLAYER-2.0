@@ -6,36 +6,42 @@ import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.widget.TextView
 
-/** Unified BLOFY visual language used across TV, tablet and phone surfaces. */
+/**
+ * Unified BLOFY visual language used across TV, tablet and phone surfaces.
+ *
+ * The base surfaces intentionally stay near-black. Purple is reserved for
+ * hierarchy, focus and primary actions so the interface feels cinematic
+ * instead of looking like one large purple panel.
+ */
 object BlofyTvDesign {
-    val Background = Color.rgb(6, 4, 11)
-    val BackgroundRaised = Color.rgb(11, 7, 18)
-    val Surface = Color.rgb(20, 13, 31)
-    val SurfaceRaised = Color.rgb(30, 19, 46)
-    val SurfaceFocused = Color.rgb(67, 36, 99)
+    val Background = Color.rgb(5, 4, 10)
+    val BackgroundRaised = Color.rgb(10, 8, 15)
+    val Surface = Color.rgb(18, 14, 25)
+    val SurfaceRaised = Color.rgb(26, 20, 36)
+    val SurfaceFocused = Color.rgb(50, 34, 68)
 
     val Purple = Color.rgb(143, 68, 255)
-    val PurpleBright = Color.rgb(189, 119, 255)
+    val PurpleBright = Color.rgb(196, 132, 255)
     val PurpleDeep = Color.rgb(91, 38, 181)
-    val PurpleSoft = Color.rgb(226, 204, 255)
-    val PurpleMuted = Color.rgb(184, 145, 225)
-    val PinkAccent = Color.rgb(231, 91, 203)
-    val Mint = Color.rgb(108, 235, 204)
-    val Amber = Color.rgb(255, 191, 105)
-    val Danger = Color.rgb(255, 135, 155)
+    val PurpleSoft = Color.rgb(230, 214, 248)
+    val PurpleMuted = Color.rgb(174, 142, 205)
+    val PinkAccent = Color.rgb(226, 103, 196)
+    val Mint = Color.rgb(105, 225, 196)
+    val Amber = Color.rgb(246, 188, 105)
+    val Danger = Color.rgb(255, 132, 152)
 
-    val TextPrimary = Color.WHITE
-    val TextSecondary = Color.rgb(234, 227, 241)
-    val TextMuted = Color.rgb(176, 166, 190)
-    val TextDim = Color.rgb(134, 124, 149)
-    val Divider = Color.rgb(72, 51, 91)
-    val FocusStroke = Color.rgb(239, 219, 255)
+    val TextPrimary = Color.rgb(250, 248, 252)
+    val TextSecondary = Color.rgb(224, 219, 230)
+    val TextMuted = Color.rgb(164, 155, 174)
+    val TextDim = Color.rgb(119, 111, 130)
+    val Divider = Color.rgb(58, 45, 69)
+    val FocusStroke = Color.rgb(244, 231, 255)
 
-    const val HeroTitleSp = 40f
-    const val TitleSp = 31f
+    const val HeroTitleSp = 38f
+    const val TitleSp = 30f
     const val HeadingSp = 21f
-    const val BodySp = 15.5f
-    const val LabelSp = 14f
+    const val BodySp = 15f
+    const val LabelSp = 13.5f
     const val CaptionSp = 12f
 
     val HeadingTypeface: Typeface by lazy { Typeface.create("sans-serif", Typeface.BOLD) }
@@ -43,83 +49,83 @@ object BlofyTvDesign {
 
     fun surface(radius: Float = 24f, focused: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF58377A.toInt(), 0xFF2B193C.toInt())
-        else intArrayOf(0xF21C1428.toInt(), 0xF20B0811.toInt())
+        if (focused) intArrayOf(0xFF3E2A56.toInt(), 0xFF1B1325.toInt())
+        else intArrayOf(0xF2181422.toInt(), 0xF20B0910.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 3 else 1, if (focused) FocusStroke else 0x80594070.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) FocusStroke else 0x5A4A3A58)
     }
 
     fun elevatedSurface(radius: Float = 26f, emphasis: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (emphasis) intArrayOf(0xF23A2250.toInt(), 0xF1120B1A.toInt())
-        else intArrayOf(0xF22A1B3B.toInt(), 0xF10F0A17.toInt())
+        if (emphasis) intArrayOf(0xF02E203D.toInt(), 0xF0100C16.toInt())
+        else intArrayOf(0xEE21192C.toInt(), 0xF00D0A12.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(1, if (emphasis) 0xB07950A0.toInt() else 0x8A604678.toInt())
+        setStroke(1, if (emphasis) 0x8B755389.toInt() else 0x5C554263)
     }
 
     fun glassPanel(radius: Float = 24f, focused: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xEE4E2B70.toInt(), 0xF020112F.toInt())
-        else intArrayOf(0xE61B1228.toInt(), 0xF20B0812.toInt())
+        if (focused) intArrayOf(0xE83B2851.toInt(), 0xF0181121.toInt())
+        else intArrayOf(0xDF17121F.toInt(), 0xEC09080E.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) PurpleBright else 0x80533B68.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) PurpleBright else 0x574F3E5E)
     }
 
     fun primaryButton(radius: Float = 20f, focused: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFFB86BFF.toInt(), 0xFFE05ACA.toInt())
-        else intArrayOf(0xFF8F44FF.toInt(), 0xFF6A2BD0.toInt())
+        if (focused) intArrayOf(0xFFB96BFF.toInt(), 0xFFD950C0.toInt())
+        else intArrayOf(0xFF8F44FF.toInt(), 0xFF6C2FD0.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else 0xB58B59B6.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) Color.WHITE else 0x947B50A2.toInt())
     }
 
     fun secondaryButton(radius: Float = 20f, focused: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF69478B.toInt(), 0xFF3B2451.toInt())
-        else intArrayOf(0xEE21172E.toInt(), 0xEE100B18.toInt())
+        if (focused) intArrayOf(0xFF4A355D.toInt(), 0xFF281C35.toInt())
+        else intArrayOf(0xEE1B1621.toInt(), 0xF00E0B12.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 3 else 1, if (focused) PurpleSoft else 0x8057406A.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) PurpleSoft else 0x654C3E57)
     }
 
     fun inputField(radius: Float = 18f, focused: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF1D132A.toInt(), 0xFF130D1C.toInt())
-        else intArrayOf(0xEE100B18.toInt(), 0xEE0B0810.toInt())
+        if (focused) intArrayOf(0xFF20162C.toInt(), 0xFF130E1A.toInt())
+        else intArrayOf(0xF00E0B14.toInt(), 0xF008070C.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 3 else 1, if (focused) PurpleBright else 0x80504061.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) PurpleBright else 0x65463A50)
     }
 
     fun posterCard(radius: Float = 22f, focused: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF6336A0.toInt(), 0xFF2B163B.toInt())
-        else intArrayOf(0xEE1A1324.toInt(), 0xF10B0910.toInt())
+        if (focused) intArrayOf(0xFF51316D.toInt(), 0xFF24172F.toInt())
+        else intArrayOf(0xEE17121E.toInt(), 0xF009080D.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 3 else 1, if (focused) FocusStroke else 0x66513C65.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) FocusStroke else 0x4F493A54)
     }
 
     fun badge(radius: Float = 14f, accent: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        if (accent) intArrayOf(0xC13D205A.toInt(), 0xB828183A.toInt())
-        else intArrayOf(0xAD20152F.toInt(), 0xAD160F20.toInt())
+        if (accent) intArrayOf(0xA93A2450.toInt(), 0x8F24182F.toInt())
+        else intArrayOf(0x951A1521.toInt(), 0x8A100D15.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(1, if (accent) 0xB57F58A3.toInt() else 0x916D4C8A.toInt())
+        setStroke(1, if (accent) 0x8C76538D.toInt() else 0x5A584360)
     }
 
     fun statusPill(radius: Float = 14f, success: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        if (success) intArrayOf(0x65326B5B, 0x45223F39)
-        else intArrayOf(0xA2261936.toInt(), 0xA216101F.toInt())
+        if (success) intArrayOf(0x55305F52, 0x38203B35)
+        else intArrayOf(0x8C21172B.toInt(), 0x79130F19.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(1, if (success) 0x996CEBCC.toInt() else 0x996E4C86.toInt())
+        setStroke(1, if (success) 0x8069D8BD.toInt() else 0x6F6B4C7D)
     }
 
     fun applyTitle(text: TextView) = text.apply {
@@ -168,10 +174,11 @@ object BlofyTvDesign {
     fun installTvFocus(
         view: View,
         radius: Float = 20f,
-        scale: Float = 1.04f,
+        scale: Float = 1.035f,
         primary: Boolean = false,
         onFocused: (() -> Unit)? = null
     ) {
+        val density = view.resources.displayMetrics.density
         view.isFocusable = true
         view.isFocusableInTouchMode = true
         view.stateListAnimator = null
@@ -182,9 +189,9 @@ object BlofyTvDesign {
             v.animate()
                 .scaleX(if (focused) scale else 1f)
                 .scaleY(if (focused) scale else 1f)
-                .translationZ(if (focused) 24f else 2f)
-                .alpha(if (focused) 1f else 0.96f)
-                .setDuration(if (focused) 115L else 90L)
+                .translationZ((if (focused) 16f else 2f) * density)
+                .alpha(if (focused) 1f else 0.97f)
+                .setDuration(if (focused) 110L else 85L)
                 .start()
             if (focused) onFocused?.invoke()
         }
