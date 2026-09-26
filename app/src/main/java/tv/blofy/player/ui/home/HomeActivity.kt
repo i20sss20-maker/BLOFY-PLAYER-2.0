@@ -16,6 +16,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.core.theme.ThemeManager
@@ -341,14 +342,15 @@ class HomeActivity : AppCompatActivity() {
     private fun registerAction(key: String, view: View) { actionViews[key] = view; if (firstAction == null) firstAction = view }
     private fun restoreFocus() { if (deviceKind != DeviceClass.Kind.TV) return; val saved = FocusMemory.restore(this, SCREEN_KEY); val target = saved?.let { actionViews[it] } ?: firstAction ?: actionViews.values.firstOrNull(); target?.post { target.requestFocus() } }
 
-    private fun sidebarBackground() = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xEA120A1B.toInt()); setStroke(dp(1), 0xFF4B2C63.toInt()) }
-    private fun sideItemBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(15).toFloat(); setColor(if (focused) 0x664B1A78 else Color.TRANSPARENT); if (focused) setStroke(dp(1), 0xFFAD66F0.toInt()) }
-    private fun heroBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF00B101C.toInt(), 0xF0210C2E.toInt())).apply { cornerRadius = dp(22).toFloat(); setStroke(dp(1), 0xFF4B2C63.toInt()) }
-    private fun panelBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, if (focused) intArrayOf(0xFF37154F.toInt(), 0xFF1C1029.toInt()) else intArrayOf(0xE8191023.toInt(), 0xEB120C1A.toInt())).apply { cornerRadius = dp(18).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFA958F5.toInt() else 0xFF3E294B.toInt()) }
-    private fun storyBackground(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR, if (focused) intArrayOf(0xFF6B23C9.toInt(), 0xFF29113C.toInt()) else intArrayOf(0xFF201329.toInt(), 0xFF100B17.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(if (focused) dp(3) else dp(1), if (focused) 0xFFFF56D6.toInt() else 0xFF463053.toInt()) }
-    private fun primaryButton(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(if (focused) 0xFF821CFF.toInt() else 0xFF681AE3.toInt(), if (focused) 0xFFF247C5.toInt() else 0xFFB429E6.toInt())).apply { cornerRadius = dp(14).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0xFFCA6DFF.toInt()) }
-    private fun secondaryButton(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(if (focused) 0xFF342047.toInt() else 0xCC160F20.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) 0xFFB166F1.toInt() else 0xFF5B3B6B.toInt()) }
-    private fun compactTile(focused: Boolean) = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(if (focused) blend(theme.surface, theme.accent, 0.34f) else theme.surface); setStroke(dp(if (focused) 3 else 1), if (focused) theme.accent else blend(theme.surface, Color.WHITE, 0.12f)) }
+    private fun sidebarBackground() = BlofyTvDesign.glassPanel(dp(20).toFloat(), false)
+    private fun sideItemBackground(focused: Boolean) =
+        if (focused) BlofyTvDesign.secondaryButton(dp(15).toFloat(), true) else BlofyTvDesign.glassPanel(dp(15).toFloat(), false)
+    private fun heroBackground() = BlofyTvDesign.elevatedSurface(dp(22).toFloat(), emphasis = true)
+    private fun panelBackground(focused: Boolean) = BlofyTvDesign.glassPanel(dp(18).toFloat(), focused)
+    private fun storyBackground(focused: Boolean) = BlofyTvDesign.posterCard(dp(15).toFloat(), focused)
+    private fun primaryButton(focused: Boolean) = BlofyTvDesign.primaryButton(dp(14).toFloat(), focused)
+    private fun secondaryButton(focused: Boolean) = BlofyTvDesign.secondaryButton(dp(14).toFloat(), focused)
+    private fun compactTile(focused: Boolean) = BlofyTvDesign.surface(dp(22).toFloat(), focused)
 
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; setTextColor(Color.WHITE); gravity = Gravity.START }
     private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(theme.accent); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }
@@ -357,7 +359,7 @@ class HomeActivity : AppCompatActivity() {
 
     companion object {
         private const val SCREEN_KEY = "home"
-        private val PURPLE_SOFT = Color.rgb(195, 135, 255)
-        private val TEXT_MUTED = Color.rgb(177, 169, 191)
+        private val PURPLE_SOFT = BlofyTvDesign.PurpleSoft
+        private val TEXT_MUTED = BlofyTvDesign.TextMuted
     }
 }
