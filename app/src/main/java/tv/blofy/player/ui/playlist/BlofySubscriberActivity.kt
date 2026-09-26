@@ -56,20 +56,20 @@ class BlofySubscriberActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(if (phone) 22 else 54, if (phone) 24 else 34, if (phone) 22 else 54, if (phone) 34 else 34)
+            setPadding(dp(if (phone) 22 else 54), dp(if (phone) 24 else 34), dp(if (phone) 22 else 54), dp(if (phone) 34 else 34))
         }
         scroll.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-        root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(if (phone) 150 else 170, if (phone) 72 else 76))
+        root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(if (phone) 150 else 170), dp(if (phone) 72 else 76)))
         root.addView(TextView(this).apply { text = "مشتركين BLOFY"; BlofyTvDesign.applyTitle(this); textSize = if (phone) 27f else 32f; gravity = Gravity.CENTER })
-        root.addView(TextView(this).apply { text = "اسم المستخدم وكلمة المرور فقط"; textSize = if (phone) 14f else 15f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0, 6, 0, 20) })
+        root.addView(TextView(this).apply { text = "اسم المستخدم وكلمة المرور فقط"; textSize = if (phone) 14f else 15f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0, dp(6), 0, dp(20)) })
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-            setPadding(if (phone) 18 else 30, if (phone) 20 else 24, if (phone) 18 else 30, if (phone) 20 else 24); background = panelBackground()
+            setPadding(dp(if (phone) 18 else 30), dp(if (phone) 20 else 24), dp(if (phone) 18 else 30), dp(if (phone) 20 else 24)); background = panelBackground()
         }
-        root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 660, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else dp(660), LinearLayout.LayoutParams.WRAP_CONTENT))
         fun field(hintText: String, passwordField: Boolean = false) = EditText(this).apply {
-            hint = hintText; isSingleLine = true; gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; setTextColor(BlofyTvDesign.TextPrimary); setHintTextColor(BlofyTvDesign.TextDim); setPadding(22,0,22,0)
+            hint = hintText; isSingleLine = true; gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; setTextColor(BlofyTvDesign.TextPrimary); setHintTextColor(BlofyTvDesign.TextDim); setPadding(dp(22), 0, dp(22), 0)
             background = fieldBackground(false); isFocusable = true; isFocusableInTouchMode = true
             if (passwordField) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             setOnFocusChangeListener { view, focused -> view.background = fieldBackground(focused); if (tv) view.animate().scaleX(if (focused) 1.015f else 1f).scaleY(if (focused) 1.015f else 1f).setDuration(90).start() }
@@ -78,9 +78,9 @@ class BlofySubscriberActivity : AppCompatActivity() {
         val password = field("كلمة المرور", true)
         username.imeOptions = EditorInfo.IME_ACTION_NEXT
         password.imeOptions = EditorInfo.IME_ACTION_DONE
-        panel.addView(username, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 8 })
-        panel.addView(password, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 10 })
-        val status = TextView(this).apply { setTextColor(BlofyTvDesign.PurpleSoft); textSize = 14f; gravity = Gravity.CENTER; setPadding(8,14,8,2) }
+        panel.addView(username, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 64)).apply { topMargin = dp(8) })
+        panel.addView(password, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 64)).apply { topMargin = dp(10) })
+        val status = TextView(this).apply { setTextColor(BlofyTvDesign.PurpleSoft); textSize = 14f; gravity = Gravity.CENTER; setPadding(dp(8), dp(14), dp(8), dp(2)) }
         panel.addView(status)
 
         val login = Button(this).apply {
@@ -141,8 +141,8 @@ class BlofySubscriberActivity : AppCompatActivity() {
                 true
             } else false
         }
-        panel.addView(login, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 330, if (phone) 64 else 68).apply { topMargin = 14 })
-        panel.addView(TextView(this).apply { text = "عنوان الخدمة الخاص مخفي داخل التطبيق"; textSize = 12f; setTextColor(BlofyTvDesign.TextDim); gravity = Gravity.CENTER; setPadding(10,12,10,0) })
+        panel.addView(login, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else dp(330), dp(if (phone) 64 else 68)).apply { topMargin = dp(14) })
+        panel.addView(TextView(this).apply { text = "عنوان الخدمة الخاص مخفي داخل التطبيق"; textSize = 12f; setTextColor(BlofyTvDesign.TextDim); gravity = Gravity.CENTER; setPadding(dp(10), dp(12), dp(10), 0) })
         setContentView(scroll); username.requestFocus()
     }
 
@@ -156,7 +156,9 @@ class BlofySubscriberActivity : AppCompatActivity() {
         return "جاري تحميل $stage  •  ${progress.percent}%"
     }
 
-    private fun panelBackground() = BlofyTvDesign.elevatedSurface(26f, emphasis = true)
-    private fun fieldBackground(focused: Boolean) = BlofyTvDesign.inputField(17f, focused)
-    private fun buttonBackground(focused: Boolean) = BlofyTvDesign.primaryButton(18f, focused)
+    private fun panelBackground() = BlofyTvDesign.elevatedSurface(dp(26).toFloat(), emphasis = true)
+    private fun fieldBackground(focused: Boolean) = BlofyTvDesign.inputField(dp(17).toFloat(), focused)
+    private fun buttonBackground(focused: Boolean) = BlofyTvDesign.primaryButton(dp(18).toFloat(), focused)
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
