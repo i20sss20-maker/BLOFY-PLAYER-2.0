@@ -12,23 +12,43 @@ object DeviceIdentity {
     private val secureRandom = SecureRandom()
 
     /**
-     * Device IDs are installation-scoped, not derived from ANDROID_ID.
+     * The first valid BLOFY device ID that reaches an installation is permanent.
      *
-     * This is intentional: after the app is deleted its local activation credential is lost.
-     * Reusing the same deterministic Device ID with a newly generated activation code would
-     * collide with the old server row and permanently reject the fresh install. A fresh install
-     * now receives a fresh complete identity, while normal app updates keep the same ID because
-     * this value remains in SharedPreferences.
+     * Existing releases may already have a server-known ID stored in Room while
+     * newer releases also have an ID in SharedPreferences. Upgrades must never
+     * replace that server-known ID, otherwise activation and portal playlists
+     * appear to belong to a different device.
+     *
+     * Fresh installations still receive a random BLOFY ID. Uninstalling the app
+     * can remove local credentials; that is a separate recovery flow and must not
+     * be confused with an in-place application update.
      */
     @Synchronized
     fun deviceId(context: Context): String {
         val preferences = preferences(context)
-        preferences.getString(DEVICE_ID, null)?.takeIf(::validDeviceId)?.let { return it }
+        preferences.getString(DEVICE_ID, null)?.takeIf(::isValidDeviceId)?.let { return it }
         return generateDeviceId().also {
             check(preferences.edit().putString(DEVICE_ID, it).commit()) {
                 "Unable to persist the device ID"
             }
         }
+    }
+
+    /**
+     * Preserves the identity already stored by an older installed version.
+     * This is intentionally one-way: an app update adopts the existing Room ID
+     * into SharedPreferences instead of generating a replacement device.
+     */
+    @Synchronized
+    fun adoptExistingDeviceId(context: Context, existingDeviceId: String): String {
+        if (!isValidDeviceId(existingDeviceId)) return deviceId(context)
+        val preferences = preferences(context)
+        val current = preferences.getString(DEVICE_ID, null)?.takeIf(::isValidDeviceId)
+        if (current == existingDeviceId) return existingDeviceId
+        check(preferences.edit().putString(DEVICE_ID, existingDeviceId).commit()) {
+            "Unable to preserve the existing device ID"
+        }
+        return existingDeviceId
     }
 
     @Synchronized
@@ -123,6 +143,9 @@ object DeviceIdentity {
     internal fun generateActivationCode(nextInt: (Int) -> Int = secureRandom::nextInt): String =
         (100_000 + nextInt(900_000)).toString()
 
+    internal fun isValidDeviceId(value: String): Boolean =
+        value.matches(Regex("BLOFY-[A-Z0-9-]{4,32}", RegexOption.IGNORE_CASE))
+
     private fun generateDifferentActivationCode(current: String): String {
         var candidate: String
         do candidate = generateActivationCode() while (candidate == current)
@@ -133,5 +156,4 @@ object DeviceIdentity {
         context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
 
     private fun validActivationCode(value: String): Boolean = value.matches(Regex("\\d{6}"))
-    private fun validDeviceId(value: String): Boolean = value.matches(Regex("BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}"))
 }
