@@ -30,8 +30,9 @@ class ActivationManager(
     }
 
     /**
-     * Moves a legacy random installation identity to this device's deterministic identity.
-     * The local identity is committed only after Azure confirms the server-side transaction.
+     * Binds the deterministic reinstall identity as a recovery alias for an already-issued device.
+     * A normal app update keeps the visible/server device ID unchanged. If we ever talk to an older
+     * backend that actually migrated the row, the legacy response is still handled for compatibility.
      */
     suspend fun migrateStableIdentityIfNeeded(
         api: ActivationApi,
@@ -42,6 +43,7 @@ class ActivationManager(
         val targetDeviceId = stable.first
         val targetActivationCode = stable.second
         if (resolved.deviceId == targetDeviceId) return resolved
+        if (DeviceIdentity.stableAliasAlreadyBound(context, resolved.deviceId)) return resolved
 
         val response = api.migrateIdentity(
             ActivationIdentityMigrationRequest(
@@ -51,9 +53,16 @@ class ActivationManager(
                 targetActivationCode = targetActivationCode
             )
         )
+
+        if (response.aliasBound) {
+            if (response.deviceId != null && response.deviceId != resolved.deviceId) return resolved
+            DeviceIdentity.markStableAliasBound(context, resolved.deviceId)
+            return resolved
+        }
+
+        // Compatibility with a short-lived older backend contract that moved the canonical row.
         if (!response.migrated && !response.alreadyStable) return resolved
         if (response.deviceId != null && response.deviceId != targetDeviceId) return resolved
-
         val migrated = resolved.copy(
             deviceId = targetDeviceId,
             activationCode = targetActivationCode,
@@ -87,6 +96,18 @@ class ActivationManager(
                 trialScope = TrialIdentity.scope(context)
             )
         )
+
+        val canonical = response.canonicalDeviceId
+            ?.takeIf { it.isNotBlank() && it != current.deviceId }
+        if (canonical != null) {
+            DeviceIdentity.adoptRecoveredCanonicalIdentity(context, canonical, current.activationCode)
+            current = current.copy(
+                deviceId = canonical,
+                lastCheckAt = System.currentTimeMillis()
+            )
+            dao.replaceActivation(current)
+        }
+
         if (response.canUse()) rotatePendingCode(api, current)
         val updated = applyRemoteStatus(response.canUse(), response.expiresAt)
         ActivationDisplayState.record(context, updated, response)
