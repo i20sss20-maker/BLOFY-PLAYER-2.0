@@ -7,3 +7,10 @@ BLOFY PLAYER 2.0 rc06 signed release gate
 - versionCode promoted to 2000007
 - versionName promoted to 2.0.0-rc06
 - production signed APK/AAB requested after successful rc05 candidate verification
+
+QA production-signed rebuild requested 2026-09-26
+- stability source app commit: 06765cd2a7e448762cabf0bee7fd489d9d60c790
+- signing gate workflow refreshed at: 130609055a3bf2ffb942e06f3986dff0e0faf8af
+- activation: https://api.blofyplayer.com
+- updates: https://updates.blofyplayer.com
+- version remains 2.0.0-rc06 / 2000007
