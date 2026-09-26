@@ -29,10 +29,10 @@ import tv.blofy.player.ui.player.PlayerActivity
 
 class RecentChannelsActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
+    private val compact by lazy { resources.configuration.screenWidthDp < 600 }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val compact = resources.configuration.screenWidthDp < 600
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(if (compact) 16 else 34), dp(if (compact) 20 else 28), dp(if (compact) 16 else 34), dp(if (compact) 22 else 30))
