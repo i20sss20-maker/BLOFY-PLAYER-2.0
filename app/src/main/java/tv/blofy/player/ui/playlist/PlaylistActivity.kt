@@ -58,7 +58,7 @@ class PlaylistActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = getString(if (editingProviderId == null) R.string.playlist_form_add_server else R.string.playlist_form_edit_server); textSize = if (phone) 25f else 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
         })
-        root.addView(TextView(this).apply { text = "Xtream Codes"; textSize = if (phone) 13f else 15f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, dp(5), 0, dp(16)) })
+        root.addView(TextView(this).apply { text = "Xtream Codes"; textSize = if (phone) 13f else 15f; setTextColor(BlofyTvDesign.TextSecondary); gravity = Gravity.CENTER; setPadding(0, dp(5), 0, dp(16)) })
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = resources.configuration.layoutDirection
@@ -67,7 +67,7 @@ class PlaylistActivity : AppCompatActivity() {
         root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else dp(760), LinearLayout.LayoutParams.WRAP_CONTENT))
 
         fun field(hintText: String, passwordField: Boolean = false) = EditText(this).apply {
-            hint = hintText; isSingleLine = true; gravity = Gravity.START or Gravity.CENTER_VERTICAL; setTextColor(Color.WHITE); setHintTextColor(0xFF8E829A.toInt()); setPadding(dp(22), 0, dp(22), 0)
+            hint = hintText; isSingleLine = true; gravity = Gravity.START or Gravity.CENTER_VERTICAL; setTextColor(Color.WHITE); setHintTextColor(BlofyTvDesign.TextDim); setPadding(dp(22), 0, dp(22), 0)
             background = fieldBackground(false); isFocusable = true; isFocusableInTouchMode = true
             setOnFocusChangeListener { view, focused ->
                 if (tv) {
@@ -90,18 +90,18 @@ class PlaylistActivity : AppCompatActivity() {
         val password = field(getString(R.string.playlist_form_password_hint), true)
         listOf(name, url).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 64)).apply { topMargin = dp(9) }) }
 
-        val transportNotice = TextView(this).apply { text = getString(R.string.playlist_form_https_preferred); textSize = if (phone) 12f else 13f; setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.START; setPadding(dp(8), dp(8), dp(8), dp(1)) }
+        val transportNotice = TextView(this).apply { text = getString(R.string.playlist_form_https_preferred); textSize = if (phone) 12f else 13f; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.START; setPadding(dp(8), dp(8), dp(8), dp(1)) }
         panel.addView(transportNotice)
         url.doAfterTextChanged { value ->
             val candidate = value?.toString()?.trim().orEmpty()
             when {
                 candidate.startsWith("http://", true) -> { transportNotice.setText(R.string.playlist_form_http_warning); transportNotice.setTextColor(Color.rgb(255,179,71)) }
                 candidate.startsWith("https://", true) -> { transportNotice.setText(R.string.playlist_form_https_secure); transportNotice.setTextColor(Color.rgb(116,224,174)) }
-                else -> { transportNotice.setText(R.string.playlist_form_https_preferred); transportNotice.setTextColor(0xFFB78CFF.toInt()) }
+                else -> { transportNotice.setText(R.string.playlist_form_https_preferred); transportNotice.setTextColor(BlofyTvDesign.PurpleSoft) }
             }
         }
         listOf(username, password).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phone) 62 else 64)).apply { topMargin = dp(9) }) }
-        val status = TextView(this).apply { setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.START; setPadding(0, dp(12), 0, dp(2)) }
+        val status = TextView(this).apply { setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.START; setPadding(0, dp(12), 0, dp(2)) }
         panel.addView(status)
 
         var confirmedHttpUrl: String? = null
