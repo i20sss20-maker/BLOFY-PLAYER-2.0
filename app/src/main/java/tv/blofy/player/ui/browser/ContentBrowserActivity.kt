@@ -79,7 +79,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(if (phoneMode) 18 else 30, if (phoneMode) 16 else 22, if (phoneMode) 18 else 30, if (phoneMode) 16 else 22)
+            setPadding(dp(if (phoneMode) 16 else 30), dp(if (phoneMode) 14 else 22), dp(if (phoneMode) 16 else 30), dp(if (phoneMode) 14 else 22))
             background = AppCompatResources.getDrawable(this@ContentBrowserActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
@@ -90,7 +90,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             setTextColor(BlofyTvDesign.TextPrimary)
             setShadowLayer(18f, 0f, 3f, BlofyTvDesign.Purple)
             gravity = Gravity.START
-            setPadding(8, 0, 0, if (phoneMode) 10 else 18)
+            setPadding(dp(8), 0, 0, dp(if (phoneMode) 10 else 18))
         })
 
         val body = LinearLayout(this).apply { orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
@@ -107,12 +107,12 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (kind != KIND_LIVE) root.addView(createCatalogStatusRow())
 
         if (phoneMode) {
-            body.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 92).apply { bottomMargin = 10 })
+            body.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(82)).apply { bottomMargin = dp(8) })
             body.addView(streamList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
-            body.addView(categoryList, LinearLayout.LayoutParams(280, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 18 })
+            body.addView(categoryList, LinearLayout.LayoutParams(dp(280), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(18) })
             if (previewEnabled) {
-                body.addView(streamList, LinearLayout.LayoutParams(360, LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = 22 })
+                body.addView(streamList, LinearLayout.LayoutParams(dp(360), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(22) })
                 body.addView(createPreviewPanel(), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             } else {
                 body.addView(streamList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
@@ -165,7 +165,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun createCatalogStatusRow() = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(8, 0, 8, if (phoneMode) 8 else 12)
+        setPadding(dp(8), 0, dp(8), dp(if (phoneMode) 8 else 12))
         background = browserPanelBackground(emphasis = true)
         catalogStatus = TextView(this@ContentBrowserActivity).apply {
             text = "جاري التحقق من ${catalogLabel()}..."
@@ -185,12 +185,12 @@ class ContentBrowserActivity : AppCompatActivity() {
             }
             setOnClickListener { refreshMissingCatalog() }
         }
-        addView(catalogRetry, LinearLayout.LayoutParams(if (phoneMode) 170 else 210, if (phoneMode) 58 else 64))
+        addView(catalogRetry, LinearLayout.LayoutParams(dp(if (phoneMode) 150 else 210), dp(if (phoneMode) 52 else 64)))
     }
 
     private fun createPreviewPanel() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(18, 18, 18, 18)
+        setPadding(dp(18), dp(18), dp(18), dp(18))
         background = previewPanelBackground()
         previewTitle = TextView(this@ContentBrowserActivity).apply {
             text = "المعاينة"
@@ -198,7 +198,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             setShadowLayer(12f, 0f, 2f, BlofyTvDesign.Purple)
-            setPadding(4, 0, 0, 12)
+            setPadding(dp(4), 0, 0, dp(12))
         }
         addView(previewTitle)
         previewView = PlayerView(this@ContentBrowserActivity).apply {
@@ -479,6 +479,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         allowCrossProtocolRedirects = provider.allowCrossProtocolRedirects,
         providerKind = tv.blofy.player.core.provider.ProviderKind.from(provider.providerType)
     )
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
         const val EXTRA_KIND = "kind"
