@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.stableId64
 
 internal class PosterStreamAdapter(
     private val onClick: (StreamEntity) -> Unit,
@@ -37,7 +38,7 @@ internal class PosterStreamAdapter(
         diff.dispatchUpdatesTo(this)
     }
 
-    override fun getItemId(position: Int): Long = items[position].key.hashCode().toLong()
+    override fun getItemId(position: Int): Long = stableId64(items[position].key)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val density = parent.resources.displayMetrics.density
