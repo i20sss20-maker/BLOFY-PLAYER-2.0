@@ -25,7 +25,7 @@
     <main class="source-main">
       <header class="topbar">
         <div>
-          <p class="eyebrow">BLOFY CONTENT CONTROL</p>
+          <p class="eyebrow">BLOFY · إدارة المحتوى</p>
           <h1>المصادر و Xtream</h1>
           <p class="subtitle">أنشئ بيانات سيرفر BLOFY، أضف مصادر مسموح لك باستخدامها، ثم تحكم بالكتالوج من شاشة واحدة.</p>
         </div>
@@ -45,7 +45,7 @@
 
       <section id="tab-sources" class="tab-page active">
         <section class="section-intro">
-          <div><span class="eyebrow">SOURCES</span><h2>مصادر BLOFY</h2><p>هذه الإضافات هي المصادر المدارة من BLOFY. فعّل ما تحتاجه وعطّل الباقي بدون لمس التطبيق.</p></div>
+          <div><span class="eyebrow">المصادر</span><h2>مصادر BLOFY</h2><p>هذه الإضافات هي المصادر المدارة من BLOFY. فعّل ما تحتاجه وعطّل الباقي بدون لمس التطبيق.</p></div>
           <div class="intro-step"><strong>1</strong><span>فعّل المصادر</span></div>
         </section>
 
@@ -79,14 +79,14 @@
 
       <section id="tab-xtream" class="tab-page" hidden>
         <section class="section-intro">
-          <div><span class="eyebrow">BLOFY XTREAM</span><h2>سيرفرك الخاص</h2><p>أنشئ Server + Username + Password ثم استخدمها في أي تطبيق يدعم Xtream Codes API.</p></div>
+          <div><span class="eyebrow">BLOFY · إكستريم</span><h2>سيرفرك الخاص</h2><p>أنشئ عنوان السيرفر واسم المستخدم وكلمة المرور، ثم استخدمها في أي تطبيق يدعم واجهة Xtream Codes.</p></div>
           <div class="intro-step"><strong>2</strong><span>أنشئ بيانات الدخول</span></div>
         </section>
 
         <section class="panel gateway-panel">
           <div class="panel-head gateway-title-row">
             <div>
-              <span class="panel-kicker">BLOFY XTREAM GATEWAY</span>
+              <span class="panel-kicker">بوابة BLOFY إكستريم</span>
               <h2>بيانات السيرفر التي ستستخدمها في التطبيقات</h2>
               <p>السيرفر يعرض فقط العناصر المفعلة في الكتالوج. إنشاء بيانات الدخول لا يضيف محتوى من نفسه.</p>
             </div>
@@ -94,7 +94,7 @@
           </div>
 
           <div class="gateway-host-row">
-            <div><span class="label">Server / Host</span><code id="gatewayServerUrl">جارٍ التحميل…</code></div>
+            <div><span class="label">عنوان السيرفر</span><code id="gatewayServerUrl">جارٍ التحميل…</code></div>
             <button id="gatewayCopyHostBtn" class="button ghost" type="button">نسخ الرابط</button>
           </div>
 
@@ -104,9 +104,9 @@
               <div class="inline-actions"><button id="gatewayCopyAllBtn" class="button primary" type="button">نسخ الكل</button><button id="gatewayHideCredentialsBtn" class="button ghost" type="button">إخفاء</button></div>
             </div>
             <div class="credential-grid">
-              <label><span>Server</span><code id="gatewayCredHost">—</code></label>
-              <label><span>Username</span><code id="gatewayCredUser">—</code></label>
-              <label><span>Password</span><code id="gatewayCredPass">—</code></label>
+              <label><span>السيرفر</span><code id="gatewayCredHost">—</code></label>
+              <label><span>اسم المستخدم</span><code id="gatewayCredUser">—</code></label>
+              <label><span>كلمة المرور</span><code id="gatewayCredPass">—</code></label>
             </div>
           </div>
 
@@ -117,22 +117,22 @@
 
         <section class="stats five" aria-label="إحصائيات Xtream">
           <article><span>المصادر</span><strong id="xtServers">0</strong></article>
-          <article><span>Online</span><strong id="xtOnline">0</strong></article>
-          <article><span>Live</span><strong id="xtLive">0</strong></article>
-          <article><span>Movies</span><strong id="xtMovies">0</strong></article>
-          <article><span>Series</span><strong id="xtSeries">0</strong></article>
+          <article><span>متصل</span><strong id="xtOnline">0</strong></article>
+          <article><span>البث المباشر</span><strong id="xtLive">0</strong></article>
+          <article><span>الأفلام</span><strong id="xtMovies">0</strong></article>
+          <article><span>المسلسلات</span><strong id="xtSeries">0</strong></article>
         </section>
 
         <section class="panel form-panel">
           <div class="panel-head">
-            <div><span class="panel-kicker">UPSTREAM SOURCES</span><h2>إضافة مصدر Xtream</h2><p>إذا عندك مصدر Xtream تملكه أو مصرح لك باستخدامه، أضفه هنا ثم اسحب Live + Movies + Series.</p></div>
+            <div><span class="panel-kicker">مصادر الربط</span><h2>إضافة مصدر Xtream</h2><p>إذا عندك مصدر Xtream تملكه أو مصرح لك باستخدامه، أضفه هنا ثم اسحب Live + Movies + Series.</p></div>
             <button id="syncAllXtreamBtn" class="button primary" type="button">مزامنة كل المصادر</button>
           </div>
           <form id="xtreamForm" class="xtream-form" autocomplete="off">
-            <label><span>اسم المصدر</span><input id="xtName" required maxlength="160" placeholder="مثال: Main Server"></label>
-            <label class="wide"><span>Host / URL</span><input id="xtBaseUrl" required inputmode="url" placeholder="https://example.com:443"></label>
-            <label><span>Username</span><input id="xtUsername" required autocomplete="new-password" autocapitalize="none" spellcheck="false"></label>
-            <label><span>Password</span><input id="xtPassword" required type="password" autocomplete="new-password"></label>
+            <label><span>اسم المصدر</span><input id="xtName" required maxlength="160" placeholder="مثال: السيرفر الرئيسي"></label>
+            <label class="wide"><span>رابط السيرفر</span><input id="xtBaseUrl" required inputmode="url" placeholder="https://example.com:443"></label>
+            <label><span>اسم المستخدم</span><input id="xtUsername" required autocomplete="new-password" autocapitalize="none" spellcheck="false"></label>
+            <label><span>كلمة المرور</span><input id="xtPassword" required type="password" autocomplete="new-password"></label>
             <label><span>الأولوية</span><input id="xtPriority" type="number" min="0" max="10000" value="100"></label>
             <label class="check"><input id="xtEnabled" type="checkbox" checked><span>مفعل</span></label>
             <label class="check"><input id="xtPublish" type="checkbox"><span>نشر الكتالوج العام</span></label>
@@ -150,13 +150,13 @@
 
       <section id="tab-catalog" class="tab-page" hidden>
         <section class="section-intro">
-          <div><span class="eyebrow">CATALOG</span><h2>الكتالوج المستورد</h2><p>حدد المصدر والنوع والقسم، ثم فعّل أو عطّل ما تريد ظهوره داخل سيرفر BLOFY.</p></div>
+          <div><span class="eyebrow">الكتالوج</span><h2>الكتالوج المستورد</h2><p>حدد المصدر والنوع والقسم، ثم فعّل أو عطّل ما تريد ظهوره داخل سيرفر BLOFY.</p></div>
           <div class="intro-step"><strong>3</strong><span>رتّب ما يظهر</span></div>
         </section>
         <section class="panel">
           <div class="catalog-controls">
             <label><span>المصدر</span><select id="catalogServer"></select></label>
-            <label><span>النوع</span><select id="catalogType"><option value="movie">Movies</option><option value="series">Series</option><option value="live">Live</option></select></label>
+            <label><span>النوع</span><select id="catalogType"><option value="movie">الأفلام</option><option value="series">المسلسلات</option><option value="live">البث المباشر</option></select></label>
             <label><span>القسم</span><select id="catalogCategory"><option value="">كل الأقسام</option></select></label>
             <label class="wide"><span>بحث</span><input id="catalogSearch" placeholder="اسم فيلم، مسلسل أو قناة"></label>
             <button id="catalogLoadBtn" class="button primary" type="button">عرض</button>
@@ -167,7 +167,7 @@
         </section>
       </section>
 
-      <footer><span>BLOFY Sources</span><span>•</span><a href="https://github.com/i20sss20-maker/BLOFY-SOURCES" target="_blank" rel="noreferrer">GitHub</a></footer>
+      <footer><span>مصادر BLOFY</span><span>•</span><a href="https://github.com/i20sss20-maker/BLOFY-SOURCES" target="_blank" rel="noreferrer">GitHub</a></footer>
     </main>
   </div>
   <script src="/sources-admin.js" defer></script>
