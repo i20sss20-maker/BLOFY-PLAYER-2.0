@@ -114,7 +114,7 @@
             var version=app.versionName||'—';
             var code=app.versionCode;
             document.getElementById('releaseState').textContent=version;
-            document.getElementById('releaseMeta').textContent=code?'Version Code '+code:'آخر إصدار معلن من BLOFY';
+            document.getElementById('releaseMeta').textContent=code?'رقم البناء '+code:'آخر إصدار معلن من BLOFY';
             overall.classList.add(healthy?'ok':'bad');
             overallText.textContent=healthy?'جميع الخدمات الأساسية تعمل بشكل طبيعي':'يوجد خلل في إحدى الخدمات الأساسية';
             var ts=p.time?new Date(p.time):new Date();
