@@ -114,8 +114,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
         percent = TextView(this).apply {
             text = "0%"
             textSize = if (isPhone) 28f else 34f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
         }
         progressRow.addView(percent, LinearLayout.LayoutParams(dp(120), dp(54)))
@@ -124,8 +124,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
         stage = TextView(this).apply {
             text = "جاري الاتصال بالخادم..."
             textSize = 19f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
             setPadding(0, dp(12), 0, dp(4))
         }
@@ -197,7 +197,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         text = label
         isAllCaps = false
         textSize = 15f
-        setTextColor(Color.WHITE)
+        setTextColor(BlofyTvDesign.TextPrimary)
         typeface = BlofyTvDesign.BodyTypeface
         stateListAnimator = null
         BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.035f, false)
@@ -308,7 +308,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private fun fail(message: String) {
         stage.text = message
-        stage.setTextColor(0xFFFF879B.toInt())
+        stage.setTextColor(BlofyTvDesign.Danger)
         detail.text = "لم يتم اعتماد المكتبة غير المكتملة • يمكنك إعادة المحاولة بأمان"
         recoveryContainer()?.visibility = android.view.View.VISIBLE
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
