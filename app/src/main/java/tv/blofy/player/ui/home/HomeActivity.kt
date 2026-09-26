@@ -73,8 +73,8 @@ class HomeActivity : AppCompatActivity() {
         main.addView(TextView(this).apply {
             text = "اكتشف الآن"
             textSize = 25f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)))
 
@@ -143,10 +143,8 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun sidebarSelected(icon: String, label: String): LinearLayout = sidebarBase(icon, label).apply {
-        background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF5417B9.toInt(), 0xFFB02DDF.toInt())).apply {
-            cornerRadius = dp(17).toFloat()
-            setStroke(dp(1), 0xFFCE75FF.toInt())
-        }
+        background = BlofyTvDesign.primaryButton(dp(17).toFloat(), false)
+        elevation = dp(5).toFloat()
     }
 
     private fun sidebarAction(key: String, icon: String, label: String, intent: Intent): LinearLayout = sidebarBase(icon, label).apply {
@@ -194,7 +192,7 @@ class HomeActivity : AppCompatActivity() {
             text = "BLOFY PLAYER"
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(0xFF54E5C6.toInt())
+            setTextColor(BlofyTvDesign.Mint)
             gravity = Gravity.RIGHT
         })
         addView(TextView(this@HomeActivity).apply {
@@ -208,7 +206,7 @@ class HomeActivity : AppCompatActivity() {
         addView(TextView(this@HomeActivity).apply {
             text = "البث المباشر والأفلام والمسلسلات والمفضلة في واجهة واحدة سريعة وواضحة."
             textSize = 17f
-            setTextColor(0xFFC8BCD4.toInt())
+            setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.RIGHT
             setPadding(0, dp(8), 0, dp(18))
         })
@@ -226,14 +224,11 @@ class HomeActivity : AppCompatActivity() {
         text = label
         isAllCaps = false
         textSize = 16f
-        typeface = Typeface.DEFAULT_BOLD
-        setTextColor(Color.WHITE)
-        isFocusable = true
-        isFocusableInTouchMode = true
-        background = if (primary) primaryButton(false) else secondaryButton(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = if (primary) primaryButton(focused) else secondaryButton(focused)
-            if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
+        typeface = BlofyTvDesign.HeadingTypeface
+        setTextColor(BlofyTvDesign.TextPrimary)
+        stateListAnimator = null
+        BlofyTvDesign.installTvFocus(this, dp(14).toFloat(), 1.045f, primary) {
+            FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
         }
         setOnClickListener { startActivity(intent) }
         registerAction(key, this)
@@ -333,7 +328,8 @@ class HomeActivity : AppCompatActivity() {
     private fun compactButton(key: String, label: String, intent: Intent) = Button(this).apply {
         val tv = deviceKind == DeviceClass.Kind.TV
         text = label; isAllCaps = false; textSize = if (deviceKind == DeviceClass.Kind.PHONE) 15f else 16f
-        isFocusable = tv; isFocusableInTouchMode = tv; setTextColor(Color.WHITE); background = compactTile(false)
+        typeface = BlofyTvDesign.BodyTypeface
+        isFocusable = tv; isFocusableInTouchMode = tv; setTextColor(BlofyTvDesign.TextPrimary); background = compactTile(false)
         setOnFocusChangeListener { view, focused -> if (tv) { view.background = compactTile(focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key) } }
         setOnClickListener { startActivity(intent) }
         registerAction(key, this)
@@ -352,7 +348,7 @@ class HomeActivity : AppCompatActivity() {
     private fun secondaryButton(focused: Boolean) = BlofyTvDesign.secondaryButton(dp(14).toFloat(), focused)
     private fun compactTile(focused: Boolean) = BlofyTvDesign.surface(dp(22).toFloat(), focused)
 
-    private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; setTextColor(Color.WHITE); gravity = Gravity.START }
+    private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.START }
     private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(theme.accent); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
     private fun blend(a: Int, b: Int, ratio: Float): Int { val r = (Color.red(a) * (1f - ratio) + Color.red(b) * ratio).toInt(); val g = (Color.green(a) * (1f - ratio) + Color.green(b) * ratio).toInt(); val bl = (Color.blue(a) * (1f - ratio) + Color.blue(b) * ratio).toInt(); return Color.rgb(r, g, bl) }
