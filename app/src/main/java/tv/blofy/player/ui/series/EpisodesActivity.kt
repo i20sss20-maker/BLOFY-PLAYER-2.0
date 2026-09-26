@@ -56,10 +56,11 @@ class EpisodesActivity : AppCompatActivity() {
         seriesId = intent.getStringExtra(EXTRA_SERIES_ID).orEmpty()
         val seriesName = intent.getStringExtra(EXTRA_SERIES_NAME).orEmpty()
         if (providerId.isBlank() || seriesId.isBlank()) { finish(); return }
+        val compact = resources.configuration.screenWidthDp < 700
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(28), dp(22), dp(28), dp(24))
+            setPadding(dp(if (compact) 16 else 28), dp(if (compact) 16 else 22), dp(if (compact) 16 else 28), dp(if (compact) 18 else 24))
             background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
@@ -75,17 +76,27 @@ class EpisodesActivity : AppCompatActivity() {
         retryButton = actionButton("إعادة تحميل الحلقات") { lifecycleScope.launch { syncEpisodes(currentProvider()) } }.apply { visibility = View.GONE }
         root.addView(retryButton, LinearLayout.LayoutParams(dp(250), dp(64)).apply { bottomMargin = dp(10); gravity = Gravity.RIGHT })
 
-        val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_LTR }
+        val body = LinearLayout(this).apply { orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_LTR }
         episodeList = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@EpisodesActivity); itemAnimator = null; setHasFixedSize(true)
             setPadding(dp(8), dp(8), dp(8), dp(8)); background = panelBackground()
         }
         seasonList = RecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@EpisodesActivity); itemAnimator = null; setHasFixedSize(true)
+            layoutManager = LinearLayoutManager(
+                this@EpisodesActivity,
+                if (compact) RecyclerView.HORIZONTAL else RecyclerView.VERTICAL,
+                false
+            )
+            itemAnimator = null; setHasFixedSize(true)
             setPadding(dp(8), dp(8), dp(8), dp(8)); background = panelBackground()
         }
-        body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(18) })
-        body.addView(seasonList, LinearLayout.LayoutParams(dp(260), LinearLayout.LayoutParams.MATCH_PARENT))
+        if (compact) {
+            body.addView(seasonList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(82)).apply { bottomMargin = dp(10) })
+            body.addView(episodeList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        } else {
+            body.addView(episodeList, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginEnd = dp(18) })
+            body.addView(seasonList, LinearLayout.LayoutParams(dp(260), LinearLayout.LayoutParams.MATCH_PARENT))
+        }
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
