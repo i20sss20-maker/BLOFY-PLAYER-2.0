@@ -135,6 +135,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun buildPlayerUi() {
+        val compactHud = resources.configuration.screenWidthDp < 900
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         playerView = PlayerView(this).apply {
             useController = false
@@ -147,16 +148,16 @@ class PlayerActivity : AppCompatActivity() {
 
         channelNumberView = TextView(this).apply {
             textSize = 34f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER
-            setPadding(24, 10, 24, 10)
-            background = BlofyTvDesign.badge(18f, accent = true)
+            setPadding(dp(if (compactHud) 14 else 24), dp(6), dp(if (compactHud) 14 else 24), dp(6))
+            background = BlofyTvDesign.badge(dp(14).toFloat(), accent = true)
             visibility = View.GONE
         }
-        root.addView(channelNumberView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = 34; marginEnd = 42 })
+        root.addView(channelNumberView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = dp(18); marginEnd = dp(20) })
 
         hud = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(44, 28, 44, 34)
-            background = BlofyTvDesign.elevatedSurface(30f, emphasis = true)
+            setPadding(dp(if (compactHud) 16 else 30), dp(if (compactHud) 14 else 22), dp(if (compactHud) 16 else 30), dp(if (compactHud) 16 else 26))
+            background = BlofyTvDesign.elevatedSurface(dp(if (compactHud) 20 else 26).toFloat(), emphasis = true)
             visibility = View.GONE
         }
 
@@ -168,27 +169,27 @@ class PlayerActivity : AppCompatActivity() {
         hud.addView(eyebrow)
 
         titleView = TextView(this).apply {
-            textSize = 25f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); maxLines = 1
+            textSize = if (compactHud) 20f else 25f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); maxLines = 1
             setPadding(0, 0, 0, 8)
         }
         hud.addView(titleView)
 
         epgView = TextView(this).apply {
-            textSize = 15f; setTextColor(BlofyTvDesign.TextSecondary); setPadding(0, 0, 0, 16)
+            textSize = if (compactHud) 13f else 15f; setTextColor(BlofyTvDesign.TextSecondary); setPadding(0, 0, 0, 16)
             visibility = if (kind == "live") View.VISIBLE else View.GONE
             background = if (kind == "live") BlofyTvDesign.badge(14f, accent = false) else null
-            if (kind == "live") setPadding(18, 12, 18, 12)
+            if (kind == "live") setPadding(dp(12), dp(8), dp(12), dp(8))
         }
         hud.addView(epgView)
 
         if (kind != "live") {
-            val timeline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 4, 0, 14) }
+            val timeline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(if (compactHud) 8 else 12)) }
             positionView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER_VERTICAL }
             durationView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER_VERTICAL }
             progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progress = 0; progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright); progressBackgroundTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.SurfaceRaised) }
-            timeline.addView(positionView, LinearLayout.LayoutParams(72, 36))
-            timeline.addView(progressBar, LinearLayout.LayoutParams(0, 18, 1f).apply { marginEnd = 14; marginStart = 14 })
-            timeline.addView(durationView, LinearLayout.LayoutParams(72, 36))
+            timeline.addView(positionView, LinearLayout.LayoutParams(dp(if (compactHud) 54 else 72), dp(32)))
+            timeline.addView(progressBar, LinearLayout.LayoutParams(0, dp(8), 1f).apply { marginEnd = dp(10); marginStart = dp(10) })
+            timeline.addView(durationView, LinearLayout.LayoutParams(dp(if (compactHud) 54 else 72), dp(32)))
             hud.addView(timeline)
         }
 
@@ -200,10 +201,10 @@ class PlayerActivity : AppCompatActivity() {
             }
             liveHint.addView(TextView(this).apply {
                 text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لإظهار معلومات البرنامج"
-                textSize = 14f
+                textSize = if (resources.configuration.screenWidthDp < 900) 12.5f else 14f
                 setTextColor(PURPLE_SOFT)
                 gravity = Gravity.CENTER_VERTICAL
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 62))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(if (compactHud) 48 else 58)))
             hud.addView(liveHint)
         } else {
             val playbackControls = LinearLayout(this).apply {
@@ -215,29 +216,63 @@ class PlayerActivity : AppCompatActivity() {
             val rewindButton = controlButton("−10 ث") { seekBy(-10_000L); showHudBriefly() }
             playPauseButton = controlButton("⏸  إيقاف") { togglePlayPause() }
             val forwardButton = controlButton("+10 ث") { seekBy(10_000L); showHudBriefly() }
-            playbackControls.addView(forwardButton, LinearLayout.LayoutParams(150, 64).apply { marginStart = 10 })
-            playbackControls.addView(playPauseButton, LinearLayout.LayoutParams(190, 64).apply { marginStart = 10 })
-            playbackControls.addView(rewindButton, LinearLayout.LayoutParams(150, 64))
-            hud.addView(playbackControls, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 10 })
-
-            val options = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
-                clipChildren = false
+            if (compactHud) {
+                playbackControls.addView(forwardButton, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginStart = dp(6) })
+                playbackControls.addView(playPauseButton, LinearLayout.LayoutParams(0, dp(54), 1.25f).apply { marginStart = dp(6) })
+                playbackControls.addView(rewindButton, LinearLayout.LayoutParams(0, dp(54), 1f))
+            } else {
+                playbackControls.addView(forwardButton, LinearLayout.LayoutParams(dp(150), dp(64)).apply { marginStart = dp(10) })
+                playbackControls.addView(playPauseButton, LinearLayout.LayoutParams(dp(190), dp(64)).apply { marginStart = dp(10) })
+                playbackControls.addView(rewindButton, LinearLayout.LayoutParams(dp(150), dp(64)))
             }
+            hud.addView(playbackControls, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(if (compactHud) 6 else 10) })
+
             audioButton = controlButton("🔊  الصوت") { showTrackDialog(C.TRACK_TYPE_AUDIO) }
             subtitleButton = controlButton("CC  الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
             qualityButton = controlButton("▣  الجودة") { showVideoQualityDialog() }
             favoriteButton = controlButton("☆  المفضلة") { toggleFavorite() }.apply { visibility = if (kind == "episode") View.GONE else View.VISIBLE }
-            options.addView(audioButton, LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 })
-            options.addView(subtitleButton, LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 })
-            options.addView(qualityButton, LinearLayout.LayoutParams(176, 64).apply { marginStart = 10 })
-            if (kind != "episode") {
-                options.addView(favoriteButton, LinearLayout.LayoutParams(184, 64))
+
+            val options = LinearLayout(this).apply {
+                orientation = if (compactHud) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                clipChildren = false
+            }
+            if (compactHud) {
+                val trackRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                    layoutDirection = View.LAYOUT_DIRECTION_RTL
+                    clipChildren = false
+                }
+                trackRow.addView(audioButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                trackRow.addView(subtitleButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                trackRow.addView(qualityButton, LinearLayout.LayoutParams(0, dp(50), 1f))
+                options.addView(trackRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
+
+                val contentRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                    layoutDirection = View.LAYOUT_DIRECTION_RTL
+                    clipChildren = false
+                }
+                if (kind != "episode") {
+                    contentRow.addView(favoriteButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
+                } else {
+                    contentRow.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                    contentRow.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(0, dp(50), 1f))
+                }
+                options.addView(contentRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(5) })
             } else {
-                options.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(150, 64).apply { marginStart = 10 })
-                options.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(150, 64))
+                options.addView(audioButton, LinearLayout.LayoutParams(dp(176), dp(64)).apply { marginStart = dp(10) })
+                options.addView(subtitleButton, LinearLayout.LayoutParams(dp(176), dp(64)).apply { marginStart = dp(10) })
+                options.addView(qualityButton, LinearLayout.LayoutParams(dp(176), dp(64)).apply { marginStart = dp(10) })
+                if (kind != "episode") {
+                    options.addView(favoriteButton, LinearLayout.LayoutParams(dp(184), dp(64)))
+                } else {
+                    options.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(dp(150), dp(64)).apply { marginStart = dp(10) })
+                    options.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(dp(150), dp(64)))
+                }
             }
             hud.addView(options)
         }
@@ -252,11 +287,11 @@ class PlayerActivity : AppCompatActivity() {
         isAllCaps = false
         isFocusable = true
         isFocusableInTouchMode = true
-        textSize = 14f
+        textSize = if (resources.configuration.screenWidthDp < 900) 12.5f else 14f
         typeface = BlofyTvDesign.BodyTypeface
         setTextColor(BlofyTvDesign.TextPrimary)
         stateListAnimator = null
-        BlofyTvDesign.installTvFocus(this, 18f, 1.055f, label.contains("تشغيل") || label.contains("إيقاف")) {
+        BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), if (resources.configuration.screenWidthDp < 900) 1.035f else 1.055f, label.contains("تشغيل") || label.contains("إيقاف")) {
             keepHudVisible()
         }
         setOnClickListener { action() }
@@ -523,6 +558,8 @@ class PlayerActivity : AppCompatActivity() {
         allowCrossProtocolRedirects = provider.allowCrossProtocolRedirects,
         providerKind = ProviderKind.from(provider.providerType)
     )
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private fun Int.floorMod(size: Int): Int = ((this % size) + size) % size
     private data class TrackEntry(val group: Tracks.Group, val index: Int, val label: String)
