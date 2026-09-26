@@ -10,6 +10,11 @@ while (rotatedActivationCode === activationCode) {
   rotatedActivationCode = String(crypto.randomInt(100_000, 1_000_000));
 }
 const playlistId = crypto.randomUUID();
+const stableDeviceId = `BLOFY-${suffix.slice(0, 4)}-${suffix.slice(4, 8)}`;
+let stableActivationCode = String(crypto.randomInt(100_000, 1_000_000));
+while (stableActivationCode === rotatedActivationCode) {
+  stableActivationCode = String(crypto.randomInt(100_000, 1_000_000));
+}
 
 async function request(path, { method = 'POST', body, headers = {} } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -88,6 +93,33 @@ assert.equal(saved.json?.id, playlistId);
 assert.equal(saved.json?.active, true);
 assert.ok(Number.isInteger(saved.json?.revision) && saved.json.revision >= 1);
 assert.ok(Number.isFinite(saved.json?.updatedAt));
+
+// Upgrading an existing install moves its canonical server record to the deterministic
+// reinstall-stable identity before the app commits the new local ID.
+const migrated = await request('/api/v1/device/identity/migrate', {
+  body: {
+    deviceId: identity.deviceId,
+    activationCode: identity.activationCode,
+    targetDeviceId: stableDeviceId,
+    targetActivationCode: stableActivationCode
+  }
+});
+assert.equal(migrated.response.status, 200);
+assert.equal(migrated.json?.migrated, true);
+assert.equal(migrated.json?.deviceId, stableDeviceId);
+identity = { deviceId: stableDeviceId, activationCode: stableActivationCode };
+
+// Retrying after a lost HTTP response is idempotent and must not create another device.
+const migrationRetry = await request('/api/v1/device/identity/migrate', {
+  body: {
+    deviceId,
+    activationCode: rotatedActivationCode,
+    targetDeviceId: stableDeviceId,
+    targetActivationCode: stableActivationCode
+  }
+});
+assert.equal(migrationRetry.response.status, 200);
+assert.equal(migrationRetry.json?.alreadyStable, true);
 
 // This is the exact endpoint and response shape consumed by PortalPlaylistClient.fetchRemote().
 const sync = await request('/api/v1/portal/playlists/list', { body: identity });
