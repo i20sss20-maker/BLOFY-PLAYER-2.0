@@ -62,6 +62,7 @@ class LoginActivity : AppCompatActivity() {
     private var playlistJob: Job? = null
     private var pairingWatcherJob: Job? = null
     private var renderedQrUrl: String? = null
+    private var renderedProviders: List<ProviderEntity> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -273,9 +274,26 @@ class LoginActivity : AppCompatActivity() {
     private suspend fun loadPortalProviders(endpoint: String, dao: BlofyDao): List<ProviderEntity> = if (endpoint.isBlank()) dao.allProviders().first() else runSuspendCatching { PortalPlaylistClient.sync(applicationContext,endpoint,dao).providers }.getOrElse { dao.allProviders().first() }
 
     private fun renderPortalPlaylists(providers: List<ProviderEntity>) {
-        val row = playlistRow ?: return; row.removeAllViews()
-        if (providers.isEmpty()) { row.addView(emptyPlaylistView("لا توجد قوائم • استخدم إضافة / إدارة"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(70))); return }
-        providers.sortedWith(compareByDescending<ProviderEntity>{it.enabled}.thenByDescending{it.updatedAt}).forEach { provider -> row.addView(playlistCard(provider), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(72)).apply { bottomMargin = dp(8) }) }
+        val row = playlistRow ?: return
+        val sorted = providers.sortedWith(compareByDescending<ProviderEntity> { it.enabled }.thenByDescending { it.updatedAt })
+        if (sorted == renderedProviders) return
+        renderedProviders = sorted.toList()
+        row.removeAllViews()
+        if (sorted.isEmpty()) {
+            row.addView(
+                emptyPlaylistView("لا توجد قوائم • استخدم إضافة / إدارة"),
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(70))
+            )
+            return
+        }
+        sorted.forEach { provider ->
+            row.addView(
+                playlistCard(provider),
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply {
+                    bottomMargin = dp(8)
+                }
+            )
+        }
     }
 
     private fun playlistCard(provider: ProviderEntity) = LinearLayout(this).apply {
