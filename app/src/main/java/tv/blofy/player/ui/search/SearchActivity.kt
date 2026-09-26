@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
@@ -50,17 +51,19 @@ class SearchActivity : AppCompatActivity() {
         }
         root.addView(TextView(this).apply {
             text = "بحث BLOFY"
-            textSize = 29f
-            setTextColor(Color.WHITE)
+            BlofyTvDesign.applyTitle(this)
             setPadding(0, 0, 0, dp(10))
         })
         input = EditText(this).apply {
             hint = "اكتب اسم قناة أو فيلم أو مسلسل"
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
+            setTextColor(BlofyTvDesign.TextPrimary)
+            setHintTextColor(BlofyTvDesign.TextDim)
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             isFocusable = true
+            background = BlofyTvDesign.inputField(dp(18).toFloat(), false)
+            setPadding(dp(18), 0, dp(18), 0)
+            setOnFocusChangeListener { view, focused -> view.background = BlofyTvDesign.inputField(dp(18).toFloat(), focused) }
             setOnEditorActionListener { _, _, _ ->
                 searchJob?.cancel()
                 runSearch(text?.toString().orEmpty(), moveFocus = true)
@@ -87,7 +90,7 @@ class SearchActivity : AppCompatActivity() {
         resultInfo = TextView(this).apply {
             text = "ابدأ بالكتابة للبحث في القنوات والأفلام والمسلسلات"
             textSize = 13.5f
-            setTextColor(Color.rgb(183, 168, 201))
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.RIGHT
             setPadding(0, dp(10), 0, dp(8))
         }
@@ -165,7 +168,7 @@ class SearchActivity : AppCompatActivity() {
                 }
                 val artwork = ImageView(this@SearchActivity).apply {
                     scaleType = ImageView.ScaleType.CENTER_CROP
-                    setBackgroundColor(0xFF16101F.toInt())
+                    setBackgroundColor(BlofyTvDesign.Surface)
                     contentDescription = stream.name
                 }
                 ArtworkLoader.load(artwork, stream.icon)
@@ -191,7 +194,7 @@ class SearchActivity : AppCompatActivity() {
                         else -> kindLabel(stream.kind)
                     }
                     textSize = 12.5f
-                    setTextColor(Color.rgb(183, 168, 201))
+                    setTextColor(BlofyTvDesign.TextMuted)
                     gravity = Gravity.RIGHT
                     setPadding(0, dp(4), 0, 0)
                 })
@@ -252,18 +255,14 @@ class SearchActivity : AppCompatActivity() {
         else -> kind.uppercase()
     }
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 16f
-        setColor(if (focused) Color.rgb(65, 31, 110) else Color.rgb(18, 17, 28))
-        if (focused) setStroke(2, Color.rgb(185, 130, 255))
-    }
+    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(16).toFloat(), focused)
 
     private fun showMessage(text: String) {
         results.removeAllViews()
         results.addView(TextView(this).apply {
             this.text = text
             textSize = 18f
-            setTextColor(Color.LTGRAY)
+            setTextColor(BlofyTvDesign.TextMuted)
             setPadding(0, dp(24), 0, 0)
         })
     }

@@ -24,6 +24,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.player.PlayerActivity
 
 class RecentChannelsActivity : AppCompatActivity() {
@@ -40,8 +41,7 @@ class RecentChannelsActivity : AppCompatActivity() {
         }
         root.addView(TextView(this).apply {
             text = "آخر القنوات"
-            textSize = 28f
-            setTextColor(Color.WHITE)
+            BlofyTvDesign.applyTitle(this)
             setPadding(dp(4), 0, 0, dp(12))
         })
 
@@ -100,7 +100,7 @@ class RecentChannelsActivity : AppCompatActivity() {
 
         val logo = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(0xFF17111F.toInt())
+            setBackgroundColor(BlofyTvDesign.Surface)
         }
         ArtworkLoader.load(logo, stream.icon)
         row.addView(logo, LinearLayout.LayoutParams(dp(58), dp(58)).apply { marginStart = dp(14) })
@@ -112,14 +112,14 @@ class RecentChannelsActivity : AppCompatActivity() {
         info.addView(TextView(this).apply {
             text = stream.name
             textSize = 18f
-            setTextColor(Color.WHITE)
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT
             maxLines = 1
         })
         info.addView(TextView(this).apply {
             text = "بث مباشر  •  اضغط للمشاهدة"
             textSize = 12.5f
-            setTextColor(0xFFB7A8C9.toInt())
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.RIGHT
             setPadding(0, dp(4), 0, 0)
         })
@@ -156,20 +156,13 @@ class RecentChannelsActivity : AppCompatActivity() {
         list.addView(TextView(this).apply {
             text = message
             textSize = 17f
-            setTextColor(Color.LTGRAY)
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
             setPadding(0, dp(30), 0, dp(30))
         })
     }
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF542783.toInt(), 0xFF251331.toInt())
-        else intArrayOf(0xED181321.toInt(), 0xF00C0A12.toInt())
-    ).apply {
-        cornerRadius = dp(18).toFloat()
-        setStroke(dp(if (focused) 2 else 1), if (focused) 0xFFD7AAFF.toInt() else 0x554D376B)
-    }
+    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(18).toFloat(), focused)
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }

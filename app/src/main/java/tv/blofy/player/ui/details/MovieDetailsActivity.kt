@@ -19,6 +19,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.playback.ExternalPlayerLauncher
 import tv.blofy.player.data.local.BlofyDatabase
@@ -57,11 +58,11 @@ class MovieDetailsActivity : AppCompatActivity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 setPadding(dp(10), dp(10), dp(10), dp(10))
-                background = cardBackground()
+                background = BlofyTvDesign.elevatedSurface(dp(20).toFloat(), emphasis = true)
             }
             val poster = ImageView(this@MovieDetailsActivity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(0xFF15101F.toInt())
+                setBackgroundColor(BlofyTvDesign.Surface)
             }
             posterCard.addView(poster, LinearLayout.LayoutParams(dp(285), dp(425)))
             ArtworkLoader.load(poster, stream.icon)
@@ -73,9 +74,8 @@ class MovieDetailsActivity : AppCompatActivity() {
             }
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.name
+                BlofyTvDesign.applyHeroTitle(this)
                 textSize = 38f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
                 gravity = Gravity.END
             })
             info.addView(TextView(this@MovieDetailsActivity).apply {
@@ -88,7 +88,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                     stream.extension?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
                 }.joinToString("  •  ")
                 textSize = 16f
-                setTextColor(0xFFC6A8E7.toInt())
+                setTextColor(BlofyTvDesign.PurpleSoft)
                 gravity = Gravity.END
                 setPadding(0, dp(8), 0, dp(18))
             })
@@ -96,7 +96,7 @@ class MovieDetailsActivity : AppCompatActivity() {
                 text = stream.plot?.takeIf { it.isNotBlank() } ?: "استمتع بالمشاهدة على BLOFY PLAYER"
                 textSize = 17f
                 maxLines = 6
-                setTextColor(0xFFE0DCE5.toInt())
+                setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = Gravity.END
                 setLineSpacing(0f, 1.18f)
                 setPadding(0, 0, 0, dp(24))
@@ -112,14 +112,14 @@ class MovieDetailsActivity : AppCompatActivity() {
                         append("متابعة المشاهدة  •  $percent%")
                         if (remainingMinutes > 0) append("  •  متبقي تقريبًا $remainingMinutes د")
                     }
-                    textSize = 15f; setTextColor(0xFFBCA8D7.toInt()); gravity = Gravity.END
+                    textSize = 15f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.END
                     setPadding(0, 0, 0, dp(7))
                 })
                 info.addView(ProgressBar(this@MovieDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
                     max = 100
                     progress = percent.toInt()
-                    progressTintList = android.content.res.ColorStateList.valueOf(0xFF9A5CFF.toInt())
-                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF2D243A.toInt())
+                    progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.SurfaceRaised)
                     contentDescription = "تقدم مشاهدة الفيلم $percent بالمئة"
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(8)).apply {
                     bottomMargin = dp(14)
@@ -171,18 +171,14 @@ class MovieDetailsActivity : AppCompatActivity() {
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = buttonBackground(focused)
-            view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(100).start()
-        }
+        text = label
+        isAllCaps = false
+        textSize = 15f
+        typeface = BlofyTvDesign.BodyTypeface
+        setTextColor(BlofyTvDesign.TextPrimary)
+        stateListAnimator = null
+        BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.04f, label.contains("شاهد") || label.contains("استئناف"))
         setOnClickListener { action() }
-    }
-
-    private fun cardBackground() = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xD9181225.toInt()); setStroke(dp(1), 0x66533B68) }
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat(); setColor(if (focused) 0xFF6934A0.toInt() else 0xD91A1429.toInt())
-        setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x66503A64)
     }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 

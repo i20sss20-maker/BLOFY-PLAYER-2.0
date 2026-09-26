@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
@@ -52,8 +53,7 @@ class LibraryActivity : AppCompatActivity() {
         }
         root.addView(TextView(this).apply {
             text = if (mode == MODE_CONTINUE) "متابعة المشاهدة" else "المفضلة"
-            textSize = 29f
-            setTextColor(Color.WHITE)
+            BlofyTvDesign.applyTitle(this)
             setPadding(dp(6), 0, 0, dp(16))
         })
 
@@ -263,17 +263,13 @@ class LibraryActivity : AppCompatActivity() {
         else -> kind.uppercase()
     }
 
-    private fun rowBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 16f
-        setColor(if (focused) Color.rgb(65, 31, 110) else Color.rgb(18, 17, 28))
-        if (focused) setStroke(2, Color.rgb(185, 130, 255))
-    }
+    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(16).toFloat(), focused)
 
     private fun showMessage(text: String) {
         val message = TextView(this).apply {
             this.text = text
             textSize = 18f
-            setTextColor(Color.LTGRAY)
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
             setPadding(0, dp(28), 0, dp(28))
         }

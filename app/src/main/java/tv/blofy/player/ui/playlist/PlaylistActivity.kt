@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.url.PlaylistUrlPolicy
@@ -65,7 +66,7 @@ class PlaylistActivity : AppCompatActivity() {
         scroll.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(if (phone) 150 else 170, if (phone) 72 else 76))
         root.addView(TextView(this).apply {
-            text = if (editingProviderId == null) "إضافة قائمة تشغيل" else "تعديل قائمة التشغيل"; textSize = if (phone) 25f else 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            text = if (editingProviderId == null) "إضافة قائمة تشغيل" else "تعديل قائمة التشغيل"; BlofyTvDesign.applyTitle(this); textSize = if (phone) 25f else 30f; gravity = Gravity.CENTER
         })
         root.addView(TextView(this).apply { text = "Xtream / M3U"; textSize = if (phone) 13f else 15f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, 5, 0, 16) })
 
@@ -202,9 +203,9 @@ class PlaylistActivity : AppCompatActivity() {
         return "جاري تحميل $stage  •  ${progress.percent}%"
     }
 
-    private fun panelBackground() = GradientDrawable().apply { cornerRadius = 24f; setColor(0xEA151020.toInt()); setStroke(1, 0xFF67458E.toInt()) }
-    private fun fieldBackground(focused: Boolean) = GradientDrawable().apply { cornerRadius = 16f; setColor(0xFF110F19.toInt()); setStroke(if (focused) 3 else 1, if (focused) 0xFFBE87FF.toInt() else 0xFF342C44.toInt()) }
-    private fun buttonBackground(focused: Boolean, primary: Boolean) = GradientDrawable().apply { cornerRadius = 18f; setColor(if (focused) 0xFF7D45D9.toInt() else if (primary) 0xFF5F2AB5.toInt() else 0xFF241A30.toInt()); setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else 0xFF69468F.toInt()) }
+    private fun panelBackground() = BlofyTvDesign.elevatedSurface(24f, emphasis = true)
+    private fun fieldBackground(focused: Boolean) = BlofyTvDesign.inputField(16f, focused)
+    private fun buttonBackground(focused: Boolean, primary: Boolean) = if (primary) BlofyTvDesign.primaryButton(18f, focused) else BlofyTvDesign.secondaryButton(18f, focused)
 
     companion object { const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_DIRECT_FORM = "direct_form" }
 }

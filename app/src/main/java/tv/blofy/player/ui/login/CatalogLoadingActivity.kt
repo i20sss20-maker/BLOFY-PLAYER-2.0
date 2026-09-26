@@ -29,6 +29,7 @@ import tv.blofy.player.data.PlaylistSyncStage
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.home.HomeActivity
 import java.util.UUID
 
@@ -72,11 +73,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(if (isPhone) dp(24) else dp(54), if (isPhone) dp(24) else dp(34), if (isPhone) dp(24) else dp(54), if (isPhone) dp(24) else dp(32))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(28).toFloat()
-                setColor(0xE8151024.toInt())
-                setStroke(dp(1), 0xFF5C357F.toInt())
-            }
+            background = BlofyTvDesign.elevatedSurface(dp(28).toFloat(), emphasis = true)
         }
 
         panel.addView(ImageView(this).apply {
@@ -88,8 +85,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
         panel.addView(TextView(this).apply {
             text = "جاري تجهيز مكتبتك"
             textSize = if (isPhone) 24f else 28f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
             setPadding(0, dp(4), 0, dp(2))
         })
@@ -97,7 +94,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         panel.addView(TextView(this).apply {
             text = "يتم تحميل الباقة وحفظها محليًا مرة واحدة، وبعدها يكون الدخول مباشرًا"
             textSize = 14f
-            setTextColor(0xFFB7A8C9.toInt())
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(18))
         })
@@ -110,8 +107,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             progress = 0
-            progressTintList = android.content.res.ColorStateList.valueOf(0xFF8D39FF.toInt())
-            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFF2D243A.toInt())
+            progressTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.SurfaceRaised)
         }
         progressRow.addView(progress, LinearLayout.LayoutParams(0, dp(14), 1f).apply { marginEnd = dp(22) })
         percent = TextView(this).apply {
@@ -137,7 +134,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         detail = TextView(this).apply {
             text = "التحميل الحقيقي من السيرفر • لن نعرض 100% قبل اكتمال الحفظ فعليًا"
             textSize = 13f
-            setTextColor(0xFF9587A8.toInt())
+            setTextColor(BlofyTvDesign.TextDim)
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(24))
         }
@@ -180,7 +177,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private fun step(value: String) = TextView(this).apply {
         text = value
         textSize = 13f
-        setTextColor(0xFF756B82.toInt())
+        setTextColor(BlofyTvDesign.TextDim)
         gravity = Gravity.CENTER
     }
 
@@ -201,11 +198,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
         isAllCaps = false
         textSize = 15f
         setTextColor(Color.WHITE)
-        background = GradientDrawable().apply {
-            cornerRadius = dp(16).toFloat()
-            setColor(0xFF21172D.toInt())
-            setStroke(dp(1), 0xFF76509B.toInt())
-        }
+        typeface = BlofyTvDesign.BodyTypeface
+        stateListAnimator = null
+        BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.035f, false)
         setOnClickListener { action() }
     }
 
@@ -299,12 +294,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
             safe >= 5 -> "تم الاتصال • جاري بدء جلب محتوى الباقة"
             else -> "جاري الاتصال والتحقق من القائمة…"
         }
-        stage.setTextColor(Color.WHITE)
+        stage.setTextColor(BlofyTvDesign.TextPrimary)
         recoveryContainer()?.visibility = android.view.View.GONE
-        serverStep.setTextColor(if (safe >= 5) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
-        contentStep.setTextColor(if (safe >= 15) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
-        prepareStep.setTextColor(if (safe >= 90) 0xFFB96CFF.toInt() else 0xFF756B82.toInt())
-        readyStep.setTextColor(if (safe >= 100) 0xFF45E3C2.toInt() else 0xFF756B82.toInt())
+        serverStep.setTextColor(if (safe >= 5) BlofyTvDesign.PurpleBright else BlofyTvDesign.TextDim)
+        contentStep.setTextColor(if (safe >= 15) BlofyTvDesign.PurpleBright else BlofyTvDesign.TextDim)
+        prepareStep.setTextColor(if (safe >= 90) BlofyTvDesign.PurpleBright else BlofyTvDesign.TextDim)
+        readyStep.setTextColor(if (safe >= 100) BlofyTvDesign.Mint else BlofyTvDesign.TextDim)
         serverStep.text = if (safe >= 15) "✓  الاتصال بالخادم" else "●  الاتصال بالخادم"
         contentStep.text = if (safe >= 90) "✓  جلب المحتوى" else "○  جلب المحتوى"
         prepareStep.text = if (safe >= 100) "✓  تحضير المكتبة" else "○  تحضير المكتبة"

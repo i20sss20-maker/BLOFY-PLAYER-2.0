@@ -18,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
@@ -44,7 +45,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
         }
         val poster = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0xFF15111E.toInt()) }
+            background = BlofyTvDesign.elevatedSurface(dp(20).toFloat(), emphasis = true)
             clipToOutline = true
         }
         root.addView(poster, LinearLayout.LayoutParams(dp(310), dp(465)).apply { marginEnd = dp(42) })
@@ -70,7 +71,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val seasons = allEpisodes.map { it.season }.distinct().size
 
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = stream.name; textSize = 38f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT
+                text = stream.name; BlofyTvDesign.applyHeroTitle(this); textSize = 38f; gravity = Gravity.RIGHT
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = buildList {
@@ -81,18 +82,18 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     if (allEpisodes.isNotEmpty()) add("${allEpisodes.size} حلقة")
                     stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
                 }.joinToString("  •  ")
-                textSize = 16f; setTextColor(SOFT); gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(18))
+                textSize = 16f; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(18))
             })
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.plot?.takeIf(String::isNotBlank) ?: "اختر الموسم والحلقة لبدء المشاهدة."
-                textSize = 17f; maxLines = 5; setTextColor(0xFFDCDCE2.toInt()); gravity = Gravity.RIGHT; setPadding(0, 0, 0, dp(24))
+                textSize = 17f; maxLines = 5; setTextColor(BlofyTvDesign.TextSecondary); gravity = Gravity.RIGHT; setPadding(0, 0, 0, dp(24))
             })
 
             resume?.let { r ->
                 val pct = if (r.durationMs > 0) ((r.positionMs * 100) / r.durationMs).toInt().coerceIn(1, 99) else 0
                 panel.addView(TextView(this@SeriesDetailsActivity).apply {
                     text = "استئناف الموسم ${r.episode.season} • الحلقة ${r.episode.episode}${if (pct > 0) "  •  $pct%" else ""}"
-                    textSize = 15f; setTextColor(SOFT); gravity = Gravity.RIGHT
+                    textSize = 15f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT
                 })
                 if (r.durationMs > 0) panel.addView(ProgressBar(this@SeriesDetailsActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
                     max = 100; progress = pct
@@ -150,12 +151,14 @@ class SeriesDetailsActivity : AppCompatActivity() {
     }
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 15f; isFocusable = true; setTextColor(Color.WHITE); background = buttonBackground(false)
-        setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused); view.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(90).start() }
+        text = label
+        isAllCaps = false
+        textSize = 15f
+        typeface = BlofyTvDesign.BodyTypeface
+        setTextColor(BlofyTvDesign.TextPrimary)
+        stateListAnimator = null
+        BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.04f, label.contains("استئناف") || label.contains("المواسم"))
         setOnClickListener { action() }
-    }
-    private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = dp(16).toFloat(); setColor(if (focused) PURPLE else 0xD31A1427.toInt()); setStroke(if (focused) dp(2) else dp(1), if (focused) Color.WHITE else 0x665C3E80)
     }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 

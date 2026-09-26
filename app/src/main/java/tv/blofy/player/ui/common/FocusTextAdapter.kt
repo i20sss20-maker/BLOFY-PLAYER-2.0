@@ -1,7 +1,5 @@
 package tv.blofy.player.ui.common
 
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -82,22 +80,25 @@ class FocusTextAdapter<T>(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val view = TextView(parent.context).apply {
-            textSize = 17f
-            setTextColor(TEXT_IDLE)
+            textSize = BlofyTvDesign.BodySp
+            typeface = BlofyTvDesign.BodyTypeface
+            setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER_VERTICAL
             setPadding(22, 0, 22, 0)
             isFocusable = true
             isClickable = true
             isLongClickable = true
+            stateListAnimator = null
             background = background(false)
             setOnFocusChangeListener { v, focused ->
-                (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
+                (v as TextView).setTextColor(if (focused) BlofyTvDesign.TextPrimary else BlofyTvDesign.TextSecondary)
                 v.animate().cancel()
                 v.animate()
-                    .scaleX(if (focused) 1.02f else 1f)
-                    .scaleY(if (focused) 1.02f else 1f)
-                    .translationZ(if (focused) 10f else 2f)
-                    .setDuration(75)
+                    .scaleX(if (focused) 1.025f else 1f)
+                    .scaleY(if (focused) 1.025f else 1f)
+                    .translationZ(if (focused) 18f else 2f)
+                    .alpha(if (focused) 1f else .96f)
+                    .setDuration(if (focused) 105L else 85L)
                     .start()
                 v.background = background(focused)
                 if (focused) {
@@ -137,16 +138,5 @@ class FocusTextAdapter<T>(
 
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
 
-    private fun background(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF7930D7.toInt(), 0xFF32164F.toInt())
-        else intArrayOf(0xD91C162C.toInt(), 0xE8110E1B.toInt())
-    ).apply {
-        cornerRadius = 16f
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFE1B8FF.toInt() else 0x554D376B)
-    }
-
-    companion object {
-        private val TEXT_IDLE = Color.rgb(232, 226, 239)
-    }
+    private fun background(focused: Boolean) = BlofyTvDesign.surface(16f, focused)
 }
