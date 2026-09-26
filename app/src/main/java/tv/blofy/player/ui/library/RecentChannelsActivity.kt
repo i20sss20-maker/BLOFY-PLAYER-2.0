@@ -32,9 +32,10 @@ class RecentChannelsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val compact = resources.configuration.screenWidthDp < 600
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(34), dp(28), dp(34), dp(30))
+            setPadding(dp(if (compact) 16 else 34), dp(if (compact) 20 else 28), dp(if (compact) 16 else 34), dp(if (compact) 22 else 30))
             background = AppCompatResources.getDrawable(this@RecentChannelsActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
@@ -42,7 +43,8 @@ class RecentChannelsActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = "آخر القنوات"
             BlofyTvDesign.applyTitle(this)
-            setPadding(dp(4), 0, 0, dp(12))
+            if (compact) textSize = 27f
+            setPadding(dp(4), 0, 0, dp(if (compact) 8 else 12))
         })
 
         list = LinearLayout(this).apply {
@@ -81,7 +83,7 @@ class RecentChannelsActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(14), dp(9), dp(14), dp(9))
+            setPadding(dp(if (compact) 10 else 14), dp(if (compact) 7 else 9), dp(if (compact) 10 else 14), dp(if (compact) 7 else 9))
             isFocusable = true
             isClickable = true
             background = rowBackground(false)
@@ -103,7 +105,7 @@ class RecentChannelsActivity : AppCompatActivity() {
             setBackgroundColor(BlofyTvDesign.Surface)
         }
         ArtworkLoader.load(logo, stream.icon)
-        row.addView(logo, LinearLayout.LayoutParams(dp(58), dp(58)).apply { marginStart = dp(14) })
+        row.addView(logo, LinearLayout.LayoutParams(dp(if (resources.configuration.screenWidthDp < 600) 50 else 58), dp(if (resources.configuration.screenWidthDp < 600) 50 else 58)).apply { marginStart = dp(if (resources.configuration.screenWidthDp < 600) 10 else 14) })
 
         val info = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -111,7 +113,7 @@ class RecentChannelsActivity : AppCompatActivity() {
         }
         info.addView(TextView(this).apply {
             text = stream.name
-            textSize = 18f
+            textSize = if (resources.configuration.screenWidthDp < 600) 16f else 18f
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT
             maxLines = 1
@@ -123,9 +125,9 @@ class RecentChannelsActivity : AppCompatActivity() {
             gravity = Gravity.RIGHT
             setPadding(0, dp(4), 0, 0)
         })
-        row.addView(info, LinearLayout.LayoutParams(0, dp(60), 1f))
-        list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(78)).apply {
-            bottomMargin = dp(8)
+        row.addView(info, LinearLayout.LayoutParams(0, dp(if (resources.configuration.screenWidthDp < 600) 54 else 60), 1f))
+        list.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (resources.configuration.screenWidthDp < 600) 68 else 78)).apply {
+            bottomMargin = dp(if (resources.configuration.screenWidthDp < 600) 6 else 8)
         })
     }
 
