@@ -104,7 +104,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             textDirection = View.TEXT_DIRECTION_LTR
             setTextColor(Color.WHITE)
-            setHintTextColor(BlofyTvDesign.TextDim)
+            setHintTextColor(BlofyTvDesign.TextMuted)
             setPadding(dp(18), 0, dp(18), 0)
             background = fieldBackground(false)
             isFocusable = true
@@ -277,7 +277,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
         panel.addView(TextView(this).apply {
             text = getString(R.string.subscriber_auto_server_settings)
             textSize = 12f
-            setTextColor(BlofyTvDesign.TextDim)
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
             setPadding(dp(10), dp(12), dp(10), 0)
         })
