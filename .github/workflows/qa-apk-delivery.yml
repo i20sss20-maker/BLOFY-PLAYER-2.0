@@ -5,6 +5,7 @@ on:
     branches: [qa/rc0755-5-safe-polish-20260926]
     paths:
       - .github/workflows/qa-apk-delivery.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,39 +15,39 @@ jobs:
   deliver-apk:
     runs-on: ubuntu-latest
     steps:
-      - name: Download verified production-signed QA artifact
+      - name: Download verified production-signed QA APK artifact
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p qa-signed
-          gh run download 36271844229 \
+          gh run download 36276903423 \
             --repo "$GITHUB_REPOSITORY" \
-            --name "BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-c617715e89981ccbc8a190a85d4994ce5de1af31" \
+            --name "BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-APK-d8a30a82236f7f4e9241e62cc4fed825341b5bd7" \
             --dir qa-signed
           apk="$(find qa-signed -type f -name '*.apk' -print -quit)"
           test -n "$apk"
           test -s "$apk"
-          cp "$apk" BLOFY-PLAYER-55.5-QA-SIGNED.apk
-          sha256sum BLOFY-PLAYER-55.5-QA-SIGNED.apk > BLOFY-PLAYER-55.5-QA-SIGNED.apk.sha256
+          cp "$apk" BLOFY-PLAYER-55.5-QA-SIGNED-LATEST.apk
+          sha256sum BLOFY-PLAYER-55.5-QA-SIGNED-LATEST.apk > BLOFY-PLAYER-55.5-QA-SIGNED-LATEST.apk.sha256
 
       - name: Attach APK to private draft QA release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="qa-rc07.55.5-signed-20260926"
+          tag="qa-rc07.55.5-signed-latest"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" \
-              BLOFY-PLAYER-55.5-QA-SIGNED.apk \
-              BLOFY-PLAYER-55.5-QA-SIGNED.apk.sha256 \
+              BLOFY-PLAYER-55.5-QA-SIGNED-LATEST.apk \
+              BLOFY-PLAYER-55.5-QA-SIGNED-LATEST.apk.sha256 \
               --clobber --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$tag" \
-              BLOFY-PLAYER-55.5-QA-SIGNED.apk \
-              BLOFY-PLAYER-55.5-QA-SIGNED.apk.sha256 \
+              BLOFY-PLAYER-55.5-QA-SIGNED-LATEST.apk \
+              BLOFY-PLAYER-55.5-QA-SIGNED-LATEST.apk.sha256 \
               --draft \
-              --title "BLOFY PLAYER 55.5 QA Signed" \
-              --notes "Private QA delivery only. Production-signed, not published to the BLOFY website or Google Play." \
+              --title "BLOFY PLAYER 55.5 QA Signed Latest" \
+              --notes "Private QA delivery only. Production-signed; not published to BLOFY website or Google Play." \
               --repo "$GITHUB_REPOSITORY"
           fi
