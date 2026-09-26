@@ -22,6 +22,7 @@ object BlofyTvDesign {
     val PinkAccent = Color.rgb(231, 91, 203)
     val Mint = Color.rgb(108, 235, 204)
     val Amber = Color.rgb(255, 191, 105)
+    val Danger = Color.rgb(255, 135, 155)
 
     val TextPrimary = Color.WHITE
     val TextSecondary = Color.rgb(234, 227, 241)
