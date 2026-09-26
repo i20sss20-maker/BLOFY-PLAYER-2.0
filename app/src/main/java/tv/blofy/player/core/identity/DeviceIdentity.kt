@@ -10,6 +10,7 @@ object DeviceIdentity {
     private const val DEVICE_ID = "device_id_v2"
     private const val ACTIVE_CODE = "activation_code"
     private const val PENDING_CODE = "pending_activation_code"
+    private const val STABLE_ALIAS_BOUND_TO = "stable_alias_bound_to"
     private const val DEVICE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     private const val DEVICE_ID_NAMESPACE = "tv.blofy.player/device-id/v3"
     private const val ACTIVATION_CODE_NAMESPACE = "tv.blofy.player/activation-code/v3"
@@ -17,8 +18,9 @@ object DeviceIdentity {
     private val secureRandom = SecureRandom()
 
     /**
-     * Existing installations keep their already-issued BLOFY identity exactly as-is until the
-     * activation service atomically migrates that identity to the reinstall-stable target.
+     * Existing installations keep their already-issued BLOFY identity exactly as-is. The
+     * activation service may bind a reinstall-stable recovery alias to that canonical identity,
+     * but a normal update must never change the visible device ID or detach its server data.
      *
      * Fresh installations derive their public Device ID and six-digit activation credential from
      * Android's app-scoped system identity. This makes the BLOFY identity recoverable after an
@@ -77,7 +79,19 @@ object DeviceIdentity {
         }
     }
 
-    /** Commits a server-approved migration. This is never called before Azure confirms success. */
+    @Synchronized
+    internal fun stableAliasAlreadyBound(context: Context, canonicalDeviceId: String): Boolean =
+        preferences(context).getString(STABLE_ALIAS_BOUND_TO, null) == canonicalDeviceId
+
+    @Synchronized
+    internal fun markStableAliasBound(context: Context, canonicalDeviceId: String) {
+        require(validDeviceId(canonicalDeviceId)) { "Invalid canonical device ID" }
+        check(preferences(context).edit().putString(STABLE_ALIAS_BOUND_TO, canonicalDeviceId).commit()) {
+            "Unable to persist stable recovery alias binding"
+        }
+    }
+
+    /** Commits a server-approved canonical identity recovery after a clean reinstall. */
     @Synchronized
     internal fun commitStableIdentity(context: Context, deviceId: String, activationCode: String) {
         require(validDeviceId(deviceId)) { "Invalid stable device ID" }
