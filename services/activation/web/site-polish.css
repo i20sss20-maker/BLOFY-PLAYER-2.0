@@ -215,3 +215,126 @@ tr:hover td{background:rgba(154,92,255,.035)}
   font-weight:800
 }
 .portal-footer a:hover{color:#fff;background:rgba(255,255,255,.05)}
+
+/* BLOFY responsive system v2 — 2026-09-26 */
+body{min-width:0;overflow-x:hidden;text-rendering:optimizeLegibility}
+.wrap{width:min(1240px,calc(100% - clamp(24px,5vw,72px)))}
+.wrap>.nav{
+  min-height:76px;
+  padding-top:max(10px,env(safe-area-inset-top));
+  padding-bottom:10px;
+  gap:16px
+}
+.wrap>.nav .brand{flex:0 0 auto}
+.site-links,.nav-links{min-width:0}
+.site-links>a,.nav-links>a{min-height:42px}
+.card,.auth-page .form,.privacy-form,.policy-grid article{border-radius:20px}
+.page-title{max-width:820px}
+.page-title h1{font-size:clamp(36px,5vw,64px);line-height:1.18}
+.section-top{align-items:flex-end}
+.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.admin-main,.source-main{max-width:1580px}
+.admin-topbar{min-height:92px;height:auto;padding-block:14px}
+.admin-main .card,.source-main .panel,.gateway-panel,.form-panel{border-radius:20px}
+.table-wrap{-webkit-overflow-scrolling:touch;overscroll-behavior-inline:contain}
+table{min-width:720px}
+button,.btn,input,select,textarea{min-height:44px}
+.rail-nav button,.rail-nav a,.rail-links a{min-height:46px}
+.record-drawer{max-width:min(680px,100vw)}
+.portal{width:min(1240px,calc(100% - clamp(24px,5vw,72px)))!important}
+.portal .auth-card,.portal .dashboard-panel,.portal .editor-card{border-radius:24px}
+.portal-footer{padding-bottom:max(8px,env(safe-area-inset-bottom))}
+@media(min-width:1500px) and (min-height:780px){
+  body{font-size:17px}
+  .wrap,.portal{width:min(1440px,calc(100% - 96px))!important}
+  .site-links>a,.nav-links>a,.btn,button{min-height:48px}
+  .admin-main,.source-main{max-width:1760px}
+  .admin-main .card,.source-main .panel{padding:28px}
+}
+@media(max-width:1100px){
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .metrics{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .admin-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:900px){
+  .wrap{width:min(100% - 28px,1240px)}
+  .wrap>.nav{flex-wrap:wrap}
+  .site-links,.nav-links{order:3;width:100%;justify-content:flex-start;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;padding-bottom:2px}
+  .site-links::-webkit-scrollbar,.nav-links::-webkit-scrollbar{display:none}
+  .site-links>a,.nav-links>a{flex:0 0 auto}
+  .admin-shell,.source-shell{display:block!important;padding:0!important}
+  .admin-rail,.source-rail{
+    position:sticky!important;
+    inset:auto!important;
+    top:0!important;
+    z-index:70!important;
+    width:100%!important;
+    height:auto!important;
+    min-height:0!important;
+    padding:10px 12px!important;
+    flex-direction:row!important;
+    align-items:center!important;
+    border-inline-end:0!important;
+    border-bottom:1px solid rgba(190,145,255,.14)!important;
+    box-shadow:0 12px 34px rgba(0,0,0,.22)
+  }
+  .admin-rail .brand,.source-rail .source-brand{display:flex!important;flex:0 0 auto}
+  .admin-rail .rail-label,.source-rail .rail-label,.rail-bottom{display:none!important}
+  .rail-nav,.rail-links{display:flex!important;flex:1;overflow-x:auto;gap:7px;padding-bottom:2px;scrollbar-width:none}
+  .rail-nav::-webkit-scrollbar,.rail-links::-webkit-scrollbar{display:none}
+  .rail-nav button,.rail-nav a,.rail-links a{white-space:nowrap;flex:0 0 auto}
+  .admin-main,.source-main{width:100%!important;margin:0!important;padding:18px!important}
+  .admin-topbar{margin-bottom:22px}
+  .two{grid-template-columns:1fr}
+}
+@media(max-width:720px){
+  .wrap{width:min(100% - 20px,1240px)}
+  .wrap>.nav{min-height:64px;padding-block:9px}
+  .brand{font-size:12px}
+  .brand img{width:34px;height:38px}
+  .site-links>a,.nav-links>a{min-height:40px;padding-inline:10px;font-size:11px}
+  .page-title{padding-top:38px}
+  .page-title h1{font-size:clamp(34px,10vw,46px)}
+  .grid,.policy-grid,.form-grid,.release-form{grid-template-columns:1fr!important}
+  .grid>.full,.policy-grid>.wide,.form-grid>.wide,.release-form>.full{grid-column:auto!important}
+  .feature-strip{grid-template-columns:1fr}
+  .card{padding:20px}
+  .admin-main,.source-main{padding:12px!important}
+  .admin-topbar{align-items:flex-start;flex-wrap:wrap}
+  .admin-account{margin-inline-start:auto}
+  .metrics,.admin-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .toolbar{align-items:stretch}
+  .toolbar input{flex:1 1 100%;max-width:none}
+  .portal{width:min(100% - 20px,1240px)!important;padding-top:28px!important}
+  .portal .login-layout{grid-template-columns:1fr!important;gap:26px!important}
+  .portal .hero-panel{max-width:none!important}
+  .portal .hero-panel h1{font-size:clamp(40px,12vw,58px)!important}
+  .portal .form-grid{grid-template-columns:1fr!important}
+  .portal .full{grid-column:auto!important}
+  .privacy-form,.delete-box{padding:18px!important}
+  .foot{align-items:flex-start}
+}
+@media(max-width:520px){
+  .wrap{width:min(100% - 16px,1240px)!important}
+  .wrap>.nav{gap:9px}
+  .site-links,.nav-links{margin-inline:-2px;width:calc(100% + 4px)}
+  .language-control{min-width:120px!important;height:42px!important}
+  .metrics,.admin-quick-grid{grid-template-columns:1fr!important}
+  .admin-rail .brand,.source-rail .source-brand{display:none!important}
+  .admin-main,.source-main{padding:10px!important}
+  .admin-title{font-size:22px}
+  .record-drawer{width:100vw!important}
+  .drawer-header,.drawer-body{padding-inline:16px}
+  .confirm-dialog{width:calc(100% - 20px);padding:20px}
+  .actions:not(.foot .actions){width:100%}
+  .connect-banner .btn,.auth-page .form button,.privacy-form button{width:100%}
+  .portal{width:min(100% - 16px,1240px)!important}
+  .portal .auth-card,.portal .dashboard-panel,.portal .editor-card{border-radius:20px}
+}
+@media(hover:none){
+  .card:hover,.policy-grid article:hover,.info:hover{transform:none}
+}
+@media(pointer:coarse){
+  button,.btn,.site-links>a,.nav-links>a,.rail-nav button,.rail-nav a,.rail-links a{min-height:46px}
+}
