@@ -209,7 +209,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         addView(TextView(this@ContentBrowserActivity).apply {
-            text = "OK: ملء الشاشة   •   ضغط مطوّل: الأرشيف ⏱   •   ↑↓: القنوات"
+            text = "زر موافق: ملء الشاشة   •   ضغط مطوّل: الأرشيف ⏱   •   ↑↓: القنوات"
             textSize = 14f
             setTextColor(BLOFY_PURPLE_SOFT)
             setPadding(dp(4), dp(14), 0, 0)
