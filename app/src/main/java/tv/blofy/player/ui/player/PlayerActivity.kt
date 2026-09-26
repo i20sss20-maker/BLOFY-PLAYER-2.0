@@ -162,7 +162,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         val eyebrow = TextView(this).apply {
-            text = if (kind == "live") "BLOFY LIVE" else if (kind == "episode") "BLOFY SERIES" else "BLOFY CINEMA"
+            text = if (kind == "live") "BLOFY · البث المباشر" else if (kind == "episode") "BLOFY · المسلسلات" else "BLOFY · السينما"
             textSize = 12f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.PurpleSoft); letterSpacing = .08f
             setPadding(0, 0, 0, 5)
         }
@@ -200,7 +200,7 @@ class PlayerActivity : AppCompatActivity() {
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
             }
             liveHint.addView(TextView(this).apply {
-                text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لإظهار معلومات البرنامج"
+                text = "CH+/CH− للتنقل   •   أرقام القنوات   •   زر موافق لإظهار معلومات البرنامج"
                 textSize = if (resources.configuration.screenWidthDp < 900) 12.5f else 14f
                 setTextColor(PURPLE_SOFT)
                 gravity = Gravity.CENTER_VERTICAL
@@ -511,7 +511,7 @@ class PlayerActivity : AppCompatActivity() {
         val entries = mutableListOf<TrackEntry>()
         session.player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO && it.length > 0 }.forEach { group -> for (index in 0 until group.length) if (group.isTrackSupported(index)) entries += TrackEntry(group, index, videoLabel(group.getTrackFormat(index))) }
         if (entries.isEmpty()) { AlertDialog.Builder(this).setMessage("لا توجد جودات فيديو متعددة").setPositiveButton("حسنًا", null).show(); return }
-        val labels = listOf("تلقائي (Auto)") + entries.map { it.label }
+        val labels = listOf("تلقائي") + entries.map { it.label }
         AlertDialog.Builder(this).setTitle("الجودة").setItems(labels.toTypedArray()) { dialog, which ->
             val builder = session.player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
             if (which == 0) builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO) else { val entry = entries[which - 1]; builder.setOverrideForType(TrackSelectionOverride(entry.group.mediaTrackGroup, listOf(entry.index))) }
@@ -526,7 +526,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun trackLabel(format: Format, type: Int): String {
-        val language = format.language?.uppercase() ?: if (type == C.TRACK_TYPE_AUDIO) "AUDIO" else "SUB"; val label = format.label?.takeIf { it.isNotBlank() }; val codec = format.codecs?.takeIf { it.isNotBlank() }
+        val language = format.language?.uppercase() ?: if (type == C.TRACK_TYPE_AUDIO) "صوت" else "ترجمة"; val label = format.label?.takeIf { it.isNotBlank() }; val codec = format.codecs?.takeIf { it.isNotBlank() }
         return listOfNotNull(label, language, codec).distinct().joinToString(" • ")
     }
 
