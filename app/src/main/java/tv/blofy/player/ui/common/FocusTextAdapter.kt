@@ -64,7 +64,7 @@ class FocusTextAdapter<T>(
 
     override fun getItemId(position: Int): Long {
         val key = itemKey ?: return super.getItemId(position)
-        return key(items[position]).hashCode().toLong()
+        return stableId64(key(items[position]))
     }
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
