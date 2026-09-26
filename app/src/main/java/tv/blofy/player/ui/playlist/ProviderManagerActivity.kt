@@ -186,7 +186,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                 text = buildString {
                     append(if (provider.enabled) "● القائمة النشطة" else "○ قائمة محفوظة")
                     append("  •  ")
-                    append(if (provider.name == "مشتركين BLOFY") "BLOFY Secure" else provider.providerType.uppercase())
+                    append(if (provider.name == "مشتركين BLOFY") "BLOFY آمن" else provider.providerType.uppercase())
                 }
                 textSize = 13f
                 typeface = BlofyTvDesign.BodyTypeface
