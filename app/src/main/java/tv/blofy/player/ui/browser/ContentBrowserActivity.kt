@@ -43,6 +43,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catchup.CatchupActivity
+import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -85,9 +86,9 @@ class ContentBrowserActivity : AppCompatActivity() {
             val section = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
             text = "BLOFY  •  $section"
             textSize = if (phoneMode) 24f else 28f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            setShadowLayer(18f, 0f, 3f, Color.rgb(126, 44, 255))
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            setShadowLayer(18f, 0f, 3f, BlofyTvDesign.Purple)
             gravity = Gravity.START
             setPadding(8, 0, 0, if (phoneMode) 10 else 18)
         })
@@ -169,13 +170,13 @@ class ContentBrowserActivity : AppCompatActivity() {
         catalogStatus = TextView(this@ContentBrowserActivity).apply {
             text = "جاري التحقق من ${catalogLabel()}..."
             textSize = if (phoneMode) 14f else 16f
-            setTextColor(BLOFY_PURPLE_SOFT)
+            setTextColor(BlofyTvDesign.PurpleSoft)
         }
         addView(catalogStatus, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         catalogRetry = Button(this@ContentBrowserActivity).apply {
             text = "إعادة المحاولة"
             isAllCaps = false
-            setTextColor(Color.WHITE)
+            setTextColor(BlofyTvDesign.TextPrimary)
             background = catalogActionBackground(false)
             visibility = View.GONE
             setOnFocusChangeListener { view, focused ->
@@ -194,9 +195,9 @@ class ContentBrowserActivity : AppCompatActivity() {
         previewTitle = TextView(this@ContentBrowserActivity).apply {
             text = "المعاينة"
             textSize = 21f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            setShadowLayer(12f, 0f, 2f, BLOFY_PURPLE)
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+            setShadowLayer(12f, 0f, 2f, BlofyTvDesign.Purple)
             setPadding(4, 0, 0, 12)
         }
         addView(previewTitle)
@@ -215,31 +216,14 @@ class ContentBrowserActivity : AppCompatActivity() {
         })
     }
 
-    private fun browserPanelBackground(emphasis: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (emphasis) intArrayOf(0xE8251B3B.toInt(), 0xF0120E20.toInt())
-        else intArrayOf(0xE81A1429.toInt(), 0xF00C0A15.toInt())
-    ).apply {
-        cornerRadius = 20f
-        setStroke(1, if (emphasis) 0x805E3A87.toInt() else 0x594A355F)
-    }
+    private fun browserPanelBackground(emphasis: Boolean) =
+        if (emphasis) BlofyTvDesign.elevatedSurface(20f, emphasis = true)
+        else BlofyTvDesign.glassPanel(20f, false)
 
-    private fun previewPanelBackground() = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xF025183D.toInt(), 0xF00C0914.toInt())
-    ).apply {
-        cornerRadius = 24f
-        setStroke(2, 0x806E3CAE.toInt())
-    }
+    private fun previewPanelBackground() = BlofyTvDesign.elevatedSurface(24f, emphasis = true)
 
-    private fun catalogActionBackground(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFFA84FFF.toInt(), 0xFF7524EF.toInt())
-        else intArrayOf(0xFF5920A5.toInt(), 0xFF35145F.toInt())
-    ).apply {
-        cornerRadius = 16f
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFE6C5FF.toInt() else 0x807C4EB8.toInt())
-    }
+    private fun catalogActionBackground(focused: Boolean) =
+        BlofyTvDesign.secondaryButton(16f, focused)
 
     private fun loadStreams(categoryId: String?) {
         if (!::provider.isInitialized) return
@@ -502,7 +486,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
         private const val ALL_CATEGORY_ID = "__all__"
-        private val BLOFY_PURPLE = Color.rgb(139, 55, 255)
-        private val BLOFY_PURPLE_SOFT = Color.rgb(195, 135, 255)
+        private val BLOFY_PURPLE = BlofyTvDesign.Purple
+        private val BLOFY_PURPLE_SOFT = BlofyTvDesign.PurpleSoft
     }
 }
