@@ -234,6 +234,13 @@ class EpisodesActivity : AppCompatActivity() {
             EpisodeLoadState.INVALID_PROVIDER_RESPONSE -> "رد السيرفر غير مكتمل • أعد تحميل الحلقات"
             EpisodeLoadState.ERROR -> "تعذر تحميل الحلقات • تحقق من الاتصال ثم أعد المحاولة"
         }
+        status.setTextColor(
+            when (loadState) {
+                EpisodeLoadState.ERROR -> BlofyTvDesign.Danger
+                EpisodeLoadState.EMPTY_PROVIDER_RESPONSE, EpisodeLoadState.INVALID_PROVIDER_RESPONSE -> BlofyTvDesign.Amber
+                else -> BlofyTvDesign.TextMuted
+            }
+        )
     }
 
     private fun selectSeason(season: Int) {
@@ -301,6 +308,6 @@ class EpisodesActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_SERIES_ID = "series_id"; const val EXTRA_SERIES_NAME = "series_name"
-        private val PURPLE = Color.rgb(126, 44, 255); private val SOFT = Color.rgb(195, 175, 220)
+        private val PURPLE = BlofyTvDesign.Purple; private val SOFT = BlofyTvDesign.TextMuted
     }
 }

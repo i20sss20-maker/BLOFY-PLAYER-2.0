@@ -68,7 +68,7 @@ class PlaylistActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = if (editingProviderId == null) "إضافة قائمة تشغيل" else "تعديل قائمة التشغيل"; BlofyTvDesign.applyTitle(this); textSize = if (phone) 25f else 30f; gravity = Gravity.CENTER
         })
-        root.addView(TextView(this).apply { text = "Xtream / M3U"; textSize = if (phone) 13f else 15f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0, 5, 0, 16) })
+        root.addView(TextView(this).apply { text = "Xtream / M3U"; textSize = if (phone) 13f else 15f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0, 5, 0, 16) })
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
@@ -77,7 +77,7 @@ class PlaylistActivity : AppCompatActivity() {
         root.addView(panel, LinearLayout.LayoutParams(if (phone) LinearLayout.LayoutParams.MATCH_PARENT else 760, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         fun field(hintText: String, passwordField: Boolean = false) = EditText(this).apply {
-            hint = hintText; isSingleLine = true; gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; setTextColor(Color.WHITE); setHintTextColor(0xFF8E829A.toInt()); setPadding(22,0,22,0)
+            hint = hintText; isSingleLine = true; gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; setTextColor(BlofyTvDesign.TextPrimary); setHintTextColor(BlofyTvDesign.TextDim); setPadding(22,0,22,0)
             background = fieldBackground(false); isFocusable = true; isFocusableInTouchMode = true
             setOnFocusChangeListener { view, focused -> if (tv) view.background = fieldBackground(focused) }
             if (passwordField) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -92,18 +92,18 @@ class PlaylistActivity : AppCompatActivity() {
         password.imeOptions = EditorInfo.IME_ACTION_DONE
         listOf(name, url).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 9 }) }
 
-        val transportNotice = TextView(this).apply { text = "يفضل HTTPS • HTTP متاح عند الحاجة"; textSize = if (phone) 12f else 13f; setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.RIGHT; setPadding(8,8,8,1) }
+        val transportNotice = TextView(this).apply { text = "يفضل HTTPS • HTTP متاح عند الحاجة"; textSize = if (phone) 12f else 13f; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.RIGHT; setPadding(8,8,8,1) }
         panel.addView(transportNotice)
         url.doAfterTextChanged { value ->
             val candidate = value?.toString()?.trim().orEmpty()
             when {
-                candidate.startsWith("http://", true) -> { transportNotice.text = "تنبيه: اتصال HTTP غير مشفر"; transportNotice.setTextColor(Color.rgb(255,179,71)) }
-                candidate.startsWith("https://", true) -> { transportNotice.text = "اتصال HTTPS مشفر"; transportNotice.setTextColor(Color.rgb(116,224,174)) }
-                else -> { transportNotice.text = "يفضل HTTPS • HTTP متاح عند الحاجة"; transportNotice.setTextColor(0xFFB78CFF.toInt()) }
+                candidate.startsWith("http://", true) -> { transportNotice.text = "تنبيه: اتصال HTTP غير مشفر"; transportNotice.setTextColor(BlofyTvDesign.Amber) }
+                candidate.startsWith("https://", true) -> { transportNotice.text = "اتصال HTTPS مشفر"; transportNotice.setTextColor(BlofyTvDesign.Mint) }
+                else -> { transportNotice.text = "يفضل HTTPS • HTTP متاح عند الحاجة"; transportNotice.setTextColor(BlofyTvDesign.PurpleSoft) }
             }
         }
         listOf(username, password).forEach { panel.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (phone) 62 else 64).apply { topMargin = 9 }) }
-        val status = TextView(this).apply { setTextColor(0xFFB78CFF.toInt()); gravity = Gravity.RIGHT; setPadding(0,12,0,2) }
+        val status = TextView(this).apply { setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.RIGHT; setPadding(0,12,0,2) }
         panel.addView(status)
 
         var confirmedHttpUrl: String? = null
@@ -170,7 +170,7 @@ class PlaylistActivity : AppCompatActivity() {
         }
 
         fun action(label: String, primary: Boolean, connectAfter: Boolean) = Button(this).apply {
-            text = label; isAllCaps = false; textSize = 16f; setTextColor(Color.WHITE); isFocusable = true; isFocusableInTouchMode = true; background = buttonBackground(false, primary)
+            text = label; isAllCaps = false; textSize = 16f; setTextColor(BlofyTvDesign.TextPrimary); isFocusable = true; isFocusableInTouchMode = true; background = buttonBackground(false, primary)
             setOnFocusChangeListener { view, focused -> view.background = buttonBackground(focused, primary); view.animate().scaleX(if (focused) 1.03f else 1f).scaleY(if (focused) 1.03f else 1f).setDuration(90).start() }
             setOnClickListener { lifecycleScope.launch { persist(connectAfter) } }
         }

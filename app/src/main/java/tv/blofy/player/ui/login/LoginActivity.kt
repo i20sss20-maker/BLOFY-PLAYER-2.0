@@ -83,7 +83,7 @@ class LoginActivity : AppCompatActivity() {
         header.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(112), dp(70)))
         val headerText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT; layoutDirection = View.LAYOUT_DIRECTION_RTL }
         headerText.addView(TextView(this).apply { text = "BLOFY PLAYER"; textSize = 13f; letterSpacing = .12f; setTextColor(BlofyTvDesign.PurpleBright); gravity = Gravity.RIGHT })
-        headerText.addView(TextView(this).apply { text = "جاهز للمشاهدة"; textSize = 30f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT; includeFontPadding = false })
+        headerText.addView(TextView(this).apply { text = "جاهز للمشاهدة"; textSize = 30f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.RIGHT; includeFontPadding = false })
         headerText.addView(TextView(this).apply { text = "فعّل الجهاز من اليسار، وأدر قوائمك واتصل بها من اليمين"; textSize = 14.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
         header.addView(headerText, LinearLayout.LayoutParams(0, dp(76), 1f).apply { marginEnd = dp(12) })
         root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(80)))
@@ -102,7 +102,7 @@ class LoginActivity : AppCompatActivity() {
             setPadding(dp(24), dp(18), dp(24), dp(18))
             background = panelBackground()
         }
-        activation.addView(TextView(this).apply { text = "تفعيل الجهاز"; textSize = 21f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER })
+        activation.addView(TextView(this).apply { text = "تفعيل الجهاز"; textSize = 21f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER })
         activation.addView(TextView(this).apply { text = "امسح QR بالجوال — الربط يتحدث تلقائيًا على هذه الشاشة"; textSize = 12.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(10)) })
         activation.addView(qrView, LinearLayout.LayoutParams(dp(216), dp(216)))
         activation.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(6) })
@@ -110,7 +110,7 @@ class LoginActivity : AppCompatActivity() {
         deviceView.apply { textSize = 18f; gravity = Gravity.CENTER; setPadding(dp(12),0,dp(12),0); background = fieldBackground() }
         activation.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)))
         activation.addView(label("رمز الربط"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)).apply { topMargin = dp(8) })
-        codeView.apply { textSize = 30f; letterSpacing = .16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); background = fieldBackground() }
+        codeView.apply { textSize = 30f; letterSpacing = .16f; gravity = Gravity.CENTER; setTextColor(BlofyTvDesign.TextPrimary); background = fieldBackground() }
         activation.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(60)))
         status.apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(BlofyTvDesign.TextSecondary); background = statusBackground(); setPadding(dp(12),0,dp(12),0) }
         activation.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { topMargin = dp(10) })
@@ -125,10 +125,10 @@ class LoginActivity : AppCompatActivity() {
             background = panelBackground()
         }
         val playlistHeader = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER_VERTICAL }
-        playlistHeader.addView(TextView(this).apply { text = "قوائم التشغيل"; textSize = 23f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.RIGHT }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        playlistHeader.addView(TextView(this).apply { text = "اتصال مباشر"; textSize = 12.5f; setTextColor(0xFF79E7C6.toInt()); gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL }, LinearLayout.LayoutParams(dp(130), dp(40)))
+        playlistHeader.addView(TextView(this).apply { text = "قوائم التشغيل"; textSize = 23f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.RIGHT }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        playlistHeader.addView(TextView(this).apply { text = "اتصال مباشر"; textSize = 12.5f; setTextColor(BlofyTvDesign.Mint); gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL }, LinearLayout.LayoutParams(dp(130), dp(40)))
         playlistsPanel.addView(playlistHeader)
-        playlistsPanel.addView(TextView(this).apply { text = "اختر أي قائمة للاتصال، أو افتح إدارة القوائم للإضافة والتعديل"; textSize = 13.5f; setTextColor(0xFFB9A9C8.toInt()); gravity = Gravity.RIGHT; setPadding(0,0,0,dp(10)) })
+        playlistsPanel.addView(TextView(this).apply { text = "اختر أي قائمة للاتصال، أو افتح إدارة القوائم للإضافة والتعديل"; textSize = 13.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT; setPadding(0,0,0,dp(10)) })
 
         val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER }
         playlistRow = LinearLayout(this).apply {
@@ -150,7 +150,7 @@ class LoginActivity : AppCompatActivity() {
         workspace.addView(activation, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, .82f).apply { marginEnd = dp(10) })
         workspace.addView(playlistsPanel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.18f).apply { marginStart = dp(10) })
         root.addView(workspace, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(8) })
-        root.addView(TextView(this).apply { text = "🔒  بيانات القوائم محفوظة محليًا • الدخول التالي يستخدم الكاش الجاهز مباشرة"; textSize = 12f; setTextColor(0xFF9D91A9.toInt()); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(26)).apply { topMargin = dp(4) })
+        root.addView(TextView(this).apply { text = "🔒  بيانات القوائم محفوظة محليًا • الدخول التالي يستخدم الكاش الجاهز مباشرة"; textSize = 12f; setTextColor(BlofyTvDesign.TextDim); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(26)).apply { topMargin = dp(4) })
         return root
     }
 
@@ -165,7 +165,7 @@ class LoginActivity : AppCompatActivity() {
         root.addView(label("رمز الربط"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)).apply { topMargin = dp(8) })
         codeView.apply { background = fieldBackground(); letterSpacing = .14f }
         root.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
-        root.addView(TextView(this).apply { text = "امسح QR بالجوال — التحديث يظهر تلقائيًا هنا"; textSize = 13f; setTextColor(0xFFB9A9C8.toInt()); gravity = Gravity.CENTER; setPadding(0,dp(14),0,dp(8)) })
+        root.addView(TextView(this).apply { text = "امسح QR بالجوال — التحديث يظهر تلقائيًا هنا"; textSize = 13f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0,dp(14),0,dp(8)) })
         root.addView(qrView, LinearLayout.LayoutParams(dp(228),dp(228)))
         root.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)))
         root.addView(status)
@@ -178,15 +178,15 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun createIdentityViews(phone: Boolean) {
-        deviceView = TextView(this).apply { text = "جاري إنشاء هوية الجهاز..."; textSize = if(phone)17f else 21f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = if(phone)Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL }
-        codeView = TextView(this).apply { textSize = if(phone)25f else 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(0xFFB78CFF.toInt()); gravity = if(phone)Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL }
+        deviceView = TextView(this).apply { text = "جاري إنشاء هوية الجهاز..."; textSize = if(phone)17f else 21f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = if(phone)Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL }
+        codeView = TextView(this).apply { textSize = if(phone)25f else 34f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.PurpleBright); gravity = if(phone)Gravity.CENTER else Gravity.RIGHT or Gravity.CENTER_VERTICAL }
         qrView = ImageView(this).apply {
             contentDescription = "رمز ربط BLOFY"
             background = qrBackground()
             setPadding(dp(12),dp(12),dp(12),dp(12))
             elevation = dp(6).toFloat()
         }
-        status = TextView(this).apply { textSize = 14f; setTextColor(0xFFB8ABC7.toInt()); gravity = Gravity.CENTER; setPadding(0,dp(8),0,dp(8)) }
+        status = TextView(this).apply { textSize = 14f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0,dp(8),0,dp(8)) }
     }
 
     private fun startOrCancelConnect() {
@@ -253,15 +253,15 @@ class LoginActivity : AppCompatActivity() {
     private fun playlistCard(provider: ProviderEntity) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; setPadding(dp(16),dp(7),dp(16),dp(7)); isFocusable = true; isFocusableInTouchMode = true; isClickable = true; background = playlistCardBackground(provider.enabled,false)
         val info = LinearLayout(this@LoginActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT }
-        info.addView(TextView(this@LoginActivity).apply { text = provider.name; textSize = 15.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 1; gravity = Gravity.RIGHT })
-        info.addView(TextView(this@LoginActivity).apply { val type = if(provider.providerType.equals("xtream",true)) "Xtream" else "M3U"; text = if(provider.enabled) "● النشطة • $type" else "$type • OK للاتصال"; textSize = 11.5f; setTextColor(if(provider.enabled)0xFF79E7C6.toInt() else 0xFFBCA9CA.toInt()); gravity = Gravity.RIGHT })
+        info.addView(TextView(this@LoginActivity).apply { text = provider.name; textSize = 15.5f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); maxLines = 1; gravity = Gravity.RIGHT })
+        info.addView(TextView(this@LoginActivity).apply { val type = if(provider.providerType.equals("xtream",true)) "Xtream" else "M3U"; text = if(provider.enabled) "● النشطة • $type" else "$type • OK للاتصال"; textSize = 11.5f; setTextColor(if(provider.enabled)BlofyTvDesign.Mint else BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
         addView(info, LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,1f))
-        addView(TextView(this@LoginActivity).apply { text = "▶"; textSize = 18f; setTextColor(Color.WHITE); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(44),LinearLayout.LayoutParams.MATCH_PARENT))
+        addView(TextView(this@LoginActivity).apply { text = "▶"; textSize = 18f; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(44),LinearLayout.LayoutParams.MATCH_PARENT))
         setOnFocusChangeListener { view, focused -> view.background = playlistCardBackground(provider.enabled,focused); view.animate().scaleX(if(focused)1.025f else 1f).scaleY(if(focused)1.025f else 1f).translationZ(if(focused)14f else 2f).setDuration(100).start() }
         setOnClickListener { selectPortalProvider(provider) }
     }
 
-    private fun emptyPlaylistView(message: String) = TextView(this).apply { text = message; textSize = 13f; setTextColor(0xFFAC9BBA.toInt()); gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT; setPadding(dp(16),0,dp(16),0); background = fieldBackground() }
+    private fun emptyPlaylistView(message: String) = TextView(this).apply { text = message; textSize = 13f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT; setPadding(dp(16),0,dp(16),0); background = fieldBackground() }
     private fun openCatalogLoading(providerId: String) { CatalogSyncState.markPending(applicationContext,providerId); startActivity(Intent(this,CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID,providerId)) }
 
     private suspend fun refreshIdentityAndProvider() {
@@ -330,21 +330,21 @@ class LoginActivity : AppCompatActivity() {
     private fun pairingLinkHint() = TextView(this).apply {
         text = "blofyplayer.com/connect  •  تحديث تلقائي"
         textSize = 12.5f
-        typeface = Typeface.DEFAULT_BOLD
-        setTextColor(0xFFCDB3FF.toInt())
+        typeface = BlofyTvDesign.HeadingTypeface
+        setTextColor(BlofyTvDesign.PurpleSoft)
         gravity = Gravity.CENTER
         letterSpacing = .02f
     }
     private fun qrBackground() = GradientDrawable().apply {
         cornerRadius = dp(18).toFloat()
         setColor(Color.WHITE)
-        setStroke(dp(2),0xFFDBC7F5.toInt())
+        setStroke(dp(2), BlofyTvDesign.FocusStroke)
     }
 
-    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply { val tv = deviceKind == DeviceClass.Kind.TV; text = label; isAllCaps = false; textSize = 14.5f; setTextColor(Color.WHITE); isFocusable = tv; isFocusableInTouchMode = tv; background = buttonBackground(false); setOnFocusChangeListener { v,f -> if(tv){ v.background = buttonBackground(f); v.animate().scaleX(if(f)1.025f else 1f).scaleY(if(f)1.025f else 1f).setDuration(90).start() } }; setOnClickListener { action() } }
-    private fun primaryActionButton(label: String, action: () -> Unit) = Button(this).apply { val tv = deviceKind == DeviceClass.Kind.TV; text = label; isAllCaps = false; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); isFocusable = tv; isFocusableInTouchMode = tv; background = primaryButtonBackground(false); setOnFocusChangeListener { v,f -> if(tv){ v.background = primaryButtonBackground(f); v.animate().scaleX(if(f)1.03f else 1f).scaleY(if(f)1.03f else 1f).setDuration(95).start() } }; setOnClickListener { action() } }
-    private fun label(value: String) = TextView(this).apply { text = value; textSize = 12.5f; setTextColor(0xFFAA9AB8.toInt()); gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL }
-    private fun title(value: String,size:Float)=TextView(this).apply{text=value;textSize=size;typeface=Typeface.DEFAULT_BOLD;setTextColor(Color.WHITE);gravity=Gravity.CENTER}
+    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply { val tv = deviceKind == DeviceClass.Kind.TV; text = label; isAllCaps = false; textSize = 14.5f; setTextColor(BlofyTvDesign.TextPrimary); isFocusable = tv; isFocusableInTouchMode = tv; background = buttonBackground(false); setOnFocusChangeListener { v,f -> if(tv){ v.background = buttonBackground(f); v.animate().scaleX(if(f)1.025f else 1f).scaleY(if(f)1.025f else 1f).setDuration(90).start() } }; setOnClickListener { action() } }
+    private fun primaryActionButton(label: String, action: () -> Unit) = Button(this).apply { val tv = deviceKind == DeviceClass.Kind.TV; text = label; isAllCaps = false; textSize = 15f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); isFocusable = tv; isFocusableInTouchMode = tv; background = primaryButtonBackground(false); setOnFocusChangeListener { v,f -> if(tv){ v.background = primaryButtonBackground(f); v.animate().scaleX(if(f)1.03f else 1f).scaleY(if(f)1.03f else 1f).setDuration(95).start() } }; setOnClickListener { action() } }
+    private fun label(value: String) = TextView(this).apply { text = value; textSize = 12.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL }
+    private fun title(value: String,size:Float)=TextView(this).apply{text=value;textSize=size;typeface=BlofyTvDesign.HeadingTypeface;setTextColor(BlofyTvDesign.TextPrimary);gravity=Gravity.CENTER}
     private fun subtitle(value:String)=TextView(this).apply{text=value;textSize=16f;setTextColor(theme.accent);gravity=Gravity.CENTER;setPadding(0,dp(8),0,dp(16))}
     private fun panelBackground() = BlofyTvDesign.elevatedSurface(dp(24).toFloat(), emphasis = true)
     private fun fieldBackground() = BlofyTvDesign.inputField(dp(14).toFloat(), false)

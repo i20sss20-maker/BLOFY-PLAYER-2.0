@@ -90,7 +90,7 @@ class MobileContentActivity : AppCompatActivity() {
         emptyView = TextView(this).apply {
             text = "لا يوجد محتوى في هذا القسم"
             textSize = 15f
-            setTextColor(0xFFB7A8C9.toInt())
+            setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
             visibility = View.GONE
             setPadding(0, dp(16), 0, dp(16))
@@ -286,7 +286,7 @@ private class MobileLiveAdapter(private val activity: MobileContentActivity) : B
             }
             val meta = TextView(activity).apply {
                 textSize = 12.5f
-                setTextColor(0xFFB7A8C9.toInt())
+                setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.RIGHT
                 setPadding(0, dp(3), 0, 0)
             }

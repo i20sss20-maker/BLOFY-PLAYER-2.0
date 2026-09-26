@@ -197,6 +197,6 @@ class PosterCatalogActivity : AppCompatActivity() {
         const val EXTRA_KIND = "kind"; const val KIND_MOVIE = "movie"; const val KIND_SERIES = "series"
         private const val GRID_COLUMNS = 5
         private const val ALL_CATEGORY_ID = "__all__"; private const val EXTRA_PROVIDER_ID_SHARED = "provider_id"; private const val EXTRA_CONTENT_KEY_SHARED = "content_key"
-        private val PURPLE_SOFT = Color.rgb(195, 135, 255)
+        private val PURPLE_SOFT = BlofyTvDesign.PurpleSoft
     }
 }

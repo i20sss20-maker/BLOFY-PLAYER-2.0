@@ -165,6 +165,6 @@ class SeriesDetailsActivity : AppCompatActivity() {
     private data class Resume(val episode: EpisodeEntity, val positionMs: Long, val durationMs: Long, val updatedAt: Long)
     companion object {
         const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_CONTENT_KEY = "content_key"
-        private val PURPLE = Color.rgb(126, 44, 255); private val SOFT = Color.rgb(195, 165, 225)
+        private val PURPLE = BlofyTvDesign.Purple; private val SOFT = BlofyTvDesign.TextMuted
     }
 }

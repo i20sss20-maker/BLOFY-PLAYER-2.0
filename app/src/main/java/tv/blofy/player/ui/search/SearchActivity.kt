@@ -181,7 +181,7 @@ class SearchActivity : AppCompatActivity() {
                 textBox.addView(TextView(this@SearchActivity).apply {
                     text = (if (stream.locked) "🔒  " else "") + stream.name
                     textSize = 17.5f
-                    setTextColor(Color.WHITE)
+                    setTextColor(BlofyTvDesign.TextPrimary)
                     gravity = Gravity.RIGHT
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
