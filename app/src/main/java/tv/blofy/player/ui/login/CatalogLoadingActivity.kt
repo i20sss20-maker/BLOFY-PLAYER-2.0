@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -52,6 +53,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         buildUi()
         currentProviderId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
         if (currentProviderId.isBlank()) {
@@ -221,6 +223,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun startSync() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         lastPercent = 0
         render(0, "جاري الاتصال بالخادم...")
         recoveryContainer()?.visibility = android.view.View.GONE
@@ -323,6 +326,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun fail(message: String) {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Danger)
         detail.text = "لم يتم اعتماد المكتبة غير المكتملة • يمكنك إعادة المحاولة بأمان"
