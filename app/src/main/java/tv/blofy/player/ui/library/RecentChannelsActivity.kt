@@ -162,5 +162,7 @@ class RecentChannelsActivity : AppCompatActivity() {
         })
     }
 
-    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(18).toFloat(), focused)\n\n    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    private fun rowBackground(focused: Boolean) = BlofyTvDesign.surface(dp(18).toFloat(), focused)
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
