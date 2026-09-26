@@ -51,6 +51,7 @@ import tv.blofy.player.data.remote.XtreamClient
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import tv.blofy.player.ui.common.BlofyTvDesign
 
 @OptIn(markerClass = [UnstableApi::class])
 class PlayerActivity : AppCompatActivity() {
@@ -147,7 +148,7 @@ class PlayerActivity : AppCompatActivity() {
         channelNumberView = TextView(this).apply {
             textSize = 34f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
             setPadding(24, 10, 24, 10)
-            background = GradientDrawable().apply { cornerRadius = 18f; setColor(Color.argb(225, 43, 18, 76)); setStroke(2, PURPLE_SOFT) }
+            background = BlofyTvDesign.badge(18f, accent = true)
             visibility = View.GONE
         }
         root.addView(channelNumberView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = 34; marginEnd = 42 })
@@ -155,16 +156,13 @@ class PlayerActivity : AppCompatActivity() {
         hud = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(44, 28, 44, 34)
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xE60B0813.toInt(), 0xFA08060D.toInt())).apply {
-                cornerRadii = floatArrayOf(30f, 30f, 30f, 30f, 0f, 0f, 0f, 0f)
-                setStroke(1, 0x553C2956)
-            }
+            background = BlofyTvDesign.elevatedSurface(30f, emphasis = true)
             visibility = View.GONE
         }
 
         val eyebrow = TextView(this).apply {
             text = if (kind == "live") "BLOFY LIVE" else if (kind == "episode") "BLOFY SERIES" else "BLOFY CINEMA"
-            textSize = 12f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_SOFT); letterSpacing = .08f
+            textSize = 12f; typeface = Typeface.DEFAULT_BOLD; setTextColor(BlofyTvDesign.PurpleSoft); letterSpacing = .08f
             setPadding(0, 0, 0, 5)
         }
         hud.addView(eyebrow)
@@ -176,7 +174,7 @@ class PlayerActivity : AppCompatActivity() {
         hud.addView(titleView)
 
         epgView = TextView(this).apply {
-            textSize = 15f; setTextColor(Color.rgb(214, 203, 228)); setPadding(0, 0, 0, 16)
+            textSize = 15f; setTextColor(BlofyTvDesign.TextSecondary); setPadding(0, 0, 0, 16)
             visibility = if (kind == "live") View.VISIBLE else View.GONE
             background = if (kind == "live") GradientDrawable().apply { cornerRadius = 14f; setColor(0x4D281D39); setStroke(1, 0x554F3868) } else null
             if (kind == "live") setPadding(18, 12, 18, 12)
@@ -186,7 +184,7 @@ class PlayerActivity : AppCompatActivity() {
         if (kind != "live") {
             val timeline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 4, 0, 14) }
             positionView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(Color.WHITE); gravity = Gravity.CENTER_VERTICAL }
-            durationView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(Color.rgb(190, 180, 205)); gravity = Gravity.CENTER_VERTICAL }
+            durationView = TextView(this).apply { text = "00:00"; textSize = 13f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER_VERTICAL }
             progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progress = 0 }
             timeline.addView(positionView, LinearLayout.LayoutParams(72, 36))
             timeline.addView(progressBar, LinearLayout.LayoutParams(0, 18, 1f).apply { marginEnd = 14; marginStart = 14 })
@@ -250,20 +248,18 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun controlButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; isFocusable = true; isFocusableInTouchMode = true; textSize = 14f
-        typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); background = controlBackground(false)
-        setOnFocusChangeListener { view, focused ->
-            view.background = controlBackground(focused)
-            view.animate().scaleX(if (focused) 1.055f else 1f).scaleY(if (focused) 1.055f else 1f).setDuration(100L).start()
-            if (focused) keepHudVisible()
+        text = label
+        isAllCaps = false
+        isFocusable = true
+        isFocusableInTouchMode = true
+        textSize = 14f
+        typeface = BlofyTvDesign.BodyTypeface
+        setTextColor(BlofyTvDesign.TextPrimary)
+        stateListAnimator = null
+        BlofyTvDesign.installTvFocus(this, 18f, 1.055f, label.contains("تشغيل") || label.contains("إيقاف")) {
+            keepHudVisible()
         }
         setOnClickListener { action() }
-    }
-
-    private fun controlBackground(focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 18f
-        setColor(if (focused) PURPLE else 0xD5231A31.toInt())
-        setStroke(if (focused) 2 else 1, if (focused) Color.WHITE else 0x66553B70)
     }
 
     private fun togglePlayPause() {
@@ -533,7 +529,7 @@ class PlayerActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_URL = "url"; const val EXTRA_CONTENT_KEY = "content_key"; const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_KIND = "kind"; const val EXTRA_LIVE_FORMAT = "live_format"; const val EXTRA_PROVIDER_TYPE = "provider_type"; const val EXTRA_PREFERRED_TRANSPORT = "preferred_transport"; const val EXTRA_PREFERRED_ENGINE = "preferred_engine"; const val EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS = "allow_cross_protocol_redirects"; const val EXTRA_FALLBACK_URL = "fallback_url"; const val EXTRA_RESUME_MS = "resume_ms"; const val EXTRA_STREAM_ID = "stream_id"; const val EXTRA_CATEGORY_ID = "category_id"; const val EXTRA_TITLE = "title"; const val EXTRA_SERIES_ID = "series_id"; const val EXTRA_SEASON = "season"; const val EXTRA_EPISODE = "episode"
-        private val PURPLE = Color.rgb(111, 54, 218); private val PURPLE_SOFT = Color.rgb(196, 157, 255)
+        private val PURPLE = BlofyTvDesign.Purple; private val PURPLE_SOFT = BlofyTvDesign.PurpleSoft
         private val HUD_NAVIGATION_ACTIONS = setOf(RemoteAction.OK, RemoteAction.UP, RemoteAction.DOWN, RemoteAction.LEFT, RemoteAction.RIGHT)
     }
 }
