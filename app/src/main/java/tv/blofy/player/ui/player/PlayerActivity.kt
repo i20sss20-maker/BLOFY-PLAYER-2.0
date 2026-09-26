@@ -135,7 +135,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun buildPlayerUi() {
-        val compactHud = resources.configuration.screenWidthDp < 700
+        val compactHud = resources.configuration.screenWidthDp < 900
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         playerView = PlayerView(this).apply {
             useController = false
@@ -201,7 +201,7 @@ class PlayerActivity : AppCompatActivity() {
             }
             liveHint.addView(TextView(this).apply {
                 text = "CH+/CH− للتنقل   •   أرقام القنوات   •   OK لإظهار معلومات البرنامج"
-                textSize = if (resources.configuration.screenWidthDp < 700) 12.5f else 14f
+                textSize = if (resources.configuration.screenWidthDp < 900) 12.5f else 14f
                 setTextColor(PURPLE_SOFT)
                 gravity = Gravity.CENTER_VERTICAL
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(if (compactHud) 48 else 58)))
@@ -227,30 +227,52 @@ class PlayerActivity : AppCompatActivity() {
             }
             hud.addView(playbackControls, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(if (compactHud) 6 else 10) })
 
-            val options = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-                layoutDirection = View.LAYOUT_DIRECTION_RTL
-                clipChildren = false
-            }
             audioButton = controlButton("🔊  الصوت") { showTrackDialog(C.TRACK_TYPE_AUDIO) }
             subtitleButton = controlButton("CC  الترجمة") { showTrackDialog(C.TRACK_TYPE_TEXT) }
             qualityButton = controlButton("▣  الجودة") { showVideoQualityDialog() }
             favoriteButton = controlButton("☆  المفضلة") { toggleFavorite() }.apply { visibility = if (kind == "episode") View.GONE else View.VISIBLE }
+
+            val options = LinearLayout(this).apply {
+                orientation = if (compactHud) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                clipChildren = false
+            }
             if (compactHud) {
-                options.addView(audioButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginStart = dp(5) })
-                options.addView(subtitleButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginStart = dp(5) })
-                options.addView(qualityButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginStart = dp(5) })
+                val trackRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                    layoutDirection = View.LAYOUT_DIRECTION_RTL
+                    clipChildren = false
+                }
+                trackRow.addView(audioButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                trackRow.addView(subtitleButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                trackRow.addView(qualityButton, LinearLayout.LayoutParams(0, dp(50), 1f))
+                options.addView(trackRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
+
+                val contentRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                    layoutDirection = View.LAYOUT_DIRECTION_RTL
+                    clipChildren = false
+                }
+                if (kind != "episode") {
+                    contentRow.addView(favoriteButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
+                } else {
+                    contentRow.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) })
+                    contentRow.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(0, dp(50), 1f))
+                }
+                options.addView(contentRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(5) })
             } else {
                 options.addView(audioButton, LinearLayout.LayoutParams(dp(176), dp(64)).apply { marginStart = dp(10) })
                 options.addView(subtitleButton, LinearLayout.LayoutParams(dp(176), dp(64)).apply { marginStart = dp(10) })
                 options.addView(qualityButton, LinearLayout.LayoutParams(dp(176), dp(64)).apply { marginStart = dp(10) })
-            }
-            if (kind != "episode") {
-                options.addView(favoriteButton, if (compactHud) LinearLayout.LayoutParams(0, dp(52), 1f) else LinearLayout.LayoutParams(dp(184), dp(64)))
-            } else {
-                options.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, if (compactHud) LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginStart = dp(5) } else LinearLayout.LayoutParams(dp(150), dp(64)).apply { marginStart = dp(10) })
-                options.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, if (compactHud) LinearLayout.LayoutParams(0, dp(52), 1f) else LinearLayout.LayoutParams(dp(150), dp(64)))
+                if (kind != "episode") {
+                    options.addView(favoriteButton, LinearLayout.LayoutParams(dp(184), dp(64)))
+                } else {
+                    options.addView(controlButton("‹  السابق") { playAdjacentEpisode(-1) }, LinearLayout.LayoutParams(dp(150), dp(64)).apply { marginStart = dp(10) })
+                    options.addView(controlButton("التالي  ›") { playAdjacentEpisode(1) }, LinearLayout.LayoutParams(dp(150), dp(64)))
+                }
             }
             hud.addView(options)
         }
@@ -265,11 +287,11 @@ class PlayerActivity : AppCompatActivity() {
         isAllCaps = false
         isFocusable = true
         isFocusableInTouchMode = true
-        textSize = 14f
+        textSize = if (resources.configuration.screenWidthDp < 900) 12.5f else 14f
         typeface = BlofyTvDesign.BodyTypeface
         setTextColor(BlofyTvDesign.TextPrimary)
         stateListAnimator = null
-        BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), if (resources.configuration.screenWidthDp < 700) 1.035f else 1.055f, label.contains("تشغيل") || label.contains("إيقاف")) {
+        BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), if (resources.configuration.screenWidthDp < 900) 1.035f else 1.055f, label.contains("تشغيل") || label.contains("إيقاف")) {
             keepHudVisible()
         }
         setOnClickListener { action() }
