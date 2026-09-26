@@ -177,9 +177,9 @@ class LibraryActivity : AppCompatActivity() {
         val seriesName = parent?.name?.takeIf(String::isNotBlank) ?: "مسلسل"
         val row = TextView(this).apply {
             text = "EPISODE   •   $seriesName   •   S${episode.season} E${episode.episode}   •   ${episode.title}\n${watchProgressLabel(entry.state)}"
-            textSize = 17f
+            textSize = if (resources.configuration.screenWidthDp < 600) 15.5f else 17f
             setTextColor(BlofyTvDesign.TextPrimary)
-            setPadding(dp(24), dp(10), dp(24), dp(10))
+            setPadding(dp(if (resources.configuration.screenWidthDp < 600) 16 else 24), dp(10), dp(if (resources.configuration.screenWidthDp < 600) 16 else 24), dp(10))
             gravity = Gravity.CENTER_VERTICAL
             maxLines = 2
             setLineSpacing(dp(2).toFloat(), 1.05f)
@@ -192,7 +192,7 @@ class LibraryActivity : AppCompatActivity() {
             }
             setOnClickListener { openEpisode(provider, episode, entry.state.positionMs, seriesName) }
         }
-        list?.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(76)).apply { topMargin = dp(7) })
+        list?.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (resources.configuration.screenWidthDp < 600) 72 else 76)).apply { topMargin = dp(if (resources.configuration.screenWidthDp < 600) 5 else 7) })
     }
 
     private fun watchProgressLabel(state: WatchStateEntity): String {
