@@ -100,17 +100,36 @@ class ActivationManager(
         val canonical = response.canonicalDeviceId
             ?.takeIf { it.isNotBlank() && it != current.deviceId }
         if (canonical != null) {
-            DeviceIdentity.adoptRecoveredCanonicalIdentity(context, canonical, current.activationCode)
-            current = current.copy(
-                deviceId = canonical,
-                lastCheckAt = System.currentTimeMillis()
-            )
-            dao.replaceActivation(current)
+            // A successful server check must remain authoritative even if a receiver has a
+            // temporarily locked/corrupt local Room write. Recovery persistence is best-effort;
+            // never turn HTTP 200 from BLOFY into a misleading [P-AUTH] UI error.
+            try {
+                DeviceIdentity.adoptRecoveredCanonicalIdentity(context, canonical, current.activationCode)
+                current = current.copy(
+                    deviceId = canonical,
+                    lastCheckAt = System.currentTimeMillis()
+                )
+                dao.replaceActivation(current)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Keep the current local identity for this session; the next refresh retries.
+            }
         }
 
         if (response.canUse()) rotatePendingCode(api, current)
-        val updated = applyRemoteStatus(response.canUse(), response.expiresAt)
-        ActivationDisplayState.record(context, updated, response)
+
+        // The remote response is the activation authority. Persisting its display/cache state is
+        // useful but must not make a healthy 200 response look like a network/authentication
+        // failure when SQLite/SharedPreferences is temporarily unavailable.
+        try {
+            val updated = applyRemoteStatus(response.canUse(), response.expiresAt)
+            ActivationDisplayState.record(context, updated, response)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Best-effort cache only. Return the verified remote state below.
+        }
         return response
     }
 
