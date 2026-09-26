@@ -50,7 +50,7 @@ internal class PosterStreamAdapter(
             isClickable = true
             stateListAnimator = null
             setPadding(dp(7), dp(7), dp(7), dp(10))
-            background = card(false)
+            background = card(this, false)
             clipToOutline = true
         }
 
@@ -127,12 +127,12 @@ internal class PosterStreamAdapter(
 
         holder.itemView.setOnClickListener { onClick(item) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
-            view.background = card(focused)
+            view.background = card(view, focused)
             view.animate().cancel()
             view.animate()
                 .scaleX(if (focused) 1.045f else 1f)
                 .scaleY(if (focused) 1.045f else 1f)
-                .translationZ(if (focused) 22f else 3f)
+                .translationZ(if (focused) dp(view, 22).toFloat() else dp(view, 3).toFloat())
                 .alpha(if (focused) 1f else .97f)
                 .setDuration(if (focused) 110L else 90L)
                 .start()
@@ -157,5 +157,9 @@ internal class PosterStreamAdapter(
         val rating: TextView
     ) : RecyclerView.ViewHolder(itemView)
 
-    private fun card(focused: Boolean) = BlofyTvDesign.posterCard(20f, focused)
+    private fun card(view: View, focused: Boolean) =
+        BlofyTvDesign.posterCard(dp(view, 20).toFloat(), focused)
+
+    private fun dp(view: View, value: Int) =
+        (value * view.resources.displayMetrics.density).toInt()
 }
