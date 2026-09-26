@@ -1,6 +1,7 @@
 package tv.blofy.player.core.identity
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -18,6 +19,15 @@ class DeviceIdentityTest {
         val first = DeviceIdentity.generateDeviceId { 0 }
         val second = DeviceIdentity.generateDeviceId { 1 }
         assertNotEquals(first, second)
+    }
+
+    @Test
+    fun acceptsCurrentAndLegacyServerKnownDeviceIds() {
+        assertTrue(DeviceIdentity.isValidDeviceId("BLOFY-66HL-GB09"))
+        assertTrue(DeviceIdentity.isValidDeviceId("BLOFY-1A2B3C4D"))
+        assertTrue(DeviceIdentity.isValidDeviceId("blofy-abcd-1234"))
+        assertFalse(DeviceIdentity.isValidDeviceId("OTHER-66HL-GB09"))
+        assertFalse(DeviceIdentity.isValidDeviceId("BLOFY-"))
     }
 
     @Test
