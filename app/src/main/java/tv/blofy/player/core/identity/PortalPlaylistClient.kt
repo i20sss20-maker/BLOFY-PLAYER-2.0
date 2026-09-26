@@ -461,6 +461,23 @@ object PortalPlaylistClient {
     )
 
     private suspend fun fetchRemote(endpoint: String, auth: JSONObject, transport: OkHttpClient): RemoteSnapshot {
+        var lastFailure: Throwable? = null
+        val candidates = BlofyBackendFallback.candidates(endpoint)
+        for ((candidateIndex, candidate) in candidates.withIndex()) {
+            try {
+                return fetchRemoteFrom(candidate, auth, transport)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                lastFailure = error
+                val hasFallback = candidateIndex < candidates.lastIndex
+                if (!hasFallback || !BlofyBackendFallback.shouldFailOver(error)) throw error
+            }
+        }
+        throw lastFailure ?: PortalRefreshFailure("LIST")
+    }
+
+    private suspend fun fetchRemoteFrom(endpoint: String, auth: JSONObject, transport: OkHttpClient): RemoteSnapshot {
         val request = Request.Builder().url("$endpoint/api/v1/portal/playlists/list")
             .post(auth.toString().toRequestBody(jsonType)).build()
         repeat(2) { attempt ->
