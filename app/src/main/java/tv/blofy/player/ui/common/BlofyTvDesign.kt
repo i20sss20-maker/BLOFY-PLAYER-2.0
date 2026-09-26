@@ -12,25 +12,25 @@ import android.widget.TextView
  */
 object BlofyTvDesign {
     val Background = CinemaStyle.Background
-    val BackgroundRaised = Color.rgb(22, 13, 34)
+    val BackgroundRaised = Color.rgb(14, 12, 18)
     val Surface = CinemaStyle.Surface
-    val SurfaceRaised = Color.rgb(50, 30, 72)
-    val SurfaceFocused = Color.rgb(112, 69, 161)
-    val FocusStroke = Color.rgb(242, 230, 255)
-    val FocusGlow = Color.rgb(188, 140, 244)
+    val SurfaceRaised = Color.rgb(43, 36, 50)
+    val SurfaceFocused = Color.rgb(82, 67, 100)
+    val FocusStroke = Color.rgb(242, 234, 250)
+    val FocusGlow = Color.rgb(185, 156, 221)
 
-    val Purple = Color.rgb(127, 73, 209)
+    val Purple = Color.rgb(134, 84, 197)
     val PurpleBright = CinemaStyle.Accent
-    val PurpleDeep = Color.rgb(53, 28, 80)
-    val PurpleSoft = Color.rgb(210, 187, 238)
-    val Lavender = Color.rgb(232, 220, 246)
+    val PurpleDeep = Color.rgb(54, 36, 67)
+    val PurpleSoft = Color.rgb(216, 197, 233)
+    val Lavender = Color.rgb(238, 232, 245)
     val Mint = Color.rgb(91, 220, 187)
     val Error = Color.rgb(255, 118, 140)
 
     val TextPrimary = CinemaStyle.White
-    val TextSecondary = Color.rgb(218, 213, 225)
+    val TextSecondary = Color.rgb(218, 215, 222)
     val TextMuted = CinemaStyle.Muted
-    val Divider = 0x62FFFFFF
+    val Divider = 0x32FFFFFF
 
     const val HeroTitleSp = 42f
     const val DetailTitleSp = 40f
@@ -95,13 +95,13 @@ object BlofyTvDesign {
     fun primaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) {
-            intArrayOf(0xFFB979F4.toInt(), 0xFF8750D7.toInt(), 0xFF6232AA.toInt())
+            intArrayOf(0xFFC6A1EF.toInt(), 0xFF9B70CF.toInt(), 0xFF724BA7.toInt())
         } else {
-            intArrayOf(0xFF874CD5.toInt(), 0xFF6B36B5.toInt(), 0xFF51288F.toInt())
+            intArrayOf(0xFF8B5CC2.toInt(), 0xFF7047A0.toInt(), 0xFF54377A.toInt())
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFF0E1FC.toInt() else 0xFF8964AE.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) 0xFFF1E8FA.toInt() else 0xFF756382.toInt())
     }
 
     fun secondaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) =
@@ -109,10 +109,10 @@ object BlofyTvDesign {
 
     fun badge(radius: Float = BadgeRadius.toFloat()) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0xD421182D.toInt(), 0xD617121E.toInt())
+        intArrayOf(0xE01D1921.toInt(), 0xE0121016.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(1, 0xFF584768.toInt())
+        setStroke(1, 0xFF4B424F.toInt())
     }
 
     fun applyTitle(t: TextView) = t.apply {
