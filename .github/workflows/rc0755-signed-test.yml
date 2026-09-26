@@ -199,3 +199,11 @@ jobs:
           path: signed-test/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload APK only for QA installation
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-APK-${{ github.sha }}
+          path: signed-test/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.apk
+          if-no-files-found: error
+          retention-days: 30
