@@ -17,6 +17,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import retrofit2.HttpException
 import retrofit2.Response
+import tv.blofy.player.data.local.ActivationEntity
 
 class ActivationRetryTest {
     private val request = ActivationCheckRequest("BLOFY-TEST-ONLY", "123456", "test")
@@ -114,6 +115,50 @@ class ActivationRetryTest {
         assertEquals(1, fake.migrations)
         assertEquals(0, fake.checks)
     }
+    @Test fun acceptedServerRotationSurvivesLocalPersistenceFailures() = runBlocking {
+        val updated = ActivationEntity(
+            deviceId = "BLOFY-AAAA-BBBB",
+            activationCode = "654321",
+            activated = true
+        )
+        var roomWrites = 0
+        var preferenceWrites = 0
+
+        val result = ActivationManager.persistAcceptedRotation(
+            updated = updated,
+            persistRoom = {
+                roomWrites++
+                throw IllegalStateException("Room temporarily unavailable")
+            },
+            persistPreferences = {
+                preferenceWrites++
+                throw IllegalStateException("SharedPreferences temporarily unavailable")
+            }
+        )
+
+        assertSame(updated, result)
+        assertEquals(1, roomWrites)
+        assertEquals(1, preferenceWrites)
+    }
+
+    @Test fun acceptedServerRotationStillPropagatesCancellation() = runBlocking {
+        val updated = ActivationEntity(
+            deviceId = "BLOFY-AAAA-BBBB",
+            activationCode = "654321"
+        )
+        val cancelled = CancellationException("screen closed")
+        try {
+            ActivationManager.persistAcceptedRotation(
+                updated = updated,
+                persistRoom = { throw cancelled },
+                persistPreferences = { fail("preferences must not run after cancellation") }
+            )
+            fail("must cancel")
+        } catch (error: CancellationException) {
+            assertSame(cancelled, error)
+        }
+    }
+
     @Test fun realRetrofitClientRecoversFrom503AndPreservesBlockedResult() = runBlocking {
         val server = MockWebServer()
         server.start()
