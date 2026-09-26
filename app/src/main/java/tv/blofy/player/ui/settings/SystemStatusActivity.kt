@@ -15,9 +15,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.BuildConfig
-import tv.blofy.player.core.update.BlofyUpdateClient
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.update.BlofyUpdateClient
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.login.LoginActivity
@@ -28,59 +28,93 @@ import java.util.Date
 class SystemStatusActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val widthDp = resources.configuration.screenWidthDp
+        val compact = widthDp < 600
 
         val root = ScrollView(this).apply {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             background = AppCompatResources.getDrawable(this@SystemStatusActivity, R.drawable.blofy_home_background)
             isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP or Gravity.RIGHT
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(56), dp(42), dp(56), dp(48))
+            setPadding(
+                dp(if (compact) 18 else 56),
+                dp(if (compact) 24 else 42),
+                dp(if (compact) 18 else 56),
+                dp(if (compact) 28 else 48)
+            )
         }
         root.addView(content)
 
         content.addView(TextView(this).apply {
             text = "حالة BLOFY PLAYER"
             BlofyTvDesign.applyHeroTitle(this)
-            textSize = 34f
+            textSize = if (compact) 29f else 34f
             gravity = Gravity.RIGHT
         })
         content.addView(TextView(this).apply {
-            text = "معلومات النسخة والجهاز والقائمة النشطة"
-            textSize = 15f
+            text = "معلومات النسخة والجهاز والخدمات والقائمة النشطة"
+            textSize = if (compact) 13.5f else 15f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.RIGHT
-            setPadding(0, dp(8), 0, dp(24))
+            setPadding(0, dp(8), 0, dp(18))
         })
 
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.TOP or Gravity.RIGHT
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(26), dp(22), dp(26), dp(22))
-            background = BlofyTvDesign.elevatedSurface(dp(24).toFloat())
-            elevation = dp(8).toFloat()
+        fun section(title: String, initial: String): TextView {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.TOP or Gravity.RIGHT
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                setPadding(dp(if (compact) 18 else 24), dp(18), dp(if (compact) 18 else 24), dp(18))
+                background = BlofyTvDesign.elevatedSurface(dp(22).toFloat())
+                elevation = dp(5).toFloat()
+            }
+            card.addView(TextView(this).apply {
+                text = title
+                BlofyTvDesign.applyHeading(this)
+                textSize = if (compact) 17f else 19f
+                setTextColor(BlofyTvDesign.PurpleSoft)
+                gravity = Gravity.RIGHT
+                setPadding(0, 0, 0, dp(8))
+            })
+            val body = TextView(this).apply {
+                text = initial
+                textSize = if (compact) 14.5f else 16f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.TextSecondary)
+                gravity = Gravity.RIGHT
+                setLineSpacing(dp(5).toFloat(), 1.08f)
+            }
+            card.addView(body)
+            content.addView(
+                card,
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(10)
+                }
+            )
+            return body
         }
-        val body = TextView(this).apply {
-            text = "جاري قراءة الحالة..."
-            textSize = 16.5f
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT
-            setLineSpacing(dp(7).toFloat(), 1.04f)
-        }
-        card.addView(body)
-        content.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        val appBody = section("التطبيق والجهاز", "جاري قراءة معلومات التطبيق...")
+        val servicesBody = section("الخدمات والتفعيل", "جاري التحقق من الخدمات...")
+        val providerBody = section("القائمة النشطة", "جاري قراءة القائمة...")
+        section(
+            "الخصوصية",
+            "بيانات الدخول الحساسة لا تظهر هنا، ولا يتم عرض اسم المستخدم أو كلمة المرور أو الروابط التي تحتوي بيانات اعتماد."
+        )
 
         val actions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER
-            setPadding(0, dp(18), 0, 0)
+            setPadding(0, dp(10), 0, 0)
+            clipChildren = false
         }
         fun action(label: String, intent: Intent) = Button(this).apply {
             text = label
@@ -88,17 +122,20 @@ class SystemStatusActivity : AppCompatActivity() {
             textSize = 15f
             typeface = BlofyTvDesign.BodyTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-            BlofyTvDesign.installTvFocus(this, dp(18).toFloat(), 1.03f, false)
+            stateListAnimator = null
+            BlofyTvDesign.installTvFocus(this, dp(18).toFloat(), 1.035f, false)
             setOnClickListener { startActivity(intent) }
         }
-        actions.addView(
-            action("▣  ربط الجهاز", Intent(this, LoginActivity::class.java)),
-            LinearLayout.LayoutParams(0, dp(58), 1f).apply { marginStart = dp(8) }
-        )
-        actions.addView(
-            action("▤  إدارة القوائم", Intent(this, ProviderManagerActivity::class.java)),
-            LinearLayout.LayoutParams(0, dp(58), 1f)
-        )
+
+        val pair = action("▣  ربط الجهاز", Intent(this, LoginActivity::class.java))
+        val lists = action("▤  إدارة القوائم", Intent(this, ProviderManagerActivity::class.java))
+        if (compact) {
+            actions.addView(pair, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { bottomMargin = dp(8) })
+            actions.addView(lists, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
+        } else {
+            actions.addView(pair, LinearLayout.LayoutParams(0, dp(58), 1f).apply { marginStart = dp(8) })
+            actions.addView(lists, LinearLayout.LayoutParams(0, dp(58), 1f))
+        }
         content.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
 
@@ -119,11 +156,15 @@ class SystemStatusActivity : AppCompatActivity() {
                 activation.expiresAt != null && activation.expiresAt <= System.currentTimeMillis() -> "منتهي • ${formatTime(activation.expiresAt)}"
                 else -> "غير مفعّل"
             }
-            body.text = buildString {
+
+            appBody.text = buildString {
                 appendLine("النسخة: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 appendLine("البناء: ${BuildConfig.BUILD_SHA.take(12)}")
                 appendLine("نوع الجهاز: ${device.name}")
-                appendLine("FFmpeg: ${if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "مدمج وجاهز" else "غير مدمج"}")
+                append("FFmpeg: ${if (BuildConfig.FFMPEG_EXTENSION_BUNDLED) "مدمج وجاهز" else "غير مدمج"}")
+            }
+
+            servicesBody.text = buildString {
                 appendLine("خدمة التفعيل: ${if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) "غير مضبوطة" else "مضبوطة"}")
                 appendLine("خدمة التحديث: ${if (BuildConfig.UPDATE_BASE_URL.isBlank()) "غير مضبوطة" else if (officialRelease != null) "متصلة" else "تعذر التحقق الآن"}")
                 if (officialRelease != null) {
@@ -131,23 +172,25 @@ class SystemStatusActivity : AppCompatActivity() {
                     appendLine("الإصدار الرسمي: ${officialRelease.versionName} (${officialRelease.versionCode})$updateState")
                 }
                 appendLine("حالة التفعيل: $activationText")
-                appendLine("آخر تحقق: ${activation?.lastCheckAt?.let(::formatTime) ?: "—"}")
-                appendLine()
-                if (provider == null) {
-                    appendLine("القائمة النشطة: لا توجد قائمة")
-                } else {
-                    appendLine("القائمة النشطة: ${provider.name}")
+                append("آخر تحقق: ${activation?.lastCheckAt?.let(::formatTime) ?: "—"}")
+            }
+
+            providerBody.text = if (provider == null) {
+                "لا توجد قائمة تشغيل نشطة"
+            } else {
+                buildString {
+                    appendLine(provider.name)
                     appendLine("النوع: ${provider.providerType.uppercase()}")
                     appendLine("صيغة البث: ${provider.liveFormat.uppercase()}")
                     appendLine("النقل: ${provider.preferredTransport.uppercase()}")
-                    appendLine("إعادة التوجيه: ${if (provider.allowCrossProtocolRedirects) "مفعّلة" else "متوقفة"}")
+                    append("إعادة التوجيه: ${if (provider.allowCrossProtocolRedirects) "مفعّلة" else "متوقفة"}")
                 }
-                appendLine()
-                append("لا يتم عرض اسم المستخدم أو كلمة المرور أو أي رابط يحتوي بيانات دخول في هذه الشاشة.")
             }
         }
     }
 
-    private fun formatTime(value: Long): String = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(value))
+    private fun formatTime(value: Long): String =
+        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(value))
+
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }

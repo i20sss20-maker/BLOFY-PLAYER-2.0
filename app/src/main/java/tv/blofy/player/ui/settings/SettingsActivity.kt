@@ -55,10 +55,18 @@ class SettingsActivity : AppCompatActivity() {
             background = AppCompatResources.getDrawable(this@SettingsActivity, R.drawable.blofy_home_background)
             overScrollMode = View.OVER_SCROLL_NEVER
         }
+        val widthDp = resources.configuration.screenWidthDp
+        val compact = widthDp < 600
+        val medium = widthDp in 600..999
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(46), dp(30), dp(46), dp(34))
+            setPadding(
+                dp(if (compact) 18 else if (medium) 28 else 46),
+                dp(if (compact) 20 else 30),
+                dp(if (compact) 18 else if (medium) 28 else 46),
+                dp(if (compact) 24 else 34)
+            )
             clipChildren = false
             clipToPadding = false
         }
@@ -87,8 +95,8 @@ class SettingsActivity : AppCompatActivity() {
         })
         header.addView(titleBox, LinearLayout.LayoutParams(0, dp(80), 1f))
         val back = settingButton("↩  رجوع", true) { finish() }.apply { id = View.generateViewId() }
-        header.addView(back, LinearLayout.LayoutParams(dp(156), dp(54)))
-        page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(88)))
+        header.addView(back, LinearLayout.LayoutParams(dp(if (compact) 112 else 156), dp(54)))
+        page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compact) 82 else 88)))
 
         status = TextView(this).apply {
             text = "✓  بياناتك محفوظة محليًا وتفتح بدون إعادة تحميل"
@@ -102,7 +110,12 @@ class SettingsActivity : AppCompatActivity() {
         page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { bottomMargin = dp(18) })
 
         grid = GridLayout(this).apply {
-            columnCount = if (isTv()) 3 else 2
+            columnCount = when {
+                isTv() -> 3
+                compact -> 1
+                medium -> 2
+                else -> 3
+            }
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             alignmentMode = GridLayout.ALIGN_BOUNDS
             useDefaultMargins = false
@@ -161,7 +174,7 @@ class SettingsActivity : AppCompatActivity() {
         isAllCaps = false
         textSize = if (compact) 15f else 14.5f
         typeface = BlofyTvDesign.BodyTypeface
-        setTextColor(Color.WHITE)
+        setTextColor(BlofyTvDesign.TextPrimary)
         gravity = Gravity.CENTER
         includeFontPadding = false
         letterSpacing = 0.005f
@@ -174,8 +187,9 @@ class SettingsActivity : AppCompatActivity() {
         grid.addView(button, GridLayout.LayoutParams().apply {
             columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
             width = 0
-            height = dp(100)
-            setMargins(dp(8), dp(8), dp(8), dp(8))
+            height = dp(if (resources.configuration.screenWidthDp < 600) 86 else 100)
+            val gap = dp(if (resources.configuration.screenWidthDp < 600) 6 else 8)
+            setMargins(gap, gap, gap, gap)
         })
     }
 
