@@ -91,7 +91,7 @@ class FocusTextAdapter<T>(
             isLongClickable = true
             background = background(false)
             setOnFocusChangeListener { v, focused ->
-                (v as TextView).setTextColor(if (focused) Color.WHITE else TEXT_IDLE)
+                (v as TextView).setTextColor(if (focused) BlofyTvDesign.TextPrimary else BlofyTvDesign.TextSecondary)
                 v.animate().cancel()
                 v.animate()
                     .scaleX(if (focused) 1.02f else 1f)
@@ -137,16 +137,4 @@ class FocusTextAdapter<T>(
 
     inner class Holder(val text: TextView) : RecyclerView.ViewHolder(text)
 
-    private fun background(focused: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (focused) intArrayOf(0xFF7930D7.toInt(), 0xFF32164F.toInt())
-        else intArrayOf(0xD91C162C.toInt(), 0xE8110E1B.toInt())
-    ).apply {
-        cornerRadius = 16f
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFE1B8FF.toInt() else 0x554D376B)
-    }
-
-    companion object {
-        private val TEXT_IDLE = Color.rgb(232, 226, 239)
-    }
-}
+    private fun background(focused: Boolean) = BlofyTvDesign.surface(16f, focused)\n}
