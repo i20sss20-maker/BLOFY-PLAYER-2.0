@@ -138,7 +138,7 @@ class VlcFallbackActivity : AppCompatActivity() {
             setPadding(dp(22), dp(15), dp(22), dp(15))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xD708060D.toInt(), 0x7208060D, 0x0008060D)
+                intArrayOf(0xDC07070A.toInt(), 0x7607070A, 0x0007070A)
             )
         }
         top.addView(TextView(this).apply {
@@ -152,13 +152,13 @@ class VlcFallbackActivity : AppCompatActivity() {
             text = "4K · VLC"
             textSize = 11f
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            setTextColor(0xFFF0DDFF.toInt())
+            setTextColor(0xFFF1EAF7.toInt())
             gravity = Gravity.CENTER
             setPadding(dp(10), dp(5), dp(10), dp(5))
             background = GradientDrawable().apply {
                 cornerRadius = dp(12).toFloat()
-                setColor(0xB3321C49.toInt())
-                setStroke(dp(1), 0xFFB98AEF.toInt())
+                setColor(0xD02A2330.toInt())
+                setStroke(dp(1), 0xFFB397DC.toInt())
             }
         })
         root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
@@ -172,7 +172,7 @@ class VlcFallbackActivity : AppCompatActivity() {
             setPadding(dp(18), dp(11), dp(18), dp(11))
             background = GradientDrawable().apply {
                 cornerRadius = dp(16).toFloat()
-                setColor(0xE324172F.toInt())
+                setColor(0xE3211C27.toInt())
                 setStroke(dp(1), 0xFFB98AEF.toInt())
             }
         }
@@ -186,7 +186,7 @@ class VlcFallbackActivity : AppCompatActivity() {
             setPadding(dp(20), dp(14), dp(20), dp(14))
             background = GradientDrawable(
                 GradientDrawable.Orientation.BOTTOM_TOP,
-                intArrayOf(0xE508060D.toInt(), 0x8A08060D.toInt(), 0x0008060D)
+                intArrayOf(0xE807070A.toInt(), 0x8F07070A.toInt(), 0x0007070A)
             )
         }
         progress = TextView(this).apply {

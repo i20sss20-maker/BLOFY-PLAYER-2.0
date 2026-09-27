@@ -106,7 +106,7 @@ class EpisodesActivity : ContentAccessActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             addView(TextView(this@EpisodesActivity).apply {
-                text = "BLOFY SERIES"
+                text = getString(R.string.player_brand_series)
                 textSize = if (compact) 10.5f else 11.5f
                 letterSpacing = .12f
                 typeface = BlofyTvDesign.LabelTypeface

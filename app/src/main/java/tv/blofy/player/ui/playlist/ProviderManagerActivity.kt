@@ -258,7 +258,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                     append(getString(
                         R.string.provider_manager_source_format,
                         getString(if (provider.enabled) R.string.provider_manager_active else R.string.provider_manager_saved),
-                        if (isBlofySubscriber(provider)) "BLOFY Secure" else "XTREAM"
+                        if (isBlofySubscriber(provider)) getString(R.string.provider_blofy_secure) else "XTREAM"
                     ))
                 }
                 textSize = 13f

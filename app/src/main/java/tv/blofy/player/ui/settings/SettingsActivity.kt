@@ -448,8 +448,8 @@ class SettingsActivity : AppCompatActivity() {
     private fun currentLanguageLabel(): String {
         val selected = AppCompatDelegate.getApplicationLocales().toLanguageTags()
             .substringBefore(',')
-            .ifBlank { prefs.getString(KEY_LANGUAGE_TAG, "en") ?: "en" }
-        return LANGUAGES.firstOrNull { it.second.equals(selected, ignoreCase = true) }?.first ?: "English"
+            .ifBlank { prefs.getString(KEY_LANGUAGE_TAG, "ar") ?: "ar" }
+        return LANGUAGES.firstOrNull { it.second.equals(selected, ignoreCase = true) }?.first ?: "العربية"
     }
 
     private fun isTv() = DeviceClass.isTv(this)

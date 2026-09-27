@@ -419,9 +419,9 @@ open class PlayerActivity : ContentAccessActivity() {
 
         val eyebrow = TextView(this).apply {
             text = when (kind) {
-                KIND_LIVE -> "BLOFY LIVE"
-                KIND_EPISODE -> "BLOFY SERIES"
-                else -> "BLOFY CINEMA"
+                KIND_LIVE -> getString(R.string.player_brand_live)
+                KIND_EPISODE -> getString(R.string.player_brand_series)
+                else -> getString(R.string.player_brand_cinema)
             }
             textSize = 9f
             typeface = Typeface.DEFAULT_BOLD
@@ -960,7 +960,7 @@ open class PlayerActivity : ContentAccessActivity() {
                 currentTitle = target.title
                 currentSeason = target.season
                 currentEpisode = target.episode
-                updateTitle("S${target.season} E${target.episode} • ${target.title}")
+                updateTitle("${getString(R.string.episodes_season, target.season)} • ${getString(R.string.cinema_episode_title, target.episode)} • ${target.title}")
                 session.play(
                     url = ContentUrlResolver.episode(provider, target),
                     resumeMs = 0L,
@@ -1384,7 +1384,7 @@ open class PlayerActivity : ContentAccessActivity() {
             return
         }
 
-        val labels = listOf("تلقائي (Auto)") + entries.map { it.label }
+        val labels = listOf(getString(R.string.player_track_auto)) + entries.map { it.label }
         AlertDialog.Builder(this)
             .setTitle("الجودة")
             .setItems(labels.toTypedArray()) { dialog, which ->
@@ -1415,7 +1415,7 @@ open class PlayerActivity : ContentAccessActivity() {
             format.height >= 1080 -> "1080p"
             format.height >= 720 -> "720p"
             format.height > 0 -> "${format.height}p"
-            else -> "VIDEO"
+            else -> getString(R.string.player_track_video)
         }
         val fps = if (format.frameRate > 0) {
             "${format.frameRate.toInt()}fps"
@@ -1437,7 +1437,7 @@ open class PlayerActivity : ContentAccessActivity() {
 
     private fun trackLabel(format: Format, type: Int): String {
         val language = format.language?.uppercase()
-            ?: if (type == C.TRACK_TYPE_AUDIO) "AUDIO" else "SUB"
+            ?: if (type == C.TRACK_TYPE_AUDIO) getString(R.string.player_track_audio) else getString(R.string.player_track_subtitles)
         val label = format.label?.takeIf { it.isNotBlank() }
         val codec = format.codecs?.takeIf { it.isNotBlank() }
         return listOfNotNull(label, language, codec)

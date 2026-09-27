@@ -9,19 +9,19 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #07070d;
-      --surface: rgba(18, 15, 29, .88);
-      --surface-solid: #12101d;
-      --surface-alt: #1b162a;
-      --surface-hover: #251d35;
-      --accent: #8b37ff;
-      --accent-2: #b16cff;
-      --accent-blue: #3421ff;
-      --accent-soft: rgba(139, 55, 255, .14);
+      --bg: #08080b;
+      --surface: rgba(20, 18, 23, .92);
+      --surface-solid: #151219;
+      --surface-alt: #1d1921;
+      --surface-hover: #28222d;
+      --accent: #9568cf;
+      --accent-2: #b998e2;
+      --accent-blue: #72539b;
+      --accent-soft: rgba(149, 104, 207, .12);
       --text: #ffffff;
       --muted: #aaa4b7;
-      --line: rgba(184, 140, 255, .19);
-      --line-accent: rgba(164, 97, 255, .34);
+      --line: rgba(218, 205, 229, .13);
+      --line-accent: rgba(185, 152, 226, .28);
       --success: #52df9a;
       --danger: #ff6b79;
       --shadow: 0 28px 90px rgba(0, 0, 0, .45);
@@ -38,7 +38,7 @@
       min-height: 100svh;
       overflow-x: hidden;
       background:
-        radial-gradient(circle at 84% -20%, rgba(109, 32, 217, .28), transparent 44%),
+        radial-gradient(circle at 84% -20%, rgba(111, 78, 145, .18), transparent 44%),
         linear-gradient(145deg, #07070d, #0b0911 52%, #09080f);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
@@ -53,7 +53,7 @@
       pointer-events: none;
       opacity: .55;
       background:
-        radial-gradient(circle at 88% 22%, rgba(147, 70, 255, .2), transparent 28rem),
+        radial-gradient(circle at 88% 22%, rgba(149, 104, 207, .12), transparent 28rem),
         radial-gradient(circle at 5% 88%, rgba(58, 77, 214, .12), transparent 26rem);
     }
 
@@ -721,12 +721,12 @@
       <div class="hero-panel">
         <div class="eyebrow"><span class="eyebrow-dot"></span><span data-i18n="portalBadge">بوابة الجهاز الآمنة</span></div>
         <h1><span data-i18n="heroTitle">كل قوائمك في مكان واحد.</span></h1>
-        <p data-i18n="heroSubtitle">اربط جهاز BLOFY ثم أضف قوائم M3U أو Xtream من جوالك. ستظهر التغييرات على التطبيق تلقائيًا.</p>
+        <p data-i18n="heroSubtitle">اربط جهاز BLOFY ثم أضف حساب Xtream أو حساب مشتركين BLOFY من جوالك. ستظهر التغييرات على التطبيق تلقائيًا.</p>
 
         <div class="flow-steps" aria-label="خطوات الإعداد" data-i18n-aria-label="setupSteps">
           <article class="flow-step"><span class="step-number">01</span><strong data-i18n="stepOneTitle">افتح التطبيق</strong><p data-i18n="stepOneText">خذ رقم الجهاز والرمز من شاشة BLOFY.</p></article>
           <article class="flow-step"><span class="step-number">02</span><strong data-i18n="stepTwoTitle">اربط الجهاز</strong><p data-i18n="stepTwoText">أدخل البيانات بأمان في النموذج.</p></article>
-          <article class="flow-step"><span class="step-number">03</span><strong data-i18n="stepThreeTitle">أضف قائمتك</strong><p data-i18n="stepThreeText">اختر M3U أو Xtream واحفظها.</p></article>
+          <article class="flow-step"><span class="step-number">03</span><strong data-i18n="stepThreeTitle">أضف قائمتك</strong><p data-i18n="stepThreeText">اختر Xtream أو مشتركين BLOFY واحفظ بياناتك.</p></article>
         </div>
       </div>
 
@@ -735,7 +735,7 @@
           <div class="device-illustration">
             <img src="/blofy-logo.png" alt="" aria-hidden="true" />
           </div>
-          <span class="auth-step" data-i18n="loginStep">STEP 1 / 2</span>
+          <span class="auth-step" data-i18n="loginStep">الخطوة ١ من ٢</span>
         </div>
         <h2 id="loginTitle" data-i18n="loginTitle">اربط جهازك</h2>
         <p class="auth-subtitle" data-i18n="loginSubtitle">أدخل معرّف الجهاز ورمز الجهاز الظاهرين على شاشة التلفزيون بعد مسح الباركود.</p>
@@ -848,13 +848,13 @@
     const translations = {
       ar: {
         pageTitle: "BLOFY PLAYER — إدارة الجهاز", language: "اللغة", setupSteps: "مزايا إدارة الجهاز", portalBadge: "إدارة الجهاز بأمان",
-        heroTitle: "كل قوائمك\nفي مكان واحد.", heroSubtitle: "سجّل برقم الجهاز ورمز الربط الظاهر في BLOFY PLAYER، ثم أضف قوائمك وعدّلها في أي وقت.",
+        heroTitle: "كل قوائمك\nفي مكان واحد.", heroSubtitle: "سجّل برقم الجهاز ورمز الربط الظاهر في BLOFY PLAYER، ثم أضف حساب Xtream أو مشترك BLOFY وعدّله في أي وقت.",
         stepOneTitle: "حفظ مشفّر", stepOneText: "خذ رقم الجهاز والرمز من شاشة BLOFY.", stepTwoTitle: "مزامنة تلقائية", stepTwoText: "أدخل البيانات بأمان في النموذج.", stepThreeTitle: "أكثر من قائمة", stepThreeText: "اختر M3U أو Xtream واحفظها.",
         loginStep: "الخطوة ١ من ٢", loginTitle: "تسجيل دخول الجهاز", loginSubtitle: "تجد الرقم والرمز في شاشة قوائم التشغيل داخل التطبيق.",
         deviceIdLabel: "رقم الجهاز", deviceIdPlaceholder: "BLOFY-66AF-CB09", activationCodeLabel: "رمز الربط", activationCodePlaceholder: "000000",
         loginButton: "دخول وإدارة القوائم", checking: "جاري التحقق...", secureNote: "اتصال مشفّر. بيانات القوائم تحفظ بشكل آمن ولا يعرض BLOFY أي محتوى أو اشتراكات.",
         playlistsTitle: "قوائم التشغيل", playlistsSubtitle: "أدر قوائم جهازك وسيقوم BLOFY بمزامنتها تلقائيًا.", addPlaylist: "إضافة قائمة", logout: "خروج",
-        loadingPlaylists: "جاري تحميل القوائم...", emptyTitle: "لا توجد قوائم بعد", emptyText: "أضف أول قائمة M3U أو Xtream وسيقوم التطبيق بمزامنتها مع هذا الجهاز.", addFirst: "إضافة أول قائمة",
+        loadingPlaylists: "جاري تحميل القوائم...", emptyTitle: "لا توجد قوائم بعد", emptyText: "أضف أول حساب Xtream أو مشترك BLOFY وسيقوم التطبيق بمزامنته مع هذا الجهاز.", addFirst: "إضافة أول قائمة",
         active: "نشطة", edit: "تعديل", delete: "حذف", deleteConfirm: "حذف {name}؟",
         editorAddTitle: "إضافة قائمة", editorEditTitle: "تعديل القائمة", editorSubtitle: "أدخل البيانات التي حصلت عليها من مزود الخدمة.",
         playlistNameLabel: "اسم القائمة", playlistNamePlaceholder: "قائمتي", playlistTypeLabel: "نوع القائمة", xtreamType: "Xtream Codes", m3uType: "M3U / M3U8",

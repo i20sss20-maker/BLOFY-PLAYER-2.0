@@ -59,7 +59,7 @@ class PosterStreamAdapter(
         }
         val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(Color.rgb(18, 13, 25))
+            setBackgroundColor(Color.rgb(18, 16, 21))
             clipToOutline = true
         }
         frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -188,7 +188,7 @@ class PosterStreamAdapter(
         if (focused) {
             intArrayOf(BlofyTvDesign.SurfaceFocused, BlofyTvDesign.SurfaceRaised, CinemaStyle.Surface)
         } else {
-            intArrayOf(CinemaStyle.Surface, 0xFF180F23.toInt())
+            intArrayOf(CinemaStyle.Surface, 0xFF111016.toInt())
         }
     ).apply {
         cornerRadius = radius

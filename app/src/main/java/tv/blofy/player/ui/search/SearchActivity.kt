@@ -71,7 +71,7 @@ class SearchActivity : AppCompatActivity() {
             background = AppCompatResources.getDrawable(this@SearchActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
-            text = "BLOFY SEARCH"
+            text = getString(R.string.ui_search_brand)
             textSize = 11.5f
             letterSpacing = .13f
             typeface = Typeface.DEFAULT_BOLD
@@ -369,7 +369,7 @@ class SearchActivity : AppCompatActivity() {
 
             val art = ImageView(this@SearchActivity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0xFF17111F.toInt()) }
+                background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0xFF171419.toInt()) }
             }
             addView(art, LinearLayout.LayoutParams(dp(58), dp(68)).apply { marginStart = dp(14) })
             ArtworkLoader.load(art, listOf(stream.icon, stream.backdrop))
@@ -458,7 +458,7 @@ class SearchActivity : AppCompatActivity() {
         else -> kind
     }
 
-    private fun kindLabel(kind: String) = when (kind) { KIND_LIVE -> "LIVE"; KIND_MOVIE -> "MOVIE"; KIND_SERIES -> "SERIES"; else -> kind.uppercase() }
+    private fun kindLabel(kind: String) = when (kind) { KIND_LIVE -> getString(R.string.live_tv); KIND_MOVIE -> getString(R.string.movies); KIND_SERIES -> getString(R.string.series); else -> kind }
 
     private fun searchField(focused: Boolean) = CinemaStyle.surface(this, focused)
     private fun rowBackground(focused: Boolean) = CinemaStyle.surface(this, focused)

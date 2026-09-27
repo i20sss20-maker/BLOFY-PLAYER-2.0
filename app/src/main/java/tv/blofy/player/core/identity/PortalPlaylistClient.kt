@@ -24,6 +24,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import tv.blofy.player.core.network.awaitResponse
+import tv.blofy.player.core.network.BlofyNetworkDns
 import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.CatalogSyncState
@@ -56,6 +57,7 @@ object PortalPlaylistClient {
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // Activation credentials must never follow redirects to another endpoint.
     private val client = OkHttpClient.Builder()
+        .dns(BlofyNetworkDns.resolver)
         .followRedirects(false)
         .followSslRedirects(false)
         .callTimeout(12, TimeUnit.SECONDS)
@@ -461,6 +463,23 @@ object PortalPlaylistClient {
     )
 
     private suspend fun fetchRemote(endpoint: String, auth: JSONObject, transport: OkHttpClient): RemoteSnapshot {
+        var lastFailure: Throwable? = null
+        val candidates = BlofyBackendFallback.candidates(endpoint)
+        for ((candidateIndex, candidate) in candidates.withIndex()) {
+            try {
+                return fetchRemoteFrom(candidate, auth, transport)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                lastFailure = error
+                val hasFallback = candidateIndex < candidates.lastIndex
+                if (!hasFallback || !BlofyBackendFallback.shouldFailOver(error)) throw error
+            }
+        }
+        throw lastFailure ?: PortalRefreshFailure("LIST")
+    }
+
+    private suspend fun fetchRemoteFrom(endpoint: String, auth: JSONObject, transport: OkHttpClient): RemoteSnapshot {
         val request = Request.Builder().url("$endpoint/api/v1/portal/playlists/list")
             .post(auth.toString().toRequestBody(jsonType)).build()
         repeat(2) { attempt ->

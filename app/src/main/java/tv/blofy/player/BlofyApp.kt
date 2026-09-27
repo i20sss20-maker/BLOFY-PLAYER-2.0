@@ -59,15 +59,15 @@ class BlofyApp : Application() {
         // locale list as English and accidentally resetting a previously selected language.
         val settings = getSharedPreferences("blofy_player_settings", MODE_PRIVATE)
         val storedTag = settings.getString("app_language_tag", null)?.trim().orEmpty()
-        val resolvedTag = storedTag.ifBlank { "en" }
+        val resolvedTag = storedTag.ifBlank { "ar" }
         val currentTags = AppCompatDelegate.getApplicationLocales().toLanguageTags()
         if (currentTags != resolvedTag) {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(resolvedTag))
         }
         if (storedTag.isBlank()) {
             settings.edit()
-                .putString("app_language_tag", "en")
-                .putString("app_language", "English")
+                .putString("app_language_tag", "ar")
+                .putString("app_language", "العربية")
                 .apply()
         }
 

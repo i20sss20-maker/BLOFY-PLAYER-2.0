@@ -1,0 +1,66 @@
+name: Export BLOFY rc07.55 Google Play AAB
+
+on:
+  push:
+    branches: [qa/rc0755-5-safe-polish-20260926]
+    paths:
+      - .github/workflows/export-google-play-rc0755.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  export-aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOURCE_RUN_ID: "35589487508"
+      SOURCE_ARTIFACT: "BLOFY-PLAYER-2.0-rc07.55-PRODUCTION-SIGNED-e6688dd54df2ad60245de0b80edb03d9bf4f8c9d"
+      AAB_NAME: "BLOFY-PLAYER-2.0-rc07.55-PRODUCTION-SIGNED.aab"
+      RELEASE_TAG: "google-play-rc07.55-2000067"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download verified rc07.55 signed artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          gh run download "$SOURCE_RUN_ID"             --repo "$GITHUB_REPOSITORY"             --name "$SOURCE_ARTIFACT"             --dir artifact
+
+      - name: Verify exact Google Play AAB
+        run: |
+          set -euo pipefail
+          test -s "artifact/$AAB_NAME"
+          test -s "artifact/build-info.txt"
+          grep -Fxq 'versionCode=2000067' artifact/build-info.txt
+          grep -Fxq 'version=2.0.0-rc07.55' artifact/build-info.txt
+          grep -Fxq 'production_signed=true' artifact/build-info.txt
+          grep -F "  $AAB_NAME" artifact/SHA256SUMS
+          (cd artifact && sha256sum --check SHA256SUMS)
+
+      - name: Publish AAB-only Google Play handoff release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'EOF'
+          BLOFY PLAYER 2.0.0-rc07.55 — Google Play handoff
+
+          Exact production-signed AAB from verified build:
+          - package: tv.blofy.player.v2
+          - versionCode: 2000067
+          - versionName: 2.0.0-rc07.55
+          - source commit: e6688dd54df2ad60245de0b80edb03d9bf4f8c9d
+
+          This release is for Google Play closed testing handoff only.
+          It does not change the public download-site release.
+          EOF
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "artifact/$AAB_NAME" artifact/SHA256SUMS artifact/build-info.txt --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG" "artifact/$AAB_NAME" artifact/SHA256SUMS artifact/build-info.txt               --title "BLOFY PLAYER rc07.55 — Google Play AAB"               --notes-file notes.md               --prerelease               --repo "$GITHUB_REPOSITORY"
+          fi

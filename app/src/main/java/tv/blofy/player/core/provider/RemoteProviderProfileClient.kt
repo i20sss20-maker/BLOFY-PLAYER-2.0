@@ -9,11 +9,13 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import tv.blofy.player.core.identity.DeviceIdentity
+import tv.blofy.player.core.network.BlofyNetworkDns
 import tv.blofy.player.data.local.ProviderEntity
 import java.util.concurrent.TimeUnit
 
 object RemoteProviderProfileClient {
     private val client = OkHttpClient.Builder()
+        .dns(BlofyNetworkDns.resolver)
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(6, TimeUnit.SECONDS)
         .writeTimeout(6, TimeUnit.SECONDS)
