@@ -5,10 +5,12 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import tv.blofy.player.core.network.ProviderCatalogDns
 import tv.blofy.player.core.network.ProviderNetworkDns
 
 object XtreamClient {
     private val okHttp = OkHttpClient.Builder()
+        .dns(ProviderCatalogDns.resolver)
         .dns(ProviderNetworkDns.resolver)
         .connectTimeout(15, TimeUnit.SECONDS)
         // Large Xtream lists are streamed and may pause between chunks on overloaded panels.
