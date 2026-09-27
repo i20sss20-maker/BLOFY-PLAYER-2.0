@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
@@ -33,20 +33,25 @@ jobs:
           grep -Fxq 'versionCode=2000073' signed/build-info.txt
           grep -Fxq 'commit=a9a11011806b22a21475c45554960de045e5b9a0' signed/build-info.txt
           grep -Fxq 'production_signed=true' signed/build-info.txt
-          sha256sum signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab
+          sha256sum signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab | tee source.sha256
 
-      - name: Publish direct AAB asset
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Upload exact AAB to temporary direct-share endpoint
         shell: bash
         run: |
           set -euo pipefail
-          tag="google-play-rc07.55.5-2000073"
-          aab="signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab"
-          gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$tag" "$aab#BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-2000073.aab" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target a9a11011806b22a21475c45554960de045e5b9a0 \
-            --title "BLOFY PLAYER rc07.55.5 — Google Play AAB 2000073" \
-            --notes "Exact verified production-signed rc07.55.5 build, versionCode 2000073, prepared for Google Play closed testing." \
-            --prerelease
+          curl --fail --show-error --retry 3 --retry-all-errors \
+            -X PUT \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab \
+            "https://blofy-aab-2000073-share-production.up.railway.app/upload-55-5-2000073-8d7c6a4f"
+
+      - name: Verify public direct AAB byte-for-byte
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-all-errors \
+            "https://blofy-aab-2000073-share-production.up.railway.app/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-2000073.aab" \
+            -o downloaded.aab
+          test -s downloaded.aab
+          test "$(sha256sum signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab | awk '{print $1}')" = "$(sha256sum downloaded.aab | awk '{print $1}')"
+          echo "DIRECT_AAB_OK"
