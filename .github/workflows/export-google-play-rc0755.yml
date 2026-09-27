@@ -37,7 +37,7 @@ jobs:
           test -s "artifact/$AAB_NAME"
           test -s "artifact/build-info.txt"
           grep -Fxq 'versionCode=2000067' artifact/build-info.txt
-          grep -Fxq 'versionName=2.0.0-rc07.55' artifact/build-info.txt
+          grep -Fxq 'version=2.0.0-rc07.55' artifact/build-info.txt
           grep -Fxq 'production_signed=true' artifact/build-info.txt
           grep -F "  $AAB_NAME" artifact/SHA256SUMS
           (cd artifact && sha256sum --check SHA256SUMS)
