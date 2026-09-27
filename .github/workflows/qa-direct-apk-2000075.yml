@@ -1,10 +1,10 @@
-name: BLOFY QA Direct APK 2000075
+name: BLOFY QA Direct APK 2000076
 
 on:
   push:
     branches: [qa/rc0755-5-safe-polish-20260926]
     paths:
-      - .github/workflows/qa-direct-apk-2000075.yml
+      - .github/workflows/qa-direct-apk-2000076.yml
 
 permissions:
   contents: write
@@ -19,8 +19,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: i20sss20-maker/BLOFY-PLAYER-2.0
-          run-id: 36279447646
-          name: BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-APK-8a208033ba3fa1a19ae3e71ea4c4ee7dcbf58d7f
+          run-id: 36281523365
+          name: BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-APK-233d2360200658d424ef8b4f4c156aa2fe0562be
           path: apk
 
       - name: Verify APK exists
@@ -34,7 +34,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="qa-rc07.55.5-2000075"
+          tag="qa-rc07.55.5-2000076"
           apk="apk/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.apk"
           gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$tag" "$apk#BLOFY-PLAYER-2.0-rc07.55.5-2000075.apk"             --repo "$GITHUB_REPOSITORY"             --target 8a208033ba3fa1a19ae3e71ea4c4ee7dcbf58d7f             --title "BLOFY PLAYER QA 2000075"             --notes "QA-only direct APK from verified Production-Signed run 36279447646. Not a production publication."             --prerelease
+          gh release create "$tag" "$apk#BLOFY-PLAYER-2.0-rc07.55.5-2000076.apk"             --repo "$GITHUB_REPOSITORY"             --target 233d2360200658d424ef8b4f4c156aa2fe0562be             --title "BLOFY PLAYER QA 2000076"             --notes "QA-only direct APK from verified Production-Signed run 36281523365. Not a production publication."             --prerelease
