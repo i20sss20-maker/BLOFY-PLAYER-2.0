@@ -4,7 +4,7 @@ on:
   push:
     branches: [qa/rc0755-5-safe-polish-20260926]
     paths:
-      - .github/workflows/qa-direct-apk-2000076.yml
+      - .github/workflows/qa-direct-apk-2000075.yml
 
 permissions:
   contents: write
