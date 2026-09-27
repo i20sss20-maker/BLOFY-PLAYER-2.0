@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
   actions: read
+  contents: read
 
 jobs:
   publish-direct-aab:
@@ -35,18 +35,11 @@ jobs:
           grep -Fxq 'production_signed=true' signed/build-info.txt
           sha256sum signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab
 
-      - name: Publish direct Google Play AAB
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Upload exact AAB to temporary share
         shell: bash
         run: |
           set -euo pipefail
-          tag="google-play-rc07.55.5-2000073"
-          aab="signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab"
-          gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$tag" "$aab#BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-2000073.aab" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target a9a11011806b22a21475c45554960de045e5b9a0 \
-            --title "BLOFY PLAYER rc07.55.5 — Google Play AAB 2000073" \
-            --notes "Exact production-signed rc07.55.5 build from run 36275519562, versionCode 2000073. Prepared for Google Play closed testing." \
-            --prerelease
+          curl --fail --show-error --location --retry 3 \
+            -X PUT \
+            --upload-file signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab \
+            https://blofy-aab-2000073-share-production.up.railway.app/upload-55-5-2000073-once
