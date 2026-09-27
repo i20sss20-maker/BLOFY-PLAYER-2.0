@@ -24,6 +24,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import tv.blofy.player.core.network.awaitResponse
+import tv.blofy.player.core.network.BlofyNetworkDns
 import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.CatalogSyncState
@@ -56,6 +57,7 @@ object PortalPlaylistClient {
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // Activation credentials must never follow redirects to another endpoint.
     private val client = OkHttpClient.Builder()
+        .dns(BlofyNetworkDns.resolver)
         .followRedirects(false)
         .followSslRedirects(false)
         .callTimeout(12, TimeUnit.SECONDS)
