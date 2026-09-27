@@ -1,0 +1,52 @@
+name: Export BLOFY rc07.55.5 Google Play AAB 2000073
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/export-google-play-rc07555-2000073.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  export-aab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download exact verified 55.5 artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: i20sss20-maker/BLOFY-PLAYER-2.0
+          run-id: 36275519562
+          name: BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-a9a11011806b22a21475c45554960de045e5b9a0
+          path: signed
+
+      - name: Verify exact AAB identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab
+          grep -Fxq 'version=2.0.0-rc07.55.5' signed/build-info.txt
+          grep -Fxq 'versionCode=2000073' signed/build-info.txt
+          grep -Fxq 'commit=a9a11011806b22a21475c45554960de045e5b9a0' signed/build-info.txt
+          grep -Fxq 'production_signed=true' signed/build-info.txt
+          sha256sum signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab
+
+      - name: Publish direct AAB asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="google-play-rc07.55.5-2000073"
+          aab="signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab"
+          gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" "$aab#BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-2000073.aab" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target a9a11011806b22a21475c45554960de045e5b9a0 \
+            --title "BLOFY PLAYER rc07.55.5 — Google Play AAB 2000073" \
+            --notes "Exact verified production-signed rc07.55.5 build, versionCode 2000073, prepared for Google Play closed testing." \
+            --prerelease
