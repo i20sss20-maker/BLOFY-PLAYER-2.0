@@ -5,6 +5,7 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import tv.blofy.player.core.network.BlofyNetworkDns
 
 object ActivationRemoteClient {
     fun create(baseUrl: String): ActivationApi {
@@ -18,6 +19,7 @@ object ActivationRemoteClient {
         val normalized = BlofyBackendFallback.normalize(baseUrl).let { "$it/" }
         require(normalized.startsWith("https://") || normalized.startsWith("http://")) { "Invalid activation endpoint" }
         val client = OkHttpClient.Builder()
+            .dns(BlofyNetworkDns.resolver)
             // Two bounded attempts fit inside the existing login screen deadline.
             .callTimeout(8, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS)
