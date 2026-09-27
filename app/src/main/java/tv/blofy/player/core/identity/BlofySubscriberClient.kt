@@ -11,6 +11,7 @@ import org.json.JSONObject
 import org.json.JSONArray
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tv.blofy.player.core.network.awaitResponse
+import tv.blofy.player.core.network.BlofyNetworkDns
 import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.BlofyDatabase
@@ -30,6 +31,7 @@ object BlofySubscriberClient {
     )
 
     private val client = OkHttpClient.Builder()
+        .dns(BlofyNetworkDns.resolver)
         .callTimeout(18, TimeUnit.SECONDS)
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
