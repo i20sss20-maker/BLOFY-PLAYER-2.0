@@ -43,14 +43,14 @@ jobs:
             -X PUT \
             -H "Content-Type: application/octet-stream" \
             --data-binary @signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab \
-            "https://blofy-aab-2000073-share-production.up.railway.app/upload-55-5-2000073-8d7c6a4f"
+            "https://blofy-aab-share-2000073-v2-production.up.railway.app/upload-55-5-2000073-8d7c6a4f"
 
       - name: Verify public direct AAB byte-for-byte
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --location --retry 3 --retry-all-errors \
-            "https://blofy-aab-2000073-share-production.up.railway.app/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-2000073.aab" \
+            "https://blofy-aab-share-2000073-v2-production.up.railway.app/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-2000073.aab" \
             -o downloaded.aab
           test -s downloaded.aab
           test "$(sha256sum signed/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab | awk '{print $1}')" = "$(sha256sum downloaded.aab | awk '{print $1}')"
