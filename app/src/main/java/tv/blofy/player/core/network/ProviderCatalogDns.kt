@@ -21,7 +21,7 @@ import okhttp3.dnsoverhttps.DnsOverHttps
  * Local/private naming conventions are intentionally never sent to public DNS.
  *
  * This resolver is attached to XtreamClient only. Playback engines and playback routing are not
- * changed by this class.
+ * changed by this class. The system resolver always remains the first attempt.
  */
 internal object ProviderCatalogDns {
     private val bootstrapClient by lazy {
