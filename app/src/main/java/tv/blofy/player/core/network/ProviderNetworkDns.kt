@@ -19,24 +19,37 @@ import okhttp3.dnsoverhttps.DnsOverHttps
  * Playback engines are not wired to this resolver.
  */
 internal object ProviderNetworkDns {
+    private val dohClient by lazy {
+        OkHttpClient.Builder()
+            .callTimeout(6, TimeUnit.SECONDS)
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .readTimeout(6, TimeUnit.SECONDS)
+            .build()
+    }
+
     val resolver: Dns by lazy {
         ResilientProviderDns(
             system = Dns.SYSTEM,
-            fallback = DnsOverHttps.Builder()
-                .client(
-                    OkHttpClient.Builder()
-                        .callTimeout(5, TimeUnit.SECONDS)
-                        .connectTimeout(4, TimeUnit.SECONDS)
-                        .readTimeout(5, TimeUnit.SECONDS)
-                        .build()
-                )
-                .url("https://cloudflare-dns.com/dns-query".toHttpUrl())
-                .bootstrapDnsHosts(
-                    ipv4(1, 1, 1, 1),
-                    ipv4(1, 0, 0, 1)
-                )
-                .includeIPv6(false)
-                .build()
+            fallbacks = listOf(
+                DnsOverHttps.Builder()
+                    .client(dohClient)
+                    .url("https://cloudflare-dns.com/dns-query".toHttpUrl())
+                    .bootstrapDnsHosts(
+                        ipv4(1, 1, 1, 1),
+                        ipv4(1, 0, 0, 1)
+                    )
+                    .includeIPv6(false)
+                    .build(),
+                DnsOverHttps.Builder()
+                    .client(dohClient)
+                    .url("https://dns.google/dns-query".toHttpUrl())
+                    .bootstrapDnsHosts(
+                        ipv4(8, 8, 8, 8),
+                        ipv4(8, 8, 4, 4)
+                    )
+                    .includeIPv6(false)
+                    .build()
+            )
         )
     }
 
@@ -46,8 +59,10 @@ internal object ProviderNetworkDns {
 
 internal class ResilientProviderDns(
     private val system: Dns,
-    private val fallback: Dns
+    fallback: Dns? = null,
+    fallbacks: List<Dns> = fallback?.let { listOf(it) } ?: emptyList()
 ) : Dns {
+    private val fallbackResolvers: List<Dns> = fallbacks
     @Throws(UnknownHostException::class)
     override fun lookup(hostname: String): List<InetAddress> {
         try {
@@ -55,12 +70,17 @@ internal class ResilientProviderDns(
         } catch (systemFailure: UnknownHostException) {
             if (!isPublicHostname(hostname)) throw systemFailure
 
-            try {
-                return fallback.lookup(hostname)
-            } catch (fallbackFailure: UnknownHostException) {
-                fallbackFailure.addSuppressed(systemFailure)
-                throw fallbackFailure
+            var lastFailure: UnknownHostException = systemFailure
+            for (fallbackResolver in fallbackResolvers) {
+                try {
+                    val addresses = fallbackResolver.lookup(hostname)
+                    if (addresses.isNotEmpty()) return addresses
+                } catch (fallbackFailure: UnknownHostException) {
+                    lastFailure = fallbackFailure
+                }
             }
+            if (lastFailure !== systemFailure) lastFailure.addSuppressed(systemFailure)
+            throw lastFailure
         }
     }
 
