@@ -94,7 +94,7 @@ test('existing pending device is accepted only with its matching activation proo
   }), null);
 });
 
-test('expired non-pending devices remain rejected', async () => {
+test('expired non-pending devices with valid credentials can enter portal to renew', async () => {
   const codec = createActivationCredentialCodec(KEY);
   const row = {
     device_id: 'BLOFY-ABCD-EF23',
@@ -105,11 +105,11 @@ test('expired non-pending devices remain rejected', async () => {
     auth_locked_until: null
   };
   const { pool } = fakePool({ row });
-  assert.equal(await authenticatePortalDevice({
+  assert.deepEqual(await authenticatePortalDevice({
     pool,
     authorizedDevice: async () => null,
     deviceId: row.device_id,
     activationCode: '123456',
     req: {}
-  }), null);
+  }), { deviceId: row.device_id, activationCode: '123456', pending: false });
 });
