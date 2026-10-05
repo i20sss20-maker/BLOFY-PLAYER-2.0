@@ -49,12 +49,12 @@ export async function authenticatePortalDevice({ pool, authorizedDevice, deviceI
     let row = result.rows[0];
 
     if (row) {
-      const allowedPending = row.trial_registration_pending === true &&
-        row.status === 'expired' &&
+      const validCredential =
         !row.data_deleted_at &&
         !isAuthLocked(row) &&
+        row.status !== 'blocked' &&
         credentials.matches(row, code);
-      if (!allowedPending) {
+      if (!validCredential) {
         await client.query('COMMIT');
         return null;
       }
@@ -63,8 +63,11 @@ export async function authenticatePortalDevice({ pool, authorizedDevice, deviceI
         await client.query('UPDATE devices SET activation_code=$2,updated_at=NOW() WHERE device_id=$1', [canonicalId, proof]);
         row.activation_code = proof;
       }
+      const pending = row.trial_registration_pending === true && row.status === 'expired';
       await client.query('COMMIT');
-      return { deviceId: canonicalId, activationCode: code, pending: true };
+      // Portal ownership is separate from playback entitlement. A valid expired device may
+      // enter the portal to renew, while app/cloud entitlement checks remain unchanged.
+      return { deviceId: canonicalId, activationCode: code, pending };
     }
 
     const proof = credentials.proof(canonicalId, code);
