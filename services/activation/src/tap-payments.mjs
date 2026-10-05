@@ -124,6 +124,34 @@ function customerObject(body, deviceId) {
   return result;
 }
 
+function customerRecord(source) {
+  const value = source && typeof source === 'object' ? source : {};
+  const firstName = clean(value.firstName || value.first_name, 80);
+  const lastName = clean(value.lastName || value.last_name, 80);
+  const name = clean(value.name || [firstName,lastName].filter(Boolean).join(' '), 160);
+  const customerEmail = email(value.email);
+  const rawPhone = phone(value.phone?.number || value.phone || '');
+  const countryCode = phone(value.phone?.countryCode || value.phone?.country_code || '966') || '966';
+  const customerPhone = rawPhone ? (rawPhone.startsWith(countryCode) ? rawPhone : countryCode + rawPhone.replace(/^0+/,'')) : '';
+  return {name, email:customerEmail, phone:customerPhone};
+}
+
+async function upsertTapCustomer(db, deviceId, source, reference) {
+  const customer = customerRecord(source);
+  await db.query(
+    `INSERT INTO device_customers(device_id,customer_name,customer_email,customer_phone,source,last_order_reference)
+     VALUES($1,NULLIF($2,''),NULLIF($3,''),NULLIF($4,''),'tap',$5)
+     ON CONFLICT(device_id) DO UPDATE SET
+       customer_name=COALESCE(NULLIF(EXCLUDED.customer_name,''),device_customers.customer_name),
+       customer_email=COALESCE(NULLIF(EXCLUDED.customer_email,''),device_customers.customer_email),
+       customer_phone=COALESCE(NULLIF(EXCLUDED.customer_phone,''),device_customers.customer_phone),
+       source='tap',
+       last_order_reference=EXCLUDED.last_order_reference,
+       updated_at=NOW()`,
+    [deviceId,customer.name,customer.email,customer.phone,reference]
+  );
+}
+
 function html(res, status, title, message) {
   const escapedTitle = String(title).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
   const escapedMessage = String(message).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
@@ -329,6 +357,7 @@ export function createTapPaymentHandlers({
         `UPDATE devices SET status='active',expires_at=$2,updated_at=NOW() WHERE device_id=$1`,
         [order.device_id,expiresAt]
       );
+      await upsertTapCustomer(client, order.device_id, charge?.customer, chargeId);
       await client.query(
         `INSERT INTO device_audit(device_id,actor,action,details)
          VALUES($1,'tap','payment_captured',jsonb_build_object('orderId',$2::text,'chargeId',$3::text,'planKey',$4::text))`,
@@ -382,6 +411,7 @@ export function createTapPaymentHandlers({
        VALUES($1,$2,$3,'pending',$4,$5,'tap')`,
       [orderId,deviceId,plan.plan_key,plan.price_minor,plan.currency]
     );
+    await upsertTapCustomer(pool, deviceId, body.customer, orderId);
 
     const amount = Number(plan.price_minor) / (10 ** minorUnits(plan.currency));
     const referenceToken = orderId.replaceAll('-','').slice(0,24);
@@ -617,8 +647,9 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     <div class="grid">
       <div class="field"><label for="deviceId">رقم الجهاز</label><input id="deviceId" autocomplete="off" placeholder="BLOFY-XXXX-XXXX"></div>
       <div class="field"><label for="activationCode">كود التفعيل</label><input id="activationCode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••••"></div>
-      <div class="field"><label for="firstName">الاسم الأول</label><input id="firstName" autocomplete="given-name" placeholder="اختياري"></div>
-      <div class="field"><label for="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="اختياري"></div>
+      <div class="field"><label for="firstName">الاسم</label><input id="firstName" autocomplete="name" maxlength="80" placeholder="اسم العميل"></div>
+      <div class="field"><label for="phone">رقم الجوال</label><input id="phone" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="05xxxxxxxx"></div>
+      <div class="field full"><label for="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" maxlength="254" placeholder="اختياري"></div>
     </div>
     <div class="plans" id="plans"></div>
     <button id="pay" disabled>متابعة إلى الدفع</button>
@@ -668,7 +699,7 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     try{
       const response=await fetch('/api/v1/payments/tap/test-checkout',{
         method:'POST',headers:{'content-type':'application/json',accept:'application/json'},
-        body:JSON.stringify({customer:{firstName:$('firstName').value.trim()||undefined,email:$('email').value.trim()||undefined}})
+        body:JSON.stringify({customer:{firstName:$('firstName').value.trim()||undefined,phone:$('phone').value.trim()||undefined,email:$('email').value.trim()||undefined}})
       });
       const data=await response.json();
       if(!response.ok){setStatus('تعذر تجهيز اختبار Tap. حاول مرة أخرى.');testPay.disabled=false;pay.disabled=false;return}
@@ -681,8 +712,12 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     const deviceId=$('deviceId').value.trim();
     const activationCode=$('activationCode').value.trim();
     const planKey=document.querySelector('input[name=plan]:checked')?.value;
+    const customerName=$('firstName').value.trim();
+    const customerPhone=$('phone').value.trim();
     if(!/^BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(deviceId)){setStatus('تحقق من رقم الجهاز.');return}
     if(!/^\\d{6}$/.test(activationCode)){setStatus('كود التفعيل يجب أن يكون 6 أرقام.');return}
+    if(customerName.length<2){setStatus('اكتب اسم العميل.');return}
+    if(customerPhone.replace(/\\D/g,'').length<9){setStatus('تحقق من رقم الجوال.');return}
     if(!planKey){setStatus('اختر باقة أولًا.');return}
     pay.disabled=true;setStatus('جاري تجهيز عملية الدفع…');
     try{
@@ -690,7 +725,7 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
         method:'POST',headers:{'content-type':'application/json',accept:'application/json'},
         body:JSON.stringify({
           deviceId,activationCode,planKey,
-          customer:{firstName:$('firstName').value.trim()||undefined,email:$('email').value.trim()||undefined}
+          customer:{firstName:customerName,phone:customerPhone,email:$('email').value.trim()||undefined}
         })
       });
       const data=await response.json();
