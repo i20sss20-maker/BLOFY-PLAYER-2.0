@@ -81,29 +81,16 @@ test('playlist name remains optional', () => {
   assert.match(html, /Playlist name \(optional\)/);
 });
 
-test('renewal UI contains all approved plans and prices', () => {
+test('renewal UI routes authenticated device directly to Tap payment page', () => {
   const html = injected();
-  assert.match(html, /تجديد الاشتراك/);
-  assert.match(html, /class="blofy-modal-brand"/);
-  assert.match(html, /BLOFY PLAYER/);
-  assert.match(html, /MEMBERSHIP/);
-  assert.match(html, /data-plan="3 شهور" data-price="10 ريال"/);
-  assert.match(html, /data-plan="6 شهور" data-price="18 ريال"/);
-  assert.match(html, /data-plan="سنة" data-price="25 ريال"/);
-  assert.match(html, /data-plan="مدى الحياة" data-price="40 ريال"/);
+  assert.match(html, /الدفع والتجديد/);
+  assert.match(html, /deviceAuth\(\)/);
+  assert.match(html, /new URLSearchParams\(\{ deviceId: state\.deviceId, code: state\.activationCode \}\)/);
+  assert.match(html, /window\.location\.assign\('\/pay#' \+ fragment\)/);
+  assert.doesNotMatch(html, /wa\.me|whatsappNumber|data-plan=/);
 });
 
-test('renewal message includes device, duration and price and opens WhatsApp', () => {
+test('renewal UI refuses to continue without QR device credentials', () => {
   const html = injected();
-  assert.match(html, /رقم جهازي:/);
-  assert.match(html, /مدة التجديد المطلوبة:/);
-  assert.match(html, /السعر:/);
-  assert.match(html, /https:\/\/wa\.me\//);
-  assert.match(html, /encodeURIComponent\(message\)/);
-});
-
-test('renewal number is supplied only through the environment-backed server value', () => {
-  const html = injected();
-  assert.match(html, /var whatsappNumber = /);
-  assert.doesNotMatch(html, /966568941484/);
+  assert.match(html, /بيانات الجهاز غير مكتملة/);
 });
