@@ -115,12 +115,15 @@ function customerObject(body, deviceId) {
   const customerEmail = email(source.email) || 'payments@blofyplayer.com';
   const rawPhone = phone(source.phone?.number || source.phone || '');
   const countryCode = phone(source.phone?.countryCode || source.phone?.country_code || '966') || '966';
+  let localPhone = rawPhone;
+  if (localPhone && localPhone.startsWith(countryCode)) localPhone = localPhone.slice(countryCode.length);
+  localPhone = localPhone.replace(/^0+/, '');
   const result = {
     first_name: firstName,
     last_name: lastName,
     email: customerEmail
   };
-  if (rawPhone) result.phone = { country_code: countryCode, number: rawPhone };
+  if (localPhone) result.phone = { country_code: countryCode, number: localPhone };
   return result;
 }
 
@@ -245,6 +248,7 @@ export function createTapPaymentHandlers({
       error.status = response.status >= 500 ? 502 : 400;
       error.tapStatus = response.status;
       error.tapCode = clean(payload?.errors?.[0]?.code || payload?.response?.code || payload?.error, 80);
+      console.warn('[tap] request failed', { path, status: error.tapStatus, code: error.tapCode || 'unknown' });
       throw error;
     }
     return payload;
@@ -730,7 +734,8 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
       });
       const data=await response.json();
       if(!response.ok){
-        setStatus(response.status===403?'رقم الجهاز أو كود التفعيل غير صحيح.':'تعذر تجهيز الدفع. حاول مرة أخرى.');
+        const providerCode=data && data.providerCode ? ' (Tap: '+String(data.providerCode)+')' : '';
+        setStatus(response.status===403?'رقم الجهاز أو كود التفعيل غير صحيح.':'تعذر تجهيز الدفع'+providerCode+'. حاول مرة أخرى.');
         pay.disabled=false;return;
       }
       if(data.checkoutUrl){location.assign(data.checkoutUrl);return}
