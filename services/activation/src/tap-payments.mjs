@@ -248,7 +248,13 @@ export function createTapPaymentHandlers({
       error.status = response.status >= 500 ? 502 : 400;
       error.tapStatus = response.status;
       error.tapCode = clean(payload?.errors?.[0]?.code || payload?.response?.code || payload?.error, 80);
-      console.warn('[tap] request failed', { path, status: error.tapStatus, code: error.tapCode || 'unknown' });
+      error.tapDescription = clean(payload?.errors?.[0]?.description || payload?.errors?.[0]?.message || payload?.response?.message || payload?.message, 240);
+      console.warn('[tap] request failed', {
+        path,
+        status: error.tapStatus,
+        code: error.tapCode || 'unknown',
+        description: error.tapDescription || 'unknown'
+      });
       throw error;
     }
     return payload;
