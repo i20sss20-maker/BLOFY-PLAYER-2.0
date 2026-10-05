@@ -34,7 +34,7 @@ async function exchange(handler, { path = '/connect', method = 'GET' } = {}) {
 }
 
 function verifyHtml(response, path = '/connect') {
-  const expected = injectSubscriberPortalUi(html, { allowRenewal: path !== '/connect' });
+  const expected = injectSubscriberPortalUi(html, { allowRenewal: true });
   assert.equal(response.body, expected);
   assert.equal(Number(response.headers['content-length']), Buffer.byteLength(expected));
   assert.equal(response.headers['transfer-encoding'], undefined);
@@ -50,8 +50,9 @@ for (const path of ['/connect', '/portal', '/']) {
     }, { path });
     assert.equal(response.status, 200);
     verifyHtml(response, path);
-    if (path === '/connect') assert.doesNotMatch(response.body, /blofyRenewBtn|wa\.me|data-plan/);
-    else assert.match(response.body, /blofyRenewBtn/);
+    assert.match(response.body, /blofyRenewBtn/);
+    assert.match(response.body, /\/pay#/);
+    assert.doesNotMatch(response.body, /wa\.me|data-plan/);
   });
 }
 
