@@ -330,7 +330,7 @@ http.createServer = function patchedPortalCreateServer(listener) {
       if (typeof chunk === 'function') { callback = chunk; chunk = undefined; }
       if (typeof encoding === 'function') { callback = encoding; encoding = undefined; }
       const body = chunk == null ? '' : Buffer.isBuffer(chunk) ? chunk.toString(encoding || 'utf8') : String(chunk);
-      const modified = injectSubscriberPortalUi(body, { allowRenewal: pathname !== '/connect' });
+      const modified = injectSubscriberPortalUi(body, { allowRenewal: true });
       // end() may invoke writeHead implicitly. Restore the real method before
       // flushing so setHeader()+end() cannot emit body bytes without HTTP headers.
       res.writeHead = originalWriteHead;
