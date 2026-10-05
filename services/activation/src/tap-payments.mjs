@@ -446,8 +446,130 @@ export function createTapPaymentHandlers({
     } : null;
   }
 
+  function servePayPage(res) {
+    const body = `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BLOFY PLAYER — الدفع</title>
+<style>
+:root{color-scheme:dark;--bg:#0e0819;--card:#1b102f;--line:#6d45a9;--accent:#b598f5;--muted:#bdb5ca}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#2a1450 0,#0e0819 48%);font-family:system-ui,-apple-system,Segoe UI,Tahoma,sans-serif;color:#fff}
+.wrap{width:min(94vw,760px);margin:auto;padding:48px 0}.brand{text-align:center;font-weight:900;letter-spacing:.08em;color:var(--accent);font-size:20px}.card{margin-top:18px;background:#1b102fee;border:1px solid #6d45a977;border-radius:26px;padding:26px;box-shadow:0 28px 90px #0008}
+h1{font-size:30px;margin:0 0 8px;text-align:center}.lead{color:var(--muted);text-align:center;line-height:1.8;margin:0 0 22px}.sandbox{display:none;margin:0 0 18px;padding:11px 14px;border-radius:14px;background:#d49b1b20;border:1px solid #d49b1b66;color:#ffd77b;text-align:center;font-weight:700}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:grid;gap:7px}.field.full{grid-column:1/-1}label{font-size:13px;color:#d5cfe0}input{width:100%;border:1px solid #ffffff22;background:#0d0818;color:#fff;border-radius:14px;padding:14px 15px;font:inherit;outline:none}input:focus{border-color:var(--accent);box-shadow:0 0 0 3px #b598f522}
+.plans{display:grid;gap:12px;margin-top:20px}.plan{display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid #ffffff1f;background:#120a21;border-radius:16px;padding:16px;cursor:pointer}.plan:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 3px #b598f51c}.plan strong{display:block}.plan small{color:var(--muted)}.price{font-weight:900;color:#d9c8ff;white-space:nowrap}
+button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:inherit;font-weight:900;cursor:pointer;background:linear-gradient(135deg,#8458d8,#b987f0);color:#fff}button:disabled{opacity:.5;cursor:wait}.status{min-height:28px;margin-top:14px;text-align:center;color:#e2dceb}.foot{font-size:12px;color:#8e849e;text-align:center;margin-top:18px;line-height:1.8}
+@media(max-width:620px){.wrap{padding:22px 0}.card{padding:20px}.grid{grid-template-columns:1fr}.field.full{grid-column:auto}h1{font-size:25px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="brand">BLOFY PLAYER</div>
+  <section class="card">
+    <h1>تفعيل وتجديد الاشتراك</h1>
+    <p class="lead">أدخل بيانات جهازك، اختر الباقة، وبعدها تنتقل لصفحة Tap الآمنة لإكمال الدفع.</p>
+    <div class="sandbox" id="sandbox">وضع تجريبي — لن يتم خصم مبلغ حقيقي</div>
+    <div class="grid">
+      <div class="field"><label for="deviceId">رقم الجهاز</label><input id="deviceId" autocomplete="off" placeholder="BLOFY-XXXX-XXXX"></div>
+      <div class="field"><label for="activationCode">كود التفعيل</label><input id="activationCode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••••"></div>
+      <div class="field"><label for="firstName">الاسم الأول</label><input id="firstName" autocomplete="given-name" placeholder="اختياري"></div>
+      <div class="field"><label for="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="اختياري"></div>
+    </div>
+    <div class="plans" id="plans"></div>
+    <button id="pay" disabled>متابعة إلى الدفع</button>
+    <div class="status" id="status"></div>
+    <div class="foot">بيانات البطاقة لا تمر عبر BLOFY PLAYER؛ يتم إدخالها مباشرة في صفحة Tap. لا تشارك كود التفعيل مع أي شخص.</div>
+  </section>
+</main>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const status=$('status'), pay=$('pay'), plans=$('plans');
+  function setStatus(text){status.textContent=text||''}
+  function fillFragment(){
+    const p=new URLSearchParams(location.hash.replace(/^#/,''));
+    if(p.get('deviceId')) $('deviceId').value=p.get('deviceId');
+    if(p.get('code')) $('activationCode').value=p.get('code');
+  }
+  function price(item){
+    const n=(Number(item.priceMinor||0)/100).toFixed(2);
+    return n+' '+String(item.currency||'SAR');
+  }
+  async function loadPlans(){
+    setStatus('جاري تحميل الباقات…');
+    const r=await fetch('/api/v1/subscriptions/plans',{headers:{accept:'application/json'}});
+    const data=await r.json();
+    if(data.sandbox) $('sandbox').style.display='block';
+    plans.innerHTML='';
+    (data.items||[]).forEach((item,index)=>{
+      const label=document.createElement('label');
+      label.className='plan';
+      label.innerHTML='<span><strong></strong><small></small></span><span class="price"></span><input type="radio" name="plan" hidden>';
+      label.querySelector('strong').textContent=item.name;
+      label.querySelector('small').textContent=item.durationDays ? item.durationDays+' يوم' : 'بدون تاريخ انتهاء';
+      label.querySelector('.price').textContent=price(item);
+      const radio=label.querySelector('input');
+      radio.value=item.planKey;
+      radio.checked=index===0;
+      radio.addEventListener('change',()=>pay.disabled=false);
+      plans.appendChild(label);
+    });
+    pay.disabled=!(data.items||[]).length;
+    setStatus((data.items||[]).length?'':'لا توجد باقات متاحة حاليًا.');
+  }
+  pay.addEventListener('click',async()=>{
+    const deviceId=$('deviceId').value.trim();
+    const activationCode=$('activationCode').value.trim();
+    const planKey=document.querySelector('input[name=plan]:checked')?.value;
+    if(!/^BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(deviceId)){setStatus('تحقق من رقم الجهاز.');return}
+    if(!/^\\d{6}$/.test(activationCode)){setStatus('كود التفعيل يجب أن يكون 6 أرقام.');return}
+    if(!planKey){setStatus('اختر باقة أولًا.');return}
+    pay.disabled=true;setStatus('جاري تجهيز عملية الدفع…');
+    try{
+      const response=await fetch('/api/v1/subscriptions/checkout',{
+        method:'POST',headers:{'content-type':'application/json',accept:'application/json'},
+        body:JSON.stringify({
+          deviceId,activationCode,planKey,
+          customer:{firstName:$('firstName').value.trim()||undefined,email:$('email').value.trim()||undefined}
+        })
+      });
+      const data=await response.json();
+      if(!response.ok){
+        setStatus(response.status===403?'رقم الجهاز أو كود التفعيل غير صحيح.':'تعذر تجهيز الدفع. حاول مرة أخرى.');
+        pay.disabled=false;return;
+      }
+      if(data.checkoutUrl){location.assign(data.checkoutUrl);return}
+      if(String(data.status||'').toUpperCase()==='CAPTURED'){setStatus('تم الدفع والتفعيل بنجاح.');return}
+      setStatus('تعذر فتح صفحة الدفع.');pay.disabled=false;
+    }catch(_){setStatus('تعذر الاتصال بالخادم. حاول مرة أخرى.');pay.disabled=false}
+  });
+  fillFragment();
+  loadPlans().catch(()=>{setStatus('تعذر تحميل الباقات.');pay.disabled=true});
+})();
+</script>
+</body></html>`;
+    res.writeHead(200,{
+      'content-type':'text/html; charset=utf-8',
+      'content-length':Buffer.byteLength(body),
+      'cache-control':'no-store',
+      'x-content-type-options':'nosniff',
+      'x-frame-options':'DENY',
+      'referrer-policy':'no-referrer',
+      'permissions-policy':'camera=(), microphone=(), geolocation=()',
+      'strict-transport-security':'max-age=31536000',
+      'content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
+    });
+    res.end(body);
+  }
+
   async function handler(req, res, url) {
     const path = url.pathname;
+    if (req.method === 'GET' && path === '/pay') {
+      servePayPage(res);
+      return true;
+    }
     if (req.method === 'GET' && path === '/api/v1/subscriptions/plans') {
       await listPlans(res);
       return true;
