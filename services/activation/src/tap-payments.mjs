@@ -395,6 +395,98 @@ export function createTapPaymentHandlers({
     }
   }
 
+
+  async function sandboxTestCheckout(req, res) {
+    await ensureSchema();
+    if (!configured || !sandbox) return json(res, 404, {error:'sandbox_unavailable'});
+
+    let body = {};
+    try { body = await readJson(req); } catch {}
+
+    const plan = (await pool.query(
+      \`SELECT plan_key,name,duration_days,max_devices,price_minor,currency
+       FROM subscription_plans WHERE plan_key='tap-sandbox-30d' AND active=TRUE\`
+    )).rows[0];
+    if (!plan) return json(res, 503, {error:'sandbox_plan_unavailable'});
+
+    const token = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const deviceId = 'BLOFY-' + token.slice(0,4) + '-' + token.slice(4,8);
+    await pool.query(
+      \`INSERT INTO devices(device_id,activation_code,status,expires_at,last_seen_at,last_app_version,last_platform)
+       VALUES($1,'sandbox-test-only','expired',NOW(),NOW(),'tap-sandbox','web-test')
+       ON CONFLICT(device_id) DO NOTHING\`,
+      [deviceId]
+    );
+
+    const orderId = crypto.randomUUID();
+    await pool.query(
+      \`INSERT INTO subscription_orders(id,device_id,plan_key,status,amount_minor,currency,payment_provider)
+       VALUES($1,$2,$3,'pending',$4,$5,'tap')\`,
+      [orderId,deviceId,plan.plan_key,plan.price_minor,plan.currency]
+    );
+
+    const amount = Number(plan.price_minor) / (10 ** minorUnits(plan.currency));
+    const referenceToken = orderId.replaceAll('-','').slice(0,24);
+    const requestBody = {
+      amount,
+      currency:String(plan.currency).toUpperCase(),
+      customer_initiated:true,
+      threeDSecure:true,
+      save_card:false,
+      description:'BLOFY PLAYER - Tap Sandbox Test',
+      metadata:{
+        blofy_order_id:orderId,
+        blofy_device_id:deviceId,
+        blofy_plan_key:plan.plan_key,
+        blofy_sandbox_test:'true'
+      },
+      reference:{
+        transaction:'blofy_' + referenceToken,
+        order:orderId,
+        idempotent:orderId
+      },
+      receipt:{email:false,sms:false},
+      customer:customerObject(body,deviceId),
+      source:{id:'src_all'},
+      post:{url:baseUrl + '/api/v1/payments/tap/webhook'},
+      redirect:{url:baseUrl + '/api/v1/payments/tap/redirect'}
+    };
+    if (merchantId) requestBody.merchant = {id:merchantId};
+
+    try {
+      const charge = await tapRequest('/charges/', {method:'POST',body:JSON.stringify(requestBody)});
+      const chargeId = clean(charge?.id,192);
+      if (chargeId && CHARGE_RE.test(chargeId)) {
+        await pool.query(
+          \`UPDATE subscription_orders SET provider_reference=$2,updated_at=NOW() WHERE id=$1\`,
+          [orderId,chargeId]
+        );
+      }
+      if (clean(charge?.status,32).toUpperCase() === 'CAPTURED') {
+        await fulfillCapturedCharge(charge);
+      }
+      const checkoutUrl = clean(charge?.transaction?.url, 2048);
+      if (!checkoutUrl && clean(charge?.status,32).toUpperCase() !== 'CAPTURED') {
+        await markOrderFailure(orderId,'failed','NO_CHECKOUT_URL',chargeId || null);
+        return json(res, 502, {error:'tap_checkout_unavailable'});
+      }
+      return json(res, 201, {
+        orderId,
+        chargeId:chargeId || null,
+        checkoutUrl:checkoutUrl || null,
+        status:clean(charge?.status,32) || 'UNKNOWN',
+        sandbox:true,
+        testDeviceId:deviceId
+      });
+    } catch (error) {
+      await markOrderFailure(orderId,'failed',error.tapCode || error.message || 'CREATE_FAILED');
+      return json(res, error.status || 502, {
+        error:'payment_initialization_failed',
+        providerCode:error.tapCode || undefined
+      });
+    }
+  }
+
   async function webhook(req, res) {
     await ensureSchema();
     if (!configured) return json(res, 503, {error:'tap_not_configured'});
@@ -418,6 +510,9 @@ export function createTapPaymentHandlers({
       const charge = await retrieveCharge(chargeId);
       const result = await reconcileCharge(charge);
       if (result.paid) {
+        if (String(charge?.metadata?.blofy_sandbox_test || '') === 'true') {
+          return html(res,200,'نجح اختبار Tap','تمت عملية الدفع التجريبية بنجاح في Sandbox بدون خصم حقيقي.');
+        }
         return html(res,200,'تم الدفع بنجاح','تم تفعيل اشتراك BLOFY PLAYER على جهازك. يمكنك الرجوع للتطبيق الآن.');
       }
       return html(res,200,'لم يكتمل الدفع','حالة العملية: ' + clean(charge?.status,32) + '. لم يتم تفعيل الاشتراك.');
@@ -479,6 +574,7 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     </div>
     <div class="plans" id="plans"></div>
     <button id="pay" disabled>متابعة إلى الدفع</button>
+    <button id="testPay" style="display:none;background:#23143d;border:1px solid #b598f566">اختبار Tap بدون رقم جهاز</button>
     <div class="status" id="status"></div>
     <div class="foot">بيانات البطاقة لا تمر عبر BLOFY PLAYER؛ يتم إدخالها مباشرة في صفحة Tap. لا تشارك كود التفعيل مع أي شخص.</div>
   </section>
@@ -486,7 +582,7 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
 <script>
 (function(){
   const $=id=>document.getElementById(id);
-  const status=$('status'), pay=$('pay'), plans=$('plans');
+  const status=$('status'), pay=$('pay'), testPay=$('testPay'), plans=$('plans');
   function setStatus(text){status.textContent=text||''}
   function fillFragment(){
     const p=new URLSearchParams(location.hash.replace(/^#/,''));
@@ -501,7 +597,7 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     setStatus('جاري تحميل الباقات…');
     const r=await fetch('/api/v1/subscriptions/plans',{headers:{accept:'application/json'}});
     const data=await r.json();
-    if(data.sandbox) $('sandbox').style.display='block';
+    if(data.sandbox){$('sandbox').style.display='block';testPay.style.display='block';}
     plans.innerHTML='';
     (data.items||[]).forEach((item,index)=>{
       const label=document.createElement('label');
@@ -519,6 +615,20 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     pay.disabled=!(data.items||[]).length;
     setStatus((data.items||[]).length?'':'لا توجد باقات متاحة حاليًا.');
   }
+  testPay.addEventListener('click',async()=>{
+    testPay.disabled=true;pay.disabled=true;setStatus('جاري تجهيز اختبار Tap…');
+    try{
+      const response=await fetch('/api/v1/payments/tap/test-checkout',{
+        method:'POST',headers:{'content-type':'application/json',accept:'application/json'},
+        body:JSON.stringify({customer:{firstName:$('firstName').value.trim()||undefined,email:$('email').value.trim()||undefined}})
+      });
+      const data=await response.json();
+      if(!response.ok){setStatus('تعذر تجهيز اختبار Tap. حاول مرة أخرى.');testPay.disabled=false;pay.disabled=false;return}
+      if(data.checkoutUrl){location.assign(data.checkoutUrl);return}
+      if(String(data.status||'').toUpperCase()==='CAPTURED'){setStatus('نجح اختبار Tap.');return}
+      setStatus('تعذر فتح صفحة Tap.');testPay.disabled=false;pay.disabled=false;
+    }catch(_){setStatus('تعذر الاتصال بالخادم. حاول مرة أخرى.');testPay.disabled=false;pay.disabled=false}
+  });
   pay.addEventListener('click',async()=>{
     const deviceId=$('deviceId').value.trim();
     const activationCode=$('activationCode').value.trim();
@@ -576,6 +686,10 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     }
     if (req.method === 'POST' && path === '/api/v1/subscriptions/checkout') {
       await checkout(req,res);
+      return true;
+    }
+    if (req.method === 'POST' && path === '/api/v1/payments/tap/test-checkout') {
+      await sandboxTestCheckout(req,res);
       return true;
     }
     if (req.method === 'POST' && path === '/api/v1/payments/tap/webhook') {
