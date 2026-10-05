@@ -87,7 +87,6 @@ function customerObject(body, deviceId) {
     email: customerEmail
   };
   if (rawPhone) result.phone = { country_code: countryCode, number: rawPhone };
-  result.metadata = { device: deviceId };
   return result;
 }
 
