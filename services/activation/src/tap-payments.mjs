@@ -404,24 +404,24 @@ export function createTapPaymentHandlers({
     try { body = await readJson(req); } catch {}
 
     const plan = (await pool.query(
-      \`SELECT plan_key,name,duration_days,max_devices,price_minor,currency
-       FROM subscription_plans WHERE plan_key='tap-sandbox-30d' AND active=TRUE\`
+      `SELECT plan_key,name,duration_days,max_devices,price_minor,currency
+       FROM subscription_plans WHERE plan_key='tap-sandbox-30d' AND active=TRUE`
     )).rows[0];
     if (!plan) return json(res, 503, {error:'sandbox_plan_unavailable'});
 
     const token = crypto.randomBytes(4).toString('hex').toUpperCase();
     const deviceId = 'BLOFY-' + token.slice(0,4) + '-' + token.slice(4,8);
     await pool.query(
-      \`INSERT INTO devices(device_id,activation_code,status,expires_at,last_seen_at,last_app_version,last_platform)
+      `INSERT INTO devices(device_id,activation_code,status,expires_at,last_seen_at,last_app_version,last_platform)
        VALUES($1,'sandbox-test-only','expired',NOW(),NOW(),'tap-sandbox','web-test')
-       ON CONFLICT(device_id) DO NOTHING\`,
+       ON CONFLICT(device_id) DO NOTHING`,
       [deviceId]
     );
 
     const orderId = crypto.randomUUID();
     await pool.query(
-      \`INSERT INTO subscription_orders(id,device_id,plan_key,status,amount_minor,currency,payment_provider)
-       VALUES($1,$2,$3,'pending',$4,$5,'tap')\`,
+      `INSERT INTO subscription_orders(id,device_id,plan_key,status,amount_minor,currency,payment_provider)
+       VALUES($1,$2,$3,'pending',$4,$5,'tap')`,
       [orderId,deviceId,plan.plan_key,plan.price_minor,plan.currency]
     );
 
@@ -458,7 +458,7 @@ export function createTapPaymentHandlers({
       const chargeId = clean(charge?.id,192);
       if (chargeId && CHARGE_RE.test(chargeId)) {
         await pool.query(
-          \`UPDATE subscription_orders SET provider_reference=$2,updated_at=NOW() WHERE id=$1\`,
+          `UPDATE subscription_orders SET provider_reference=$2,updated_at=NOW() WHERE id=$1`,
           [orderId,chargeId]
         );
       }
