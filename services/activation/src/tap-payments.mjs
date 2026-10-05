@@ -23,6 +23,40 @@ function minorUnits(currency) {
   return ['BHD','JOD','KWD','OMR'].includes(String(currency || '').toUpperCase()) ? 3 : 2;
 }
 
+export function parseConfiguredPlans(raw) {
+  const source = String(raw || '').trim();
+  if (!source) return [];
+  let value;
+  try { value = JSON.parse(source); } catch { throw new Error('invalid_payment_plans_json'); }
+  if (!Array.isArray(value) || value.length > 20) throw new Error('invalid_payment_plans_json');
+  return value.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('invalid_payment_plan');
+    const planKey = clean(item.planKey ?? item.plan_key, 80).toLowerCase();
+    const name = clean(item.name, 120);
+    const durationSource = item.durationDays ?? item.duration_days;
+    const durationDays = durationSource == null || durationSource === '' ? null : Number(durationSource);
+    const maxDevices = Number(item.maxDevices ?? item.max_devices ?? 1);
+    const priceMinor = Number(item.priceMinor ?? item.price_minor);
+    const currency = clean(item.currency || 'SAR', 3).toUpperCase();
+    const sortOrder = Number(item.sortOrder ?? item.sort_order ?? index);
+    if (!/^tap-live-[a-z0-9][a-z0-9-]{1,60}$/.test(planKey) || !name) throw new Error('invalid_payment_plan');
+    if (durationDays !== null && (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 3650)) throw new Error('invalid_payment_plan');
+    if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 50) throw new Error('invalid_payment_plan');
+    if (!Number.isInteger(priceMinor) || priceMinor < 1 || priceMinor > 100000000) throw new Error('invalid_payment_plan');
+    if (!/^[A-Z]{3}$/.test(currency) || !Number.isInteger(sortOrder) || Math.abs(sortOrder) > 100000) throw new Error('invalid_payment_plan');
+    return {
+      planKey,
+      name,
+      durationDays,
+      maxDevices,
+      priceMinor,
+      currency,
+      active:item.active !== false,
+      sortOrder
+    };
+  });
+}
+
 export function formatTapAmount(value, currency = 'SAR') {
   const amount = Number(value);
   if (!Number.isFinite(amount)) throw new Error('invalid_amount');
@@ -120,6 +154,7 @@ export function createTapPaymentHandlers({
   const tapBase = clean(env.TAP_API_BASE_URL || 'https://api.tap.company/v2', 512).replace(/\/+$/, '');
   const baseUrl = publicBaseUrl(env);
   const sandbox = secretKey.startsWith('sk_test_');
+  const livePlans = sandbox ? [] : parseConfiguredPlans(env.BLOFY_PAYMENT_PLANS_JSON);
   let schemaReady;
 
   const configured = Boolean(secretKey);
@@ -142,6 +177,17 @@ export function createTapPaymentHandlers({
                max_devices=EXCLUDED.max_devices,price_minor=EXCLUDED.price_minor,currency=EXCLUDED.currency,
                active=TRUE,sort_order=EXCLUDED.sort_order,updated_at=NOW()`
           );
+        } else {
+          for (const plan of livePlans) {
+            await pool.query(
+              `INSERT INTO subscription_plans(plan_key,name,duration_days,max_devices,price_minor,currency,active,sort_order)
+               VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+               ON CONFLICT(plan_key) DO UPDATE SET name=EXCLUDED.name,duration_days=EXCLUDED.duration_days,
+                 max_devices=EXCLUDED.max_devices,price_minor=EXCLUDED.price_minor,currency=EXCLUDED.currency,
+                 active=EXCLUDED.active,sort_order=EXCLUDED.sort_order,updated_at=NOW()`,
+              [plan.planKey,plan.name,plan.durationDays,plan.maxDevices,plan.priceMinor,plan.currency,plan.active,plan.sortOrder]
+            );
+          }
         }
       })().catch(error => {
         schemaReady = null;
@@ -184,7 +230,9 @@ export function createTapPaymentHandlers({
   async function listPlans(res) {
     await ensureSchema();
     if (!configured) return json(res, 200, {items:[],purchasesAvailable:false,sandbox:false});
-    const where = sandbox ? 'active=TRUE' : "active=TRUE AND plan_key NOT LIKE 'tap-sandbox-%'";
+    const where = sandbox
+      ? "active=TRUE AND plan_key LIKE 'tap-sandbox-%'"
+      : "active=TRUE AND plan_key NOT LIKE 'tap-sandbox-%'";
     const result = await pool.query(
       `SELECT plan_key,name,duration_days,max_devices,price_minor,currency
        FROM subscription_plans WHERE ${where} ORDER BY sort_order,price_minor,plan_key`
@@ -325,7 +373,7 @@ export function createTapPaymentHandlers({
       [planKey]
     );
     const plan = planResult.rows[0];
-    if (!plan || (!sandbox && plan.plan_key.startsWith('tap-sandbox-'))) {
+    if (!plan || (sandbox ? !plan.plan_key.startsWith('tap-sandbox-') : plan.plan_key.startsWith('tap-sandbox-'))) {
       return json(res, 404, {error:'plan_not_found'});
     }
     const orderId = crypto.randomUUID();
