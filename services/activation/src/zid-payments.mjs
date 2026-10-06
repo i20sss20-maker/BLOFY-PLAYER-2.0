@@ -56,13 +56,15 @@ export function parseZidProducts(raw) {
     const durationDays = Number(item.durationDays ?? item.duration_days);
     const productId = clean(item.productId ?? item.product_id, 128);
     const sku = clean(item.sku, 128);
-    const productUrl = safeHttpsUrl(item.productUrl ?? item.product_url ?? item.url);
+    const productUrlSource = clean(item.productUrl ?? item.product_url ?? item.url, 1024);
+    const productUrl = safeHttpsUrl(productUrlSource);
     const priceLabel = clean(item.priceLabel ?? item.price_label, 80);
     const sortOrder = Number(item.sortOrder ?? item.sort_order ?? index);
     if (!/^zid-[a-z0-9][a-z0-9-]{1,60}$/.test(planKey)) throw new Error('invalid_zid_product');
     if (!name || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > 3650) throw new Error('invalid_zid_product');
     if (!productId && !sku) throw new Error('invalid_zid_product');
     if (productId && !UUIDISH_RE.test(productId)) throw new Error('invalid_zid_product');
+    if (productUrlSource && !productUrl) throw new Error('invalid_zid_product');
     if (!Number.isInteger(sortOrder) || Math.abs(sortOrder) > 100000) throw new Error('invalid_zid_product');
     return {
       planKey,
