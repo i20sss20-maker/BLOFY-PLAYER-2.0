@@ -231,6 +231,7 @@ export function createZidPaymentHandlers({ pool, json, readJson, authorize, env 
   }
   handler.selected = selected;
   handler.configured = providerConfigured;
+  handler.purchasesAvailable = Boolean(purchasesConfigured && hasStaticTokens);
   handler.hasPurchasesAvailable = async () => Boolean(purchasesConfigured && await credentials().then(() => true).catch(() => false));
   return handler;
 }
