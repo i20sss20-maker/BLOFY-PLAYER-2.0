@@ -203,12 +203,13 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
       if (path==='/api/v1/subscriptions/status') {
         const row=(await pool.query('SELECT status,expires_at,trial_started_at FROM devices WHERE device_id=$1',[deviceId])).rows[0];
         const paid=await tapPayments.statusForDevice(deviceId).catch(()=>null);
+        const zidPurchasesAvailable=zidPayments.selected ? await zidPayments.hasPurchasesAvailable() : false;
         json(res,200,{active:entitled(row),
           planKey:paid?.planKey || (row?.status==='trial'?'trial':row?.status==='active'?'license':null),
           planName:paid?.planName || (row?.status==='trial'?'تجربة BLOFY':row?.status==='active'?'BLOFY PLAYER':null),
           maxDevices:1,startsAt:paid?.startsAt ?? millis(row?.trial_started_at),
           expiresAt:paid?.expiresAt ?? millis(row?.expires_at),orderId:paid?.orderId || null,
-          purchasesAvailable:zidPayments.selected ? zidPayments.purchasesAvailable : tapPayments.configured,
+          purchasesAvailable:zidPayments.selected ? zidPurchasesAvailable : tapPayments.configured,
           sandbox:zidPayments.selected ? false : tapPayments.sandbox});
       } else if (path.endsWith('/privacy/support')) {
         const message=String(body.message||'').trim();
