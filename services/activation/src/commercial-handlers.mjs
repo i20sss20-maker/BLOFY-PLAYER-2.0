@@ -5,6 +5,7 @@ import { createGooglePlayReviewHandler } from './google-play-review.mjs';
 import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';
 import { createTapPaymentHandlers } from './tap-payments.mjs';
 import { createZidPaymentHandlers } from './zid-payments.mjs';
+import { createZidOAuthHandlers } from './zid-oauth.mjs';
 
 export class CommercialError extends Error {
   constructor(code, status = 400) { super(code); this.status = status; }
@@ -30,7 +31,8 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
     return deviceId;
   }
   const tapPayments = createTapPaymentHandlers({pool,json,readJson,authorize,schemaSql:ADMIN_CONSOLE_SCHEMA,env});
-  const zidPayments = createZidPaymentHandlers({pool,json,readJson,authorize,env});
+  const zidOAuth = createZidOAuthHandlers({pool,json,keyHex,env});
+  const zidPayments = createZidPaymentHandlers({pool,json,readJson,authorize,env,tokenProvider:zidOAuth.loadTokens});
   async function transaction(action) {
     const client = await pool.connect();
     try { await client.query('BEGIN'); const result = await action(client); await client.query('COMMIT'); return result; }
@@ -188,6 +190,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
   return async function handle(req,res,url) {
     const path=url.pathname;
     if (await googlePlayReview(req,res,url)) return true;
+    if (await zidOAuth(req,res,url)) return true;
     if (await zidPayments(req,res,url)) return true;
     if (await tapPayments(req,res,url)) return true;
     const routes=['/api/v1/subscriptions/status','/api/v1/license/recovery/create','/api/v1/license/recovery/restore',
