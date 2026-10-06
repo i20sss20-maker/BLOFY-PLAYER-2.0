@@ -21,7 +21,7 @@ export function injectSubscriberPortalUi(html, { allowRenewal = true } = {}) {
     var actions = document.querySelector('.dashboard-head .actions');
     if (!actions || qs('blofyRenewBtn')) return;
     var button = document.createElement('button');
-    button.id = 'blofyRenewBtn'; button.type = 'button'; button.textContent = '💳 الدفع والتجديد';
+    button.id = 'blofyRenewBtn'; button.type = 'button'; button.textContent = '💳 الدفع والتجديد عبر BLOFY SAT';
     actions.insertBefore(button, actions.firstChild);
     button.onclick = function () {
       var state = deviceAuth();
