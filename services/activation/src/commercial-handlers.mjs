@@ -5,6 +5,7 @@ import { createGooglePlayReviewHandler } from './google-play-review.mjs';
 import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';
 import { createTapPaymentHandlers } from './tap-payments.mjs';
 import { createZidPaymentHandlers } from './zid-payments.mjs';
+import { createZidOAuthHandlers } from './zid-oauth.mjs';
 
 export class CommercialError extends Error {
   constructor(code, status = 400) { super(code); this.status = status; }
@@ -30,7 +31,8 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
     return deviceId;
   }
   const tapPayments = createTapPaymentHandlers({pool,json,readJson,authorize,schemaSql:ADMIN_CONSOLE_SCHEMA,env});
-  const zidPayments = createZidPaymentHandlers({pool,json,readJson,authorize,env});
+  const zidOAuth = createZidOAuthHandlers({pool,json,keyHex,env});
+  const zidPayments = createZidPaymentHandlers({pool,json,readJson,authorize,env,tokenProvider:zidOAuth.loadTokens});
   async function transaction(action) {
     const client = await pool.connect();
     try { await client.query('BEGIN'); const result = await action(client); await client.query('COMMIT'); return result; }
@@ -188,6 +190,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
   return async function handle(req,res,url) {
     const path=url.pathname;
     if (await googlePlayReview(req,res,url)) return true;
+    if (await zidOAuth(req,res,url)) return true;
     if (await zidPayments(req,res,url)) return true;
     if (await tapPayments(req,res,url)) return true;
     const routes=['/api/v1/subscriptions/status','/api/v1/license/recovery/create','/api/v1/license/recovery/restore',
@@ -200,12 +203,13 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
       if (path==='/api/v1/subscriptions/status') {
         const row=(await pool.query('SELECT status,expires_at,trial_started_at FROM devices WHERE device_id=$1',[deviceId])).rows[0];
         const paid=await tapPayments.statusForDevice(deviceId).catch(()=>null);
+        const zidPurchasesAvailable=zidPayments.selected ? await zidPayments.hasPurchasesAvailable() : false;
         json(res,200,{active:entitled(row),
           planKey:paid?.planKey || (row?.status==='trial'?'trial':row?.status==='active'?'license':null),
           planName:paid?.planName || (row?.status==='trial'?'تجربة BLOFY':row?.status==='active'?'BLOFY PLAYER':null),
           maxDevices:1,startsAt:paid?.startsAt ?? millis(row?.trial_started_at),
           expiresAt:paid?.expiresAt ?? millis(row?.expires_at),orderId:paid?.orderId || null,
-          purchasesAvailable:zidPayments.selected ? zidPayments.purchasesAvailable : tapPayments.configured,
+          purchasesAvailable:zidPayments.selected ? zidPurchasesAvailable : tapPayments.configured,
           sandbox:zidPayments.selected ? false : tapPayments.sandbox});
       } else if (path.endsWith('/privacy/support')) {
         const message=String(body.message||'').trim();
