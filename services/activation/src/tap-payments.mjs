@@ -652,7 +652,7 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
   <div class="brand">BLOFY PLAYER</div>
   <section class="card">
     <h1>تفعيل وتجديد الاشتراك</h1>
-    <p class="lead">أدخل بيانات جهازك، اختر الباقة، وبعدها تنتقل لصفحة Tap الآمنة لإكمال الدفع.</p>
+    <p class="lead" id="paymentLead">أدخل بيانات جهازك، اختر الباقة، وبعدها تنتقل لصفحة Tap الآمنة لإكمال الدفع.</p>
     <div class="sandbox" id="sandbox">وضع تجريبي — لن يتم خصم مبلغ حقيقي</div>
     <div class="grid">
       <div class="field"><label for="deviceId">رقم الجهاز</label><input id="deviceId" autocomplete="off" placeholder="BLOFY-XXXX-XXXX"></div>
@@ -665,14 +665,19 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     <button id="pay" disabled>متابعة إلى الدفع</button>
     <button id="testPay" style="display:none;background:#23143d;border:1px solid #b598f566">اختبار Tap بدون رقم جهاز</button>
     <div class="status" id="status"></div>
-    <div class="foot">بيانات البطاقة لا تمر عبر BLOFY PLAYER؛ يتم إدخالها مباشرة في صفحة Tap. لا تشارك كود التفعيل مع أي شخص.</div>
+    <div class="foot" id="paymentFoot">بيانات البطاقة لا تمر عبر BLOFY PLAYER؛ يتم إدخالها مباشرة في صفحة Tap. لا تشارك كود التفعيل مع أي شخص.</div>
   </section>
 </main>
 <script>
 (function(){
   const $=id=>document.getElementById(id);
   const status=$('status'), pay=$('pay'), testPay=$('testPay'), plans=$('plans');
+  let paymentProvider='tap';
+  let merchantCheckout=null;
   function setStatus(text){status.textContent=text||''}
+  for(const name of ['deviceId','activationCode']) $(name).addEventListener('input',()=>{
+    if(merchantCheckout){merchantCheckout=null;pay.textContent='متابعة إلى الدفع';setStatus('تحقق من بيانات الجهاز ثم تابع.');}
+  });
   function fillFragment(){
     const p=new URLSearchParams(location.hash.replace(/^#/,''));
     if(p.get('deviceId')) $('deviceId').value=p.get('deviceId');
@@ -686,6 +691,12 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     setStatus('جاري تحميل الباقات…');
     const r=await fetch('/api/v1/subscriptions/plans',{headers:{accept:'application/json'}});
     const data=await r.json();
+    if(data.provider==='zid'){
+      paymentProvider='zid';
+      $('paymentLead').textContent='اختر مدة التفعيل، ثم انسخ رقم الجهاز وأدخله في منتج BLOFY SAT لإتمام الدفع.';
+      $('paymentFoot').textContent='التفعيل لجهاز واحد بعد تأكيد الدفع. أدخل رقم الجهاز فقط في المتجر؛ كود التفعيل يبقى هنا.';
+      for(const name of ['firstName','phone','email']) $(name).closest('.field').style.display='none';
+    }
     if(data.sandbox){$('sandbox').style.display='block';testPay.style.display='block';}
     plans.innerHTML='';
     (data.items||[]).forEach((item,index)=>{
@@ -698,7 +709,7 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
       const radio=label.querySelector('input');
       radio.value=item.planKey;
       radio.checked=index===0;
-      radio.addEventListener('change',()=>pay.disabled=false);
+      radio.addEventListener('change',()=>{merchantCheckout=null;pay.textContent='متابعة إلى الدفع';pay.disabled=false});
       plans.appendChild(label);
     });
     pay.disabled=!(data.items||[]).length;
@@ -719,6 +730,7 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     }catch(_){setStatus('تعذر الاتصال بالخادم. حاول مرة أخرى.');testPay.disabled=false;pay.disabled=false}
   });
   pay.addEventListener('click',async()=>{
+    if(merchantCheckout){location.assign(merchantCheckout);return}
     const deviceId=$('deviceId').value.trim();
     const activationCode=$('activationCode').value.trim();
     const planKey=document.querySelector('input[name=plan]:checked')?.value;
@@ -726,8 +738,8 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
     const customerPhone=$('phone').value.trim();
     if(!/^BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(deviceId)){setStatus('تحقق من رقم الجهاز.');return}
     if(!/^\\d{6}$/.test(activationCode)){setStatus('كود التفعيل يجب أن يكون 6 أرقام.');return}
-    if(customerName.length<2){setStatus('اكتب اسم العميل.');return}
-    if(customerPhone.replace(/\\D/g,'').length<9){setStatus('تحقق من رقم الجوال.');return}
+    if(paymentProvider!=='zid'&&customerName.length<2){setStatus('اكتب اسم العميل.');return}
+    if(paymentProvider!=='zid'&&customerPhone.replace(/\\D/g,'').length<9){setStatus('تحقق من رقم الجوال.');return}
     if(!planKey){setStatus('اختر باقة أولًا.');return}
     pay.disabled=true;setStatus('جاري تجهيز عملية الدفع…');
     try{
@@ -743,6 +755,15 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
         const providerCode=data && data.providerCode ? ' (Tap: '+String(data.providerCode)+')' : '';
         setStatus(response.status===403?'رقم الجهاز أو كود التفعيل غير صحيح.':'تعذر تجهيز الدفع'+providerCode+'. حاول مرة أخرى.');
         pay.disabled=false;return;
+      }
+      if(data.checkoutUrl&&data.requiresDeviceId){
+        if($('deviceId').value.trim()!==deviceId||$('activationCode').value.trim()!==activationCode||document.querySelector('input[name=plan]:checked')?.value!==planKey){
+          setStatus('تغيّرت بيانات الطلب. تحقق منها ثم تابع.');pay.disabled=false;return;
+        }
+        merchantCheckout=data.checkoutUrl;
+        setStatus('انسخ رقم الجهاز '+data.deviceId+'، وألصقه في حقل رقم الجهاز داخل منتج BLOFY SAT.');
+        $('deviceId').focus();$('deviceId').select();
+        pay.textContent='نسخت رقم الجهاز — متابعة إلى BLOFY SAT';pay.disabled=false;return;
       }
       if(data.checkoutUrl){location.assign(data.checkoutUrl);return}
       if(String(data.status||'').toUpperCase()==='CAPTURED'){setStatus('تم الدفع والتفعيل بنجاح.');return}
