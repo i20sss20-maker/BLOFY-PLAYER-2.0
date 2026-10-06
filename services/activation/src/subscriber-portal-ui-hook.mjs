@@ -29,8 +29,8 @@ export function injectSubscriberPortalUi(html, { allowRenewal = true } = {}) {
         alert('بيانات الجهاز غير مكتملة. أعد فتح الباركود من التطبيق.');
         return;
       }
-      var fragment = new URLSearchParams({ deviceId: state.deviceId, code: state.activationCode }).toString();
-      window.location.assign('/pay#' + fragment);
+      var fragment = 'deviceId=' + encodeURIComponent(state.deviceId) + '&code=' + encodeURIComponent(state.activationCode);
+      window.location.href = '/pay#' + fragment;
     };
   }
 `;
