@@ -147,7 +147,7 @@ function harness({ transport, whatsapp = true, authenticated = true } = {}) {
     querySelector: selector => selector === '.dashboard-head .actions' ? actions : null
   };
   const context = vm.createContext({
-    document, Event: BrowserEvent, URL, encodeURIComponent, console,
+    document, Event: BrowserEvent, URL, URLSearchParams, encodeURIComponent, console,
     MutationObserver: class { constructor(fn) { observers.push(fn); } observe() {} },
     requestAnimationFrame: fn => fn(), alert: message => alerts.push(message),
     fetch: async (url, options) => {
@@ -158,7 +158,7 @@ function harness({ transport, whatsapp = true, authenticated = true } = {}) {
   });
   context.auth = { deviceId: n('deviceId').value, activationCode: n('activationCode').value };
   context.window = context;
-  context.location = { reload: () => { loads++; } };
+  context.location = { reload: () => { loads++; }, assign: url => opened.push([url]) };
   context.open = (...args) => opened.push(args);
   context.load = async () => { loads++; };
   context.typeUi = () => {
@@ -298,26 +298,23 @@ test('runtime: ordinary Xtream saves retain the original event handler', async (
   assert.equal(h.requests.length,0); assert.equal(h.legacyCount(),1);
 });
 
-test('runtime: renewal opens an encoded message without PIN or provider password', async () => {
+test('runtime: renewal passes credentials only in the same-origin payment fragment', async () => {
   const h=harness(); await h.n('blofyRenewBtn').click();
-  assert.equal(h.n('blofyRenewModal').classList.contains('hidden'),false);
-  const plans=h.n('blofyRenewModal').querySelectorAll('[data-plan]');
-  assert.deepEqual(plans.map(x=>[x.getAttribute('data-plan'),x.getAttribute('data-price')]),[
-    ['3 شهور','10 ريال'],['6 شهور','18 ريال'],['سنة','25 ريال'],['مدى الحياة','40 ريال']
-  ]);
-  await plans[0].click(); assert.equal(h.opened.length,1);
-  const [url,target,features]=h.opened[0];
-  const parsed=new URL(url); assert.equal(parsed.hostname,'wa.me'); assert.equal(parsed.pathname,'/966500000000');
-  assert.match(parsed.searchParams.get('text'),/BLOFY-TEST-0001/);
-  assert.match(parsed.searchParams.get('text'),/3 شهور/);
-  assert.ok(parsed.searchParams.get('text').includes('\n\nرقم جهازي:'));
-  assert.doesNotMatch(parsed.searchParams.get('text'),/test-only-pin|typed-test-password/);
-  assert.equal(target,'_blank'); assert.equal(features,'noopener');
+  assert.equal(h.opened.length,1);
+  const [url]=h.opened[0];
+  assert.match(url,/^\/pay#/);
+  const parsed=new URL(url,'https://portal.example');
+  assert.equal(parsed.origin,'https://portal.example');
+  assert.equal(parsed.search,'');
+  const fragment=new URLSearchParams(parsed.hash.slice(1));
+  assert.equal(fragment.get('deviceId'),'BLOFY-TEST-0001');
+  assert.equal(fragment.get('code'),'test-only-pin');
+  assert.doesNotMatch(url,/typed-test-password|wa\.me/);
 });
 
-test('runtime: missing renewal configuration cannot open an arbitrary recipient', async () => {
-  const h=harness({whatsapp:false});
-  await h.n('blofyRenewModal').querySelectorAll('[data-plan]')[0].click();
+test('runtime: missing device credentials cannot open payment', async () => {
+  const h=harness({authenticated:false});
+  await h.n('blofyRenewBtn').click();
   assert.equal(h.opened.length,0); assert.equal(h.alerts.length,1);
 });
 
