@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS zid_license_grants (
   PRIMARY KEY(store_id,zid_order_id,zid_line_id)
 );`;
 
-export function createZidPaymentHandlers({ pool, json, readJson, authorize, env = process.env, fetchImpl = globalThis.fetch }) {
+export function createZidPaymentHandlers({ pool, json, readJson, authorize, env = process.env, fetchImpl = globalThis.fetch, tokenProvider = null }) {
   const enabled = env.BLOFY_ZID_ENABLED === 'true';
   const selected = env.BLOFY_PAYMENT_PROVIDER === 'zid';
   const storeId = id(env.BLOFY_ZID_STORE_ID);
@@ -105,8 +105,10 @@ export function createZidPaymentHandlers({ pool, json, readJson, authorize, env 
   const appAuthorization = String(env.BLOFY_ZID_AUTHORIZATION || '');
   const managerToken = String(env.BLOFY_ZID_MANAGER_TOKEN || '');
   const plans = parseZidPlans(env.BLOFY_ZID_PLANS_JSON);
-  const configured = Boolean(enabled && storeId && secret.length >= 32 && appAuthorization && managerToken && plans.length);
-  const purchasesAvailable = Boolean(configured && plans.every(p => p.productUrl));
+  const hasStaticTokens = Boolean(appAuthorization && managerToken);
+  const providerConfigured = Boolean(enabled && storeId && plans.length && (hasStaticTokens || typeof tokenProvider === 'function'));
+  const webhookConfigured = Boolean(providerConfigured && secret.length >= 32);
+  const purchasesConfigured = Boolean(providerConfigured && plans.every(p => p.productUrl));
   let ready;
   function ensureSchema() {
     if (!ready) ready = (async () => {
@@ -128,9 +130,16 @@ export function createZidPaymentHandlers({ pool, json, readJson, authorize, env 
     })().catch(error => { ready = null; throw error; });
     return ready;
   }
+  async function credentials() {
+    if (hasStaticTokens) return { authorization: appAuthorization, accessToken: managerToken };
+    const stored = typeof tokenProvider === 'function' ? await tokenProvider() : null;
+    if (!stored?.authorization || !stored?.accessToken) throw fail('zid_not_authorized', 503);
+    return stored;
+  }
   async function retrieveOrder(orderId) {
+    const tokens = await credentials();
     const response = await fetchImpl(`https://api.zid.sa/v1/managers/store/orders/${orderId}/view`, {
-      headers: { authorization: appAuthorization, 'x-manager-token': managerToken, 'accept-language': 'en', accept: 'application/json' },
+      headers: { authorization: tokens.authorization, 'x-manager-token': tokens.accessToken, 'accept-language': 'en', accept: 'application/json' },
       redirect: 'error', signal: AbortSignal.timeout(10000)
     });
     if (!response.ok) throw fail('zid_order_verification_unavailable', 503);
@@ -191,7 +200,7 @@ export function createZidPaymentHandlers({ pool, json, readJson, authorize, env 
     const path = url.pathname;
     if (path === '/api/v1/payments/zid/webhook') {
       if (req.method !== 'POST') { json(res,405,{error:'method_not_allowed'}); return true; }
-      if (!configured) { json(res,503,{error:'zid_not_configured'}); return true; }
+      if (!webhookConfigured) { json(res,503,{error:'zid_webhook_not_configured'}); return true; }
       const expected = 'Basic ' + Buffer.from('blofy-zid:' + secret).toString('base64');
       if (!equal(req.headers.authorization, expected)) { json(res,401,{error:'unauthorized_webhook'}); return true; }
       try {
@@ -203,10 +212,12 @@ export function createZidPaymentHandlers({ pool, json, readJson, authorize, env 
     }
     if (!selected) return false;
     if (path === '/api/v1/subscriptions/plans' && req.method === 'GET') {
+      const purchasesAvailable = Boolean(purchasesConfigured && await credentials().then(() => true).catch(() => false));
       json(res,200,{items:purchasesAvailable ? plans.map(({productId,sku,productUrl,...p}) => p) : [],purchasesAvailable,sandbox:false,provider:'zid'});
       return true;
     }
     if (path === '/api/v1/subscriptions/checkout' && req.method === 'POST') {
+      const purchasesAvailable = Boolean(purchasesConfigured && await credentials().then(() => true).catch(() => false));
       if (!purchasesAvailable) { json(res,503,{error:'zid_checkout_unavailable'}); return true; }
       const body = await readJson(req);
       const authorizedId = await authorize(req,res,body);
@@ -219,7 +230,7 @@ export function createZidPaymentHandlers({ pool, json, readJson, authorize, env 
     return false;
   }
   handler.selected = selected;
-  handler.configured = configured;
-  handler.purchasesAvailable = purchasesAvailable;
+  handler.configured = providerConfigured;
+  handler.hasPurchasesAvailable = async () => Boolean(purchasesConfigured && await credentials().then(() => true).catch(() => false));
   return handler;
 }
