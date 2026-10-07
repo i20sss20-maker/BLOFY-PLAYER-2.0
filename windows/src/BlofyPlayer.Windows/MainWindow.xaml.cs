@@ -143,6 +143,7 @@ public partial class MainWindow : Window
                     existing.BaseUrl = item.BaseUrl;
                     existing.Username = item.Username;
                     existing.Password = item.Password;
+                    existing.SubscriberToken = item.SubscriberToken;
                     existing.Active = item.Active;
                     existing.UpdatedAt = item.UpdatedAt;
                 }
@@ -351,9 +352,7 @@ public partial class MainWindow : Window
         catch { }
     }
 
-    private string ActivationPortalUrl() =>
-        "https://api.blofyplayer.com/connect#deviceId=" + Uri.EscapeDataString(_identity.DeviceId) +
-        "&code=" + Uri.EscapeDataString(_identity.ActivationCode);
+    private string ActivationPortalUrl() => BlofyEndpoints.ActivationPortal(_identity);
 
     private void ShowBrowser(string kind)
     {
@@ -1036,6 +1035,7 @@ public partial class MainWindow : Window
         var type = new ComboBox { Margin = new Thickness(0, 14, 0, 0) };
         type.Items.Add("Xtream Codes");
         type.Items.Add("M3U / M3U8");
+        type.Items.Add("مشترك BLOFY");
         type.SelectedIndex = 0;
         form.Children.Add(Labeled("النوع", type));
 
@@ -1050,6 +1050,8 @@ public partial class MainWindow : Window
         form.Children.Add(Labeled("اسم المستخدم", username));
         form.Children.Add(Labeled("كلمة المرور", password));
         form.Children.Add(Labeled("رابط/مسار M3U", m3u));
+        form.Children.Add(Txt("في «مشترك BLOFY» تجاهل رابط السيرفر وM3U؛ أدخل اسم المستخدم وكلمة المرور فقط.",
+            11, Muted, marginTop: 8));
 
         ProviderAccount? editing = null;
         list.SelectionChanged += (_, _) =>
@@ -1063,29 +1065,81 @@ public partial class MainWindow : Window
                 return;
             }
             name.Text = editing.Name;
-            url.Text = editing.BaseUrl;
-            username.Text = editing.Username;
-            password.Password = editing.Password;
             m3u.Text = editing.M3uUrl;
-            type.SelectedIndex = editing.ProviderType == "m3u" ? 1 : 0;
+            var managed = !string.IsNullOrWhiteSpace(editing.SubscriberToken);
+            type.SelectedIndex = editing.ProviderType == "m3u" ? 1 : managed ? 2 : 0;
+            if (managed)
+            {
+                // Never expose resolved upstream credentials in the UI. Re-enter BLOFY subscriber
+                // credentials only when intentionally changing the managed account.
+                url.Text = "";
+                username.Text = "";
+                password.Password = "";
+            }
+            else
+            {
+                url.Text = editing.BaseUrl;
+                username.Text = editing.Username;
+                password.Password = editing.Password;
+            }
         };
 
         var buttons = Horizontal(0, 18, 0, 0);
         buttons.Children.Add(Action("حفظ واتصال", true, async (_, _) =>
         {
             var isM3u = type.SelectedIndex == 1;
+            var isSubscriber = type.SelectedIndex == 2;
             var provider = editing ?? new ProviderAccount();
-            provider.Name = string.IsNullOrWhiteSpace(name.Text) ? "BLOFY Server" : name.Text.Trim();
-            provider.ProviderType = isM3u ? "m3u" : "xtream";
-            provider.BaseUrl = url.Text.Trim();
-            provider.Username = username.Text.Trim();
-            provider.Password = password.Password;
-            provider.M3uUrl = m3u.Text.Trim();
             provider.Active = true;
             provider.UpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-            if (!isM3u)
+            if (isSubscriber)
             {
+                if (_activationState?.CanUse() != true)
+                {
+                    MessageBox.Show(this, "فعّل جهاز BLOFY أولًا قبل تسجيل مشترك BLOFY.", "BLOFY PLAYER");
+                    return;
+                }
+                if (string.IsNullOrWhiteSpace(username.Text) || string.IsNullOrWhiteSpace(password.Password))
+                {
+                    MessageBox.Show(this, "أدخل اسم المستخدم وكلمة المرور لمشترك BLOFY.", "BLOFY PLAYER");
+                    return;
+                }
+
+                try
+                {
+                    using var subscriber = new BlofySubscriberService();
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                    var session = await subscriber.CreateSessionAsync(
+                        _identity, username.Text.Trim(), password.Password, timeout.Token);
+
+                    if (editing is null && Guid.TryParse(session.ProviderId, out _))
+                        provider.Id = session.ProviderId;
+
+                    provider.Name = string.IsNullOrWhiteSpace(name.Text) ? session.ProviderName : name.Text.Trim();
+                    provider.ProviderType = "xtream";
+                    provider.BaseUrl = session.BaseUrl;
+                    provider.Username = session.Username;
+                    provider.Password = session.Password;
+                    provider.SubscriberToken = session.SessionToken;
+                    provider.M3uUrl = "";
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, ex.Message, "BLOFY PLAYER");
+                    return;
+                }
+            }
+            else if (!isM3u)
+            {
+                provider.Name = string.IsNullOrWhiteSpace(name.Text) ? "BLOFY Server" : name.Text.Trim();
+                provider.ProviderType = "xtream";
+                provider.BaseUrl = url.Text.Trim();
+                provider.Username = username.Text.Trim();
+                provider.Password = password.Password;
+                provider.SubscriberToken = "";
+                provider.M3uUrl = "";
+
                 if (!Uri.TryCreate(provider.BaseUrl, UriKind.Absolute, out _) ||
                     string.IsNullOrWhiteSpace(provider.Username) || string.IsNullOrWhiteSpace(provider.Password))
                 {
@@ -1107,10 +1161,20 @@ public partial class MainWindow : Window
                     return;
                 }
             }
-            else if (string.IsNullOrWhiteSpace(provider.M3uUrl))
+            else
             {
-                MessageBox.Show(this, "أدخل رابط أو مسار M3U.", "BLOFY PLAYER");
-                return;
+                provider.Name = string.IsNullOrWhiteSpace(name.Text) ? "BLOFY M3U" : name.Text.Trim();
+                provider.ProviderType = "m3u";
+                provider.BaseUrl = "";
+                provider.Username = "";
+                provider.Password = "";
+                provider.SubscriberToken = "";
+                provider.M3uUrl = m3u.Text.Trim();
+                if (string.IsNullOrWhiteSpace(provider.M3uUrl))
+                {
+                    MessageBox.Show(this, "أدخل رابط أو مسار M3U.", "BLOFY PLAYER");
+                    return;
+                }
             }
 
             foreach (var p in _store.State.Providers) p.Active = false;
