@@ -122,9 +122,17 @@ public sealed class PersistentState
 {
     public List<ProviderAccount> Providers { get; set; } = [];
     public string ActiveProviderId { get; set; } = "";
+
+    // Profile-aware state. The legacy fields below remain only for one-time migration from
+    // early Windows builds and are no longer used after LoadAsync initializes profiles.
+    public List<UserProfile> Profiles { get; set; } = [];
+    public string ActiveProfileId { get; set; } = "";
+    public Dictionary<string, ProfileLibraryState> ProfileLibraries { get; set; } = [];
+
     public HashSet<string> Favorites { get; set; } = [];
     public Dictionary<string, WatchState> WatchStates { get; set; } = [];
     public List<string> RecentSearches { get; set; } = [];
+
     public AppSettings Settings { get; set; } = new();
 }
 
@@ -150,22 +158,28 @@ public sealed class LocalStore
     );
 
     public PersistentState State { get; private set; } = new();
+    public string RootPath => _root;
 
     private string StatePath => Path.Combine(_root, "state.json");
 
     public async Task LoadAsync()
     {
         Directory.CreateDirectory(_root);
-        if (!File.Exists(StatePath)) return;
-        try
+        if (File.Exists(StatePath))
         {
-            await using var stream = File.OpenRead(StatePath);
-            State = await JsonSerializer.DeserializeAsync<PersistentState>(stream, Json) ?? new();
+            try
+            {
+                await using var stream = File.OpenRead(StatePath);
+                State = await JsonSerializer.DeserializeAsync<PersistentState>(stream, Json) ?? new();
+            }
+            catch
+            {
+                State = new();
+            }
         }
-        catch
-        {
-            State = new();
-        }
+
+        if (EnsureProfiles())
+            await SaveAsync();
     }
 
     public async Task SaveAsync()
@@ -181,6 +195,124 @@ public sealed class LocalStore
         State.Providers.FirstOrDefault(p => p.Id == State.ActiveProviderId)
         ?? State.Providers.FirstOrDefault(p => p.Active)
         ?? State.Providers.FirstOrDefault();
+
+    public UserProfile ActiveProfile()
+    {
+        EnsureProfiles();
+        return State.Profiles.FirstOrDefault(p => p.Id == State.ActiveProfileId)
+            ?? State.Profiles[0];
+    }
+
+    public ProfileLibraryState ActiveLibrary()
+    {
+        var profile = ActiveProfile();
+        if (!State.ProfileLibraries.TryGetValue(profile.Id, out var library))
+        {
+            library = new ProfileLibraryState();
+            State.ProfileLibraries[profile.Id] = library;
+        }
+        return library;
+    }
+
+    public bool IsKidsProfile => ActiveProfile().Kids;
+
+    public bool IsContentVisible(StreamItem item) =>
+        !IsKidsProfile || !KidsPolicy.IsBlocked(item);
+
+    public async Task<UserProfile> CreateProfileAsync(string name, bool kids = false, bool guest = false)
+    {
+        EnsureProfiles();
+        var clean = name.Trim();
+        if (string.IsNullOrWhiteSpace(clean)) throw new InvalidOperationException("اسم الملف مطلوب.");
+        if (State.Profiles.Count >= 8) throw new InvalidOperationException("الحد الأقصى 8 ملفات.");
+        if (guest && State.Profiles.Any(p => p.Guest)) throw new InvalidOperationException("يوجد ملف ضيف بالفعل.");
+
+        var profile = new UserProfile
+        {
+            Name = clean.Length > 32 ? clean[..32] : clean,
+            Kids = kids,
+            Guest = guest
+        };
+        State.Profiles.Add(profile);
+        State.ProfileLibraries[profile.Id] = new ProfileLibraryState();
+        await SaveAsync();
+        return profile;
+    }
+
+    public async Task<bool> SelectProfileAsync(string profileId, string? pin = null)
+    {
+        EnsureProfiles();
+        var profile = State.Profiles.FirstOrDefault(p => p.Id == profileId);
+        if (profile is null) return false;
+        if (!string.IsNullOrWhiteSpace(profile.PinHash) && !ProfileSecurity.Verify(profile.PinHash, pin ?? ""))
+            return false;
+
+        State.ActiveProfileId = profile.Id;
+        await SaveAsync();
+        return true;
+    }
+
+    public async Task SetProfilePinAsync(string profileId, string? pin)
+    {
+        var profile = State.Profiles.FirstOrDefault(p => p.Id == profileId)
+            ?? throw new InvalidOperationException("الملف غير موجود.");
+        profile.PinHash = string.IsNullOrWhiteSpace(pin) ? null : ProfileSecurity.HashPin(pin);
+        await SaveAsync();
+    }
+
+    public async Task RenameProfileAsync(string profileId, string name)
+    {
+        var profile = State.Profiles.FirstOrDefault(p => p.Id == profileId)
+            ?? throw new InvalidOperationException("الملف غير موجود.");
+        var clean = name.Trim();
+        if (string.IsNullOrWhiteSpace(clean)) throw new InvalidOperationException("الاسم مطلوب.");
+        profile.Name = clean.Length > 32 ? clean[..32] : clean;
+        await SaveAsync();
+    }
+
+    public async Task DeleteProfileAsync(string profileId)
+    {
+        EnsureProfiles();
+        if (State.Profiles.Count <= 1) throw new InvalidOperationException("يجب إبقاء ملف واحد على الأقل.");
+        var profile = State.Profiles.FirstOrDefault(p => p.Id == profileId)
+            ?? throw new InvalidOperationException("الملف غير موجود.");
+        State.Profiles.Remove(profile);
+        State.ProfileLibraries.Remove(profile.Id);
+        if (State.ActiveProfileId == profile.Id)
+            State.ActiveProfileId = State.Profiles[0].Id;
+        await SaveAsync();
+    }
+
+    public WatchState? WatchState(string key)
+    {
+        var library = ActiveLibrary();
+        return library.WatchStates.TryGetValue(key, out var state) ? state : null;
+    }
+
+    public int FavoritesCount => ActiveLibrary().Favorites.Count;
+    public IEnumerable<WatchState> WatchStates => ActiveLibrary().WatchStates.Values;
+
+    public async Task AddRecentSearchAsync(string value)
+    {
+        var clean = value.Trim();
+        if (clean.Length < 2) return;
+        var recent = ActiveLibrary().RecentSearches;
+        recent.RemoveAll(x => x.Equals(clean, StringComparison.OrdinalIgnoreCase));
+        recent.Insert(0, clean);
+        if (recent.Count > 30) recent.RemoveRange(30, recent.Count - 30);
+        await SaveAsync();
+    }
+
+    public async Task SetCategoryHiddenAsync(string kind, string remoteId, bool hidden)
+    {
+        var key = kind + ":" + remoteId;
+        var set = ActiveLibrary().HiddenCategoryKeys;
+        if (hidden) set.Add(key); else set.Remove(key);
+        await SaveAsync();
+    }
+
+    public bool IsCategoryHidden(string kind, string remoteId) =>
+        ActiveLibrary().HiddenCategoryKeys.Contains(kind + ":" + remoteId);
 
     public async Task SaveCatalogAsync(CatalogSnapshot snapshot)
     {
@@ -211,15 +343,17 @@ public sealed class LocalStore
 
     public void ApplyFavoriteState(IEnumerable<StreamItem> streams)
     {
+        var favorites = ActiveLibrary().Favorites;
         foreach (var item in streams)
-            item.Favorite = State.Favorites.Contains(item.Key);
+            item.Favorite = favorites.Contains(item.Key);
     }
 
     public async Task ToggleFavoriteAsync(StreamItem item)
     {
+        var favorites = ActiveLibrary().Favorites;
         item.Favorite = !item.Favorite;
-        if (item.Favorite) State.Favorites.Add(item.Key);
-        else State.Favorites.Remove(item.Key);
+        if (item.Favorite) favorites.Add(item.Key);
+        else favorites.Remove(item.Key);
         await SaveAsync();
     }
 
@@ -227,7 +361,7 @@ public sealed class LocalStore
     {
         if (string.IsNullOrWhiteSpace(key) || durationMs <= 0) return;
         var completed = positionMs >= durationMs * .93;
-        State.WatchStates[key] = new WatchState
+        ActiveLibrary().WatchStates[key] = new WatchState
         {
             Key = key,
             PositionMs = completed ? 0 : Math.Max(0, positionMs),
@@ -236,6 +370,71 @@ public sealed class LocalStore
             UpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         };
         await SaveAsync();
+    }
+
+    public int CleanCatalogCache()
+    {
+        var count = 0;
+        foreach (var file in Directory.EnumerateFiles(_root, "catalog-*.json.gz", SearchOption.TopDirectoryOnly))
+        {
+            try { File.Delete(file); count++; } catch { }
+        }
+        return count;
+    }
+
+    private bool EnsureProfiles()
+    {
+        var changed = false;
+        State.Profiles ??= [];
+        State.ProfileLibraries ??= [];
+
+        if (State.Profiles.Count == 0)
+        {
+            State.Profiles.Add(new UserProfile { Id = "main", Name = "الرئيسي", Kids = false });
+            State.Profiles.Add(new UserProfile { Id = "kids", Name = "أطفال", Kids = true });
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(State.ActiveProfileId) ||
+            State.Profiles.All(p => p.Id != State.ActiveProfileId))
+        {
+            State.ActiveProfileId = State.Profiles[0].Id;
+            changed = true;
+        }
+
+        foreach (var profile in State.Profiles)
+        {
+            if (!State.ProfileLibraries.ContainsKey(profile.Id))
+            {
+                State.ProfileLibraries[profile.Id] = new ProfileLibraryState();
+                changed = true;
+            }
+        }
+
+        // One-time migration from Windows 0.1/0.2 where favorites/history were global.
+        var main = State.Profiles.FirstOrDefault(p => p.Id == "main") ?? State.Profiles[0];
+        var mainLibrary = State.ProfileLibraries[main.Id];
+        if (State.Favorites.Count > 0)
+        {
+            mainLibrary.Favorites.UnionWith(State.Favorites);
+            State.Favorites.Clear();
+            changed = true;
+        }
+        if (State.WatchStates.Count > 0)
+        {
+            foreach (var pair in State.WatchStates) mainLibrary.WatchStates[pair.Key] = pair.Value;
+            State.WatchStates.Clear();
+            changed = true;
+        }
+        if (State.RecentSearches.Count > 0)
+        {
+            mainLibrary.RecentSearches = State.RecentSearches
+                .Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).Take(30).ToList();
+            State.RecentSearches.Clear();
+            changed = true;
+        }
+
+        return changed;
     }
 
     private string CatalogPath(string providerId)
