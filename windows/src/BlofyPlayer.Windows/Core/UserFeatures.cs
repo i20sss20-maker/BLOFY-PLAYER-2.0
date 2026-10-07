@@ -396,32 +396,114 @@ public static class WindowsUpdateService
 
     public static async Task<WindowsUpdateInfo?> CheckAsync(CancellationToken ct = default)
     {
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4");
-        using var response = await client.GetAsync(ReleasesApi, ct);
-        if (!response.IsSuccessStatusCode) return null;
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
+        var current = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+            ?? new Version(0, 0, 0);
 
-        foreach (var release in doc.RootElement.EnumerateArray())
+        var official = await CheckOfficialAsync(current, ct);
+        if (official is not null) return official;
+
+        return await CheckGitHubAsync(current, ct);
+    }
+
+    private static async Task<WindowsUpdateInfo?> CheckOfficialAsync(Version current, CancellationToken ct)
+    {
+        try
         {
-            if (release.TryGetProperty("draft", out var draft) && draft.GetBoolean()) continue;
-            if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) continue;
-            foreach (var asset in assets.EnumerateArray())
+            using var client = NewClient();
+            using var response = await client.GetAsync(
+                BlofyEndpoints.ServiceBase.TrimEnd('/') + "/api/v1/releases/windows", ct);
+            if (!response.IsSuccessStatusCode) return null;
+
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            var root = doc.RootElement;
+            var versionText = GetString(root, "versionName", "version");
+            var url = GetString(root, "downloadUrl", "url");
+            var notes = GetString(root, "releaseNotes", "notes");
+
+            if (!TryVersion(versionText, out var remote) || remote <= current) return null;
+            if (!ValidHttps(url)) return null;
+            return new WindowsUpdateInfo(versionText, url, LimitNotes(notes));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static async Task<WindowsUpdateInfo?> CheckGitHubAsync(Version current, CancellationToken ct)
+    {
+        try
+        {
+            using var client = NewClient();
+            using var response = await client.GetAsync(ReleasesApi, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
+
+            foreach (var release in doc.RootElement.EnumerateArray())
             {
-                var name = asset.TryGetProperty("name", out var n) ? (n.GetString() ?? "") : "";
-                if (!name.Contains("windows", StringComparison.OrdinalIgnoreCase)) continue;
-                if (!(name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-                      name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
-                      name.EndsWith(".msix", StringComparison.OrdinalIgnoreCase))) continue;
-                var url = asset.TryGetProperty("browser_download_url", out var u) ? (u.GetString() ?? "") : "";
-                if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed) || parsed.Scheme != Uri.UriSchemeHttps) continue;
-                var version = release.TryGetProperty("tag_name", out var tag) ? (tag.GetString() ?? "Windows") : "Windows";
-                var notes = release.TryGetProperty("body", out var body) ? (body.GetString() ?? "") : "";
-                return new WindowsUpdateInfo(version, url, notes.Length > 600 ? notes[..600] : notes);
+                if (release.TryGetProperty("draft", out var draft) && draft.GetBoolean()) continue;
+                if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) continue;
+
+                var tag = release.TryGetProperty("tag_name", out var tagValue)
+                    ? tagValue.GetString() ?? ""
+                    : "";
+                if (!TryVersion(tag, out var remote) || remote <= current) continue;
+
+                foreach (var asset in assets.EnumerateArray())
+                {
+                    var name = asset.TryGetProperty("name", out var n) ? (n.GetString() ?? "") : "";
+                    if (!name.Contains("windows", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!(name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                          name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                          name.EndsWith(".msix", StringComparison.OrdinalIgnoreCase))) continue;
+
+                    var url = asset.TryGetProperty("browser_download_url", out var u)
+                        ? u.GetString() ?? ""
+                        : "";
+                    if (!ValidHttps(url)) continue;
+
+                    var notes = release.TryGetProperty("body", out var body)
+                        ? body.GetString() ?? ""
+                        : "";
+                    return new WindowsUpdateInfo(remote.ToString(3), url, LimitNotes(notes));
+                }
             }
         }
+        catch { }
+
         return null;
+    }
+
+    private static HttpClient NewClient()
+    {
+        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4");
+        return client;
+    }
+
+    private static bool ValidHttps(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+        uri.Scheme == Uri.UriSchemeHttps;
+
+    private static string LimitNotes(string value) =>
+        string.IsNullOrWhiteSpace(value) ? "" : value.Length > 600 ? value[..600] : value;
+
+    private static string GetString(JsonElement root, params string[] names)
+    {
+        foreach (var name in names)
+            if (root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)
+                return value.GetString() ?? "";
+        return "";
+    }
+
+    private static bool TryVersion(string? raw, out Version version)
+    {
+        version = new Version(0, 0, 0);
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+        var match = Regex.Match(raw, @"(?<!\d)(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?");
+        if (!match.Success) return false;
+        return Version.TryParse(match.Value, out version!);
     }
 }
 
