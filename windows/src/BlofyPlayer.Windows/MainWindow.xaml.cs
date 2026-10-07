@@ -11,12 +11,12 @@ namespace BlofyPlayer.Windows;
 
 public partial class MainWindow : Window
 {
-    private static readonly Brush Bg = Brush("#08060D");
-    private static readonly Brush Surface = Brush("#241536");
-    private static readonly Brush Surface2 = Brush("#180F23");
-    private static readonly Brush Text = Brush("#F3F4F6");
-    private static readonly Brush Muted = Brush("#C9BCD9");
-    private static readonly Brush Accent = Brush("#D0B2FF");
+    private static readonly SolidColorBrush Bg = Brush("#08060D");
+    private static readonly SolidColorBrush Surface = Brush("#241536");
+    private static readonly SolidColorBrush Surface2 = Brush("#180F23");
+    private static readonly SolidColorBrush Text = Brush("#F3F4F6");
+    private static readonly SolidColorBrush Muted = Brush("#C9BCD9");
+    private static readonly SolidColorBrush Accent = Brush("#D0B2FF");
 
     private readonly BlofyIdentity _identity = WindowsDeviceIdentity.Get();
     private readonly ActivationClient _activation = new();
