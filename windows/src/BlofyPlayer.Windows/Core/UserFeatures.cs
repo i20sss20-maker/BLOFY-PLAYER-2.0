@@ -1,5 +1,6 @@
 using BlofyPlayer.Windows.Core.Identity;
 using System.Net.Http;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
