@@ -27,7 +27,7 @@
             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="30,0,58,0">
                 <Image Source="/Assets/blofy_logo.png" Width="170" Height="92"
                        Stretch="Uniform" HorizontalAlignment="Right" Margin="0,0,0,18"/>
-                <TextBlock Text="BLOFY PLAYER" FontSize="38" FontWeight="Bold" LetterSpacing="2"/>
+                <TextBlock Text="BLOFY PLAYER" FontSize="38" FontWeight="Bold"/>
                 <TextBlock Text="اربط جهازك وابدأ المشاهدة"
                            FontSize="24" FontWeight="SemiBold" Margin="0,10,0,12"/>
                 <TextBlock Text="امسح الباركود بالجوال أو افتح بوابة BLOFY. بعد نجاح التفعيل اضغط «دخول BLOFY»، وبعدها نجهز قوائمك ونفتح التطبيق."
@@ -84,7 +84,7 @@
                     CornerRadius="28" Padding="28">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock Text="SCAN TO CONNECT" Foreground="#C69BFF" FontSize="12"
-                               FontWeight="Bold" LetterSpacing="2" HorizontalAlignment="Center"/>
+                               FontWeight="Bold" HorizontalAlignment="Center"/>
                     <TextBlock Text="امسح الباركود" FontSize="24" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,8,0,18"/>
                     <Border Background="White" CornerRadius="18" Padding="12" Width="270" Height="270">
