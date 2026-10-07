@@ -17,8 +17,7 @@ public sealed record BlofySubscriberSession(
 
 public sealed class BlofySubscriberService : IDisposable
 {
-    public const string ServiceBase = "https://api.blofyplayer.com/";
-    public const string ProxyPath = "/api/v1/subscribers/xtream";
+     public const string ProxyPath = "/api/v1/subscribers/xtream";
 
     private readonly HttpClient _http;
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web)
@@ -35,7 +34,7 @@ public sealed class BlofySubscriberService : IDisposable
         };
         _http = new HttpClient(handler)
         {
-            BaseAddress = new Uri(ServiceBase),
+            BaseAddress = new Uri(BlofyEndpoints.ServiceBase),
             Timeout = TimeSpan.FromSeconds(18)
         };
         _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.3.0");
@@ -43,7 +42,7 @@ public sealed class BlofySubscriberService : IDisposable
 
     public async Task<bool> HealthAsync(CancellationToken ct = default)
     {
-        using var response = await _http.GetAsync("api/v1/subscribers/health", ct);
+        using var response = await _http.GetAsync(BlofyEndpoints.SubscriberRoot + "/health", ct);
         if (!response.IsSuccessStatusCode) return false;
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         return doc.RootElement.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True;
@@ -67,7 +66,7 @@ public sealed class BlofySubscriberService : IDisposable
             delivery = "direct"
         };
 
-        using var response = await _http.PostAsJsonAsync("api/v1/subscribers/session", body, _json, ct);
+        using var response = await _http.PostAsJsonAsync(BlofyEndpoints.SubscriberRoot + "/session", body, _json, ct);
         var raw = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException(ErrorMessage(raw));
@@ -96,7 +95,7 @@ public sealed class BlofySubscriberService : IDisposable
                 activationCode = identity.ActivationCode,
                 sessionTokens = batch
             };
-            using var response = await _http.PostAsJsonAsync("api/v1/subscribers/resolve", body, _json, ct);
+            using var response = await _http.PostAsJsonAsync(BlofyEndpoints.SubscriberRoot + "/resolve", body, _json, ct);
             if (!response.IsSuccessStatusCode) continue;
 
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
