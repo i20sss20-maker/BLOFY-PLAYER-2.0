@@ -65,6 +65,8 @@ public sealed class EpisodeItem
     public string Title { get; set; } = "";
     public string Extension { get; set; } = "mp4";
     public string DirectSource { get; set; } = "";
+    public string Icon { get; set; } = "";
+    public string Plot { get; set; } = "";
     public long DurationSecs { get; set; }
 }
 
@@ -660,15 +662,39 @@ public sealed class XtreamService : IDisposable
             if (number <= 0) number = tuple.Number <= 0 ? 1 : tuple.Number;
             var ext = First(row, "container_extension", "extension");
             if (string.IsNullOrWhiteSpace(ext)) ext = "mp4";
+
+            JsonElement info = default;
+            var hasInfo = TryGet(row, "info", out var nestedInfo) && nestedInfo.ValueKind == JsonValueKind.Object;
+            if (hasInfo) info = nestedInfo;
+
+            var title = First(row, "title", "name");
+            if (string.IsNullOrWhiteSpace(title) && hasInfo) title = First(info, "title", "name");
+            if (string.IsNullOrWhiteSpace(title)) title = "Episode " + number;
+
+            var icon = First(row, "movie_image", "stream_icon", "cover", "image");
+            if (string.IsNullOrWhiteSpace(icon) && hasInfo)
+                icon = First(info, "movie_image", "stream_icon", "cover", "image");
+
+            var plot = First(row, "plot", "description", "overview");
+            if (string.IsNullOrWhiteSpace(plot) && hasInfo)
+                plot = First(info, "plot", "description", "overview");
+
+            var durationSecs = Long(row, "duration_secs", "duration_seconds");
+            if (durationSecs <= 0 && hasInfo)
+                durationSecs = Long(info, "duration_secs", "duration_seconds");
+
             return new EpisodeItem
             {
                 Key = provider.Id + ":episode:" + id,
                 RemoteId = id,
                 Season = season,
                 Episode = number,
-                Title = First(row, "title", "name") is { Length: > 0 } title ? title : "Episode " + number,
+                Title = title,
                 Extension = ext.TrimStart('.'),
-                DirectSource = First(row, "direct_source")
+                DirectSource = First(row, "direct_source"),
+                Icon = icon,
+                Plot = plot,
+                DurationSecs = durationSecs
             };
         })
         .Where(e => !string.IsNullOrWhiteSpace(e.RemoteId))
