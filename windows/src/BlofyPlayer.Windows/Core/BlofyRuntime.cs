@@ -336,6 +336,37 @@ public sealed class LocalStore
     public bool IsCategoryHidden(string kind, string remoteId) =>
         ActiveLibrary().HiddenCategoryKeys.Contains(kind + ":" + remoteId);
 
+    public IReadOnlyList<string> HomeRows
+    {
+        get
+        {
+            var rows = ActiveLibrary().HomeRows;
+            if (rows.Count == 0) rows.AddRange(["continue", "latest_movies", "latest_series"]);
+            return rows;
+        }
+    }
+
+    public async Task SetHomeRowEnabledAsync(string row, bool enabled)
+    {
+        if (row is not ("continue" or "latest_movies" or "latest_series")) return;
+        var rows = ActiveLibrary().HomeRows;
+        rows.Remove(row);
+        if (enabled) rows.Add(row);
+        await SaveAsync();
+    }
+
+    public async Task MoveHomeRowAsync(string row, int delta)
+    {
+        var rows = ActiveLibrary().HomeRows;
+        var index = rows.IndexOf(row);
+        if (index < 0 || rows.Count < 2) return;
+        var target = Math.Clamp(index + delta, 0, rows.Count - 1);
+        if (target == index) return;
+        rows.RemoveAt(index);
+        rows.Insert(target, row);
+        await SaveAsync();
+    }
+
     public async Task SaveCatalogAsync(CatalogSnapshot snapshot)
     {
         Directory.CreateDirectory(_root);
