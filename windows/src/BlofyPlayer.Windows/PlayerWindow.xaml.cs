@@ -90,7 +90,6 @@ public partial class PlayerWindow : Window
         _player.Playing += (_, _) => Dispatcher.Invoke(() =>
         {
             ApplyResumeOnce();
-            _automaticRecoveries = 0;
             _lastProgressAt = DateTimeOffset.UtcNow;
         });
         _player.EncounteredError += (_, _) => Dispatcher.Invoke(() =>
@@ -242,6 +241,9 @@ public partial class PlayerWindow : Window
         {
             _lastObservedTime = time;
             _lastProgressAt = DateTimeOffset.UtcNow;
+            if (_automaticRecoveries > 0 &&
+                DateTimeOffset.UtcNow - _playStartedAt > TimeSpan.FromSeconds(30))
+                _automaticRecoveries = 0;
         }
         else if (_player.IsPlaying && time > 0 &&
                  DateTimeOffset.UtcNow - _lastProgressAt > TimeSpan.FromSeconds(12))
