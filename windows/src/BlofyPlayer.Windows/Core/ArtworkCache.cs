@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Media.Imaging;
