@@ -520,6 +520,9 @@ public partial class MainWindow : Window
             BorderBrush = Brush("#443D2756"), BorderThickness = new Thickness(1),
             Padding = new Thickness(6), DisplayMemberPath = "Name"
         };
+        VirtualizingPanel.SetIsVirtualizing(channels, true);
+        VirtualizingPanel.SetVirtualizationMode(channels, VirtualizationMode.Recycling);
+        ScrollViewer.SetCanContentScroll(channels, true);
         Grid.SetColumn(channels, 2);
         grid.Children.Add(channels);
 
@@ -562,12 +565,14 @@ public partial class MainWindow : Window
 
         void FillChannels()
         {
-            channels.Items.Clear();
             var selectedCat = cats.SelectedItem as CategoryItem;
-            IEnumerable<StreamItem> filtered = all;
-            if (selectedCat is not null) filtered = filtered.Where(s => s.CategoryId == selectedCat.RemoteId);
-            foreach (var item in filtered) channels.Items.Add(item);
-            if (channels.Items.Count > 0) channels.SelectedIndex = 0;
+            IReadOnlyList<StreamItem> filtered = selectedCat is null
+                ? all
+                : CategoryItems("live", selectedCat.RemoteId);
+
+            channels.ItemsSource = null;
+            channels.ItemsSource = filtered;
+            if (filtered.Count > 0) channels.SelectedIndex = 0;
         }
 
         cats.SelectionChanged += (_, _) => FillChannels();
