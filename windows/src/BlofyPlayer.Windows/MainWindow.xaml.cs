@@ -80,7 +80,12 @@ public partial class MainWindow : Window
         if (_activeProvider is not null)
         {
             ProgressText.Text = "تحميل الكاش…";
-            var cached = await Task.Run(() => _catalog.LoadCachedAsync(_activeProvider));
+            var cached = StartupCatalogTransfer.Take(_activeProvider.Id);
+            if (cached is not null)
+                _catalog.AdoptSnapshot(cached);
+            else
+                cached = await Task.Run(() => _catalog.LoadCachedAsync(_activeProvider));
+
             if (cached is not null)
             {
                 ProgressText.Text = "فهرسة المحتوى…";
@@ -90,7 +95,10 @@ public partial class MainWindow : Window
                 ShowHome();
             }
 
-            if (_activationState?.CanUse() == true)
+            var cacheAge = cached is null
+                ? TimeSpan.MaxValue
+                : DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(cached.UpdatedAt);
+            if (_activationState?.CanUse() == true && (cached is null || cacheAge > TimeSpan.FromHours(6)))
                 _ = SyncCatalogAsync(false);
         }
         else ShowHome();
