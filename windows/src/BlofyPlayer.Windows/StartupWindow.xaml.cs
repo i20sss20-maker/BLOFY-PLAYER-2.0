@@ -2,6 +2,7 @@ using BlofyPlayer.Windows.Core;
 using BlofyPlayer.Windows.Core.Identity;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace BlofyPlayer.Windows;
 
@@ -11,9 +12,11 @@ public partial class StartupWindow : Window
     private readonly ActivationClient _activation = new();
     private readonly PortalService _portal = new();
     private readonly LocalStore _store = new();
-    private CancellationTokenSource? _pollCts;
+    private readonly DispatcherTimer _pollTimer = new() { Interval = TimeSpan.FromSeconds(4) };
     private ActivationCheckResponse? _activationState;
     private bool _loading;
+    private bool _checking;
+    private bool _autoEntryStarted;
 
     public StartupWindow()
     {
@@ -22,60 +25,45 @@ public partial class StartupWindow : Window
         ActivationCodeText.Text = _identity.ActivationCode;
         QrImage.Source = QrCodeHelper.Create(BlofyEndpoints.ActivationPortal(_identity));
 
+        _pollTimer.Tick += async (_, _) => await RefreshActivationAsync();
+
         Loaded += async (_, _) =>
         {
             try
             {
                 await _store.LoadAsync();
                 await RefreshActivationAsync();
-                StartPolling();
+                if (!_loading) _pollTimer.Start();
             }
             catch (Exception ex)
             {
                 App.LogCrash("StartupWindow.Loaded", ex);
                 ActivationStateText.Text = "تعذر تجهيز صفحة التفعيل";
                 TrialText.Text = ex.Message;
+                _pollTimer.Start();
             }
         };
 
         Closed += (_, _) =>
         {
-            _pollCts?.Cancel();
+            _pollTimer.Stop();
             _activation.Dispose();
             _portal.Dispose();
         };
     }
 
-    private void StartPolling()
-    {
-        _pollCts?.Cancel();
-        _pollCts = new CancellationTokenSource();
-        var token = _pollCts.Token;
-        _ = Task.Run(async () =>
-        {
-            while (!token.IsCancellationRequested)
-            {
-                try
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(4), token);
-                    if (token.IsCancellationRequested || _loading) break;
-                    await Dispatcher.InvokeAsync(RefreshActivationAsync).Task.Unwrap();
-                }
-                catch (OperationCanceledException) { break; }
-                catch { }
-            }
-        }, token);
-    }
-
     private async Task RefreshActivationAsync()
     {
-        if (_loading) return;
+        if (_loading || _checking) return;
+        _checking = true;
         ActivationStateText.Text = "جاري التحقق من حالة الجهاز…";
+        TrialText.Text = "الاتصال بخدمة BLOFY…";
         EnterButton.IsEnabled = false;
 
         try
         {
-            _activationState = await _activation.CheckAsync(_identity);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            _activationState = await _activation.CheckAsync(_identity, cancellationToken: timeout.Token);
             if (_activationState is null)
             {
                 ActivationStateText.Text = "تعذر التحقق من الجهاز";
@@ -89,11 +77,13 @@ public partial class StartupWindow : Window
                     ActivationStateText.Text = "الجهاز مفعّل ✓";
                     TrialText.Text = ExpiryText(false);
                     EnterButton.IsEnabled = true;
+                    await AutoEnterIfReadyAsync();
                     break;
                 case "trial":
                     ActivationStateText.Text = "التجربة مفعّلة ✓";
                     TrialText.Text = ExpiryText(true);
                     EnterButton.IsEnabled = true;
+                    await AutoEnterIfReadyAsync();
                     break;
                 case "expired":
                     ActivationStateText.Text = "انتهى التفعيل";
@@ -109,12 +99,34 @@ public partial class StartupWindow : Window
                     break;
             }
         }
+        catch (OperationCanceledException)
+        {
+            ActivationStateText.Text = "انتهت مهلة التحقق";
+            TrialText.Text = "اضغط «تحديث من الموقع» للمحاولة مرة ثانية.";
+        }
         catch (Exception ex)
         {
             App.LogCrash("Activation refresh", ex);
             ActivationStateText.Text = "تعذر الاتصال بخدمة التفعيل";
             TrialText.Text = "تحقق من اتصال الإنترنت ثم حاول مرة أخرى.";
         }
+        finally
+        {
+            _checking = false;
+        }
+    }
+
+    private async Task AutoEnterIfReadyAsync()
+    {
+        if (_autoEntryStarted || _loading || _activationState?.CanUse() != true) return;
+        _autoEntryStarted = true;
+        _pollTimer.Stop();
+        ActivationStateText.Text = _activationState.Status.Equals("trial", StringComparison.OrdinalIgnoreCase)
+            ? "التجربة جاهزة ✓"
+            : "الجهاز مفعّل ✓";
+        TrialText.Text = "جاري الانتقال إلى تحميل BLOFY…";
+        await Task.Delay(550);
+        await EnterBlofyAsync();
     }
 
     private string ExpiryText(bool trial)
@@ -146,7 +158,7 @@ public partial class StartupWindow : Window
     private async Task EnterBlofyAsync()
     {
         _loading = true;
-        _pollCts?.Cancel();
+        _pollTimer.Stop();
         EnterButton.IsEnabled = false;
         ActivationPanel.Visibility = Visibility.Collapsed;
         LoadingPanel.Visibility = Visibility.Visible;
@@ -155,7 +167,8 @@ public partial class StartupWindow : Window
         try
         {
             SetLoading(8, "التحقق من التفعيل…");
-            var fresh = await _activation.CheckAsync(_identity);
+            using var activationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            var fresh = await _activation.CheckAsync(_identity, cancellationToken: activationTimeout.Token);
             if (fresh?.CanUse() != true)
                 throw new InvalidOperationException("التفعيل غير متاح الآن. ارجع لصفحة الباركود وحدّث الحالة.");
 
@@ -275,7 +288,8 @@ public partial class StartupWindow : Window
         LoadingPanel.Visibility = Visibility.Collapsed;
         ActivationPanel.Visibility = Visibility.Visible;
         _loading = false;
+        _autoEntryStarted = false;
         _ = RefreshActivationAsync();
-        StartPolling();
+        _pollTimer.Start();
     }
 }
