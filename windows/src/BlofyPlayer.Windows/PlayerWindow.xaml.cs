@@ -25,7 +25,6 @@ public partial class PlayerWindow : Window
     private bool _fullscreen;
     private bool _resumeApplied;
     private readonly long _resumePosition;
-    private int _aspectIndex;
     private Rect _restoreBounds;
     private WindowStyle _restoreWindowStyle;
     private ResizeMode _restoreResizeMode;
@@ -148,7 +147,7 @@ public partial class PlayerWindow : Window
         if (!SeekSlider.IsMouseCaptureWithin) SeekSlider.Value = Math.Min(time, SeekSlider.Maximum);
         TimeText.Text = Format(time) + " / " + Format(length);
         PlayPauseButton.Content = _player.IsPlaying ? "⏸" : "▶";
-        TimelinePanel.Visibility = length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SeekSlider.Visibility = length > 0 ? Visibility.Visible : Visibility.Collapsed;
         PreviousButton.ToolTip = _playlist.Count > 0 ? "القناة السابقة" : "رجوع 10 ثوان";
         NextButton.ToolTip = _playlist.Count > 0 ? "القناة التالية" : "تقديم 10 ثوان";
     }
