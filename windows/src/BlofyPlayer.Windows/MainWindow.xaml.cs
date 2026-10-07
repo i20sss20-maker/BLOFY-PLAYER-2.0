@@ -1095,7 +1095,13 @@ public partial class MainWindow : Window
 
         var actions = Horizontal(0, 8, 0, 0);
         if (item.Kind == "movie")
+        {
             actions.Children.Add(Action("▶ تشغيل", true, async (_, _) => await PlayItemAsync(item)));
+        }
+        else if (item.Kind == "series")
+        {
+            actions.Children.Add(Action("▤ المواسم والحلقات", true, async (_, _) => await OpenEpisodesAsync(item)));
+        }
 
         var fav = Action(item.Favorite ? "★ إزالة من المفضلة" : "☆ إضافة للمفضلة", false, async (s, _) =>
         {
@@ -1166,56 +1172,23 @@ public partial class MainWindow : Window
         };
         ContentHost.Content = pageScroll;
 
-        if (item.Kind == "series" && _activeProvider is not null && _activeProvider.ProviderType == "xtream")
+    }
+
+    private async Task OpenEpisodesAsync(StreamItem series)
+    {
+        if (_activeProvider is null || _catalog is null || _activeProvider.ProviderType != "xtream")
         {
-            var loading = Txt("جاري تحميل المواسم والحلقات…", 13, Muted, marginBottom: 14);
-            root.Children.Add(loading);
-
-            try
-            {
-                var episodes = await _catalog!.Xtream(_activeProvider)
-                    .GetEpisodesAsync(_activeProvider, item.RemoteId);
-                root.Children.Remove(loading);
-
-                if (episodes.Count == 0)
-                {
-                    root.Children.Add(Txt("لا توجد حلقات متاحة من السيرفر.", 13, Muted, marginBottom: 18));
-                }
-                else
-                {
-                    foreach (var season in episodes.GroupBy(e => e.Season).OrderBy(g => g.Key))
-                    {
-                        root.Children.Add(Txt("الموسم " + season.Key, 20, Text,
-                            FontWeights.Bold, marginTop: 10, marginBottom: 10));
-
-                        var row = new WrapPanel
-                        {
-                            Orientation = Orientation.Horizontal,
-                            FlowDirection = FlowDirection.RightToLeft,
-                            Margin = new Thickness(0, 0, 0, 18)
-                        };
-                        foreach (var ep in season.OrderBy(e => e.Episode))
-                        {
-                            var epButton = Action(
-                                "الحلقة " + ep.Episode + Environment.NewLine + ep.Title,
-                                false,
-                                async (_, _) => await PlayEpisodeAsync(item, ep, episodes));
-                            epButton.Width = 205;
-                            epButton.Height = 70;
-                            epButton.HorizontalContentAlignment = HorizontalAlignment.Right;
-                            epButton.Margin = new Thickness(0, 0, 10, 10);
-                            row.Children.Add(epButton);
-                        }
-                        root.Children.Add(row);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                root.Children.Remove(loading);
-                root.Children.Add(Txt("تعذر تحميل الحلقات: " + ex.Message, 12, Muted, marginBottom: 18));
-            }
+            MessageBox.Show(this, "الحلقات متاحة لقوائم Xtream فقط.", "BLOFY PLAYER");
+            return;
         }
+
+        var window = new EpisodesWindow(
+            series,
+            _store,
+            async ct => await _catalog.Xtream(_activeProvider).GetEpisodesAsync(_activeProvider, series.RemoteId, ct),
+            async (episode, all) => await PlayEpisodeAsync(series, episode, all))
+        { Owner = this };
+        window.ShowDialog();
     }
 
     private async Task PlayItemAsync(StreamItem item)
