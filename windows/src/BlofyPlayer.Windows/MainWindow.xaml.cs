@@ -870,8 +870,17 @@ public partial class MainWindow : Window
                 resume = state.PositionMs;
         }
 
-        var sameKind = item.Kind == "live" ? Items("live") : [];
-        var idx = item.Kind == "live" ? sameKind.FindIndex(x => x.Key == item.Key) : -1;
+        var sameKind = item.Kind == "live" ? Items("live") : Array.Empty<StreamItem>();
+        var idx = -1;
+        if (item.Kind == "live")
+        {
+            for (var i = 0; i < sameKind.Count; i++)
+            {
+                if (!sameKind[i].Key.Equals(item.Key, StringComparison.Ordinal)) continue;
+                idx = i;
+                break;
+            }
+        }
         Func<StreamItem, string>? resolver = item.Kind == "live"
             ? s => _activeProvider.ProviderType == "m3u" ? s.DirectSource :
                 _catalog!.Xtream(_activeProvider).StreamUrl(_activeProvider, s, _store.State.Settings.LiveFormat)
