@@ -2,6 +2,7 @@ using BlofyPlayer.Windows.Core;
 using BlofyPlayer.Windows.Core.Identity;
 using BlofyPlayer.Windows.Core.Playback;
 using LibVLCSharp.WPF;
+using Microsoft.Win32;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -50,6 +51,8 @@ public partial class MainWindow : Window
     private async Task InitializeAsync()
     {
         await _store.LoadAsync();
+        ApplyTheme();
+        UpdateProfileLabel();
         _catalog = new CatalogCoordinator(_store);
         await CheckActivationAsync();
         await SyncPortalAsync();
@@ -192,6 +195,7 @@ public partial class MainWindow : Window
             case "series": ShowBrowser("series"); break;
             case "favorites": ShowFavorites(); break;
             case "search": ShowSearch(); break;
+            case "profiles": ShowProfiles(); break;
             case "providers": ShowProviders(); break;
             case "settings": ShowSettings(); break;
             default: ShowHome(); break;
@@ -244,14 +248,15 @@ public partial class MainWindow : Window
         counts.Children.Add(Stat("القنوات", Items("live").Count));
         counts.Children.Add(Stat("الأفلام", Items("movie").Count, 12));
         counts.Children.Add(Stat("المسلسلات", Items("series").Count, 12));
-        counts.Children.Add(Stat("المفضلة", _store.State.Favorites.Count, 12));
+        counts.Children.Add(Stat("المفضلة", _store.FavoritesCount, 12));
         root.Children.Add(counts);
 
-        var continueItems = _store.State.WatchStates.Values
+        var continueItems = _store.WatchStates
             .Where(w => !w.Completed && w.PositionMs > 30_000)
             .OrderByDescending(w => w.UpdatedAt)
             .Select(w => _catalog?.Snapshot.Streams.FirstOrDefault(s => s.Key == w.Key))
-            .Where(s => s is not null).Cast<StreamItem>().Take(12).ToList();
+            .Where(s => s is not null).Cast<StreamItem>()
+            .Where(_store.IsContentVisible).Take(12).ToList();
 
         if (continueItems.Count > 0)
             root.Children.Add(ContentRow("متابعة المشاهدة", continueItems));
@@ -359,7 +364,8 @@ public partial class MainWindow : Window
             Padding = new Thickness(6)
         };
         cats.Items.Add("الكل");
-        foreach (var cat in (_catalog?.Snapshot.Categories ?? []).Where(c => c.Kind == kind))
+        foreach (var cat in (_catalog?.Snapshot.Categories ?? [])
+                     .Where(c => c.Kind == kind && !_store.IsCategoryHidden(kind, c.RemoteId)))
             cats.Items.Add(cat);
         cats.DisplayMemberPath = "Name";
         cats.SelectedIndex = 0;
@@ -411,7 +417,8 @@ public partial class MainWindow : Window
             Padding = new Thickness(6)
         };
         cats.Items.Add("الكل");
-        foreach (var cat in (_catalog?.Snapshot.Categories ?? []).Where(c => c.Kind == "live"))
+        foreach (var cat in (_catalog?.Snapshot.Categories ?? [])
+                     .Where(c => c.Kind == "live" && !_store.IsCategoryHidden("live", c.RemoteId)))
             cats.Items.Add(cat);
         cats.DisplayMemberPath = "Name";
         cats.SelectedIndex = 0;
@@ -715,8 +722,10 @@ public partial class MainWindow : Window
         else url = _catalog!.Xtream(_activeProvider).StreamUrl(_activeProvider, item, _store.State.Settings.LiveFormat);
 
         long resume = 0;
-        if (item.Kind != "live" && _store.State.WatchStates.TryGetValue(item.Key, out var state) && !state.Completed && state.PositionMs > 30_000)
+        var itemState = _store.WatchState(item.Key);
+        if (item.Kind != "live" && itemState is not null && !itemState.Completed && itemState.PositionMs > 30_000)
         {
+            var state = itemState;
             if (!_store.State.Settings.ResumePrompt ||
                 MessageBox.Show(this, "متابعة من " + TimeSpan.FromMilliseconds(state.PositionMs).ToString(@"hh\:mm\:ss") + "؟", "BLOFY PLAYER",
                     MessageBoxButton.YesNo) == MessageBoxResult.Yes)
@@ -747,8 +756,9 @@ public partial class MainWindow : Window
         if (_activeProvider is null) return;
         var key = episode.Key;
         var resume = 0L;
-        if (_store.State.WatchStates.TryGetValue(key, out var state) && !state.Completed && state.PositionMs > 30_000)
-            resume = state.PositionMs;
+        var episodeState = _store.WatchState(key);
+        if (episodeState is not null && !episodeState.Completed && episodeState.PositionMs > 30_000)
+            resume = episodeState.PositionMs;
         var url = _catalog!.Xtream(_activeProvider).EpisodeUrl(_activeProvider, episode);
         var player = new PlayerWindow(series.Name + " • S" + episode.Season + "E" + episode.Episode,
             url, resume, savePosition: async (pos, len) => await _store.SaveWatchStateAsync(key, pos, len))
@@ -760,7 +770,7 @@ public partial class MainWindow : Window
     {
         DisposePreview();
         PageTitle.Text = "المفضلة";
-        var items = _catalog?.Snapshot.Streams.Where(i => i.Favorite).ToList() ?? [];
+        var items = _catalog?.Snapshot.Streams.Where(i => i.Favorite && _store.IsContentVisible(i)).ToList() ?? [];
         if (items.Count == 0)
         {
             ContentHost.Content = EmptyState("المفضلة فارغة", "اضغط ☆ في تفاصيل الفيلم أو المسلسل لإضافته.");
@@ -787,12 +797,26 @@ public partial class MainWindow : Window
             var q = NormalizeSearch(search.Text);
             if (q.Length == 0) return;
             foreach (var item in (_catalog?.Snapshot.Streams ?? [])
-                         .Where(i => NormalizeSearch(i.Name).Contains(q, StringComparison.OrdinalIgnoreCase))
+                         .Where(i => _store.IsContentVisible(i) &&
+                                     NormalizeSearch(i.Name).Contains(q, StringComparison.OrdinalIgnoreCase))
                          .Take(150))
                 results.Children.Add(ContentCard(item, item.Kind == "live" ? 260 : 160));
         }
 
         search.TextChanged += (_, _) => Run();
+        search.KeyDown += async (_, e) =>
+        {
+            if (e.Key != Key.Enter || search.Text.Trim().Length < 2) return;
+            await _store.AddRecentSearchAsync(search.Text);
+        };
+
+        var recent = _store.ActiveLibrary().RecentSearches;
+        if (recent.Count > 0)
+        {
+            root.Children.Insert(1, Txt("عمليات البحث الأخيرة: " + string.Join(" • ", recent.Take(8)),
+                11, Muted, marginTop: 8));
+        }
+
         ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         search.Focus();
     }
@@ -803,6 +827,104 @@ public partial class MainWindow : Window
             .Replace("أ", "ا").Replace("إ", "ا").Replace("آ", "ا")
             .Replace("ة", "ه").Replace("ى", "ي")
             .Replace("ـ", "");
+    }
+
+    private void ShowProfiles()
+    {
+        DisposePreview();
+        PageTitle.Text = "الملفات الشخصية";
+        var root = Vertical();
+        var active = _store.ActiveProfile();
+
+        root.Children.Add(Txt("كل ملف له مفضلته وسجل مشاهدته وإعداداته الخاصة بالمحتوى.", 12, Muted, marginBottom: 16));
+
+        foreach (var profile in _store.State.Profiles.OrderBy(p => p.CreatedAt))
+        {
+            var card = Card(0, 0, 0, 12);
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var info = Vertical();
+            var badges = profile.Kids ? " • أطفال" : profile.Guest ? " • ضيف" : "";
+            if (!string.IsNullOrWhiteSpace(profile.PinHash)) badges += " • PIN";
+            info.Children.Add(Txt(profile.Name + (profile.Id == active.Id ? "  ✓" : ""), 18, Text, FontWeights.Bold));
+            info.Children.Add(Txt("ملف BLOFY" + badges, 11, profile.Id == active.Id ? Accent : Muted, marginTop: 4));
+            grid.Children.Add(info);
+
+            var actions = Horizontal();
+            actions.Children.Add(Action(profile.Id == active.Id ? "الحالي" : "فتح", profile.Id != active.Id, async (_, _) =>
+            {
+                if (profile.Id == _store.ActiveProfile().Id) return;
+                string? pin = null;
+                if (!string.IsNullOrWhiteSpace(profile.PinHash))
+                {
+                    pin = UiDialogs.Prompt(this, "رمز PIN", "أدخل رمز PIN لهذا الملف", password: true);
+                    if (pin is null) return;
+                }
+                if (!await _store.SelectProfileAsync(profile.Id, pin))
+                {
+                    MessageBox.Show(this, "رمز PIN غير صحيح.", "BLOFY PLAYER");
+                    return;
+                }
+
+                UpdateProfileLabel();
+                _catalog?.Snapshot.Streams.ToList().ForEach(x => x.Favorite = false);
+                if (_catalog is not null) _store.ApplyFavoriteState(_catalog.Snapshot.Streams);
+                _currentPage = "home";
+                ShowHome();
+            }));
+
+            actions.Children.Add(Action("PIN", false, async (_, _) =>
+            {
+                var pin = UiDialogs.Prompt(this, "PIN", "أدخل PIN جديد من 4 إلى 8 أرقام، أو اتركه فارغًا للإزالة", password: true);
+                if (pin is null) return;
+                try
+                {
+                    await _store.SetProfilePinAsync(profile.Id, string.IsNullOrWhiteSpace(pin) ? null : pin);
+                    ShowProfiles();
+                }
+                catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+            }, 8));
+
+            if (_store.State.Profiles.Count > 1)
+                actions.Children.Add(Action("حذف", false, async (_, _) =>
+                {
+                    if (!UiDialogs.Confirm(this, "حذف الملف", "حذف «" + profile.Name + "» وكل مفضلته وسجله؟")) return;
+                    await _store.DeleteProfileAsync(profile.Id);
+                    UpdateProfileLabel();
+                    ShowProfiles();
+                }, 8));
+
+            Grid.SetColumn(actions, 1);
+            grid.Children.Add(actions);
+            card.Child = grid;
+            root.Children.Add(card);
+        }
+
+        var create = Horizontal(0, 8, 0, 0);
+        create.Children.Add(Action("+ ملف", true, async (_, _) =>
+        {
+            var name = UiDialogs.Prompt(this, "ملف جديد", "اسم الملف");
+            if (string.IsNullOrWhiteSpace(name)) return;
+            try { await _store.CreateProfileAsync(name); ShowProfiles(); }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        }));
+        create.Children.Add(Action("+ أطفال", false, async (_, _) =>
+        {
+            var name = UiDialogs.Prompt(this, "ملف أطفال", "اسم ملف الأطفال", initial: "أطفال");
+            if (string.IsNullOrWhiteSpace(name)) return;
+            try { await _store.CreateProfileAsync(name, kids: true); ShowProfiles(); }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        }, 8));
+        create.Children.Add(Action("+ ضيف", false, async (_, _) =>
+        {
+            try { await _store.CreateProfileAsync("ضيف", guest: true); ShowProfiles(); }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        }, 8));
+        root.Children.Add(create);
+
+        ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
     private void ShowProviders()
@@ -958,7 +1080,10 @@ public partial class MainWindow : Window
         var root = Vertical();
 
         var theme = Choice("المظهر", [("داكن BLOFY", "dark"), ("فاتح", "light")], _store.State.Settings.Theme);
-        var language = Choice("اللغة", [("العربية", "ar"), ("English", "en")], _store.State.Settings.Language);
+        var language = Choice("اللغة", [
+            ("العربية", "ar"), ("English", "en"), ("Français", "fr"), ("Español", "es"),
+            ("Deutsch", "de"), ("Türkçe", "tr"), ("Português", "pt"), ("Italiano", "it")
+        ], _store.State.Settings.Language);
         var liveFormat = Choice("صيغة البث المباشر", [("TS", "ts"), ("HLS / M3U8", "m3u8")], _store.State.Settings.LiveFormat);
         var subtitle = Choice("الترجمة", [("العربية أولًا", "ar"), ("تلقائي", "auto"), ("إيقاف", "off")], _store.State.Settings.SubtitleLanguage);
         var subtitleSize = Choice("حجم الترجمة", [("صغير", "small"), ("متوسط", "medium"), ("كبير", "large")], _store.State.Settings.SubtitleSize);
@@ -992,9 +1117,32 @@ public partial class MainWindow : Window
             _store.State.Settings.UserAgent = string.IsNullOrWhiteSpace(userAgent.Text)
                 ? "BLOFY PLAYER/2.0 (Windows)" : userAgent.Text.Trim();
             await _store.SaveAsync();
+            ApplyTheme();
             MessageBox.Show(this, "تم حفظ الإعدادات.", "BLOFY PLAYER");
+            ShowSettings();
         }, 0, 20, 0, 0));
 
+        root.Children.Add(Txt("الملفات والحماية", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
+        root.Children.Add(Action("إدارة الملفات وPIN", false, (_, _) =>
+        {
+            _currentPage = "profiles";
+            ShowProfiles();
+        }));
+
+        root.Children.Add(Txt("النسخ الاحتياطي", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
+        var backupRow = Horizontal();
+        backupRow.Children.Add(Action("تصدير نسخة احتياطية", false, async (_, _) => await ExportBackupAsync()));
+        backupRow.Children.Add(Action("استعادة نسخة", false, async (_, _) => await RestoreBackupAsync(), 8));
+        root.Children.Add(backupRow);
+
+        root.Children.Add(Txt("التحديث والتشخيص", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
+        var serviceRow = Horizontal();
+        serviceRow.Children.Add(Action("فحص تحديث Windows", false, async (_, _) => await CheckWindowsUpdateAsync()));
+        serviceRow.Children.Add(Action("تشخيص BLOFY", false, (_, _) => ShowDiagnostics(), 8));
+        serviceRow.Children.Add(Action("تنظيف الكاش", false, (_, _) => CleanStorage(), 8));
+        root.Children.Add(serviceRow);
+
+        root.Children.Add(Txt("BLOFY PLAYER Windows 0.3.0", 11, Muted, marginTop: 26));
         ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
@@ -1009,6 +1157,131 @@ public partial class MainWindow : Window
 
     private sealed record ComboItem(string Label, string Value);
 
+    private void UpdateProfileLabel()
+    {
+        var profile = _store.ActiveProfile();
+        ActiveProfileText.Text = profile.Name + (profile.Kids ? " • أطفال" : profile.Guest ? " • ضيف" : "");
+    }
+
+    private void ApplyTheme()
+    {
+        var light = _store.State.Settings.Theme.Equals("light", StringComparison.OrdinalIgnoreCase);
+        var background = light ? "#F7F5FA" : "#08060D";
+        var surface = light ? "#FFFFFF" : "#241536";
+        var surface2 = light ? "#F0EBF5" : "#180F23";
+        var sidebar = light ? "#F3EFF7" : "#100A18";
+        var text = light ? "#17151D" : "#F3F4F6";
+        var muted = light ? "#6B6175" : "#C9BCD9";
+        var accent = light ? "#6D28D9" : "#D0B2FF";
+        var border = light ? "#D8D0E2" : "#665E437A";
+        var primaryText = light ? "#FFFFFF" : "#08060D";
+
+        Bg.Color = Brush(background).Color;
+        Surface.Color = Brush(surface).Color;
+        Surface2.Color = Brush(surface2).Color;
+        Text.Color = Brush(text).Color;
+        Muted.Color = Brush(muted).Color;
+        Accent.Color = Brush(accent).Color;
+
+        SetResourceColor("BackgroundBrush", background);
+        SetResourceColor("SurfaceBrush", surface);
+        SetResourceColor("Surface2Brush", surface2);
+        SetResourceColor("SidebarBrush", sidebar);
+        SetResourceColor("TextBrush", text);
+        SetResourceColor("MutedBrush", muted);
+        SetResourceColor("AccentBrush", accent);
+        SetResourceColor("BorderBrush", border);
+        SetResourceColor("PrimaryTextBrush", primaryText);
+        Background = Bg;
+    }
+
+    private static void SetResourceColor(string key, string color)
+    {
+        if (Application.Current.Resources[key] is SolidColorBrush brush)
+            brush.Color = Brush(color).Color;
+    }
+
+    private async Task ExportBackupAsync()
+    {
+        try
+        {
+            var dialog = new SaveFileDialog
+            {
+                Title = "تصدير نسخة BLOFY",
+                Filter = "BLOFY Backup (*.blofy.json)|*.blofy.json|JSON (*.json)|*.json",
+                FileName = "BLOFY-Backup-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + ".blofy.json"
+            };
+            if (dialog.ShowDialog(this) != true) return;
+            await File.WriteAllTextAsync(dialog.FileName, BackupService.Export(_store));
+            MessageBox.Show(this, "تم حفظ النسخة الاحتياطية بدون بيانات الدخول.", "BLOFY PLAYER");
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+    }
+
+    private async Task RestoreBackupAsync()
+    {
+        try
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "استعادة نسخة BLOFY",
+                Filter = "BLOFY Backup (*.blofy.json;*.json)|*.blofy.json;*.json"
+            };
+            if (dialog.ShowDialog(this) != true) return;
+            var json = await File.ReadAllTextAsync(dialog.FileName);
+            await BackupService.RestoreAsync(_store, json);
+            ApplyTheme();
+            if (_catalog is not null) _store.ApplyFavoriteState(_catalog.Snapshot.Streams);
+            MessageBox.Show(this, "تمت الاستعادة.", "BLOFY PLAYER");
+            ShowSettings();
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+    }
+
+    private async Task CheckWindowsUpdateAsync()
+    {
+        ProgressText.Text = "فحص تحديث Windows…";
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var update = await WindowsUpdateService.CheckAsync(timeout.Token);
+            if (update is null)
+            {
+                MessageBox.Show(this, "لا يوجد إصدار Windows منشور أحدث حاليًا.", "BLOFY PLAYER");
+                return;
+            }
+            var result = MessageBox.Show(this,
+                "الإصدار المنشور: " + update.Version + Environment.NewLine +
+                (string.IsNullOrWhiteSpace(update.Notes) ? "" : update.Notes + Environment.NewLine) +
+                "فتح صفحة التحميل؟",
+                "تحديث BLOFY PLAYER", MessageBoxButton.YesNo);
+            if (result == MessageBoxResult.Yes)
+                Process.Start(new ProcessStartInfo(update.DownloadUrl) { UseShellExecute = true });
+        }
+        catch (Exception ex) { MessageBox.Show(this, "تعذر فحص التحديث: " + ex.Message, "BLOFY PLAYER"); }
+        finally { ProgressText.Text = ""; }
+    }
+
+    private void ShowDiagnostics()
+    {
+        var report = DiagnosticService.Build(_store, _identity, ActivationStatusText.Text, _catalog?.Snapshot);
+        Clipboard.SetText(report);
+        MessageBox.Show(this, report + Environment.NewLine + Environment.NewLine + "تم نسخ التقرير للحافظة.",
+            "تشخيص BLOFY PLAYER");
+    }
+
+    private void CleanStorage()
+    {
+        var before = DiagnosticService.DirectoryBytes(_store.RootPath);
+        var removed = _store.CleanCatalogCache();
+        var after = DiagnosticService.DirectoryBytes(_store.RootPath);
+        MessageBox.Show(this,
+            "تم حذف " + removed + " ملفات كتالوج مؤقتة." + Environment.NewLine +
+            "المساحة المحررة: " + DiagnosticService.FormatBytes(Math.Max(0, before - after)) +
+            Environment.NewLine + "بيانات الدخول والمفضلة والسجل لم تُحذف.",
+            "BLOFY PLAYER");
+    }
+
     private void DisposePreview()
     {
         if (_previewPlayback is null) return;
@@ -1018,7 +1291,9 @@ public partial class MainWindow : Window
     }
 
     private List<StreamItem> Items(string kind) =>
-        _catalog?.Snapshot.Streams.Where(s => s.Kind == kind).ToList() ?? [];
+        _catalog?.Snapshot.Streams
+            .Where(s => s.Kind == kind && _store.IsContentVisible(s))
+            .ToList() ?? [];
 
     private UIElement ContentRow(string title, IReadOnlyList<StreamItem> items)
     {
