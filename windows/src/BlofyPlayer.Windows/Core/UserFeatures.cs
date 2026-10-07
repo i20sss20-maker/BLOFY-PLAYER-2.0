@@ -89,7 +89,7 @@ public sealed class BackupPayload
 {
     public int Schema { get; set; } = 2;
     public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-    public string AppVersion { get; set; } = "windows-0.3.0";
+    public string AppVersion { get; set; } = "windows-0.4.0";
     public string ProviderId { get; set; } = "";
     public string ProviderName { get; set; } = "";
     public string ProfileId { get; set; } = "";
@@ -184,7 +184,7 @@ public static class ProfileCloudService
             BaseAddress = new Uri(BaseUrl),
             Timeout = TimeSpan.FromSeconds(15)
         };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.3");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4");
         return client;
     }
 
@@ -397,7 +397,7 @@ public static class WindowsUpdateService
     public static async Task<WindowsUpdateInfo?> CheckAsync(CancellationToken ct = default)
     {
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.3");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4");
         using var response = await client.GetAsync(ReleasesApi, ct);
         if (!response.IsSuccessStatusCode) return null;
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
@@ -435,7 +435,7 @@ public static class DiagnosticService
         var root = store.RootPath;
         return string.Join(Environment.NewLine,
             "BLOFY PLAYER — Windows Diagnostics",
-            "Version: Windows 0.3.0",
+            "Version: Windows 0.4.0",
             "Device: " + identity.DeviceId,
             "Activation: " + activation,
             "Windows: " + Environment.OSVersion.VersionString,
