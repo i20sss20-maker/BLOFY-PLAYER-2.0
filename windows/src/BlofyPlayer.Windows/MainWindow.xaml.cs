@@ -1,5 +1,7 @@
 using BlofyPlayer.Windows.Core;
 using BlofyPlayer.Windows.Core.Identity;
+using BlofyPlayer.Windows.Core.Playback;
+using LibVLCSharp.WPF;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,6 +28,8 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _syncCts;
     private ActivationCheckResponse? _activationState;
     private ProviderAccount? _activeProvider;
+    private PlaybackService? _previewPlayback;
+    private int _liveSelectionSerial;
     private string _currentPage = "home";
 
     public MainWindow()
@@ -36,6 +40,7 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _syncCts?.Cancel();
+            DisposePreview();
             _catalog?.Dispose();
             _activation.Dispose();
             _portal.Dispose();
@@ -178,6 +183,7 @@ public partial class MainWindow : Window
 
     private void RefreshCurrentPage()
     {
+        DisposePreview();
         switch (_currentPage)
         {
             case "home": ShowHome(); break;
@@ -201,6 +207,7 @@ public partial class MainWindow : Window
 
     private void ShowHome()
     {
+        DisposePreview();
         PageTitle.Text = "الرئيسية";
         var root = Vertical();
 
@@ -322,6 +329,12 @@ public partial class MainWindow : Window
 
     private void ShowBrowser(string kind)
     {
+        if (kind == "live")
+        {
+            ShowLiveBrowser();
+            return;
+        }
+        DisposePreview();
         var label = kind switch { "live" => "البث المباشر", "movie" => "الأفلام", _ => "المسلسلات" };
         PageTitle.Text = label;
 
@@ -370,6 +383,169 @@ public partial class MainWindow : Window
         cats.SelectionChanged += (_, _) => Fill();
         Fill();
 
+        ContentHost.Content = grid;
+    }
+
+    private void ShowLiveBrowser()
+    {
+        DisposePreview();
+        PageTitle.Text = "البث المباشر";
+        var all = Items("live");
+        if (all.Count == 0)
+        {
+            ContentHost.Content = EmptyState("لا توجد قنوات محمّلة", "اضغط تحديث أو أضف قائمة من «القوائم».");
+            return;
+        }
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(210) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(330) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+
+        var cats = new ListBox
+        {
+            Background = Surface2, Foreground = Text,
+            BorderBrush = Brush("#443D2756"), BorderThickness = new Thickness(1),
+            Padding = new Thickness(6)
+        };
+        cats.Items.Add("الكل");
+        foreach (var cat in (_catalog?.Snapshot.Categories ?? []).Where(c => c.Kind == "live"))
+            cats.Items.Add(cat);
+        cats.DisplayMemberPath = "Name";
+        cats.SelectedIndex = 0;
+        grid.Children.Add(cats);
+
+        var channels = new ListBox
+        {
+            Background = Surface2, Foreground = Text,
+            BorderBrush = Brush("#443D2756"), BorderThickness = new Thickness(1),
+            Padding = new Thickness(6), DisplayMemberPath = "Name"
+        };
+        Grid.SetColumn(channels, 2);
+        grid.Children.Add(channels);
+
+        var right = Vertical();
+        Grid.SetColumn(right, 4);
+        grid.Children.Add(right);
+
+        var previewBorder = new Border
+        {
+            Height = 330, CornerRadius = new CornerRadius(14),
+            Background = Brushes.Black, BorderBrush = Brush("#665E437A"), BorderThickness = new Thickness(1),
+            ClipToBounds = true
+        };
+        _previewPlayback = new PlaybackService();
+        var video = new VideoView { MediaPlayer = _previewPlayback.MediaPlayer };
+        previewBorder.Child = video;
+        right.Children.Add(previewBorder);
+
+        var channelTitle = Txt("اختر قناة", 20, Text, FontWeights.Bold, 0, 12, 0, 4);
+        right.Children.Add(channelTitle);
+        var nowText = Txt("", 11, Muted);
+        right.Children.Add(nowText);
+
+        var actions = Horizontal(0, 10, 0, 8);
+        var playFull = Action("▶ ملء الشاشة", true, async (_, _) =>
+        {
+            if (channels.SelectedItem is StreamItem selected) await PlayItemAsync(selected);
+        });
+        actions.Children.Add(playFull);
+        right.Children.Add(actions);
+
+        right.Children.Add(Txt("دليل البرامج EPG", 15, Accent, FontWeights.Bold, 0, 10, 0, 8));
+        var epgPanel = Vertical();
+        right.Children.Add(new ScrollViewer
+        {
+            Content = epgPanel,
+            MaxHeight = 270,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        });
+
+        void FillChannels()
+        {
+            channels.Items.Clear();
+            var selectedCat = cats.SelectedItem as CategoryItem;
+            IEnumerable<StreamItem> filtered = all;
+            if (selectedCat is not null) filtered = filtered.Where(s => s.CategoryId == selectedCat.RemoteId);
+            foreach (var item in filtered) channels.Items.Add(item);
+            if (channels.Items.Count > 0) channels.SelectedIndex = 0;
+        }
+
+        cats.SelectionChanged += (_, _) => FillChannels();
+        channels.MouseDoubleClick += async (_, _) =>
+        {
+            if (channels.SelectedItem is StreamItem selected) await PlayItemAsync(selected);
+        };
+
+        channels.SelectionChanged += async (_, _) =>
+        {
+            if (channels.SelectedItem is not StreamItem selected || _activeProvider is null) return;
+            var serial = ++_liveSelectionSerial;
+            channelTitle.Text = selected.Name;
+            nowText.Text = selected.ArchiveEnabled
+                ? "يدعم الاسترجاع حتى " + selected.ArchiveDurationDays + " يوم"
+                : "بث مباشر";
+
+            if (_store.State.Settings.AutoplayLive && _previewPlayback is not null)
+            {
+                var url = _activeProvider.ProviderType == "m3u"
+                    ? selected.DirectSource
+                    : _catalog!.Xtream(_activeProvider).StreamUrl(_activeProvider, selected, _store.State.Settings.LiveFormat);
+                _previewPlayback.Play(url);
+            }
+
+            epgPanel.Children.Clear();
+            epgPanel.Children.Add(Txt("جاري تحميل الدليل…", 11, Muted));
+            if (_activeProvider.ProviderType != "xtream")
+            {
+                epgPanel.Children.Clear();
+                epgPanel.Children.Add(Txt("EPG غير متاح لهذه القائمة.", 11, Muted));
+                return;
+            }
+
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                var epg = await _catalog!.Xtream(_activeProvider).GetShortEpgAsync(_activeProvider, selected.RemoteId, timeout.Token);
+                if (serial != _liveSelectionSerial) return;
+                epgPanel.Children.Clear();
+                if (epg.Count == 0)
+                {
+                    epgPanel.Children.Add(Txt("لا توجد بيانات EPG من السيرفر.", 11, Muted));
+                    return;
+                }
+
+                var now = DateTimeOffset.Now;
+                foreach (var entry in epg)
+                {
+                    var isNow = entry.Start <= now && entry.End > now;
+                    var text = entry.Start.ToLocalTime().ToString("HH:mm") + "  " + entry.Title;
+                    if (isNow) text = "● الآن  " + text;
+                    var button = Action(text, isNow, async (_, _) =>
+                    {
+                        if (!selected.ArchiveEnabled || entry.End > DateTimeOffset.Now)
+                            return;
+                        var catchupUrl = _catalog!.Xtream(_activeProvider).CatchupUrl(_activeProvider, selected, entry.Start, entry.End);
+                        var player = new PlayerWindow(selected.Name + " • " + entry.Title, catchupUrl) { Owner = this };
+                        player.ShowDialog();
+                        await Task.CompletedTask;
+                    }, 0, 0, 0, 6);
+                    button.HorizontalContentAlignment = HorizontalAlignment.Right;
+                    button.ToolTip = entry.Description;
+                    epgPanel.Children.Add(button);
+                }
+            }
+            catch
+            {
+                if (serial != _liveSelectionSerial) return;
+                epgPanel.Children.Clear();
+                epgPanel.Children.Add(Txt("تعذر تحميل EPG الآن.", 11, Muted));
+            }
+        };
+
+        FillChannels();
         ContentHost.Content = grid;
     }
 
@@ -428,7 +604,20 @@ public partial class MainWindow : Window
 
     private async Task ShowDetailsAsync(StreamItem item)
     {
+        DisposePreview();
         PageTitle.Text = item.Name;
+
+        ProviderDetails? providerDetails = null;
+        if (_activeProvider is not null && _activeProvider.ProviderType == "xtream")
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                providerDetails = await _catalog!.Xtream(_activeProvider).GetDetailsAsync(_activeProvider, item, timeout.Token);
+            }
+            catch { }
+        }
+
         var root = Vertical();
 
         var hero = new Border
@@ -445,11 +634,24 @@ public partial class MainWindow : Window
         info.Children.Add(Txt(item.Kind == "series" ? "BLOFY SERIES" : "BLOFY MOVIE", 10, Accent, FontWeights.Bold));
         info.Children.Add(Txt(item.Name, 30, Text, FontWeights.Bold, 0, 8, 0, 6));
 
-        var meta = string.Join("  •  ", new[] { item.Year, item.Genre, string.IsNullOrWhiteSpace(item.Rating) ? "" : "★ " + item.Rating, item.Duration }
+        var detailGenre = providerDetails?.Genre is { Length: > 0 } dg ? dg : item.Genre;
+        var detailRating = providerDetails?.Rating is { Length: > 0 } dr ? dr : item.Rating;
+        var detailDuration = providerDetails?.Duration is { Length: > 0 } dd ? dd : item.Duration;
+        var detailRelease = providerDetails?.ReleaseDate is { Length: > 0 } rd ? rd : item.ReleaseDate;
+        var detailPlot = providerDetails?.Plot is { Length: > 0 } dp ? dp : item.Plot;
+        var meta = string.Join("  •  ", new[] { item.Year, detailRelease, detailGenre, string.IsNullOrWhiteSpace(detailRating) ? "" : "★ " + detailRating, detailDuration }
             .Where(s => !string.IsNullOrWhiteSpace(s)));
         info.Children.Add(Txt(meta, 12, Muted));
-        if (!string.IsNullOrWhiteSpace(item.Plot))
-            info.Children.Add(Txt(item.Plot, 13, Text, FontWeights.Normal, 0, 14, 0, 14));
+        if (!string.IsNullOrWhiteSpace(providerDetails?.Country))
+            info.Children.Add(Txt("الدولة: " + providerDetails.Country, 11, Accent, marginTop: 7));
+        if (!string.IsNullOrWhiteSpace(providerDetails?.Network))
+            info.Children.Add(Txt("الشبكة: " + providerDetails.Network, 11, Muted, marginTop: 4));
+        if (!string.IsNullOrWhiteSpace(detailPlot))
+            info.Children.Add(Txt(detailPlot, 13, Text, FontWeights.Normal, 0, 14, 0, 14));
+        if (!string.IsNullOrWhiteSpace(providerDetails?.Cast))
+            info.Children.Add(Txt("الممثلون: " + providerDetails.Cast, 11, Muted, marginBottom: 6));
+        if (!string.IsNullOrWhiteSpace(providerDetails?.Director))
+            info.Children.Add(Txt("المخرج: " + providerDetails.Director, 11, Muted, marginBottom: 6));
 
         var actions = Horizontal();
         if (item.Kind == "movie")
@@ -556,6 +758,7 @@ public partial class MainWindow : Window
 
     private void ShowFavorites()
     {
+        DisposePreview();
         PageTitle.Text = "المفضلة";
         var items = _catalog?.Snapshot.Streams.Where(i => i.Favorite).ToList() ?? [];
         if (items.Count == 0)
@@ -570,6 +773,7 @@ public partial class MainWindow : Window
 
     private void ShowSearch()
     {
+        DisposePreview();
         PageTitle.Text = "البحث";
         var root = Vertical();
         var search = new TextBox { FontSize = 17, Height = 44, ToolTip = "ابحث من أول حرف…" };
@@ -603,6 +807,7 @@ public partial class MainWindow : Window
 
     private void ShowProviders()
     {
+        DisposePreview();
         PageTitle.Text = "القوائم والسيرفرات";
         var root = new Grid();
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(330) });
@@ -748,6 +953,7 @@ public partial class MainWindow : Window
 
     private void ShowSettings()
     {
+        DisposePreview();
         PageTitle.Text = "الإعدادات";
         var root = Vertical();
 
@@ -802,6 +1008,14 @@ public partial class MainWindow : Window
     }
 
     private sealed record ComboItem(string Label, string Value);
+
+    private void DisposePreview()
+    {
+        if (_previewPlayback is null) return;
+        try { _previewPlayback.Stop(); } catch { }
+        _previewPlayback.Dispose();
+        _previewPlayback = null;
+    }
 
     private List<StreamItem> Items(string kind) =>
         _catalog?.Snapshot.Streams.Where(s => s.Kind == kind).ToList() ?? [];
