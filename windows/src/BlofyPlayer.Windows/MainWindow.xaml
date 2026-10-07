@@ -5,83 +5,103 @@
         Width="1440" Height="860"
         MinWidth="1100" MinHeight="680"
         WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource BackgroundBrush}"
-        Foreground="{DynamicResource TextBrush}"
+        Background="#08060D"
+        Foreground="#F3F4F6"
         FlowDirection="RightToLeft"
         KeyDown="Window_KeyDown">
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+        <Grid.Background>
+            <RadialGradientBrush Center="0.82,0.12" GradientOrigin="0.82,0.12" RadiusX="0.98" RadiusY="0.98">
+                <GradientStop Color="#241536" Offset="0"/>
+                <GradientStop Color="#100A18" Offset="0.42"/>
+                <GradientStop Color="#08060D" Offset="1"/>
+            </RadialGradientBrush>
+        </Grid.Background>
 
-        <Border x:Name="SidebarBorder" Grid.Column="0"
-                Background="{DynamicResource SidebarBrush}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Top" Margin="15,20,15,8">
-                    <Border Width="48" Height="48" CornerRadius="14"
-                            Background="{DynamicResource AccentBrush}" HorizontalAlignment="Right">
-                        <TextBlock Text="B" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="27"
-                                   FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="BLOFY PLAYER" FontSize="17" FontWeight="Bold" Margin="0,10,0,2"/>
-                    <TextBlock Text="Windows" Foreground="{DynamicResource MutedBrush}" FontSize="11"/>
-                </StackPanel>
+        <Grid Margin="14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-                <StackPanel x:Name="NavigationPanel" DockPanel.Dock="Top">
-                    <Button Style="{StaticResource NavButton}" Content="⌂  الرئيسية" Tag="home" Click="Nav_Click"/>
-                    <Button Style="{StaticResource NavButton}" Content="●  البث المباشر" Tag="live" Click="Nav_Click"/>
-                    <Button Style="{StaticResource NavButton}" Content="▣  الأفلام" Tag="movie" Click="Nav_Click"/>
-                    <Button Style="{StaticResource NavButton}" Content="▤  المسلسلات" Tag="series" Click="Nav_Click"/>
-                    <Button Style="{StaticResource NavButton}" Content="★  المفضلة" Tag="favorites" Click="Nav_Click"/>
-                    <Button Style="{StaticResource NavButton}" Content="⌕  البحث" Tag="search" Click="Nav_Click"/>
-                    <Button Style="{StaticResource NavButton}" Content="👤  الملفات" Tag="profiles" Click="Nav_Click"/>
-                    <Button Style="{StaticResource NavButton}" Content="☰  القوائم" Tag="providers" Click="Nav_Click"/>
-                    <Button Style="{StaticResource NavButton}" Content="⚙  الإعدادات" Tag="settings" Click="Nav_Click"/>
-                </StackPanel>
-
-                <Border DockPanel.Dock="Bottom" Margin="12" Padding="12" CornerRadius="12"
-                        Background="{DynamicResource SurfaceBrush}"
-                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                    <StackPanel>
-                        <TextBlock Text="الملف الحالي" FontSize="10" Foreground="{DynamicResource MutedBrush}"/>
-                        <TextBlock x:Name="ActiveProfileText" FontSize="12" FontWeight="Bold"
-                                   Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,7"/>
-                        <TextBlock Text="رقم الجهاز" FontSize="10" Foreground="{DynamicResource MutedBrush}"/>
-                        <TextBlock x:Name="DeviceIdText" FontSize="13" FontWeight="Bold"
-                                   FlowDirection="LeftToRight" HorizontalAlignment="Right" Margin="0,3,0,5"/>
-                        <TextBlock x:Name="ActivationStatusText" Text="جاري التحقق…" FontSize="11"
-                                   Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap"/>
+            <Border x:Name="SidebarBorder" Grid.Column="0"
+                    Background="#E6241536"
+                    BorderBrush="#66FFFFFF" BorderThickness="1"
+                    CornerRadius="18" Padding="8">
+                <DockPanel LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Top" Margin="4,4,4,10">
+                        <Image Source="/Assets/blofy_logo.png"
+                               Width="92" Height="54" Stretch="Uniform"
+                               HorizontalAlignment="Center" Margin="0,2,0,12"/>
                     </StackPanel>
-                </Border>
-            </DockPanel>
-        </Border>
 
-        <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="74"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+                    <StackPanel x:Name="NavigationPanel" DockPanel.Dock="Top">
+                        <Button Style="{StaticResource NavButton}" Content="⌂  الرئيسية" Tag="home" Click="Nav_Click"/>
+                        <Button Style="{StaticResource NavButton}" Content="●  البث المباشر" Tag="live" Click="Nav_Click"/>
+                        <Button Style="{StaticResource NavButton}" Content="▣  الأفلام" Tag="movie" Click="Nav_Click"/>
+                        <Button Style="{StaticResource NavButton}" Content="▤  المسلسلات" Tag="series" Click="Nav_Click"/>
+                        <Button Style="{StaticResource NavButton}" Content="◫  المجموعات" Tag="collections" Click="Nav_Click"/>
+                        <Button Style="{StaticResource NavButton}" Content="★  المفضلة" Tag="favorites" Click="Nav_Click"/>
+                        <Button Style="{StaticResource NavButton}" Content="⌕  البحث" Tag="search" Click="Nav_Click"/>
+                        <Button Style="{StaticResource NavButton}" Content="⚙  الإعدادات" Tag="settings" Click="Nav_Click"/>
+                    </StackPanel>
 
-            <Grid Grid.Row="0" Margin="28,10,28,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="PageTitle" Text="الرئيسية" FontSize="25" FontWeight="Bold"/>
-                    <TextBlock x:Name="PageSubtitle" Text="BLOFY PLAYER"
-                               Foreground="{DynamicResource MutedBrush}" FontSize="11" Margin="0,3,0,0"/>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock x:Name="ProgressText" Foreground="{DynamicResource MutedBrush}"
-                               VerticalAlignment="Center" Margin="0,0,10,0"/>
-                    <Button Content="↻ تحديث" Style="{StaticResource SecondaryButton}" Click="Refresh_Click"/>
-                </StackPanel>
+                    <Border DockPanel.Dock="Bottom" Margin="3,12,3,3" Padding="12"
+                            CornerRadius="13" Background="#B3180F23"
+                            BorderBrush="#3AFFFFFF" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="الملف الحالي" FontSize="10" Foreground="#9F93AE"/>
+                            <TextBlock x:Name="ActiveProfileText" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="#D0B2FF" Margin="0,2,0,7"/>
+                            <TextBlock Text="رقم الجهاز" FontSize="10" Foreground="#9F93AE"/>
+                            <TextBlock x:Name="DeviceIdText" FontSize="12" FontWeight="Bold"
+                                       FlowDirection="LeftToRight" HorizontalAlignment="Right" Margin="0,3,0,4"/>
+                            <TextBlock x:Name="ActivationStatusText" Text="جاري التحقق…" FontSize="10.5"
+                                       Foreground="#C9BCD9" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </DockPanel>
+            </Border>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="64"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="12,0,12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock x:Name="PageTitle" Text="BLOFY PLAYER"
+                                   Foreground="#F3F4F6" FontSize="21" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="PageSubtitle" Text="اليوم"
+                                   Foreground="#C9BCD9" FontSize="10.5" Margin="0,3,0,0"/>
+                    </StackPanel>
+
+                    <TextBlock x:Name="HeaderServerText" Grid.Column="1"
+                               Foreground="#AFA4BC" FontSize="11"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="ProgressText" Foreground="#AFA4BC"
+                                   FontSize="10.5" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock x:Name="HeaderClockText" Foreground="#DDD5E6"
+                                   FontSize="10.5" VerticalAlignment="Center" TextAlignment="Left"
+                                   FlowDirection="LeftToRight" Margin="0,0,12,0"/>
+                        <Button Content="↻" Width="36" Height="34" ToolTip="تحديث المحتوى"
+                                Style="{StaticResource SecondaryButton}" Click="Refresh_Click"/>
+                    </StackPanel>
+                </Grid>
+
+                <ContentControl x:Name="ContentHost" Grid.Row="1" Margin="12,4,12,6"/>
             </Grid>
-
-            <ContentControl x:Name="ContentHost" Grid.Row="1" Margin="28,12,28,24"/>
         </Grid>
     </Grid>
 </Window>
