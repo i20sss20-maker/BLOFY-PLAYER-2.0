@@ -174,6 +174,7 @@ public partial class StartupWindow : Window
 
             SetLoading(20, "مزامنة القوائم من موقع BLOFY…");
             await SyncPortalIntoStoreAsync();
+            StartupSessionTransfer.Store(fresh, portalSynced: true);
 
             var provider = _store.ActiveProvider();
             if (provider is not null)
