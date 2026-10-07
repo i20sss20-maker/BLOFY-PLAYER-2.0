@@ -259,14 +259,21 @@ public partial class MainWindow : Window
             .Where(s => s is not null).Cast<StreamItem>()
             .Where(_store.IsContentVisible).Take(12).ToList();
 
+        var homeSections = new Dictionary<string, UIElement>();
         if (continueItems.Count > 0)
-            root.Children.Add(ContentRow("متابعة المشاهدة", continueItems));
+            homeSections["continue"] = ContentRow("متابعة المشاهدة", continueItems);
 
         var latestMovies = Items("movie").OrderByDescending(i => i.AddedAt).Take(16).ToList();
-        if (latestMovies.Count > 0) root.Children.Add(ContentRow("أحدث الأفلام", latestMovies));
+        if (latestMovies.Count > 0)
+            homeSections["latest_movies"] = ContentRow("أحدث الأفلام", latestMovies);
 
         var latestSeries = Items("series").OrderByDescending(i => i.AddedAt).Take(16).ToList();
-        if (latestSeries.Count > 0) root.Children.Add(ContentRow("أحدث المسلسلات", latestSeries));
+        if (latestSeries.Count > 0)
+            homeSections["latest_series"] = ContentRow("أحدث المسلسلات", latestSeries);
+
+        foreach (var rowKey in _store.HomeRows)
+            if (homeSections.TryGetValue(rowKey, out var section))
+                root.Children.Add(section);
 
         root.Children.Add(ActivationCompact());
         ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -1125,6 +1132,74 @@ public partial class MainWindow : Window
         ContentHost.Content = root;
     }
 
+    private void ShowHomePersonalization()
+    {
+        DisposePreview();
+        PageTitle.Text = "تخصيص الرئيسية";
+        var root = Vertical();
+        root.Children.Add(Txt("رتّب الأقسام أو أخفِ ما لا تحتاجه. الإعداد يخص الملف الحالي.", 12, Muted, marginBottom: 14));
+
+        var labels = new Dictionary<string, string>
+        {
+            ["continue"] = "متابعة المشاهدة",
+            ["latest_movies"] = "أحدث الأفلام",
+            ["latest_series"] = "أحدث المسلسلات"
+        };
+
+        void Rebuild()
+        {
+            root.Children.Clear();
+            root.Children.Add(Txt("رتّب الأقسام أو أخفِ ما لا تحتاجه. الإعداد يخص الملف الحالي.", 12, Muted, marginBottom: 14));
+            var visible = _store.HomeRows.ToList();
+
+            foreach (var key in labels.Keys)
+            {
+                var card = Card(0, 0, 0, 10);
+                var grid = new Grid();
+                grid.ColumnDefinitions.Add(new ColumnDefinition());
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var check = new CheckBox
+                {
+                    Content = labels[key],
+                    IsChecked = visible.Contains(key),
+                    Foreground = Text,
+                    FontSize = 13,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                check.Click += async (_, _) =>
+                {
+                    await _store.SetHomeRowEnabledAsync(key, check.IsChecked == true);
+                    Rebuild();
+                };
+                grid.Children.Add(check);
+
+                var actions = Horizontal();
+                var up = Action("↑", false, async (_, _) => { await _store.MoveHomeRowAsync(key, -1); Rebuild(); });
+                var down = Action("↓", false, async (_, _) => { await _store.MoveHomeRowAsync(key, 1); Rebuild(); }, 6);
+                up.IsEnabled = visible.Contains(key);
+                down.IsEnabled = visible.Contains(key);
+                actions.Children.Add(up);
+                actions.Children.Add(down);
+                Grid.SetColumn(actions, 1);
+                grid.Children.Add(actions);
+                card.Child = grid;
+                root.Children.Add(card);
+            }
+
+            root.Children.Add(Action("استعادة الترتيب الافتراضي", false, async (_, _) =>
+            {
+                foreach (var key in labels.Keys) await _store.SetHomeRowEnabledAsync(key, false);
+                foreach (var key in new[] { "continue", "latest_movies", "latest_series" })
+                    await _store.SetHomeRowEnabledAsync(key, true);
+                Rebuild();
+            }, 0, 10, 0, 0));
+        }
+
+        Rebuild();
+        ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    }
+
     private void ShowCategoryManager()
     {
         DisposePreview();
@@ -1242,6 +1317,7 @@ public partial class MainWindow : Window
         }));
         securityRow.Children.Add(Action("PIN الرقابة الأبوية", false, async (_, _) => await ChangeParentalPinAsync(), 8));
         securityRow.Children.Add(Action("ترتيب/إخفاء الفئات", false, (_, _) => ShowCategoryManager(), 8));
+        securityRow.Children.Add(Action("تخصيص الرئيسية", false, (_, _) => ShowHomePersonalization(), 8));
         root.Children.Add(securityRow);
 
         root.Children.Add(Txt("النسخ الاحتياطي", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
