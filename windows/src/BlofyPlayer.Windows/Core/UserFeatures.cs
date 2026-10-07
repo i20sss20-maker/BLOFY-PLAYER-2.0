@@ -92,6 +92,7 @@ public sealed class BackupPayload
     public string ProfileId { get; set; } = "";
     public string ProfileName { get; set; } = "";
     public ProfileLibraryState Library { get; set; } = new();
+    public HashSet<string> LockedContentKeys { get; set; } = [];
     public AppSettings Settings { get; set; } = new();
 }
 
@@ -121,6 +122,9 @@ public static class BackupService
                 RecentSearches = library.RecentSearches.Take(30).ToList(),
                 HiddenCategoryKeys = new HashSet<string>(library.HiddenCategoryKeys)
             },
+            LockedContentKeys = store.State.LockedContentKeys
+                .Where(key => key.StartsWith(provider.Id + ":", StringComparison.Ordinal))
+                .ToHashSet(),
             Settings = store.State.Settings
         };
         return JsonSerializer.Serialize(payload, Json);
@@ -142,6 +146,10 @@ public static class BackupService
         library.WatchStates = payload.Library.WatchStates ?? [];
         library.RecentSearches = (payload.Library.RecentSearches ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Take(30).ToList();
         library.HiddenCategoryKeys = payload.Library.HiddenCategoryKeys ?? [];
+        store.State.LockedContentKeys.RemoveWhere(key => key.StartsWith(provider.Id + ":", StringComparison.Ordinal));
+        foreach (var key in payload.LockedContentKeys ?? [])
+            if (key.StartsWith(provider.Id + ":", StringComparison.Ordinal))
+                store.State.LockedContentKeys.Add(key);
         store.State.Settings = payload.Settings ?? new AppSettings();
         await store.SaveAsync();
     }
