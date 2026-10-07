@@ -1909,86 +1909,226 @@ public partial class MainWindow : Window
     {
         DisposePreview();
         PageTitle.Text = "الإعدادات";
-        var root = Vertical();
+        PageSubtitle.Text = "BLOFY PLAYER";
 
-        var theme = Choice("المظهر", [("داكن BLOFY", "dark"), ("فاتح", "light")], _store.State.Settings.Theme);
-        var language = Choice("اللغة", [
+        var root = Vertical();
+        var status = Txt("يتم حفظ الإعدادات عند الضغط على «حفظ التغييرات».", 11, Muted, marginBottom: 8);
+        root.Children.Add(status);
+
+        var language = ChoiceControl([
             ("العربية", "ar"), ("English", "en"), ("Français", "fr"), ("Español", "es"),
             ("Deutsch", "de"), ("Türkçe", "tr"), ("Português", "pt"), ("Italiano", "it")
         ], _store.State.Settings.Language);
-        var liveFormat = Choice("صيغة البث المباشر", [("TS", "ts"), ("HLS / M3U8", "m3u8")], _store.State.Settings.LiveFormat);
-        var subtitle = Choice("الترجمة", [("العربية أولًا", "ar"), ("تلقائي", "auto"), ("إيقاف", "off")], _store.State.Settings.SubtitleLanguage);
-        var subtitleSize = Choice("حجم الترجمة", [("صغير", "small"), ("متوسط", "medium"), ("كبير", "large")], _store.State.Settings.SubtitleSize);
-        var aspect = Choice("أبعاد الصورة", [("ملاءمة", "fit"), ("ملء", "fill"), ("تكبير", "zoom")], _store.State.Settings.Aspect);
-        var autoNext = Choice("الحلقة التالية", [("اسأل", "ask"), ("تشغيل تلقائي", "on"), ("إيقاف", "off")], _store.State.Settings.AutoNext);
-        var density = Choice("كثافة المحتوى", [("مريح", "comfortable"), ("مضغوط", "compact")], _store.State.Settings.CatalogDensity);
+        var aspect = ChoiceControl([("ملاءمة", "fit"), ("تكبير", "zoom"), ("ملء", "fill")], _store.State.Settings.Aspect);
+        var liveFormat = ChoiceControl([("TS", "ts"), ("HLS / M3U8", "m3u8")], _store.State.Settings.LiveFormat);
+        var subtitle = ChoiceControl([("العربية أولًا", "ar"), ("تلقائي", "auto"), ("إيقاف", "off")], _store.State.Settings.SubtitleLanguage);
+        var subtitleSize = ChoiceControl([("صغير", "small"), ("متوسط", "medium"), ("كبير", "large")], _store.State.Settings.SubtitleSize);
+        var audioOutput = ChoiceControl([("تلقائي", "auto"), ("Stereo", "stereo")], _store.State.Settings.AudioOutput);
+        var autoNext = ChoiceControl([("اسأل", "ask"), ("تلقائي", "on"), ("إيقاف", "off")], _store.State.Settings.AutoNext);
+        var density = ChoiceControl([("مريح", "comfortable"), ("مضغوط", "compact")], _store.State.Settings.CatalogDensity);
 
-        foreach (var row in new UIElement[] { theme.View, language.View, liveFormat.View, subtitle.View, subtitleSize.View, aspect.View, autoNext.View, density.View })
-            root.Children.Add(row);
-
-        var autoplay = new CheckBox { Content = "تشغيل أول قناة تلقائيًا", IsChecked = _store.State.Settings.AutoplayLive, Foreground = Text, Margin = new Thickness(0, 8, 0, 8) };
-        var resume = new CheckBox { Content = "اسأل قبل متابعة المشاهدة", IsChecked = _store.State.Settings.ResumePrompt, Foreground = Text, Margin = new Thickness(0, 8, 0, 8) };
-        root.Children.Add(autoplay);
-        root.Children.Add(resume);
-
-        var userAgent = new TextBox { Text = _store.State.Settings.UserAgent, FlowDirection = FlowDirection.LeftToRight };
-        root.Children.Add(Labeled("User-Agent", userAgent));
-
-        root.Children.Add(Action("حفظ الإعدادات", true, async (_, _) =>
+        var autoplay = new CheckBox
         {
-            _store.State.Settings.Theme = theme.Value();
+            IsChecked = _store.State.Settings.AutoplayLive,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        var resume = new CheckBox
+        {
+            IsChecked = _store.State.Settings.ResumePrompt,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+
+        root.Children.Add(SettingsSection("عام",
+            SettingTile("لغة التطبيق", "لغة واجهة BLOFY PLAYER", language.Control),
+            SettingActionTile("ترتيب وإخفاء أقسام الرئيسية", "رتّب صفوف Home وأخفِ ما لا تحتاجه", (_, _) => ShowHomePersonalization()),
+            SettingActionTile("بيانات الجهاز والباركود", "عرض رقم الجهاز ورمز التفعيل والباركود", (_, _) => ShowActivation()),
+            SettingActionTile("الملفات الشخصية", "الرئيسي، الأطفال والضيف وPIN", (_, _) =>
+            {
+                _currentPage = "profiles";
+                ShowProfiles();
+            })));
+
+        root.Children.Add(SettingsSection("التشغيل",
+            SettingTile("أبعاد الصورة", "طريقة عرض الفيديو على الشاشة", aspect.Control),
+            SettingTile("حجم عرض البوسترات", "عدد البوسترات الظاهرة وخفة الواجهة", density.Control)));
+
+        root.Children.Add(SettingsSection("البث المباشر",
+            SettingTile("تشغيل القناة عند تحديدها", "المعاينة التلقائية للبث المباشر", autoplay),
+            SettingTile("صيغة البث", "TS أو HLS حسب السيرفر", liveFormat.Control)));
+
+        root.Children.Add(SettingsSection("الأفلام والمسلسلات",
+            SettingTile("متابعة المشاهدة", "السؤال قبل متابعة آخر نقطة", resume),
+            SettingTile("الحلقة التالية", "ما يحدث عند انتهاء الحلقة", autoNext.Control)));
+
+        root.Children.Add(SettingsSection("الترجمة والصوت",
+            SettingTile("مخرج الصوت", "تلقائي أو Stereo", audioOutput.Control),
+            SettingTile("لغة الترجمة", "العربية أولًا أو تلقائي أو إيقاف", subtitle.Control),
+            SettingTile("حجم الترجمة", "حجم نص الترجمة أثناء المشاهدة", subtitleSize.Control)));
+
+        root.Children.Add(SettingsSection("القوائم والسيرفرات",
+            SettingActionTile("إدارة السيرفرات والقوائم", "تبديل، تعديل ومزامنة السيرفرات", (_, _) => ShowProviders()),
+            SettingActionTile("ترتيب وإخفاء الفئات", "البث والأفلام والمسلسلات", (_, _) => ShowCategoryManager()),
+            SettingActionTile("تحديث المحتوى", "إعادة مزامنة المكتبة يدويًا", async (_, _) => await SyncCatalogAsync(true))));
+
+        root.Children.Add(SettingsSection("الحماية",
+            SettingActionTile("الحماية الأبوية وPIN", "تعيين أو تغيير رمز فتح المحتوى المقفل", async (_, _) => await ChangeParentalPinAsync()),
+            SettingActionTile("إدارة الملفات وPIN", "PIN منفصل لكل ملف شخصي", (_, _) =>
+            {
+                _currentPage = "profiles";
+                ShowProfiles();
+            })));
+
+        root.Children.Add(SettingsSection("BLOFY Cloud والنسخ الاحتياطي",
+            SettingActionTile("نسخ للسحابة", "حفظ الملف الحالي في BLOFY Cloud", async (_, _) => await CloudBackupAsync()),
+            SettingActionTile("استعادة من السحابة", "استرجاع مفضلة وإعدادات الملف الحالي", async (_, _) => await CloudRestoreAsync()),
+            SettingActionTile("إنشاء كود ربط", "نقل الملف إلى جهاز BLOFY آخر", async (_, _) => await CreatePairCodeAsync()),
+            SettingActionTile("نسخ احتياطي محلي", "تصدير أو استعادة ملف بدون بيانات الدخول", async (_, _) => await ExportBackupAsync()),
+            SettingActionTile("استعادة نسخة محلية", "استرجاع النسخة الاحتياطية من ملف", async (_, _) => await RestoreBackupAsync())));
+
+        root.Children.Add(SettingsSection("التحديث وحول التطبيق",
+            SettingActionTile("فحص تحديث Windows", "البحث عن إصدار BLOFY PLAYER جديد", async (_, _) => await CheckWindowsUpdateAsync()),
+            SettingActionTile("تشخيص BLOFY", "الجهاز والمكتبة وتقرير الدعم", (_, _) => ShowDiagnostics()),
+            SettingActionTile("تنظيف التخزين المؤقت", "يحذف الكاش فقط ولا يحذف بياناتك", (_, _) => CleanStorage())));
+
+        var save = Action("حفظ التغييرات", true, async (_, _) =>
+        {
+            _store.State.Settings.Theme = "dark";
             _store.State.Settings.Language = language.Value();
+            _store.State.Settings.Aspect = aspect.Value();
             _store.State.Settings.LiveFormat = liveFormat.Value();
             _store.State.Settings.SubtitleLanguage = subtitle.Value();
             _store.State.Settings.SubtitleSize = subtitleSize.Value();
-            _store.State.Settings.Aspect = aspect.Value();
+            _store.State.Settings.AudioOutput = audioOutput.Value();
             _store.State.Settings.AutoNext = autoNext.Value();
             _store.State.Settings.CatalogDensity = density.Value();
             _store.State.Settings.AutoplayLive = autoplay.IsChecked == true;
             _store.State.Settings.ResumePrompt = resume.IsChecked == true;
-            _store.State.Settings.UserAgent = string.IsNullOrWhiteSpace(userAgent.Text)
-                ? "BLOFY PLAYER/2.0 (Windows)" : userAgent.Text.Trim();
             await _store.SaveAsync();
             ApplyTheme();
-            MessageBox.Show(this, "تم حفظ الإعدادات.", "BLOFY PLAYER");
-            ShowSettings();
-        }, 0, 20, 0, 0));
+            status.Text = "تم حفظ الإعدادات ✓";
+        }, 0, 18, 0, 8);
+        save.Width = 170;
+        root.Children.Add(save);
+        root.Children.Add(Txt("BLOFY PLAYER Windows • Android UI parity", 10, Muted, marginBottom: 20));
 
-        root.Children.Add(Txt("الملفات والحماية", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
-        var securityRow = Horizontal();
-        securityRow.Children.Add(Action("إدارة الملفات وPIN", false, (_, _) =>
+        ContentHost.Content = new ScrollViewer
         {
-            _currentPage = "profiles";
-            ShowProfiles();
-        }));
-        securityRow.Children.Add(Action("PIN الرقابة الأبوية", false, async (_, _) => await ChangeParentalPinAsync(), 8));
-        securityRow.Children.Add(Action("ترتيب/إخفاء الفئات", false, (_, _) => ShowCategoryManager(), 8));
-        securityRow.Children.Add(Action("تخصيص الرئيسية", false, (_, _) => ShowHomePersonalization(), 8));
-        root.Children.Add(securityRow);
+            Content = root,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden
+        };
+    }
 
-        root.Children.Add(Txt("النسخ الاحتياطي", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
-        var backupRow = Horizontal();
-        backupRow.Children.Add(Action("تصدير نسخة احتياطية", false, async (_, _) => await ExportBackupAsync()));
-        backupRow.Children.Add(Action("استعادة نسخة", false, async (_, _) => await RestoreBackupAsync(), 8));
-        root.Children.Add(backupRow);
+    private UIElement SettingsSection(string title, params UIElement[] cards)
+    {
+        var section = Vertical(0, 18, 0, 0);
+        section.Children.Add(Txt(title, 17, Text, FontWeights.Bold, marginBottom: 8));
+        var wrap = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal,
+            FlowDirection = FlowDirection.RightToLeft
+        };
+        foreach (var card in cards) wrap.Children.Add(card);
+        section.Children.Add(wrap);
+        return section;
+    }
 
-        root.Children.Add(Txt("BLOFY Cloud", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
-        var cloudRow = Horizontal();
-        cloudRow.Children.Add(Action("نسخ للسحابة", false, async (_, _) => await CloudBackupAsync()));
-        cloudRow.Children.Add(Action("استعادة من السحابة", false, async (_, _) => await CloudRestoreAsync(), 8));
-        cloudRow.Children.Add(Action("إنشاء كود ربط", false, async (_, _) => await CreatePairCodeAsync(), 8));
-        cloudRow.Children.Add(Action("استعادة بكود", false, async (_, _) => await RestorePairCodeAsync(), 8));
-        root.Children.Add(cloudRow);
+    private UIElement SettingTile(string title, string subtitle, UIElement control)
+    {
+        var card = new Border
+        {
+            Width = 430,
+            MinHeight = 92,
+            Background = new LinearGradientBrush(Brush("#241536").Color, Brush("#160D22").Color, 35),
+            BorderBrush = Brush("#52FFFFFF"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(15),
+            Margin = new Thickness(0, 0, 10, 10)
+        };
 
-        root.Children.Add(Txt("التحديث والتشخيص", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
-        var serviceRow = Horizontal();
-        serviceRow.Children.Add(Action("فحص تحديث Windows", false, async (_, _) => await CheckWindowsUpdateAsync()));
-        serviceRow.Children.Add(Action("تشخيص BLOFY", false, (_, _) => ShowDiagnostics(), 8));
-        serviceRow.Children.Add(Action("تنظيف الكاش", false, (_, _) => CleanStorage(), 8));
-        root.Children.Add(serviceRow);
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        root.Children.Add(Txt("BLOFY PLAYER Windows 0.3.0", 11, Muted, marginTop: 26));
-        ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var text = Vertical();
+        text.Children.Add(Txt(title, 13.5, Text, FontWeights.SemiBold));
+        text.Children.Add(Txt(subtitle, 10.5, Muted, marginTop: 5));
+        grid.Children.Add(text);
+
+        if (control is FrameworkElement fe)
+        {
+            fe.MinWidth = control is CheckBox ? 28 : 145;
+            fe.Margin = new Thickness(14, 0, 0, 0);
+            fe.VerticalAlignment = VerticalAlignment.Center;
+        }
+        Grid.SetColumn(control, 1);
+        grid.Children.Add(control);
+
+        card.Child = grid;
+        return card;
+    }
+
+    private UIElement SettingActionTile(string title, string subtitle, RoutedEventHandler click)
+    {
+        var button = new Button
+        {
+            Width = 430,
+            MinHeight = 92,
+            Background = Brushes.Transparent,
+            BorderBrush = Brushes.Transparent,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0, 0, 10, 10),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Cursor = Cursors.Hand,
+            RenderTransformOrigin = new Point(.5, .5),
+            RenderTransform = new ScaleTransform(1, 1)
+        };
+
+        var card = new Border
+        {
+            Background = new LinearGradientBrush(Brush("#241536").Color, Brush("#160D22").Color, 35),
+            BorderBrush = Brush("#52FFFFFF"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(15)
+        };
+        var text = Vertical();
+        text.Children.Add(Txt(title, 13.5, Text, FontWeights.SemiBold));
+        text.Children.Add(Txt(subtitle, 10.5, Muted, marginTop: 5));
+        card.Child = text;
+        button.Content = card;
+
+        void Focus(bool active)
+        {
+            card.Background = active
+                ? new LinearGradientBrush(Brush("#63408A").Color, Brush("#3D2756").Color, 35)
+                : new LinearGradientBrush(Brush("#241536").Color, Brush("#160D22").Color, 35);
+            card.BorderBrush = active ? Brush("#EBD8FF") : Brush("#52FFFFFF");
+            card.BorderThickness = active ? new Thickness(2) : new Thickness(1);
+            if (button.RenderTransform is ScaleTransform scale)
+            {
+                scale.ScaleX = active ? 1.018 : 1;
+                scale.ScaleY = active ? 1.018 : 1;
+            }
+        }
+
+        button.GotKeyboardFocus += (_, _) => Focus(true);
+        button.LostKeyboardFocus += (_, _) => Focus(false);
+        button.MouseEnter += (_, _) => Focus(true);
+        button.MouseLeave += (_, _) => Focus(false);
+        button.Click += click;
+        return button;
+    }
+
+    private (ComboBox Control, Func<string> Value) ChoiceControl((string Label, string Value)[] items, string selected)
+    {
+        var combo = new ComboBox { MinWidth = 145 };
+        foreach (var item in items) combo.Items.Add(new ComboItem(item.Label, item.Value));
+        combo.DisplayMemberPath = "Label";
+        combo.SelectedItem = combo.Items.Cast<ComboItem>().FirstOrDefault(i => i.Value == selected) ?? combo.Items[0];
+        return (combo, () => (combo.SelectedItem as ComboItem)?.Value ?? items[0].Value);
     }
 
     private (UIElement View, Func<string> Value) Choice(string title, (string Label, string Value)[] items, string selected)
