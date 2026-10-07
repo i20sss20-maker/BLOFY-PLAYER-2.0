@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace BlofyPlayer.Windows;
 
@@ -35,16 +36,29 @@ public partial class MainWindow : Window
     private PlaybackService? _previewPlayback;
     private int _liveSelectionSerial;
     private string _currentPage = "home";
+    private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(30) };
+    private readonly DispatcherTimer _heroTimer = new() { Interval = TimeSpan.FromSeconds(8) };
+    private List<StreamItem> _heroCandidates = [];
+    private int _heroIndex;
 
     public MainWindow()
     {
         InitializeComponent();
         DeviceIdText.Text = _identity.DeviceId;
+        _clockTimer.Tick += (_, _) => UpdateHeaderClock();
+        _heroTimer.Tick += (_, _) =>
+        {
+            if (_currentPage != "home" || _heroCandidates.Count < 2) return;
+            _heroIndex = (_heroIndex + 1) % _heroCandidates.Count;
+            ShowHome();
+        };
         Loaded += async (_, _) =>
         {
             try
             {
                 await InitializeAsync();
+                UpdateHeaderClock();
+                _clockTimer.Start();
             }
             catch (Exception ex)
             {
@@ -60,6 +74,8 @@ public partial class MainWindow : Window
         {
             _syncCts?.Cancel();
             _searchCts?.Cancel();
+            _clockTimer.Stop();
+            _heroTimer.Stop();
             DisposePreview();
             _catalog?.Dispose();
             _activation.Dispose();
@@ -77,6 +93,7 @@ public partial class MainWindow : Window
         await SyncPortalAsync();
 
         _activeProvider = _store.ActiveProvider();
+        HeaderServerText.Text = _activeProvider?.Name ?? "BLOFY";
         if (_activeProvider is not null)
         {
             ProgressText.Text = "تحميل الكاش…";
@@ -221,12 +238,14 @@ public partial class MainWindow : Window
     private void RefreshCurrentPage()
     {
         DisposePreview();
+        UpdateNavigationState();
         switch (_currentPage)
         {
             case "home": ShowHome(); break;
             case "live": ShowBrowser("live"); break;
             case "movie": ShowBrowser("movie"); break;
             case "series": ShowBrowser("series"); break;
+            case "collections": ShowCollections(); break;
             case "favorites": ShowFavorites(); break;
             case "search": ShowSearch(); break;
             case "profiles": ShowProfiles(); break;
@@ -246,70 +265,260 @@ public partial class MainWindow : Window
     private void ShowHome()
     {
         DisposePreview();
-        PageTitle.Text = "الرئيسية";
-        var root = Vertical();
+        PageTitle.Text = "BLOFY PLAYER";
+        PageSubtitle.Text = "اليوم";
+        HeaderServerText.Text = _activeProvider?.Name ?? "BLOFY";
 
         if (_activationState?.CanUse() != true)
         {
-            root.Children.Add(ActivationCard());
-            ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            var gated = Vertical();
+            gated.Children.Add(ActivationCard());
+            ContentHost.Content = new ScrollViewer { Content = gated, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             return;
         }
 
-        var hero = new Border
+        var root = Vertical();
+        var latest = _viewIndex.Collection("latest").Where(_store.IsContentVisible).Take(36).ToList();
+        _heroCandidates = latest.Where(x => !string.IsNullOrWhiteSpace(x.Backdrop) || !string.IsNullOrWhiteSpace(x.Icon))
+            .Take(6).ToList();
+        if (_heroCandidates.Count == 0) _heroCandidates = latest.Take(6).ToList();
+        if (_heroCandidates.Count > 0)
         {
-            Height = 290,
-            CornerRadius = new CornerRadius(18),
-            BorderBrush = Brush("#665E437A"),
-            BorderThickness = new Thickness(1),
-            Background = new LinearGradientBrush(Brush("#4B276A").Color, Bg.Color, 25),
-            Padding = new Thickness(26),
-            Margin = new Thickness(0, 0, 0, 22)
-        };
-        var heroContent = Vertical();
-        heroContent.VerticalAlignment = VerticalAlignment.Center;
-        heroContent.Children.Add(Txt("BLOFY PLAYER", 11, Accent, FontWeights.Bold));
-        heroContent.Children.Add(Txt("كل محتواك في مكان واحد", 31, Text, FontWeights.Bold, 0, 8, 0, 5));
-        heroContent.Children.Add(Txt("بث مباشر • أفلام • مسلسلات • مفضلة • متابعة المشاهدة", 13, Muted));
-        var heroActions = Horizontal(0, 18, 0, 0);
-        heroActions.Children.Add(Action("شاهد الآن", true, (_, _) => { _currentPage = "live"; ShowBrowser("live"); }));
-        heroActions.Children.Add(Action("استكشف الأفلام", false, (_, _) => { _currentPage = "movie"; ShowBrowser("movie"); }, 10));
-        heroContent.Children.Add(heroActions);
-        hero.Child = heroContent;
-        root.Children.Add(hero);
-
-        var counts = Horizontal();
-        counts.Children.Add(Stat("القنوات", ItemCount("live")));
-        counts.Children.Add(Stat("الأفلام", ItemCount("movie"), 12));
-        counts.Children.Add(Stat("المسلسلات", ItemCount("series"), 12));
-        counts.Children.Add(Stat("المفضلة", _store.FavoritesCount, 12));
-        root.Children.Add(counts);
+            _heroIndex = Math.Clamp(_heroIndex, 0, _heroCandidates.Count - 1);
+            root.Children.Add(BuildAndroidHero(_heroCandidates[_heroIndex]));
+            _heroTimer.Start();
+        }
 
         var continueItems = _store.WatchStates
             .Where(w => !w.Completed && w.PositionMs > 30_000)
             .OrderByDescending(w => w.UpdatedAt)
             .Select(w => _viewIndex.Find(w.Key))
-            .Where(s => s is not null).Cast<StreamItem>()
-            .Where(_store.IsContentVisible).Take(12).ToList();
-
-        var homeSections = new Dictionary<string, UIElement>();
+            .Where(x => x is not null && _store.IsContentVisible(x))
+            .Cast<StreamItem>()
+            .Take(18)
+            .ToList();
         if (continueItems.Count > 0)
-            homeSections["continue"] = ContentRow("متابعة المشاهدة", continueItems);
+            root.Children.Add(ContentRow("متابعة المشاهدة", continueItems, landscape: true));
 
-        var latestMovies = LatestItems("movie", 16);
-        if (latestMovies.Count > 0)
-            homeSections["latest_movies"] = ContentRow("أحدث الأفلام", latestMovies);
+        var recent = _store.WatchStates
+            .OrderByDescending(w => w.UpdatedAt)
+            .Select(w => _viewIndex.Find(w.Key))
+            .Where(x => x is not null && _store.IsContentVisible(x))
+            .Cast<StreamItem>()
+            .DistinctBy(x => x.Key)
+            .Take(18)
+            .ToList();
+        if (recent.Count > 0)
+            root.Children.Add(ContentRow("شاهدتها مؤخرًا", recent, landscape: true));
 
-        var latestSeries = LatestItems("series", 16);
-        if (latestSeries.Count > 0)
-            homeSections["latest_series"] = ContentRow("أحدث المسلسلات", latestSeries);
+        if (latest.Count > 0)
+            root.Children.Add(ContentRow("أضيف حديثًا", latest.Take(18).ToList()));
 
-        foreach (var rowKey in _store.HomeRows)
-            if (homeSections.TryGetValue(rowKey, out var section))
-                root.Children.Add(section);
+        var top = _viewIndex.Collection("top").Where(_store.IsContentVisible).Take(18).ToList();
+        if (top.Count > 0)
+        {
+            root.Children.Add(TopTenRow(top.Take(10).ToList()));
+            root.Children.Add(ContentRow("أعلى تقييم", top));
+        }
 
-        root.Children.Add(ActivationCompact());
-        ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var arabic = _viewIndex.Collection("arabic").Where(_store.IsContentVisible).Take(18).ToList();
+        if (arabic.Count > 0)
+            root.Children.Add(ContentRow("مختارات عربية", arabic));
+
+        var ultra = _viewIndex.Collection("4k").Where(_store.IsContentVisible).Take(18).ToList();
+        if (ultra.Count > 0)
+            root.Children.Add(ContentRow("4K • UHD", ultra));
+
+        root.Children.Add(QuickLinksRow());
+        ContentHost.Content = new ScrollViewer
+        {
+            Content = root,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+        };
+    }
+
+    private UIElement BuildAndroidHero(StreamItem item)
+    {
+        var hero = new Border
+        {
+            Height = 330,
+            CornerRadius = new CornerRadius(18),
+            BorderBrush = Brush("#52FFFFFF"),
+            BorderThickness = new Thickness(1),
+            ClipToBounds = true,
+            Margin = new Thickness(0, 0, 0, 10)
+        };
+
+        var grid = new Grid();
+        var artwork = item.Backdrop;
+        if (string.IsNullOrWhiteSpace(artwork)) artwork = item.Icon;
+        if (!string.IsNullOrWhiteSpace(artwork))
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(artwork, UriKind.Absolute);
+                bitmap.DecodePixelWidth = 1100;
+                bitmap.CacheOption = BitmapCacheOption.OnDemand;
+                bitmap.CreateOptions = BitmapCreateOptions.DelayCreation;
+                bitmap.EndInit();
+                grid.Background = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill, Opacity = .88 };
+            }
+            catch
+            {
+                grid.Background = new LinearGradientBrush(Brush("#241536").Color, Brush("#08060D").Color, 15);
+            }
+        }
+        else grid.Background = new LinearGradientBrush(Brush("#241536").Color, Brush("#08060D").Color, 15);
+
+        grid.Children.Add(new Border
+        {
+            Background = new LinearGradientBrush(
+                new GradientStopCollection
+                {
+                    new(Brush("#FA090B10").Color, 0),
+                    new(Brush("#B3090B10").Color, .46),
+                    new(Brush("#18090B10").Color, 1)
+                },
+                new Point(1, .5), new Point(0, .5))
+        });
+
+        var content = Vertical();
+        content.Width = 620;
+        content.VerticalAlignment = VerticalAlignment.Center;
+        content.HorizontalAlignment = HorizontalAlignment.Right;
+        content.Margin = new Thickness(28, 22, 28, 28);
+
+        content.Children.Add(Txt(item.Kind == "series" ? "مسلسل جديد" : "فيلم جديد", 10, Accent, FontWeights.Bold));
+        var title = Txt(item.Name, 30, Brushes.White, FontWeights.Bold, 0, 7, 0, 0);
+        title.MaxWidth = 590;
+        title.MaxHeight = 82;
+        title.TextTrimming = TextTrimming.CharacterEllipsis;
+        title.TextDirection = DetectDirection(item.Name);
+        content.Children.Add(title);
+
+        var meta = string.Join("   •   ", new[]
+        {
+            item.Year,
+            string.IsNullOrWhiteSpace(item.Rating) ? "" : "★ " + item.Rating,
+            item.Genre?.Split(',').FirstOrDefault()?.Trim(),
+            item.Kind == "series" ? "مسلسل" : "فيلم"
+        }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        var metaText = Txt(meta, 11, Brush("#DDD3E9"), marginTop: 7);
+        metaText.TextDirection = FlowDirection.LeftToRight;
+        content.Children.Add(metaText);
+
+        var plot = Txt(string.IsNullOrWhiteSpace(item.Plot)
+            ? (item.Kind == "series" ? "اكتشف تفاصيل المسلسل والحلقات." : "شاهد الفيلم الآن على BLOFY PLAYER.")
+            : item.Plot, 12, Brush("#DAD5E1"), marginTop: 8, marginBottom: 10);
+        plot.MaxWidth = 590;
+        plot.MaxHeight = 48;
+        plot.TextTrimming = TextTrimming.CharacterEllipsis;
+        plot.TextDirection = DetectDirection(plot.Text);
+        content.Children.Add(plot);
+
+        var actions = Horizontal();
+        actions.Children.Add(Action(item.Kind == "series" ? "عرض المسلسل" : "شاهد الآن", true, async (_, _) =>
+        {
+            if (item.Kind == "series") await ShowDetailsAsync(item);
+            else await PlayItemAsync(item);
+        }));
+        actions.Children.Add(Action("استكشف الأفلام", false, (_, _) =>
+        {
+            _currentPage = "movie";
+            RefreshCurrentPage();
+        }, 10));
+        content.Children.Add(actions);
+
+        if (_heroCandidates.Count > 1)
+        {
+            var dots = Horizontal(0, 18, 0, 0);
+            for (var i = 0; i < _heroCandidates.Count; i++)
+            {
+                dots.Children.Add(new Border
+                {
+                    Width = i == _heroIndex ? 15 : 5,
+                    Height = 4,
+                    CornerRadius = new CornerRadius(2),
+                    Background = i == _heroIndex ? Accent : Brush("#667B6A89"),
+                    Margin = new Thickness(4, 0, 0, 0)
+                });
+            }
+            content.Children.Add(dots);
+        }
+
+        grid.Children.Add(content);
+        hero.Child = grid;
+        return hero;
+    }
+
+    private UIElement TopTenRow(IReadOnlyList<StreamItem> items)
+    {
+        var section = Vertical(0, 18, 0, 0);
+        section.Children.Add(Txt("TOP 10", 16, Text, FontWeights.SemiBold, marginBottom: 8));
+        var row = Horizontal();
+        for (var i = 0; i < items.Count; i++)
+        {
+            var wrap = new Grid { Width = 198, Height = 242, Margin = new Thickness(0, 0, 10, 0) };
+            wrap.Children.Add(new TextBlock
+            {
+                Text = (i + 1).ToString(),
+                FontSize = 52,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brush("#606671"),
+                VerticalAlignment = VerticalAlignment.Bottom,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 0, 0, 20)
+            });
+            var card = ContentCard(items[i], 150);
+            card.HorizontalAlignment = HorizontalAlignment.Right;
+            wrap.Children.Add(card);
+            row.Children.Add(wrap);
+        }
+        section.Children.Add(new ScrollViewer
+        {
+            Content = row,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
+        });
+        return section;
+    }
+
+    private UIElement QuickLinksRow()
+    {
+        var section = Vertical(0, 20, 0, 18);
+        section.Children.Add(Txt("اختصارات سريعة", 16, Text, FontWeights.SemiBold, marginBottom: 8));
+        var row = Horizontal();
+        foreach (var entry in new[]
+        {
+            ("● البث المباشر", "live"),
+            ("▣ الأفلام", "movie"),
+            ("▤ المسلسلات", "series"),
+            ("★ المفضلة", "favorites"),
+            ("⌕ البحث", "search")
+        })
+        {
+            var button = Action(entry.Item1, false, (_, _) =>
+            {
+                _currentPage = entry.Item2;
+                RefreshCurrentPage();
+            }, 0, 0, 9, 0);
+            button.Width = 150;
+            button.Height = 58;
+            row.Children.Add(button);
+        }
+        section.Children.Add(row);
+        return section;
+    }
+
+    private static FlowDirection DetectDirection(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return FlowDirection.RightToLeft;
+        return value.Any(ch => ch >= '\u0600' && ch <= '\u06FF')
+            ? FlowDirection.RightToLeft
+            : FlowDirection.LeftToRight;
     }
 
     private UIElement ActivationCard()
@@ -935,6 +1144,36 @@ public partial class MainWindow : Window
             onEnded: nextAction)
         { Owner = this };
         player.ShowDialog();
+    }
+
+    private void ShowCollections()
+    {
+        DisposePreview();
+        PageTitle.Text = "المجموعات";
+        PageSubtitle.Text = "مختارات BLOFY";
+        var root = Vertical();
+
+        var top = _viewIndex.Collection("top").Where(_store.IsContentVisible).Take(24).ToList();
+        var latest = _viewIndex.Collection("latest").Where(_store.IsContentVisible).Take(24).ToList();
+        var arabic = _viewIndex.Collection("arabic").Where(_store.IsContentVisible).Take(24).ToList();
+        var ultra = _viewIndex.Collection("4k").Where(_store.IsContentVisible).Take(24).ToList();
+
+        if (top.Count > 0) root.Children.Add(ContentRow("أعلى تقييم", top));
+        if (latest.Count > 0) root.Children.Add(ContentRow("أضيف حديثًا", latest));
+        if (arabic.Count > 0) root.Children.Add(ContentRow("مختارات عربية", arabic));
+        if (ultra.Count > 0) root.Children.Add(ContentRow("4K • UHD", ultra));
+
+        if (root.Children.Count == 0)
+        {
+            ContentHost.Content = EmptyState("لا توجد مجموعات جاهزة", "حدّث المكتبة ثم حاول مرة أخرى.");
+            return;
+        }
+
+        ContentHost.Content = new ScrollViewer
+        {
+            Content = root,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden
+        };
     }
 
     private void ShowFavorites()
@@ -1599,6 +1838,37 @@ public partial class MainWindow : Window
                 "BLOFY PLAYER");
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+    }
+
+    private void UpdateHeaderClock()
+    {
+        var now = DateTimeOffset.Now;
+        string TimeIn(string id)
+        {
+            try
+            {
+                var zone = TimeZoneInfo.FindSystemTimeZoneById(id);
+                return TimeZoneInfo.ConvertTime(now, zone).ToString("HH:mm");
+            }
+            catch { return "--:--"; }
+        }
+
+        HeaderClockText.Text = "الرياض " + TimeIn("Arab Standard Time") +
+                               "  •  لندن " + TimeIn("GMT Standard Time") +
+                               "\nدبي " + TimeIn("Arabian Standard Time") +
+                               "  •  نيويورك " + TimeIn("Eastern Standard Time");
+    }
+
+    private void UpdateNavigationState()
+    {
+        foreach (var button in NavigationPanel.Children.OfType<Button>())
+        {
+            var selected = string.Equals(button.Tag as string, _currentPage, StringComparison.Ordinal);
+            button.Background = selected ? Brush("#241536") : Brushes.Transparent;
+            button.Foreground = selected ? Accent : Brush("#C9BCD9");
+            button.BorderBrush = selected ? Brush("#66FFFFFF") : Brushes.Transparent;
+            button.BorderThickness = selected ? new Thickness(1) : new Thickness(0);
+        }
     }
 
     private void UpdateProfileLabel()
