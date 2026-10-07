@@ -966,7 +966,9 @@ public partial class MainWindow : Window
     {
         DisposePreview();
         if (_store.IsLocked(item.Key) && !EnsureParentalAccess()) return;
-        PageTitle.Text = item.Name;
+
+        PageTitle.Text = item.Kind == "series" ? "BLOFY SERIES" : "BLOFY MOVIE";
+        PageSubtitle.Text = item.Name;
 
         ProviderDetails? providerDetails = null;
         if (_activeProvider is not null && _activeProvider.ProviderType == "xtream")
@@ -974,55 +976,159 @@ public partial class MainWindow : Window
             try
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-                providerDetails = await _catalog!.Xtream(_activeProvider).GetDetailsAsync(_activeProvider, item, timeout.Token);
+                providerDetails = await _catalog!.Xtream(_activeProvider)
+                    .GetDetailsAsync(_activeProvider, item, timeout.Token);
             }
             catch { }
         }
-
-        var root = Vertical();
-
-        var hero = new Border
-        {
-            MinHeight = 250,
-            CornerRadius = new CornerRadius(18),
-            BorderBrush = Brush("#665E437A"),
-            BorderThickness = new Thickness(1),
-            Background = new LinearGradientBrush(Brush("#4B276A").Color, Bg.Color, 15),
-            Padding = new Thickness(24)
-        };
-
-        var info = Vertical();
-        info.Children.Add(Txt(item.Kind == "series" ? "BLOFY SERIES" : "BLOFY MOVIE", 10, Accent, FontWeights.Bold));
-        info.Children.Add(Txt(item.Name, 30, Text, FontWeights.Bold, 0, 8, 0, 6));
 
         var detailGenre = providerDetails?.Genre is { Length: > 0 } dg ? dg : item.Genre;
         var detailRating = providerDetails?.Rating is { Length: > 0 } dr ? dr : item.Rating;
         var detailDuration = providerDetails?.Duration is { Length: > 0 } dd ? dd : item.Duration;
         var detailRelease = providerDetails?.ReleaseDate is { Length: > 0 } rd ? rd : item.ReleaseDate;
         var detailPlot = providerDetails?.Plot is { Length: > 0 } dp ? dp : item.Plot;
-        var meta = string.Join("  •  ", new[] { item.Year, detailRelease, detailGenre, string.IsNullOrWhiteSpace(detailRating) ? "" : "★ " + detailRating, detailDuration }
-            .Where(s => !string.IsNullOrWhiteSpace(s)));
-        info.Children.Add(Txt(meta, 12, Muted));
-        if (!string.IsNullOrWhiteSpace(providerDetails?.Country))
-            info.Children.Add(Txt("الدولة: " + providerDetails.Country, 11, Accent, marginTop: 7));
-        if (!string.IsNullOrWhiteSpace(providerDetails?.Network))
-            info.Children.Add(Txt("الشبكة: " + providerDetails.Network, 11, Muted, marginTop: 4));
-        if (!string.IsNullOrWhiteSpace(detailPlot))
-            info.Children.Add(Txt(detailPlot, 13, Text, FontWeights.Normal, 0, 14, 0, 14));
-        if (!string.IsNullOrWhiteSpace(providerDetails?.Cast))
-            info.Children.Add(Txt("الممثلون: " + providerDetails.Cast, 11, Muted, marginBottom: 6));
-        if (!string.IsNullOrWhiteSpace(providerDetails?.Director))
-            info.Children.Add(Txt("المخرج: " + providerDetails.Director, 11, Muted, marginBottom: 6));
+        var detailBackdrop = providerDetails?.Backdrop is { Length: > 0 } db ? db : item.Backdrop;
+        if (string.IsNullOrWhiteSpace(detailBackdrop)) detailBackdrop = item.Icon;
 
-        var actions = Horizontal();
+        var root = Vertical();
+        var hero = new Grid
+        {
+            Height = 555,
+            ClipToBounds = true,
+            Margin = new Thickness(0, 0, 0, 20)
+        };
+
+        var heroBorder = new Border
+        {
+            CornerRadius = new CornerRadius(18),
+            BorderBrush = Brush("#52FFFFFF"),
+            BorderThickness = new Thickness(1),
+            ClipToBounds = true
+        };
+        var heroLayer = new Grid();
+
+        if (!string.IsNullOrWhiteSpace(detailBackdrop))
+        {
+            try
+            {
+                var bgBitmap = CreateRemoteBitmap(detailBackdrop, 1200);
+                heroLayer.Children.Add(new Image
+                {
+                    Source = bgBitmap,
+                    Stretch = Stretch.UniformToFill,
+                    Opacity = .88
+                });
+            }
+            catch { }
+        }
+
+        heroLayer.Children.Add(new Border
+        {
+            Background = new LinearGradientBrush(
+                new GradientStopCollection
+                {
+                    new(Brush("#F707050B").Color, 0),
+                    new(Brush("#C10B0712").Color, .42),
+                    new(Brush("#64130A1C").Color, .76),
+                    new(Brush("#1607050B").Color, 1)
+                },
+                new Point(0, .5), new Point(1, .5))
+        });
+        heroLayer.Children.Add(new Border
+        {
+            Background = new LinearGradientBrush(
+                new GradientStopCollection
+                {
+                    new(Brush("#D907050B").Color, 0),
+                    new(Brush("#4207050B").Color, .55),
+                    new(Brush("#0007050B").Color, 1)
+                },
+                new Point(.5, 1), new Point(.5, 0))
+        });
+
+        var body = new Grid { Margin = new Thickness(38, 28, 38, 28) };
+        body.ColumnDefinitions.Add(new ColumnDefinition());
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(280) });
+
+        var infoPanel = new Border
+        {
+            Background = Brush("#B8180F23"),
+            BorderBrush = Brush("#52FFFFFF"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(16),
+            Padding = new Thickness(24),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(infoPanel, 0);
+
+        var info = Vertical();
+        info.Children.Add(Txt(item.Kind == "series" ? "BLOFY SERIES" : "BLOFY MOVIE",
+            10, Accent, FontWeights.Bold, marginBottom: 6));
+
+        var title = Txt(item.Name, 37, Brushes.White, FontWeights.Bold, marginBottom: 10);
+        title.MaxHeight = 100;
+        title.TextTrimming = TextTrimming.CharacterEllipsis;
+        title.FlowDirection = DetectDirection(item.Name);
+        info.Children.Add(title);
+
+        var chips = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal,
+            FlowDirection = FlowDirection.RightToLeft,
+            Margin = new Thickness(0, 0, 0, 12)
+        };
+        foreach (var value in new[]
+        {
+            item.Year,
+            detailRelease,
+            detailGenre?.Split(',').FirstOrDefault()?.Trim(),
+            string.IsNullOrWhiteSpace(detailRating) ? "" : "★ " + detailRating,
+            detailDuration,
+            providerDetails?.Country
+        }.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().Take(8))
+        {
+            chips.Children.Add(MetadataChip(value!));
+        }
+        info.Children.Add(chips);
+
+        if (!string.IsNullOrWhiteSpace(detailPlot))
+        {
+            var plot = Txt(detailPlot, 14, Brush("#DAD5E1"), marginBottom: 12);
+            plot.MaxHeight = 88;
+            plot.TextTrimming = TextTrimming.CharacterEllipsis;
+            plot.FlowDirection = DetectDirection(detailPlot);
+            info.Children.Add(plot);
+        }
+
+        if (!string.IsNullOrWhiteSpace(providerDetails?.Network))
+            info.Children.Add(Txt("الشبكة: " + providerDetails.Network, 11, Accent, marginBottom: 5));
+        if (!string.IsNullOrWhiteSpace(providerDetails?.Cast))
+        {
+            var cast = Txt("الممثلون: " + providerDetails.Cast, 11, Muted, marginBottom: 5);
+            cast.MaxHeight = 42;
+            cast.TextTrimming = TextTrimming.CharacterEllipsis;
+            cast.FlowDirection = DetectDirection(cast.Text);
+            info.Children.Add(cast);
+        }
+        if (!string.IsNullOrWhiteSpace(providerDetails?.Director))
+        {
+            var director = Txt("المخرج: " + providerDetails.Director, 11, Muted, marginBottom: 8);
+            director.FlowDirection = DetectDirection(director.Text);
+            info.Children.Add(director);
+        }
+
+        var actions = Horizontal(0, 8, 0, 0);
         if (item.Kind == "movie")
             actions.Children.Add(Action("▶ تشغيل", true, async (_, _) => await PlayItemAsync(item)));
+
         var fav = Action(item.Favorite ? "★ إزالة من المفضلة" : "☆ إضافة للمفضلة", false, async (s, _) =>
         {
             await _store.ToggleFavoriteAsync(item);
             if (s is Button b) b.Content = item.Favorite ? "★ إزالة من المفضلة" : "☆ إضافة للمفضلة";
-        }, 10);
+        }, 8);
         actions.Children.Add(fav);
+
         var lockButton = Action(_store.IsLocked(item.Key) ? "🔓 إلغاء القفل" : "🔒 قفل المحتوى", false, async (s, _) =>
         {
             var locked = _store.IsLocked(item.Key);
@@ -1035,7 +1141,8 @@ public partial class MainWindow : Window
             {
                 if (!_store.HasParentalPin)
                 {
-                    var newPin = UiDialogs.Prompt(this, "PIN أبوي", "عيّن PIN من 4 إلى 8 أرقام قبل قفل المحتوى", password: true);
+                    var newPin = UiDialogs.Prompt(this, "PIN أبوي",
+                        "عيّن PIN من 4 إلى 8 أرقام قبل قفل المحتوى", password: true);
                     if (string.IsNullOrWhiteSpace(newPin)) return;
                     try { await _store.SetParentalPinAsync(newPin); }
                     catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); return; }
@@ -1044,36 +1151,89 @@ public partial class MainWindow : Window
             }
 
             if (s is Button b) b.Content = _store.IsLocked(item.Key) ? "🔓 إلغاء القفل" : "🔒 قفل المحتوى";
-        }, 10);
+        }, 8);
         actions.Children.Add(lockButton);
         info.Children.Add(actions);
-        hero.Child = info;
+        infoPanel.Child = info;
+        body.Children.Add(infoPanel);
+
+        var posterShell = new Border
+        {
+            Width = 280,
+            Height = 420,
+            CornerRadius = new CornerRadius(20),
+            Background = Brush("#35110B18"),
+            BorderBrush = Brush("#52FFFFFF"),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(2),
+            VerticalAlignment = VerticalAlignment.Center,
+            ClipToBounds = true
+        };
+        if (!string.IsNullOrWhiteSpace(item.Icon))
+        {
+            try
+            {
+                posterShell.Child = new Image
+                {
+                    Source = CreateRemoteBitmap(item.Icon, 480),
+                    Stretch = Stretch.UniformToFill
+                };
+            }
+            catch { }
+        }
+        Grid.SetColumn(posterShell, 2);
+        body.Children.Add(posterShell);
+
+        heroLayer.Children.Add(body);
+        heroBorder.Child = heroLayer;
+        hero.Children.Add(heroBorder);
         root.Children.Add(hero);
+
+        var pageScroll = new ScrollViewer
+        {
+            Content = root,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+        };
+        ContentHost.Content = pageScroll;
 
         if (item.Kind == "series" && _activeProvider is not null && _activeProvider.ProviderType == "xtream")
         {
-            var loading = Txt("جاري تحميل المواسم والحلقات…", 13, Muted, marginTop: 20);
+            var loading = Txt("جاري تحميل المواسم والحلقات…", 13, Muted, marginBottom: 14);
             root.Children.Add(loading);
-            ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
             try
             {
-                var episodes = await _catalog!.Xtream(_activeProvider).GetEpisodesAsync(_activeProvider, item.RemoteId);
+                var episodes = await _catalog!.Xtream(_activeProvider)
+                    .GetEpisodesAsync(_activeProvider, item.RemoteId);
                 root.Children.Remove(loading);
+
                 if (episodes.Count == 0)
-                    root.Children.Add(Txt("لا توجد حلقات متاحة من السيرفر.", 13, Muted, marginTop: 20));
+                {
+                    root.Children.Add(Txt("لا توجد حلقات متاحة من السيرفر.", 13, Muted, marginBottom: 18));
+                }
                 else
                 {
-                    foreach (var season in episodes.GroupBy(e => e.Season))
+                    foreach (var season in episodes.GroupBy(e => e.Season).OrderBy(g => g.Key))
                     {
-                        root.Children.Add(Txt("الموسم " + season.Key, 20, Text, FontWeights.Bold, 0, 22, 0, 10));
-                        var row = new WrapPanel();
-                        foreach (var ep in season)
+                        root.Children.Add(Txt("الموسم " + season.Key, 20, Text,
+                            FontWeights.Bold, marginTop: 10, marginBottom: 10));
+
+                        var row = new WrapPanel
                         {
-                            var epButton = Action("الحلقة " + ep.Episode + "\n" + ep.Title, false, async (_, _) =>
-                                await PlayEpisodeAsync(item, ep, episodes), 0);
-                            epButton.Width = 190;
+                            Orientation = Orientation.Horizontal,
+                            FlowDirection = FlowDirection.RightToLeft,
+                            Margin = new Thickness(0, 0, 0, 18)
+                        };
+                        foreach (var ep in season.OrderBy(e => e.Episode))
+                        {
+                            var epButton = Action(
+                                "الحلقة " + ep.Episode + Environment.NewLine + ep.Title,
+                                false,
+                                async (_, _) => await PlayEpisodeAsync(item, ep, episodes));
+                            epButton.Width = 205;
                             epButton.Height = 70;
+                            epButton.HorizontalContentAlignment = HorizontalAlignment.Right;
                             epButton.Margin = new Thickness(0, 0, 10, 10);
                             row.Children.Add(epButton);
                         }
@@ -1084,11 +1244,9 @@ public partial class MainWindow : Window
             catch (Exception ex)
             {
                 root.Children.Remove(loading);
-                root.Children.Add(Txt("تعذر تحميل الحلقات: " + ex.Message, 12, Muted, marginTop: 20));
+                root.Children.Add(Txt("تعذر تحميل الحلقات: " + ex.Message, 12, Muted, marginBottom: 18));
             }
         }
-
-        ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
     private async Task PlayItemAsync(StreamItem item)
@@ -2236,6 +2394,39 @@ public partial class MainWindow : Window
         stack.Children.Add(Txt(label, 11, Muted, FontWeights.Normal, 0, 0, 0, 5));
         stack.Children.Add(control);
         return stack;
+    }
+
+    private static BitmapImage CreateRemoteBitmap(string url, int decodeWidth)
+    {
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.UriSource = new Uri(url, UriKind.Absolute);
+        bitmap.DecodePixelWidth = decodeWidth;
+        bitmap.CacheOption = BitmapCacheOption.OnDemand;
+        bitmap.CreateOptions = BitmapCreateOptions.DelayCreation;
+        bitmap.EndInit();
+        return bitmap;
+    }
+
+    private UIElement MetadataChip(string value)
+    {
+        return new Border
+        {
+            Background = Brush("#D421182D"),
+            BorderBrush = Brush("#584768"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(10, 5, 10, 5),
+            Margin = new Thickness(0, 0, 6, 6),
+            Child = new TextBlock
+            {
+                Text = value,
+                FontSize = 11,
+                Foreground = Brush("#D2BBEE"),
+                VerticalAlignment = VerticalAlignment.Center,
+                FlowDirection = DetectDirection(value)
+            }
+        };
     }
 
     private static SolidColorBrush Brush(string value) =>
