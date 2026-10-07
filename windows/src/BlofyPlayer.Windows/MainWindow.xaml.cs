@@ -1221,18 +1221,23 @@ public partial class MainWindow : Window
             }
         }
         Func<StreamItem, string>? resolver = item.Kind == "live"
-            ? s => _activeProvider.ProviderType == "m3u" ? s.DirectSource :
-                _catalog!.Xtream(_activeProvider).StreamUrl(_activeProvider, s, _store.State.Settings.LiveFormat)
+            ? s => BuildStreamCandidates(s).FirstOrDefault() ?? ""
+            : null;
+        Func<StreamItem, IReadOnlyList<string>>? recoveryResolver = item.Kind == "live"
+            ? s => BuildStreamCandidates(s)
             : null;
 
         var player = new PlayerWindow(
             item.Name,
             url,
-            resume,
-            sameKind,
-            idx,
-            resolver,
-            item.Kind == "live" ? null : async (pos, len) => await _store.SaveWatchStateAsync(item.Key, pos, len),
+            resumePositionMs: resume,
+            playlist: sameKind,
+            playlistIndex: idx,
+            urlResolver: resolver,
+            recoveryResolver: recoveryResolver,
+            recoveryUrls: BuildStreamCandidates(item),
+            savePosition: item.Kind == "live" ? null : async (pos, len) =>
+                await _store.SaveWatchStateAsync(item.Key, pos, len),
             settings: _store.State.Settings)
         { Owner = this };
         player.ShowDialog();
@@ -1268,12 +1273,69 @@ public partial class MainWindow : Window
         }
 
         var player = new PlayerWindow(series.Name + " • S" + episode.Season + "E" + episode.Episode,
-            url, resume,
+            url,
+            resumePositionMs: resume,
+            recoveryUrls: BuildEpisodeCandidates(episode),
             savePosition: async (pos, len) => await _store.SaveWatchStateAsync(key, pos, len),
             settings: _store.State.Settings,
             onEnded: nextAction)
         { Owner = this };
         player.ShowDialog();
+    }
+
+    private IReadOnlyList<string> BuildStreamCandidates(StreamItem item)
+    {
+        if (_activeProvider is null || _catalog is null) return Array.Empty<string>();
+
+        var urls = new List<string>();
+        void Add(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)) return;
+            if (uri.Scheme is not ("http" or "https")) return;
+            if (urls.Any(x => x.Equals(value.Trim(), StringComparison.OrdinalIgnoreCase))) return;
+            urls.Add(value.Trim());
+        }
+
+        if (_activeProvider.ProviderType == "m3u")
+        {
+            Add(item.DirectSource);
+            return urls;
+        }
+
+        var xtream = _catalog.Xtream(_activeProvider);
+        if (item.Kind == "live")
+        {
+            var preferred = _store.State.Settings.LiveFormat == "m3u8" ? "m3u8" : "ts";
+            var alternate = preferred == "ts" ? "m3u8" : "ts";
+            Add(xtream.StreamUrl(_activeProvider, item, preferred));
+            Add(item.DirectSource);
+            Add(xtream.StreamUrl(_activeProvider, item, alternate));
+        }
+        else
+        {
+            Add(item.DirectSource);
+            Add(xtream.StreamUrl(_activeProvider, item, _store.State.Settings.LiveFormat));
+        }
+        return urls;
+    }
+
+    private IReadOnlyList<string> BuildEpisodeCandidates(EpisodeItem episode)
+    {
+        if (_activeProvider is null || _catalog is null) return Array.Empty<string>();
+        var urls = new List<string>();
+        void Add(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)) return;
+            if (uri.Scheme is not ("http" or "https")) return;
+            if (urls.Any(x => x.Equals(value.Trim(), StringComparison.OrdinalIgnoreCase))) return;
+            urls.Add(value.Trim());
+        }
+
+        Add(episode.DirectSource);
+        Add(_catalog.Xtream(_activeProvider).EpisodeUrl(_activeProvider, episode));
+        return urls;
     }
 
     private void ShowCollections()
