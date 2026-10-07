@@ -87,3 +87,27 @@ public sealed class CatalogViewIndex
     private static string CategoryKey(string kind, string categoryId) =>
         kind + "\u001F" + categoryId;
 }
+
+
+public static class StartupCatalogTransfer
+{
+    private static readonly object Gate = new();
+    private static CatalogSnapshot? _snapshot;
+
+    public static void Store(CatalogSnapshot snapshot)
+    {
+        lock (Gate) _snapshot = snapshot;
+    }
+
+    public static CatalogSnapshot? Take(string providerId)
+    {
+        lock (Gate)
+        {
+            if (_snapshot is null || !_snapshot.ProviderId.Equals(providerId, StringComparison.Ordinal))
+                return null;
+            var value = _snapshot;
+            _snapshot = null;
+            return value;
+        }
+    }
+}
