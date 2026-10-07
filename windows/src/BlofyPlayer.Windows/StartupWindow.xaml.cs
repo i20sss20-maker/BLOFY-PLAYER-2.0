@@ -59,7 +59,7 @@ public partial class StartupWindow : Window
                 {
                     await Task.Delay(TimeSpan.FromSeconds(4), token);
                     if (token.IsCancellationRequested || _loading) break;
-                    await Dispatcher.InvokeAsync(async () => await RefreshActivationAsync());
+                    await Dispatcher.InvokeAsync(RefreshActivationAsync).Task.Unwrap();
                 }
                 catch (OperationCanceledException) { break; }
                 catch { }
