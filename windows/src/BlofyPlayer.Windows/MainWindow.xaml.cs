@@ -500,7 +500,10 @@ public partial class MainWindow : Window
                 var url = _activeProvider.ProviderType == "m3u"
                     ? selected.DirectSource
                     : _catalog!.Xtream(_activeProvider).StreamUrl(_activeProvider, selected, _store.State.Settings.LiveFormat);
-                _previewPlayback.Play(url);
+                _previewPlayback.Play(url, new Dictionary<string, string>
+                {
+                    ["User-Agent"] = _store.State.Settings.UserAgent
+                });
             }
 
             epgPanel.Children.Clear();
@@ -746,7 +749,8 @@ public partial class MainWindow : Window
             sameKind,
             idx,
             resolver,
-            item.Kind == "live" ? null : async (pos, len) => await _store.SaveWatchStateAsync(item.Key, pos, len))
+            item.Kind == "live" ? null : async (pos, len) => await _store.SaveWatchStateAsync(item.Key, pos, len),
+            settings: _store.State.Settings)
         { Owner = this };
         player.ShowDialog();
     }
@@ -760,8 +764,31 @@ public partial class MainWindow : Window
         if (episodeState is not null && !episodeState.Completed && episodeState.PositionMs > 30_000)
             resume = episodeState.PositionMs;
         var url = _catalog!.Xtream(_activeProvider).EpisodeUrl(_activeProvider, episode);
+
+        Func<Task>? nextAction = null;
+        var ordered = episodes.OrderBy(e => e.Season).ThenBy(e => e.Episode).ToList();
+        var currentIndex = ordered.FindIndex(e => e.Key == episode.Key);
+        var nextEpisode = currentIndex >= 0 && currentIndex + 1 < ordered.Count ? ordered[currentIndex + 1] : null;
+        if (nextEpisode is not null && _store.State.Settings.AutoNext != "off")
+        {
+            nextAction = async () =>
+            {
+                if (_store.State.Settings.AutoNext == "ask")
+                {
+                    var yes = MessageBox.Show(this,
+                        "تشغيل الحلقة التالية؟\nS" + nextEpisode.Season + "E" + nextEpisode.Episode + " • " + nextEpisode.Title,
+                        "BLOFY PLAYER", MessageBoxButton.YesNo) == MessageBoxResult.Yes;
+                    if (!yes) return;
+                }
+                await PlayEpisodeAsync(series, nextEpisode, episodes);
+            };
+        }
+
         var player = new PlayerWindow(series.Name + " • S" + episode.Season + "E" + episode.Episode,
-            url, resume, savePosition: async (pos, len) => await _store.SaveWatchStateAsync(key, pos, len))
+            url, resume,
+            savePosition: async (pos, len) => await _store.SaveWatchStateAsync(key, pos, len),
+            settings: _store.State.Settings,
+            onEnded: nextAction)
         { Owner = this };
         player.ShowDialog();
     }
