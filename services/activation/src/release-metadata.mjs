@@ -56,6 +56,17 @@ export function appReleaseMetadata(env = process.env) {
   };
 }
 
+export function windowsReleaseMetadata(env = process.env) {
+  const versionName = sanitizeVersionName(env.BLOFY_WINDOWS_VERSION_NAME);
+  const downloadUrl = sanitizeHttpsUrl(env.BLOFY_WINDOWS_DOWNLOAD_URL);
+  if (!versionName || !downloadUrl) return null;
+  return {
+    versionName,
+    downloadUrl,
+    releaseNotes: sanitizeReleaseNotes(env.BLOFY_WINDOWS_RELEASE_NOTES)
+  };
+}
+
 export function activationReleaseMetadata(env = process.env) {
   const vercelCommitSha = sanitizeCommitSha(env.VERCEL_GIT_COMMIT_SHA);
   const fallbackCommitSha = sanitizeCommitSha(env.BLOFY_RELEASE_COMMIT_SHA);
@@ -64,7 +75,8 @@ export function activationReleaseMetadata(env = process.env) {
     version: ACTIVATION_SERVICE_VERSION,
     platform: env.VERCEL === '1' || vercelCommitSha ? 'vercel' : 'self-hosted',
     commitSha: vercelCommitSha || fallbackCommitSha,
-    app: appReleaseMetadata(env)
+    app: appReleaseMetadata(env),
+    windows: windowsReleaseMetadata(env)
   };
 }
 
