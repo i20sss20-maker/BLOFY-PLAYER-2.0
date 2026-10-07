@@ -128,6 +128,8 @@ public sealed class PersistentState
     public List<UserProfile> Profiles { get; set; } = [];
     public string ActiveProfileId { get; set; } = "";
     public Dictionary<string, ProfileLibraryState> ProfileLibraries { get; set; } = [];
+    public HashSet<string> LockedContentKeys { get; set; } = [];
+    public string? ParentalPinHash { get; set; }
 
     public HashSet<string> Favorites { get; set; } = [];
     public Dictionary<string, WatchState> WatchStates { get; set; } = [];
@@ -217,7 +219,27 @@ public sealed class LocalStore
     public bool IsKidsProfile => ActiveProfile().Kids;
 
     public bool IsContentVisible(StreamItem item) =>
-        !IsKidsProfile || !KidsPolicy.IsBlocked(item);
+        !IsKidsProfile || (!KidsPolicy.IsBlocked(item) && !IsLocked(item.Key));
+
+    public bool IsLocked(string contentKey) => State.LockedContentKeys.Contains(contentKey);
+
+    public bool HasParentalPin => !string.IsNullOrWhiteSpace(State.ParentalPinHash);
+
+    public bool VerifyParentalPin(string pin) =>
+        ProfileSecurity.Verify(State.ParentalPinHash, pin);
+
+    public async Task SetParentalPinAsync(string? pin)
+    {
+        State.ParentalPinHash = string.IsNullOrWhiteSpace(pin) ? null : ProfileSecurity.HashPin(pin);
+        await SaveAsync();
+    }
+
+    public async Task SetLockedAsync(string contentKey, bool locked)
+    {
+        if (locked) State.LockedContentKeys.Add(contentKey);
+        else State.LockedContentKeys.Remove(contentKey);
+        await SaveAsync();
+    }
 
     public async Task<UserProfile> CreateProfileAsync(string name, bool kids = false, bool guest = false)
     {
