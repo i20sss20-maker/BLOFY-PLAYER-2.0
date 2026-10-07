@@ -614,7 +614,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
     if (await experience.handle(req,res,requestUrl)) return;
-    if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
+    if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal' || requestUrl.pathname === '/connect')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
