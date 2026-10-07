@@ -396,7 +396,7 @@ public partial class MainWindow : Window
         title.MaxWidth = 590;
         title.MaxHeight = 82;
         title.TextTrimming = TextTrimming.CharacterEllipsis;
-        title.TextDirection = DetectDirection(item.Name);
+        title.FlowDirection = DetectDirection(item.Name);
         content.Children.Add(title);
 
         var meta = string.Join("   •   ", new[]
@@ -407,7 +407,7 @@ public partial class MainWindow : Window
             item.Kind == "series" ? "مسلسل" : "فيلم"
         }.Where(x => !string.IsNullOrWhiteSpace(x)));
         var metaText = Txt(meta, 11, Brush("#DDD3E9"), marginTop: 7);
-        metaText.TextDirection = FlowDirection.LeftToRight;
+        metaText.FlowDirection = FlowDirection.LeftToRight;
         content.Children.Add(metaText);
 
         var plot = Txt(string.IsNullOrWhiteSpace(item.Plot)
@@ -416,7 +416,7 @@ public partial class MainWindow : Window
         plot.MaxWidth = 590;
         plot.MaxHeight = 48;
         plot.TextTrimming = TextTrimming.CharacterEllipsis;
-        plot.TextDirection = DetectDirection(plot.Text);
+        plot.FlowDirection = DetectDirection(plot.Text);
         content.Children.Add(plot);
 
         var actions = Horizontal();
@@ -871,27 +871,32 @@ public partial class MainWindow : Window
         ContentHost.Content = grid;
     }
 
-    private Button ContentCard(StreamItem item, int width)
+    private Button ContentCard(StreamItem item, int width, bool landscape = false)
     {
         var stack = Vertical();
+        var imageHeight = landscape ? (int)Math.Round((width - 18) * 9d / 16d) : item.Kind == "live" ? 100 : 210;
         var imageBorder = new Border
         {
             Width = width - 18,
-            Height = item.Kind == "live" ? 100 : 210,
+            Height = imageHeight,
             CornerRadius = new CornerRadius(10),
             Background = Surface2,
-            BorderBrush = Brush("#443D2756"),
-            BorderThickness = new Thickness(1)
+            BorderBrush = Brush("#52FFFFFF"),
+            BorderThickness = new Thickness(1),
+            ClipToBounds = true
         };
 
-        if (!string.IsNullOrWhiteSpace(item.Icon))
+        var artwork = landscape
+            ? (!string.IsNullOrWhiteSpace(item.Backdrop) ? item.Backdrop : item.Icon)
+            : item.Icon;
+        if (!string.IsNullOrWhiteSpace(artwork))
         {
             try
             {
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
-                bitmap.UriSource = new Uri(item.Icon, UriKind.Absolute);
-                bitmap.DecodePixelWidth = item.Kind == "live" ? 240 : 220;
+                bitmap.UriSource = new Uri(artwork, UriKind.Absolute);
+                bitmap.DecodePixelWidth = landscape ? 360 : item.Kind == "live" ? 240 : 220;
                 bitmap.CacheOption = BitmapCacheOption.OnDemand;
                 bitmap.CreateOptions = BitmapCreateOptions.DelayCreation;
                 bitmap.EndInit();
@@ -899,31 +904,56 @@ public partial class MainWindow : Window
                 imageBorder.Child = new Image
                 {
                     Source = bitmap,
-                    Stretch = item.Kind == "live" ? Stretch.Uniform : Stretch.UniformToFill
+                    Stretch = landscape || item.Kind != "live" ? Stretch.UniformToFill : Stretch.Uniform
                 };
             }
             catch { }
         }
 
         stack.Children.Add(imageBorder);
-        stack.Children.Add(Txt(item.Name, 12, Text, FontWeights.SemiBold, 2, 7, 2, 0));
-        if (!string.IsNullOrWhiteSpace(item.Rating) && item.Kind != "live")
-            stack.Children.Add(Txt("★ " + item.Rating, 10, Accent));
+        var title = Txt(item.Name, 11.5, Text, FontWeights.SemiBold, 2, 7, 2, 0);
+        title.MaxWidth = width - 12;
+        title.MaxHeight = 38;
+        title.TextTrimming = TextTrimming.CharacterEllipsis;
+        title.FlowDirection = DetectDirection(item.Name);
+        stack.Children.Add(title);
+        if (!string.IsNullOrWhiteSpace(item.Rating) && item.Kind != "live" && !landscape)
+            stack.Children.Add(Txt("★ " + item.Rating, 9.5, Accent));
 
         var button = new Button
         {
             Width = width,
-            Height = item.Kind == "live" ? 155 : 270,
+            Height = landscape ? imageHeight + 58 : item.Kind == "live" ? 155 : 270,
             Content = stack,
             Background = Brushes.Transparent,
             BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(1),
             Padding = new Thickness(6),
-            Margin = new Thickness(0, 0, 12, 14),
+            Margin = new Thickness(0, 0, 10, 12),
             Cursor = Cursors.Hand,
             ToolTip = item.Name,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            VerticalContentAlignment = VerticalAlignment.Stretch
+            VerticalContentAlignment = VerticalAlignment.Stretch,
+            RenderTransformOrigin = new Point(.5, .5),
+            RenderTransform = new ScaleTransform(1, 1)
         };
+
+        void Focus(bool active)
+        {
+            button.Background = active ? Brush("#3D2756") : Brushes.Transparent;
+            button.BorderBrush = active ? Brush("#F0E1FF") : Brushes.Transparent;
+            button.BorderThickness = active ? new Thickness(2) : new Thickness(1);
+            if (button.RenderTransform is ScaleTransform scale)
+            {
+                scale.ScaleX = active ? 1.025 : 1;
+                scale.ScaleY = active ? 1.025 : 1;
+            }
+        }
+
+        button.GotKeyboardFocus += (_, _) => Focus(true);
+        button.LostKeyboardFocus += (_, _) => Focus(false);
+        button.MouseEnter += (_, _) => Focus(true);
+        button.MouseLeave += (_, _) => Focus(false);
         button.Click += async (_, _) =>
         {
             if (item.Kind == "live") await PlayItemAsync(item);
@@ -1879,16 +1909,17 @@ public partial class MainWindow : Window
 
     private void ApplyTheme()
     {
-        var light = _store.State.Settings.Theme.Equals("light", StringComparison.OrdinalIgnoreCase);
-        var background = light ? "#F7F5FA" : "#08060D";
-        var surface = light ? "#FFFFFF" : "#241536";
-        var surface2 = light ? "#F0EBF5" : "#180F23";
-        var sidebar = light ? "#F3EFF7" : "#100A18";
-        var text = light ? "#17151D" : "#F3F4F6";
-        var muted = light ? "#6B6175" : "#C9BCD9";
-        var accent = light ? "#6D28D9" : "#D0B2FF";
-        var border = light ? "#D8D0E2" : "#665E437A";
-        var primaryText = light ? "#FFFFFF" : "#08060D";
+        // Android parity mode: the reference Android TV UI is intentionally cinematic-dark.
+        // Keep one visual language across Home, browser, details and settings.
+        const string background = "#08060D";
+        const string surface = "#241536";
+        const string surface2 = "#180F23";
+        const string sidebar = "#241536";
+        const string text = "#F3F4F6";
+        const string muted = "#C9BCD9";
+        const string accent = "#D0B2FF";
+        const string border = "#52FFFFFF";
+        const string primaryText = "#08060D";
 
         Bg.Color = Brush(background).Color;
         Surface.Color = Brush(surface).Color;
@@ -2113,17 +2144,21 @@ public partial class MainWindow : Window
         return latest.Where(_store.IsContentVisible).Take(take).ToList();
     }
 
-    private UIElement ContentRow(string title, IReadOnlyList<StreamItem> items)
+    private UIElement ContentRow(string title, IReadOnlyList<StreamItem> items, bool landscape = false)
     {
-        var section = Vertical(0, 22, 0, 0);
-        section.Children.Add(Txt(title, 19, Text, FontWeights.Bold, 0, 0, 0, 10));
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        foreach (var item in items) panel.Children.Add(ContentCard(item, 160));
+        var section = Vertical(0, 18, 0, 0);
+        section.Children.Add(Txt(title, 15, Text, FontWeights.SemiBold, 0, 0, 0, 7));
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, FlowDirection = FlowDirection.RightToLeft };
+        var width = landscape ? 224 : 154;
+        foreach (var item in items.Take(18))
+            panel.Children.Add(ContentCard(item, width, landscape));
+
         section.Children.Add(new ScrollViewer
         {
             Content = panel,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            PanningMode = PanningMode.HorizontalOnly
         });
         return section;
     }
