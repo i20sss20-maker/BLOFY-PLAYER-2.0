@@ -20,6 +20,7 @@ public sealed class ProviderAccount
     public string Username { get; set; } = "";
     public string Password { get; set; } = "";
     public string M3uUrl { get; set; } = "";
+    public string SubscriberToken { get; set; } = "";
     public bool Active { get; set; }
     public long UpdatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 }
@@ -1047,7 +1048,8 @@ public sealed class PortalService : IDisposable
         if (!response.IsSuccessStatusCode) return [];
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) return [];
-        var result = new List<ProviderAccount>();
+
+        var raw = new List<(string Id, string Name, string Url, string User, string Pass, bool Active, long UpdatedAt)>();
         foreach (var row in items.EnumerateArray())
         {
             var type = Get(row, "providerType").ToLowerInvariant();
@@ -1058,16 +1060,66 @@ public sealed class PortalService : IDisposable
             var pass = Get(row, "password");
             if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(url) ||
                 string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(pass)) continue;
+
+            raw.Add((
+                id,
+                Get(row, "name") is { Length: > 0 } name ? name : "BLOFY Server",
+                url.TrimEnd('/'),
+                user,
+                pass,
+                Bool(row, "active"),
+                Long(row, "updatedAt")
+            ));
+        }
+
+        var subscriberRows = raw.Where(x => BlofySubscriberService.IsProxyUrl(x.Url)).ToList();
+        Dictionary<string, BlofySubscriberSession> resolved = [];
+        if (subscriberRows.Count > 0)
+        {
+            try
+            {
+                using var subscriber = new BlofySubscriberService();
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(TimeSpan.FromSeconds(8));
+                resolved = await subscriber.ResolveAsync(identity, subscriberRows.Select(x => x.User), timeout.Token);
+            }
+            catch
+            {
+                resolved = [];
+            }
+        }
+
+        var result = new List<ProviderAccount>();
+        foreach (var row in raw)
+        {
+            if (BlofySubscriberService.IsProxyUrl(row.Url))
+            {
+                if (!resolved.TryGetValue(row.User, out var direct)) continue;
+                result.Add(new ProviderAccount
+                {
+                    Id = row.Id,
+                    Name = string.IsNullOrWhiteSpace(row.Name) ? direct.ProviderName : row.Name,
+                    ProviderType = "xtream",
+                    BaseUrl = direct.BaseUrl.TrimEnd('/'),
+                    Username = direct.Username,
+                    Password = direct.Password,
+                    SubscriberToken = direct.SessionToken,
+                    Active = row.Active,
+                    UpdatedAt = row.UpdatedAt
+                });
+                continue;
+            }
+
             result.Add(new ProviderAccount
             {
-                Id = id,
-                Name = Get(row, "name") is { Length: > 0 } name ? name : "BLOFY Server",
+                Id = row.Id,
+                Name = row.Name,
                 ProviderType = "xtream",
-                BaseUrl = url.TrimEnd('/'),
-                Username = user,
-                Password = pass,
-                Active = Bool(row, "active"),
-                UpdatedAt = Long(row, "updatedAt")
+                BaseUrl = row.Url,
+                Username = row.User,
+                Password = row.Pass,
+                Active = row.Active,
+                UpdatedAt = row.UpdatedAt
             });
         }
         return result;
@@ -1075,6 +1127,13 @@ public sealed class PortalService : IDisposable
 
     public async Task<string?> SaveAsync(BlofyIdentity identity, ProviderAccount provider, CancellationToken ct = default)
     {
+        var managed = !string.IsNullOrWhiteSpace(provider.SubscriberToken);
+        var baseUrl = managed
+            ? "https://api.blofyplayer.com" + BlofySubscriberService.ProxyPath
+            : provider.BaseUrl.TrimEnd('/');
+        var username = managed ? provider.SubscriberToken : provider.Username;
+        var password = managed ? "blofy" : provider.Password;
+
         var body = new
         {
             deviceId = identity.DeviceId,
@@ -1082,9 +1141,9 @@ public sealed class PortalService : IDisposable
             id = provider.Id,
             name = provider.Name,
             providerType = "xtream",
-            baseUrl = provider.BaseUrl.TrimEnd('/'),
-            username = provider.Username,
-            password = provider.Password,
+            baseUrl,
+            username,
+            password,
             active = provider.Active
         };
         using var response = await _http.PostAsJsonAsync("api/v1/portal/playlists", body, ct);
