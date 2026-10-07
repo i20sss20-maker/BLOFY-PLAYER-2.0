@@ -14,6 +14,8 @@ public partial class PlayerWindow : Window
     private readonly IReadOnlyList<StreamItem> _playlist;
     private readonly Func<StreamItem, string>? _urlResolver;
     private readonly Func<long, long, Task>? _savePosition;
+    private readonly Func<Task>? _onEnded;
+    private readonly AppSettings _settings;
     private int _index;
     private bool _fullscreen;
     private bool _resumeApplied;
@@ -26,18 +28,30 @@ public partial class PlayerWindow : Window
         IReadOnlyList<StreamItem>? playlist = null,
         int playlistIndex = -1,
         Func<StreamItem, string>? urlResolver = null,
-        Func<long, long, Task>? savePosition = null)
+        Func<long, long, Task>? savePosition = null,
+        AppSettings? settings = null,
+        Func<Task>? onEnded = null)
     {
         InitializeComponent();
+        _settings = settings ?? new AppSettings();
+        _onEnded = onEnded;
         LibVLCSharp.Shared.Core.Initialize();
-        _libVlc = new LibVLC(
+
+        var options = new List<string>
+        {
             "--no-video-title-show",
             "--network-caching=650",
             "--live-caching=450",
             "--file-caching=500",
-            "--avcodec-hw=any",
-            "--sub-language=ara,ar,eng,en"
-        );
+            "--avcodec-hw=any"
+        };
+        if (_settings.SubtitleLanguage == "ar") options.Add("--sub-language=ara,ar,eng,en");
+        else if (_settings.SubtitleLanguage == "auto") options.Add("--sub-language=ara,ar,eng,en");
+        var subtitleScale = _settings.SubtitleSize switch { "large" => 125, "medium" => 105, _ => 85 };
+        options.Add("--sub-text-scale=" + subtitleScale);
+        if (_settings.AudioOutput == "stereo") options.Add("--audio-channels=2");
+
+        _libVlc = new LibVLC(options.ToArray());
         _player = new MediaPlayer(_libVlc);
         VideoView.MediaPlayer = _player;
         _playlist = playlist ?? [];
@@ -50,10 +64,7 @@ public partial class PlayerWindow : Window
         _player.Playing += (_, _) => Dispatcher.Invoke(ApplyResumeOnce);
         _player.EncounteredError += (_, _) => Dispatcher.Invoke(() =>
             MessageBox.Show(this, "تعذر تشغيل هذا البث. جرّب قناة/جودة أخرى.", "BLOFY PLAYER"));
-        _player.EndReached += (_, _) => Dispatcher.Invoke(() =>
-        {
-            if (_playlist.Count > 0 && _index >= 0 && _index + 1 < _playlist.Count) ChangeChannel(1);
-        });
+        _player.EndReached += (_, _) => Dispatcher.Invoke(HandleEnded);
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _timer.Tick += (_, _) => RefreshHud();
@@ -79,8 +90,26 @@ public partial class PlayerWindow : Window
             return;
         }
         using var media = new Media(_libVlc, uri);
-        media.AddOption(":http-user-agent=BLOFY PLAYER/2.0 (Windows)");
+        media.AddOption(":http-user-agent=" + _settings.UserAgent);
+        if (_settings.SubtitleLanguage == "off") media.AddOption(":no-spu");
         _player.Play(media);
+    }
+
+    private async void HandleEnded()
+    {
+        if (_playlist.Count > 0 && _index >= 0 && _index + 1 < _playlist.Count)
+        {
+            ChangeChannel(1);
+            return;
+        }
+
+        if (_onEnded is null) return;
+        try
+        {
+            Close();
+            await _onEnded();
+        }
+        catch { }
     }
 
     private void ApplyResumeOnce()
