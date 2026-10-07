@@ -6,27 +6,113 @@
         Width="1280" Height="760"
         MinWidth="900" MinHeight="540"
         WindowStartupLocation="CenterOwner"
-        Background="#050408"
+        Background="#000000"
         Foreground="#F3F4F6"
         KeyDown="Window_KeyDown"
         MouseMove="Window_MouseMove"
         FlowDirection="RightToLeft">
-    <Grid>
-        <vlc:VideoView x:Name="VideoView"/>
+    <Window.Resources>
+        <Style x:Key="PlayerRoundButton" TargetType="Button">
+            <Setter Property="Width" Value="52"/>
+            <Setter Property="Height" Value="52"/>
+            <Setter Property="Margin" Value="5,0"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="Foreground" Value="#F3F4F6"/>
+            <Setter Property="Background" Value="#CC241536"/>
+            <Setter Property="BorderBrush" Value="#665E437A"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Border" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="26">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#63408A"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#EBD8FF"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#63408A"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#FFFFFF"/>
+                                <Setter TargetName="Border" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-        <Border x:Name="TopShade" VerticalAlignment="Top" Height="120"
-                Background="#7808060D" IsHitTestVisible="False">
-            <Grid Margin="28,18">
+        <Style x:Key="PlayerPrimaryButton" TargetType="Button" BasedOn="{StaticResource PlayerRoundButton}">
+            <Setter Property="Width" Value="66"/>
+            <Setter Property="Height" Value="66"/>
+            <Setter Property="FontSize" Value="23"/>
+            <Setter Property="Background" Value="#D0B2FF"/>
+            <Setter Property="Foreground" Value="#08060D"/>
+            <Setter Property="BorderBrush" Value="#F6ECFF"/>
+        </Style>
+
+        <Style x:Key="PlayerPillButton" TargetType="Button">
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="MinWidth" Value="78"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Margin" Value="4,0"/>
+            <Setter Property="Foreground" Value="#E8E0EF"/>
+            <Setter Property="Background" Value="#AA180F23"/>
+            <Setter Property="BorderBrush" Value="#4DFFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Border" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="19">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#3D2756"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#EBD8FF"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#63408A"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#FFFFFF"/>
+                                <Setter TargetName="Border" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid x:Name="PlayerRoot" Background="Black">
+        <vlc:VideoView x:Name="VideoView"
+                       HorizontalAlignment="Stretch"
+                       VerticalAlignment="Stretch"/>
+
+        <Border x:Name="TopShade" VerticalAlignment="Top" Height="96"
+                Background="#8A08060D" IsHitTestVisible="False">
+            <Grid Margin="28,16">
                 <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top">
-                    <TextBlock Text="BLOFY PLAYER" FontSize="10" FontWeight="Bold"
+                    <TextBlock Text="BLOFY PLAYER" FontSize="9.5" FontWeight="Bold"
                                Foreground="#D0B2FF"/>
-                    <TextBlock x:Name="TopTitleText" FontSize="18" FontWeight="SemiBold"
-                               Foreground="#F3F4F6" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="TopTitleText" FontSize="17" FontWeight="SemiBold"
+                               Foreground="#F3F4F6" Margin="0,4,0,0"
+                               MaxWidth="780" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <Border x:Name="Hud" VerticalAlignment="Bottom" Margin="24" Padding="20"
+        <Border x:Name="Hud" VerticalAlignment="Bottom"
+                HorizontalAlignment="Stretch"
+                Margin="24" Padding="18,14"
                 CornerRadius="18" Background="#E308060D"
                 BorderBrush="#665E437A" BorderThickness="1">
             <Grid>
@@ -39,54 +125,50 @@
 
                 <Grid Grid.Row="0">
                     <StackPanel>
-                        <TextBlock Text="BLOFY PLAYER" FontSize="10" FontWeight="Bold"
-                                   Foreground="#D0B2FF"/>
-                        <TextBlock x:Name="TitleText" FontSize="22" FontWeight="Bold"
+                        <TextBlock x:Name="TitleText" FontSize="18" FontWeight="Bold"
+                                   MaxWidth="800" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="EpgText" FontSize="10.5" Foreground="#C9BCD9"
                                    Margin="0,3,0,0"/>
-                        <TextBlock x:Name="EpgText" FontSize="11" Foreground="#C9BCD9"
-                                   Margin="0,4,0,0"/>
                     </StackPanel>
                     <TextBlock x:Name="TimeText" HorizontalAlignment="Left"
                                VerticalAlignment="Bottom"
                                FlowDirection="LeftToRight" Foreground="#C9BCD9"
-                               FontSize="11"/>
+                               FontSize="10.5"/>
                 </Grid>
 
-                <Grid x:Name="TimelinePanel" Grid.Row="1" Margin="0,12,0,10">
-                    <Slider x:Name="SeekSlider" Minimum="0" Maximum="1"
-                            Height="22" PreviewMouseLeftButtonUp="SeekSlider_MouseUp"/>
-                </Grid>
+                <Slider x:Name="SeekSlider" Grid.Row="1"
+                        Minimum="0" Maximum="1" Height="20"
+                        Margin="0,8,0,6"
+                        PreviewMouseLeftButtonUp="SeekSlider_MouseUp"/>
 
                 <StackPanel Grid.Row="2" Orientation="Horizontal"
-                            HorizontalAlignment="Center" Margin="0,2,0,8">
+                            HorizontalAlignment="Center" Margin="0,0,0,9">
                     <Button x:Name="PreviousButton" Content="⏮"
-                            Click="Back_Click" Style="{StaticResource SecondaryButton}"
-                            Width="64" Height="48" FontSize="18" Margin="0,0,8,0"
+                            Click="Back_Click" Style="{StaticResource PlayerRoundButton}"
                             ToolTip="السابق / رجوع 10 ثوان"/>
                     <Button x:Name="PlayPauseButton" Content="⏸"
-                            Click="PlayPause_Click" Style="{StaticResource PrimaryButton}"
-                            Width="88" Height="52" FontSize="20" Margin="0,0,8,0"
-                            ToolTip="تشغيل / إيقاف مؤقت"/>
+                            Click="PlayPause_Click" Style="{StaticResource PlayerPrimaryButton}"
+                            ToolTip="تشغيل / إيقاف"/>
                     <Button x:Name="NextButton" Content="⏭"
-                            Click="Forward_Click" Style="{StaticResource SecondaryButton}"
-                            Width="64" Height="48" FontSize="18"
+                            Click="Forward_Click" Style="{StaticResource PlayerRoundButton}"
                             ToolTip="التالي / تقديم 10 ثوان"/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="3" Orientation="Horizontal"
                             HorizontalAlignment="Center">
-                    <Button Content="🔊  الصوت" Click="Audio_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
-                    <Button Content="CC  الترجمة" Click="Subtitle_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
-                    <Button Content="◉  الجودة" Click="Quality_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
-                    <Button Content="▣  المقاس" Click="Aspect_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
-                    <Button Content="⛶  ملء الشاشة" Click="Fullscreen_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
+                    <Button Content="🔊 الصوت" Click="Audio_Click"
+                            Style="{StaticResource PlayerPillButton}"/>
+                    <Button Content="CC الترجمة" Click="Subtitle_Click"
+                            Style="{StaticResource PlayerPillButton}"/>
+                    <Button Content="◉ الجودة" Click="Quality_Click"
+                            Style="{StaticResource PlayerPillButton}"/>
+                    <Button Content="▣ المقاس" Click="Aspect_Click"
+                            Style="{StaticResource PlayerPillButton}"/>
+                    <Button x:Name="FullscreenButton" Content="⛶ الشاشة"
+                            Click="Fullscreen_Click"
+                            Style="{StaticResource PlayerPillButton}"/>
                     <Button Content="✕" Click="Close_Click"
-                            Style="{StaticResource SecondaryButton}" Width="46"/>
+                            Style="{StaticResource PlayerPillButton}" MinWidth="48"/>
                 </StackPanel>
             </Grid>
         </Border>
