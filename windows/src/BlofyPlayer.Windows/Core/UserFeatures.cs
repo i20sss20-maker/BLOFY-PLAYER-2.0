@@ -24,6 +24,7 @@ public sealed class ProfileLibraryState
     public HashSet<string> Favorites { get; set; } = [];
     public Dictionary<string, WatchState> WatchStates { get; set; } = [];
     public List<string> RecentSearches { get; set; } = [];
+    public List<string> RecentChannels { get; set; } = [];
     public HashSet<string> HiddenCategoryKeys { get; set; } = [];
     public List<string> HomeRows { get; set; } = ["continue", "latest_movies", "latest_series"];
 }
@@ -122,6 +123,7 @@ public static class BackupService
                 Favorites = new HashSet<string>(library.Favorites),
                 WatchStates = library.WatchStates.ToDictionary(x => x.Key, x => x.Value),
                 RecentSearches = library.RecentSearches.Take(30).ToList(),
+                RecentChannels = library.RecentChannels.Take(30).ToList(),
                 HiddenCategoryKeys = new HashSet<string>(library.HiddenCategoryKeys),
                 HomeRows = library.HomeRows.ToList()
             },
@@ -148,6 +150,7 @@ public static class BackupService
         library.Favorites = payload.Library.Favorites ?? [];
         library.WatchStates = payload.Library.WatchStates ?? [];
         library.RecentSearches = (payload.Library.RecentSearches ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Take(30).ToList();
+        library.RecentChannels = (payload.Library.RecentChannels ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().Take(30).ToList();
         library.HiddenCategoryKeys = payload.Library.HiddenCategoryKeys ?? [];
         library.HomeRows = (payload.Library.HomeRows ?? [])
             .Where(x => x is "continue" or "latest_movies" or "latest_series")
