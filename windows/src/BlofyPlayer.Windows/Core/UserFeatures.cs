@@ -1,5 +1,6 @@
 using BlofyPlayer.Windows.Core.Identity;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -153,6 +154,221 @@ public static class BackupService
         store.State.Settings = payload.Settings ?? new AppSettings();
         await store.SaveAsync();
     }
+}
+
+public sealed record ProfileCloudResult(string Action, long Revision);
+public sealed record ProfilePairCode(string Code, long ExpiresAt, int TtlMinutes);
+
+public static class ProfileCloudService
+{
+    private const string BaseUrl = "https://api.blofyplayer.com/";
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    private static HttpClient Client()
+    {
+        var handler = new HttpClientHandler { AllowAutoRedirect = false };
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri(BaseUrl),
+            Timeout = TimeSpan.FromSeconds(15)
+        };
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.3");
+        return client;
+    }
+
+    public static async Task<ProfileCloudResult> BackupAsync(LocalStore store, BlofyIdentity identity, CancellationToken ct = default)
+    {
+        var profile = store.ActiveProfile();
+        if (profile.Guest) throw new InvalidOperationException("ملف الضيف محلي فقط.");
+        var remote = await GetAsync(identity, profile.Id, ct);
+        var payload = Payload(store);
+        var saved = await PutAsync(identity, profile.Id, remote.Revision, payload, ct);
+        if (saved.Conflict)
+        {
+            remote = await GetAsync(identity, profile.Id, ct);
+            saved = await PutAsync(identity, profile.Id, remote.Revision, payload, ct);
+        }
+        if (saved.Conflict) throw new InvalidOperationException("تعارضت نسخة السحابة. أعد المحاولة.");
+        return new ProfileCloudResult("backup", saved.Revision);
+    }
+
+    public static async Task<ProfileCloudResult> RestoreAsync(LocalStore store, BlofyIdentity identity, CancellationToken ct = default)
+    {
+        var profile = store.ActiveProfile();
+        if (profile.Guest) throw new InvalidOperationException("ملف الضيف محلي فقط.");
+        var remote = await GetAsync(identity, profile.Id, ct);
+        if (!remote.Exists) return new ProfileCloudResult("no_backup", 0);
+        ApplyPayload(store, remote.Payload);
+        await store.SaveAsync();
+        return new ProfileCloudResult("restore", remote.Revision);
+    }
+
+    public static async Task<ProfilePairCode> CreatePairCodeAsync(LocalStore store, BlofyIdentity identity, CancellationToken ct = default)
+    {
+        await BackupAsync(store, identity, ct);
+        var profile = store.ActiveProfile();
+        using var client = Client();
+        using var response = await client.PostAsJsonAsync("api/v1/cloud/profile/pair/create",
+            new { deviceId = identity.DeviceId, activationCode = identity.ActivationCode, profileId = profile.Id }, Json, ct);
+        var raw = await response.Content.ReadAsStringAsync(ct);
+        if ((int)response.StatusCode != 201) throw new InvalidOperationException(ReadError(raw, "تعذر إنشاء كود الربط."));
+        using var doc = JsonDocument.Parse(raw);
+        return new ProfilePairCode(
+            doc.RootElement.GetProperty("pairCode").GetString() ?? "",
+            GetLong(doc.RootElement, "expiresAt"),
+            (int)Math.Max(1, GetLong(doc.RootElement, "ttlMinutes", 10))
+        );
+    }
+
+    public static async Task<ProfileCloudResult> RestorePairCodeAsync(
+        LocalStore store, BlofyIdentity identity, string code, CancellationToken ct = default)
+    {
+        var profile = store.ActiveProfile();
+        if (profile.Guest) throw new InvalidOperationException("ملف الضيف محلي فقط.");
+        using var client = Client();
+        using var response = await client.PostAsJsonAsync("api/v1/cloud/profile/pair/restore",
+            new
+            {
+                deviceId = identity.DeviceId,
+                activationCode = identity.ActivationCode,
+                profileId = profile.Id,
+                pairCode = code.Trim().ToUpperInvariant()
+            }, Json, ct);
+        var raw = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode) throw new InvalidOperationException(ReadError(raw, "تعذر استعادة كود الربط."));
+        using var doc = JsonDocument.Parse(raw);
+        var revision = GetLong(doc.RootElement, "revision", 1);
+        if (doc.RootElement.TryGetProperty("payload", out var payload))
+        {
+            ApplyPayload(store, payload);
+            await store.SaveAsync();
+        }
+        return new ProfileCloudResult("pair_restore", revision);
+    }
+
+    private static async Task<(bool Exists, long Revision, JsonElement Payload)> GetAsync(
+        BlofyIdentity identity, string profileId, CancellationToken ct)
+    {
+        using var client = Client();
+        var request = new HttpRequestMessage(HttpMethod.Get,
+            "api/v1/cloud/profile?profileId=" + Uri.EscapeDataString(profileId));
+        request.Headers.TryAddWithoutValidation("X-BLOFY-Device-ID", identity.DeviceId);
+        request.Headers.TryAddWithoutValidation("X-BLOFY-Activation-Code", identity.ActivationCode);
+        using var response = await client.SendAsync(request, ct);
+        var raw = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode) throw new InvalidOperationException(ReadError(raw, "تعذر قراءة BLOFY Cloud."));
+        using var doc = JsonDocument.Parse(raw);
+        var exists = doc.RootElement.TryGetProperty("exists", out var e) && e.GetBoolean();
+        var revision = GetLong(doc.RootElement, "revision");
+        var payload = doc.RootElement.TryGetProperty("payload", out var p)
+            ? p.Clone()
+            : JsonSerializer.SerializeToElement(new { });
+        return (exists, revision, payload);
+    }
+
+    private static async Task<(bool Conflict, long Revision)> PutAsync(
+        BlofyIdentity identity, string profileId, long expectedRevision, JsonElement payload, CancellationToken ct)
+    {
+        using var client = Client();
+        using var request = new HttpRequestMessage(HttpMethod.Put, "api/v1/cloud/profile")
+        {
+            Content = JsonContent.Create(new
+            {
+                deviceId = identity.DeviceId,
+                activationCode = identity.ActivationCode,
+                profileId,
+                expectedRevision,
+                payload
+            }, options: Json)
+        };
+        using var response = await client.SendAsync(request, ct);
+        var raw = await response.Content.ReadAsStringAsync(ct);
+        if ((int)response.StatusCode == 409)
+        {
+            using var conflictDoc = JsonDocument.Parse(string.IsNullOrWhiteSpace(raw) ? "{}" : raw);
+            return (true, GetLong(conflictDoc.RootElement, "revision", expectedRevision));
+        }
+        if (!response.IsSuccessStatusCode) throw new InvalidOperationException(ReadError(raw, "تعذر حفظ BLOFY Cloud."));
+        using var doc = JsonDocument.Parse(raw);
+        return (false, GetLong(doc.RootElement, "revision", expectedRevision + 1));
+    }
+
+    private static JsonElement Payload(LocalStore store)
+    {
+        var library = store.ActiveLibrary();
+        var settings = store.State.Settings;
+        return JsonSerializer.SerializeToElement(new
+        {
+            watchlist = library.Favorites.TakeLast(500).ToArray(),
+            hiddenCategories = library.HiddenCategoryKeys.Take(500).ToArray(),
+            homeRows = Array.Empty<string>(),
+            settings = new Dictionary<string, object>
+            {
+                ["theme"] = settings.Theme,
+                ["language"] = settings.Language,
+                ["liveFormat"] = settings.LiveFormat,
+                ["subtitleLanguage"] = settings.SubtitleLanguage,
+                ["subtitleSize"] = settings.SubtitleSize,
+                ["aspect"] = settings.Aspect,
+                ["audioOutput"] = settings.AudioOutput,
+                ["autoplayLive"] = settings.AutoplayLive,
+                ["resumePrompt"] = settings.ResumePrompt,
+                ["autoNext"] = settings.AutoNext,
+                ["catalogDensity"] = settings.CatalogDensity
+            }
+        }, Json);
+    }
+
+    private static void ApplyPayload(LocalStore store, JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object) return;
+        var library = store.ActiveLibrary();
+
+        if (payload.TryGetProperty("watchlist", out var watchlist) && watchlist.ValueKind == JsonValueKind.Array)
+            library.Favorites = watchlist.EnumerateArray()
+                .Select(x => x.GetString()).Where(x => !string.IsNullOrWhiteSpace(x))
+                .Cast<string>().Take(500).ToHashSet();
+
+        if (payload.TryGetProperty("hiddenCategories", out var hidden) && hidden.ValueKind == JsonValueKind.Array)
+            library.HiddenCategoryKeys = hidden.EnumerateArray()
+                .Select(x => x.GetString()).Where(x => !string.IsNullOrWhiteSpace(x))
+                .Cast<string>().Take(500).ToHashSet();
+
+        if (!payload.TryGetProperty("settings", out var s) || s.ValueKind != JsonValueKind.Object) return;
+        string? GetString(string key) => s.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        bool? GetBool(string key) => s.TryGetProperty(key, out var v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False ? v.GetBoolean() : null;
+
+        var settings = store.State.Settings;
+        settings.Theme = GetString("theme") ?? settings.Theme;
+        settings.Language = GetString("language") ?? settings.Language;
+        settings.LiveFormat = GetString("liveFormat") ?? settings.LiveFormat;
+        settings.SubtitleLanguage = GetString("subtitleLanguage") ?? settings.SubtitleLanguage;
+        settings.SubtitleSize = GetString("subtitleSize") ?? settings.SubtitleSize;
+        settings.Aspect = GetString("aspect") ?? settings.Aspect;
+        settings.AudioOutput = GetString("audioOutput") ?? settings.AudioOutput;
+        settings.AutoplayLive = GetBool("autoplayLive") ?? settings.AutoplayLive;
+        settings.ResumePrompt = GetBool("resumePrompt") ?? settings.ResumePrompt;
+        settings.AutoNext = GetString("autoNext") ?? settings.AutoNext;
+        settings.CatalogDensity = GetString("catalogDensity") ?? settings.CatalogDensity;
+    }
+
+    private static string ReadError(string raw, string fallback)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(raw);
+            return doc.RootElement.TryGetProperty("error", out var e) && !string.IsNullOrWhiteSpace(e.GetString())
+                ? e.GetString()!
+                : fallback;
+        }
+        catch { return fallback; }
+    }
+
+    private static long GetLong(JsonElement root, string key, long fallback = 0) =>
+        root.TryGetProperty(key, out var value) && value.TryGetInt64(out var parsed) ? parsed : fallback;
 }
 
 public sealed record WindowsUpdateInfo(string Version, string DownloadUrl, string Notes);
