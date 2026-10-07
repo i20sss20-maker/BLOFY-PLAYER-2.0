@@ -11,6 +11,7 @@ public partial class PlayerWindow : Window
     private readonly LibVLC _libVlc;
     private readonly MediaPlayer _player;
     private readonly DispatcherTimer _timer;
+    private readonly DispatcherTimer _hudTimer;
     private readonly IReadOnlyList<StreamItem> _playlist;
     private readonly Func<StreamItem, string>? _urlResolver;
     private readonly Func<long, long, Task>? _savePosition;
@@ -20,6 +21,8 @@ public partial class PlayerWindow : Window
     private bool _fullscreen;
     private bool _resumeApplied;
     private readonly long _resumePosition;
+    private int _aspectIndex;
+    private readonly string?[] _aspectModes = [null, "16:9", "4:3"];
 
     public PlayerWindow(
         string title,
@@ -60,6 +63,8 @@ public partial class PlayerWindow : Window
         _savePosition = savePosition;
         _resumePosition = resumePositionMs;
         TitleText.Text = title;
+        TopTitleText.Text = title;
+        EpgText.Text = _playlist.Count > 0 ? "بث مباشر" : "BLOFY PLAYER";
 
         _player.Playing += (_, _) => Dispatcher.Invoke(ApplyResumeOnce);
         _player.EncounteredError += (_, _) => Dispatcher.Invoke(() =>
@@ -70,10 +75,18 @@ public partial class PlayerWindow : Window
         _timer.Tick += (_, _) => RefreshHud();
         _timer.Start();
 
-        Loaded += (_, _) => PlayUrl(url);
+        _hudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        _hudTimer.Tick += (_, _) => HideHud();
+
+        Loaded += (_, _) =>
+        {
+            PlayUrl(url);
+            ShowHudBriefly();
+        };
         Closed += async (_, _) =>
         {
             _timer.Stop();
+            _hudTimer.Stop();
             if (_savePosition is not null)
                 await _savePosition(Math.Max(0, _player.Time), Math.Max(0, _player.Length));
             _player.Stop();
@@ -126,7 +139,10 @@ public partial class PlayerWindow : Window
         SeekSlider.Maximum = Math.Max(1, length);
         if (!SeekSlider.IsMouseCaptureWithin) SeekSlider.Value = Math.Min(time, SeekSlider.Maximum);
         TimeText.Text = Format(time) + " / " + Format(length);
-        PlayPauseButton.Content = _player.IsPlaying ? "⏸ إيقاف مؤقت" : "▶ تشغيل";
+        PlayPauseButton.Content = _player.IsPlaying ? "⏸" : "▶";
+        TimelinePanel.Visibility = length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        PreviousButton.ToolTip = _playlist.Count > 0 ? "القناة السابقة" : "رجوع 10 ثوان";
+        NextButton.ToolTip = _playlist.Count > 0 ? "القناة التالية" : "تقديم 10 ثوان";
     }
 
     private static string Format(long ms)
@@ -139,10 +155,22 @@ public partial class PlayerWindow : Window
     {
         if (_player.IsPlaying) _player.Pause();
         else _player.Play();
+        ShowHudBriefly();
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e) => Seek(-10_000);
-    private void Forward_Click(object sender, RoutedEventArgs e) => Seek(10_000);
+    private void Back_Click(object sender, RoutedEventArgs e)
+    {
+        if (_playlist.Count > 0 && _urlResolver is not null) ChangeChannel(-1);
+        else Seek(-10_000);
+        ShowHudBriefly();
+    }
+
+    private void Forward_Click(object sender, RoutedEventArgs e)
+    {
+        if (_playlist.Count > 0 && _urlResolver is not null) ChangeChannel(1);
+        else Seek(10_000);
+        ShowHudBriefly();
+    }
 
     private void Seek(long delta)
     {
@@ -162,7 +190,8 @@ public partial class PlayerWindow : Window
         var current = Array.FindIndex(tracks, t => t.Id == _player.AudioTrack);
         var next = tracks[(current + 1 + tracks.Length) % tracks.Length];
         _player.SetAudioTrack(next.Id);
-        MessageBox.Show(this, "الصوت: " + next.Name, "BLOFY PLAYER");
+        EpgText.Text = "الصوت: " + next.Name;
+        ShowHudBriefly();
     }
 
     private void Subtitle_Click(object sender, RoutedEventArgs e)
@@ -176,10 +205,15 @@ public partial class PlayerWindow : Window
         var current = Array.FindIndex(tracks, t => t.Id == _player.Spu);
         var next = tracks[(current + 1 + tracks.Length) % tracks.Length];
         _player.SetSpu(next.Id);
-        MessageBox.Show(this, "الترجمة: " + next.Name, "BLOFY PLAYER");
+        EpgText.Text = "الترجمة: " + next.Name;
+        ShowHudBriefly();
     }
 
-    private void Fullscreen_Click(object sender, RoutedEventArgs e) => ToggleFullscreen();
+    private void Fullscreen_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleFullscreen();
+        ShowHudBriefly();
+    }
 
     private void ToggleFullscreen()
     {
@@ -188,15 +222,53 @@ public partial class PlayerWindow : Window
         {
             WindowStyle = WindowStyle.None;
             WindowState = WindowState.Maximized;
-            Hud.Visibility = Visibility.Collapsed;
         }
         else
         {
             WindowStyle = WindowStyle.SingleBorderWindow;
             WindowState = WindowState.Normal;
-            Hud.Visibility = Visibility.Visible;
         }
+        ShowHudBriefly();
     }
+
+    private void Quality_Click(object sender, RoutedEventArgs e)
+    {
+        EpgText.Text = "الجودة: تلقائي • LibVLC يختار أفضل مسار متاح";
+        ShowHudBriefly();
+    }
+
+    private void Aspect_Click(object sender, RoutedEventArgs e)
+    {
+        _aspectIndex = (_aspectIndex + 1) % _aspectModes.Length;
+        var value = _aspectModes[_aspectIndex];
+        try
+        {
+            var property = _player.GetType().GetProperty("AspectRatio");
+            property?.SetValue(_player, value);
+        }
+        catch { }
+
+        EpgText.Text = value is null ? "المقاس: ملاءمة تلقائية" : "المقاس: " + value;
+        ShowHudBriefly();
+    }
+
+    private void ShowHudBriefly()
+    {
+        Hud.Visibility = Visibility.Visible;
+        TopShade.Visibility = Visibility.Visible;
+        _hudTimer.Stop();
+        _hudTimer.Start();
+    }
+
+    private void HideHud()
+    {
+        _hudTimer.Stop();
+        if (!_player.IsPlaying) return;
+        Hud.Visibility = Visibility.Collapsed;
+        TopShade.Visibility = Visibility.Collapsed;
+    }
+
+    private void Window_MouseMove(object sender, MouseEventArgs e) => ShowHudBriefly();
 
     private void ChangeChannel(int delta)
     {
@@ -204,32 +276,64 @@ public partial class PlayerWindow : Window
         _index = (_index + delta + _playlist.Count) % _playlist.Count;
         var item = _playlist[_index];
         TitleText.Text = item.Name;
+        TopTitleText.Text = item.Name;
+        EpgText.Text = "القناة " + (_index + 1).ToString("N0") + " من " + _playlist.Count.ToString("N0");
         _resumeApplied = true;
         PlayUrl(_urlResolver(item));
+        ShowHudBriefly();
     }
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
+        if (Hud.Visibility != Visibility.Visible &&
+            e.Key is not Key.Escape and not Key.F)
+        {
+            ShowHudBriefly();
+            e.Handled = true;
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.Space:
             case Key.Enter:
-                PlayPause_Click(sender, e); e.Handled = true; break;
+                PlayPause_Click(sender, e);
+                e.Handled = true;
+                break;
             case Key.Left:
-                Seek(-10_000); e.Handled = true; break;
+                if (_playlist.Count > 0 && _urlResolver is not null) ChangeChannel(-1);
+                else Seek(-10_000);
+                ShowHudBriefly();
+                e.Handled = true;
+                break;
             case Key.Right:
-                Seek(10_000); e.Handled = true; break;
+                if (_playlist.Count > 0 && _urlResolver is not null) ChangeChannel(1);
+                else Seek(10_000);
+                ShowHudBriefly();
+                e.Handled = true;
+                break;
             case Key.Up:
-                ChangeChannel(-1); e.Handled = true; break;
+                ChangeChannel(-1);
+                e.Handled = true;
+                break;
             case Key.Down:
-                ChangeChannel(1); e.Handled = true; break;
+                ChangeChannel(1);
+                e.Handled = true;
+                break;
             case Key.F:
-                ToggleFullscreen(); e.Handled = true; break;
+                ToggleFullscreen();
+                e.Handled = true;
+                break;
             case Key.M:
-                _player.Mute = !_player.Mute; e.Handled = true; break;
+                _player.Mute = !_player.Mute;
+                EpgText.Text = _player.Mute ? "الصوت مكتوم" : "الصوت مفعّل";
+                ShowHudBriefly();
+                e.Handled = true;
+                break;
             case Key.Escape:
                 if (_fullscreen) ToggleFullscreen(); else Close();
-                e.Handled = true; break;
+                e.Handled = true;
+                break;
         }
     }
 
