@@ -149,3 +149,31 @@ public static class StartupCatalogTransfer
         }
     }
 }
+
+
+public static class StartupSessionTransfer
+{
+    private static readonly object Gate = new();
+    private static ActivationCheckResponse? _activation;
+    private static bool _portalSynced;
+
+    public static void Store(ActivationCheckResponse? activation, bool portalSynced)
+    {
+        lock (Gate)
+        {
+            _activation = activation;
+            _portalSynced = portalSynced;
+        }
+    }
+
+    public static (ActivationCheckResponse? Activation, bool PortalSynced) Take()
+    {
+        lock (Gate)
+        {
+            var result = (_activation, _portalSynced);
+            _activation = null;
+            _portalSynced = false;
+            return result;
+        }
+    }
+}
