@@ -38,7 +38,22 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DeviceIdText.Text = _identity.DeviceId;
-        Loaded += async (_, _) => await InitializeAsync();
+        Loaded += async (_, _) =>
+        {
+            try
+            {
+                await InitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                App.LogCrash("Startup initialization", ex);
+                ProgressText.Text = "تعذر إكمال التهيئة";
+                MessageBox.Show(this,
+                    "تعذر إكمال تشغيل BLOFY PLAYER. تم حفظ تقرير الخطأ تلقائيًا.\n\n" +
+                    ex.Message,
+                    "BLOFY PLAYER", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        };
         Closed += (_, _) =>
         {
             _syncCts?.Cancel();
@@ -1422,8 +1437,9 @@ public partial class MainWindow : Window
 
     private static void SetResourceColor(string key, string color)
     {
-        if (Application.Current.Resources[key] is SolidColorBrush brush)
-            brush.Color = Brush(color).Color;
+        // WPF may freeze Freezable resources after XAML load. Replacing the resource is safe,
+        // while mutating a frozen SolidColorBrush can crash immediately after the window appears.
+        Application.Current.Resources[key] = Brush(color);
     }
 
     private async Task ExportBackupAsync()
