@@ -20,15 +20,6 @@ export function createReleasePublicHandlers({ pool, json, catalog, metadata = ac
     if (req.method === 'GET' && path === '/api/v1/releases') {
       json(res, 200, await catalog.list()); return true;
     }
-    if (req.method === 'GET' && path === '/api/v1/releases/windows') {
-      if (!metadata.windows?.downloadUrl) { json(res, 404, { error: 'windows_release_unavailable' }); return true; }
-      json(res, 200, metadata.windows); return true;
-    }
-    if (['GET', 'HEAD'].includes(req.method) && path === '/download/latest-windows.exe') {
-      if (!metadata.windows?.downloadUrl) { json(res, 404, { error: 'windows_release_unavailable' }); return true; }
-      res.writeHead(302, { location: metadata.windows.downloadUrl, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
-      res.end(); return true;
-    }
     if (['GET', 'HEAD'].includes(req.method) && path === '/download/latest.apk') {
       const release = await catalog.appRelease();
       res.writeHead(302, { location: release.downloadUrl, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
