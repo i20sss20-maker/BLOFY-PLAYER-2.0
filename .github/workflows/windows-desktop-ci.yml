@@ -16,7 +16,7 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -27,6 +27,20 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Create Windows icon from Android BLOFY logo
+        shell: pwsh
+        run: |
+          python -m pip install pillow --disable-pip-version-check --quiet
+          New-Item -ItemType Directory -Force windows/src/BlofyPlayer.Windows/Assets | Out-Null
+          @'
+          from PIL import Image
+          src = "app/src/main/res/drawable-nodpi/blofy_logo.png"
+          dst = "windows/src/BlofyPlayer.Windows/Assets/blofy.ico"
+          image = Image.open(src).convert("RGBA")
+          image.save(dst, format="ICO", sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          '@ | Set-Content -Encoding UTF8 convert_icon.py
+          python convert_icon.py
+
       - name: Restore
         run: dotnet restore windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
 
@@ -36,9 +50,33 @@ jobs:
       - name: Publish self-contained x64
         run: dotnet publish windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj -c Release -r win-x64 --self-contained true -o windows/publish
 
-      - name: Upload Windows build
+      - name: Include BLOFY icon
+        shell: pwsh
+        run: Copy-Item windows/src/BlofyPlayer.Windows/Assets/blofy.ico windows/publish/blofy.ico -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Setup EXE
+        shell: pwsh
+        run: |
+          $programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
+          $iscc = Join-Path $programFilesX86 "Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { throw "Inno Setup compiler not found" }
+          & $iscc windows/installer/BlofyPlayer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload portable Windows build
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-Windows-x64
+          name: BLOFY-PLAYER-Windows-x64-Portable
           path: windows/publish
+          if-no-files-found: error
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-Windows-Setup-x64
+          path: windows/installer/output/BLOFY-PLAYER-Windows-Setup-x64.exe
           if-no-files-found: error
