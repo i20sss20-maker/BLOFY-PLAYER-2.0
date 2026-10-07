@@ -590,7 +590,8 @@ public partial class MainWindow : Window
 
         DisposePreview();
         var label = kind == "movie" ? "الأفلام" : "المسلسلات";
-        PageTitle.Text = label;
+        PageTitle.Text = "BLOFY • " + label;
+        PageSubtitle.Text = _activeProvider?.Name ?? "BLOFY";
 
         var all = Items(kind);
         if (all.Count == 0)
@@ -609,11 +610,7 @@ public partial class MainWindow : Window
 
         var cats = new ListBox
         {
-            Background = Surface2,
-            Foreground = Text,
-            BorderBrush = Brush("#443D2756"),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(6)
+            Style = Application.Current.FindResource("TvListBox") as Style
         };
         VirtualizingPanel.SetIsVirtualizing(cats, true);
         VirtualizingPanel.SetVirtualizationMode(cats, VirtualizationMode.Recycling);
@@ -702,7 +699,8 @@ public partial class MainWindow : Window
     private void ShowLiveBrowser()
     {
         DisposePreview();
-        PageTitle.Text = "البث المباشر";
+        PageTitle.Text = "BLOFY • البث المباشر";
+        PageSubtitle.Text = _activeProvider?.Name ?? "BLOFY";
         var all = Items("live");
         if (all.Count == 0)
         {
@@ -719,9 +717,7 @@ public partial class MainWindow : Window
 
         var cats = new ListBox
         {
-            Background = Surface2, Foreground = Text,
-            BorderBrush = Brush("#443D2756"), BorderThickness = new Thickness(1),
-            Padding = new Thickness(6)
+            Style = Application.Current.FindResource("TvListBox") as Style
         };
         cats.Items.Add("الكل");
         foreach (var cat in (_catalog?.Snapshot.Categories ?? [])
@@ -733,9 +729,8 @@ public partial class MainWindow : Window
 
         var channels = new ListBox
         {
-            Background = Surface2, Foreground = Text,
-            BorderBrush = Brush("#443D2756"), BorderThickness = new Thickness(1),
-            Padding = new Thickness(6), DisplayMemberPath = "Name"
+            Style = Application.Current.FindResource("TvListBox") as Style,
+            DisplayMemberPath = "Name"
         };
         VirtualizingPanel.SetIsVirtualizing(channels, true);
         VirtualizingPanel.SetVirtualizationMode(channels, VirtualizationMode.Recycling);
