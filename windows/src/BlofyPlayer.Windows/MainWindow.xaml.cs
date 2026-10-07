@@ -300,6 +300,15 @@ public partial class MainWindow : Window
         if (continueItems.Count > 0)
             root.Children.Add(ContentRow("متابعة المشاهدة", continueItems, landscape: true));
 
+        var recentChannels = _store.RecentChannels
+            .Select(key => _viewIndex.Find(key))
+            .Where(x => x is not null && x.Kind == "live" && _store.IsContentVisible(x))
+            .Cast<StreamItem>()
+            .Take(12)
+            .ToList();
+        if (recentChannels.Count > 0)
+            root.Children.Add(ContentRow("آخر القنوات", recentChannels, landscape: true));
+
         var recent = _store.WatchStates
             .OrderByDescending(w => w.UpdatedAt)
             .Select(w => _viewIndex.Find(w.Key))
@@ -1227,6 +1236,9 @@ public partial class MainWindow : Window
             ? s => BuildStreamCandidates(s)
             : null;
 
+        if (item.Kind == "live")
+            await _store.AddRecentChannelAsync(item.Key);
+
         var player = new PlayerWindow(
             item.Name,
             url,
@@ -1238,6 +1250,9 @@ public partial class MainWindow : Window
             recoveryUrls: BuildStreamCandidates(item),
             savePosition: item.Kind == "live" ? null : async (pos, len) =>
                 await _store.SaveWatchStateAsync(item.Key, pos, len),
+            onPlaylistItemChanged: item.Kind == "live"
+                ? async changed => await _store.AddRecentChannelAsync(changed.Key)
+                : null,
             settings: _store.State.Settings)
         { Owner = this };
         player.ShowDialog();
