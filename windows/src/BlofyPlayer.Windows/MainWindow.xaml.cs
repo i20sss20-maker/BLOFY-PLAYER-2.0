@@ -350,28 +350,22 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 0, 0, 10)
         };
 
-        var grid = new Grid();
+        var grid = new Grid
+        {
+            Background = new LinearGradientBrush(Brush("#241536").Color, Brush("#08060D").Color, 15)
+        };
         var artwork = item.Backdrop;
         if (string.IsNullOrWhiteSpace(artwork)) artwork = item.Icon;
         if (!string.IsNullOrWhiteSpace(artwork))
         {
-            try
+            var heroImage = new Image
             {
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri(artwork, UriKind.Absolute);
-                bitmap.DecodePixelWidth = 1100;
-                bitmap.CacheOption = BitmapCacheOption.OnDemand;
-                bitmap.CreateOptions = BitmapCreateOptions.DelayCreation;
-                bitmap.EndInit();
-                grid.Background = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill, Opacity = .88 };
-            }
-            catch
-            {
-                grid.Background = new LinearGradientBrush(Brush("#241536").Color, Brush("#08060D").Color, 15);
-            }
+                Stretch = Stretch.UniformToFill,
+                Opacity = .88
+            };
+            BindArtwork(heroImage, artwork, 1100);
+            grid.Children.Add(heroImage);
         }
-        else grid.Background = new LinearGradientBrush(Brush("#241536").Color, Brush("#08060D").Color, 15);
 
         grid.Children.Add(new Border
         {
@@ -600,7 +594,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        const int pageSize = 54;
+        const int pageSize = 30;
         var page = 0;
 
         var grid = new Grid();
@@ -886,23 +880,12 @@ public partial class MainWindow : Window
             : item.Icon;
         if (!string.IsNullOrWhiteSpace(artwork))
         {
-            try
+            var posterImage = new Image
             {
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri(artwork, UriKind.Absolute);
-                bitmap.DecodePixelWidth = landscape ? 360 : item.Kind == "live" ? 240 : 220;
-                bitmap.CacheOption = BitmapCacheOption.OnDemand;
-                bitmap.CreateOptions = BitmapCreateOptions.DelayCreation;
-                bitmap.EndInit();
-
-                imageBorder.Child = new Image
-                {
-                    Source = bitmap,
-                    Stretch = landscape || item.Kind != "live" ? Stretch.UniformToFill : Stretch.Uniform
-                };
-            }
-            catch { }
+                Stretch = landscape || item.Kind != "live" ? Stretch.UniformToFill : Stretch.Uniform
+            };
+            BindArtwork(posterImage, artwork, landscape ? 360 : item.Kind == "live" ? 240 : 220);
+            imageBorder.Child = posterImage;
         }
 
         stack.Children.Add(imageBorder);
@@ -924,7 +907,7 @@ public partial class MainWindow : Window
             BorderBrush = Brushes.Transparent,
             BorderThickness = new Thickness(1),
             Padding = new Thickness(6),
-            Margin = new Thickness(0, 0, 10, 12),
+            Margin = new Thickness(4, 4, 14, 16),
             Cursor = Cursors.Hand,
             ToolTip = item.Name,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
@@ -938,10 +921,11 @@ public partial class MainWindow : Window
             button.Background = active ? Brush("#3D2756") : Brushes.Transparent;
             button.BorderBrush = active ? Brush("#F0E1FF") : Brushes.Transparent;
             button.BorderThickness = active ? new Thickness(2) : new Thickness(1);
+            Panel.SetZIndex(button, active ? 10 : 0);
             if (button.RenderTransform is ScaleTransform scale)
             {
-                scale.ScaleX = active ? 1.025 : 1;
-                scale.ScaleY = active ? 1.025 : 1;
+                scale.ScaleX = active ? 1.012 : 1;
+                scale.ScaleY = active ? 1.012 : 1;
             }
         }
 
@@ -1004,17 +988,13 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrWhiteSpace(detailBackdrop))
         {
-            try
+            var bgImage = new Image
             {
-                var bgBitmap = CreateRemoteBitmap(detailBackdrop, 1200);
-                heroLayer.Children.Add(new Image
-                {
-                    Source = bgBitmap,
-                    Stretch = Stretch.UniformToFill,
-                    Opacity = .88
-                });
-            }
-            catch { }
+                Stretch = Stretch.UniformToFill,
+                Opacity = .88
+            };
+            BindArtwork(bgImage, detailBackdrop, 1200);
+            heroLayer.Children.Add(bgImage);
         }
 
         heroLayer.Children.Add(new Border
@@ -1166,15 +1146,9 @@ public partial class MainWindow : Window
         };
         if (!string.IsNullOrWhiteSpace(item.Icon))
         {
-            try
-            {
-                posterShell.Child = new Image
-                {
-                    Source = CreateRemoteBitmap(item.Icon, 480),
-                    Stretch = Stretch.UniformToFill
-                };
-            }
-            catch { }
+            var posterImage = new Image { Stretch = Stretch.UniformToFill };
+            BindArtwork(posterImage, item.Icon, 480);
+            posterShell.Child = posterImage;
         }
         Grid.SetColumn(posterShell, 2);
         body.Children.Add(posterShell);
@@ -2394,9 +2368,10 @@ public partial class MainWindow : Window
     {
         var before = DiagnosticService.DirectoryBytes(_store.RootPath);
         var removed = _store.CleanCatalogCache();
+        var artworkRemoved = ArtworkCache.Clear();
         var after = DiagnosticService.DirectoryBytes(_store.RootPath);
         MessageBox.Show(this,
-            "تم حذف " + removed + " ملفات كتالوج مؤقتة." + Environment.NewLine +
+            "تم حذف " + removed + " ملفات كتالوج مؤقتة و" + artworkRemoved + " صور مخزنة." + Environment.NewLine +
             "المساحة المحررة: " + DiagnosticService.FormatBytes(Math.Max(0, before - after)) +
             Environment.NewLine + "بيانات الدخول والمفضلة والسجل لم تُحذف.",
             "BLOFY PLAYER");
@@ -2443,7 +2418,7 @@ public partial class MainWindow : Window
         section.Children.Add(Txt(title, 15, Text, FontWeights.SemiBold, 0, 0, 0, 7));
         var panel = new StackPanel { Orientation = Orientation.Horizontal, FlowDirection = FlowDirection.RightToLeft };
         var width = landscape ? 224 : 154;
-        foreach (var item in items.Take(18))
+        foreach (var item in items.Take(12))
             panel.Children.Add(ContentCard(item, width, landscape));
 
         section.Children.Add(new ScrollViewer
@@ -2531,16 +2506,18 @@ public partial class MainWindow : Window
         return stack;
     }
 
-    private static BitmapImage CreateRemoteBitmap(string url, int decodeWidth)
+    private static void BindArtwork(Image target, string? url, int decodeWidth)
     {
-        var bitmap = new BitmapImage();
-        bitmap.BeginInit();
-        bitmap.UriSource = new Uri(url, UriKind.Absolute);
-        bitmap.DecodePixelWidth = decodeWidth;
-        bitmap.CacheOption = BitmapCacheOption.OnDemand;
-        bitmap.CreateOptions = BitmapCreateOptions.DelayCreation;
-        bitmap.EndInit();
-        return bitmap;
+        if (string.IsNullOrWhiteSpace(url)) return;
+        var requested = url;
+        target.Tag = requested;
+        target.Loaded += async (_, _) =>
+        {
+            if (!Equals(target.Tag, requested) || target.Source is not null) return;
+            var image = await ArtworkCache.LoadAsync(requested, decodeWidth);
+            if (image is null || !Equals(target.Tag, requested)) return;
+            target.Source = image;
+        };
     }
 
     private UIElement MetadataChip(string value)
