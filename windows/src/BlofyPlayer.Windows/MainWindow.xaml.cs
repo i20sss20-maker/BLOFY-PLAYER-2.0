@@ -27,7 +27,9 @@ public partial class MainWindow : Window
     private readonly PortalService _portal = new();
     private readonly LocalStore _store = new();
     private CatalogCoordinator? _catalog;
+    private CatalogViewIndex _viewIndex = CatalogViewIndex.Empty;
     private CancellationTokenSource? _syncCts;
+    private CancellationTokenSource? _searchCts;
     private ActivationCheckResponse? _activationState;
     private ProviderAccount? _activeProvider;
     private PlaybackService? _previewPlayback;
@@ -57,6 +59,7 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _syncCts?.Cancel();
+            _searchCts?.Cancel();
             DisposePreview();
             _catalog?.Dispose();
             _activation.Dispose();
@@ -76,10 +79,14 @@ public partial class MainWindow : Window
         _activeProvider = _store.ActiveProvider();
         if (_activeProvider is not null)
         {
-            var cached = await _catalog.LoadCachedAsync(_activeProvider);
+            ProgressText.Text = "تحميل الكاش…";
+            var cached = await Task.Run(() => _catalog.LoadCachedAsync(_activeProvider));
             if (cached is not null)
             {
+                ProgressText.Text = "فهرسة المحتوى…";
+                _viewIndex = await Task.Run(() => CatalogViewIndex.Build(cached));
                 PageSubtitle.Text = _activeProvider.Name + " • " + cached.Streams.Count.ToString("N0") + " عنصر";
+                ProgressText.Text = "جاهز";
                 ShowHome();
             }
 
@@ -180,7 +187,9 @@ public partial class MainWindow : Window
 
         try
         {
-            await _catalog.SyncAsync(_activeProvider, progress, _syncCts.Token);
+            await Task.Run(() => _catalog.SyncAsync(_activeProvider, progress, _syncCts.Token));
+            ProgressText.Text = "فهرسة المحتوى…";
+            _viewIndex = await Task.Run(() => CatalogViewIndex.Build(_catalog.Snapshot));
             PageSubtitle.Text = _activeProvider.Name + " • " + _catalog.Snapshot.Streams.Count.ToString("N0") + " عنصر";
             ProgressText.Text = "جاهز";
             RefreshCurrentPage();
