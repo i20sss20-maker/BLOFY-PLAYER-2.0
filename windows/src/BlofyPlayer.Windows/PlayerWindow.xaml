@@ -9,35 +9,84 @@
         Background="#050408"
         Foreground="#F3F4F6"
         KeyDown="Window_KeyDown"
+        MouseMove="Window_MouseMove"
         FlowDirection="RightToLeft">
     <Grid>
         <vlc:VideoView x:Name="VideoView"/>
 
-        <Border x:Name="Hud" VerticalAlignment="Bottom" Margin="24" Padding="18"
-                CornerRadius="16" Background="#D908060D" BorderBrush="#665E437A" BorderThickness="1">
+        <Border x:Name="TopShade" VerticalAlignment="Top" Height="120"
+                Background="#7808060D" IsHitTestVisible="False">
+            <Grid Margin="28,18">
+                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top">
+                    <TextBlock Text="BLOFY PLAYER" FontSize="10" FontWeight="Bold"
+                               Foreground="#D0B2FF"/>
+                    <TextBlock x:Name="TopTitleText" FontSize="18" FontWeight="SemiBold"
+                               Foreground="#F3F4F6" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border x:Name="Hud" VerticalAlignment="Bottom" Margin="24" Padding="20"
+                CornerRadius="18" Background="#E308060D"
+                BorderBrush="#665E437A" BorderThickness="1">
             <Grid>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0">
-                    <TextBlock x:Name="TitleText" FontSize="20" FontWeight="Bold"/>
-                    <TextBlock x:Name="TimeText" HorizontalAlignment="Left" FlowDirection="LeftToRight" Foreground="#C9BCD9"/>
+                    <StackPanel>
+                        <TextBlock Text="BLOFY PLAYER" FontSize="10" FontWeight="Bold"
+                                   Foreground="#D0B2FF"/>
+                        <TextBlock x:Name="TitleText" FontSize="22" FontWeight="Bold"
+                                   Margin="0,3,0,0"/>
+                        <TextBlock x:Name="EpgText" FontSize="11" Foreground="#C9BCD9"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <TextBlock x:Name="TimeText" HorizontalAlignment="Left"
+                               VerticalAlignment="Bottom"
+                               FlowDirection="LeftToRight" Foreground="#C9BCD9"
+                               FontSize="11"/>
                 </Grid>
 
-                <Slider x:Name="SeekSlider" Grid.Row="1" Margin="0,12,0,10" Minimum="0" Maximum="1"
-                        PreviewMouseLeftButtonUp="SeekSlider_MouseUp"/>
+                <Grid x:Name="TimelinePanel" Grid.Row="1" Margin="0,12,0,10">
+                    <Slider x:Name="SeekSlider" Minimum="0" Maximum="1"
+                            Height="22" PreviewMouseLeftButtonUp="SeekSlider_MouseUp"/>
+                </Grid>
 
-                <StackPanel Grid.Row="2" Orientation="Horizontal">
-                    <Button x:Name="PlayPauseButton" Content="⏯  تشغيل/إيقاف" Click="PlayPause_Click" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
-                    <Button Content="⏪ 10ث" Click="Back_Click" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
-                    <Button Content="10ث ⏩" Click="Forward_Click" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
-                    <Button Content="🔊 صوت" Click="Audio_Click" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
-                    <Button Content="CC ترجمة" Click="Subtitle_Click" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
-                    <Button Content="⛶ ملء الشاشة" Click="Fullscreen_Click" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
-                    <Button Content="إغلاق" Click="Close_Click" Style="{StaticResource SecondaryButton}"/>
+                <StackPanel Grid.Row="2" Orientation="Horizontal"
+                            HorizontalAlignment="Center" Margin="0,2,0,8">
+                    <Button x:Name="PreviousButton" Content="⏮"
+                            Click="Back_Click" Style="{StaticResource SecondaryButton}"
+                            Width="64" Height="48" FontSize="18" Margin="0,0,8,0"
+                            ToolTip="السابق / رجوع 10 ثوان"/>
+                    <Button x:Name="PlayPauseButton" Content="⏸"
+                            Click="PlayPause_Click" Style="{StaticResource PrimaryButton}"
+                            Width="88" Height="52" FontSize="20" Margin="0,0,8,0"
+                            ToolTip="تشغيل / إيقاف مؤقت"/>
+                    <Button x:Name="NextButton" Content="⏭"
+                            Click="Forward_Click" Style="{StaticResource SecondaryButton}"
+                            Width="64" Height="48" FontSize="18"
+                            ToolTip="التالي / تقديم 10 ثوان"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="3" Orientation="Horizontal"
+                            HorizontalAlignment="Center">
+                    <Button Content="🔊  الصوت" Click="Audio_Click"
+                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
+                    <Button Content="CC  الترجمة" Click="Subtitle_Click"
+                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
+                    <Button Content="◉  الجودة" Click="Quality_Click"
+                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
+                    <Button Content="▣  المقاس" Click="Aspect_Click"
+                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
+                    <Button Content="⛶  ملء الشاشة" Click="Fullscreen_Click"
+                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
+                    <Button Content="✕" Click="Close_Click"
+                            Style="{StaticResource SecondaryButton}" Width="46"/>
                 </StackPanel>
             </Grid>
         </Border>
