@@ -5,7 +5,7 @@ using System.Text;
 
 namespace BlofyPlayer.Windows.Core.Identity;
 
-public sealed record BlofyIdentity(string DeviceId, string ActivationCode);
+public sealed record BlofyIdentity(string DeviceId, string ActivationCode, string TrialScope);
 
 public static class WindowsDeviceIdentity
 {
@@ -20,7 +20,8 @@ public static class WindowsDeviceIdentity
 
         return new BlofyIdentity(
             DeriveDeviceId(stable),
-            DeriveActivationCode(stable)
+            DeriveActivationCode(stable),
+            DeriveTrialScope(stable)
         );
     }
 
