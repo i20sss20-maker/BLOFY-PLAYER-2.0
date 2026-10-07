@@ -181,9 +181,11 @@ public partial class StartupWindow : Window
                 using var catalog = new CatalogCoordinator(_store);
                 SetLoading(34, "تجهيز القائمة: " + provider.Name);
 
-                var cached = await catalog.LoadCachedAsync(provider);
+                var cached = await Task.Run(() => catalog.LoadCachedAsync(provider));
+                CatalogSnapshot ready;
                 if (cached is not null && cached.Streams.Count > 0)
                 {
+                    ready = cached;
                     SetLoading(82, "تم تجهيز بياناتك المحفوظة • " + cached.Streams.Count.ToString("N0") + " عنصر");
                 }
                 else
@@ -193,8 +195,9 @@ public partial class StartupWindow : Window
                         var mapped = 34 + (int)Math.Round(value.Percent * 0.58);
                         SetLoading(Math.Min(92, mapped), value.Text);
                     });
-                    await catalog.SyncAsync(provider, progress);
+                    ready = await Task.Run(() => catalog.SyncAsync(provider, progress));
                 }
+                StartupCatalogTransfer.Store(ready);
             }
             else
             {
