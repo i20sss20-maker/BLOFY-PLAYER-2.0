@@ -9,7 +9,7 @@ public sealed class PlaybackService : IDisposable
 
     public PlaybackService()
     {
-        Core.Initialize();
+        LibVLCSharp.Shared.Core.Initialize();
 
         LibVlc = new LibVLC(
             "--no-video-title-show",
