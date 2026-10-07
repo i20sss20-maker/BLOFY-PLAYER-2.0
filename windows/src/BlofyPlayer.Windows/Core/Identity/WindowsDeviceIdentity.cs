@@ -62,6 +62,14 @@ public static class WindowsDeviceIdentity
         return (100_000 + (value % 900_000)).ToString();
     }
 
+    private static string DeriveTrialScope(string stable)
+    {
+        var digest = SHA256.HashData(
+            Encoding.UTF8.GetBytes("blofy-trial-scope-v1:windows:" + stable.Trim().ToLowerInvariant())
+        );
+        return Convert.ToHexString(digest).ToLowerInvariant();
+    }
+
     private static byte[] Digest(string ns, string stable) =>
         SHA256.HashData(Encoding.UTF8.GetBytes($"{ns}:{stable}"));
 }
