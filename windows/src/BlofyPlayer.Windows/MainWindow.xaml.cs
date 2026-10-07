@@ -1250,6 +1250,14 @@ public partial class MainWindow : Window
         backupRow.Children.Add(Action("استعادة نسخة", false, async (_, _) => await RestoreBackupAsync(), 8));
         root.Children.Add(backupRow);
 
+        root.Children.Add(Txt("BLOFY Cloud", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
+        var cloudRow = Horizontal();
+        cloudRow.Children.Add(Action("نسخ للسحابة", false, async (_, _) => await CloudBackupAsync()));
+        cloudRow.Children.Add(Action("استعادة من السحابة", false, async (_, _) => await CloudRestoreAsync(), 8));
+        cloudRow.Children.Add(Action("إنشاء كود ربط", false, async (_, _) => await CreatePairCodeAsync(), 8));
+        cloudRow.Children.Add(Action("استعادة بكود", false, async (_, _) => await RestorePairCodeAsync(), 8));
+        root.Children.Add(cloudRow);
+
         root.Children.Add(Txt("التحديث والتشخيص", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
         var serviceRow = Horizontal();
         serviceRow.Children.Add(Action("فحص تحديث Windows", false, async (_, _) => await CheckWindowsUpdateAsync()));
@@ -1374,6 +1382,87 @@ public partial class MainWindow : Window
             ApplyTheme();
             if (_catalog is not null) _store.ApplyFavoriteState(_catalog.Snapshot.Streams);
             MessageBox.Show(this, "تمت الاستعادة.", "BLOFY PLAYER");
+            ShowSettings();
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+    }
+
+    private bool CloudReady()
+    {
+        if (_activationState?.CanUse() == true) return true;
+        MessageBox.Show(this, "يجب أن يكون الجهاز مفعّلًا لاستخدام BLOFY Cloud.", "BLOFY PLAYER");
+        return false;
+    }
+
+    private async Task CloudBackupAsync()
+    {
+        if (!CloudReady()) return;
+        ProgressText.Text = "حفظ BLOFY Cloud…";
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(18));
+            var result = await ProfileCloudService.BackupAsync(_store, _identity, timeout.Token);
+            MessageBox.Show(this, "تم حفظ الملف في السحابة. Revision " + result.Revision, "BLOFY PLAYER");
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        finally { ProgressText.Text = ""; }
+    }
+
+    private async Task CloudRestoreAsync()
+    {
+        if (!CloudReady()) return;
+        if (!UiDialogs.Confirm(this, "استعادة BLOFY Cloud", "استبدال مفضلة وإعدادات الملف الحالي بالنسخة السحابية؟")) return;
+        ProgressText.Text = "استعادة BLOFY Cloud…";
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(18));
+            var result = await ProfileCloudService.RestoreAsync(_store, _identity, timeout.Token);
+            if (result.Action == "no_backup")
+            {
+                MessageBox.Show(this, "لا توجد نسخة سحابية لهذا الملف.", "BLOFY PLAYER");
+                return;
+            }
+            ApplyTheme();
+            if (_catalog is not null) _store.ApplyFavoriteState(_catalog.Snapshot.Streams);
+            MessageBox.Show(this, "تمت استعادة BLOFY Cloud.", "BLOFY PLAYER");
+            ShowSettings();
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        finally { ProgressText.Text = ""; }
+    }
+
+    private async Task CreatePairCodeAsync()
+    {
+        if (!CloudReady()) return;
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var pair = await ProfileCloudService.CreatePairCodeAsync(_store, _identity, timeout.Token);
+            Clipboard.SetText(pair.Code);
+            var expiry = pair.ExpiresAt > 10_000_000_000
+                ? DateTimeOffset.FromUnixTimeMilliseconds(pair.ExpiresAt)
+                : DateTimeOffset.FromUnixTimeSeconds(pair.ExpiresAt);
+            MessageBox.Show(this,
+                "كود الربط: " + pair.Code + Environment.NewLine +
+                "صالح حتى: " + expiry.ToLocalTime().ToString("HH:mm") + Environment.NewLine +
+                "تم نسخ الكود للحافظة.",
+                "BLOFY Cloud");
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+    }
+
+    private async Task RestorePairCodeAsync()
+    {
+        if (!CloudReady()) return;
+        var code = UiDialogs.Prompt(this, "استعادة بكود ربط", "أدخل كود BLOFY Cloud", initial: "");
+        if (string.IsNullOrWhiteSpace(code)) return;
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(18));
+            await ProfileCloudService.RestorePairCodeAsync(_store, _identity, code, timeout.Token);
+            ApplyTheme();
+            if (_catalog is not null) _store.ApplyFavoriteState(_catalog.Snapshot.Streams);
+            MessageBox.Show(this, "تم نقل بيانات الملف من كود الربط.", "BLOFY PLAYER");
             ShowSettings();
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
