@@ -34,15 +34,28 @@ function playlistCards(container,items,request){container.replaceChildren();if(!
     card.append(title,node('p',item.type.toUpperCase(),'caption'),button,message);container.append(card);
   }
 }
-async function releaseCards(container){try{const {items}=await api('/api/v1/releases');container.replaceChildren();
+async function releaseCards(container){try{
+  const android=await api('/api/v1/releases');
+  const windows=await api('/api/v1/releases/windows').catch(()=>null);
+  const items=android.items||[];
+  container.replaceChildren();
   const channels=['stable','testing'].sort((a,b)=>Number(items.some(x=>x.channel===b))-Number(items.some(x=>x.channel===a)));
-  for(const channel of channels){const release=items.find(item=>item.channel===channel);const card=node('article',null,'card download-card'+(release?' available':''));card.append(badge(channel),node('h3',channel==='stable'?'الإصدار المعتمد':'الإصدار التجريبي'));
-    if(!release){card.append(node('p',channel==='stable'?'لم يُعلن إصدار معتمد في مركز التحميل بعد.':'لا يوجد إصدار تجريبي منشور حاليًا.'));}
+  for(const channel of channels){const release=items.find(item=>item.channel===channel);const card=node('article',null,'card download-card'+(release?' available':''));card.append(badge(channel),node('h3',channel==='stable'?'Android — الإصدار المعتمد':'Android — الإصدار التجريبي'));
+    if(!release){card.append(node('p',channel==='stable'?'لم يُعلن إصدار Android معتمد في مركز التحميل بعد.':'لا يوجد إصدار Android تجريبي منشور حاليًا.'));}
     else{if(release.isPrimary)card.append(node('span','★ الإصدار الأساسي','pill'));card.append(node('div',release.versionName,'download-version'),node('p',release.releaseNotes||'لا توجد ملاحظات إضافية.','content-text'));
       if(release.downloadUrl&&/^https:\/\//i.test(release.downloadUrl)){const link=node('a','تحميل APK',channel==='stable'?'btn primary':'btn');link.href=release.downloadUrl;link.rel='noopener noreferrer';card.append(link);}
       else card.append(node('p','رابط التحميل لم يُضف بعد.'));
     }container.append(card);
-  }}catch(error){container.replaceChildren(node('p',error.message,'notice'));}}
+  }
+  const winCard=node('article',null,'card download-card'+(windows?' available':''));
+  winCard.append(node('span','Windows','badge stable'),node('h3','BLOFY PLAYER — Windows x64'));
+  if(!windows){winCard.append(node('p','نسخة Windows قيد الاعتماد. لن يظهر زر التحميل حتى نعتمد Setup النهائي.'));}
+  else{
+    winCard.append(node('div',windows.versionName,'download-version'),node('p',windows.releaseNotes||'نسخة Windows الأصلية من BLOFY PLAYER.','content-text'));
+    const link=node('a','تحميل Windows Setup','btn primary');link.href='/download/latest-windows.exe';link.rel='noopener noreferrer';winCard.append(link);
+  }
+  container.append(winCard);
+}catch(error){container.replaceChildren(node('p',error.message,'notice'));}}
 
 if(page==='admin-login'){
   $('admin-login').addEventListener('submit',async event=>{
@@ -59,7 +72,7 @@ if(page==='home'){
 }
 if(page==='downloads'){
   releaseCards($('releases'));
-  const instructions={phone:['حمّل ملف APK من الإصدار الذي تختاره أعلاه.','افتح الملف واسمح بالتثبيت من مصدر التحميل عندما يطلب أندرويد ذلك.','ثبّت التطبيق أو حدّث نسختك الحالية، ثم افتح BLOFY واربط جهازك.'],tv:['حمّل ملف APK وانقله إلى التلفزيون أو الرسيفر بوسيلة نقل الملفات المتاحة لديك.','افتح الملف من مدير الملفات وامنح إذن التثبيت عند الطلب.','افتح BLOFY، ثم استخدم كود الجهاز ورمز الربط لإدارة قوائمك من الجوال.'],computer:['هذه نسخة أندرويد APK؛ تشغيلها على الكمبيوتر يحتاج محاكي أندرويد.','شغّل المحاكي، ثم اسحب ملف APK إلى نافذته أو استخدم خيار تثبيت APK.','افتح BLOFY داخل المحاكي. أداء 4K يعتمد على المحاكي وفك الترميز؛ اختبره على الجهاز المستهدف.']};
+  const instructions={phone:['حمّل ملف APK من إصدار Android الذي تختاره أعلاه.','افتح الملف واسمح بالتثبيت من مصدر التحميل عندما يطلب أندرويد ذلك.','ثبّت التطبيق أو حدّث نسختك الحالية، ثم افتح BLOFY واربط جهازك.'],tv:['حمّل ملف APK وانقله إلى التلفزيون أو الرسيفر بوسيلة نقل الملفات المتاحة لديك.','افتح الملف من مدير الملفات وامنح إذن التثبيت عند الطلب.','افتح BLOFY، ثم استخدم كود الجهاز ورمز الربط لإدارة قوائمك من الجوال.'],computer:['اضغط «تحميل Windows Setup» لتحميل النسخة الأصلية للكمبيوتر؛ لا تحتاج محاكي أندرويد.','افتح ملف BLOFY-PLAYER-Windows-Setup-x64.exe وأكمل التثبيت. إذا ظهر SmartScreen في النسخ غير الموقعة اختر «مزيد من المعلومات» ثم «تشغيل على أي حال».','افتح BLOFY PLAYER. سيظهر رقم الجهاز ورمز التفعيل، وتستخدم نفس بوابة BLOFY للقوائم والتجديد والمزامنة.']};
   const show=type=>{const list=node('ol');instructions[type].forEach(text=>list.append(node('li',text)));$('install-help').replaceChildren(list);document.querySelectorAll('[data-install]').forEach(button=>button.setAttribute('aria-selected',String(button.dataset.install===type)));};
   document.querySelectorAll('[data-install]').forEach(button=>button.addEventListener('click',()=>show(button.dataset.install)));show('phone');
 }
