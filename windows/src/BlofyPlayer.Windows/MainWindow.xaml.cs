@@ -615,6 +615,7 @@ public partial class MainWindow : Window
     private async Task ShowDetailsAsync(StreamItem item)
     {
         DisposePreview();
+        if (_store.IsLocked(item.Key) && !EnsureParentalAccess()) return;
         PageTitle.Text = item.Name;
 
         ProviderDetails? providerDetails = null;
@@ -672,6 +673,29 @@ public partial class MainWindow : Window
             if (s is Button b) b.Content = item.Favorite ? "★ إزالة من المفضلة" : "☆ إضافة للمفضلة";
         }, 10);
         actions.Children.Add(fav);
+        var lockButton = Action(_store.IsLocked(item.Key) ? "🔓 إلغاء القفل" : "🔒 قفل المحتوى", false, async (s, _) =>
+        {
+            var locked = _store.IsLocked(item.Key);
+            if (locked)
+            {
+                if (!EnsureParentalAccess()) return;
+                await _store.SetLockedAsync(item.Key, false);
+            }
+            else
+            {
+                if (!_store.HasParentalPin)
+                {
+                    var newPin = UiDialogs.Prompt(this, "PIN أبوي", "عيّن PIN من 4 إلى 8 أرقام قبل قفل المحتوى", password: true);
+                    if (string.IsNullOrWhiteSpace(newPin)) return;
+                    try { await _store.SetParentalPinAsync(newPin); }
+                    catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); return; }
+                }
+                await _store.SetLockedAsync(item.Key, true);
+            }
+
+            if (s is Button b) b.Content = _store.IsLocked(item.Key) ? "🔓 إلغاء القفل" : "🔒 قفل المحتوى";
+        }, 10);
+        actions.Children.Add(lockButton);
         info.Children.Add(actions);
         hero.Child = info;
         root.Children.Add(hero);
@@ -1100,6 +1124,65 @@ public partial class MainWindow : Window
         ContentHost.Content = root;
     }
 
+    private void ShowCategoryManager()
+    {
+        DisposePreview();
+        PageTitle.Text = "إدارة الفئات";
+        var root = Vertical();
+        root.Children.Add(Txt("إخفاء الفئات هنا يخص الملف الحالي فقط.", 12, Muted, marginBottom: 12));
+
+        var kindChoice = new ComboBox { MinWidth = 220 };
+        kindChoice.Items.Add(new ComboItem("البث المباشر", "live"));
+        kindChoice.Items.Add(new ComboItem("الأفلام", "movie"));
+        kindChoice.Items.Add(new ComboItem("المسلسلات", "series"));
+        kindChoice.DisplayMemberPath = "Label";
+        kindChoice.SelectedIndex = 0;
+        root.Children.Add(Labeled("القسم", kindChoice));
+
+        var list = Vertical(0, 14, 0, 0);
+        root.Children.Add(list);
+
+        void Rebuild()
+        {
+            list.Children.Clear();
+            var kind = (kindChoice.SelectedItem as ComboItem)?.Value ?? "live";
+            var categories = (_catalog?.Snapshot.Categories ?? []).Where(x => x.Kind == kind).ToList();
+            if (categories.Count == 0)
+            {
+                list.Children.Add(Txt("لا توجد فئات محمّلة.", 12, Muted));
+                return;
+            }
+
+            foreach (var category in categories)
+            {
+                var check = new CheckBox
+                {
+                    Content = category.Name,
+                    IsChecked = !_store.IsCategoryHidden(kind, category.RemoteId),
+                    Foreground = Text,
+                    Margin = new Thickness(0, 6, 0, 6),
+                    FontSize = 13
+                };
+                check.Click += async (_, _) =>
+                    await _store.SetCategoryHiddenAsync(kind, category.RemoteId, check.IsChecked != true);
+                list.Children.Add(check);
+            }
+        }
+
+        kindChoice.SelectionChanged += (_, _) => Rebuild();
+        Rebuild();
+
+        root.Children.Add(Action("إظهار جميع فئات القسم", false, async (_, _) =>
+        {
+            var kind = (kindChoice.SelectedItem as ComboItem)?.Value ?? "live";
+            foreach (var category in (_catalog?.Snapshot.Categories ?? []).Where(x => x.Kind == kind))
+                await _store.SetCategoryHiddenAsync(kind, category.RemoteId, false);
+            Rebuild();
+        }, 0, 16, 0, 0));
+
+        ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    }
+
     private void ShowSettings()
     {
         DisposePreview();
@@ -1150,11 +1233,15 @@ public partial class MainWindow : Window
         }, 0, 20, 0, 0));
 
         root.Children.Add(Txt("الملفات والحماية", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
-        root.Children.Add(Action("إدارة الملفات وPIN", false, (_, _) =>
+        var securityRow = Horizontal();
+        securityRow.Children.Add(Action("إدارة الملفات وPIN", false, (_, _) =>
         {
             _currentPage = "profiles";
             ShowProfiles();
         }));
+        securityRow.Children.Add(Action("PIN الرقابة الأبوية", false, async (_, _) => await ChangeParentalPinAsync(), 8));
+        securityRow.Children.Add(Action("ترتيب/إخفاء الفئات", false, (_, _) => ShowCategoryManager(), 8));
+        root.Children.Add(securityRow);
 
         root.Children.Add(Txt("النسخ الاحتياطي", 18, Text, FontWeights.Bold, marginTop: 26, marginBottom: 8));
         var backupRow = Horizontal();
@@ -1183,6 +1270,32 @@ public partial class MainWindow : Window
     }
 
     private sealed record ComboItem(string Label, string Value);
+
+    private bool EnsureParentalAccess()
+    {
+        if (!_store.HasParentalPin) return true;
+        var pin = UiDialogs.Prompt(this, "الرقابة الأبوية", "أدخل PIN الأبوي", password: true);
+        if (pin is null) return false;
+        if (_store.VerifyParentalPin(pin)) return true;
+        MessageBox.Show(this, "PIN غير صحيح.", "BLOFY PLAYER");
+        return false;
+    }
+
+    private async Task ChangeParentalPinAsync()
+    {
+        if (_store.HasParentalPin && !EnsureParentalAccess()) return;
+        var pin = UiDialogs.Prompt(this, "PIN الرقابة الأبوية",
+            "PIN جديد من 4 إلى 8 أرقام، أو اتركه فارغًا لإزالة PIN", password: true);
+        if (pin is null) return;
+        try
+        {
+            await _store.SetParentalPinAsync(string.IsNullOrWhiteSpace(pin) ? null : pin);
+            MessageBox.Show(this,
+                string.IsNullOrWhiteSpace(pin) ? "تمت إزالة PIN الأبوي." : "تم حفظ PIN الأبوي.",
+                "BLOFY PLAYER");
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+    }
 
     private void UpdateProfileLabel()
     {
