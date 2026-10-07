@@ -20,6 +20,7 @@ public partial class PlayerWindow : Window
     private readonly Func<StreamItem, string>? _urlResolver;
     private readonly Func<StreamItem, IReadOnlyList<string>>? _recoveryResolver;
     private readonly Func<long, long, Task>? _savePosition;
+    private readonly Func<StreamItem, Task>? _onPlaylistItemChanged;
     private readonly Func<Task>? _onEnded;
     private readonly AppSettings _settings;
     private int _index;
@@ -48,6 +49,7 @@ public partial class PlayerWindow : Window
         Func<StreamItem, IReadOnlyList<string>>? recoveryResolver = null,
         IReadOnlyList<string>? recoveryUrls = null,
         Func<long, long, Task>? savePosition = null,
+        Func<StreamItem, Task>? onPlaylistItemChanged = null,
         AppSettings? settings = null,
         Func<Task>? onEnded = null)
     {
@@ -79,6 +81,7 @@ public partial class PlayerWindow : Window
         _recoveryResolver = recoveryResolver;
         _recoveryUrls = NormalizeRecoveryUrls(url, recoveryUrls);
         _savePosition = savePosition;
+        _onPlaylistItemChanged = onPlaylistItemChanged;
         _resumePosition = resumePositionMs;
         TitleText.Text = title;
         TopTitleText.Text = title;
@@ -530,7 +533,7 @@ public partial class PlayerWindow : Window
 
     private void Window_MouseMove(object sender, MouseEventArgs e) => ShowHudBriefly();
 
-    private void ChangeChannel(int delta)
+    private async void ChangeChannel(int delta)
     {
         if (_playlist.Count == 0 || _urlResolver is null) return;
         _index = (_index + delta + _playlist.Count) % _playlist.Count;
@@ -546,6 +549,10 @@ public partial class PlayerWindow : Window
             : NormalizeRecoveryUrls(_urlResolver(item), null);
         PlayCurrentCandidate();
         ShowHudBriefly();
+        if (_onPlaylistItemChanged is not null)
+        {
+            try { await _onPlaylistItemChanged(item); } catch { }
+        }
     }
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
