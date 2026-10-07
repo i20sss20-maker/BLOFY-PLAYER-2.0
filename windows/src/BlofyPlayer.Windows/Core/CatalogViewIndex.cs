@@ -11,23 +11,27 @@ public sealed class CatalogViewIndex
     private readonly Dictionary<string, List<StreamItem>> _byCategory;
     private readonly Dictionary<string, StreamItem> _byKey;
     private readonly Dictionary<string, List<StreamItem>> _latest;
+    private readonly Dictionary<string, List<StreamItem>> _collections;
 
     public static CatalogViewIndex Empty { get; } = new(
         new(StringComparer.OrdinalIgnoreCase),
         new(StringComparer.OrdinalIgnoreCase),
         new(StringComparer.Ordinal),
+        new(StringComparer.OrdinalIgnoreCase),
         new(StringComparer.OrdinalIgnoreCase));
 
     private CatalogViewIndex(
         Dictionary<string, List<StreamItem>> byKind,
         Dictionary<string, List<StreamItem>> byCategory,
         Dictionary<string, StreamItem> byKey,
-        Dictionary<string, List<StreamItem>> latest)
+        Dictionary<string, List<StreamItem>> latest,
+        Dictionary<string, List<StreamItem>> collections)
     {
         _byKind = byKind;
         _byCategory = byCategory;
         _byKey = byKey;
         _latest = latest;
+        _collections = collections;
     }
 
     public static CatalogViewIndex Build(CatalogSnapshot snapshot)
@@ -67,7 +71,38 @@ public sealed class CatalogViewIndex
             }
         }
 
-        return new CatalogViewIndex(byKind, byCategory, byKey, latest);
+        var allVod = byKind
+            .Where(x => x.Key.Equals("movie", StringComparison.OrdinalIgnoreCase) ||
+                        x.Key.Equals("series", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(x => x.Value)
+            .ToList();
+
+        static double RatingValue(string raw)
+        {
+            if (!double.TryParse((raw ?? "").Replace(',', '.'),
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var value)) return 0;
+            return value <= 5 ? value * 2 : value;
+        }
+
+        static bool HasArabic(string value) =>
+            !string.IsNullOrWhiteSpace(value) && value.Any(ch => ch >= '\u0600' && ch <= '\u06FF');
+
+        var collections = new Dictionary<string, List<StreamItem>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["latest"] = allVod.OrderByDescending(x => x.AddedAt).Take(48).ToList(),
+            ["top"] = allVod.Where(x => RatingValue(x.Rating) > 0)
+                .OrderByDescending(x => RatingValue(x.Rating)).Take(48).ToList(),
+            ["arabic"] = allVod.Where(x => HasArabic(x.Name) || HasArabic(x.Genre) ||
+                (x.Genre ?? "").Contains("arab", StringComparison.OrdinalIgnoreCase)).Take(48).ToList(),
+            ["4k"] = allVod.Where(x =>
+                (x.Name ?? "").Contains("4K", StringComparison.OrdinalIgnoreCase) ||
+                (x.Name ?? "").Contains("UHD", StringComparison.OrdinalIgnoreCase) ||
+                (x.Genre ?? "").Contains("4K", StringComparison.OrdinalIgnoreCase)).Take(48).ToList()
+        };
+
+        return new CatalogViewIndex(byKind, byCategory, byKey, latest, collections);
     }
 
     public IReadOnlyList<StreamItem> Kind(string kind) =>
@@ -80,6 +115,9 @@ public sealed class CatalogViewIndex
 
     public IReadOnlyList<StreamItem> Latest(string kind) =>
         _latest.TryGetValue(kind, out var list) ? list : Array.Empty<StreamItem>();
+
+    public IReadOnlyList<StreamItem> Collection(string key) =>
+        _collections.TryGetValue(key, out var list) ? list : Array.Empty<StreamItem>();
 
     public StreamItem? Find(string key) =>
         _byKey.TryGetValue(key, out var item) ? item : null;
