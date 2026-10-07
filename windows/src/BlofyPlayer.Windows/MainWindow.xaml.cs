@@ -91,8 +91,27 @@ public partial class MainWindow : Window
         ApplyTheme();
         UpdateProfileLabel();
         _catalog = new CatalogCoordinator(_store);
-        await CheckActivationAsync();
-        await SyncPortalAsync();
+
+        var startupSession = StartupSessionTransfer.Take();
+        if (startupSession.Activation is not null)
+        {
+            _activationState = startupSession.Activation;
+            ActivationStatusText.Text = _activationState.Status.ToLowerInvariant() switch
+            {
+                "active" => ExpiryLabel("مفعّل"),
+                "trial" => ExpiryLabel("تجربة"),
+                "expired" => "انتهى الاشتراك — جدد من الباركود",
+                "blocked" => "الجهاز موقوف",
+                _ => _activationState.Message ?? "حالة غير معروفة"
+            };
+        }
+        else
+        {
+            await CheckActivationAsync();
+        }
+
+        if (!startupSession.PortalSynced)
+            await SyncPortalAsync();
 
         _activeProvider = _store.ActiveProvider();
         HeaderServerText.Text = _activeProvider?.Name ?? "BLOFY";
