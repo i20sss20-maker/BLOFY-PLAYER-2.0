@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     private ProviderAccount? _activeProvider;
     private PlaybackService? _previewPlayback;
     private int _liveSelectionSerial;
+    private CancellationTokenSource? _livePreviewCts;
     private string _currentPage = "home";
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private readonly DispatcherTimer _heroTimer = new() { Interval = TimeSpan.FromSeconds(8) };
@@ -74,6 +75,7 @@ public partial class MainWindow : Window
         {
             _syncCts?.Cancel();
             _searchCts?.Cancel();
+            _livePreviewCts?.Cancel();
             _clockTimer.Stop();
             _heroTimer.Stop();
             DisposePreview();
@@ -799,37 +801,55 @@ public partial class MainWindow : Window
         channels.SelectionChanged += async (_, _) =>
         {
             if (channels.SelectedItem is not StreamItem selected || _activeProvider is null) return;
+
+            _livePreviewCts?.Cancel();
+            _livePreviewCts?.Dispose();
+            _livePreviewCts = new CancellationTokenSource();
+            var token = _livePreviewCts.Token;
             var serial = ++_liveSelectionSerial;
+
             channelTitle.Text = selected.Name;
             nowText.Text = selected.ArchiveEnabled
                 ? "يدعم الاسترجاع حتى " + selected.ArchiveDurationDays + " يوم"
                 : "بث مباشر";
-
-            if (_store.State.Settings.AutoplayLive && _previewPlayback is not null)
-            {
-                var url = _activeProvider.ProviderType == "m3u"
-                    ? selected.DirectSource
-                    : _catalog!.Xtream(_activeProvider).StreamUrl(_activeProvider, selected, _store.State.Settings.LiveFormat);
-                _previewPlayback.Play(url, new Dictionary<string, string>
-                {
-                    ["User-Agent"] = _store.State.Settings.UserAgent
-                });
-            }
-
             epgPanel.Children.Clear();
-            epgPanel.Children.Add(Txt("جاري تحميل الدليل…", 11, Muted));
-            if (_activeProvider.ProviderType != "xtream")
-            {
-                epgPanel.Children.Clear();
-                epgPanel.Children.Add(Txt("EPG غير متاح لهذه القائمة.", 11, Muted));
-                return;
-            }
+            epgPanel.Children.Add(Txt("جاري تجهيز القناة…", 11, Muted));
 
             try
             {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-                var epg = await _catalog!.Xtream(_activeProvider).GetShortEpgAsync(_activeProvider, selected.RemoteId, timeout.Token);
-                if (serial != _liveSelectionSerial) return;
+                await Task.Delay(180, token);
+                if (token.IsCancellationRequested || serial != _liveSelectionSerial) return;
+
+                if (_store.State.Settings.AutoplayLive && _previewPlayback is not null)
+                {
+                    var candidates = BuildStreamCandidates(selected);
+                    var url = candidates.FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(url))
+                    {
+                        _previewPlayback.Stop();
+                        _previewPlayback.Play(url, new Dictionary<string, string>
+                        {
+                            ["User-Agent"] = _store.State.Settings.UserAgent
+                        });
+                    }
+                }
+
+                epgPanel.Children.Clear();
+                epgPanel.Children.Add(Txt("جاري تحميل الدليل…", 11, Muted));
+
+                if (_activeProvider.ProviderType != "xtream")
+                {
+                    epgPanel.Children.Clear();
+                    epgPanel.Children.Add(Txt("EPG غير متاح لهذه القائمة.", 11, Muted));
+                    return;
+                }
+
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+                timeout.CancelAfter(TimeSpan.FromSeconds(6));
+                var epg = await _catalog!.Xtream(_activeProvider)
+                    .GetShortEpgAsync(_activeProvider, selected.RemoteId, timeout.Token);
+                if (token.IsCancellationRequested || serial != _liveSelectionSerial) return;
+
                 epgPanel.Children.Clear();
                 if (epg.Count == 0)
                 {
@@ -847,8 +867,13 @@ public partial class MainWindow : Window
                     {
                         if (!selected.ArchiveEnabled || entry.End > DateTimeOffset.Now)
                             return;
-                        var catchupUrl = _catalog!.Xtream(_activeProvider).CatchupUrl(_activeProvider, selected, entry.Start, entry.End);
-                        var player = new PlayerWindow(selected.Name + " • " + entry.Title, catchupUrl) { Owner = this };
+                        var catchupUrl = _catalog!.Xtream(_activeProvider)
+                            .CatchupUrl(_activeProvider, selected, entry.Start, entry.End);
+                        var player = new PlayerWindow(
+                            selected.Name + " • " + entry.Title,
+                            catchupUrl,
+                            settings: _store.State.Settings)
+                        { Owner = this };
                         player.ShowDialog();
                         await Task.CompletedTask;
                     }, 0, 0, 0, 6);
@@ -856,6 +881,10 @@ public partial class MainWindow : Window
                     button.ToolTip = entry.Description;
                     epgPanel.Children.Add(button);
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                // Selection moved to another channel; only the newest item is allowed to render.
             }
             catch
             {
