@@ -38,7 +38,7 @@ public sealed class ActivationClient : IDisposable
         PropertyNameCaseInsensitive = true
     };
 
-    public ActivationClient(string baseUrl = "https://api.blofyplayer.com/")
+    public ActivationClient(string baseUrl = BlofyPlayer.Windows.Core.BlofyEndpoints.ServiceBase)
     {
         _http = new HttpClient
         {
@@ -54,11 +54,11 @@ public sealed class ActivationClient : IDisposable
         var payload = new ActivationCheckRequest(
             identity.DeviceId,
             identity.ActivationCode,
-            "windows-0.1.0"
+            "windows-0.3.0"
         );
 
         using var response = await _http.PostAsJsonAsync(
-            "api/v1/activation/check",
+            BlofyPlayer.Windows.Core.BlofyEndpoints.ActivationCheck,
             payload,
             _json,
             cancellationToken
