@@ -8,6 +8,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Runtime.CompilerServices;
 
 namespace BlofyPlayer.Windows.Core;
 
@@ -780,10 +781,8 @@ public sealed class XtreamService : IDisposable
 
     private async Task<List<CategoryItem>> GetCategoryListAsync(ProviderAccount provider, string kind, string action, CancellationToken ct)
     {
-        using var doc = await GetJsonAsync(ApiUrl(provider, action), ct);
-        if (doc.RootElement.ValueKind != JsonValueKind.Array) return [];
         var result = new List<CategoryItem>();
-        foreach (var row in doc.RootElement.EnumerateArray())
+        await foreach (var row in GetJsonArrayStreamAsync(ApiUrl(provider, action), ct))
         {
             if (row.ValueKind != JsonValueKind.Object) continue;
             var id = First(row, "category_id", "id");
@@ -796,10 +795,8 @@ public sealed class XtreamService : IDisposable
 
     private async Task<List<StreamItem>> GetStreamListAsync(ProviderAccount provider, string kind, string action, CancellationToken ct)
     {
-        using var doc = await GetJsonAsync(ApiUrl(provider, action), ct);
-        if (doc.RootElement.ValueKind != JsonValueKind.Array) return [];
-        var result = new List<StreamItem>();
-        foreach (var row in doc.RootElement.EnumerateArray())
+        var result = new List<StreamItem>(kind == "live" ? 20_000 : 50_000);
+        await foreach (var row in GetJsonArrayStreamAsync(ApiUrl(provider, action), ct))
         {
             if (row.ValueKind != JsonValueKind.Object) continue;
             var id = First(row, kind == "series" ? "series_id" : "stream_id", "id");
@@ -836,6 +833,33 @@ public sealed class XtreamService : IDisposable
             });
         }
         return result;
+    }
+
+    private static readonly JsonSerializerOptions StreamJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        AllowTrailingCommas = true,
+        ReadCommentHandling = JsonCommentHandling.Skip
+    };
+
+    private async IAsyncEnumerable<JsonElement> GetJsonArrayStreamAsync(
+        string url,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        var status = (int)response.StatusCode;
+        if (!response.IsSuccessStatusCode && status != 884)
+            throw new HttpRequestException("Xtream HTTP " + status);
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        await foreach (var row in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(
+                           stream,
+                           StreamJsonOptions,
+                           cancellationToken: ct))
+        {
+            if (row.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) continue;
+            yield return row;
+        }
     }
 
     private async Task<JsonDocument> GetJsonAsync(string url, CancellationToken ct)
