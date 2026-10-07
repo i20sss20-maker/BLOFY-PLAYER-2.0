@@ -328,6 +328,18 @@ public sealed class LocalStore
         await SaveAsync();
     }
 
+    public IReadOnlyList<string> RecentChannels => ActiveLibrary().RecentChannels;
+
+    public async Task AddRecentChannelAsync(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return;
+        var recent = ActiveLibrary().RecentChannels;
+        recent.RemoveAll(x => x.Equals(key, StringComparison.Ordinal));
+        recent.Insert(0, key);
+        if (recent.Count > 30) recent.RemoveRange(30, recent.Count - 30);
+        await SaveAsync();
+    }
+
     public async Task SetCategoryHiddenAsync(string kind, string remoteId, bool hidden)
     {
         var key = kind + ":" + remoteId;
