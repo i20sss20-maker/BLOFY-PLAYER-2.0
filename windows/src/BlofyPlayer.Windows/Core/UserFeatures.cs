@@ -167,7 +167,7 @@ public sealed record ProfilePairCode(string Code, long ExpiresAt, int TtlMinutes
 
 public static class ProfileCloudService
 {
-    private const string BaseUrl = "https://api.blofyplayer.com/";
+    private const string BaseUrl = BlofyEndpoints.ServiceBase;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true
@@ -217,7 +217,7 @@ public static class ProfileCloudService
         await BackupAsync(store, identity, ct);
         var profile = store.ActiveProfile();
         using var client = Client();
-        using var response = await client.PostAsJsonAsync("api/v1/cloud/profile/pair/create",
+        using var response = await client.PostAsJsonAsync(BlofyEndpoints.CloudProfile + "/pair/create",
             new { deviceId = identity.DeviceId, activationCode = identity.ActivationCode, profileId = profile.Id }, Json, ct);
         var raw = await response.Content.ReadAsStringAsync(ct);
         if ((int)response.StatusCode != 201) throw new InvalidOperationException(ReadError(raw, "تعذر إنشاء كود الربط."));
@@ -235,7 +235,7 @@ public static class ProfileCloudService
         var profile = store.ActiveProfile();
         if (profile.Guest) throw new InvalidOperationException("ملف الضيف محلي فقط.");
         using var client = Client();
-        using var response = await client.PostAsJsonAsync("api/v1/cloud/profile/pair/restore",
+        using var response = await client.PostAsJsonAsync(BlofyEndpoints.CloudProfile + "/pair/restore",
             new
             {
                 deviceId = identity.DeviceId,
@@ -260,7 +260,7 @@ public static class ProfileCloudService
     {
         using var client = Client();
         var request = new HttpRequestMessage(HttpMethod.Get,
-            "api/v1/cloud/profile?profileId=" + Uri.EscapeDataString(profileId));
+            BlofyEndpoints.CloudProfile + "?profileId=" + Uri.EscapeDataString(profileId));
         request.Headers.TryAddWithoutValidation("X-BLOFY-Device-ID", identity.DeviceId);
         request.Headers.TryAddWithoutValidation("X-BLOFY-Activation-Code", identity.ActivationCode);
         using var response = await client.SendAsync(request, ct);
@@ -279,7 +279,7 @@ public static class ProfileCloudService
         BlofyIdentity identity, string profileId, long expectedRevision, JsonElement payload, CancellationToken ct)
     {
         using var client = Client();
-        using var request = new HttpRequestMessage(HttpMethod.Put, "api/v1/cloud/profile")
+        using var request = new HttpRequestMessage(HttpMethod.Put, BlofyEndpoints.CloudProfile)
         {
             Content = JsonContent.Create(new
             {
