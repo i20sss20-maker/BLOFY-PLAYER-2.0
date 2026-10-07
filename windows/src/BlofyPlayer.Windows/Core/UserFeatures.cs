@@ -25,6 +25,7 @@ public sealed class ProfileLibraryState
     public Dictionary<string, WatchState> WatchStates { get; set; } = [];
     public List<string> RecentSearches { get; set; } = [];
     public HashSet<string> HiddenCategoryKeys { get; set; } = [];
+    public List<string> HomeRows { get; set; } = ["continue", "latest_movies", "latest_series"];
 }
 
 public static class ProfileSecurity
@@ -121,7 +122,8 @@ public static class BackupService
                 Favorites = new HashSet<string>(library.Favorites),
                 WatchStates = library.WatchStates.ToDictionary(x => x.Key, x => x.Value),
                 RecentSearches = library.RecentSearches.Take(30).ToList(),
-                HiddenCategoryKeys = new HashSet<string>(library.HiddenCategoryKeys)
+                HiddenCategoryKeys = new HashSet<string>(library.HiddenCategoryKeys),
+                HomeRows = library.HomeRows.ToList()
             },
             LockedContentKeys = store.State.LockedContentKeys
                 .Where(key => key.StartsWith(provider.Id + ":", StringComparison.Ordinal))
@@ -147,6 +149,10 @@ public static class BackupService
         library.WatchStates = payload.Library.WatchStates ?? [];
         library.RecentSearches = (payload.Library.RecentSearches ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Take(30).ToList();
         library.HiddenCategoryKeys = payload.Library.HiddenCategoryKeys ?? [];
+        library.HomeRows = (payload.Library.HomeRows ?? [])
+            .Where(x => x is "continue" or "latest_movies" or "latest_series")
+            .Distinct().ToList();
+        if (library.HomeRows.Count == 0) library.HomeRows = ["continue", "latest_movies", "latest_series"];
         store.State.LockedContentKeys.RemoveWhere(key => key.StartsWith(provider.Id + ":", StringComparison.Ordinal));
         foreach (var key in payload.LockedContentKeys ?? [])
             if (key.StartsWith(provider.Id + ":", StringComparison.Ordinal))
@@ -304,7 +310,7 @@ public static class ProfileCloudService
         {
             watchlist = library.Favorites.TakeLast(500).ToArray(),
             hiddenCategories = library.HiddenCategoryKeys.Take(500).ToArray(),
-            homeRows = Array.Empty<string>(),
+            homeRows = library.HomeRows.Take(20).ToArray(),
             settings = new Dictionary<string, object>
             {
                 ["theme"] = settings.Theme,
@@ -336,6 +342,14 @@ public static class ProfileCloudService
             library.HiddenCategoryKeys = hidden.EnumerateArray()
                 .Select(x => x.GetString()).Where(x => !string.IsNullOrWhiteSpace(x))
                 .Cast<string>().Take(500).ToHashSet();
+
+        if (payload.TryGetProperty("homeRows", out var rows) && rows.ValueKind == JsonValueKind.Array)
+        {
+            var nextRows = rows.EnumerateArray().Select(x => x.GetString())
+                .Where(x => x is "continue" or "latest_movies" or "latest_series")
+                .Cast<string>().Distinct().ToList();
+            if (nextRows.Count > 0) library.HomeRows = nextRows;
+        }
 
         if (!payload.TryGetProperty("settings", out var s) || s.ValueKind != JsonValueKind.Object) return;
         string? GetString(string key) => s.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
