@@ -50,6 +50,8 @@ public sealed class StreamItem
     public string Duration { get; set; } = "";
     public string Backdrop { get; set; } = "";
     public long AddedAt { get; set; }
+    public bool ArchiveEnabled { get; set; }
+    public int ArchiveDurationDays { get; set; }
     public bool Favorite { get; set; }
 }
 
@@ -71,6 +73,24 @@ public sealed class EpgItem
     public string Description { get; set; } = "";
     public DateTimeOffset Start { get; set; }
     public DateTimeOffset End { get; set; }
+}
+
+public sealed class ProviderDetails
+{
+    public string Plot { get; set; } = "";
+    public string Genre { get; set; } = "";
+    public string Rating { get; set; } = "";
+    public string Country { get; set; } = "";
+    public string Cast { get; set; } = "";
+    public string Director { get; set; } = "";
+    public string Writer { get; set; } = "";
+    public string ReleaseDate { get; set; } = "";
+    public string Duration { get; set; } = "";
+    public string Backdrop { get; set; } = "";
+    public string Trailer { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string Network { get; set; } = "";
+    public string OriginalLanguage { get; set; } = "";
 }
 
 public sealed class WatchState
@@ -281,6 +301,87 @@ public sealed class XtreamService : IDisposable
         return GetStreamListAsync(provider, kind, action, ct);
     }
 
+    public async Task<ProviderDetails> GetDetailsAsync(ProviderAccount provider, StreamItem item, CancellationToken ct = default)
+    {
+        var action = item.Kind == "series" ? "get_series_info" : "get_vod_info";
+        var idKey = item.Kind == "series" ? "series_id" : "vod_id";
+        var url = ApiUrl(provider, action) + "&" + idKey + "=" + Uri.EscapeDataString(NormalizeId(item.RemoteId));
+        using var doc = await GetJsonAsync(url, ct);
+
+        var values = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        void MergeObject(JsonElement node)
+        {
+            if (node.ValueKind != JsonValueKind.Object) return;
+            foreach (var prop in node.EnumerateObject())
+            {
+                if (prop.Value.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
+                    values[prop.Name] = prop.Value.Clone();
+            }
+        }
+
+        MergeObject(doc.RootElement);
+        if (doc.RootElement.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var key in new[] { "data", "movie_data", "info" })
+                if (TryGet(doc.RootElement, key, out var nested) && nested.ValueKind == JsonValueKind.Object)
+                {
+                    MergeObject(nested);
+                    foreach (var sub in new[] { "movie_data", "info" })
+                        if (TryGet(nested, sub, out var child) && child.ValueKind == JsonValueKind.Object)
+                            MergeObject(child);
+                }
+        }
+
+        string Value(params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                if (!values.TryGetValue(key, out var value)) continue;
+                var text = FlexibleText(value);
+                if (!string.IsNullOrWhiteSpace(text) && !text.Equals("null", StringComparison.OrdinalIgnoreCase))
+                    return text.Trim();
+            }
+            return "";
+        }
+
+        string ImageValue(params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                if (!values.TryGetValue(key, out var value)) continue;
+                if (value.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var x in value.EnumerateArray())
+                    {
+                        var text = FlexibleText(x);
+                        if (!string.IsNullOrWhiteSpace(text)) return ResolveImage(provider, text);
+                    }
+                }
+                var raw = FlexibleText(value);
+                if (!string.IsNullOrWhiteSpace(raw)) return ResolveImage(provider, raw);
+            }
+            return "";
+        }
+
+        return new ProviderDetails
+        {
+            Plot = Value("plot", "description", "overview", "synopsis") is { Length: > 0 } plot ? plot : item.Plot,
+            Genre = Value("genre", "genres") is { Length: > 0 } genre ? genre : item.Genre,
+            Rating = Value("rating", "rating_5based", "vote_average") is { Length: > 0 } rating ? rating : item.Rating,
+            Country = Value("country", "countries", "country_name", "production_country", "production_countries", "origin_country"),
+            Cast = Value("cast", "actors", "actor"),
+            Director = Value("director"),
+            Writer = Value("writer", "writers"),
+            ReleaseDate = Value("releasedate", "release_date", "releaseDate", "first_air_date") is { Length: > 0 } release ? release : item.ReleaseDate,
+            Duration = Value("duration", "duration_secs", "duration_seconds") is { Length: > 0 } duration ? duration : item.Duration,
+            Backdrop = ImageValue("backdrop_path", "backdrop"),
+            Trailer = Value("youtube_trailer", "trailer"),
+            Status = Value("status"),
+            Network = Value("network", "networks"),
+            OriginalLanguage = Value("language", "original_language")
+        };
+    }
+
     public async Task<List<EpisodeItem>> GetEpisodesAsync(ProviderAccount provider, string seriesId, CancellationToken ct = default)
     {
         var url = ApiUrl(provider, "get_series_info") + "&series_id=" + Uri.EscapeDataString(NormalizeId(seriesId));
@@ -375,6 +476,17 @@ public sealed class XtreamService : IDisposable
                Uri.EscapeDataString(episode.RemoteId) + "." + CleanExt(episode.Extension);
     }
 
+    public string CatchupUrl(ProviderAccount provider, StreamItem item, DateTimeOffset start, DateTimeOffset end)
+    {
+        var minutes = Math.Max(1, (int)Math.Ceiling((end - start).TotalMinutes));
+        var localStart = start.ToLocalTime().ToString("yyyy-MM-dd:HH-mm", CultureInfo.InvariantCulture);
+        return NormalizeBase(provider.BaseUrl) + "/timeshift/" +
+               Uri.EscapeDataString(provider.Username) + "/" +
+               Uri.EscapeDataString(provider.Password) + "/" +
+               minutes + "/" + Uri.EscapeDataString(localStart) + "/" +
+               Uri.EscapeDataString(item.RemoteId) + ".ts";
+    }
+
     private async Task<List<CategoryItem>> GetCategoryListAsync(ProviderAccount provider, string kind, string action, CancellationToken ct)
     {
         using var doc = await GetJsonAsync(ApiUrl(provider, action), ct);
@@ -427,7 +539,9 @@ public sealed class XtreamService : IDisposable
                 Rating = First(row, "rating", "rating_5based"),
                 Duration = First(row, "duration"),
                 Backdrop = back,
-                AddedAt = Long(row, "added", "added_at")
+                AddedAt = Long(row, "added", "added_at"),
+                ArchiveEnabled = First(row, "tv_archive", "archive", "catchup").ToLowerInvariant() is "1" or "true" or "yes",
+                ArchiveDurationDays = Int(row, "tv_archive_duration", "archive_duration")
             });
         }
         return result;
@@ -549,6 +663,31 @@ public sealed class XtreamService : IDisposable
         if (long.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value)) return value;
         if (double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var dbl)) return (long)dbl;
         return 0;
+    }
+
+    private static string FlexibleText(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? "",
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Array => string.Join(", ", value.EnumerateArray().Select(FlexibleText).Where(x => !string.IsNullOrWhiteSpace(x))),
+            JsonValueKind.Object => value.TryGetProperty("name", out var name) ? FlexibleText(name)
+                : value.TryGetProperty("url", out var url) ? FlexibleText(url)
+                : value.TryGetProperty("file_path", out var path) ? FlexibleText(path)
+                : "",
+            _ => ""
+        };
+    }
+
+    private static string ResolveImage(ProviderAccount provider, string raw)
+    {
+        if (Uri.TryCreate(raw, UriKind.Absolute, out var absolute)) return absolute.ToString();
+        if (Uri.TryCreate(NormalizeBase(provider.BaseUrl) + "/" + raw.TrimStart('/'), UriKind.Absolute, out var relative))
+            return relative.ToString();
+        return raw;
     }
 
     private static string DecodeMaybeBase64(string value)
