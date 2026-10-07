@@ -1,7 +1,11 @@
 using BlofyPlayer.Windows.Core;
 using LibVLCSharp.Shared;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
 
 namespace BlofyPlayer.Windows;
@@ -22,7 +26,10 @@ public partial class PlayerWindow : Window
     private bool _resumeApplied;
     private readonly long _resumePosition;
     private int _aspectIndex;
-    private readonly string?[] _aspectModes = [null, "16:9", "4:3"];
+    private Rect _restoreBounds;
+    private WindowStyle _restoreWindowStyle;
+    private ResizeMode _restoreResizeMode;
+    private bool _restoreTopmost;
 
     public PlayerWindow(
         string title,
@@ -106,6 +113,7 @@ public partial class PlayerWindow : Window
         media.AddOption(":http-user-agent=" + _settings.UserAgent);
         if (_settings.SubtitleLanguage == "off") media.AddOption(":no-spu");
         _player.Play(media);
+        ApplyAspect(_settings.Aspect);
     }
 
     private async void HandleEnded()
@@ -186,26 +194,77 @@ public partial class PlayerWindow : Window
     private void Audio_Click(object sender, RoutedEventArgs e)
     {
         var tracks = _player.AudioTrackDescription;
-        if (tracks.Length == 0) return;
-        var current = Array.FindIndex(tracks, t => t.Id == _player.AudioTrack);
-        var next = tracks[(current + 1 + tracks.Length) % tracks.Length];
-        _player.SetAudioTrack(next.Id);
-        EpgText.Text = "الصوت: " + next.Name;
+        var menu = new ContextMenu
+        {
+            PlacementTarget = sender as Button,
+            Placement = PlacementMode.Top
+        };
+
+        if (tracks.Length == 0)
+        {
+            menu.Items.Add(new MenuItem { Header = "لا توجد مسارات صوت", IsEnabled = false });
+        }
+        else
+        {
+            foreach (var track in tracks)
+            {
+                var item = new MenuItem
+                {
+                    Header = (track.Id == _player.AudioTrack ? "✓  " : "") + track.Name,
+                    Tag = track.Id
+                };
+                item.Click += (_, _) =>
+                {
+                    _player.SetAudioTrack((int)item.Tag);
+                    EpgText.Text = "الصوت: " + track.Name;
+                    ShowHudBriefly();
+                };
+                menu.Items.Add(item);
+            }
+        }
+        menu.IsOpen = true;
         ShowHudBriefly();
     }
 
     private void Subtitle_Click(object sender, RoutedEventArgs e)
     {
         var tracks = _player.SpuDescription;
-        if (tracks.Length == 0)
+        var menu = new ContextMenu
         {
-            MessageBox.Show(this, "لا توجد ترجمة مضمّنة في هذا المحتوى.", "BLOFY PLAYER");
-            return;
+            PlacementTarget = sender as Button,
+            Placement = PlacementMode.Top
+        };
+
+        var off = new MenuItem { Header = _player.Spu < 0 ? "✓  إيقاف الترجمة" : "إيقاف الترجمة" };
+        off.Click += (_, _) =>
+        {
+            _player.SetSpu(-1);
+            EpgText.Text = "الترجمة: إيقاف";
+            ShowHudBriefly();
+        };
+        menu.Items.Add(off);
+        menu.Items.Add(new Separator());
+
+        foreach (var track in tracks.Where(t => t.Id >= 0))
+        {
+            var item = new MenuItem
+            {
+                Header = (track.Id == _player.Spu ? "✓  " : "") + track.Name,
+                Tag = track.Id
+            };
+            item.Click += (_, _) =>
+            {
+                _player.SetSpu((int)item.Tag);
+                EpgText.Text = "الترجمة: " + track.Name;
+                ShowHudBriefly();
+            };
+            menu.Items.Add(item);
         }
-        var current = Array.FindIndex(tracks, t => t.Id == _player.Spu);
-        var next = tracks[(current + 1 + tracks.Length) % tracks.Length];
-        _player.SetSpu(next.Id);
-        EpgText.Text = "الترجمة: " + next.Name;
+
+        if (tracks.Length == 0)
+            menu.Items.Add(new MenuItem { Header = "لا توجد ترجمة مضمّنة", IsEnabled = false });
+
+        menu.IsOpen = true;
         ShowHudBriefly();
     }
 
@@ -217,39 +276,139 @@ public partial class PlayerWindow : Window
 
     private void ToggleFullscreen()
     {
-        _fullscreen = !_fullscreen;
-        if (_fullscreen)
+        if (!_fullscreen)
         {
+            _restoreBounds = new Rect(Left, Top, ActualWidth, ActualHeight);
+            _restoreWindowStyle = WindowStyle;
+            _restoreResizeMode = ResizeMode;
+            _restoreTopmost = Topmost;
+
+            var bounds = CurrentMonitorBounds();
+
+            WindowState = WindowState.Normal;
             WindowStyle = WindowStyle.None;
-            WindowState = WindowState.Maximized;
+            ResizeMode = ResizeMode.NoResize;
+            Topmost = true;
+            Left = bounds.Left;
+            Top = bounds.Top;
+            Width = bounds.Width;
+            Height = bounds.Height;
+            _fullscreen = true;
+            FullscreenButton.Content = "🗗 نافذة";
         }
         else
         {
-            WindowStyle = WindowStyle.SingleBorderWindow;
+            Topmost = _restoreTopmost;
+            WindowStyle = _restoreWindowStyle;
+            ResizeMode = _restoreResizeMode;
             WindowState = WindowState.Normal;
+            Left = _restoreBounds.Left;
+            Top = _restoreBounds.Top;
+            Width = Math.Max(MinWidth, _restoreBounds.Width);
+            Height = Math.Max(MinHeight, _restoreBounds.Height);
+            _fullscreen = false;
+            FullscreenButton.Content = "⛶ الشاشة";
         }
+
+        ApplyAspect(_settings.Aspect);
         ShowHudBriefly();
     }
 
     private void Quality_Click(object sender, RoutedEventArgs e)
     {
-        EpgText.Text = "الجودة: تلقائي • LibVLC يختار أفضل مسار متاح";
+        var menu = new ContextMenu
+        {
+            PlacementTarget = sender as Button,
+            Placement = PlacementMode.Top
+        };
+        menu.Items.Add(new MenuItem
+        {
+            Header = "✓  تلقائي — أفضل جودة متاحة",
+            IsEnabled = false
+        });
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem
+        {
+            Header = "BLOFY يستخدم مسار السيرفر الأصلي / HLS التكيفي",
+            IsEnabled = false
+        });
+        menu.IsOpen = true;
         ShowHudBriefly();
     }
 
     private void Aspect_Click(object sender, RoutedEventArgs e)
     {
-        _aspectIndex = (_aspectIndex + 1) % _aspectModes.Length;
-        var value = _aspectModes[_aspectIndex];
+        var menu = new ContextMenu
+        {
+            PlacementTarget = sender as Button,
+            Placement = PlacementMode.Top
+        };
+
+        foreach (var option in new[]
+        {
+            ("ملاءمة تلقائية", "fit"),
+            ("16:9", "16:9"),
+            ("4:3", "4:3"),
+            ("ملء النافذة", "fill")
+        })
+        {
+            var item = new MenuItem
+            {
+                Header = (_settings.Aspect == option.Item2 ? "✓  " : "") + option.Item1,
+                Tag = option.Item2
+            };
+            item.Click += (_, _) =>
+            {
+                _settings.Aspect = option.Item2;
+                ApplyAspect(option.Item2);
+                EpgText.Text = "المقاس: " + option.Item1;
+                ShowHudBriefly();
+            };
+            menu.Items.Add(item);
+        }
+
+        menu.IsOpen = true;
+        ShowHudBriefly();
+    }
+
+    private void ApplyAspect(string? mode)
+    {
         try
         {
             var property = _player.GetType().GetProperty("AspectRatio");
+            string? value = mode switch
+            {
+                "16:9" => "16:9",
+                "4:3" => "4:3",
+                "fill" => Math.Max(1, (int)ActualWidth) + ":" + Math.Max(1, (int)ActualHeight),
+                _ => null
+            };
             property?.SetValue(_player, value);
         }
         catch { }
+    }
 
-        EpgText.Text = value is null ? "المقاس: ملاءمة تلقائية" : "المقاس: " + value;
-        ShowHudBriefly();
+    private Rect CurrentMonitorBounds()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var monitor = MonitorFromWindow(hwnd, 2);
+            var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+            if (monitor != IntPtr.Zero && GetMonitorInfo(monitor, ref info))
+            {
+                var dpi = Math.Max(96u, GetDpiForWindow(hwnd));
+                var scale = dpi / 96d;
+                return new Rect(
+                    info.rcMonitor.Left / scale,
+                    info.rcMonitor.Top / scale,
+                    (info.rcMonitor.Right - info.rcMonitor.Left) / scale,
+                    (info.rcMonitor.Bottom - info.rcMonitor.Top) / scale);
+            }
+        }
+        catch { }
+
+        return new Rect(0, 0, SystemParameters.PrimaryScreenWidth, SystemParameters.PrimaryScreenHeight);
     }
 
     private void ShowHudBriefly()
@@ -336,6 +495,33 @@ public partial class PlayerWindow : Window
                 break;
         }
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 }
