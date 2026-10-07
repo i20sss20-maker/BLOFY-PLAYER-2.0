@@ -271,16 +271,16 @@ public partial class MainWindow : Window
         root.Children.Add(hero);
 
         var counts = Horizontal();
-        counts.Children.Add(Stat("القنوات", Items("live").Count));
-        counts.Children.Add(Stat("الأفلام", Items("movie").Count, 12));
-        counts.Children.Add(Stat("المسلسلات", Items("series").Count, 12));
+        counts.Children.Add(Stat("القنوات", ItemCount("live")));
+        counts.Children.Add(Stat("الأفلام", ItemCount("movie"), 12));
+        counts.Children.Add(Stat("المسلسلات", ItemCount("series"), 12));
         counts.Children.Add(Stat("المفضلة", _store.FavoritesCount, 12));
         root.Children.Add(counts);
 
         var continueItems = _store.WatchStates
             .Where(w => !w.Completed && w.PositionMs > 30_000)
             .OrderByDescending(w => w.UpdatedAt)
-            .Select(w => _catalog?.Snapshot.Streams.FirstOrDefault(s => s.Key == w.Key))
+            .Select(w => _viewIndex.Find(w.Key))
             .Where(s => s is not null).Cast<StreamItem>()
             .Where(_store.IsContentVisible).Take(12).ToList();
 
@@ -288,11 +288,11 @@ public partial class MainWindow : Window
         if (continueItems.Count > 0)
             homeSections["continue"] = ContentRow("متابعة المشاهدة", continueItems);
 
-        var latestMovies = Items("movie").OrderByDescending(i => i.AddedAt).Take(16).ToList();
+        var latestMovies = LatestItems("movie", 16);
         if (latestMovies.Count > 0)
             homeSections["latest_movies"] = ContentRow("أحدث الأفلام", latestMovies);
 
-        var latestSeries = Items("series").OrderByDescending(i => i.AddedAt).Take(16).ToList();
+        var latestSeries = LatestItems("series", 16);
         if (latestSeries.Count > 0)
             homeSections["latest_series"] = ContentRow("أحدث المسلسلات", latestSeries);
 
@@ -852,7 +852,11 @@ public partial class MainWindow : Window
     {
         DisposePreview();
         PageTitle.Text = "المفضلة";
-        var items = _catalog?.Snapshot.Streams.Where(i => i.Favorite && _store.IsContentVisible(i)).ToList() ?? [];
+        var items = _store.ActiveLibrary().Favorites
+            .Select(key => _viewIndex.Find(key))
+            .Where(i => i is not null && _store.IsContentVisible(i))
+            .Cast<StreamItem>()
+            .ToList();
         if (items.Count == 0)
         {
             ContentHost.Content = EmptyState("المفضلة فارغة", "اضغط ☆ في تفاصيل الفيلم أو المسلسل لإضافته.");
@@ -1685,10 +1689,32 @@ public partial class MainWindow : Window
         _previewPlayback = null;
     }
 
-    private List<StreamItem> Items(string kind) =>
-        _catalog?.Snapshot.Streams
-            .Where(s => s.Kind == kind && _store.IsContentVisible(s))
-            .ToList() ?? [];
+    private IReadOnlyList<StreamItem> Items(string kind)
+    {
+        var items = _viewIndex.Kind(kind);
+        if (!_store.IsKidsProfile) return items;
+        return items.Where(_store.IsContentVisible).ToList();
+    }
+
+    private IReadOnlyList<StreamItem> CategoryItems(string kind, string categoryId)
+    {
+        var items = _viewIndex.Category(kind, categoryId);
+        if (!_store.IsKidsProfile) return items;
+        return items.Where(_store.IsContentVisible).ToList();
+    }
+
+    private int ItemCount(string kind)
+    {
+        var items = _viewIndex.Kind(kind);
+        if (!_store.IsKidsProfile) return items.Count;
+        return items.Count(_store.IsContentVisible);
+    }
+
+    private List<StreamItem> LatestItems(string kind, int take)
+    {
+        var latest = _viewIndex.Latest(kind);
+        return latest.Where(_store.IsContentVisible).Take(take).ToList();
+    }
 
     private UIElement ContentRow(string title, IReadOnlyList<StreamItem> items)
     {
