@@ -9,11 +9,12 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <AssemblyName>BLOFY PLAYER</AssemblyName>
     <RootNamespace>BlofyPlayer.Windows</RootNamespace>
-    <ApplicationIcon Condition="Exists('Assets\\blofy.ico')">Assets\blofy.ico</ApplicationIcon>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="LibVLCSharp.WPF" Version="3.10.1" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 </Project>

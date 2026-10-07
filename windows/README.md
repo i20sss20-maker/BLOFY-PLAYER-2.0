@@ -1,55 +1,51 @@
 # BLOFY PLAYER for Windows
 
-Windows desktop port of BLOFY PLAYER. This branch starts from the rc07.55 stable Android baseline and keeps the Android app untouched.
+Native Windows port of BLOFY PLAYER based on the Android rc07.55 stable baseline.
 
-## Stack
+## Product parity implemented
 
-- .NET 10 LTS
-- WPF desktop UI
-- LibVLCSharp 3.10.1
-- VideoLAN LibVLC Windows 3.0.24
-- Existing BLOFY activation API with `platform=windows`
+- Same BLOFY device ID format and 6-digit activation credential
+- Same production activation API using `platform=windows`
+- QR/portal activation and renewal entry
+- Portal playlist sync for Xtream lists
+- Xtream Codes login and server validation
+- Local M3U/M3U8 list support
+- Live / Movies / Series catalogs
+- Category browsing
+- Series seasons and episodes
+- Movie/series details
+- Favorites
+- Instant Arabic-aware search
+- Watch progress and resume
+- Persistent settings and catalog cache
+- LibVLC playback with hardware decoding
+- HLS/TS live formats
+- Audio-track switching
+- Subtitle-track switching
+- Keyboard/remote-style controls
+- Fast live channel switching with Up/Down
+- Self-contained Windows x64 build
+- BLOFY cinematic design tokens copied from the Android app:
+  - background #08060D
+  - surface #241536
+  - white #F3F4F6
+  - muted #C9BCD9
+  - accent #D0B2FF
 
-## Implemented in the first Windows foundation
+## Keyboard controls in player
 
-- BLOFY purple/white Windows shell
-- Arabic RTL layout
-- Stable Windows BLOFY device ID in `BLOFY-XXXX-XXXX` format
-- Six-digit activation credential
-- Same activation endpoint used by Android
-- Live playback engine wiring through LibVLC
-- Navigation shell for Home / Live / Movies / Series / Favorites / Search / Settings
-- Windows CI build and self-contained x64 publish
+- Enter / Space: Play or pause
+- Left / Right: Seek 10 seconds
+- Up / Down: Previous or next live channel
+- F: Full screen
+- M: Mute
+- Esc: Exit full screen / close player
 
-## Port parity target
-
-1. Xtream Codes login and saved playlists
-2. M3U/M3U8 import
-3. Live categories, EPG, preview, fullscreen and fast channel zapping
-4. Movies and series catalogs
-5. Seasons / episodes / details / cast / country / server ratings
-6. Resume playback and watch history
-7. Favorites
-8. Instant Arabic-aware search
-9. Subtitle / audio / quality controls
-10. White mode default + dark mode
-11. QR activation / renewal flow
-12. Remaining subscription/trial display
-13. Provider headers, redirects and HLS/TS fallback
-14. Local timezone handling
-15. Auto-update channel for Windows
-16. x64 installer/MSIX packaging
-
-## Build locally
+## Build
 
 ```powershell
 cd windows\src\BlofyPlayer.Windows
 dotnet restore
-dotnet run
-```
-
-## Publish
-
-```powershell
-dotnet publish -c Release -r win-x64 --self-contained true -o .\publish
+dotnet build -c Release
+dotnet publish -c Release -r win-x64 --self-contained true -o ..\..\publish
 ```
