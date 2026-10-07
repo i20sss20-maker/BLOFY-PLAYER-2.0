@@ -1,3 +1,4 @@
+using BlofyPlayer.Windows.Core.Identity;
 namespace BlofyPlayer.Windows.Core;
 
 /// <summary>
