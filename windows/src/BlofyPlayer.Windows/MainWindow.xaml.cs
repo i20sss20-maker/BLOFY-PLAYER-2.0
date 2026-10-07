@@ -370,8 +370,9 @@ public partial class MainWindow : Window
             ShowLiveBrowser();
             return;
         }
+
         DisposePreview();
-        var label = kind switch { "live" => "البث المباشر", "movie" => "الأفلام", _ => "المسلسلات" };
+        var label = kind == "movie" ? "الأفلام" : "المسلسلات";
         PageTitle.Text = label;
 
         var all = Items(kind);
@@ -380,6 +381,9 @@ public partial class MainWindow : Window
             ContentHost.Content = EmptyState("لا يوجد محتوى محمّل في " + label, "اضغط تحديث أو أضف قائمة من «القوائم».");
             return;
         }
+
+        const int pageSize = 54;
+        var page = 0;
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
@@ -394,32 +398,87 @@ public partial class MainWindow : Window
             BorderThickness = new Thickness(1),
             Padding = new Thickness(6)
         };
+        VirtualizingPanel.SetIsVirtualizing(cats, true);
+        VirtualizingPanel.SetVirtualizationMode(cats, VirtualizationMode.Recycling);
+        ScrollViewer.SetCanContentScroll(cats, true);
+
         cats.Items.Add("الكل");
         foreach (var cat in (_catalog?.Snapshot.Categories ?? [])
-                     .Where(c => c.Kind == kind && !_store.IsCategoryHidden(kind, c.RemoteId)))
+                     .Where(x => x.Kind == kind && !_store.IsCategoryHidden(kind, x.RemoteId)))
             cats.Items.Add(cat);
         cats.DisplayMemberPath = "Name";
         cats.SelectedIndex = 0;
         Grid.SetColumn(cats, 0);
         grid.Children.Add(cats);
 
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var right = Vertical();
+        Grid.SetColumn(right, 2);
+        grid.Children.Add(right);
+
+        var pageBar = Horizontal(0, 0, 0, 10);
+        right.Children.Add(pageBar);
+
+        var scroll = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+        };
         var wrap = new WrapPanel { Orientation = Orientation.Horizontal };
         scroll.Content = wrap;
-        Grid.SetColumn(scroll, 2);
-        grid.Children.Add(scroll);
+        right.Children.Add(scroll);
 
-        void Fill()
+        IReadOnlyList<StreamItem> CurrentItems()
         {
-            wrap.Children.Clear();
             var selected = cats.SelectedItem as CategoryItem;
-            var filtered = selected is null ? all : all.Where(i => i.CategoryId == selected.RemoteId).ToList();
-            foreach (var item in filtered)
-                wrap.Children.Add(ContentCard(item, kind == "live" ? 260 : 160));
+            return selected is null ? all : CategoryItems(kind, selected.RemoteId);
         }
-        cats.SelectionChanged += (_, _) => Fill();
-        Fill();
 
+        void RenderPage()
+        {
+            var items = CurrentItems();
+            var pages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)pageSize));
+            page = Math.Clamp(page, 0, pages - 1);
+
+            pageBar.Children.Clear();
+            var previous = Action("‹ السابق", false, (_, _) =>
+            {
+                if (page <= 0) return;
+                page--;
+                RenderPage();
+                scroll.ScrollToTop();
+            });
+            previous.IsEnabled = page > 0;
+
+            var next = Action("التالي ›", false, (_, _) =>
+            {
+                if (page >= pages - 1) return;
+                page++;
+                RenderPage();
+                scroll.ScrollToTop();
+            }, 8);
+            next.IsEnabled = page < pages - 1;
+
+            pageBar.Children.Add(previous);
+            pageBar.Children.Add(next);
+            pageBar.Children.Add(Txt(
+                "صفحة " + (page + 1).ToString("N0") + " من " + pages.ToString("N0") +
+                " • " + items.Count.ToString("N0") + " عنصر",
+                11, Muted, marginLeft: 14));
+
+            wrap.Children.Clear();
+            var startIndex = page * pageSize;
+            var endIndex = Math.Min(items.Count, startIndex + pageSize);
+            for (var i = startIndex; i < endIndex; i++)
+                wrap.Children.Add(ContentCard(items[i], 160));
+        }
+
+        cats.SelectionChanged += (_, _) =>
+        {
+            page = 0;
+            RenderPage();
+        };
+
+        RenderPage();
         ContentHost.Content = grid;
     }
 
