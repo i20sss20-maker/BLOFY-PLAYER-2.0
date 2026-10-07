@@ -1037,14 +1037,14 @@ public sealed class PortalService : IDisposable
 {
     private readonly HttpClient _http = new()
     {
-        BaseAddress = new Uri("https://api.blofyplayer.com/"),
+        BaseAddress = new Uri(BlofyEndpoints.ServiceBase),
         Timeout = TimeSpan.FromSeconds(10)
     };
 
     public async Task<List<ProviderAccount>> FetchAsync(BlofyIdentity identity, CancellationToken ct = default)
     {
         var auth = new { deviceId = identity.DeviceId, activationCode = identity.ActivationCode };
-        using var response = await _http.PostAsJsonAsync("api/v1/portal/playlists/list", auth, ct);
+        using var response = await _http.PostAsJsonAsync(BlofyEndpoints.PortalList, auth, ct);
         if (!response.IsSuccessStatusCode) return [];
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) return [];
@@ -1129,7 +1129,7 @@ public sealed class PortalService : IDisposable
     {
         var managed = !string.IsNullOrWhiteSpace(provider.SubscriberToken);
         var baseUrl = managed
-            ? "https://api.blofyplayer.com" + BlofySubscriberService.ProxyPath
+            ? BlofyEndpoints.SubscriberProxy
             : provider.BaseUrl.TrimEnd('/');
         var username = managed ? provider.SubscriberToken : provider.Username;
         var password = managed ? "blofy" : provider.Password;
@@ -1146,7 +1146,7 @@ public sealed class PortalService : IDisposable
             password,
             active = provider.Active
         };
-        using var response = await _http.PostAsJsonAsync("api/v1/portal/playlists", body, ct);
+        using var response = await _http.PostAsJsonAsync(BlofyEndpoints.PortalPlaylists, body, ct);
         if (!response.IsSuccessStatusCode) return null;
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         return Get(doc.RootElement, "id") is { Length: > 0 } id ? id : provider.Id;
