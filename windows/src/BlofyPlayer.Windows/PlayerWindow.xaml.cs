@@ -18,6 +18,7 @@ public partial class PlayerWindow : Window
     private readonly DispatcherTimer _hudTimer;
     private readonly IReadOnlyList<StreamItem> _playlist;
     private readonly Func<StreamItem, string>? _urlResolver;
+    private readonly Func<StreamItem, IReadOnlyList<string>>? _recoveryResolver;
     private readonly Func<long, long, Task>? _savePosition;
     private readonly Func<Task>? _onEnded;
     private readonly AppSettings _settings;
@@ -25,6 +26,13 @@ public partial class PlayerWindow : Window
     private bool _fullscreen;
     private bool _resumeApplied;
     private readonly long _resumePosition;
+    private List<string> _recoveryUrls = [];
+    private int _recoveryIndex;
+    private string _currentUrl = "";
+    private long _lastObservedTime = -1;
+    private DateTimeOffset _lastProgressAt = DateTimeOffset.UtcNow;
+    private DateTimeOffset _playStartedAt = DateTimeOffset.UtcNow;
+    private int _automaticRecoveries;
     private Rect _restoreBounds;
     private WindowStyle _restoreWindowStyle;
     private ResizeMode _restoreResizeMode;
@@ -37,6 +45,8 @@ public partial class PlayerWindow : Window
         IReadOnlyList<StreamItem>? playlist = null,
         int playlistIndex = -1,
         Func<StreamItem, string>? urlResolver = null,
+        Func<StreamItem, IReadOnlyList<string>>? recoveryResolver = null,
+        IReadOnlyList<string>? recoveryUrls = null,
         Func<long, long, Task>? savePosition = null,
         AppSettings? settings = null,
         Func<Task>? onEnded = null)
@@ -66,15 +76,22 @@ public partial class PlayerWindow : Window
         _playlist = playlist ?? [];
         _index = playlistIndex;
         _urlResolver = urlResolver;
+        _recoveryResolver = recoveryResolver;
+        _recoveryUrls = NormalizeRecoveryUrls(url, recoveryUrls);
         _savePosition = savePosition;
         _resumePosition = resumePositionMs;
         TitleText.Text = title;
         TopTitleText.Text = title;
         EpgText.Text = _playlist.Count > 0 ? "بث مباشر" : "BLOFY PLAYER";
 
-        _player.Playing += (_, _) => Dispatcher.Invoke(ApplyResumeOnce);
+        _player.Playing += (_, _) => Dispatcher.Invoke(() =>
+        {
+            ApplyResumeOnce();
+            _automaticRecoveries = 0;
+            _lastProgressAt = DateTimeOffset.UtcNow;
+        });
         _player.EncounteredError += (_, _) => Dispatcher.Invoke(() =>
-            MessageBox.Show(this, "تعذر تشغيل هذا البث. جرّب قناة/جودة أخرى.", "BLOFY PLAYER"));
+            TryRecoverPlayback("تعذر التشغيل — تجربة مسار بديل…"));
         _player.EndReached += (_, _) => Dispatcher.Invoke(HandleEnded);
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -86,7 +103,7 @@ public partial class PlayerWindow : Window
 
         Loaded += (_, _) =>
         {
-            PlayUrl(url);
+            PlayCurrentCandidate();
             ShowHudBriefly();
         };
         Closed += async (_, _) =>
@@ -101,18 +118,82 @@ public partial class PlayerWindow : Window
         };
     }
 
-    private void PlayUrl(string url)
+    private void PlayCurrentCandidate(long preservePosition = 0)
+    {
+        if (_recoveryUrls.Count == 0)
+        {
+            EpgText.Text = "لا يوجد رابط تشغيل صالح";
+            ShowHudBriefly();
+            return;
+        }
+
+        _recoveryIndex = Math.Clamp(_recoveryIndex, 0, _recoveryUrls.Count - 1);
+        PlayUrl(_recoveryUrls[_recoveryIndex], preservePosition);
+    }
+
+    private void PlayUrl(string url, long preservePosition = 0)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
-            MessageBox.Show(this, "رابط التشغيل غير صالح.", "BLOFY PLAYER");
+            TryRecoverPlayback("رابط غير صالح — تجربة المسار التالي…");
             return;
         }
+
+        _currentUrl = url;
+        _playStartedAt = DateTimeOffset.UtcNow;
+        _lastProgressAt = _playStartedAt;
+        _lastObservedTime = -1;
+
+        if (preservePosition > 0)
+        {
+            _resumeApplied = false;
+            _pendingRecoveryResume = preservePosition;
+        }
+
         using var media = new Media(_libVlc, uri);
         media.AddOption(":http-user-agent=" + _settings.UserAgent);
+        media.AddOption(":http-referrer=" + uri.GetLeftPart(UriPartial.Authority) + "/");
+        media.AddOption(":network-caching=" + (_playlist.Count > 0 ? "450" : "850"));
         if (_settings.SubtitleLanguage == "off") media.AddOption(":no-spu");
         _player.Play(media);
         ApplyAspect(_settings.Aspect);
+    }
+
+    private long _pendingRecoveryResume;
+
+    private static List<string> NormalizeRecoveryUrls(string primary, IReadOnlyList<string>? recovery)
+    {
+        var result = new List<string>();
+        void Add(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)) return;
+            if (uri.Scheme is not ("http" or "https")) return;
+            if (result.Any(x => x.Equals(value.Trim(), StringComparison.OrdinalIgnoreCase))) return;
+            result.Add(value.Trim());
+        }
+
+        Add(primary);
+        if (recovery is not null)
+            foreach (var value in recovery) Add(value);
+        return result;
+    }
+
+    private void TryRecoverPlayback(string message)
+    {
+        if (_recoveryUrls.Count <= 1 || _automaticRecoveries >= Math.Min(3, _recoveryUrls.Count))
+        {
+            EpgText.Text = "تعذر التشغيل. جرّب إعادة فتح المحتوى.";
+            ShowHudBriefly();
+            return;
+        }
+
+        var preserve = Math.Max(_player.Time, _pendingRecoveryResume);
+        _automaticRecoveries++;
+        _recoveryIndex = (_recoveryIndex + 1) % _recoveryUrls.Count;
+        EpgText.Text = message;
+        ShowHudBriefly();
+        PlayCurrentCandidate(preserve);
     }
 
     private async void HandleEnded()
@@ -134,9 +215,12 @@ public partial class PlayerWindow : Window
 
     private void ApplyResumeOnce()
     {
-        if (_resumeApplied || _resumePosition <= 0) return;
+        if (_resumeApplied) return;
+        var target = Math.Max(_resumePosition, _pendingRecoveryResume);
+        if (target <= 0) return;
         _resumeApplied = true;
-        _player.Time = _resumePosition;
+        _pendingRecoveryResume = 0;
+        _player.Time = target;
     }
 
     private void RefreshHud()
@@ -150,6 +234,24 @@ public partial class PlayerWindow : Window
         SeekSlider.Visibility = length > 0 ? Visibility.Visible : Visibility.Collapsed;
         PreviousButton.ToolTip = _playlist.Count > 0 ? "القناة السابقة" : "رجوع 10 ثوان";
         NextButton.ToolTip = _playlist.Count > 0 ? "القناة التالية" : "تقديم 10 ثوان";
+
+        if (time > 0 && time != _lastObservedTime)
+        {
+            _lastObservedTime = time;
+            _lastProgressAt = DateTimeOffset.UtcNow;
+        }
+        else if (_player.IsPlaying && time > 0 &&
+                 DateTimeOffset.UtcNow - _lastProgressAt > TimeSpan.FromSeconds(12))
+        {
+            _lastProgressAt = DateTimeOffset.UtcNow;
+            TryRecoverPlayback("توقف البث — إعادة الاتصال…");
+        }
+        else if (!_player.IsPlaying &&
+                 DateTimeOffset.UtcNow - _playStartedAt > TimeSpan.FromSeconds(10) &&
+                 _automaticRecoveries == 0)
+        {
+            TryRecoverPlayback("تأخر بدء التشغيل — تجربة مسار بديل…");
+        }
     }
 
     private static string Format(long ms)
@@ -437,7 +539,12 @@ public partial class PlayerWindow : Window
         TopTitleText.Text = item.Name;
         EpgText.Text = "القناة " + (_index + 1).ToString("N0") + " من " + _playlist.Count.ToString("N0");
         _resumeApplied = true;
-        PlayUrl(_urlResolver(item));
+        _automaticRecoveries = 0;
+        _recoveryIndex = 0;
+        _recoveryUrls = _recoveryResolver is not null
+            ? NormalizeRecoveryUrls(_urlResolver(item), _recoveryResolver(item))
+            : NormalizeRecoveryUrls(_urlResolver(item), null);
+        PlayCurrentCandidate();
         ShowHudBriefly();
     }
 
