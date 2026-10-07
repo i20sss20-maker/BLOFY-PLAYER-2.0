@@ -144,7 +144,7 @@ public partial class EpisodesWindow : Window
         BindArtwork(img, artUrl, 300);
         grid.Children.Add(art);
 
-        var copy = new StackPanel { Grid.Column = 2, VerticalAlignment = VerticalAlignment.Center };
+        var copy = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var watch = _store.WatchState(episode.Key);
         var progress = watch is { DurationMs: > 0, PositionMs: > 15000 }
             ? Math.Clamp((int)(watch.PositionMs * 100 / watch.DurationMs), 1, 100)
