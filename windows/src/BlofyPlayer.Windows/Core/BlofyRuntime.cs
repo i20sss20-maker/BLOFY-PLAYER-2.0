@@ -1190,6 +1190,13 @@ public sealed class CatalogCoordinator : IDisposable
 
     public CatalogCoordinator(LocalStore store) => _store = store;
 
+    public CatalogSnapshot AdoptSnapshot(CatalogSnapshot snapshot)
+    {
+        _store.ApplyFavoriteState(snapshot.Streams);
+        Snapshot = snapshot;
+        return snapshot;
+    }
+
     public async Task<CatalogSnapshot?> LoadCachedAsync(ProviderAccount provider)
     {
         var cached = await _store.LoadCatalogAsync(provider.Id);
