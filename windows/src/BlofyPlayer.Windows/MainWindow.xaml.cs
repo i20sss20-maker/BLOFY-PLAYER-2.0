@@ -671,9 +671,17 @@ public partial class MainWindow : Window
         {
             try
             {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(item.Icon, UriKind.Absolute);
+                bitmap.DecodePixelWidth = item.Kind == "live" ? 240 : 220;
+                bitmap.CacheOption = BitmapCacheOption.OnDemand;
+                bitmap.CreateOptions = BitmapCreateOptions.DelayCreation;
+                bitmap.EndInit();
+
                 imageBorder.Child = new Image
                 {
-                    Source = new BitmapImage(new Uri(item.Icon)),
+                    Source = bitmap,
                     Stretch = item.Kind == "live" ? Stretch.Uniform : Stretch.UniformToFill
                 };
             }
@@ -938,22 +946,60 @@ public partial class MainWindow : Window
         var root = Vertical();
         var search = new TextBox { FontSize = 17, Height = 44, ToolTip = "ابحث من أول حرف…" };
         root.Children.Add(search);
-        var results = new WrapPanel { Margin = new Thickness(0, 18, 0, 0) };
+        var status = Txt("اكتب للبحث…", 11, Muted, marginTop: 8);
+        root.Children.Add(status);
+        var results = new WrapPanel { Margin = new Thickness(0, 14, 0, 0) };
         root.Children.Add(results);
 
-        void Run()
+        async Task RunAsync()
         {
+            _searchCts?.Cancel();
+            _searchCts?.Dispose();
+            _searchCts = new CancellationTokenSource();
+            var token = _searchCts.Token;
+            var raw = search.Text;
+            var q = NormalizeSearch(raw);
+
             results.Children.Clear();
-            var q = NormalizeSearch(search.Text);
-            if (q.Length == 0) return;
-            foreach (var item in (_catalog?.Snapshot.Streams ?? [])
-                         .Where(i => _store.IsContentVisible(i) &&
-                                     NormalizeSearch(i.Name).Contains(q, StringComparison.OrdinalIgnoreCase))
-                         .Take(150))
-                results.Children.Add(ContentCard(item, item.Kind == "live" ? 260 : 160));
+            if (q.Length == 0)
+            {
+                status.Text = "اكتب للبحث…";
+                return;
+            }
+
+            status.Text = "جاري البحث…";
+            try
+            {
+                await Task.Delay(250, token);
+                var snapshot = _catalog?.Snapshot.Streams;
+                if (snapshot is null) return;
+
+                var matches = await Task.Run(() =>
+                {
+                    var list = new List<StreamItem>(72);
+                    foreach (var item in snapshot)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        if (!_store.IsContentVisible(item)) continue;
+                        if (!NormalizeSearch(item.Name).Contains(q, StringComparison.OrdinalIgnoreCase)) continue;
+                        list.Add(item);
+                        if (list.Count >= 72) break;
+                    }
+                    return list;
+                }, token);
+
+                if (token.IsCancellationRequested || !string.Equals(raw, search.Text, StringComparison.Ordinal)) return;
+                results.Children.Clear();
+                foreach (var item in matches)
+                    results.Children.Add(ContentCard(item, item.Kind == "live" ? 240 : 160));
+                status.Text = matches.Count == 0
+                    ? "لا توجد نتائج"
+                    : "عرض أول " + matches.Count.ToString("N0") + " نتيجة";
+            }
+            catch (OperationCanceledException) { }
         }
 
-        search.TextChanged += (_, _) => Run();
+        search.TextChanged += async (_, _) => await RunAsync();
         search.KeyDown += async (_, e) =>
         {
             if (e.Key != Key.Enter || search.Text.Trim().Length < 2) return;
