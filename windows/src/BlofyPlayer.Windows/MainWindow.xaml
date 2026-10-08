@@ -8,6 +8,7 @@
         Background="#08060D"
         Foreground="#F3F4F6"
         FlowDirection="RightToLeft"
+        PreviewKeyDown="Window_PreviewKeyDown"
         KeyDown="Window_KeyDown">
     <Grid x:Name="RootGrid">
         <Grid.Background>
@@ -36,7 +37,10 @@
                                HorizontalAlignment="Center" Margin="0,2,0,12"/>
                     </StackPanel>
 
-                    <StackPanel x:Name="NavigationPanel" DockPanel.Dock="Top">
+                    <StackPanel x:Name="NavigationPanel"
+                                DockPanel.Dock="Top"
+                                KeyboardNavigation.DirectionalNavigation="Cycle"
+                                KeyboardNavigation.TabNavigation="Cycle">
                         <Button Style="{StaticResource NavButton}" Content="⌂  الرئيسية" Tag="home" Click="Nav_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="●  البث المباشر" Tag="live" Click="Nav_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="▣  الأفلام" Tag="movie" Click="Nav_Click"/>
@@ -100,7 +104,11 @@
                     </StackPanel>
                 </Grid>
 
-                <ContentControl x:Name="ContentHost" Grid.Row="1" Margin="12,4,12,6"/>
+                <ContentControl x:Name="ContentHost"
+                                Grid.Row="1"
+                                Margin="12,4,12,6"
+                                KeyboardNavigation.DirectionalNavigation="Contained"
+                                KeyboardNavigation.TabNavigation="Local"/>
             </Grid>
         </Grid>
 
