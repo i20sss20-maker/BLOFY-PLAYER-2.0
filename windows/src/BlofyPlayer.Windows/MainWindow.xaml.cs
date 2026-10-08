@@ -1765,6 +1765,46 @@ public partial class MainWindow : Window
         await Task.CompletedTask;
     }
 
+    private async Task<string> GetLiveNowNextTextAsync(StreamItem item, CancellationToken ct)
+    {
+        if (_activeProvider is null || _catalog is null || _activeProvider.ProviderType != "xtream")
+            return "بث مباشر";
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(6));
+
+        var epg = await _catalog.Xtream(_activeProvider)
+            .GetShortEpgAsync(_activeProvider, item.RemoteId, timeout.Token);
+        if (epg.Count == 0) return "لا تتوفر معلومات البرنامج";
+
+        var now = DateTimeOffset.Now;
+        var current = epg.FirstOrDefault(entry => entry.Start <= now && entry.End > now)
+                      ?? epg.FirstOrDefault(entry => entry.End > now);
+        if (current is null) return "لا تتوفر معلومات البرنامج";
+
+        var next = epg
+            .Where(entry => entry.Start >= current.End)
+            .OrderBy(entry => entry.Start)
+            .FirstOrDefault();
+
+        var lines = new List<string>
+        {
+            "الآن  " +
+            current.Start.ToLocalTime().ToString("HH:mm") + "–" +
+            current.End.ToLocalTime().ToString("HH:mm") + "   " +
+            current.Title
+        };
+
+        if (next is not null)
+        {
+            lines.Add("التالي  " +
+                      next.Start.ToLocalTime().ToString("HH:mm") + "   " +
+                      next.Title);
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
     private async Task PlayItemAsync(StreamItem item, IReadOnlyList<StreamItem>? livePlaylistOverride = null)
     {
         if (_activeProvider is null) return;
