@@ -2079,13 +2079,15 @@ public partial class MainWindow : Window
         var list = new ListBox
         {
             Height = 430,
-            Background = Surface2,
-            Foreground = Text,
-            BorderBrush = Brush("#443D2756")
+            Style = Application.Current.FindResource("TvListBox") as Style
         };
+        VirtualizingPanel.SetIsVirtualizing(list, true);
+        VirtualizingPanel.SetVirtualizationMode(list, VirtualizationMode.Recycling);
+        ScrollViewer.SetCanContentScroll(list, true);
         foreach (var provider in _store.State.Providers.OrderByDescending(p => p.Active).ThenByDescending(p => p.UpdatedAt))
             list.Items.Add(provider);
         list.DisplayMemberPath = "Name";
+        if (list.Items.Count > 0) list.SelectedIndex = 0;
         left.Children.Add(list);
 
         var add = Action("+ قائمة جديدة", true, (_, _) => list.SelectedItem = null, 0, 10, 0, 0);
@@ -2274,7 +2276,28 @@ public partial class MainWindow : Window
         }, 10));
         form.Children.Add(buttons);
         formCard.Child = new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+
+        list.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not Key.Enter and not Key.Space) return;
+            if (list.SelectedItem is null)
+            {
+                add.Focus();
+            }
+            else
+            {
+                name.Focus();
+                name.SelectAll();
+            }
+            e.Handled = true;
+        };
+
         ContentHost.Content = root;
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (list.Items.Count > 0) FocusSelectedListItem(list);
+            else add.Focus();
+        });
     }
 
     private void ShowHomePersonalization()
