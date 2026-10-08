@@ -167,6 +167,11 @@ public partial class MainWindow : Window
         IReadOnlyList<string>? recoveryUrls = null,
         Func<long, long, Task>? savePosition = null,
         Func<StreamItem, Task>? onPlaylistItemChanged = null,
+        Func<StreamItem, bool>? favoriteResolver = null,
+        Func<Task>? previousAction = null,
+        Func<Task>? nextAction = null,
+        bool? favorite = null,
+        Func<Task<bool>>? toggleFavorite = null,
         Func<Task>? onEnded = null)
     {
         var overlay = new PlayerOverlay(
@@ -182,6 +187,11 @@ public partial class MainWindow : Window
             recoveryUrls: recoveryUrls,
             savePosition: savePosition,
             onPlaylistItemChanged: onPlaylistItemChanged,
+            favoriteResolver: favoriteResolver,
+            previousAction: previousAction,
+            nextAction: nextAction,
+            favorite: favorite,
+            toggleFavorite: toggleFavorite,
             settings: _store.State.Settings,
             onEnded: onEnded);
 
@@ -1050,7 +1060,7 @@ public partial class MainWindow : Window
         var actions = Horizontal(0, 10, 0, 8);
         var playFull = Action("▶ ملء الشاشة", true, async (_, _) =>
         {
-            if (channels.SelectedItem is StreamItem selected) await PlayItemAsync(selected);
+            if (channels.SelectedItem is StreamItem selected) await PlayItemAsync(selected, CurrentLivePlaylist());
         });
         actions.Children.Add(playFull);
         right.Children.Add(actions);
@@ -1076,6 +1086,9 @@ public partial class MainWindow : Window
             if (filtered.Count > 0) channels.SelectedIndex = 0;
         }
 
+        IReadOnlyList<StreamItem> CurrentLivePlaylist() =>
+            channels.ItemsSource as IReadOnlyList<StreamItem> ?? all;
+
         cats.SelectionChanged += (_, _) => FillChannels();
 
         cats.PreviewKeyDown += (_, e) =>
@@ -1090,12 +1103,12 @@ public partial class MainWindow : Window
             if (e.Key is not Key.Enter and not Key.Space) return;
             if (channels.SelectedItem is not StreamItem selected) return;
             e.Handled = true;
-            await PlayItemAsync(selected);
+            await PlayItemAsync(selected, CurrentLivePlaylist());
         };
 
         channels.MouseDoubleClick += async (_, _) =>
         {
-            if (channels.SelectedItem is StreamItem selected) await PlayItemAsync(selected);
+            if (channels.SelectedItem is StreamItem selected) await PlayItemAsync(selected, CurrentLivePlaylist());
         };
 
         channels.SelectionChanged += async (_, _) =>
@@ -1328,6 +1341,15 @@ public partial class MainWindow : Window
             _lastFocusedContentKey = item.Key;
             Focus(true);
             button.BringIntoView(new Rect(0, 0, button.ActualWidth, button.ActualHeight));
+
+            if (_currentPage == "home" && _heroHost is not null && item.Kind is "movie" or "series")
+            {
+                var idx = _heroCandidates.FindIndex(x => x.Key == item.Key);
+                if (idx >= 0) _heroIndex = idx;
+                _heroHost.Content = BuildAndroidHero(item);
+                _heroTimer.Stop();
+                _heroTimer.Start();
+            }
         };
         button.LostKeyboardFocus += (_, _) => Focus(false);
         button.MouseEnter += (_, _) => Focus(true);
@@ -1596,7 +1618,7 @@ public partial class MainWindow : Window
         await Task.CompletedTask;
     }
 
-    private async Task PlayItemAsync(StreamItem item)
+    private async Task PlayItemAsync(StreamItem item, IReadOnlyList<StreamItem>? livePlaylistOverride = null)
     {
         if (_activeProvider is null) return;
         string url;
@@ -1614,7 +1636,9 @@ public partial class MainWindow : Window
                 resume = state.PositionMs;
         }
 
-        var sameKind = item.Kind == "live" ? Items("live") : Array.Empty<StreamItem>();
+        var sameKind = item.Kind == "live"
+            ? (livePlaylistOverride ?? Items("live"))
+            : Array.Empty<StreamItem>();
         var idx = -1;
         if (item.Kind == "live")
         {
@@ -1632,6 +1656,8 @@ public partial class MainWindow : Window
             ? s => BuildStreamCandidates(s)
             : null;
 
+        var currentPlaybackItem = item;
+
         if (item.Kind == "live")
             await _store.AddRecentChannelAsync(item.Key);
 
@@ -1647,8 +1673,19 @@ public partial class MainWindow : Window
             savePosition: item.Kind == "live" ? null : async (pos, len) =>
                 await _store.SaveWatchStateAsync(item.Key, pos, len),
             onPlaylistItemChanged: item.Kind == "live"
-                ? async changed => await _store.AddRecentChannelAsync(changed.Key)
-                : null);
+                ? async changed =>
+                {
+                    currentPlaybackItem = changed;
+                    await _store.AddRecentChannelAsync(changed.Key);
+                }
+                : null,
+            favoriteResolver: item.Kind == "live" ? changed => changed.Favorite : null,
+            favorite: item.Favorite,
+            toggleFavorite: async () =>
+            {
+                await _store.ToggleFavoriteAsync(currentPlaybackItem);
+                return currentPlaybackItem.Favorite;
+            });
     }
 
     private async Task PlayEpisodeAsync(StreamItem series, EpisodeItem episode, IReadOnlyList<EpisodeItem> episodes)
@@ -1664,7 +1701,16 @@ public partial class MainWindow : Window
         Func<Task>? nextAction = null;
         var ordered = episodes.OrderBy(e => e.Season).ThenBy(e => e.Episode).ToList();
         var currentIndex = ordered.FindIndex(e => e.Key == episode.Key);
+        var previousEpisode = currentIndex > 0 ? ordered[currentIndex - 1] : null;
         var nextEpisode = currentIndex >= 0 && currentIndex + 1 < ordered.Count ? ordered[currentIndex + 1] : null;
+
+        Func<Task>? previousManual = previousEpisode is null
+            ? null
+            : async () => await PlayEpisodeAsync(series, previousEpisode, episodes);
+        Func<Task>? nextManual = nextEpisode is null
+            ? null
+            : async () => await PlayEpisodeAsync(series, nextEpisode, episodes);
+
         if (nextEpisode is not null && _store.State.Settings.AutoNext != "off")
         {
             nextAction = async () =>
@@ -1686,6 +1732,8 @@ public partial class MainWindow : Window
             resumePositionMs: resume,
             recoveryUrls: BuildEpisodeCandidates(episode),
             savePosition: async (pos, len) => await _store.SaveWatchStateAsync(key, pos, len),
+            previousAction: previousManual,
+            nextAction: nextManual,
             onEnded: nextAction);
     }
 
