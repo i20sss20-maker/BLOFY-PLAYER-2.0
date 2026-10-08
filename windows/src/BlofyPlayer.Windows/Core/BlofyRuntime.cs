@@ -430,15 +430,25 @@ public sealed class LocalStore
         await SaveAsync();
     }
 
-    public async Task SaveCatalogAsync(CatalogSnapshot snapshot)
+    public async Task SaveCatalogAsync(CatalogSnapshot snapshot, CancellationToken ct = default)
     {
         Directory.CreateDirectory(_root);
         var path = CatalogPath(snapshot.ProviderId);
-        var temp = path + ".tmp";
-        await using (var file = File.Create(temp))
-        await using (var gzip = new GZipStream(file, CompressionLevel.Fastest))
-            await JsonSerializer.SerializeAsync(gzip, snapshot, Json);
-        File.Move(temp, path, true);
+        var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await using (var file = File.Create(temp))
+            await using (var gzip = new GZipStream(file, CompressionLevel.Fastest))
+                await JsonSerializer.SerializeAsync(gzip, snapshot, Json, ct);
+            ct.ThrowIfCancellationRequested();
+            File.Move(temp, path, true);
+        }
+        finally
+        {
+            // Keep the last known good catalog even if a huge provider refresh
+            // is canceled or serialization fails halfway through.
+            try { if (File.Exists(temp)) File.Delete(temp); } catch (IOException) { }
+        }
     }
 
     public async Task<CatalogSnapshot?> LoadCatalogAsync(string providerId)
@@ -1376,12 +1386,14 @@ public sealed class CatalogCoordinator : IDisposable
             progress?.Report((8, "تحميل أقسام البث المباشر…"));
             categories.AddRange(await _xtream.GetCategoriesAsync(provider, "live", ct));
             progress?.Report((16, "تحميل القنوات…"));
-            streams.AddRange(await _xtream.GetStreamsAsync(provider, "live", ct));
+            streams.AddRange(await _xtream.GetStreamsAsync(provider, "live", ct,
+                count => progress?.Report((16, "تحميل القنوات… " + count.ToString("N0") + " قناة"))));
 
             progress?.Report((40, "تحميل أقسام الأفلام…"));
             categories.AddRange(await _xtream.GetCategoriesAsync(provider, "movie", ct));
             progress?.Report((48, "تحميل الأفلام…"));
-            streams.AddRange(await _xtream.GetStreamsAsync(provider, "movie", ct));
+            streams.AddRange(await _xtream.GetStreamsAsync(provider, "movie", ct,
+                count => progress?.Report((48, "تحميل الأفلام… " + count.ToString("N0") + " فيلم"))));
 
             progress?.Report((70, "تحميل أقسام المسلسلات…"));
             categories.AddRange(await _xtream.GetCategoriesAsync(provider, "series", ct));
@@ -1398,10 +1410,12 @@ public sealed class CatalogCoordinator : IDisposable
             };
         }
 
+        ct.ThrowIfCancellationRequested();
         _store.ApplyFavoriteState(snapshot.Streams);
-        Snapshot = snapshot;
         progress?.Report((94, "حفظ الكتالوج…"));
-        await _store.SaveCatalogAsync(snapshot);
+        await _store.SaveCatalogAsync(snapshot, ct);
+        ct.ThrowIfCancellationRequested();
+        Snapshot = snapshot;
         progress?.Report((100, "جاهز"));
         return snapshot;
     }
