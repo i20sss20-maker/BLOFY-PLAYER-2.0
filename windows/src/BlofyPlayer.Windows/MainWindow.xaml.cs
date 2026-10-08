@@ -948,6 +948,20 @@ public partial class MainWindow : Window
                 }
 
                 var now = DateTimeOffset.Now;
+                var currentProgram = epg.FirstOrDefault(entry => entry.Start <= now && entry.End > now);
+                if (currentProgram is not null)
+                {
+                    nowText.Text = currentProgram.Start.ToLocalTime().ToString("HH:mm") +
+                                   "–" + currentProgram.End.ToLocalTime().ToString("HH:mm") +
+                                   "  •  " + currentProgram.Title;
+                }
+                else
+                {
+                    nowText.Text = selected.ArchiveEnabled
+                        ? "يدعم الاسترجاع حتى " + selected.ArchiveDurationDays + " يوم"
+                        : "بث مباشر";
+                }
+
                 foreach (var entry in epg)
                 {
                     var isNow = entry.Start <= now && entry.End > now;
