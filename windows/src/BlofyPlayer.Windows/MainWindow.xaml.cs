@@ -5,6 +5,8 @@ using LibVLCSharp.WPF;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -45,6 +47,13 @@ public partial class MainWindow : Window
     private List<StreamItem> _heroCandidates = [];
     private int _heroIndex;
     private ContentControl? _heroHost;
+    private readonly Stack<UIElement> _overlayStack = new();
+    private UIElement? _currentOverlay;
+    private bool _overlayFullscreen;
+    private Rect _overlayRestoreBounds;
+    private WindowStyle _overlayRestoreWindowStyle;
+    private ResizeMode _overlayRestoreResizeMode;
+    private bool _overlayRestoreTopmost;
 
     public MainWindow()
     {
@@ -88,6 +97,142 @@ public partial class MainWindow : Window
             _activation.Dispose();
             _portal.Dispose();
         };
+    }
+
+    private void PushOverlay(UIElement view)
+    {
+        if (_currentOverlay is not null)
+            _overlayStack.Push(_currentOverlay);
+
+        _currentOverlay = view;
+        OverlayContent.Content = view;
+        OverlayHost.Visibility = Visibility.Visible;
+        Dispatcher.BeginInvoke(() => (view as UIElement)?.Focus());
+    }
+
+    private void CloseOverlay(UIElement view)
+    {
+        if (!ReferenceEquals(_currentOverlay, view)) return;
+
+        if (_overlayFullscreen)
+            SetOverlayFullscreen(false);
+
+        if (view is IDisposable disposable)
+            disposable.Dispose();
+
+        RestorePreviousOverlay();
+    }
+
+    private async Task ClosePlayerOverlayAsync(PlayerOverlay player)
+    {
+        if (_overlayFullscreen)
+            SetOverlayFullscreen(false);
+
+        try { await player.DisposeAsync(); } catch { }
+
+        if (ReferenceEquals(_currentOverlay, player))
+            RestorePreviousOverlay();
+    }
+
+    private void RestorePreviousOverlay()
+    {
+        OverlayContent.Content = null;
+        if (_overlayStack.Count > 0)
+        {
+            _currentOverlay = _overlayStack.Pop();
+            OverlayContent.Content = _currentOverlay;
+            OverlayHost.Visibility = Visibility.Visible;
+            Dispatcher.BeginInvoke(() => _currentOverlay?.Focus());
+        }
+        else
+        {
+            _currentOverlay = null;
+            OverlayHost.Visibility = Visibility.Collapsed;
+            Focus();
+        }
+    }
+
+    private Task ShowPlayerOverlayAsync(
+        string title,
+        string url,
+        long resumePositionMs = 0,
+        IReadOnlyList<StreamItem>? playlist = null,
+        int playlistIndex = -1,
+        Func<StreamItem, string>? urlResolver = null,
+        Func<StreamItem, IReadOnlyList<string>>? recoveryResolver = null,
+        IReadOnlyList<string>? recoveryUrls = null,
+        Func<long, long, Task>? savePosition = null,
+        Func<StreamItem, Task>? onPlaylistItemChanged = null,
+        Func<Task>? onEnded = null)
+    {
+        var overlay = new PlayerOverlay(
+            title,
+            url,
+            closeHandler: ClosePlayerOverlayAsync,
+            fullscreenHandler: SetOverlayFullscreen,
+            resumePositionMs: resumePositionMs,
+            playlist: playlist,
+            playlistIndex: playlistIndex,
+            urlResolver: urlResolver,
+            recoveryResolver: recoveryResolver,
+            recoveryUrls: recoveryUrls,
+            savePosition: savePosition,
+            onPlaylistItemChanged: onPlaylistItemChanged,
+            settings: _store.State.Settings,
+            onEnded: onEnded);
+
+        PushOverlay(overlay);
+        return Task.CompletedTask;
+    }
+
+    private void SetOverlayFullscreen(bool enabled)
+    {
+        if (enabled == _overlayFullscreen) return;
+
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+
+        if (enabled)
+        {
+            _overlayRestoreBounds = new Rect(Left, Top, ActualWidth, ActualHeight);
+            _overlayRestoreWindowStyle = WindowStyle;
+            _overlayRestoreResizeMode = ResizeMode;
+            _overlayRestoreTopmost = Topmost;
+
+            var monitor = MonitorFromWindow(hwnd, 2);
+            var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+            if (monitor == IntPtr.Zero || !GetMonitorInfo(monitor, ref info)) return;
+
+            WindowState = WindowState.Normal;
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            Topmost = true;
+
+            var width = info.rcMonitor.Right - info.rcMonitor.Left;
+            var height = info.rcMonitor.Bottom - info.rcMonitor.Top;
+            SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                info.rcMonitor.Left,
+                info.rcMonitor.Top,
+                width,
+                height,
+                SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+            _overlayFullscreen = true;
+        }
+        else
+        {
+            Topmost = _overlayRestoreTopmost;
+            WindowStyle = _overlayRestoreWindowStyle;
+            ResizeMode = _overlayRestoreResizeMode;
+            WindowState = WindowState.Normal;
+            Left = _overlayRestoreBounds.Left;
+            Top = _overlayRestoreBounds.Top;
+            Width = Math.Max(MinWidth, _overlayRestoreBounds.Width);
+            Height = Math.Max(MinHeight, _overlayRestoreBounds.Height);
+            _overlayFullscreen = false;
+        }
     }
 
     private async Task InitializeAsync()
@@ -2810,6 +2955,44 @@ public partial class MainWindow : Window
             }
         };
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private const uint SWP_SHOWWINDOW = 0x0040;
+    private const uint SWP_FRAMECHANGED = 0x0020;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int X,
+        int Y,
+        int cx,
+        int cy,
+        uint uFlags);
 
     private static SolidColorBrush Brush(string value) =>
         new((Color)ColorConverter.ConvertFromString(value));
