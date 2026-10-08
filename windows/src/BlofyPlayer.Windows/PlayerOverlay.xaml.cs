@@ -17,12 +17,14 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _hudTimer;
     private readonly DispatcherTimer _channelNumberTimer;
+    private CancellationTokenSource? _epgCts;
     private readonly IReadOnlyList<StreamItem> _playlist;
     private readonly Func<StreamItem, string>? _urlResolver;
     private readonly Func<StreamItem, IReadOnlyList<string>>? _recoveryResolver;
     private readonly Func<long, long, Task>? _savePosition;
     private readonly Func<StreamItem, Task>? _onPlaylistItemChanged;
     private readonly Func<StreamItem, bool>? _favoriteResolver;
+    private readonly Func<StreamItem, CancellationToken, Task<string>>? _epgResolver;
     private readonly Func<Task>? _previousAction;
     private readonly Func<Task>? _nextAction;
     private readonly Func<Task<bool>>? _toggleFavorite;
@@ -45,6 +47,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private bool _disposed;
     private bool _favorite;
     private string _channelDigits = "";
+    private int _previousLiveIndex = -1;
 
     public PlayerOverlay(
         string title,
@@ -60,6 +63,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         Func<long, long, Task>? savePosition = null,
         Func<StreamItem, Task>? onPlaylistItemChanged = null,
         Func<StreamItem, bool>? favoriteResolver = null,
+        Func<StreamItem, CancellationToken, Task<string>>? epgResolver = null,
         Func<Task>? previousAction = null,
         Func<Task>? nextAction = null,
         bool? favorite = null,
@@ -99,6 +103,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _savePosition = savePosition;
         _onPlaylistItemChanged = onPlaylistItemChanged;
         _favoriteResolver = favoriteResolver;
+        _epgResolver = epgResolver;
         _previousAction = previousAction;
         _nextAction = nextAction;
         _toggleFavorite = toggleFavorite;
@@ -134,10 +139,14 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             _timer.Start();
             ConfigureControlVisibility();
             UpdateFavoriteButton();
+            PopulateChannelList();
             SetFullscreenState(true);
             PlayCurrentCandidate();
             if (_playlist.Count > 0 && _index >= 0)
+            {
                 ShowChannelPosition(_index + 1, 950);
+                _ = RefreshEpgAsync(_playlist[_index]);
+            }
             ShowHudBriefly();
             PlayPauseButton.Focus();
         };
@@ -150,6 +159,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _timer.Stop();
         _hudTimer.Stop();
         _channelNumberTimer.Stop();
+        _epgCts?.Cancel();
+        _epgCts?.Dispose();
         try
         {
             if (_savePosition is not null)
@@ -328,6 +339,120 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         Forward10Button.Visibility = live ? Visibility.Collapsed : Visibility.Visible;
         SeekSlider.Visibility = live ? Visibility.Collapsed : Visibility.Visible;
         FavoriteButton.Visibility = _toggleFavorite is null ? Visibility.Collapsed : Visibility.Visible;
+        ChannelListButton.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+        LastChannelButton.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void PopulateChannelList()
+    {
+        if (_playlist.Count == 0 || _urlResolver is null)
+        {
+            ChannelPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        ChannelList.ItemsSource = _playlist
+            .Select((item, index) => new PlayerChannelRow(index + 1, item))
+            .ToList();
+        if (_index >= 0 && _index < _playlist.Count)
+            ChannelList.SelectedIndex = _index;
+    }
+
+    private void ChannelList_Click(object sender, RoutedEventArgs e)
+    {
+        if (_playlist.Count == 0) return;
+        if (ChannelPanel.Visibility == Visibility.Visible)
+            CloseChannelPanel();
+        else
+            OpenChannelPanel();
+    }
+
+    private void OpenChannelPanel()
+    {
+        if (_playlist.Count == 0) return;
+        ChannelPanel.Visibility = Visibility.Visible;
+        Hud.Visibility = Visibility.Collapsed;
+        TopShade.Visibility = Visibility.Collapsed;
+        if (_index >= 0 && _index < _playlist.Count)
+            ChannelList.SelectedIndex = _index;
+        ChannelList.UpdateLayout();
+        ChannelList.Focus();
+        if (ChannelList.ItemContainerGenerator.ContainerFromIndex(ChannelList.SelectedIndex) is ListBoxItem row)
+        {
+            row.Focus();
+            row.BringIntoView();
+        }
+    }
+
+    private void CloseChannelPanel()
+    {
+        ChannelPanel.Visibility = Visibility.Collapsed;
+        ShowHudBriefly();
+        PlayPauseButton.Focus();
+    }
+
+    private void ChannelList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ChannelList.SelectedItem is not PlayerChannelRow row) return;
+        ChannelListHint.Text = row.Number.ToString("N0") + " • " + row.Item.Name + "   —   OK تشغيل";
+    }
+
+    private void ChannelList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Escape or Key.Back or Key.BrowserBack)
+        {
+            CloseChannelPanel();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key is not Key.Enter and not Key.Space) return;
+        if (ChannelList.SelectedItem is not PlayerChannelRow row) return;
+
+        SwitchChannelToIndex(row.Number - 1);
+        ChannelPanel.Visibility = Visibility.Collapsed;
+        ShowHudBriefly();
+        e.Handled = true;
+    }
+
+    private void LastChannel_Click(object sender, RoutedEventArgs e)
+    {
+        if (_previousLiveIndex < 0 || _previousLiveIndex >= _playlist.Count)
+        {
+            EpgText.Text = "لا توجد قناة سابقة بعد";
+            ShowHudBriefly();
+            return;
+        }
+
+        var target = _previousLiveIndex;
+        SwitchChannelToIndex(target);
+        ShowHudBriefly();
+    }
+
+    private async Task RefreshEpgAsync(StreamItem item)
+    {
+        if (_epgResolver is null || _playlist.Count == 0) return;
+
+        _epgCts?.Cancel();
+        _epgCts?.Dispose();
+        _epgCts = new CancellationTokenSource();
+        var token = _epgCts.Token;
+        var expectedKey = item.Key;
+
+        EpgText.Text = "جاري تحميل معلومات البرنامج…";
+        try
+        {
+            var text = await _epgResolver(item, token);
+            if (token.IsCancellationRequested) return;
+            if (_index < 0 || _index >= _playlist.Count || _playlist[_index].Key != expectedKey) return;
+            EpgText.Text = string.IsNullOrWhiteSpace(text) ? "لا تتوفر معلومات البرنامج" : text;
+        }
+        catch (OperationCanceledException) { }
+        catch
+        {
+            if (!token.IsCancellationRequested)
+                EpgText.Text = "لا تتوفر معلومات البرنامج";
+        }
     }
 
     private void UpdateFavoriteButton()
@@ -603,10 +728,29 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         e.Handled = true;
     }
 
-    private async void ChangeChannel(int delta)
+    private void ChangeChannel(int delta)
+    {
+        if (_playlist.Count == 0 || _urlResolver is null || delta == 0) return;
+        var target = (_index + delta) % _playlist.Count;
+        if (target < 0) target += _playlist.Count;
+        SwitchChannelToIndex(target);
+    }
+
+    private async void SwitchChannelToIndex(int targetIndex)
     {
         if (_playlist.Count == 0 || _urlResolver is null) return;
-        _index = (_index + delta + _playlist.Count) % _playlist.Count;
+        targetIndex = Math.Clamp(targetIndex, 0, _playlist.Count - 1);
+        if (targetIndex == _index)
+        {
+            ShowChannelPosition(_index + 1, 900);
+            return;
+        }
+
+        var oldIndex = _index;
+        _index = targetIndex;
+        if (oldIndex >= 0 && oldIndex < _playlist.Count)
+            _previousLiveIndex = oldIndex;
+
         var item = _playlist[_index];
         TitleText.Text = item.Name;
         TopTitleText.Text = item.Name;
@@ -620,8 +764,14 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _recoveryUrls = _recoveryResolver is not null
             ? NormalizeRecoveryUrls(_urlResolver(item), _recoveryResolver(item))
             : NormalizeRecoveryUrls(_urlResolver(item), null);
+
+        if (ChannelList.Items.Count > _index)
+            ChannelList.SelectedIndex = _index;
+
         PlayCurrentCandidate();
         ShowHudBriefly();
+        _ = RefreshEpgAsync(item);
+
         if (_onPlaylistItemChanged is not null)
         {
             try { await _onPlaylistItemChanged(item); } catch { }
@@ -707,6 +857,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         {
             PersistentBackButton,
             PersistentFullscreenButton,
+            ChannelListButton,
+            LastChannelButton,
             PreviousButton,
             RewindButton,
             PlayPauseButton,
@@ -809,7 +961,10 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
         if (e.Key is Key.Escape or Key.Back or Key.BrowserBack)
         {
-            await _closeHandler(this);
+            if (ChannelPanel.Visibility == Visibility.Visible)
+                CloseChannelPanel();
+            else
+                await _closeHandler(this);
             e.Handled = true;
             return;
         }
@@ -887,8 +1042,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         {
             if (!hudVisible)
             {
-                ShowHudBriefly();
-                PlayPauseButton.Focus();
+                if (e.Key == Key.Up && _playlist.Count > 0)
+                    OpenChannelPanel();
+                else
+                {
+                    ShowHudBriefly();
+                    PlayPauseButton.Focus();
+                }
                 e.Handled = true;
                 return;
             }
@@ -921,6 +1081,11 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 : LogicalTreeHelper.GetParent(current);
         }
         return false;
+    }
+
+    private sealed record PlayerChannelRow(int Number, StreamItem Item)
+    {
+        public string Display => Number.ToString("D3") + "   " + Item.Name;
     }
 
     private async void Close_Click(object sender, RoutedEventArgs e) =>
