@@ -94,6 +94,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         {
             ApplyResumeOnce();
             _lastProgressAt = DateTimeOffset.UtcNow;
+            LoadingBadge.Visibility = Visibility.Collapsed;
         });
         _player.EncounteredError += (_, _) => Dispatcher.Invoke(() =>
             TryRecoverPlayback("تعذر التشغيل — تجربة مسار بديل…"));
@@ -111,7 +112,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             _timer.Start();
             PlayCurrentCandidate();
             ShowHudBriefly();
-            Focus();
+            PlayPauseButton.Focus();
         };
     }
 
@@ -152,6 +153,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             return;
         }
 
+        LoadingText.Text = _automaticRecoveries > 0 ? "إعادة الاتصال…" : "جاري التشغيل…";
+        LoadingBadge.Visibility = Visibility.Visible;
         _playStartedAt = DateTimeOffset.UtcNow;
         _lastProgressAt = _playStartedAt;
         _lastObservedTime = -1;
@@ -203,6 +206,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _automaticRecoveries++;
         _recoveryIndex = (_recoveryIndex + 1) % _recoveryUrls.Count;
         EpgText.Text = message;
+        LoadingText.Text = message.Replace("…", "");
+        LoadingBadge.Visibility = Visibility.Visible;
         ShowHudBriefly();
         PlayCurrentCandidate(preserve);
     }
@@ -464,6 +469,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void ShowHudBriefly()
     {
+        Cursor = Cursors.Arrow;
         Hud.Visibility = Visibility.Visible;
         TopShade.Visibility = Visibility.Visible;
         _hudTimer.Stop();
@@ -476,9 +482,16 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         if (!_player.IsPlaying) return;
         Hud.Visibility = Visibility.Collapsed;
         TopShade.Visibility = Visibility.Collapsed;
+        Cursor = Cursors.None;
     }
 
     private void Overlay_MouseMove(object sender, MouseEventArgs e) => ShowHudBriefly();
+
+    private void Overlay_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        Fullscreen_Click(sender, e);
+        e.Handled = true;
+    }
 
     private async void ChangeChannel(int delta)
     {
@@ -488,6 +501,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         TitleText.Text = item.Name;
         TopTitleText.Text = item.Name;
         EpgText.Text = "القناة " + (_index + 1).ToString("N0") + " من " + _playlist.Count.ToString("N0");
+        LoadingText.Text = "جاري فتح القناة…";
+        LoadingBadge.Visibility = Visibility.Visible;
         _resumeApplied = true;
         _automaticRecoveries = 0;
         _recoveryIndex = 0;
@@ -504,19 +519,37 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private async void Overlay_KeyDown(object sender, KeyEventArgs e)
     {
-        if (Hud.Visibility != Visibility.Visible && e.Key is not Key.Escape and not Key.F)
+        var hudVisible = Hud.Visibility == Visibility.Visible;
+        var focused = Keyboard.FocusedElement as DependencyObject;
+        var focusInsideHud = focused is not null && IsDescendantOf(focused, Hud);
+
+        if (!hudVisible && e.Key is not Key.Escape and not Key.F)
         {
             ShowHudBriefly();
+            PlayPauseButton.Focus();
             e.Handled = true;
+            return;
+        }
+
+        if (focusInsideHud && e.Key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Tab)
+        {
+            // Let WPF directional navigation move between visible player controls.
             return;
         }
 
         switch (e.Key)
         {
             case Key.Space:
-            case Key.Enter:
                 PlayPause_Click(sender, e);
                 e.Handled = true;
+                break;
+            case Key.Enter:
+                if (!focusInsideHud)
+                {
+                    ShowHudBriefly();
+                    PlayPauseButton.Focus();
+                    e.Handled = true;
+                }
                 break;
             case Key.Left:
                 if (_playlist.Count > 0 && _urlResolver is not null) ChangeChannel(-1); else Seek(-10_000);
@@ -529,11 +562,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 e.Handled = true;
                 break;
             case Key.Up:
-                ChangeChannel(-1);
+                if (_playlist.Count > 0) ChangeChannel(-1);
+                else { ShowHudBriefly(); PlayPauseButton.Focus(); }
                 e.Handled = true;
                 break;
             case Key.Down:
-                ChangeChannel(1);
+                if (_playlist.Count > 0) ChangeChannel(1);
+                else { ShowHudBriefly(); PlayPauseButton.Focus(); }
                 e.Handled = true;
                 break;
             case Key.F:
@@ -552,6 +587,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                     _fullscreen = false;
                     FullscreenButton.Content = "⛶ الشاشة";
                     _fullscreenHandler(false);
+                    ShowHudBriefly();
                 }
                 else
                 {
@@ -560,6 +596,19 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 e.Handled = true;
                 break;
         }
+    }
+
+    private static bool IsDescendantOf(DependencyObject child, DependencyObject ancestor)
+    {
+        var current = child;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, ancestor)) return true;
+            current = current is Visual || current is System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(current)
+                : LogicalTreeHelper.GetParent(current);
+        }
+        return false;
     }
 
     private async void Close_Click(object sender, RoutedEventArgs e) =>
