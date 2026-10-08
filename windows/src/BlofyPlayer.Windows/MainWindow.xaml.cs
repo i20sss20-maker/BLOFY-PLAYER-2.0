@@ -2207,118 +2207,223 @@ public partial class MainWindow : Window
     private void ShowSearch()
     {
         DisposePreview();
-        PageTitle.Text = "البحث";
-        PageSubtitle.Text = "ابحث في BLOFY";
-        var root = Vertical();
+        PageTitle.Text = "البحث الشامل";
+        PageSubtitle.Text = "كل الأفلام والمسلسلات والقنوات • بدون حد 12 نتيجة";
+
+        // Grid's star-sized content area lets results genuinely scroll instead
+        // of allowing a StackPanel to extend beyond the bottom of the window.
+        var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var heading = Vertical(0, 0, 0, 10);
+        heading.Children.Add(Txt("ابحث عن فيلم أو مسلسل أو قناة", 18, Text, FontWeights.Bold, 0, 0, 0, 7));
         var search = new TextBox
         {
-            FontSize = 17,
-            Height = 44,
-            ToolTip = "ابحث من أول حرف…"
+            Height = 48,
+            FontSize = 18,
+            ToolTip = "بحث فوري في جميع أقسام مكتبتك، بالاسم العربي أو الإنجليزي"
         };
-        root.Children.Add(search);
+        heading.Children.Add(search);
+        var recent = _store.ActiveLibrary().RecentSearches.Take(6).ToList();
+        if (recent.Count > 0)
+            heading.Children.Add(Txt("آخر عمليات البحث: " + string.Join("  •  ", recent), 11, Muted, marginTop: 7));
+        root.Children.Add(heading);
 
-        var status = Txt("اكتب للبحث…", 11, Muted, marginTop: 8);
-        root.Children.Add(status);
+        var filters = Horizontal(0, 3, 0, 10);
+        Grid.SetRow(filters, 1);
+        root.Children.Add(filters);
 
-        var results = Vertical(0, 10, 0, 0);
-        root.Children.Add(results);
-
-        async Task RunAsync()
+        var scroll = new ScrollViewer
         {
-            _searchCts?.Cancel();
-            _searchCts?.Dispose();
-            _searchCts = new CancellationTokenSource();
-            var token = _searchCts.Token;
-            var raw = search.Text;
-            var q = NormalizeSearch(raw);
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            PanningMode = PanningMode.VerticalOnly
+        };
+        var wrap = new WrapPanel { Orientation = Orientation.Horizontal, ItemWidth = 182, ItemHeight = 294 };
+        scroll.Content = wrap;
+        Grid.SetRow(scroll, 2);
+        root.Children.Add(scroll);
 
-            results.Children.Clear();
-            if (q.Length == 0)
+        var footer = Horizontal(0, 12, 0, 0);
+        var more = Action("↓ عرض نتائج إضافية", false, (_, _) => AppendMore(true), 0, 0, 15, 0);
+        more.MinWidth = 175;
+        var status = Txt("ابدأ بالكتابة للبحث في المكتبة كاملة", 12, Muted, marginTop: 9);
+        footer.Children.Add(more);
+        footer.Children.Add(status);
+        Grid.SetRow(footer, 3);
+        root.Children.Add(footer);
+
+        string activeKind = "all";
+        IReadOnlyList<StreamItem> matched = [];
+        IReadOnlyList<StreamItem> displayed = [];
+        var rendered = 0;
+        const int batch = 36;
+        bool adding = false;
+        CancellationTokenSource? request = null;
+        var filterButtons = new Dictionary<string, Button>();
+
+        void RefreshTabs()
+        {
+            foreach (var (kind, button) in filterButtons)
             {
-                status.Text = "اكتب للبحث…";
-                return;
+                var selected = kind == activeKind;
+                button.Background = selected ? Accent : Surface2;
+                button.Foreground = selected ? Bg : Text;
+                button.BorderBrush = selected ? Accent : Brush("#665E437A");
             }
-
-            status.Text = "جاري البحث…";
-            try
-            {
-                await Task.Delay(220, token);
-                var snapshot = _catalog?.Snapshot.Streams;
-                if (snapshot is null) return;
-
-                var grouped = await Task.Run(() =>
-                {
-                    var live = new List<StreamItem>(10);
-                    var movies = new List<StreamItem>(12);
-                    var series = new List<StreamItem>(12);
-
-                    foreach (var item in snapshot)
-                    {
-                        token.ThrowIfCancellationRequested();
-                        if (!_store.IsContentVisible(item)) continue;
-                        if (!NormalizeSearch(item.Name).Contains(q, StringComparison.OrdinalIgnoreCase)) continue;
-
-                        switch (item.Kind)
-                        {
-                            case "live" when live.Count < 10:
-                                live.Add(item);
-                                break;
-                            case "movie" when movies.Count < 12:
-                                movies.Add(item);
-                                break;
-                            case "series" when series.Count < 12:
-                                series.Add(item);
-                                break;
-                        }
-
-                        if (live.Count >= 10 && movies.Count >= 12 && series.Count >= 12)
-                            break;
-                    }
-
-                    return (Live: live, Movies: movies, Series: series);
-                }, token);
-
-                if (token.IsCancellationRequested ||
-                    !string.Equals(raw, search.Text, StringComparison.Ordinal))
-                    return;
-
-                results.Children.Clear();
-                if (grouped.Live.Count > 0)
-                    results.Children.Add(ContentRow("القنوات", grouped.Live, landscape: true));
-                if (grouped.Movies.Count > 0)
-                    results.Children.Add(ContentRow("الأفلام", grouped.Movies));
-                if (grouped.Series.Count > 0)
-                    results.Children.Add(ContentRow("المسلسلات", grouped.Series));
-
-                var count = grouped.Live.Count + grouped.Movies.Count + grouped.Series.Count;
-                status.Text = count == 0
-                    ? "لا توجد نتائج"
-                    : "عرض أفضل " + count.ToString("N0") + " نتيجة";
-            }
-            catch (OperationCanceledException) { }
         }
 
-        search.TextChanged += async (_, _) => await RunAsync();
+        void AppendMore(bool focusFirst = false)
+        {
+            if (adding || rendered >= displayed.Count) return;
+            adding = true;
+            var firstIndex = rendered;
+            var lastIndex = Math.Min(rendered + batch, displayed.Count);
+            for (var i = firstIndex; i < lastIndex; i++)
+            {
+                var card = ContentCard(displayed[i], 160);
+                card.ToolTip = (displayed[i].Kind switch
+                {
+                    "movie" => "فيلم",
+                    "series" => "مسلسل",
+                    _ => "قناة"
+                }) + " • " + displayed[i].Name;
+                wrap.Children.Add(card);
+            }
+            rendered = lastIndex;
+            more.Visibility = rendered < displayed.Count ? Visibility.Visible : Visibility.Collapsed;
+            status.Text = "عرض " + rendered.ToString("N0") + " من " + displayed.Count.ToString("N0") + " نتيجة";
+            adding = false;
+            if (focusFirst && lastIndex > firstIndex)
+                _ = Dispatcher.BeginInvoke(() =>
+                {
+                    if (!ReferenceEquals(ContentHost.Content, root)) return;
+                    if (wrap.Children[firstIndex] is Button first) { first.Focus(); first.BringIntoView(); }
+                });
+        }
+
+        void ShowMatching()
+        {
+            displayed = activeKind == "all"
+                ? matched
+                : matched.Where(item => item.Kind == activeKind).ToList();
+            rendered = 0;
+            wrap.Children.Clear();
+            scroll.ScrollToTop();
+            more.Visibility = Visibility.Collapsed;
+            if (displayed.Count > 0)
+                AppendMore();
+            else
+                status.Text = search.Text.Trim().Length == 0
+                    ? "ابدأ بالكتابة للبحث في المكتبة كاملة"
+                    : "لا توجد نتائج في هذا القسم";
+        }
+
+        foreach (var (kind, label) in new[]
+        {
+            ("all", "الكل"), ("movie", "الأفلام"),
+            ("series", "المسلسلات"), ("live", "القنوات")
+        })
+        {
+            var key = kind;
+            var button = Action(label, false, (_, _) =>
+            {
+                activeKind = key;
+                RefreshTabs();
+                ShowMatching();
+            }, 0, 0, 10, 0);
+            button.MinWidth = 112;
+            filterButtons.Add(key, button);
+            filters.Children.Add(button);
+        }
+        RefreshTabs();
+
+        scroll.ScrollChanged += (_, e) =>
+        {
+            if (e.ExtentHeightChange == 0 && e.VerticalChange == 0) return;
+            if (rendered < displayed.Count &&
+                scroll.ScrollableHeight - scroll.VerticalOffset < Math.Max(450, scroll.ViewportHeight * .6))
+                AppendMore();
+        };
+        scroll.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is Key.PageDown or Key.End) AppendMore();
+        };
+
+        search.TextChanged += (_, _) =>
+        {
+            request?.Cancel();
+            var current = new CancellationTokenSource();
+            request = current;
+            _ = SearchAsync(current);
+        };
+
+        async Task SearchAsync(CancellationTokenSource current)
+        {
+            var token = current.Token;
+            try
+            {
+                await Task.Delay(180, token);
+                var q = NormalizeSearch(search.Text);
+                if (q.Length == 0)
+                {
+                    if (ReferenceEquals(request, current) && ReferenceEquals(ContentHost.Content, root))
+                    {
+                        matched = [];
+                        ShowMatching();
+                    }
+                    return;
+                }
+
+                status.Text = "جاري البحث عن «" + search.Text.Trim() + "» في جميع الفئات…";
+                // Scan the full locally cached catalog in the background; no
+                // misleading "top 12" cutoff and no blocking the WPF dispatcher.
+                var movies = Items("movie");
+                var series = Items("series");
+                var live = Items("live");
+                var hits = await Task.Run(() =>
+                {
+                    var exactPrefix = new List<StreamItem>();
+                    var remaining = new List<StreamItem>();
+                    foreach (var collection in new[] { movies, series, live })
+                    {
+                        foreach (var item in collection)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            var name = NormalizeSearch(item.Name);
+                            if (name.StartsWith(q, StringComparison.Ordinal)) exactPrefix.Add(item);
+                            else if (name.Contains(q, StringComparison.Ordinal)) remaining.Add(item);
+                        }
+                    }
+                    exactPrefix.AddRange(remaining);
+                    return exactPrefix;
+                }, token);
+
+                if (!token.IsCancellationRequested && ReferenceEquals(request, current) &&
+                    ReferenceEquals(ContentHost.Content, root))
+                {
+                    matched = hits;
+                    ShowMatching();
+                }
+            }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                if (ReferenceEquals(request, current)) request = null;
+                current.Dispose();
+            }
+        }
+
         search.KeyDown += async (_, e) =>
         {
-            if (e.Key != Key.Enter || search.Text.Trim().Length < 2) return;
+            if (e.Key != Key.Enter || search.Text.Trim().Length == 0) return;
             await _store.AddRecentSearchAsync(search.Text);
         };
 
-        var recent = _store.ActiveLibrary().RecentSearches;
-        if (recent.Count > 0)
-        {
-            root.Children.Insert(1, Txt(
-                "عمليات البحث الأخيرة: " + string.Join(" • ", recent.Take(8)),
-                11, Muted, marginTop: 8));
-        }
-
-        ContentHost.Content = new ScrollViewer
-        {
-            Content = root,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden
-        };
+        ContentHost.Content = root;
         search.Focus();
     }
 
