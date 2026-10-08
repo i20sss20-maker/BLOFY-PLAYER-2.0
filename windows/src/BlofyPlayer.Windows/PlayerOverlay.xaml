@@ -131,6 +131,24 @@
             </Grid>
         </Border>
 
+        <Border x:Name="ChannelNumberBadge"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Margin="28,118,0,0"
+                Background="#DD08060D"
+                BorderBrush="#66D0B2FF"
+                BorderThickness="1"
+                CornerRadius="14"
+                Padding="16,10"
+                Visibility="Collapsed"
+                IsHitTestVisible="False">
+            <TextBlock x:Name="ChannelNumberText"
+                       FontSize="26"
+                       FontWeight="Bold"
+                       Foreground="#F3F4F6"
+                       FlowDirection="LeftToRight"/>
+        </Border>
+
         <Border x:Name="Hud"
                 KeyboardNavigation.DirectionalNavigation="Cycle"
                 KeyboardNavigation.TabNavigation="Cycle"
@@ -168,14 +186,20 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal"
                             HorizontalAlignment="Center" Margin="0,0,0,9">
                     <Button x:Name="PreviousButton" Content="⏮"
-                            Click="Back_Click" Style="{StaticResource PlayerRoundButton}"
-                            ToolTip="السابق / رجوع 10 ثوان"/>
+                            Click="Previous_Click" Style="{StaticResource PlayerRoundButton}"
+                            ToolTip="السابق"/>
+                    <Button x:Name="RewindButton" Content="↶10"
+                            Click="Rewind_Click" Style="{StaticResource PlayerRoundButton}"
+                            FontSize="13" ToolTip="رجوع 10 ثوان"/>
                     <Button x:Name="PlayPauseButton" Content="⏸"
                             Click="PlayPause_Click" Style="{StaticResource PlayerPrimaryButton}"
                             ToolTip="تشغيل / إيقاف"/>
+                    <Button x:Name="Forward10Button" Content="10↷"
+                            Click="Forward10_Click" Style="{StaticResource PlayerRoundButton}"
+                            FontSize="13" ToolTip="تقديم 10 ثوان"/>
                     <Button x:Name="NextButton" Content="⏭"
-                            Click="Forward_Click" Style="{StaticResource PlayerRoundButton}"
-                            ToolTip="التالي / تقديم 10 ثوان"/>
+                            Click="Next_Click" Style="{StaticResource PlayerRoundButton}"
+                            ToolTip="التالي"/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="3" Orientation="Horizontal"
@@ -187,6 +211,9 @@
                     <Button Content="◉ الجودة" Click="Quality_Click"
                             Style="{StaticResource PlayerPillButton}"/>
                     <Button Content="▣ المقاس" Click="Aspect_Click"
+                            Style="{StaticResource PlayerPillButton}"/>
+                    <Button x:Name="FavoriteButton" Content="☆ المفضلة"
+                            Click="Favorite_Click"
                             Style="{StaticResource PlayerPillButton}"/>
                     <Button x:Name="FullscreenButton" Content="⛶ الشاشة"
                             Click="Fullscreen_Click"
