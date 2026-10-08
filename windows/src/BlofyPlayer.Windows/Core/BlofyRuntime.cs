@@ -900,33 +900,45 @@ public sealed class XtreamService : IDisposable
         string url,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        // HttpClient.Timeout stops watching after response headers when using
-        // ResponseHeadersRead. A provider that stalls mid-JSON otherwise leaves
-        // Windows stuck on "تحميل المسلسلات" indefinitely.
+        // With ResponseHeadersRead, HttpClient.Timeout does not protect the
+        // response body. Reset an inactivity timeout as entries arrive.
         using var inactivity = CancellationTokenSource.CreateLinkedTokenSource(ct);
         inactivity.CancelAfter(TimeSpan.FromSeconds(90));
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        HttpResponseMessage response;
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, inactivity.Token);
+            response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, inactivity.Token);
+        }
+        catch (OperationCanceledException e) when (!ct.IsCancellationRequested && inactivity.IsCancellationRequested)
+        {
+            throw new TimeoutException("مهلة الاتصال بسيرفر القوائم انتهت؛ مكتبتك السابقة محفوظة.", e);
+        }
+        using (response)
+        {
             var status = (int)response.StatusCode;
             if (!response.IsSuccessStatusCode && status != 884)
                 throw new HttpRequestException("Xtream HTTP " + status);
 
             await using var stream = await response.Content.ReadAsStreamAsync(inactivity.Token);
-            await foreach (var row in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(
-                               stream,
-                               StreamJsonOptions,
-                               cancellationToken: inactivity.Token))
+            await using var enumerator = JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(
+                stream, StreamJsonOptions, cancellationToken: inactivity.Token)
+                .GetAsyncEnumerator(inactivity.Token);
+
+            while (true)
             {
-                if (row.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) continue;
+                bool hasNext;
+                try { hasNext = await enumerator.MoveNextAsync(); }
+                catch (OperationCanceledException e) when (!ct.IsCancellationRequested && inactivity.IsCancellationRequested)
+                {
+                    throw new TimeoutException("توقف سيرفر القوائم عن إرسال البيانات لمدة 90 ثانية؛ مكتبتك السابقة محفوظة.", e);
+                }
+                if (!hasNext) break;
+                var row = enumerator.Current;
                 inactivity.CancelAfter(TimeSpan.FromSeconds(90));
+                if (row.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) continue;
                 yield return row;
             }
-        }
-        catch (OperationCanceledException e) when (!ct.IsCancellationRequested && inactivity.IsCancellationRequested)
-        {
-            throw new TimeoutException("توقف سيرفر القوائم عن إرسال البيانات لمدة 90 ثانية؛ بياناتك السابقة محفوظة.", e);
         }
     }
 
