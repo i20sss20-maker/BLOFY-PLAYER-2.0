@@ -1415,6 +1415,36 @@ public partial class MainWindow : Window
         player.ShowDialog();
     }
 
+    private async Task<ProviderDetails?> GetProviderDetailsCachedAsync(StreamItem item)
+    {
+        if (_detailsCache.TryGetValue(item.Key, out var cached)) return cached;
+        if (_activeProvider is null || _catalog is null || _activeProvider.ProviderType != "xtream")
+            return null;
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        var details = await _catalog.Xtream(_activeProvider)
+            .GetDetailsAsync(_activeProvider, item, timeout.Token);
+        _detailsCache[item.Key] = details;
+        return details;
+    }
+
+    private async Task<List<EpisodeItem>> GetEpisodesCachedAsync(StreamItem series, CancellationToken ct)
+    {
+        if (_episodesCache.TryGetValue(series.Key, out var cached))
+            return cached;
+        if (_activeProvider is null || _catalog is null || _activeProvider.ProviderType != "xtream")
+            return [];
+
+        var episodes = await _catalog.Xtream(_activeProvider)
+            .GetEpisodesAsync(_activeProvider, series.RemoteId, ct);
+        episodes = episodes
+            .OrderBy(x => x.Season)
+            .ThenBy(x => x.Episode)
+            .ToList();
+        _episodesCache[series.Key] = episodes;
+        return episodes;
+    }
+
     private IReadOnlyList<string> BuildStreamCandidates(StreamItem item)
     {
         if (_activeProvider is null || _catalog is null) return Array.Empty<string>();
