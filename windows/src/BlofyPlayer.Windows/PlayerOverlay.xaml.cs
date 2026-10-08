@@ -125,6 +125,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             _lastProgressAt = DateTimeOffset.UtcNow;
             LoadingBadge.Visibility = Visibility.Collapsed;
             RetryPlaybackButton.Visibility = Visibility.Collapsed;
+            PlaybackFailureShade.Visibility = Visibility.Collapsed;
         });
         _player.EncounteredError += (_, _) => DispatchPlayerEvent(() =>
             TryRecoverPlayback("تعذر التشغيل — تجربة مسار بديل…"));
@@ -194,6 +195,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         {
             LoadingBadge.Visibility = Visibility.Collapsed;
             RetryPlaybackButton.Visibility = Visibility.Collapsed;
+            PlaybackFailureShade.Visibility = Visibility.Visible;
             EpgText.Text = "لا يوجد رابط تشغيل صالح";
             ShowHudBriefly();
             return;
@@ -213,6 +215,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         LoadingText.Text = _automaticRecoveries > 0 ? "إعادة الاتصال…" : "جاري التشغيل…";
         _playbackFailed = false;
         RetryPlaybackButton.Visibility = Visibility.Collapsed;
+        PlaybackFailureShade.Visibility = Visibility.Collapsed;
         LoadingBadge.Visibility = Visibility.Visible;
         _playStartedAt = DateTimeOffset.UtcNow;
         _lastProgressAt = _playStartedAt;
@@ -263,6 +266,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         {
             _playbackFailed = true;
             LoadingBadge.Visibility = Visibility.Collapsed;
+            PlaybackFailureShade.Visibility = Visibility.Visible;
             EpgText.Text = "تعذر فتح المحتوى. جرّب إعادة المحاولة أو اختر محتوى آخر.";
             RetryPlaybackButton.Visibility = Visibility.Visible;
             ShowHudBriefly();
