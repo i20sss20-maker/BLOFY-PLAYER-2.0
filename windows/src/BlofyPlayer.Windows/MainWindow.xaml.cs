@@ -1750,17 +1750,42 @@ public partial class MainWindow : Window
 
     private async Task ShowDetailsAsync(StreamItem item)
     {
+        if (_store.IsLocked(item.Key) && !EnsureParentalAccess()) return;
+
+        // Preserve the exact category, query, loaded poster batch, scroll offset
+        // and keyboard focus when opening details from deep in a huge catalog.
+        var returnView = ContentHost.Content;
+        var returnSearch = _activeBrowserSearch;
+        var returnTitle = PageTitle.Text;
+        var returnSubtitle = PageSubtitle.Text;
+        var returnPage = _currentPage;
+        var returnFocus = Keyboard.FocusedElement;
         DisposePreview();
         _detailsOpen = true;
-        var detailsReturnPage = _currentPage;
+        _activeBrowserSearch = null;
         _pageBackAction = () =>
         {
-            _currentPage = detailsReturnPage;
-            RefreshCurrentPage();
+            _detailsOpen = false;
+            _currentPage = returnPage;
+            if (returnView is not null)
+            {
+                ContentHost.Content = returnView;
+                _activeBrowserSearch = returnSearch;
+                PageTitle.Text = returnTitle;
+                PageSubtitle.Text = returnSubtitle;
+                HeaderBackButton.Visibility = returnPage == "home"
+                    ? Visibility.Collapsed : Visibility.Visible;
+                UpdateNavigationState();
+                if (returnFocus is FrameworkElement focused)
+                    _ = Dispatcher.BeginInvoke(() =>
+                    {
+                        if (focused.IsVisible) { focused.Focus(); focused.BringIntoView(); }
+                    });
+            }
+            else RefreshCurrentPage();
         };
         HeaderBackButton.Visibility = Visibility.Visible;
         _lastFocusedContentKey = item.Key;
-        if (_store.IsLocked(item.Key) && !EnsureParentalAccess()) return;
 
         PageTitle.Text = item.Kind == "series" ? "BLOFY SERIES" : "BLOFY MOVIE";
         PageSubtitle.Text = item.Name;
@@ -1908,7 +1933,7 @@ public partial class MainWindow : Window
         }
 
         var actions = Horizontal(0, 8, 0, 0);
-        actions.Children.Add(Action("← رجوع", false, (_, _) => RefreshCurrentPage()));
+        actions.Children.Add(Action("← رجوع", false, (_, _) => NavigateBack()));
         if (item.Kind == "movie")
         {
             actions.Children.Add(Action("▶ تشغيل", true, async (_, _) => await PlayItemAsync(item)));
