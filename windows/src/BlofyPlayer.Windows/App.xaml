@@ -67,6 +67,16 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="MinHeight" Value="34"/>
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#FFFFFF"/>
+                    <Setter Property="BorderThickness" Value="3"/>
+                    <Setter Property="Background" Value="#E4CFFF"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="#FFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="SecondaryButton" TargetType="Button">
@@ -77,6 +87,18 @@
             <Setter Property="Padding" Value="14,8"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="MinHeight" Value="34"/>
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="Background" Value="#63408A"/>
+                    <Setter Property="BorderBrush" Value="#FFFFFF"/>
+                    <Setter Property="BorderThickness" Value="3"/>
+                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#3D2756"/>
+                    <Setter Property="BorderBrush" Value="#EBD8FF"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="TvListItem" TargetType="ListBoxItem">
