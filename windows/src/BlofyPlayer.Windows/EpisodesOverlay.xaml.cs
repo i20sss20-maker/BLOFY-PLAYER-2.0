@@ -265,7 +265,7 @@ public partial class EpisodesOverlay : UserControl, IDisposable
 
     private void Overlay_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
+        if (e.Key is Key.Escape or Key.Back or Key.BrowserBack)
         {
             _close();
             e.Handled = true;
