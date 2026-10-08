@@ -195,7 +195,7 @@ public static class ArtworkCache
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.5");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.6");
         return client;
     }
 }
