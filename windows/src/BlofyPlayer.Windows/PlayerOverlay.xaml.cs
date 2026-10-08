@@ -528,6 +528,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         {
             _favorite = await _toggleFavorite();
             UpdateFavoriteButton();
+            if (_playlist.Count > 0) ChannelList.Items.Refresh();
             EpgText.Text = _favorite ? "تمت الإضافة إلى المفضلة" : "تمت الإزالة من المفضلة";
             ShowHudBriefly();
         }
@@ -1109,7 +1110,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private sealed record PlayerChannelRow(int Number, StreamItem Item)
     {
-        public string Display => Number.ToString("D3") + "   " + Item.Name;
+        public string Display => Number.ToString("D3") + "   " + (Item.Favorite ? "★ " : "") + Item.Name;
     }
 
     private async void Close_Click(object sender, RoutedEventArgs e) =>
