@@ -12,6 +12,7 @@ namespace BlofyPlayer.Windows;
 
 public partial class PlayerOverlay : UserControl, IAsyncDisposable
 {
+    private const string CompatibilityUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     private readonly LibVLC _libVlc;
     private readonly VlcMediaPlayer _player;
     private readonly DispatcherTimer _timer;
@@ -48,6 +49,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private long _pendingRecoveryResume;
     private bool _disposed;
     private bool _playbackFailed;
+    private bool _compatibilityUserAgent;
     private bool _favorite;
     private string _channelDigits = "";
     private int _previousLiveIndex = -1;
@@ -229,7 +231,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
 
         using var media = new Media(_libVlc, uri);
-        media.AddOption(":http-user-agent=" + _settings.UserAgent);
+        media.AddOption(":http-user-agent=" + (_compatibilityUserAgent ? CompatibilityUserAgent : _settings.UserAgent));
         media.AddOption(":http-referrer=" + uri.GetLeftPart(UriPartial.Authority) + "/");
         media.AddOption(":network-caching=" + (_playlist.Count > 0 ? "450" : "850"));
         if (_settings.SubtitleLanguage == "off") media.AddOption(":no-spu");
@@ -260,9 +262,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     {
         if (_disposed || _playbackFailed) return;
 
-        // Visit each candidate at most once per attempt. An endless retry loop
-        // keeps the spinner visible and prevents the user from navigating back.
-        if (_recoveryIndex + 1 >= _recoveryUrls.Count || _automaticRecoveries >= 3)
+        // Try each stream URL with the configured User-Agent and one standard
+        // browser User-Agent. Some providers reject desktop app-specific agents.
+        // Keep retries finite so a failed source cannot hang the playback screen.
+        var tryCompatibility = !_compatibilityUserAgent &&
+            !string.Equals(_settings.UserAgent, CompatibilityUserAgent, StringComparison.OrdinalIgnoreCase);
+        var nextIndex = tryCompatibility ? _recoveryIndex : _recoveryIndex + 1;
+        if (nextIndex >= _recoveryUrls.Count || _automaticRecoveries >= 5)
         {
             _playbackFailed = true;
             LoadingBadge.Visibility = Visibility.Collapsed;
@@ -276,8 +282,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
         var preserve = Math.Max(_player.Time, _pendingRecoveryResume);
         _automaticRecoveries++;
-        _recoveryIndex++;
-        EpgText.Text = message;
+        _recoveryIndex = nextIndex;
+        _compatibilityUserAgent = tryCompatibility;
+        EpgText.Text = tryCompatibility ? "تجربة توافق السيرفر…" : message;
         LoadingText.Text = message.Replace("…", "");
         LoadingBadge.Visibility = Visibility.Visible;
         ShowHudBriefly();
@@ -291,6 +298,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _resumeApplied = false;
         _recoveryIndex = 0;
         _automaticRecoveries = 0;
+        _compatibilityUserAgent = false;
         _playbackFailed = false;
         PlayCurrentCandidate(_pendingRecoveryResume);
         PlayPauseButton.Focus();
@@ -825,6 +833,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _resumeApplied = true;
         _automaticRecoveries = 0;
         _recoveryIndex = 0;
+        _compatibilityUserAgent = false;
         _recoveryUrls = _recoveryResolver is not null
             ? NormalizeRecoveryUrls(_urlResolver(item), _recoveryResolver(item))
             : NormalizeRecoveryUrls(_urlResolver(item), null);
