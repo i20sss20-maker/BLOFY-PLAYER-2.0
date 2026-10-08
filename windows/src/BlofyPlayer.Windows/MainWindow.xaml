@@ -81,11 +81,21 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock x:Name="PageTitle" Text="BLOFY PLAYER"
-                                   Foreground="#F3F4F6" FontSize="21" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="PageSubtitle" Text="اليوم"
-                                   Foreground="#C9BCD9" FontSize="10.5" Margin="0,3,0,0"/>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="HeaderBackButton"
+                                Content="←"
+                                Width="42" Height="38"
+                                Margin="0,0,10,0"
+                                ToolTip="رجوع"
+                                Visibility="Collapsed"
+                                Click="HeaderBackButton_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+                        <StackPanel>
+                            <TextBlock x:Name="PageTitle" Text="BLOFY PLAYER"
+                                       Foreground="#F3F4F6" FontSize="21" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="PageSubtitle" Text="اليوم"
+                                       Foreground="#C9BCD9" FontSize="10.5" Margin="0,3,0,0"/>
+                        </StackPanel>
                     </StackPanel>
 
                     <TextBlock x:Name="HeaderServerText" Grid.Column="1"
