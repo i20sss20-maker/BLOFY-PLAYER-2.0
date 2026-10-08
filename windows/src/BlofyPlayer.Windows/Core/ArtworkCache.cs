@@ -14,13 +14,20 @@ public static class ArtworkCache
     private static readonly SemaphoreSlim Gate = new(4, 4);
     private static readonly ConcurrentDictionary<string, WeakReference<BitmapSource>> Memory = new();
     private static readonly ConcurrentDictionary<string, Task<BitmapSource?>> InFlight = new();
+    private const long MaxDiskBytes = 600L * 1024 * 1024;
+    private const int MaxFiles = 3500;
+    private static int _pruneStarted;
 
     private static readonly string Root = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "BLOFY PLAYER",
         "artwork-cache");
 
-    static ArtworkCache() => Directory.CreateDirectory(Root);
+    static ArtworkCache()
+    {
+        Directory.CreateDirectory(Root);
+        _ = Task.Run(PruneAsync);
+    }
 
     public static Task<BitmapSource?> LoadAsync(string? url, int decodeWidth, CancellationToken ct = default)
     {
@@ -71,6 +78,7 @@ public static class ArtworkCache
                         var temp = disk + ".tmp";
                         await File.WriteAllBytesAsync(temp, bytes, ct).ConfigureAwait(false);
                         File.Move(temp, disk, true);
+                        _ = Task.Run(PruneAsync);
                     }
                     catch { }
                 }
@@ -115,6 +123,44 @@ public static class ArtworkCache
                 .Sum(path => new FileInfo(path).Length);
         }
         catch { return 0; }
+    }
+
+    private static async Task PruneAsync()
+    {
+        if (Interlocked.Exchange(ref _pruneStarted, 1) == 1) return;
+        try
+        {
+            await Task.Yield();
+            var files = Directory.EnumerateFiles(Root, "*.img", SearchOption.TopDirectoryOnly)
+                .Select(path =>
+                {
+                    try { return new FileInfo(path); }
+                    catch { return null; }
+                })
+                .Where(info => info is not null)
+                .Cast<FileInfo>()
+                .OrderByDescending(info => info.LastWriteTimeUtc)
+                .ToList();
+
+            var total = files.Sum(info => info.Length);
+            var keep = 0;
+            foreach (var info in files)
+            {
+                keep++;
+                if (keep <= MaxFiles && total <= MaxDiskBytes) continue;
+                try
+                {
+                    total -= info.Length;
+                    info.Delete();
+                }
+                catch { }
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref _pruneStarted, 0);
+        }
     }
 
     public static int Clear()
