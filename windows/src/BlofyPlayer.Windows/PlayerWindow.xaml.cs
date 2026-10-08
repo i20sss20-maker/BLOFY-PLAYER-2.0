@@ -33,6 +33,7 @@ public partial class PlayerWindow : Window
     private long _lastObservedTime = -1;
     private DateTimeOffset _lastProgressAt = DateTimeOffset.UtcNow;
     private DateTimeOffset _playStartedAt = DateTimeOffset.UtcNow;
+    private bool _videoOutputSeen;
     private int _automaticRecoveries;
     private Rect _restoreBounds;
     private WindowStyle _restoreWindowStyle;
@@ -145,6 +146,7 @@ public partial class PlayerWindow : Window
         _playStartedAt = DateTimeOffset.UtcNow;
         _lastProgressAt = _playStartedAt;
         _lastObservedTime = -1;
+        _videoOutputSeen = false;
 
         if (preservePosition > 0)
         {
@@ -236,6 +238,19 @@ public partial class PlayerWindow : Window
         SeekSlider.Visibility = length > 0 ? Visibility.Visible : Visibility.Collapsed;
         PreviousButton.ToolTip = _playlist.Count > 0 ? "القناة السابقة" : "رجوع 10 ثوان";
         NextButton.ToolTip = _playlist.Count > 0 ? "القناة التالية" : "تقديم 10 ثوان";
+
+        if (!_videoOutputSeen && HasVideoOutput())
+            _videoOutputSeen = true;
+
+        if (_playlist.Count > 0 &&
+            !_videoOutputSeen &&
+            DateTimeOffset.UtcNow - _playStartedAt > TimeSpan.FromSeconds(8) &&
+            _automaticRecoveries < Math.Min(3, _recoveryUrls.Count))
+        {
+            _playStartedAt = DateTimeOffset.UtcNow;
+            TryRecoverPlayback("لا توجد صورة — تجربة مسار بديل…");
+            return;
+        }
 
         if (time > 0 && time != _lastObservedTime)
         {
@@ -492,6 +507,25 @@ public partial class PlayerWindow : Window
             property?.SetValue(_player, value);
         }
         catch { }
+    }
+
+    private bool HasVideoOutput()
+    {
+        try
+        {
+            var property = _player.GetType().GetProperty("Vout");
+            if (property?.GetValue(_player) is uint unsignedValue)
+                return unsignedValue > 0;
+            if (property?.GetValue(_player) is int signedValue)
+                return signedValue > 0;
+            if (property?.GetValue(_player) is long longValue)
+                return longValue > 0;
+        }
+        catch { }
+
+        // For VOD the time advancing is enough evidence even if the native Vout property
+        // is unavailable on a specific LibVLC build.
+        return _playlist.Count == 0 && _player.Time > 0;
     }
 
     private Rect CurrentMonitorBounds()
