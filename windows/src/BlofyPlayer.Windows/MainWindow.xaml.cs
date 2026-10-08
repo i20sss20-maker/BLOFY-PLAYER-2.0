@@ -848,7 +848,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        const int pageSize = 30;
+        var compactCatalog = _store.State.Settings.CatalogDensity == "compact";
+        var posterWidth = compactCatalog ? 138 : 160;
+        var pageSize = compactCatalog ? 42 : 30;
+        var posterCellHeight = (int)Math.Round((posterWidth - 18) * 1.5) + 84;
         var page = _browserPageByKind.TryGetValue(kind, out var rememberedPage)
             ? Math.Max(0, rememberedPage)
             : 0;
@@ -903,8 +906,8 @@ public partial class MainWindow : Window
         var wrap = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
-            ItemWidth = 182,
-            ItemHeight = 302
+            ItemWidth = posterWidth + 22,
+            ItemHeight = posterCellHeight
         };
         scroll.Content = wrap;
         right.Children.Add(scroll);
@@ -954,7 +957,7 @@ public partial class MainWindow : Window
             var startIndex = page * pageSize;
             var endIndex = Math.Min(items.Count, startIndex + pageSize);
             for (var i = startIndex; i < endIndex; i++)
-                wrap.Children.Add(ContentCard(items[i], 160));
+                wrap.Children.Add(ContentCard(items[i], posterWidth));
 
             if (!string.IsNullOrWhiteSpace(_lastFocusedContentKey))
             {
@@ -1252,7 +1255,11 @@ public partial class MainWindow : Window
     private Button ContentCard(StreamItem item, int width, bool landscape = false)
     {
         var stack = Vertical();
-        var imageHeight = landscape ? (int)Math.Round((width - 18) * 9d / 16d) : item.Kind == "live" ? 100 : 210;
+        var imageHeight = landscape
+            ? (int)Math.Round((width - 18) * 9d / 16d)
+            : item.Kind == "live"
+                ? 100
+                : (int)Math.Round((width - 18) * 1.5d);
         var imageBorder = new Border
         {
             Width = width - 18,
@@ -1375,7 +1382,7 @@ public partial class MainWindow : Window
         {
             Tag = item.Key,
             Width = width,
-            Height = landscape ? imageHeight + 58 : item.Kind == "live" ? 155 : 270,
+            Height = landscape ? imageHeight + 58 : item.Kind == "live" ? 155 : imageHeight + 60,
             Content = stack,
             Background = Brushes.Transparent,
             BorderBrush = Brushes.Transparent,
@@ -1934,14 +1941,17 @@ public partial class MainWindow : Window
             ContentHost.Content = EmptyState("المفضلة فارغة", "اضغط ☆ في تفاصيل الفيلم أو المسلسل لإضافته.");
             return;
         }
+        var compactCatalog = _store.State.Settings.CatalogDensity == "compact";
+        var posterWidth = compactCatalog ? 138 : 160;
+        var posterCellHeight = (int)Math.Round((posterWidth - 18) * 1.5) + 84;
         var wrap = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
-            ItemWidth = 182,
-            ItemHeight = 302
+            ItemWidth = posterWidth + 22,
+            ItemHeight = posterCellHeight
         };
-        foreach (var item in items.Take(60))
-            wrap.Children.Add(ContentCard(item, 160));
+        foreach (var item in items.Take(compactCatalog ? 84 : 60))
+            wrap.Children.Add(ContentCard(item, posterWidth));
         ContentHost.Content = new ScrollViewer { Content = wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
@@ -3156,8 +3166,12 @@ public partial class MainWindow : Window
         var section = Vertical(0, 18, 0, 0);
         section.Children.Add(Txt(title, 15, Text, FontWeights.SemiBold, 0, 0, 0, 7));
         var panel = new StackPanel { Orientation = Orientation.Horizontal, FlowDirection = FlowDirection.RightToLeft };
-        var width = landscape ? 224 : 154;
-        foreach (var item in items.Take(12))
+        var compact = _store.State.Settings.CatalogDensity == "compact";
+        var width = landscape
+            ? compact ? 205 : 224
+            : compact ? 138 : 154;
+        var take = compact ? 14 : 12;
+        foreach (var item in items.Take(take))
             panel.Children.Add(ContentCard(item, width, landscape));
 
         section.Children.Add(new ScrollViewer
