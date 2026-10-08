@@ -390,8 +390,9 @@ public partial class MainWindow : Window
     private async Task SyncCatalogAsync(bool userRequested)
     {
         if (_catalog is null) return;
-        _activeProvider = _store.ActiveProvider();
-        if (_activeProvider is null)
+        var provider = _store.ActiveProvider();
+        _activeProvider = provider;
+        if (provider is null)
         {
             if (userRequested) ShowProviders();
             return;
@@ -402,30 +403,47 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Keep each refresh tied to its own provider/token. A second refresh
+        // must never inherit the first one's token or replace its UI on finish.
         _syncCts?.Cancel();
-        _syncCts = new CancellationTokenSource();
+        var sync = new CancellationTokenSource();
+        _syncCts = sync;
         var progress = new Progress<(int Percent, string Text)>(p =>
         {
-            ProgressText.Text = p.Percent + "% • " + p.Text;
+            if (ReferenceEquals(_syncCts, sync) && !sync.IsCancellationRequested)
+                ProgressText.Text = p.Percent + "% • " + p.Text;
         });
 
         try
         {
-            await Task.Run(() => _catalog.SyncAsync(_activeProvider, progress, _syncCts.Token));
+            var snapshot = await Task.Run(() => _catalog.SyncAsync(provider, progress, sync.Token), sync.Token);
+            if (!ReferenceEquals(_syncCts, sync) || sync.IsCancellationRequested ||
+                _store.ActiveProvider()?.Id != provider.Id) return;
+
             ProgressText.Text = "فهرسة المحتوى…";
-            _viewIndex = await Task.Run(() => CatalogViewIndex.Build(_catalog.Snapshot));
+            var index = await Task.Run(() => CatalogViewIndex.Build(snapshot), sync.Token);
+            if (!ReferenceEquals(_syncCts, sync) || sync.IsCancellationRequested ||
+                _store.ActiveProvider()?.Id != provider.Id) return;
+
+            _viewIndex = index;
             _detailsCache.Clear();
             _episodesCache.Clear();
-            PageSubtitle.Text = _activeProvider.Name + " • " + _catalog.Snapshot.Streams.Count.ToString("N0") + " عنصر";
+            PageSubtitle.Text = provider.Name + " • " + snapshot.Streams.Count.ToString("N0") + " عنصر";
             ProgressText.Text = "جاهز";
             RefreshCurrentPage();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            ProgressText.Text = "تعذر التحديث";
+            if (!ReferenceEquals(_syncCts, sync)) return;
+            ProgressText.Text = "تعذر التحديث • المكتبة السابقة محفوظة";
             if (userRequested)
                 MessageBox.Show(this, ex.Message, "BLOFY PLAYER");
+        }
+        finally
+        {
+            if (ReferenceEquals(_syncCts, sync)) _syncCts = null;
+            sync.Dispose();
         }
     }
 
