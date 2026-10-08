@@ -1222,6 +1222,33 @@ public partial class MainWindow : Window
         _ = Dispatcher.BeginInvoke(() => FocusSelectedListItem(cats));
     }
 
+    private static List<string> PosterBadges(StreamItem item)
+    {
+        var source = (item.Name + " " + item.Genre + " " + item.Extension).Trim();
+        var result = new List<string>();
+
+        if (Regex.IsMatch(source, "(?i)(4k|uhd|2160p)")) result.Add("4K");
+        if (Regex.IsMatch(source, "(?i)(hdr|dolby\\s*vision)")) result.Add("HDR");
+        if (source.Any(ch => ch >= '\u0600' && ch <= '\u06FF') ||
+            source.Contains("arab", StringComparison.OrdinalIgnoreCase))
+            result.Add("AR");
+
+        var added = item.AddedAt;
+        var addedMs = added is > 0 and < 10_000_000_000 ? added * 1000 : added;
+        if (addedMs > 0 &&
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - addedMs < 30L * 24 * 60 * 60 * 1000)
+            result.Add("NEW");
+
+        return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static string? EpisodeHint(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        var match = Regex.Match(name, "(?i)(?:S\\d{1,2}E|الحلقة\\s*)(\\d{1,3})");
+        return match.Success ? "حلقة " + match.Groups[1].Value : null;
+    }
+
     private Button ContentCard(StreamItem item, int width, bool landscape = false)
     {
         var stack = Vertical();
@@ -1249,6 +1276,38 @@ public partial class MainWindow : Window
             };
             BindArtwork(posterImage, artwork, landscape ? 360 : item.Kind == "live" ? 240 : 220);
             imageGrid.Children.Add(posterImage);
+        }
+
+        var badges = PosterBadges(item);
+        if (badges.Count > 0)
+        {
+            var badgeRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(7)
+            };
+            foreach (var badge in badges.Take(3))
+            {
+                badgeRow.Children.Add(new Border
+                {
+                    Background = Brush("#DB12161D"),
+                    BorderBrush = Brush("#665E437A"),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Margin = new Thickness(0, 0, 4, 0),
+                    Child = new TextBlock
+                    {
+                        Text = badge,
+                        Foreground = Brushes.White,
+                        FontSize = 8.5,
+                        FontWeight = FontWeights.Bold
+                    }
+                });
+            }
+            imageGrid.Children.Add(badgeRow);
         }
 
         if (item.Favorite)
@@ -1301,8 +1360,16 @@ public partial class MainWindow : Window
         title.TextTrimming = TextTrimming.CharacterEllipsis;
         title.FlowDirection = DetectDirection(item.Name);
         stack.Children.Add(title);
-        if (!string.IsNullOrWhiteSpace(item.Rating) && item.Kind != "live" && !landscape)
-            stack.Children.Add(Txt("★ " + item.Rating, 9.5, Accent));
+        if (item.Kind != "live" && !landscape)
+        {
+            var metaParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(item.Year)) metaParts.Add(item.Year);
+            if (!string.IsNullOrWhiteSpace(item.Rating)) metaParts.Add("★ " + item.Rating);
+            var episodeHint = EpisodeHint(item.Name);
+            if (!string.IsNullOrWhiteSpace(episodeHint)) metaParts.Add(episodeHint);
+            if (metaParts.Count > 0)
+                stack.Children.Add(Txt(string.Join("  •  ", metaParts), 9.5, Accent));
+        }
 
         var button = new Button
         {
