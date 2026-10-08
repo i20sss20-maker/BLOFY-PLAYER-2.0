@@ -38,7 +38,7 @@ public sealed class BlofySubscriberService : IDisposable
             BaseAddress = new Uri(BlofyEndpoints.ServiceBase),
             Timeout = TimeSpan.FromSeconds(18)
         };
-        _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.0");
+        _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.1");
     }
 
     public async Task<bool> HealthAsync(CancellationToken ct = default)
