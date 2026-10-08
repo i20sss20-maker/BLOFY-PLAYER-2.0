@@ -118,6 +118,27 @@
             </StackPanel>
         </Border>
 
+        <StackPanel x:Name="PersistentTopControls"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Margin="20"
+                    Panel.ZIndex="30"
+                    FlowDirection="RightToLeft">
+            <Button x:Name="PersistentBackButton"
+                    Content="← رجوع"
+                    Click="Close_Click"
+                    Style="{StaticResource PlayerPillButton}"
+                    MinWidth="92"
+                    Height="42"/>
+            <Button x:Name="PersistentFullscreenButton"
+                    Content="🗗 نافذة"
+                    Click="Fullscreen_Click"
+                    Style="{StaticResource PlayerPillButton}"
+                    MinWidth="92"
+                    Height="42"/>
+        </StackPanel>
+
         <Border x:Name="TopShade" VerticalAlignment="Top" Height="96"
                 Background="#8A08060D" IsHitTestVisible="False">
             <Grid Margin="28,16">
@@ -204,13 +225,13 @@
 
                 <StackPanel Grid.Row="3" Orientation="Horizontal"
                             HorizontalAlignment="Center">
-                    <Button Content="🔊 الصوت" Click="Audio_Click"
+                    <Button x:Name="AudioButton" Content="🔊 الصوت" Click="Audio_Click"
                             Style="{StaticResource PlayerPillButton}"/>
-                    <Button Content="CC الترجمة" Click="Subtitle_Click"
+                    <Button x:Name="SubtitleButton" Content="CC الترجمة" Click="Subtitle_Click"
                             Style="{StaticResource PlayerPillButton}"/>
-                    <Button Content="◉ الجودة" Click="Quality_Click"
+                    <Button x:Name="QualityButton" Content="◉ الجودة" Click="Quality_Click"
                             Style="{StaticResource PlayerPillButton}"/>
-                    <Button Content="▣ المقاس" Click="Aspect_Click"
+                    <Button x:Name="AspectButton" Content="▣ المقاس" Click="Aspect_Click"
                             Style="{StaticResource PlayerPillButton}"/>
                     <Button x:Name="FavoriteButton" Content="☆ المفضلة"
                             Click="Favorite_Click"
@@ -218,7 +239,7 @@
                     <Button x:Name="FullscreenButton" Content="⛶ الشاشة"
                             Click="Fullscreen_Click"
                             Style="{StaticResource PlayerPillButton}"/>
-                    <Button Content="✕ رجوع" Click="Close_Click"
+                    <Button x:Name="CloseButton" Content="✕ رجوع" Click="Close_Click"
                             Style="{StaticResource PlayerPillButton}"/>
                 </StackPanel>
             </Grid>
