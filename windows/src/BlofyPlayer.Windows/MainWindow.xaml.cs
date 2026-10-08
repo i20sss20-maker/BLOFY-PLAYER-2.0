@@ -29,6 +29,8 @@ public partial class MainWindow : Window
     private readonly LocalStore _store = new();
     private CatalogCoordinator? _catalog;
     private CatalogViewIndex _viewIndex = CatalogViewIndex.Empty;
+    private readonly Dictionary<string, ProviderDetails?> _detailsCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<EpisodeItem>> _episodesCache = new(StringComparer.Ordinal);
     private CancellationTokenSource? _syncCts;
     private CancellationTokenSource? _searchCts;
     private CancellationTokenSource? _homeRenderCts;
@@ -240,6 +242,8 @@ public partial class MainWindow : Window
             await Task.Run(() => _catalog.SyncAsync(_activeProvider, progress, _syncCts.Token));
             ProgressText.Text = "فهرسة المحتوى…";
             _viewIndex = await Task.Run(() => CatalogViewIndex.Build(_catalog.Snapshot));
+            _detailsCache.Clear();
+            _episodesCache.Clear();
             PageSubtitle.Text = _activeProvider.Name + " • " + _catalog.Snapshot.Streams.Count.ToString("N0") + " عنصر";
             ProgressText.Text = "جاهز";
             RefreshCurrentPage();
@@ -1078,9 +1082,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-                providerDetails = await _catalog!.Xtream(_activeProvider)
-                    .GetDetailsAsync(_activeProvider, item, timeout.Token);
+                providerDetails = await GetProviderDetailsCachedAsync(item);
             }
             catch { }
         }
@@ -1309,7 +1311,7 @@ public partial class MainWindow : Window
         var window = new EpisodesWindow(
             series,
             _store,
-            async ct => await _catalog.Xtream(_activeProvider).GetEpisodesAsync(_activeProvider, series.RemoteId, ct),
+            async ct => await GetEpisodesCachedAsync(series, ct),
             async (episode, all) => await PlayEpisodeAsync(series, episode, all))
         { Owner = this };
         window.ShowDialog();
