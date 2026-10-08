@@ -54,6 +54,10 @@ public partial class MainWindow : Window
     private WindowStyle _overlayRestoreWindowStyle;
     private ResizeMode _overlayRestoreResizeMode;
     private bool _overlayRestoreTopmost;
+    private bool _detailsOpen;
+    private readonly Dictionary<string, int> _browserPageByKind = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _browserCategoryByKind = new(StringComparer.OrdinalIgnoreCase);
+    private string? _lastFocusedContentKey;
 
     public MainWindow()
     {
@@ -418,6 +422,7 @@ public partial class MainWindow : Window
 
     private void RefreshCurrentPage()
     {
+        _detailsOpen = false;
         _homeRenderCts?.Cancel();
         DisposePreview();
         if (_currentPage != "home")
@@ -834,7 +839,9 @@ public partial class MainWindow : Window
         }
 
         const int pageSize = 30;
-        var page = 0;
+        var page = _browserPageByKind.TryGetValue(kind, out var rememberedPage)
+            ? Math.Max(0, rememberedPage)
+            : 0;
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
@@ -854,7 +861,20 @@ public partial class MainWindow : Window
                      .Where(x => x.Kind == kind && !_store.IsCategoryHidden(kind, x.RemoteId)))
             cats.Items.Add(cat);
         cats.DisplayMemberPath = "Name";
-        cats.SelectedIndex = 0;
+        var rememberedCategory = _browserCategoryByKind.TryGetValue(kind, out var categoryId)
+            ? categoryId
+            : "";
+        var rememberedIndex = 0;
+        for (var i = 0; i < cats.Items.Count; i++)
+        {
+            if (cats.Items[i] is CategoryItem row &&
+                string.Equals(row.RemoteId, rememberedCategory, StringComparison.Ordinal))
+            {
+                rememberedIndex = i;
+                break;
+            }
+        }
+        cats.SelectedIndex = rememberedIndex;
         Grid.SetColumn(cats, 0);
         grid.Children.Add(cats);
 
@@ -892,6 +912,7 @@ public partial class MainWindow : Window
             var items = CurrentItems();
             var pages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)pageSize));
             page = Math.Clamp(page, 0, pages - 1);
+            _browserPageByKind[kind] = page;
 
             pageBar.Children.Clear();
             var previous = Action("‹ السابق", false, (_, _) =>
@@ -924,11 +945,23 @@ public partial class MainWindow : Window
             var endIndex = Math.Min(items.Count, startIndex + pageSize);
             for (var i = startIndex; i < endIndex; i++)
                 wrap.Children.Add(ContentCard(items[i], 160));
+
+            if (!string.IsNullOrWhiteSpace(_lastFocusedContentKey))
+            {
+                var target = wrap.Children.OfType<Button>()
+                    .FirstOrDefault(button => button.Tag is string key &&
+                                              key.Equals(_lastFocusedContentKey, StringComparison.Ordinal));
+                if (target is not null)
+                    _ = Dispatcher.BeginInvoke(() => target.Focus());
+            }
         }
 
         cats.SelectionChanged += (_, _) =>
         {
+            if (cats.SelectedItem is CategoryItem selected)
+                _browserCategoryByKind[kind] = selected.RemoteId;
             page = 0;
+            _browserPageByKind[kind] = 0;
             RenderPage();
         };
 
@@ -1227,6 +1260,7 @@ public partial class MainWindow : Window
 
         var button = new Button
         {
+            Tag = item.Key,
             Width = width,
             Height = landscape ? imageHeight + 58 : item.Kind == "live" ? 155 : 270,
             Content = stack,
@@ -1258,6 +1292,7 @@ public partial class MainWindow : Window
 
         button.GotKeyboardFocus += (_, _) =>
         {
+            _lastFocusedContentKey = item.Key;
             Focus(true);
             button.BringIntoView(new Rect(0, 0, button.ActualWidth, button.ActualHeight));
         };
@@ -1275,6 +1310,8 @@ public partial class MainWindow : Window
     private async Task ShowDetailsAsync(StreamItem item)
     {
         DisposePreview();
+        _detailsOpen = true;
+        _lastFocusedContentKey = item.Key;
         if (_store.IsLocked(item.Key) && !EnsureParentalAccess()) return;
 
         PageTitle.Text = item.Kind == "series" ? "BLOFY SERIES" : "BLOFY MOVIE";
@@ -1423,6 +1460,7 @@ public partial class MainWindow : Window
         }
 
         var actions = Horizontal(0, 8, 0, 0);
+        actions.Children.Add(Action("← رجوع", false, (_, _) => RefreshCurrentPage()));
         if (item.Kind == "movie")
         {
             actions.Children.Add(Action("▶ تشغيل", true, async (_, _) => await PlayItemAsync(item)));
@@ -3051,12 +3089,17 @@ public partial class MainWindow : Window
             _ = SyncCatalogAsync(true);
             e.Handled = true;
         }
+        else if (e.Key == Key.Escape && _detailsOpen)
+        {
+            RefreshCurrentPage();
+            e.Handled = true;
+        }
         else if (e.Key == Key.Escape && _currentPage != "home")
         {
             _currentPage = "home";
             _store.State.Settings.LastPage = "home";
             _store.ScheduleSave();
-            ShowHome();
+            RefreshCurrentPage();
             e.Handled = true;
         }
     }
