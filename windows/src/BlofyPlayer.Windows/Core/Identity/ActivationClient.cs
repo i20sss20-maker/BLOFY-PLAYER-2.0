@@ -54,7 +54,7 @@ public sealed class ActivationClient : IDisposable
         var payload = new ActivationCheckRequest(
             identity.DeviceId,
             identity.ActivationCode,
-            "windows-0.4.5",
+            "windows-0.4.6",
             "windows",
             identity.TrialScope
         );
