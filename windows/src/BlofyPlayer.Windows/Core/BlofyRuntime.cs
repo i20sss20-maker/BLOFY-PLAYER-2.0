@@ -166,6 +166,8 @@ public sealed class LocalStore
 
     public PersistentState State { get; private set; } = new();
     public string RootPath => _root;
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
+    private CancellationTokenSource? _saveDebounceCts;
 
     private string StatePath => Path.Combine(_root, "state.json");
 
@@ -191,11 +193,53 @@ public sealed class LocalStore
 
     public async Task SaveAsync()
     {
-        Directory.CreateDirectory(_root);
-        var temp = StatePath + ".tmp";
-        await using (var stream = File.Create(temp))
-            await JsonSerializer.SerializeAsync(stream, State, Json);
-        File.Move(temp, StatePath, true);
+        _saveDebounceCts?.Cancel();
+        await _saveGate.WaitAsync();
+        try
+        {
+            Directory.CreateDirectory(_root);
+            var temp = StatePath + ".tmp";
+            await using (var stream = File.Create(temp))
+                await JsonSerializer.SerializeAsync(stream, State, Json);
+            File.Move(temp, StatePath, true);
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+    }
+
+    public void ScheduleSave(int delayMs = 650)
+    {
+        _saveDebounceCts?.Cancel();
+        _saveDebounceCts?.Dispose();
+        _saveDebounceCts = new CancellationTokenSource();
+        var token = _saveDebounceCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(Math.Max(100, delayMs), token);
+                if (token.IsCancellationRequested) return;
+
+                await _saveGate.WaitAsync(token);
+                try
+                {
+                    Directory.CreateDirectory(_root);
+                    var temp = StatePath + ".tmp";
+                    await using (var stream = File.Create(temp))
+                        await JsonSerializer.SerializeAsync(stream, State, Json, token);
+                    File.Move(temp, StatePath, true);
+                }
+                finally
+                {
+                    _saveGate.Release();
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch { }
+        }, token);
     }
 
     public ProviderAccount? ActiveProvider() =>
@@ -332,14 +376,15 @@ public sealed class LocalStore
 
     public IReadOnlyList<string> RecentChannels => ActiveLibrary().RecentChannels;
 
-    public async Task AddRecentChannelAsync(string key)
+    public Task AddRecentChannelAsync(string key)
     {
-        if (string.IsNullOrWhiteSpace(key)) return;
+        if (string.IsNullOrWhiteSpace(key)) return Task.CompletedTask;
         var recent = ActiveLibrary().RecentChannels;
         recent.RemoveAll(x => x.Equals(key, StringComparison.Ordinal));
         recent.Insert(0, key);
         if (recent.Count > 30) recent.RemoveRange(30, recent.Count - 30);
-        await SaveAsync();
+        ScheduleSave();
+        return Task.CompletedTask;
     }
 
     public async Task SetCategoryHiddenAsync(string kind, string remoteId, bool hidden)
