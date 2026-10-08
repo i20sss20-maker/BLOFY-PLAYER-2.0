@@ -2995,6 +2995,9 @@ public partial class MainWindow : Window
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
+        if (OverlayHost.Visibility == Visibility.Visible)
+            return;
+
         if (e.Key == Key.F5)
         {
             _ = SyncCatalogAsync(true);
@@ -3003,6 +3006,8 @@ public partial class MainWindow : Window
         else if (e.Key == Key.Escape && _currentPage != "home")
         {
             _currentPage = "home";
+            _store.State.Settings.LastPage = "home";
+            _store.ScheduleSave();
             ShowHome();
             e.Handled = true;
         }
