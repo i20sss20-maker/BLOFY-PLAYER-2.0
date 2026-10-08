@@ -31,6 +31,7 @@ public partial class MainWindow : Window
     private CatalogViewIndex _viewIndex = CatalogViewIndex.Empty;
     private CancellationTokenSource? _syncCts;
     private CancellationTokenSource? _searchCts;
+    private CancellationTokenSource? _homeRenderCts;
     private ActivationCheckResponse? _activationState;
     private ProviderAccount? _activeProvider;
     private PlaybackService? _previewPlayback;
@@ -76,6 +77,7 @@ public partial class MainWindow : Window
         {
             _syncCts?.Cancel();
             _searchCts?.Cancel();
+            _homeRenderCts?.Cancel();
             _livePreviewCts?.Cancel();
             _clockTimer.Stop();
             _heroTimer.Stop();
@@ -251,12 +253,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void Nav_Click(object sender, RoutedEventArgs e)
+    private void Nav_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string page }) return;
         _currentPage = page;
         _store.State.Settings.LastPage = NormalizeLastPage(page);
-        try { await _store.SaveAsync(); } catch { }
+        _store.ScheduleSave();
         RefreshCurrentPage();
     }
 
@@ -267,6 +269,7 @@ public partial class MainWindow : Window
 
     private void RefreshCurrentPage()
     {
+        _homeRenderCts?.Cancel();
         DisposePreview();
         if (_currentPage != "home")
         {
@@ -308,15 +311,27 @@ public partial class MainWindow : Window
         {
             var gated = Vertical();
             gated.Children.Add(ActivationCard());
-            ContentHost.Content = new ScrollViewer { Content = gated, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            ContentHost.Content = new ScrollViewer
+            {
+                Content = gated,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            };
             return;
         }
 
+        _homeRenderCts?.Cancel();
+        _homeRenderCts?.Dispose();
+        _homeRenderCts = new CancellationTokenSource();
+        var token = _homeRenderCts.Token;
+
         var root = Vertical();
         var latest = _viewIndex.Collection("latest").Where(_store.IsContentVisible).Take(36).ToList();
-        _heroCandidates = latest.Where(x => !string.IsNullOrWhiteSpace(x.Backdrop) || !string.IsNullOrWhiteSpace(x.Icon))
-            .Take(6).ToList();
+        _heroCandidates = latest
+            .Where(x => !string.IsNullOrWhiteSpace(x.Backdrop) || !string.IsNullOrWhiteSpace(x.Icon))
+            .Take(6)
+            .ToList();
         if (_heroCandidates.Count == 0) _heroCandidates = latest.Take(6).ToList();
+
         if (_heroCandidates.Count > 0)
         {
             _heroIndex = Math.Clamp(_heroIndex, 0, _heroCandidates.Count - 1);
@@ -340,7 +355,7 @@ public partial class MainWindow : Window
             .Select(w => _viewIndex.Find(w.Key))
             .Where(x => x is not null && _store.IsContentVisible(x))
             .Cast<StreamItem>()
-            .Take(18)
+            .Take(12)
             .ToList();
         if (continueItems.Count > 0)
             root.Children.Add(ContentRow("متابعة المشاهدة", continueItems, landscape: true));
@@ -349,47 +364,68 @@ public partial class MainWindow : Window
             .Select(key => _viewIndex.Find(key))
             .Where(x => x is not null && x.Kind == "live" && _store.IsContentVisible(x))
             .Cast<StreamItem>()
-            .Take(12)
+            .Take(10)
             .ToList();
         if (recentChannels.Count > 0)
             root.Children.Add(ContentRow("آخر القنوات", recentChannels, landscape: true));
 
-        var recent = _store.WatchStates
-            .OrderByDescending(w => w.UpdatedAt)
-            .Select(w => _viewIndex.Find(w.Key))
-            .Where(x => x is not null && _store.IsContentVisible(x))
-            .Cast<StreamItem>()
-            .DistinctBy(x => x.Key)
-            .Take(18)
-            .ToList();
-        if (recent.Count > 0)
-            root.Children.Add(ContentRow("شاهدتها مؤخرًا", recent, landscape: true));
-
-        if (latest.Count > 0)
-            root.Children.Add(ContentRow("أضيف حديثًا", latest.Take(18).ToList()));
-
-        var top = _viewIndex.Collection("top").Where(_store.IsContentVisible).Take(18).ToList();
-        if (top.Count > 0)
-        {
-            root.Children.Add(TopTenRow(top.Take(10).ToList()));
-            root.Children.Add(ContentRow("أعلى تقييم", top));
-        }
-
-        var arabic = _viewIndex.Collection("arabic").Where(_store.IsContentVisible).Take(18).ToList();
-        if (arabic.Count > 0)
-            root.Children.Add(ContentRow("مختارات عربية", arabic));
-
-        var ultra = _viewIndex.Collection("4k").Where(_store.IsContentVisible).Take(18).ToList();
-        if (ultra.Count > 0)
-            root.Children.Add(ContentRow("4K • UHD", ultra));
-
-        root.Children.Add(QuickLinksRow());
-        ContentHost.Content = new ScrollViewer
+        var scroll = new ScrollViewer
         {
             Content = root,
             VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
+        ContentHost.Content = scroll;
+
+        _ = PopulateHomeShelvesAsync(root, latest, token);
+    }
+
+    private async Task PopulateHomeShelvesAsync(StackPanel root, IReadOnlyList<StreamItem> latest, CancellationToken token)
+    {
+        async Task AddAsync(Func<UIElement?> factory)
+        {
+            await Task.Delay(70, token);
+            token.ThrowIfCancellationRequested();
+            if (_currentPage != "home") throw new OperationCanceledException(token);
+
+            var element = factory();
+            if (element is not null) root.Children.Add(element);
+        }
+
+        try
+        {
+            var recent = _store.WatchStates
+                .OrderByDescending(w => w.UpdatedAt)
+                .Select(w => _viewIndex.Find(w.Key))
+                .Where(x => x is not null && _store.IsContentVisible(x))
+                .Cast<StreamItem>()
+                .DistinctBy(x => x.Key)
+                .Take(10)
+                .ToList();
+            if (recent.Count > 0)
+                await AddAsync(() => ContentRow("شاهدتها مؤخرًا", recent, landscape: true));
+
+            if (latest.Count > 0)
+                await AddAsync(() => ContentRow("أضيف حديثًا", latest.Take(10).ToList()));
+
+            var top = _viewIndex.Collection("top").Where(_store.IsContentVisible).Take(14).ToList();
+            if (top.Count > 0)
+            {
+                await AddAsync(() => TopTenRow(top.Take(10).ToList()));
+                await AddAsync(() => ContentRow("أعلى تقييم", top.Take(10).ToList()));
+            }
+
+            var arabic = _viewIndex.Collection("arabic").Where(_store.IsContentVisible).Take(10).ToList();
+            if (arabic.Count > 0)
+                await AddAsync(() => ContentRow("مختارات عربية", arabic));
+
+            var ultra = _viewIndex.Collection("4k").Where(_store.IsContentVisible).Take(10).ToList();
+            if (ultra.Count > 0)
+                await AddAsync(() => ContentRow("4K • UHD", ultra));
+
+            await AddAsync(QuickLinksRow);
+        }
+        catch (OperationCanceledException) { }
     }
 
     private UIElement BuildAndroidHero(StreamItem item)
