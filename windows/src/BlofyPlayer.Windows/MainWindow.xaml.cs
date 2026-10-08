@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using BlofyPlayer.Windows.Core;
 using BlofyPlayer.Windows.Core.Identity;
 using BlofyPlayer.Windows.Core.Playback;
