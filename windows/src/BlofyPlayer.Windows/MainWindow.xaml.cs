@@ -3816,17 +3816,30 @@ public partial class MainWindow : Window
     {
         if (list.Items.Count == 0) return;
         if (list.SelectedIndex < 0) list.SelectedIndex = 0;
+
+        // For virtualized categories the desired item may not have been
+        // realized yet. Scroll it into view before resolving its container.
+        var selected = list.SelectedItem;
+        if (selected is null) { list.Focus(); return; }
+        list.ScrollIntoView(selected);
         list.UpdateLayout();
-        if (list.ItemContainerGenerator.ContainerFromIndex(list.SelectedIndex) is ListBoxItem item)
+        var container = list.ItemContainerGenerator.ContainerFromItem(selected) as ListBoxItem;
+        if (container is not null)
         {
-            item.IsSelected = true;
-            item.Focus();
-            item.BringIntoView();
+            container.Focus();
+            container.BringIntoView();
+            return;
         }
-        else
-        {
-            list.Focus();
-        }
+
+        list.Focus();
+        _ = list.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,
+            new Action(() =>
+            {
+                if (!list.IsLoaded || list.SelectedItem != selected) return;
+                list.ScrollIntoView(selected);
+                if (list.ItemContainerGenerator.ContainerFromItem(selected) is ListBoxItem realized)
+                    realized.Focus();
+            }));
     }
 
     private bool MoveRemoteFocus(FrameworkElement current, Key key)
