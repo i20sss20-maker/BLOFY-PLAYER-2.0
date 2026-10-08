@@ -584,6 +584,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 e.Handled = true;
                 break;
             case Key.Escape:
+            case Key.Back:
+            case Key.BrowserBack:
                 if (_fullscreen)
                 {
                     _fullscreen = false;
