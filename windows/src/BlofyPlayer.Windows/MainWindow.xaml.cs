@@ -1569,6 +1569,27 @@ public partial class MainWindow : Window
         ContentHost.Content = new ScrollViewer { Content = wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
+    private static string NormalizeSearch(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        var text = value.Trim().ToLowerInvariant()
+            .Replace("أ", "ا")
+            .Replace("إ", "ا")
+            .Replace("آ", "ا")
+            .Replace("ى", "ي")
+            .Replace("ؤ", "و")
+            .Replace("ئ", "ي")
+            .Replace("ة", "ه")
+            .Replace("ـ", "");
+
+        var chars = text.Where(ch =>
+            ch is not ('َ' or 'ً' or 'ُ' or 'ٌ' or 'ِ' or 'ٍ' or 'ْ' or 'ّ')).ToArray();
+
+        return new string(chars)
+            .Replace("  ", " ")
+            .Trim();
+    }
+
     private void ShowSearch()
     {
         DisposePreview();
