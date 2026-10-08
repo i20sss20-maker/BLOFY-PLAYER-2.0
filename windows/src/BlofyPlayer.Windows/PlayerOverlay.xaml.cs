@@ -134,6 +134,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             _timer.Start();
             ConfigureControlVisibility();
             UpdateFavoriteButton();
+            SetFullscreenState(true);
             PlayCurrentCandidate();
             ShowHudBriefly();
             PlayPauseButton.Focus();
@@ -476,10 +477,17 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void Fullscreen_Click(object sender, RoutedEventArgs e)
     {
-        _fullscreen = !_fullscreen;
-        FullscreenButton.Content = _fullscreen ? "🗗 نافذة" : "⛶ الشاشة";
-        _fullscreenHandler(_fullscreen);
+        SetFullscreenState(!_fullscreen);
         ShowHudBriefly();
+    }
+
+    private void SetFullscreenState(bool enabled)
+    {
+        if (_fullscreen == enabled) return;
+        _fullscreen = enabled;
+        FullscreenButton.Content = enabled ? "🗗 نافذة" : "⛶ الشاشة";
+        PersistentFullscreenButton.Content = enabled ? "🗗 نافذة" : "⛶ الشاشة";
+        _fullscreenHandler(enabled);
     }
 
     private void Quality_Click(object sender, RoutedEventArgs e)
@@ -582,6 +590,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         Hud.Visibility = Visibility.Collapsed;
         TopShade.Visibility = Visibility.Collapsed;
         Cursor = Cursors.None;
+        Focus();
     }
 
     private void Overlay_MouseMove(object sender, MouseEventArgs e) => ShowHudBriefly();
@@ -678,9 +687,103 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
     }
 
+    private IReadOnlyList<Button> VisiblePlayerButtons() =>
+        new Button[]
+        {
+            PersistentBackButton,
+            PersistentFullscreenButton,
+            PreviousButton,
+            RewindButton,
+            PlayPauseButton,
+            Forward10Button,
+            NextButton,
+            AudioButton,
+            SubtitleButton,
+            QualityButton,
+            AspectButton,
+            FavoriteButton,
+            FullscreenButton,
+            CloseButton
+        }
+        .Where(button => button.Visibility == Visibility.Visible && button.IsEnabled)
+        .ToList();
+
+    private bool MovePlayerFocus(Key key)
+    {
+        var buttons = VisiblePlayerButtons();
+        if (buttons.Count == 0) return false;
+
+        if (Keyboard.FocusedElement is not Button current || !buttons.Contains(current))
+        {
+            PlayPauseButton.Focus();
+            return true;
+        }
+
+        if (!TryButtonCenter(current, out var from)) return false;
+        Button? best = null;
+        var bestScore = double.MaxValue;
+
+        foreach (var candidate in buttons)
+        {
+            if (ReferenceEquals(candidate, current) || !TryButtonCenter(candidate, out var to)) continue;
+
+            double primary;
+            double cross;
+            switch (key)
+            {
+                case Key.Left:
+                    primary = from.X - to.X;
+                    cross = Math.Abs(from.Y - to.Y);
+                    break;
+                case Key.Right:
+                    primary = to.X - from.X;
+                    cross = Math.Abs(from.Y - to.Y);
+                    break;
+                case Key.Up:
+                    primary = from.Y - to.Y;
+                    cross = Math.Abs(from.X - to.X);
+                    break;
+                case Key.Down:
+                    primary = to.Y - from.Y;
+                    cross = Math.Abs(from.X - to.X);
+                    break;
+                default:
+                    return false;
+            }
+
+            if (primary <= 3) continue;
+            var score = primary + cross * 2.15;
+            if (cross > 260) score += cross;
+            if (score >= bestScore) continue;
+
+            bestScore = score;
+            best = candidate;
+        }
+
+        if (best is null) return false;
+        best.Focus();
+        best.BringIntoView();
+        return true;
+    }
+
+    private bool TryButtonCenter(FrameworkElement element, out Point point)
+    {
+        point = default;
+        if (!element.IsVisible || element.ActualWidth <= 0 || element.ActualHeight <= 0) return false;
+        try
+        {
+            var transform = element.TransformToAncestor(PlayerRoot);
+            point = transform.Transform(new Point(element.ActualWidth / 2, element.ActualHeight / 2));
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private async void Overlay_KeyDown(object sender, KeyEventArgs e)
     {
-        var hudVisible = Hud.Visibility == Visibility.Visible;
         var digit = DigitFromKey(e.Key);
         if (digit is not null && _playlist.Count > 0 && _urlResolver is not null)
         {
@@ -689,83 +792,71 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             return;
         }
 
-        var focused = Keyboard.FocusedElement as DependencyObject;
-        var focusInsideHud = focused is not null && IsDescendantOf(focused, Hud);
-
-        if (!hudVisible && e.Key is not Key.Escape and not Key.F)
+        if (e.Key is Key.Escape or Key.Back or Key.BrowserBack)
         {
-            ShowHudBriefly();
-            PlayPauseButton.Focus();
+            await _closeHandler(this);
             e.Handled = true;
             return;
         }
 
-        if (focusInsideHud && e.Key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Tab)
+        if (e.Key == Key.F)
         {
-            // Let WPF directional navigation move between visible player controls.
+            SetFullscreenState(!_fullscreen);
+            ShowHudBriefly();
+            e.Handled = true;
             return;
         }
 
-        switch (e.Key)
+        var hudVisible = Hud.Visibility == Visibility.Visible;
+        var focusedButton = Keyboard.FocusedElement as Button;
+        var focusOnVisiblePlayerButton = focusedButton is not null &&
+                                         focusedButton.Visibility == Visibility.Visible &&
+                                         (IsDescendantOf(focusedButton, Hud) ||
+                                          IsDescendantOf(focusedButton, PersistentTopControls));
+
+        if (e.Key is Key.Enter or Key.Return or Key.Space)
         {
-            case Key.Space:
-                PlayPause_Click(sender, e);
+            if (focusOnVisiblePlayerButton && focusedButton is not null)
+            {
+                focusedButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            }
+            else if (!hudVisible)
+            {
+                ShowHudBriefly();
+                PlayPauseButton.Focus();
+            }
+            else
+            {
+                PlayPauseButton.Focus();
+            }
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down)
+        {
+            if (!hudVisible)
+            {
+                ShowHudBriefly();
+                PlayPauseButton.Focus();
                 e.Handled = true;
-                break;
-            case Key.Enter:
-                if (!focusInsideHud)
-                {
-                    ShowHudBriefly();
-                    PlayPauseButton.Focus();
-                    e.Handled = true;
-                }
-                break;
-            case Key.Left:
-                if (_playlist.Count > 0 && _urlResolver is not null) ChangeChannel(-1); else Seek(-10_000);
+                return;
+            }
+
+            if (MovePlayerFocus(e.Key))
+            {
                 ShowHudBriefly();
                 e.Handled = true;
-                break;
-            case Key.Right:
-                if (_playlist.Count > 0 && _urlResolver is not null) ChangeChannel(1); else Seek(10_000);
-                ShowHudBriefly();
-                e.Handled = true;
-                break;
-            case Key.Up:
-                if (_playlist.Count > 0) ChangeChannel(-1);
-                else { ShowHudBriefly(); PlayPauseButton.Focus(); }
-                e.Handled = true;
-                break;
-            case Key.Down:
-                if (_playlist.Count > 0) ChangeChannel(1);
-                else { ShowHudBriefly(); PlayPauseButton.Focus(); }
-                e.Handled = true;
-                break;
-            case Key.F:
-                Fullscreen_Click(sender, e);
-                e.Handled = true;
-                break;
-            case Key.M:
-                _player.Mute = !_player.Mute;
-                EpgText.Text = _player.Mute ? "الصوت مكتوم" : "الصوت مفعّل";
-                ShowHudBriefly();
-                e.Handled = true;
-                break;
-            case Key.Escape:
-            case Key.Back:
-            case Key.BrowserBack:
-                if (_fullscreen)
-                {
-                    _fullscreen = false;
-                    FullscreenButton.Content = "⛶ الشاشة";
-                    _fullscreenHandler(false);
-                    ShowHudBriefly();
-                }
-                else
-                {
-                    await _closeHandler(this);
-                }
-                e.Handled = true;
-                break;
+                return;
+            }
+        }
+
+        if (e.Key == Key.M)
+        {
+            _player.Mute = !_player.Mute;
+            EpgText.Text = _player.Mute ? "الصوت مكتوم" : "الصوت مفعّل";
+            ShowHudBriefly();
+            e.Handled = true;
         }
     }
 
