@@ -61,6 +61,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, int> _browserPageByKind = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _browserCategoryByKind = new(StringComparer.OrdinalIgnoreCase);
     private string? _lastFocusedContentKey;
+    private TextBox? _activeBrowserSearch;
 
     public MainWindow()
     {
@@ -507,6 +508,7 @@ public partial class MainWindow : Window
 
     private void RefreshCurrentPage()
     {
+        _activeBrowserSearch = null;
         _detailsOpen = false;
         _pageBackAction = null;
         HeaderBackButton.Visibility = _currentPage == "home"
@@ -971,6 +973,12 @@ public partial class MainWindow : Window
         var categoryFoot = Txt(allCategories.Count.ToString("N0") + " فئة  •  ↑↓ للتنقل", 11, Muted, marginTop: 8);
         Grid.SetRow(categoryFoot, 2);
         categoryColumn.Children.Add(categoryFoot);
+        categorySearch.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Down or Key.Enter)) return;
+            FocusSelectedListItem(cats);
+            e.Handled = true;
+        };
 
         var right = new Grid();
         right.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -988,6 +996,7 @@ public partial class MainWindow : Window
             ToolTip = "ابحث في جميع " + label + " مهما كانت الفئة — من أول حرف"
         };
         searchHeader.Children.Add(contentSearch);
+        _activeBrowserSearch = contentSearch;
         searchHeader.Children.Add(Txt("البحث يشمل كل فئات " + label + " • Enter من الفئات ينقلك للبوسترات", 11, Muted, marginTop: 5));
         right.Children.Add(searchHeader);
 
@@ -1005,6 +1014,14 @@ public partial class MainWindow : Window
             ItemHeight = cellHeight
         };
         scroll.Content = wrap;
+        contentSearch.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Down or Key.Enter)) return;
+            if (wrap.Children.OfType<Button>().FirstOrDefault() is not Button first) return;
+            first.Focus();
+            first.BringIntoView();
+            e.Handled = true;
+        };
         Grid.SetRow(scroll, 1);
         right.Children.Add(scroll);
 
@@ -1224,6 +1241,12 @@ public partial class MainWindow : Window
         var categoryCounter = Txt(allCategories.Count.ToString("N0") + " فئة  •  ↑↓ للتنقل", 10, Muted, marginTop: 8);
         Grid.SetRow(categoryCounter, 2);
         categoriesColumn.Children.Add(categoryCounter);
+        categorySearch.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Down or Key.Enter)) return;
+            FocusSelectedListItem(cats);
+            e.Handled = true;
+        };
 
         var channelsColumn = new Grid();
         channelsColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -1235,6 +1258,7 @@ public partial class MainWindow : Window
         channelHeading.Children.Add(Txt("القنوات", 15, Accent, FontWeights.Bold, 0, 0, 0, 6));
         var channelSearch = new TextBox { Height = 38, FontSize = 12, ToolTip = "ابحث في جميع القنوات بغض النظر عن الفئة" };
         channelHeading.Children.Add(channelSearch);
+        _activeBrowserSearch = channelSearch;
         channelsColumn.Children.Add(channelHeading);
 
         var channels = new ListBox
@@ -1246,6 +1270,12 @@ public partial class MainWindow : Window
         VirtualizingPanel.SetVirtualizationMode(channels, VirtualizationMode.Recycling);
         ScrollViewer.SetCanContentScroll(channels, true);
         ScrollViewer.SetVerticalScrollBarVisibility(channels, ScrollBarVisibility.Auto);
+        channelSearch.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Down or Key.Enter)) return;
+            FocusSelectedListItem(channels);
+            e.Handled = true;
+        };
         Grid.SetRow(channels, 1);
         channelsColumn.Children.Add(channels);
         var channelCounter = Txt("", 10, Muted, marginTop: 8);
@@ -2331,6 +2361,7 @@ public partial class MainWindow : Window
             ToolTip = "بحث فوري في جميع أقسام مكتبتك، بالاسم العربي أو الإنجليزي"
         };
         heading.Children.Add(search);
+        _activeBrowserSearch = search;
         var recent = _store.ActiveLibrary().RecentSearches.Take(6).ToList();
         if (recent.Count > 0)
             heading.Children.Add(Txt("آخر عمليات البحث: " + string.Join("  •  ", recent), 11, Muted, marginTop: 7));
@@ -2348,6 +2379,14 @@ public partial class MainWindow : Window
         };
         var wrap = new WrapPanel { Orientation = Orientation.Horizontal, ItemWidth = 182, ItemHeight = 294 };
         scroll.Content = wrap;
+        search.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Down or Key.Enter)) return;
+            if (wrap.Children.OfType<Button>().FirstOrDefault() is not Button first) return;
+            first.Focus();
+            first.BringIntoView();
+            e.Handled = true;
+        };
         Grid.SetRow(scroll, 2);
         root.Children.Add(scroll);
 
@@ -3782,6 +3821,14 @@ public partial class MainWindow : Window
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (OverlayHost.Visibility == Visibility.Visible) return;
+        if (e.Key == Key.F && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) &&
+            _activeBrowserSearch is { IsVisible: true } finder)
+        {
+            finder.Focus();
+            finder.SelectAll();
+            e.Handled = true;
+            return;
+        }
         if (e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down)) return;
 
         var focused = Keyboard.FocusedElement as DependencyObject;
