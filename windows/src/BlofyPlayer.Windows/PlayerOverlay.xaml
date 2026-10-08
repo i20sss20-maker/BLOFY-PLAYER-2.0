@@ -7,7 +7,8 @@
         Focusable="True"
         FlowDirection="RightToLeft"
         PreviewKeyDown="Overlay_KeyDown"
-        MouseMove="Overlay_MouseMove">
+        MouseMove="Overlay_MouseMove"
+        MouseDoubleClick="Overlay_MouseDoubleClick">
     <UserControl.Resources>
         <Style x:Key="PlayerRoundButton" TargetType="Button">
             <Setter Property="Width" Value="52"/>
@@ -92,6 +93,31 @@
                        HorizontalAlignment="Stretch"
                        VerticalAlignment="Stretch"/>
 
+        <Border x:Name="LoadingBadge"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="#D908060D"
+                BorderBrush="#665E437A"
+                BorderThickness="1"
+                CornerRadius="16"
+                Padding="22,14"
+                IsHitTestVisible="False">
+            <StackPanel Orientation="Horizontal">
+                <ProgressBar Width="44" Height="5"
+                             IsIndeterminate="True"
+                             Foreground="#D0B2FF"
+                             Background="#241536"
+                             VerticalAlignment="Center"
+                             Margin="0,0,12,0"/>
+                <TextBlock x:Name="LoadingText"
+                           Text="جاري التشغيل…"
+                           Foreground="#F3F4F6"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
         <Border x:Name="TopShade" VerticalAlignment="Top" Height="96"
                 Background="#8A08060D" IsHitTestVisible="False">
             <Grid Margin="28,16">
@@ -105,7 +131,10 @@
             </Grid>
         </Border>
 
-        <Border x:Name="Hud" VerticalAlignment="Bottom"
+        <Border x:Name="Hud"
+                KeyboardNavigation.DirectionalNavigation="Cycle"
+                KeyboardNavigation.TabNavigation="Cycle"
+                VerticalAlignment="Bottom"
                 HorizontalAlignment="Stretch"
                 Margin="24" Padding="18,14"
                 CornerRadius="18" Background="#E308060D"
