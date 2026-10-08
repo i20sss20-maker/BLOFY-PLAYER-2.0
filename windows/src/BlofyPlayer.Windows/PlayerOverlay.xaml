@@ -137,6 +137,18 @@
                     Style="{StaticResource PlayerPillButton}"
                     MinWidth="92"
                     Height="42"/>
+            <Button x:Name="ChannelListButton"
+                    Content="☰ القنوات"
+                    Click="ChannelList_Click"
+                    Style="{StaticResource PlayerPillButton}"
+                    MinWidth="104"
+                    Height="42"/>
+            <Button x:Name="LastChannelButton"
+                    Content="↩ آخر قناة"
+                    Click="LastChannel_Click"
+                    Style="{StaticResource PlayerPillButton}"
+                    MinWidth="104"
+                    Height="42"/>
         </StackPanel>
 
         <Border x:Name="TopShade" VerticalAlignment="Top" Height="96"
@@ -149,6 +161,51 @@
                                Foreground="#F3F4F6" Margin="0,4,0,0"
                                MaxWidth="900" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border x:Name="ChannelPanel"
+                Width="390"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Stretch"
+                Margin="20,92,20,24"
+                Background="#F20B0810"
+                BorderBrush="#665E437A"
+                BorderThickness="1"
+                CornerRadius="18"
+                Padding="14"
+                Panel.ZIndex="25"
+                Visibility="Collapsed">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel Margin="4,0,4,12">
+                    <TextBlock Text="BLOFY LIVE"
+                               Foreground="#D0B2FF"
+                               FontSize="10"
+                               FontWeight="Bold"/>
+                    <TextBlock Text="القنوات"
+                               Foreground="White"
+                               FontSize="24"
+                               FontWeight="Bold"
+                               Margin="0,3,0,0"/>
+                </StackPanel>
+                <ListBox x:Name="ChannelList"
+                         Grid.Row="1"
+                         Style="{StaticResource TvListBox}"
+                         DisplayMemberPath="Display"
+                         PreviewKeyDown="ChannelList_KeyDown"
+                         SelectionChanged="ChannelList_SelectionChanged"/>
+                <TextBlock x:Name="ChannelListHint"
+                           Grid.Row="2"
+                           Text="↑↓ تنقل   •   OK تشغيل   •   رجوع إغلاق"
+                           Foreground="#AFA4BC"
+                           FontSize="10.5"
+                           HorizontalAlignment="Center"
+                           Margin="0,10,0,0"/>
             </Grid>
         </Border>
 
@@ -190,8 +247,10 @@
                     <StackPanel>
                         <TextBlock x:Name="TitleText" FontSize="18" FontWeight="Bold"
                                    MaxWidth="900" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock x:Name="EpgText" FontSize="10.5" Foreground="#C9BCD9"
-                                   Margin="0,3,0,0"/>
+                        <TextBlock x:Name="EpgText" FontSize="12.5" Foreground="#DDD3E9"
+                                   Margin="0,5,0,0"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="1050"/>
                     </StackPanel>
                     <TextBlock x:Name="TimeText" HorizontalAlignment="Left"
                                VerticalAlignment="Bottom"
