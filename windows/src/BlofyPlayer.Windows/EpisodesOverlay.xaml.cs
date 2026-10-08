@@ -15,6 +15,8 @@ public partial class EpisodesOverlay : UserControl, IDisposable
     private readonly Action _close;
     private readonly CancellationTokenSource _cts = new();
     private List<EpisodeItem> _episodes = [];
+    private int _selectedSeason;
+    private string? _lastEpisodeKey;
 
     public EpisodesOverlay(
         StreamItem series,
@@ -36,8 +38,10 @@ public partial class EpisodesOverlay : UserControl, IDisposable
 
         Loaded += async (_, _) =>
         {
-            Focus();
-            if (_episodes.Count == 0) await LoadEpisodesAsync();
+            if (_episodes.Count == 0)
+                await LoadEpisodesAsync();
+            else
+                RestoreFocus();
         };
     }
 
@@ -73,7 +77,9 @@ public partial class EpisodesOverlay : UserControl, IDisposable
             SeasonList.ItemsSource = seasons.Select(x => new SeasonRow(x)).ToList();
             SeasonList.DisplayMemberPath = "Label";
             SeasonList.SelectedIndex = 0;
+            _selectedSeason = seasons[0];
             StatusText.Text = seasons.Count + " مواسم • " + _episodes.Count + " حلقات";
+            Dispatcher.BeginInvoke(() => SeasonList.Focus());
         }
         catch (OperationCanceledException)
         {
@@ -93,23 +99,57 @@ public partial class EpisodesOverlay : UserControl, IDisposable
     private void SeasonList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (SeasonList.SelectedItem is not SeasonRow row) return;
-        RenderSeason(row.Season);
+        _selectedSeason = row.Season;
+        RenderSeason(row.Season, focusEpisode: false);
     }
 
-    private void RenderSeason(int season)
+    private void RenderSeason(int season, bool focusEpisode)
     {
         EpisodePanel.Children.Clear();
         foreach (var episode in _episodes.Where(x => x.Season == season).OrderBy(x => x.Episode))
             EpisodePanel.Children.Add(EpisodeCard(episode));
 
-        if (EpisodePanel.Children.Count > 0 && EpisodePanel.Children[0] is Button first)
-            Dispatcher.BeginInvoke(() => first.Focus());
+        if (!focusEpisode) return;
+        Dispatcher.BeginInvoke(RestoreEpisodeFocus);
+    }
+
+    private void RestoreEpisodeFocus()
+    {
+        Button? target = null;
+        if (!string.IsNullOrWhiteSpace(_lastEpisodeKey))
+        {
+            target = EpisodePanel.Children
+                .OfType<Button>()
+                .FirstOrDefault(button => button.Tag is string key &&
+                                          key.Equals(_lastEpisodeKey, StringComparison.Ordinal));
+        }
+
+        target ??= EpisodePanel.Children.OfType<Button>().FirstOrDefault();
+        target?.Focus();
+    }
+
+    private void RestoreFocus()
+    {
+        if (_selectedSeason > 0)
+        {
+            var row = SeasonList.Items.Cast<SeasonRow>().FirstOrDefault(x => x.Season == _selectedSeason);
+            if (row is not null) SeasonList.SelectedItem = row;
+        }
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!string.IsNullOrWhiteSpace(_lastEpisodeKey))
+                RestoreEpisodeFocus();
+            else
+                SeasonList.Focus();
+        });
     }
 
     private UIElement EpisodeCard(EpisodeItem episode)
     {
         var button = new Button
         {
+            Tag = episode.Key,
             Background = Brushes.Transparent,
             BorderBrush = Brushes.Transparent,
             BorderThickness = new Thickness(0),
@@ -209,7 +249,12 @@ public partial class EpisodesOverlay : UserControl, IDisposable
         button.LostKeyboardFocus += (_, _) => Focus(false);
         button.MouseEnter += (_, _) => Focus(true);
         button.MouseLeave += (_, _) => Focus(false);
-        button.Click += async (_, _) => await _play(episode, _episodes);
+        button.Click += async (_, _) =>
+        {
+            _lastEpisodeKey = episode.Key;
+            _selectedSeason = episode.Season;
+            await _play(episode, _episodes);
+        };
         return button;
     }
 
@@ -220,9 +265,27 @@ public partial class EpisodesOverlay : UserControl, IDisposable
 
     private void Overlay_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Escape) return;
-        _close();
-        e.Handled = true;
+        if (e.Key == Key.Escape)
+        {
+            _close();
+            e.Handled = true;
+            return;
+        }
+
+        if (Keyboard.FocusedElement == SeasonList &&
+            e.Key is Key.Enter or Key.Right)
+        {
+            RenderSeason(_selectedSeason, focusEpisode: true);
+            e.Handled = true;
+            return;
+        }
+
+        if (Keyboard.FocusedElement is Button &&
+            e.Key == Key.Left)
+        {
+            SeasonList.Focus();
+            e.Handled = true;
+        }
     }
 
     private static TextBlock EmptyText(string value) => new()
