@@ -16,11 +16,15 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private readonly VlcMediaPlayer _player;
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _hudTimer;
+    private readonly DispatcherTimer _channelNumberTimer;
     private readonly IReadOnlyList<StreamItem> _playlist;
     private readonly Func<StreamItem, string>? _urlResolver;
     private readonly Func<StreamItem, IReadOnlyList<string>>? _recoveryResolver;
     private readonly Func<long, long, Task>? _savePosition;
     private readonly Func<StreamItem, Task>? _onPlaylistItemChanged;
+    private readonly Func<Task>? _previousAction;
+    private readonly Func<Task>? _nextAction;
+    private readonly Func<Task<bool>>? _toggleFavorite;
     private readonly Func<Task>? _onEnded;
     private readonly AppSettings _settings;
     private readonly Func<PlayerOverlay, Task> _closeHandler;
@@ -38,6 +42,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private int _automaticRecoveries;
     private long _pendingRecoveryResume;
     private bool _disposed;
+    private bool _favorite;
+    private string _channelDigits = "";
 
     public PlayerOverlay(
         string title,
@@ -52,6 +58,10 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         IReadOnlyList<string>? recoveryUrls = null,
         Func<long, long, Task>? savePosition = null,
         Func<StreamItem, Task>? onPlaylistItemChanged = null,
+        Func<Task>? previousAction = null,
+        Func<Task>? nextAction = null,
+        bool? favorite = null,
+        Func<Task<bool>>? toggleFavorite = null,
         AppSettings? settings = null,
         Func<Task>? onEnded = null)
     {
@@ -86,6 +96,10 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _recoveryUrls = NormalizeRecoveryUrls(url, recoveryUrls);
         _savePosition = savePosition;
         _onPlaylistItemChanged = onPlaylistItemChanged;
+        _previousAction = previousAction;
+        _nextAction = nextAction;
+        _toggleFavorite = toggleFavorite;
+        _favorite = favorite == true;
         _resumePosition = resumePositionMs;
 
         TitleText.Text = title;
@@ -108,10 +122,15 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _hudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
         _hudTimer.Tick += (_, _) => HideHud();
 
+        _channelNumberTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+        _channelNumberTimer.Tick += (_, _) => CommitChannelNumber();
+
         Loaded += (_, _) =>
         {
             if (_disposed) return;
             _timer.Start();
+            ConfigureControlVisibility();
+            UpdateFavoriteButton();
             PlayCurrentCandidate();
             ShowHudBriefly();
             PlayPauseButton.Focus();
@@ -124,6 +143,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _disposed = true;
         _timer.Stop();
         _hudTimer.Stop();
+        _channelNumberTimer.Stop();
         try
         {
             if (_savePosition is not null)
@@ -250,8 +270,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         TimeText.Text = Format(time) + " / " + Format(length);
         PlayPauseButton.Content = _player.IsPlaying ? "⏸" : "▶";
         SeekSlider.Visibility = length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        PreviousButton.ToolTip = _playlist.Count > 0 ? "القناة السابقة" : "رجوع 10 ثوان";
-        NextButton.ToolTip = _playlist.Count > 0 ? "القناة التالية" : "تقديم 10 ثوان";
+        PreviousButton.ToolTip = _playlist.Count > 0 ? "القناة السابقة" : "الحلقة السابقة";
+        NextButton.ToolTip = _playlist.Count > 0 ? "القناة التالية" : "الحلقة التالية";
 
         if (!_videoOutputSeen && HasVideoOutput()) _videoOutputSeen = true;
 
@@ -293,6 +313,22 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         return t.TotalHours >= 1 ? t.ToString(@"hh\:mm\:ss") : t.ToString(@"mm\:ss");
     }
 
+    private void ConfigureControlVisibility()
+    {
+        var live = _playlist.Count > 0 && _urlResolver is not null;
+        PreviousButton.Visibility = live || _previousAction is not null ? Visibility.Visible : Visibility.Collapsed;
+        NextButton.Visibility = live || _nextAction is not null ? Visibility.Visible : Visibility.Collapsed;
+        RewindButton.Visibility = live ? Visibility.Collapsed : Visibility.Visible;
+        Forward10Button.Visibility = live ? Visibility.Collapsed : Visibility.Visible;
+        SeekSlider.Visibility = live ? Visibility.Collapsed : Visibility.Visible;
+        FavoriteButton.Visibility = _toggleFavorite is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void UpdateFavoriteButton()
+    {
+        FavoriteButton.Content = _favorite ? "★ المفضلة" : "☆ المفضلة";
+    }
+
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
         if (_player.IsPlaying) _player.Pause();
@@ -300,18 +336,65 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         ShowHudBriefly();
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e)
+    private async void Previous_Click(object sender, RoutedEventArgs e)
     {
-        if (_playlist.Count > 0 && _urlResolver is not null) ChangeChannel(-1);
-        else Seek(-10_000);
+        if (_playlist.Count > 0 && _urlResolver is not null)
+        {
+            ChangeChannel(-1);
+        }
+        else if (_previousAction is not null)
+        {
+            await SwitchAdjacentAsync(_previousAction);
+        }
         ShowHudBriefly();
     }
 
-    private void Forward_Click(object sender, RoutedEventArgs e)
+    private async void Next_Click(object sender, RoutedEventArgs e)
     {
-        if (_playlist.Count > 0 && _urlResolver is not null) ChangeChannel(1);
-        else Seek(10_000);
+        if (_playlist.Count > 0 && _urlResolver is not null)
+        {
+            ChangeChannel(1);
+        }
+        else if (_nextAction is not null)
+        {
+            await SwitchAdjacentAsync(_nextAction);
+        }
         ShowHudBriefly();
+    }
+
+    private void Rewind_Click(object sender, RoutedEventArgs e)
+    {
+        Seek(-10_000);
+        ShowHudBriefly();
+    }
+
+    private void Forward10_Click(object sender, RoutedEventArgs e)
+    {
+        Seek(10_000);
+        ShowHudBriefly();
+    }
+
+    private async Task SwitchAdjacentAsync(Func<Task> action)
+    {
+        try
+        {
+            await _closeHandler(this);
+            await action();
+        }
+        catch { }
+    }
+
+    private async void Favorite_Click(object sender, RoutedEventArgs e)
+    {
+        if (_toggleFavorite is null) return;
+        try
+        {
+            _favorite = await _toggleFavorite();
+            UpdateFavoriteButton();
+            EpgText.Text = _favorite ? "تمت الإضافة إلى المفضلة" : "تمت الإزالة من المفضلة";
+            ShowHudBriefly();
+        }
+        catch { }
     }
 
     private void Seek(long delta)
@@ -519,9 +602,70 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
     }
 
+    private static int? DigitFromKey(Key key) => key switch
+    {
+        Key.D0 or Key.NumPad0 => 0,
+        Key.D1 or Key.NumPad1 => 1,
+        Key.D2 or Key.NumPad2 => 2,
+        Key.D3 or Key.NumPad3 => 3,
+        Key.D4 or Key.NumPad4 => 4,
+        Key.D5 or Key.NumPad5 => 5,
+        Key.D6 or Key.NumPad6 => 6,
+        Key.D7 or Key.NumPad7 => 7,
+        Key.D8 or Key.NumPad8 => 8,
+        Key.D9 or Key.NumPad9 => 9,
+        _ => null
+    };
+
+    private void HandleChannelDigit(int digit)
+    {
+        if (_playlist.Count == 0 || _urlResolver is null) return;
+        if (_channelDigits.Length >= 4) _channelDigits = "";
+        _channelDigits += digit.ToString();
+        ChannelNumberText.Text = _channelDigits;
+        ChannelNumberBadge.Visibility = Visibility.Visible;
+        _channelNumberTimer.Stop();
+        _channelNumberTimer.Start();
+        ShowHudBriefly();
+    }
+
+    private void CommitChannelNumber()
+    {
+        _channelNumberTimer.Stop();
+        ChannelNumberBadge.Visibility = Visibility.Collapsed;
+        if (!int.TryParse(_channelDigits, out var number))
+        {
+            _channelDigits = "";
+            return;
+        }
+        _channelDigits = "";
+        if (number < 1 || number > _playlist.Count) return;
+        var targetIndex = number - 1;
+        var delta = targetIndex - _index;
+        if (delta != 0) ChangeChannel(delta);
+        else
+        {
+            ChannelNumberText.Text = number.ToString();
+            ChannelNumberBadge.Visibility = Visibility.Visible;
+            _ = Dispatcher.BeginInvoke(async () =>
+            {
+                await Task.Delay(700);
+                ChannelNumberBadge.Visibility = Visibility.Collapsed;
+            });
+        }
+    }
+
     private async void Overlay_KeyDown(object sender, KeyEventArgs e)
     {
         var hudVisible = Hud.Visibility == Visibility.Visible;
+        var digit = DigitFromKey(e.Key);
+        if (digit is not null && _playlist.Count > 0 && _urlResolver is not null)
+        {
+            HandleChannelDigit(digit.Value);
+            e.Handled = true;
+            return;
+        }
+
         var focused = Keyboard.FocusedElement as DependencyObject;
         var focusInsideHud = focused is not null && IsDescendantOf(focused, Hud);
 
