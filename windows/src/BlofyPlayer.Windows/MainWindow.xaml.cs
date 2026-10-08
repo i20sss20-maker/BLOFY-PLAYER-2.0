@@ -177,6 +177,7 @@ public partial class MainWindow : Window
         Func<long, long, Task>? savePosition = null,
         Func<StreamItem, Task>? onPlaylistItemChanged = null,
         Func<StreamItem, bool>? favoriteResolver = null,
+        Func<StreamItem, CancellationToken, Task<string>>? epgResolver = null,
         Func<Task>? previousAction = null,
         Func<Task>? nextAction = null,
         bool? favorite = null,
@@ -197,6 +198,7 @@ public partial class MainWindow : Window
             savePosition: savePosition,
             onPlaylistItemChanged: onPlaylistItemChanged,
             favoriteResolver: favoriteResolver,
+            epgResolver: epgResolver,
             previousAction: previousAction,
             nextAction: nextAction,
             favorite: favorite,
@@ -1825,6 +1827,7 @@ public partial class MainWindow : Window
                 }
                 : null,
             favoriteResolver: item.Kind == "live" ? changed => changed.Favorite : null,
+            epgResolver: item.Kind == "live" ? GetLiveNowNextTextAsync : null,
             favorite: item.Favorite,
             toggleFavorite: async () =>
             {
