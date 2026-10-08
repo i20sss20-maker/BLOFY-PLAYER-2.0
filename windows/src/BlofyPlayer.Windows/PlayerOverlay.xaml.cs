@@ -501,9 +501,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         var menu = new ContextMenu { PlacementTarget = sender as Button, Placement = PlacementMode.Top };
         foreach (var option in new[]
         {
-            ("ملاءمة تلقائية", "fit"),
-            ("16:9", "16:9"),
-            ("4:3", "4:3"),
+            ("ملاءمة", "fit"),
+            ("تكبير", "zoom"),
             ("ملء الشاشة", "fill")
         })
         {
@@ -529,15 +528,27 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     {
         try
         {
-            var property = _player.GetType().GetProperty("AspectRatio");
-            string? value = mode switch
+            var type = _player.GetType();
+            var aspect = type.GetProperty("AspectRatio");
+            var scale = type.GetProperty("Scale");
+            var crop = type.GetProperty("CropGeometry");
+
+            aspect?.SetValue(_player, null);
+            crop?.SetValue(_player, null);
+            if (scale?.CanWrite == true) scale.SetValue(_player, 0f);
+
+            switch (mode)
             {
-                "16:9" => "16:9",
-                "4:3" => "4:3",
-                "fill" => Math.Max(1, (int)ActualWidth) + ":" + Math.Max(1, (int)ActualHeight),
-                _ => null
-            };
-            property?.SetValue(_player, value);
+                case "zoom":
+                    if (scale?.CanWrite == true) scale.SetValue(_player, 1.15f);
+                    break;
+                case "fill":
+                    aspect?.SetValue(_player,
+                        Math.Max(1, (int)ActualWidth) + ":" + Math.Max(1, (int)ActualHeight));
+                    break;
+                default:
+                    break;
+            }
         }
         catch { }
     }
