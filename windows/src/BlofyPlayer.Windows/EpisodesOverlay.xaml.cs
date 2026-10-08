@@ -273,18 +273,37 @@ public partial class EpisodesOverlay : UserControl, IDisposable
         }
 
         if (Keyboard.FocusedElement == SeasonList &&
-            e.Key is Key.Enter or Key.Right)
+            e.Key is Key.Enter or Key.Left or Key.Right)
         {
             RenderSeason(_selectedSeason, focusEpisode: true);
             e.Handled = true;
             return;
         }
 
-        if (Keyboard.FocusedElement is Button &&
-            e.Key == Key.Left)
+        if (Keyboard.FocusedElement is Button focused &&
+            focused.Tag is string episodeKey)
         {
-            SeasonList.Focus();
-            e.Handled = true;
+            if (e.Key is Key.Left or Key.Right)
+            {
+                SeasonList.Focus();
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key is Key.Up or Key.Down)
+            {
+                var buttons = EpisodePanel.Children.OfType<Button>().ToList();
+                var index = buttons.FindIndex(button =>
+                    button.Tag is string key && key.Equals(episodeKey, StringComparison.Ordinal));
+                if (index >= 0)
+                {
+                    var next = e.Key == Key.Up ? index - 1 : index + 1;
+                    next = Math.Clamp(next, 0, buttons.Count - 1);
+                    buttons[next].Focus();
+                    buttons[next].BringIntoView();
+                    e.Handled = true;
+                }
+            }
         }
     }
 
