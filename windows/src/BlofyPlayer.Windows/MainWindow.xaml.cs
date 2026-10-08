@@ -1118,13 +1118,9 @@ public partial class MainWindow : Window
                             return;
                         var catchupUrl = _catalog!.Xtream(_activeProvider)
                             .CatchupUrl(_activeProvider, selected, entry.Start, entry.End);
-                        var player = new PlayerWindow(
+                        await ShowPlayerOverlayAsync(
                             selected.Name + " • " + entry.Title,
-                            catchupUrl,
-                            settings: _store.State.Settings)
-                        { Owner = this };
-                        player.ShowDialog();
-                        await Task.CompletedTask;
+                            catchupUrl);
                     }, 0, 0, 0, 6);
                     button.HorizontalContentAlignment = HorizontalAlignment.Right;
                     button.ToolTip = entry.Description;
@@ -1467,13 +1463,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new EpisodesWindow(
+        EpisodesOverlay? overlay = null;
+        overlay = new EpisodesOverlay(
             series,
             _store,
             async ct => await GetEpisodesCachedAsync(series, ct),
-            async (episode, all) => await PlayEpisodeAsync(series, episode, all))
-        { Owner = this };
-        window.ShowDialog();
+            async (episode, all) => await PlayEpisodeAsync(series, episode, all),
+            close: () =>
+            {
+                if (overlay is not null) CloseOverlay(overlay);
+            });
+        PushOverlay(overlay);
+        await Task.CompletedTask;
     }
 
     private async Task PlayItemAsync(StreamItem item)
@@ -1515,7 +1516,7 @@ public partial class MainWindow : Window
         if (item.Kind == "live")
             await _store.AddRecentChannelAsync(item.Key);
 
-        var player = new PlayerWindow(
+        await ShowPlayerOverlayAsync(
             item.Name,
             url,
             resumePositionMs: resume,
@@ -1528,10 +1529,7 @@ public partial class MainWindow : Window
                 await _store.SaveWatchStateAsync(item.Key, pos, len),
             onPlaylistItemChanged: item.Kind == "live"
                 ? async changed => await _store.AddRecentChannelAsync(changed.Key)
-                : null,
-            settings: _store.State.Settings)
-        { Owner = this };
-        player.ShowDialog();
+                : null);
     }
 
     private async Task PlayEpisodeAsync(StreamItem series, EpisodeItem episode, IReadOnlyList<EpisodeItem> episodes)
@@ -1563,15 +1561,13 @@ public partial class MainWindow : Window
             };
         }
 
-        var player = new PlayerWindow(series.Name + " • S" + episode.Season + "E" + episode.Episode,
+        await ShowPlayerOverlayAsync(
+            series.Name + " • S" + episode.Season + "E" + episode.Episode,
             url,
             resumePositionMs: resume,
             recoveryUrls: BuildEpisodeCandidates(episode),
             savePosition: async (pos, len) => await _store.SaveWatchStateAsync(key, pos, len),
-            settings: _store.State.Settings,
-            onEnded: nextAction)
-        { Owner = this };
-        player.ShowDialog();
+            onEnded: nextAction);
     }
 
     private async Task<ProviderDetails?> GetProviderDetailsCachedAsync(StreamItem item)
