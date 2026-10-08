@@ -700,7 +700,7 @@ public partial class MainWindow : Window
         VirtualizingPanel.SetVirtualizationMode(cats, VirtualizationMode.Recycling);
         ScrollViewer.SetCanContentScroll(cats, true);
 
-        cats.Items.Add("الكل");
+        cats.Items.Add(new CategoryItem { RemoteId = "", Kind = kind, Name = "الكل" });
         foreach (var cat in (_catalog?.Snapshot.Categories ?? [])
                      .Where(x => x.Kind == kind && !_store.IsCategoryHidden(kind, x.RemoteId)))
             cats.Items.Add(cat);
@@ -721,14 +721,21 @@ public partial class MainWindow : Window
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
-        var wrap = new WrapPanel { Orientation = Orientation.Horizontal };
+        var wrap = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal,
+            ItemWidth = 182,
+            ItemHeight = 302
+        };
         scroll.Content = wrap;
         right.Children.Add(scroll);
 
         IReadOnlyList<StreamItem> CurrentItems()
         {
             var selected = cats.SelectedItem as CategoryItem;
-            return selected is null ? all : CategoryItems(kind, selected.RemoteId);
+            return selected is null || string.IsNullOrWhiteSpace(selected.RemoteId)
+                ? all
+                : CategoryItems(kind, selected.RemoteId);
         }
 
         void RenderPage()
@@ -803,7 +810,7 @@ public partial class MainWindow : Window
         {
             Style = Application.Current.FindResource("TvListBox") as Style
         };
-        cats.Items.Add("الكل");
+        cats.Items.Add(new CategoryItem { RemoteId = "", Kind = "live", Name = "الكل" });
         foreach (var cat in (_catalog?.Snapshot.Categories ?? [])
                      .Where(c => c.Kind == "live" && !_store.IsCategoryHidden("live", c.RemoteId)))
             cats.Items.Add(cat);
@@ -862,7 +869,7 @@ public partial class MainWindow : Window
         void FillChannels()
         {
             var selectedCat = cats.SelectedItem as CategoryItem;
-            IReadOnlyList<StreamItem> filtered = selectedCat is null
+            IReadOnlyList<StreamItem> filtered = selectedCat is null || string.IsNullOrWhiteSpace(selectedCat.RemoteId)
                 ? all
                 : CategoryItems("live", selectedCat.RemoteId);
 
@@ -1505,8 +1512,14 @@ public partial class MainWindow : Window
             ContentHost.Content = EmptyState("المفضلة فارغة", "اضغط ☆ في تفاصيل الفيلم أو المسلسل لإضافته.");
             return;
         }
-        var wrap = new WrapPanel();
-        foreach (var item in items) wrap.Children.Add(ContentCard(item, item.Kind == "live" ? 260 : 160));
+        var wrap = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal,
+            ItemWidth = 182,
+            ItemHeight = 302
+        };
+        foreach (var item in items.Take(60))
+            wrap.Children.Add(ContentCard(item, 160));
         ContentHost.Content = new ScrollViewer { Content = wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
