@@ -909,11 +909,7 @@ public partial class MainWindow : Window
 
     private void ShowBrowser(string kind)
     {
-        if (kind == "live")
-        {
-            ShowLiveBrowser();
-            return;
-        }
+        if (kind == "live") { ShowLiveBrowser(); return; }
 
         DisposePreview();
         var label = kind == "movie" ? "الأفلام" : "المسلسلات";
@@ -927,154 +923,252 @@ public partial class MainWindow : Window
             return;
         }
 
-        var compactCatalog = _store.State.Settings.CatalogDensity == "compact";
-        var posterWidth = compactCatalog ? 138 : 160;
-        var pageSize = compactCatalog ? 42 : 30;
-        var posterCellHeight = (int)Math.Round((posterWidth - 18) * 1.5) + 84;
-        var page = _browserPageByKind.TryGetValue(kind, out var rememberedPage)
-            ? Math.Max(0, rememberedPage)
-            : 0;
+        var compact = _store.State.Settings.CatalogDensity == "compact";
+        var posterWidth = compact ? 138 : 160;
+        var batchSize = compact ? 42 : 30;
+        var cellHeight = (int)Math.Round((posterWidth - 18) * 1.5) + 84;
 
+        // Use two height-constrained columns. A vertical StackPanel directly in
+        // a Grid gives its children infinite height, leaving the poster scroller
+        // unable to scroll on smaller windows.
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(255) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var categoryColumn = new Grid();
+        categoryColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        categoryColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        categoryColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetColumn(categoryColumn, 0);
+        grid.Children.Add(categoryColumn);
+
+        var categoryHeader = Vertical(0, 0, 0, 8);
+        categoryHeader.Children.Add(Txt("الفئات", 17, Accent, FontWeights.Bold, 4, 0, 0, 5));
+        var categorySearch = new TextBox { Height = 38, FontSize = 13, ToolTip = "ابحث عن اسم الفئة" };
+        categoryHeader.Children.Add(categorySearch);
+        categoryColumn.Children.Add(categoryHeader);
 
         var cats = new ListBox
         {
-            Style = Application.Current.FindResource("TvListBox") as Style
+            Style = Application.Current.FindResource("TvListBox") as Style,
+            DisplayMemberPath = "Name",
+            VerticalAlignment = VerticalAlignment.Stretch
         };
         VirtualizingPanel.SetIsVirtualizing(cats, true);
         VirtualizingPanel.SetVirtualizationMode(cats, VirtualizationMode.Recycling);
         ScrollViewer.SetCanContentScroll(cats, true);
+        ScrollViewer.SetVerticalScrollBarVisibility(cats, ScrollBarVisibility.Auto);
+        Grid.SetRow(cats, 1);
+        categoryColumn.Children.Add(cats);
 
-        cats.Items.Add(new CategoryItem { RemoteId = "", Kind = kind, Name = "الكل" });
-        foreach (var cat in (_catalog?.Snapshot.Categories ?? [])
-                     .Where(x => x.Kind == kind && !_store.IsCategoryHidden(kind, x.RemoteId)))
-            cats.Items.Add(cat);
-        cats.DisplayMemberPath = "Name";
-        var rememberedCategory = _browserCategoryByKind.TryGetValue(kind, out var categoryId)
-            ? categoryId
-            : "";
-        var rememberedIndex = 0;
-        for (var i = 0; i < cats.Items.Count; i++)
+        var allCategories = new List<CategoryItem>
         {
-            if (cats.Items[i] is CategoryItem row &&
-                string.Equals(row.RemoteId, rememberedCategory, StringComparison.Ordinal))
-            {
-                rememberedIndex = i;
-                break;
-            }
-        }
-        cats.SelectedIndex = rememberedIndex;
-        Grid.SetColumn(cats, 0);
-        grid.Children.Add(cats);
+            new() { RemoteId = "", Kind = kind, Name = "الكل" }
+        };
+        allCategories.AddRange((_catalog?.Snapshot.Categories ?? [])
+            .Where(x => x.Kind == kind && !_store.IsCategoryHidden(kind, x.RemoteId)));
+        var categoryFoot = Txt(allCategories.Count.ToString("N0") + " فئة  •  ↑↓ للتنقل", 11, Muted, marginTop: 8);
+        Grid.SetRow(categoryFoot, 2);
+        categoryColumn.Children.Add(categoryFoot);
 
-        var right = Vertical();
+        var right = new Grid();
+        right.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        right.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        right.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetColumn(right, 2);
         grid.Children.Add(right);
 
-        var pageBar = Horizontal(0, 0, 0, 10);
-        right.Children.Add(pageBar);
+        var searchHeader = Vertical(0, 0, 0, 10);
+        var title = Txt("استعرض " + label, 15, Text, FontWeights.SemiBold, 0, 0, 0, 7);
+        searchHeader.Children.Add(title);
+        var contentSearch = new TextBox
+        {
+            Height = 43, FontSize = 15,
+            ToolTip = "ابحث في جميع " + label + " مهما كانت الفئة — من أول حرف"
+        };
+        searchHeader.Children.Add(contentSearch);
+        searchHeader.Children.Add(Txt("البحث يشمل كل فئات " + label + " • Enter من الفئات ينقلك للبوسترات", 11, Muted, marginTop: 5));
+        right.Children.Add(searchHeader);
 
         var scroll = new ScrollViewer
         {
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            PanningMode = PanningMode.VerticalOnly,
+            Focusable = false
         };
         var wrap = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
             ItemWidth = posterWidth + 22,
-            ItemHeight = posterCellHeight
+            ItemHeight = cellHeight
         };
         scroll.Content = wrap;
+        Grid.SetRow(scroll, 1);
         right.Children.Add(scroll);
 
-        IReadOnlyList<StreamItem> CurrentItems()
+        var footer = Horizontal(0, 10, 0, 0);
+        var countLabel = Txt("", 12, Muted, marginLeft: 12, marginTop: 8);
+        var more = Action("↓ عرض المزيد", false, (_, _) => AppendMore(true), 0, 0, 12, 0);
+        more.MinWidth = 135;
+        footer.Children.Add(more);
+        footer.Children.Add(countLabel);
+        Grid.SetRow(footer, 2);
+        right.Children.Add(footer);
+
+        IReadOnlyList<StreamItem> filtered = all;
+        int visible = 0;
+        bool appending = false;
+        CancellationTokenSource? filterRequest = null;
+        string? remembered = _browserCategoryByKind.TryGetValue(kind, out var chosen) ? chosen : "";
+
+        IReadOnlyList<StreamItem> CurrentCategory()
         {
-            var selected = cats.SelectedItem as CategoryItem;
-            return selected is null || string.IsNullOrWhiteSpace(selected.RemoteId)
-                ? all
-                : CategoryItems(kind, selected.RemoteId);
+            if (cats.SelectedItem is not CategoryItem category ||
+                string.IsNullOrEmpty(category.RemoteId)) return all;
+            return CategoryItems(kind, category.RemoteId);
         }
 
-        void RenderPage()
+        void AppendMore(bool focusNew = false)
         {
-            var items = CurrentItems();
-            var pages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)pageSize));
-            page = Math.Clamp(page, 0, pages - 1);
-            _browserPageByKind[kind] = page;
+            if (appending || visible >= filtered.Count) return;
+            appending = true;
+            var from = visible;
+            var until = Math.Min(filtered.Count, from + batchSize);
+            for (var i = from; i < until; i++)
+                wrap.Children.Add(ContentCard(filtered[i], posterWidth));
+            visible = until;
+            countLabel.Text = "عرض " + visible.ToString("N0") + " من " +
+                              filtered.Count.ToString("N0") + " " + (kind == "movie" ? "فيلم" : "مسلسل");
+            more.Visibility = visible < filtered.Count ? Visibility.Visible : Visibility.Collapsed;
+            appending = false;
+            if (focusNew && until > from)
+                _ = Dispatcher.BeginInvoke(() =>
+                {
+                    if (!ReferenceEquals(ContentHost.Content, grid)) return;
+                    if (wrap.Children[from] is Button first) { first.Focus(); first.BringIntoView(); }
+                });
+        }
 
-            pageBar.Children.Clear();
-            var previous = Action("‹ السابق", false, (_, _) =>
-            {
-                if (page <= 0) return;
-                page--;
-                RenderPage();
-                scroll.ScrollToTop();
-            });
-            previous.IsEnabled = page > 0;
-
-            var next = Action("التالي ›", false, (_, _) =>
-            {
-                if (page >= pages - 1) return;
-                page++;
-                RenderPage();
-                scroll.ScrollToTop();
-            }, 8);
-            next.IsEnabled = page < pages - 1;
-
-            pageBar.Children.Add(previous);
-            pageBar.Children.Add(next);
-            pageBar.Children.Add(Txt(
-                "صفحة " + (page + 1).ToString("N0") + " من " + pages.ToString("N0") +
-                " • " + items.Count.ToString("N0") + " عنصر",
-                11, Muted, marginLeft: 14));
-
+        void RenderInitial(IReadOnlyList<StreamItem> items)
+        {
+            filtered = items;
+            visible = 0;
             wrap.Children.Clear();
-            var startIndex = page * pageSize;
-            var endIndex = Math.Min(items.Count, startIndex + pageSize);
-            for (var i = startIndex; i < endIndex; i++)
-                wrap.Children.Add(ContentCard(items[i], posterWidth));
-
-            if (!string.IsNullOrWhiteSpace(_lastFocusedContentKey))
-            {
-                var target = wrap.Children.OfType<Button>()
-                    .FirstOrDefault(button => button.Tag is string key &&
-                                              key.Equals(_lastFocusedContentKey, StringComparison.Ordinal));
-                if (target is not null)
-                    _ = Dispatcher.BeginInvoke(() => target.Focus());
-            }
+            scroll.ScrollToTop();
+            more.Visibility = Visibility.Collapsed;
+            countLabel.Text = items.Count == 0 ? "لا توجد نتائج في هذا القسم" : "جاري عرض المحتوى…";
+            AppendMore();
         }
+
+        // Mouse, touch, wheel and keyboard scroll all bring in the next batch
+        // without forcing the customer through hundreds of "التالي" pages.
+        scroll.ScrollChanged += (_, e) =>
+        {
+            if (e.ExtentHeightChange == 0 && e.VerticalChange == 0) return;
+            if (visible < filtered.Count &&
+                scroll.ScrollableHeight - scroll.VerticalOffset < Math.Max(420, scroll.ViewportHeight * .6))
+                AppendMore();
+        };
+        scroll.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.PageDown or Key.End)) return;
+            if (visible >= filtered.Count) return;
+            AppendMore();
+        };
 
         cats.SelectionChanged += (_, _) =>
         {
             if (cats.SelectedItem is CategoryItem selected)
                 _browserCategoryByKind[kind] = selected.RemoteId;
-            page = 0;
-            _browserPageByKind[kind] = 0;
-            RenderPage();
+            // A typed title search spans the entire kind, not merely the current
+            // category; switching categories while not searching is instantaneous.
+            if (contentSearch.Text.Trim().Length == 0)
+                RenderInitial(CurrentCategory());
+        };
+
+        categorySearch.TextChanged += (_, _) =>
+        {
+            var q = NormalizeSearch(categorySearch.Text);
+            var rows = q.Length == 0
+                ? allCategories
+                : allCategories.Where(c => c.RemoteId.Length == 0 ||
+                    NormalizeSearch(c.Name).Contains(q, StringComparison.Ordinal)).ToList();
+            cats.ItemsSource = rows;
+            var preferred = rows.FirstOrDefault(c => c.RemoteId == _browserCategoryByKind.GetValueOrDefault(kind))
+                            ?? rows.FirstOrDefault();
+            cats.SelectedItem = preferred;
+            if (preferred is not null) cats.ScrollIntoView(preferred);
         };
 
         cats.PreviewKeyDown += (_, e) =>
         {
-            if (e.Key is not Key.Enter and not Key.Space) return;
-            var target = !string.IsNullOrWhiteSpace(_lastFocusedContentKey)
-                ? wrap.Children.OfType<Button>()
-                    .FirstOrDefault(button => button.Tag is string key &&
-                                              key.Equals(_lastFocusedContentKey, StringComparison.Ordinal))
-                : null;
-            target ??= wrap.Children.OfType<Button>().FirstOrDefault();
-            if (target is null) return;
-            target.Focus();
-            target.BringIntoView();
+            if (e.Key is Key.PageDown or Key.PageUp or Key.Home or Key.End)
+                return; // WPF virtualized list handles these and ScrollIntoView.
+            if (e.Key is not (Key.Enter or Key.Space)) return;
+            var first = wrap.Children.OfType<Button>().FirstOrDefault();
+            if (first is null) return;
+            first.Focus();
+            first.BringIntoView();
             e.Handled = true;
         };
 
-        RenderPage();
+        contentSearch.TextChanged += (_, _) =>
+        {
+            filterRequest?.Cancel();
+            var request = new CancellationTokenSource();
+            filterRequest = request;
+            _ = SearchCatalogAsync(request);
+        };
+
+        async Task SearchCatalogAsync(CancellationTokenSource request)
+        {
+            var token = request.Token;
+            try
+            {
+                await Task.Delay(170, token);
+                var term = NormalizeSearch(contentSearch.Text);
+                if (term.Length == 0)
+                {
+                    if (!token.IsCancellationRequested && ReferenceEquals(ContentHost.Content, grid))
+                        RenderInitial(CurrentCategory());
+                    return;
+                }
+                countLabel.Text = "جاري البحث في كل " + label + "…";
+                // Do large provider title scans off the UI thread.
+                var matches = await Task.Run(() =>
+                {
+                    var found = new List<StreamItem>();
+                    foreach (var item in all)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        if (NormalizeSearch(item.Name).Contains(term, StringComparison.Ordinal))
+                            found.Add(item);
+                    }
+                    return found;
+                }, token);
+                if (!token.IsCancellationRequested && ReferenceEquals(filterRequest, request) &&
+                    ReferenceEquals(ContentHost.Content, grid))
+                    RenderInitial(matches);
+            }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                if (ReferenceEquals(filterRequest, request)) filterRequest = null;
+                request.Dispose();
+            }
+        }
+
+        cats.ItemsSource = allCategories;
+        cats.SelectedItem = allCategories.FirstOrDefault(c => c.RemoteId == remembered) ?? allCategories[0];
+        RenderInitial(CurrentCategory());
         ContentHost.Content = grid;
-        _ = Dispatcher.BeginInvoke(() => FocusSelectedListItem(cats));
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (!ReferenceEquals(ContentHost.Content, grid)) return;
+            FocusSelectedListItem(cats);
+        });
     }
 
     private void ShowLiveBrowser()
