@@ -119,6 +119,7 @@ public sealed class AppSettings
     public bool ResumePrompt { get; set; } = true;
     public string AutoNext { get; set; } = "ask";
     public string CatalogDensity { get; set; } = "comfortable";
+    public string Motion { get; set; } = "smooth";
     public string LastPage { get; set; } = "home";
     public string UserAgent { get; set; } = "BLOFY PLAYER/2.0 (Windows)";
 }
