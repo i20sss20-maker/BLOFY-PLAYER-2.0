@@ -89,6 +89,7 @@ public partial class MainWindow : Window
     private async Task InitializeAsync()
     {
         await _store.LoadAsync();
+        _currentPage = NormalizeLastPage(_store.State.Settings.LastPage);
         ApplyTheme();
         UpdateProfileLabel();
         _catalog = new CatalogCoordinator(_store);
@@ -131,7 +132,7 @@ public partial class MainWindow : Window
                 _viewIndex = await Task.Run(() => CatalogViewIndex.Build(cached));
                 PageSubtitle.Text = _activeProvider.Name + " • " + cached.Streams.Count.ToString("N0") + " عنصر";
                 ProgressText.Text = "جاهز";
-                ShowHome();
+                RefreshCurrentPage();
             }
 
             var cacheAge = cached is null
@@ -140,7 +141,7 @@ public partial class MainWindow : Window
             if (_activationState?.CanUse() == true && (cached is null || cacheAge > TimeSpan.FromHours(6)))
                 _ = SyncCatalogAsync(false);
         }
-        else ShowHome();
+        else RefreshCurrentPage();
     }
 
     private async Task CheckActivationAsync()
@@ -250,12 +251,19 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Nav_Click(object sender, RoutedEventArgs e)
+    private async void Nav_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string page }) return;
         _currentPage = page;
+        _store.State.Settings.LastPage = NormalizeLastPage(page);
+        try { await _store.SaveAsync(); } catch { }
         RefreshCurrentPage();
     }
+
+    private static string NormalizeLastPage(string? page) =>
+        page is "home" or "live" or "movie" or "series" or "collections" or "favorites" or "search" or "settings"
+            ? page
+            : "home";
 
     private void RefreshCurrentPage()
     {
