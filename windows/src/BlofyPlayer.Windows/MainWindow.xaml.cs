@@ -68,6 +68,12 @@ public partial class MainWindow : Window
         _heroTimer.Tick += (_, _) =>
         {
             if (_currentPage != "home" || _heroCandidates.Count < 2 || _heroHost is null) return;
+
+            if (Keyboard.FocusedElement is Button focusedButton &&
+                focusedButton.Tag is string focusedKey &&
+                focusedKey.Contains(':'))
+                return;
+
             _heroIndex = (_heroIndex + 1) % _heroCandidates.Count;
             _heroHost.Content = BuildAndroidHero(_heroCandidates[_heroIndex]);
         };
@@ -1424,10 +1430,14 @@ public partial class MainWindow : Window
                 if (idx >= 0) _heroIndex = idx;
                 _heroHost.Content = BuildAndroidHero(item);
                 _heroTimer.Stop();
-                _heroTimer.Start();
             }
         };
-        button.LostKeyboardFocus += (_, _) => Focus(false);
+        button.LostKeyboardFocus += (_, _) =>
+        {
+            Focus(false);
+            if (_currentPage == "home" && _heroCandidates.Count > 1)
+                _heroTimer.Start();
+        };
         button.MouseEnter += (_, _) => Focus(true);
         button.MouseLeave += (_, _) => Focus(false);
         button.Click += async (_, _) =>
