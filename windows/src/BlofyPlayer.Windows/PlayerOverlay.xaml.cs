@@ -17,7 +17,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _hudTimer;
     private readonly DispatcherTimer _channelNumberTimer;
+    private readonly DispatcherTimer _zapTimer;
     private CancellationTokenSource? _epgCts;
+    private int _pendingZapDelta;
     private readonly IReadOnlyList<StreamItem> _playlist;
     private readonly Func<StreamItem, string>? _urlResolver;
     private readonly Func<StreamItem, IReadOnlyList<string>>? _recoveryResolver;
@@ -133,6 +135,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _channelNumberTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
         _channelNumberTimer.Tick += (_, _) => CommitChannelNumber();
 
+        _zapTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+        _zapTimer.Tick += (_, _) => ApplyPendingZap();
+
         Loaded += (_, _) =>
         {
             if (_disposed) return;
@@ -159,6 +164,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _timer.Stop();
         _hudTimer.Stop();
         _channelNumberTimer.Stop();
+        _zapTimer.Stop();
         _epgCts?.Cancel();
         _epgCts?.Dispose();
         try
@@ -731,6 +737,22 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private void ChangeChannel(int delta)
     {
         if (_playlist.Count == 0 || _urlResolver is null || delta == 0) return;
+        _pendingZapDelta += delta;
+        _zapTimer.Stop();
+        _zapTimer.Start();
+
+        var previewIndex = (_index + _pendingZapDelta) % _playlist.Count;
+        if (previewIndex < 0) previewIndex += _playlist.Count;
+        ShowChannelPosition(previewIndex + 1, 650);
+    }
+
+    private void ApplyPendingZap()
+    {
+        _zapTimer.Stop();
+        var delta = _pendingZapDelta;
+        _pendingZapDelta = 0;
+        if (delta == 0 || _playlist.Count == 0) return;
+
         var target = (_index + delta) % _playlist.Count;
         if (target < 0) target += _playlist.Count;
         SwitchChannelToIndex(target);
@@ -739,6 +761,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private async void SwitchChannelToIndex(int targetIndex)
     {
         if (_playlist.Count == 0 || _urlResolver is null) return;
+        _zapTimer.Stop();
+        _pendingZapDelta = 0;
         targetIndex = Math.Clamp(targetIndex, 0, _playlist.Count - 1);
         if (targetIndex == _index)
         {
