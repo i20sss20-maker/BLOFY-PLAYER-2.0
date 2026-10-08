@@ -1358,10 +1358,22 @@ public sealed class CatalogCoordinator : IDisposable
         return cached;
     }
 
+    private readonly SemaphoreSlim _syncLock = new(1, 1);
+
     public async Task<CatalogSnapshot> SyncAsync(
         ProviderAccount provider,
         IProgress<(int Percent, string Text)>? progress = null,
         CancellationToken ct = default)
+    {
+        await _syncLock.WaitAsync(ct).ConfigureAwait(false);
+        try { return await SyncCoreAsync(provider, progress, ct).ConfigureAwait(false); }
+        finally { _syncLock.Release(); }
+    }
+
+    private async Task<CatalogSnapshot> SyncCoreAsync(
+        ProviderAccount provider,
+        IProgress<(int Percent, string Text)>? progress,
+        CancellationToken ct)
     {
         progress?.Report((2, "بدء الاتصال بالسيرفر…"));
 
