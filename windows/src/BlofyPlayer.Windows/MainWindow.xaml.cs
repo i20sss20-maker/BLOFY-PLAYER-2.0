@@ -965,8 +965,24 @@ public partial class MainWindow : Window
             RenderPage();
         };
 
+        cats.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not Key.Enter and not Key.Space) return;
+            var target = !string.IsNullOrWhiteSpace(_lastFocusedContentKey)
+                ? wrap.Children.OfType<Button>()
+                    .FirstOrDefault(button => button.Tag is string key &&
+                                              key.Equals(_lastFocusedContentKey, StringComparison.Ordinal))
+                : null;
+            target ??= wrap.Children.OfType<Button>().FirstOrDefault();
+            if (target is null) return;
+            target.Focus();
+            target.BringIntoView();
+            e.Handled = true;
+        };
+
         RenderPage();
         ContentHost.Content = grid;
+        _ = Dispatcher.BeginInvoke(() => FocusSelectedListItem(cats));
     }
 
     private void ShowLiveBrowser()
@@ -1061,6 +1077,22 @@ public partial class MainWindow : Window
         }
 
         cats.SelectionChanged += (_, _) => FillChannels();
+
+        cats.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not Key.Enter and not Key.Space) return;
+            FocusSelectedListItem(channels);
+            e.Handled = true;
+        };
+
+        channels.PreviewKeyDown += async (_, e) =>
+        {
+            if (e.Key is not Key.Enter and not Key.Space) return;
+            if (channels.SelectedItem is not StreamItem selected) return;
+            e.Handled = true;
+            await PlayItemAsync(selected);
+        };
+
         channels.MouseDoubleClick += async (_, _) =>
         {
             if (channels.SelectedItem is StreamItem selected) await PlayItemAsync(selected);
@@ -1174,6 +1206,7 @@ public partial class MainWindow : Window
 
         FillChannels();
         ContentHost.Content = grid;
+        _ = Dispatcher.BeginInvoke(() => FocusSelectedListItem(cats));
     }
 
     private Button ContentCard(StreamItem item, int width, bool landscape = false)
@@ -3079,6 +3112,216 @@ public partial class MainWindow : Window
     private static SolidColorBrush Brush(string value) =>
         new((Color)ColorConverter.ConvertFromString(value));
 
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (OverlayHost.Visibility == Visibility.Visible) return;
+        if (e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down)) return;
+
+        var focused = Keyboard.FocusedElement as DependencyObject;
+        if (IsKeyboardEditingControl(focused)) return;
+
+        var source = FindNavigationSource(focused);
+        if (source is ListBoxItem or ListBox)
+        {
+            if (e.Key is Key.Up or Key.Down)
+                return; // Native list navigation is better for long virtualized lists.
+        }
+
+        if (source is null)
+        {
+            FocusCurrentNavigationButton();
+            e.Handled = true;
+            return;
+        }
+
+        if (MoveRemoteFocus(source, e.Key))
+            e.Handled = true;
+    }
+
+    private void FocusCurrentNavigationButton()
+    {
+        var target = NavigationPanel.Children
+            .OfType<Button>()
+            .FirstOrDefault(button => string.Equals(button.Tag as string, _currentPage, StringComparison.Ordinal))
+            ?? NavigationPanel.Children.OfType<Button>().FirstOrDefault();
+        target?.Focus();
+    }
+
+    private static void FocusSelectedListItem(ListBox list)
+    {
+        if (list.Items.Count == 0) return;
+        if (list.SelectedIndex < 0) list.SelectedIndex = 0;
+        list.UpdateLayout();
+        if (list.ItemContainerGenerator.ContainerFromIndex(list.SelectedIndex) is ListBoxItem item)
+        {
+            item.IsSelected = true;
+            item.Focus();
+            item.BringIntoView();
+        }
+        else
+        {
+            list.Focus();
+        }
+    }
+
+    private bool MoveRemoteFocus(FrameworkElement current, Key key)
+    {
+        var candidates = EnumerateNavigationTargets(RootGrid)
+            .Where(target => !ReferenceEquals(target, current))
+            .ToList();
+
+        if (current is ListBoxItem && key is Key.Left or Key.Right)
+        {
+            var posterButtons = candidates
+                .OfType<Button>()
+                .Where(button => button.Tag is string tag && tag.Contains(':'))
+                .Cast<FrameworkElement>()
+                .ToList();
+            if (posterButtons.Count > 0 && TryFindDirectionalTarget(current, posterButtons, key, out var posterTarget))
+                return FocusNavigationTarget(posterTarget);
+        }
+
+        return TryFindDirectionalTarget(current, candidates, key, out var target)
+            && FocusNavigationTarget(target);
+    }
+
+    private bool FocusNavigationTarget(FrameworkElement target)
+    {
+        if (target is ListBoxItem item)
+            item.IsSelected = true;
+
+        var focused = target.Focus();
+        if (!focused) return false;
+
+        target.BringIntoView(new Rect(0, 0, Math.Max(1, target.ActualWidth), Math.Max(1, target.ActualHeight)));
+        return true;
+    }
+
+    private bool TryFindDirectionalTarget(
+        FrameworkElement current,
+        IReadOnlyList<FrameworkElement> candidates,
+        Key key,
+        out FrameworkElement target)
+    {
+        target = null!;
+        if (!TryCenter(current, out var from)) return false;
+
+        var bestScore = double.MaxValue;
+        foreach (var candidate in candidates)
+        {
+            if (!TryCenter(candidate, out var to)) continue;
+
+            double primary;
+            double cross;
+            switch (key)
+            {
+                case Key.Left:
+                    primary = from.X - to.X;
+                    cross = Math.Abs(from.Y - to.Y);
+                    break;
+                case Key.Right:
+                    primary = to.X - from.X;
+                    cross = Math.Abs(from.Y - to.Y);
+                    break;
+                case Key.Up:
+                    primary = from.Y - to.Y;
+                    cross = Math.Abs(from.X - to.X);
+                    break;
+                case Key.Down:
+                    primary = to.Y - from.Y;
+                    cross = Math.Abs(from.X - to.X);
+                    break;
+                default:
+                    return false;
+            }
+
+            if (primary <= 3) continue;
+
+            // Prefer the control that is visually aligned in the requested direction.
+            var score = primary + (cross * 2.35);
+            if (cross > 260) score += cross * 1.5;
+            if (score >= bestScore) continue;
+
+            bestScore = score;
+            target = candidate;
+        }
+
+        return bestScore < double.MaxValue;
+    }
+
+    private bool TryCenter(FrameworkElement element, out Point point)
+    {
+        point = default;
+        if (!element.IsVisible || !element.IsEnabled || !element.Focusable ||
+            element.ActualWidth <= 0 || element.ActualHeight <= 0)
+            return false;
+
+        try
+        {
+            var transform = element.TransformToAncestor(RootGrid);
+            point = transform.Transform(new Point(element.ActualWidth / 2d, element.ActualHeight / 2d));
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static IEnumerable<FrameworkElement> EnumerateNavigationTargets(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is FrameworkElement element &&
+                element.IsVisible &&
+                element.IsEnabled &&
+                element.Focusable &&
+                element is Button or ListBoxItem or CheckBox)
+            {
+                yield return element;
+            }
+
+            foreach (var descendant in EnumerateNavigationTargets(child))
+                yield return descendant;
+        }
+    }
+
+    private static FrameworkElement? FindNavigationSource(DependencyObject? current)
+    {
+        var node = current;
+        while (node is not null)
+        {
+            if (node is Button or ListBoxItem or ListBox or CheckBox)
+                return node as FrameworkElement;
+            if (node is TextBox or PasswordBox or ComboBox or Slider)
+                return null;
+
+            node = node is Visual || node is System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(node)
+                : LogicalTreeHelper.GetParent(node);
+        }
+        return null;
+    }
+
+    private static bool IsKeyboardEditingControl(DependencyObject? current)
+    {
+        var node = current;
+        while (node is not null)
+        {
+            if (node is TextBox or PasswordBox or ComboBox or Slider)
+                return true;
+            if (node is Button or ListBoxItem or ListBox or CheckBox)
+                return false;
+
+            node = node is Visual || node is System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(node)
+                : LogicalTreeHelper.GetParent(node);
+        }
+        return false;
+    }
+
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
         if (OverlayHost.Visibility == Visibility.Visible)
@@ -3089,12 +3332,12 @@ public partial class MainWindow : Window
             _ = SyncCatalogAsync(true);
             e.Handled = true;
         }
-        else if (e.Key == Key.Escape && _detailsOpen)
+        else if (e.Key is Key.Escape or Key.Back or Key.BrowserBack && _detailsOpen)
         {
             RefreshCurrentPage();
             e.Handled = true;
         }
-        else if (e.Key == Key.Escape && _currentPage != "home")
+        else if (e.Key is Key.Escape or Key.Back or Key.BrowserBack && _currentPage != "home")
         {
             _currentPage = "home";
             _store.State.Settings.LastPage = "home";
