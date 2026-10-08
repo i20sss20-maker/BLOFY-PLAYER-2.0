@@ -1053,11 +1053,11 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             else if (!hudVisible)
             {
                 ShowHudBriefly();
-                PlayPauseButton.Focus();
+                Focus();
             }
             else
             {
-                PlayPauseButton.Focus();
+                HideHud();
             }
             e.Handled = true;
             return;
@@ -1068,7 +1068,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             if (!hudVisible)
             {
                 if (e.Key == Key.Up && _playlist.Count > 0)
+                {
                     OpenChannelPanel();
+                }
                 else
                 {
                     ShowHudBriefly();
