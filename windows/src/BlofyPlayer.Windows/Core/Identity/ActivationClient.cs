@@ -54,7 +54,9 @@ public sealed class ActivationClient : IDisposable
         var payload = new ActivationCheckRequest(
             identity.DeviceId,
             identity.ActivationCode,
-            "windows-0.4.4"
+            "windows-0.4.4",
+            "windows",
+            identity.TrialScope
         );
 
         using var response = await _http.PostAsJsonAsync(
