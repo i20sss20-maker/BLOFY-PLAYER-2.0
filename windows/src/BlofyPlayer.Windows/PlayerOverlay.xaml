@@ -90,8 +90,16 @@
 
     <Grid x:Name="PlayerRoot" Background="Black">
         <vlc:VideoView x:Name="VideoView"
+                       Background="Black"
                        HorizontalAlignment="Stretch"
                        VerticalAlignment="Stretch"/>
+
+        <!-- Keep a failed native video surface from leaving a white desktop pane. -->
+        <Border x:Name="PlaybackFailureShade"
+                Background="#F008060D"
+                IsHitTestVisible="False"
+                Visibility="Collapsed"
+                Panel.ZIndex="5"/>
 
         <Border x:Name="LoadingBadge"
                 HorizontalAlignment="Center"
