@@ -1331,8 +1331,9 @@ public partial class MainWindow : Window
             Panel.SetZIndex(button, active ? 10 : 0);
             if (button.RenderTransform is ScaleTransform scale)
             {
-                scale.ScaleX = active ? 1.012 : 1;
-                scale.ScaleY = active ? 1.012 : 1;
+                var factor = active && _store.State.Settings.Motion != "reduced" ? 1.012 : 1;
+                scale.ScaleX = factor;
+                scale.ScaleY = factor;
             }
         }
 
@@ -2475,6 +2476,69 @@ public partial class MainWindow : Window
         ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
+    private void ShowSubscriptionSummary()
+    {
+        var status = _activationState?.Status?.ToLowerInvariant() switch
+        {
+            "active" => "مفعّل",
+            "trial" => "تجربة",
+            "expired" => "منتهي",
+            "blocked" => "موقوف",
+            _ => "غير معروف"
+        };
+
+        var expiry = "بدون تاريخ محدد";
+        if (_activationState?.ExpiresAt is long value)
+        {
+            var date = value > 10_000_000_000
+                ? DateTimeOffset.FromUnixTimeMilliseconds(value)
+                : DateTimeOffset.FromUnixTimeSeconds(value);
+            expiry = date.ToLocalTime().ToString("yyyy/MM/dd HH:mm");
+        }
+
+        MessageBox.Show(this,
+            "الحالة: " + status + Environment.NewLine +
+            "الصلاحية حتى: " + expiry + Environment.NewLine +
+            "رقم الجهاز: " + _identity.DeviceId,
+            "باقتي • BLOFY PLAYER");
+    }
+
+    private void ShowConnectionSummary()
+    {
+        var provider = _activeProvider;
+        var providerText = provider is null
+            ? "لا يوجد سيرفر نشط"
+            : provider.Name + " • " + (provider.ProviderType == "m3u" ? "M3U" : "Xtream");
+
+        var snapshot = _catalog?.Snapshot;
+        var live = snapshot?.Streams.Count(x => x.Kind == "live") ?? 0;
+        var movies = snapshot?.Streams.Count(x => x.Kind == "movie") ?? 0;
+        var series = snapshot?.Streams.Count(x => x.Kind == "series") ?? 0;
+
+        MessageBox.Show(this,
+            "السيرفر: " + providerText + Environment.NewLine +
+            "القنوات: " + live.ToString("N0") + Environment.NewLine +
+            "الأفلام: " + movies.ToString("N0") + Environment.NewLine +
+            "المسلسلات: " + series.ToString("N0"),
+            "حالة الاشتراك • BLOFY PLAYER");
+    }
+
+    private async Task RestoreDefaultSettingsAsync()
+    {
+        if (!UiDialogs.Confirm(this, "استعادة الإعدادات", "إرجاع إعدادات التشغيل والواجهة للوضع الافتراضي؟")) return;
+
+        var lastPage = _store.State.Settings.LastPage;
+        var language = _store.State.Settings.Language;
+        _store.State.Settings = new AppSettings
+        {
+            LastPage = lastPage,
+            Language = language
+        };
+        await _store.SaveAsync();
+        ApplyTheme();
+        ShowSettings();
+    }
+
     private void ShowSettings()
     {
         DisposePreview();
@@ -2496,6 +2560,7 @@ public partial class MainWindow : Window
         var audioOutput = ChoiceControl([("تلقائي", "auto"), ("Stereo", "stereo")], _store.State.Settings.AudioOutput);
         var autoNext = ChoiceControl([("اسأل", "ask"), ("تلقائي", "on"), ("إيقاف", "off")], _store.State.Settings.AutoNext);
         var density = ChoiceControl([("مريح", "comfortable"), ("مضغوط", "compact")], _store.State.Settings.CatalogDensity);
+        var motion = ChoiceControl([("ناعم", "smooth"), ("مخفض", "reduced")], _store.State.Settings.Motion);
 
         var autoplay = new CheckBox
         {
@@ -2512,7 +2577,10 @@ public partial class MainWindow : Window
 
         root.Children.Add(SettingsSection("عام",
             SettingTile("لغة التطبيق", "لغة واجهة BLOFY PLAYER", language.Control),
+            SettingTile("حركة الواجهة", "حركة الفوكس والانتقال بين العناصر", motion.Control),
             SettingActionTile("ترتيب وإخفاء أقسام الرئيسية", "رتّب صفوف Home وأخفِ ما لا تحتاجه", (_, _) => ShowHomePersonalization()),
+            SettingActionTile("باقتي", "مدة التفعيل وحالة الجهاز الحالية", (_, _) => ShowSubscriptionSummary()),
+            SettingActionTile("حالة الاشتراك", "صلاحية المحتوى والسيرفر الحالي", (_, _) => ShowConnectionSummary()),
             SettingActionTile("بيانات الجهاز والباركود", "عرض رقم الجهاز ورمز التفعيل والباركود", (_, _) => ShowActivation()),
             SettingActionTile("الملفات الشخصية", "الرئيسي، الأطفال والضيف وPIN", (_, _) =>
             {
@@ -2560,7 +2628,8 @@ public partial class MainWindow : Window
         root.Children.Add(SettingsSection("التحديث وحول التطبيق",
             SettingActionTile("فحص تحديث Windows", "البحث عن إصدار BLOFY PLAYER جديد", async (_, _) => await CheckWindowsUpdateAsync()),
             SettingActionTile("تشخيص BLOFY", "الجهاز والمكتبة وتقرير الدعم", (_, _) => ShowDiagnostics()),
-            SettingActionTile("تنظيف التخزين المؤقت", "يحذف الكاش فقط ولا يحذف بياناتك", (_, _) => CleanStorage())));
+            SettingActionTile("تنظيف التخزين المؤقت", "يحذف الكاش فقط ولا يحذف بياناتك", (_, _) => CleanStorage()),
+            SettingActionTile("استعادة الإعدادات الافتراضية", "إرجاع خيارات التشغيل والواجهة للوضع الافتراضي", async (_, _) => await RestoreDefaultSettingsAsync())));
 
         var save = Action("حفظ التغييرات", true, async (_, _) =>
         {
@@ -2573,6 +2642,7 @@ public partial class MainWindow : Window
             _store.State.Settings.AudioOutput = audioOutput.Value();
             _store.State.Settings.AutoNext = autoNext.Value();
             _store.State.Settings.CatalogDensity = density.Value();
+            _store.State.Settings.Motion = motion.Value();
             _store.State.Settings.AutoplayLive = autoplay.IsChecked == true;
             _store.State.Settings.ResumePrompt = resume.IsChecked == true;
             await _store.SaveAsync();
@@ -2679,8 +2749,9 @@ public partial class MainWindow : Window
             card.BorderThickness = active ? new Thickness(2) : new Thickness(1);
             if (button.RenderTransform is ScaleTransform scale)
             {
-                scale.ScaleX = active ? 1.018 : 1;
-                scale.ScaleY = active ? 1.018 : 1;
+                var factor = active && _store.State.Settings.Motion != "reduced" ? 1.018 : 1;
+                scale.ScaleX = factor;
+                scale.ScaleY = factor;
             }
         }
 
