@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _heroTimer = new() { Interval = TimeSpan.FromSeconds(8) };
     private List<StreamItem> _heroCandidates = [];
     private int _heroIndex;
+    private ContentControl? _heroHost;
 
     public MainWindow()
     {
@@ -49,9 +50,9 @@ public partial class MainWindow : Window
         _clockTimer.Tick += (_, _) => UpdateHeaderClock();
         _heroTimer.Tick += (_, _) =>
         {
-            if (_currentPage != "home" || _heroCandidates.Count < 2) return;
+            if (_currentPage != "home" || _heroCandidates.Count < 2 || _heroHost is null) return;
             _heroIndex = (_heroIndex + 1) % _heroCandidates.Count;
-            ShowHome();
+            _heroHost.Content = BuildAndroidHero(_heroCandidates[_heroIndex]);
         };
         Loaded += async (_, _) =>
         {
@@ -259,6 +260,11 @@ public partial class MainWindow : Window
     private void RefreshCurrentPage()
     {
         DisposePreview();
+        if (_currentPage != "home")
+        {
+            _heroTimer.Stop();
+            _heroHost = null;
+        }
         UpdateNavigationState();
         switch (_currentPage)
         {
@@ -306,8 +312,18 @@ public partial class MainWindow : Window
         if (_heroCandidates.Count > 0)
         {
             _heroIndex = Math.Clamp(_heroIndex, 0, _heroCandidates.Count - 1);
-            root.Children.Add(BuildAndroidHero(_heroCandidates[_heroIndex]));
+            _heroHost = new ContentControl
+            {
+                Content = BuildAndroidHero(_heroCandidates[_heroIndex]),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch
+            };
+            root.Children.Add(_heroHost);
             _heroTimer.Start();
+        }
+        else
+        {
+            _heroHost = null;
+            _heroTimer.Stop();
         }
 
         var continueItems = _store.WatchStates
