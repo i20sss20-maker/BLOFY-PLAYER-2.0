@@ -604,7 +604,7 @@ public sealed class XtreamService : IDisposable
         return GetCategoryListAsync(provider, kind, action, ct);
     }
 
-    public Task<List<StreamItem>> GetStreamsAsync(ProviderAccount provider, string kind, CancellationToken ct = default)
+    public Task<List<StreamItem>> GetStreamsAsync(ProviderAccount provider, string kind, CancellationToken ct = default, Action<int>? countProgress = null)
     {
         var action = kind switch
         {
@@ -613,7 +613,7 @@ public sealed class XtreamService : IDisposable
             "series" => "get_series",
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
-        return GetStreamListAsync(provider, kind, action, ct);
+        return GetStreamListAsync(provider, kind, action, ct, countProgress);
     }
 
     public async Task<ProviderDetails> GetDetailsAsync(ProviderAccount provider, StreamItem item, CancellationToken ct = default)
@@ -840,7 +840,7 @@ public sealed class XtreamService : IDisposable
         return result;
     }
 
-    private async Task<List<StreamItem>> GetStreamListAsync(ProviderAccount provider, string kind, string action, CancellationToken ct)
+    private async Task<List<StreamItem>> GetStreamListAsync(ProviderAccount provider, string kind, string action, CancellationToken ct, Action<int>? countProgress = null)
     {
         var result = new List<StreamItem>(kind == "live" ? 20_000 : 50_000);
         await foreach (var row in GetJsonArrayStreamAsync(ApiUrl(provider, action), ct))
@@ -878,7 +878,15 @@ public sealed class XtreamService : IDisposable
                 ArchiveEnabled = First(row, "tv_archive", "archive", "catchup").ToLowerInvariant() is "1" or "true" or "yes",
                 ArchiveDurationDays = Int(row, "tv_archive_duration", "archive_duration")
             });
+            if (result.Count % 2000 == 0)
+            {
+                countProgress?.Invoke(result.Count);
+                // A large provider can produce hundreds of thousands of rows. Do not
+                // monopolize a CPU core and starve Windows input/rendering.
+                await Task.Delay(1, ct).ConfigureAwait(false);
+            }
         }
+        countProgress?.Invoke(result.Count);
         return result;
     }
 
@@ -892,20 +900,33 @@ public sealed class XtreamService : IDisposable
         string url,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-        var status = (int)response.StatusCode;
-        if (!response.IsSuccessStatusCode && status != 884)
-            throw new HttpRequestException("Xtream HTTP " + status);
-
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        await foreach (var row in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(
-                           stream,
-                           StreamJsonOptions,
-                           cancellationToken: ct))
+        // HttpClient.Timeout stops watching after response headers when using
+        // ResponseHeadersRead. A provider that stalls mid-JSON otherwise leaves
+        // Windows stuck on "تحميل المسلسلات" indefinitely.
+        using var inactivity = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        inactivity.CancelAfter(TimeSpan.FromSeconds(90));
+        try
         {
-            if (row.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) continue;
-            yield return row;
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, inactivity.Token);
+            var status = (int)response.StatusCode;
+            if (!response.IsSuccessStatusCode && status != 884)
+                throw new HttpRequestException("Xtream HTTP " + status);
+
+            await using var stream = await response.Content.ReadAsStreamAsync(inactivity.Token);
+            await foreach (var row in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(
+                               stream,
+                               StreamJsonOptions,
+                               cancellationToken: inactivity.Token))
+            {
+                if (row.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) continue;
+                inactivity.CancelAfter(TimeSpan.FromSeconds(90));
+                yield return row;
+            }
+        }
+        catch (OperationCanceledException e) when (!ct.IsCancellationRequested && inactivity.IsCancellationRequested)
+        {
+            throw new TimeoutException("توقف سيرفر القوائم عن إرسال البيانات لمدة 90 ثانية؛ بياناتك السابقة محفوظة.", e);
         }
     }
 
@@ -1353,7 +1374,8 @@ public sealed class CatalogCoordinator : IDisposable
             progress?.Report((70, "تحميل أقسام المسلسلات…"));
             categories.AddRange(await _xtream.GetCategoriesAsync(provider, "series", ct));
             progress?.Report((78, "تحميل المسلسلات…"));
-            streams.AddRange(await _xtream.GetStreamsAsync(provider, "series", ct));
+            streams.AddRange(await _xtream.GetStreamsAsync(provider, "series", ct,
+                count => progress?.Report((78, "تحميل المسلسلات… " + count.ToString("N0") + " مسلسل"))));
 
             snapshot = new CatalogSnapshot
             {
