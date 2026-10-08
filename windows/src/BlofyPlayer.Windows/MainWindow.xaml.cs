@@ -1784,7 +1784,10 @@ public partial class MainWindow : Window
         }
 
         var sameKind = item.Kind == "live"
-            ? (livePlaylistOverride ?? Items("live"))
+            ? (livePlaylistOverride ??
+               (!string.IsNullOrWhiteSpace(item.CategoryId)
+                   ? CategoryItems("live", item.CategoryId)
+                   : Items("live")))
             : Array.Empty<StreamItem>();
         var idx = -1;
         if (item.Kind == "live")
