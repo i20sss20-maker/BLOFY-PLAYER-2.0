@@ -9,7 +9,7 @@
         Foreground="#F3F4F6"
         FlowDirection="RightToLeft"
         KeyDown="Window_KeyDown">
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Grid.Background>
             <RadialGradientBrush Center="0.82,0.12" GradientOrigin="0.82,0.12" RadiusX="0.98" RadiusY="0.98">
                 <GradientStop Color="#241536" Offset="0"/>
@@ -102,6 +102,15 @@
 
                 <ContentControl x:Name="ContentHost" Grid.Row="1" Margin="12,4,12,6"/>
             </Grid>
+        </Grid>
+
+        <Grid x:Name="OverlayHost"
+              Panel.ZIndex="100"
+              Background="#F208060D"
+              Visibility="Collapsed">
+            <ContentControl x:Name="OverlayContent"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"/>
         </Grid>
     </Grid>
 </Window>
