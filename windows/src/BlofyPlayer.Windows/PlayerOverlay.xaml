@@ -118,6 +118,19 @@
             </StackPanel>
         </Border>
 
+        <Button x:Name="RetryPlaybackButton"
+                Content="↻ إعادة المحاولة"
+                Click="RetryPlayback_Click"
+                Style="{StaticResource PlayerPillButton}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="0,100,0,0"
+                MinWidth="170"
+                Height="46"
+                FontSize="15"
+                Panel.ZIndex="40"
+                Visibility="Collapsed"/>
+
         <StackPanel x:Name="PersistentTopControls"
                     Orientation="Horizontal"
                     HorizontalAlignment="Left"
