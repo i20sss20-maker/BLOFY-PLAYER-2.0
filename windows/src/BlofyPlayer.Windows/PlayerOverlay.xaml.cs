@@ -59,7 +59,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _settings = settings ?? new AppSettings();
         _onEnded = onEnded;
 
-        Core.Initialize();
+        LibVLCSharp.Shared.Core.Initialize();
         var options = new List<string>
         {
             "--no-video-title-show",
