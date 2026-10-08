@@ -11,10 +11,10 @@
         MouseDoubleClick="Overlay_MouseDoubleClick">
     <UserControl.Resources>
         <Style x:Key="PlayerRoundButton" TargetType="Button">
-            <Setter Property="Width" Value="52"/>
-            <Setter Property="Height" Value="52"/>
+            <Setter Property="Width" Value="60"/>
+            <Setter Property="Height" Value="60"/>
             <Setter Property="Margin" Value="5,0"/>
-            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontSize" Value="20"/>
             <Setter Property="Foreground" Value="#F3F4F6"/>
             <Setter Property="Background" Value="#CC241536"/>
             <Setter Property="BorderBrush" Value="#665E437A"/>
@@ -26,7 +26,7 @@
                         <Border x:Name="Border" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="26">
+                                CornerRadius="30">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -45,16 +45,16 @@
             </Setter>
         </Style>
         <Style x:Key="PlayerPrimaryButton" TargetType="Button" BasedOn="{StaticResource PlayerRoundButton}">
-            <Setter Property="Width" Value="66"/>
-            <Setter Property="Height" Value="66"/>
-            <Setter Property="FontSize" Value="23"/>
+            <Setter Property="Width" Value="76"/>
+            <Setter Property="Height" Value="76"/>
+            <Setter Property="FontSize" Value="26"/>
             <Setter Property="Background" Value="#D0B2FF"/>
             <Setter Property="Foreground" Value="#08060D"/>
             <Setter Property="BorderBrush" Value="#F6ECFF"/>
         </Style>
         <Style x:Key="PlayerPillButton" TargetType="Button">
-            <Setter Property="Height" Value="38"/>
-            <Setter Property="MinWidth" Value="78"/>
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="MinWidth" Value="94"/>
             <Setter Property="Padding" Value="12,0"/>
             <Setter Property="Margin" Value="4,0"/>
             <Setter Property="Foreground" Value="#E8E0EF"/>
@@ -68,7 +68,7 @@
                         <Border x:Name="Border" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="19">
+                                CornerRadius="22">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
