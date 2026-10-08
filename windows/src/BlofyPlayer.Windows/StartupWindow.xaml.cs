@@ -2,6 +2,7 @@ using BlofyPlayer.Windows.Core;
 using BlofyPlayer.Windows.Core.Identity;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace BlofyPlayer.Windows;
@@ -34,6 +35,8 @@ public partial class StartupWindow : Window
                 await _store.LoadAsync();
                 await RefreshActivationAsync();
                 if (!_loading) _pollTimer.Start();
+                if (!_loading)
+                    (EnterButton.IsEnabled ? EnterButton : OpenPortalButton).Focus();
             }
             catch (Exception ex)
             {
@@ -77,6 +80,7 @@ public partial class StartupWindow : Window
                     ActivationStateText.Text = "الجهاز مفعّل ✓";
                     TrialText.Text = ExpiryText(false);
                     EnterButton.IsEnabled = true;
+                    EnterButton.Focus();
                     await AutoEnterIfReadyAsync();
                     break;
                 case "trial":
@@ -147,6 +151,27 @@ public partial class StartupWindow : Window
         if (remaining.TotalHours >= 1)
             return prefix + ": " + Math.Ceiling(remaining.TotalHours) + " ساعة";
         return prefix + ": " + Math.Max(1, Math.Ceiling(remaining.TotalMinutes)) + " دقيقة";
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Escape or Key.Back or Key.BrowserBack)
+        {
+            if (LoadingPanel.Visibility == Visibility.Visible && BackButton.Visibility == Visibility.Visible)
+            {
+                BackButton_Click(BackButton, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if (e.Key is Key.Enter or Key.Space &&
+            Keyboard.FocusedElement is Button button &&
+            button.IsEnabled)
+        {
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            e.Handled = true;
+        }
     }
 
     private async void EnterButton_Click(object sender, RoutedEventArgs e)
@@ -223,6 +248,7 @@ public partial class StartupWindow : Window
             LoadingProgress.Value = 0;
             LoadingPercent.Text = "";
             BackButton.Visibility = Visibility.Visible;
+            BackButton.Focus();
             _loading = false;
         }
     }
