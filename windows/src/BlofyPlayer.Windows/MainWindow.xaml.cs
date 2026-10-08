@@ -3579,5 +3579,11 @@ public partial class MainWindow : Window
             RefreshCurrentPage();
             e.Handled = true;
         }
+        else if (e.Key is Key.Escape or Key.Back or Key.BrowserBack && _currentPage == "home")
+        {
+            if (UiDialogs.Confirm(this, "الخروج من BLOFY", "هل تريد إغلاق BLOFY PLAYER؟"))
+                Close();
+            e.Handled = true;
+        }
     }
 }
