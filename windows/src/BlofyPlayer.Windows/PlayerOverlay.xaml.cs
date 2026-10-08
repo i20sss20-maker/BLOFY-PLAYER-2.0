@@ -122,7 +122,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _timer.Tick += (_, _) => RefreshHud();
 
-        _hudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        _hudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
         _hudTimer.Tick += (_, _) => HideHud();
 
         _channelNumberTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
@@ -136,6 +136,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             UpdateFavoriteButton();
             SetFullscreenState(true);
             PlayCurrentCandidate();
+            if (_playlist.Count > 0 && _index >= 0)
+                ShowChannelPosition(_index + 1, 950);
             ShowHudBriefly();
             PlayPauseButton.Focus();
         };
@@ -609,6 +611,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         TitleText.Text = item.Name;
         TopTitleText.Text = item.Name;
         EpgText.Text = "القناة " + (_index + 1).ToString("N0") + " من " + _playlist.Count.ToString("N0");
+        ShowChannelPosition(_index + 1, 950);
         LoadingText.Text = "جاري فتح القناة…";
         LoadingBadge.Visibility = Visibility.Visible;
         _resumeApplied = true;
@@ -648,6 +651,18 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         Key.D9 or Key.NumPad9 => 9,
         _ => null
     };
+
+    private void ShowChannelPosition(int number, int durationMs)
+    {
+        ChannelNumberText.Text = number.ToString();
+        ChannelNumberBadge.Visibility = Visibility.Visible;
+        _ = Dispatcher.BeginInvoke(async () =>
+        {
+            await Task.Delay(durationMs);
+            if (string.IsNullOrEmpty(_channelDigits))
+                ChannelNumberBadge.Visibility = Visibility.Collapsed;
+        });
+    }
 
     private void HandleChannelDigit(int digit)
     {
