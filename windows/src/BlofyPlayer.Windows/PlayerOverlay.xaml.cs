@@ -1,5 +1,6 @@
 using BlofyPlayer.Windows.Core;
 using LibVLCSharp.Shared;
+using VlcMediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -12,7 +13,7 @@ namespace BlofyPlayer.Windows;
 public partial class PlayerOverlay : UserControl, IAsyncDisposable
 {
     private readonly LibVLC _libVlc;
-    private readonly MediaPlayer _player;
+    private readonly VlcMediaPlayer _player;
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _hudTimer;
     private readonly IReadOnlyList<StreamItem> _playlist;
@@ -76,7 +77,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         if (_settings.AudioOutput == "stereo") options.Add("--audio-channels=2");
 
         _libVlc = new LibVLC(options.ToArray());
-        _player = new MediaPlayer(_libVlc);
+        _player = new VlcMediaPlayer(_libVlc);
         VideoView.MediaPlayer = _player;
         _playlist = playlist ?? [];
         _index = playlistIndex;
