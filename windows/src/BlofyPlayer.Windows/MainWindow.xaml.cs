@@ -55,6 +55,8 @@ public partial class MainWindow : Window
     private WindowStyle _overlayRestoreWindowStyle;
     private ResizeMode _overlayRestoreResizeMode;
     private bool _overlayRestoreTopmost;
+    private WindowState _overlayRestoreWindowState;
+    private Action? _pageBackAction;
     private bool _detailsOpen;
     private readonly Dictionary<string, int> _browserPageByKind = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _browserCategoryByKind = new(StringComparer.OrdinalIgnoreCase);
@@ -216,6 +218,7 @@ public partial class MainWindow : Window
         if (enabled)
         {
             _overlayRestoreBounds = new Rect(Left, Top, ActualWidth, ActualHeight);
+            _overlayRestoreWindowState = WindowState;
             _overlayRestoreWindowStyle = WindowStyle;
             _overlayRestoreResizeMode = ResizeMode;
             _overlayRestoreTopmost = Topmost;
@@ -252,6 +255,7 @@ public partial class MainWindow : Window
             Top = _overlayRestoreBounds.Top;
             Width = Math.Max(MinWidth, _overlayRestoreBounds.Width);
             Height = Math.Max(MinHeight, _overlayRestoreBounds.Height);
+            WindowState = _overlayRestoreWindowState;
             _overlayFullscreen = false;
         }
     }
@@ -423,8 +427,19 @@ public partial class MainWindow : Window
         }
     }
 
-    private void HeaderBackButton_Click(object sender, RoutedEventArgs e)
+    private void HeaderBackButton_Click(object sender, RoutedEventArgs e) =>
+        NavigateBack();
+
+    private void NavigateBack()
     {
+        if (_pageBackAction is not null)
+        {
+            var action = _pageBackAction;
+            _pageBackAction = null;
+            action();
+            return;
+        }
+
         if (_detailsOpen)
         {
             RefreshCurrentPage();
@@ -437,7 +452,23 @@ public partial class MainWindow : Window
             _store.State.Settings.LastPage = "home";
             _store.ScheduleSave();
             RefreshCurrentPage();
+            return;
         }
+
+        if (UiDialogs.Confirm(this, "الخروج من BLOFY", "هل تريد إغلاق BLOFY PLAYER؟"))
+            Close();
+    }
+
+    private void OpenSubpage(Action open)
+    {
+        var returnPage = _currentPage;
+        _pageBackAction = () =>
+        {
+            _currentPage = returnPage;
+            RefreshCurrentPage();
+        };
+        HeaderBackButton.Visibility = Visibility.Visible;
+        open();
     }
 
     private void Nav_Click(object sender, RoutedEventArgs e)
@@ -457,6 +488,7 @@ public partial class MainWindow : Window
     private void RefreshCurrentPage()
     {
         _detailsOpen = false;
+        _pageBackAction = null;
         HeaderBackButton.Visibility = _currentPage == "home"
             ? Visibility.Collapsed
             : Visibility.Visible;
@@ -1472,6 +1504,12 @@ public partial class MainWindow : Window
     {
         DisposePreview();
         _detailsOpen = true;
+        var detailsReturnPage = _currentPage;
+        _pageBackAction = () =>
+        {
+            _currentPage = detailsReturnPage;
+            RefreshCurrentPage();
+        };
         HeaderBackButton.Visibility = Visibility.Visible;
         _lastFocusedContentKey = item.Key;
         if (_store.IsLocked(item.Key) && !EnsureParentalAccess()) return;
@@ -2687,14 +2725,17 @@ public partial class MainWindow : Window
         root.Children.Add(SettingsSection("عام",
             SettingTile("لغة التطبيق", "لغة واجهة BLOFY PLAYER", language.Control),
             SettingTile("حركة الواجهة", "حركة الفوكس والانتقال بين العناصر", motion.Control),
-            SettingActionTile("ترتيب وإخفاء أقسام الرئيسية", "رتّب صفوف Home وأخفِ ما لا تحتاجه", (_, _) => ShowHomePersonalization()),
+            SettingActionTile("ترتيب وإخفاء أقسام الرئيسية", "رتّب صفوف Home وأخفِ ما لا تحتاجه", (_, _) => OpenSubpage(ShowHomePersonalization)),
             SettingActionTile("باقتي", "مدة التفعيل وحالة الجهاز الحالية", (_, _) => ShowSubscriptionSummary()),
             SettingActionTile("حالة الاشتراك", "صلاحية المحتوى والسيرفر الحالي", (_, _) => ShowConnectionSummary()),
-            SettingActionTile("بيانات الجهاز والباركود", "عرض رقم الجهاز ورمز التفعيل والباركود", (_, _) => ShowActivation()),
+            SettingActionTile("بيانات الجهاز والباركود", "عرض رقم الجهاز ورمز التفعيل والباركود", (_, _) => OpenSubpage(ShowActivation)),
             SettingActionTile("الملفات الشخصية", "الرئيسي، الأطفال والضيف وPIN", (_, _) =>
             {
-                _currentPage = "profiles";
-                ShowProfiles();
+                OpenSubpage(() =>
+                {
+                    _currentPage = "profiles";
+                    ShowProfiles();
+                });
             })));
 
         root.Children.Add(SettingsSection("التشغيل",
@@ -2715,16 +2756,19 @@ public partial class MainWindow : Window
             SettingTile("حجم الترجمة", "حجم نص الترجمة أثناء المشاهدة", subtitleSize.Control)));
 
         root.Children.Add(SettingsSection("القوائم والسيرفرات",
-            SettingActionTile("إدارة السيرفرات والقوائم", "تبديل، تعديل ومزامنة السيرفرات", (_, _) => ShowProviders()),
-            SettingActionTile("ترتيب وإخفاء الفئات", "البث والأفلام والمسلسلات", (_, _) => ShowCategoryManager()),
+            SettingActionTile("إدارة السيرفرات والقوائم", "تبديل، تعديل ومزامنة السيرفرات", (_, _) => OpenSubpage(ShowProviders)),
+            SettingActionTile("ترتيب وإخفاء الفئات", "البث والأفلام والمسلسلات", (_, _) => OpenSubpage(ShowCategoryManager)),
             SettingActionTile("تحديث المحتوى", "إعادة مزامنة المكتبة يدويًا", async (_, _) => await SyncCatalogAsync(true))));
 
         root.Children.Add(SettingsSection("الحماية",
             SettingActionTile("الحماية الأبوية وPIN", "تعيين أو تغيير رمز فتح المحتوى المقفل", async (_, _) => await ChangeParentalPinAsync()),
             SettingActionTile("إدارة الملفات وPIN", "PIN منفصل لكل ملف شخصي", (_, _) =>
             {
-                _currentPage = "profiles";
-                ShowProfiles();
+                OpenSubpage(() =>
+                {
+                    _currentPage = "profiles";
+                    ShowProfiles();
+                });
             })));
 
         root.Children.Add(SettingsSection("BLOFY Cloud والنسخ الاحتياطي",
@@ -2736,7 +2780,7 @@ public partial class MainWindow : Window
 
         root.Children.Add(SettingsSection("التحديث وحول التطبيق",
             SettingActionTile("فحص تحديث Windows", "البحث عن إصدار BLOFY PLAYER جديد", async (_, _) => await CheckWindowsUpdateAsync()),
-            SettingActionTile("تشخيص BLOFY", "الجهاز والمكتبة وتقرير الدعم", (_, _) => ShowDiagnostics()),
+            SettingActionTile("تشخيص BLOFY", "الجهاز والمكتبة وتقرير الدعم", (_, _) => OpenSubpage(ShowDiagnostics)),
             SettingActionTile("تنظيف التخزين المؤقت", "يحذف الكاش فقط ولا يحذف بياناتك", (_, _) => CleanStorage()),
             SettingActionTile("استعادة الإعدادات الافتراضية", "إرجاع خيارات التشغيل والواجهة للوضع الافتراضي", async (_, _) => await RestoreDefaultSettingsAsync())));
 
@@ -3586,25 +3630,14 @@ public partial class MainWindow : Window
         {
             _ = SyncCatalogAsync(true);
             e.Handled = true;
+            return;
         }
-        else if (e.Key is Key.Escape or Key.Back or Key.BrowserBack && _detailsOpen)
+
+        if (e.Key is Key.Escape or Key.Back or Key.BrowserBack)
         {
-            RefreshCurrentPage();
-            e.Handled = true;
-        }
-        else if (e.Key is Key.Escape or Key.Back or Key.BrowserBack && _currentPage != "home")
-        {
-            _currentPage = "home";
-            _store.State.Settings.LastPage = "home";
-            _store.ScheduleSave();
-            RefreshCurrentPage();
-            e.Handled = true;
-        }
-        else if (e.Key is Key.Escape or Key.Back or Key.BrowserBack && _currentPage == "home")
-        {
-            if (UiDialogs.Confirm(this, "الخروج من BLOFY", "هل تريد إغلاق BLOFY PLAYER؟"))
-                Close();
+            NavigateBack();
             e.Handled = true;
         }
     }
+
 }
