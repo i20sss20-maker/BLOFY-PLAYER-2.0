@@ -799,10 +799,45 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             return;
         }
 
-        if (e.Key == Key.F)
+        if (e.Key is Key.F or Key.F11)
         {
             SetFullscreenState(!_fullscreen);
             ShowHudBriefly();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.MediaPlayPause)
+        {
+            PlayPause_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.MediaPreviousTrack)
+        {
+            Previous_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.MediaNextTrack)
+        {
+            Next_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.PageUp && _playlist.Count > 0 && _urlResolver is not null)
+        {
+            ChangeChannel(-1);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.PageDown && _playlist.Count > 0 && _urlResolver is not null)
+        {
+            ChangeChannel(1);
             e.Handled = true;
             return;
         }
