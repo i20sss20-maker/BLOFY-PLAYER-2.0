@@ -1190,17 +1190,51 @@ public partial class MainWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
 
+        var categoriesColumn = new Grid();
+        categoriesColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        categoriesColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        categoriesColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetColumn(categoriesColumn, 0);
+        grid.Children.Add(categoriesColumn);
+
+        var categoriesHeading = Vertical(0, 0, 0, 8);
+        categoriesHeading.Children.Add(Txt("فئات البث", 15, Accent, FontWeights.Bold, 0, 0, 0, 6));
+        var categorySearch = new TextBox { Height = 38, FontSize = 12, ToolTip = "ابحث عن اسم فئة البث" };
+        categoriesHeading.Children.Add(categorySearch);
+        categoriesColumn.Children.Add(categoriesHeading);
+
         var cats = new ListBox
         {
-            Style = Application.Current.FindResource("TvListBox") as Style
+            Style = Application.Current.FindResource("TvListBox") as Style,
+            DisplayMemberPath = "Name",
+            VerticalAlignment = VerticalAlignment.Stretch
         };
-        cats.Items.Add(new CategoryItem { RemoteId = "", Kind = "live", Name = "الكل" });
-        foreach (var cat in (_catalog?.Snapshot.Categories ?? [])
-                     .Where(c => c.Kind == "live" && !_store.IsCategoryHidden("live", c.RemoteId)))
-            cats.Items.Add(cat);
-        cats.DisplayMemberPath = "Name";
-        cats.SelectedIndex = 0;
-        grid.Children.Add(cats);
+        ScrollViewer.SetVerticalScrollBarVisibility(cats, ScrollBarVisibility.Auto);
+        VirtualizingPanel.SetIsVirtualizing(cats, true);
+        VirtualizingPanel.SetVirtualizationMode(cats, VirtualizationMode.Recycling);
+        Grid.SetRow(cats, 1);
+        categoriesColumn.Children.Add(cats);
+        var allCategories = new List<CategoryItem>
+        {
+            new() { RemoteId = "", Kind = "live", Name = "الكل" }
+        };
+        allCategories.AddRange((_catalog?.Snapshot.Categories ?? [])
+            .Where(c => c.Kind == "live" && !_store.IsCategoryHidden("live", c.RemoteId)));
+        var categoryCounter = Txt(allCategories.Count.ToString("N0") + " فئة  •  ↑↓ للتنقل", 10, Muted, marginTop: 8);
+        Grid.SetRow(categoryCounter, 2);
+        categoriesColumn.Children.Add(categoryCounter);
+
+        var channelsColumn = new Grid();
+        channelsColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        channelsColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        channelsColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetColumn(channelsColumn, 2);
+        grid.Children.Add(channelsColumn);
+        var channelHeading = Vertical(0, 0, 0, 8);
+        channelHeading.Children.Add(Txt("القنوات", 15, Accent, FontWeights.Bold, 0, 0, 0, 6));
+        var channelSearch = new TextBox { Height = 38, FontSize = 12, ToolTip = "ابحث في جميع القنوات بغض النظر عن الفئة" };
+        channelHeading.Children.Add(channelSearch);
+        channelsColumn.Children.Add(channelHeading);
 
         var channels = new ListBox
         {
@@ -1210,16 +1244,27 @@ public partial class MainWindow : Window
         VirtualizingPanel.SetIsVirtualizing(channels, true);
         VirtualizingPanel.SetVirtualizationMode(channels, VirtualizationMode.Recycling);
         ScrollViewer.SetCanContentScroll(channels, true);
-        Grid.SetColumn(channels, 2);
-        grid.Children.Add(channels);
+        ScrollViewer.SetVerticalScrollBarVisibility(channels, ScrollBarVisibility.Auto);
+        Grid.SetRow(channels, 1);
+        channelsColumn.Children.Add(channels);
+        var channelCounter = Txt("", 10, Muted, marginTop: 8);
+        Grid.SetRow(channelCounter, 2);
+        channelsColumn.Children.Add(channelCounter);
 
         var right = Vertical();
-        Grid.SetColumn(right, 4);
-        grid.Children.Add(right);
+        var detailsScroll = new ScrollViewer
+        {
+            Content = right,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            PanningMode = PanningMode.VerticalOnly
+        };
+        Grid.SetColumn(detailsScroll, 4);
+        grid.Children.Add(detailsScroll);
 
         var previewBorder = new Border
         {
-            Height = 330, CornerRadius = new CornerRadius(14),
+            Height = 260, CornerRadius = new CornerRadius(14),
             Background = Brushes.Black, BorderBrush = Brush("#665E437A"), BorderThickness = new Thickness(1),
             ClipToBounds = true
         };
@@ -1246,26 +1291,82 @@ public partial class MainWindow : Window
         right.Children.Add(new ScrollViewer
         {
             Content = epgPanel,
-            MaxHeight = 270,
+            MaxHeight = 180,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         });
 
-        void FillChannels()
+        void FillChannels(IReadOnlyList<StreamItem>? searchMatches = null)
         {
             var selectedCat = cats.SelectedItem as CategoryItem;
-            IReadOnlyList<StreamItem> filtered = selectedCat is null || string.IsNullOrWhiteSpace(selectedCat.RemoteId)
-                ? all
-                : CategoryItems("live", selectedCat.RemoteId);
+            IReadOnlyList<StreamItem> filtered = searchMatches ??
+                (selectedCat is null || string.IsNullOrWhiteSpace(selectedCat.RemoteId)
+                    ? all
+                    : CategoryItems("live", selectedCat.RemoteId));
 
-            channels.ItemsSource = null;
             channels.ItemsSource = filtered;
+            channelCounter.Text = filtered.Count.ToString("N0") + " قناة";
             if (filtered.Count > 0) channels.SelectedIndex = 0;
         }
 
         IReadOnlyList<StreamItem> CurrentLivePlaylist() =>
             channels.ItemsSource as IReadOnlyList<StreamItem> ?? all;
 
-        cats.SelectionChanged += (_, _) => FillChannels();
+        cats.SelectionChanged += (_, _) =>
+        {
+            if (channelSearch.Text.Trim().Length == 0) FillChannels();
+        };
+        categorySearch.TextChanged += (_, _) =>
+        {
+            var query = NormalizeSearch(categorySearch.Text);
+            var shown = query.Length == 0 ? allCategories
+                : allCategories.Where(cat => cat.RemoteId.Length == 0 ||
+                    NormalizeSearch(cat.Name).Contains(query, StringComparison.Ordinal)).ToList();
+            cats.ItemsSource = shown;
+            cats.SelectedIndex = shown.Count > 0 ? 0 : -1;
+            if (cats.SelectedItem is not null) cats.ScrollIntoView(cats.SelectedItem);
+        };
+
+        CancellationTokenSource? channelFilter = null;
+        channelSearch.TextChanged += (_, _) =>
+        {
+            channelFilter?.Cancel();
+            var task = new CancellationTokenSource();
+            channelFilter = task;
+            _ = SearchChannelsAsync(task);
+        };
+        async Task SearchChannelsAsync(CancellationTokenSource request)
+        {
+            try
+            {
+                await Task.Delay(180, request.Token);
+                var query = NormalizeSearch(channelSearch.Text);
+                if (query.Length == 0)
+                {
+                    if (ReferenceEquals(channelFilter, request) && ReferenceEquals(ContentHost.Content, grid))
+                        FillChannels();
+                    return;
+                }
+                var matching = await Task.Run(() =>
+                {
+                    var matches = new List<StreamItem>();
+                    foreach (var channel in all)
+                    {
+                        request.Token.ThrowIfCancellationRequested();
+                        if (NormalizeSearch(channel.Name).Contains(query, StringComparison.Ordinal))
+                            matches.Add(channel);
+                    }
+                    return matches;
+                }, request.Token);
+                if (ReferenceEquals(channelFilter, request) && ReferenceEquals(ContentHost.Content, grid))
+                    FillChannels(matching);
+            }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                if (ReferenceEquals(channelFilter, request)) channelFilter = null;
+                request.Dispose();
+            }
+        }
 
         cats.PreviewKeyDown += (_, e) =>
         {
@@ -1393,6 +1494,8 @@ public partial class MainWindow : Window
             }
         };
 
+        cats.ItemsSource = allCategories;
+        cats.SelectedIndex = 0;
         FillChannels();
         ContentHost.Content = grid;
         _ = Dispatcher.BeginInvoke(() => FocusSelectedListItem(cats));
