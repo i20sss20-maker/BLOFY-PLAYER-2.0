@@ -47,6 +47,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private int _automaticRecoveries;
     private long _pendingRecoveryResume;
     private bool _disposed;
+    private bool _playbackFailed;
     private bool _favorite;
     private string _channelDigits = "";
     private int _previousLiveIndex = -1;
@@ -116,15 +117,18 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         TopTitleText.Text = title;
         EpgText.Text = _playlist.Count > 0 ? "بث مباشر" : "BLOFY PLAYER";
 
-        _player.Playing += (_, _) => Dispatcher.Invoke(() =>
+        // VLC raises callbacks on native playback threads. Never synchronously
+        // wait on the WPF dispatcher, especially while starting/stopping media.
+        _player.Playing += (_, _) => DispatchPlayerEvent(() =>
         {
             ApplyResumeOnce();
             _lastProgressAt = DateTimeOffset.UtcNow;
             LoadingBadge.Visibility = Visibility.Collapsed;
+            RetryPlaybackButton.Visibility = Visibility.Collapsed;
         });
-        _player.EncounteredError += (_, _) => Dispatcher.Invoke(() =>
+        _player.EncounteredError += (_, _) => DispatchPlayerEvent(() =>
             TryRecoverPlayback("تعذر التشغيل — تجربة مسار بديل…"));
-        _player.EndReached += (_, _) => Dispatcher.Invoke(HandleEnded);
+        _player.EndReached += (_, _) => DispatchPlayerEvent(HandleEnded);
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _timer.Tick += (_, _) => RefreshHud();
@@ -157,6 +161,12 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         };
     }
 
+    private void DispatchPlayerEvent(Action action)
+    {
+        if (_disposed || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+        _ = Dispatcher.BeginInvoke(new Action(() => { if (!_disposed) action(); }));
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
@@ -182,6 +192,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     {
         if (_recoveryUrls.Count == 0)
         {
+            LoadingBadge.Visibility = Visibility.Collapsed;
+            RetryPlaybackButton.Visibility = Visibility.Collapsed;
             EpgText.Text = "لا يوجد رابط تشغيل صالح";
             ShowHudBriefly();
             return;
@@ -199,6 +211,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
 
         LoadingText.Text = _automaticRecoveries > 0 ? "إعادة الاتصال…" : "جاري التشغيل…";
+        _playbackFailed = false;
+        RetryPlaybackButton.Visibility = Visibility.Collapsed;
         LoadingBadge.Visibility = Visibility.Visible;
         _playStartedAt = DateTimeOffset.UtcNow;
         _lastProgressAt = _playStartedAt;
@@ -216,7 +230,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         media.AddOption(":http-referrer=" + uri.GetLeftPart(UriPartial.Authority) + "/");
         media.AddOption(":network-caching=" + (_playlist.Count > 0 ? "450" : "850"));
         if (_settings.SubtitleLanguage == "off") media.AddOption(":no-spu");
-        _player.Play(media);
+        if (!_player.Play(media))
+            DispatchPlayerEvent(() => TryRecoverPlayback("المحرك رفض الرابط — تجربة مسار بديل…"));
         ApplyAspect(_settings.Aspect);
     }
 
@@ -240,21 +255,41 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void TryRecoverPlayback(string message)
     {
-        if (_recoveryUrls.Count <= 1 || _automaticRecoveries >= Math.Min(3, _recoveryUrls.Count))
+        if (_disposed || _playbackFailed) return;
+
+        // Visit each candidate at most once per attempt. An endless retry loop
+        // keeps the spinner visible and prevents the user from navigating back.
+        if (_recoveryIndex + 1 >= _recoveryUrls.Count || _automaticRecoveries >= 3)
         {
-            EpgText.Text = "تعذر التشغيل. جرّب إعادة فتح المحتوى.";
+            _playbackFailed = true;
+            LoadingBadge.Visibility = Visibility.Collapsed;
+            EpgText.Text = "تعذر فتح المحتوى. جرّب إعادة المحاولة أو اختر محتوى آخر.";
+            RetryPlaybackButton.Visibility = Visibility.Visible;
             ShowHudBriefly();
+            RetryPlaybackButton.Focus();
             return;
         }
 
         var preserve = Math.Max(_player.Time, _pendingRecoveryResume);
         _automaticRecoveries++;
-        _recoveryIndex = (_recoveryIndex + 1) % _recoveryUrls.Count;
+        _recoveryIndex++;
         EpgText.Text = message;
         LoadingText.Text = message.Replace("…", "");
         LoadingBadge.Visibility = Visibility.Visible;
         ShowHudBriefly();
         PlayCurrentCandidate(preserve);
+    }
+
+    private void RetryPlayback_Click(object sender, RoutedEventArgs e)
+    {
+        if (_disposed || _recoveryUrls.Count == 0) return;
+        _pendingRecoveryResume = Math.Max(_pendingRecoveryResume, _player.Time);
+        _resumeApplied = false;
+        _recoveryIndex = 0;
+        _automaticRecoveries = 0;
+        _playbackFailed = false;
+        PlayCurrentCandidate(_pendingRecoveryResume);
+        PlayPauseButton.Focus();
     }
 
     private async void HandleEnded()
@@ -296,12 +331,12 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         PreviousButton.ToolTip = _playlist.Count > 0 ? "القناة السابقة" : "الحلقة السابقة";
         NextButton.ToolTip = _playlist.Count > 0 ? "القناة التالية" : "الحلقة التالية";
 
+        if (_disposed || _playbackFailed) return;
         if (!_videoOutputSeen && HasVideoOutput()) _videoOutputSeen = true;
 
-        if (_playlist.Count > 0 &&
-            !_videoOutputSeen &&
-            DateTimeOffset.UtcNow - _playStartedAt > TimeSpan.FromSeconds(8) &&
-            _automaticRecoveries < Math.Min(3, _recoveryUrls.Count))
+        if (!_videoOutputSeen &&
+            DateTimeOffset.UtcNow - _playStartedAt >
+                TimeSpan.FromSeconds(_playlist.Count > 0 ? 12 : 22))
         {
             _playStartedAt = DateTimeOffset.UtcNow;
             TryRecoverPlayback("لا توجد صورة — تجربة مسار بديل…");
@@ -323,8 +358,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             TryRecoverPlayback("توقف البث — إعادة الاتصال…");
         }
         else if (!_player.IsPlaying &&
-                 DateTimeOffset.UtcNow - _playStartedAt > TimeSpan.FromSeconds(10) &&
-                 _automaticRecoveries == 0)
+                 DateTimeOffset.UtcNow - _playStartedAt >
+                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 12 : 22))
         {
             TryRecoverPlayback("تأخر بدء التشغيل — تجربة مسار بديل…");
         }
