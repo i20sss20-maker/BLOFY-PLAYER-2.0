@@ -8,7 +8,8 @@
         Background="#08060D"
         Foreground="#F3F4F6"
         FlowDirection="RightToLeft"
-        ResizeMode="CanResize">
+        ResizeMode="CanResize"
+        PreviewKeyDown="Window_PreviewKeyDown">
     <Grid>
         <Grid.Background>
             <RadialGradientBrush Center="0.82,0.15" GradientOrigin="0.82,0.15" RadiusX="0.9" RadiusY="0.9">
@@ -30,7 +31,7 @@
                 <TextBlock Text="BLOFY PLAYER" FontSize="38" FontWeight="Bold"/>
                 <TextBlock Text="اربط جهازك وابدأ المشاهدة"
                            FontSize="24" FontWeight="SemiBold" Margin="0,10,0,12"/>
-                <TextBlock Text="امسح الباركود بالجوال أو افتح بوابة BLOFY. بعد نجاح التفعيل اضغط «دخول BLOFY»، وبعدها نجهز قوائمك ونفتح التطبيق."
+                <TextBlock Text="امسح الباركود بالجوال أو افتح بوابة BLOFY. بعد نجاح التفعيل ينتقل BLOFY تلقائيًا إلى التحميل ثم يفتح التطبيق."
                            Foreground="#C9BCD9" FontSize="15" LineHeight="26" TextWrapping="Wrap" MaxWidth="520"/>
 
                 <Border Background="#161020" BorderBrush="#55376C" BorderThickness="1"
@@ -65,17 +66,21 @@
                     </StackPanel>
                 </Border>
 
-                <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,20,0,0"
+                            KeyboardNavigation.DirectionalNavigation="Cycle"
+                            KeyboardNavigation.TabNavigation="Cycle">
                     <Button x:Name="EnterButton" Content="دخول BLOFY" IsEnabled="False"
-                            Click="EnterButton_Click" Background="#D0B2FF" Foreground="#08060D"
-                            FontWeight="Bold" FontSize="15" Padding="26,12" BorderThickness="0"
-                            MinWidth="155" Cursor="Hand"/>
-                    <Button Content="تحديث من الموقع" Click="RefreshButton_Click"
-                            Background="#241536" Foreground="#F3F4F6" BorderBrush="#5B4373"
-                            BorderThickness="1" Padding="20,12" Margin="10,0,0,0" Cursor="Hand"/>
-                    <Button Content="فتح الموقع" Click="OpenPortalButton_Click"
-                            Background="Transparent" Foreground="#D0B2FF" BorderBrush="#5B4373"
-                            BorderThickness="1" Padding="20,12" Margin="10,0,0,0" Cursor="Hand"/>
+                            Click="EnterButton_Click"
+                            Style="{StaticResource PrimaryButton}"
+                            FontWeight="Bold" FontSize="15"
+                            MinWidth="155"/>
+                    <Button x:Name="RefreshButton" Content="تحديث من الموقع" Click="RefreshButton_Click"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="20,12" Margin="10,0,0,0"/>
+                    <Button x:Name="OpenPortalButton" Content="فتح الموقع" Click="OpenPortalButton_Click"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="20,12" Margin="10,0,0,0"/>
                 </StackPanel>
             </StackPanel>
 
@@ -116,8 +121,9 @@
                 <TextBlock x:Name="LoadingPercent" Text="5%" Foreground="#D0B2FF"
                            FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,10,0,0"/>
                 <Button x:Name="BackButton" Content="العودة للتفعيل" Visibility="Collapsed"
-                        Click="BackButton_Click" Background="#241536" Foreground="White"
-                        BorderBrush="#5B4373" BorderThickness="1" Padding="20,10"
+                        Click="BackButton_Click"
+                        Style="{StaticResource SecondaryButton}"
+                        Padding="20,10"
                         HorizontalAlignment="Center" Margin="0,24,0,0"/>
             </StackPanel>
         </Grid>
