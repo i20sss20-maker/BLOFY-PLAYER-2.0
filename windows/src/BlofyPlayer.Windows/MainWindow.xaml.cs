@@ -1158,6 +1158,7 @@ public partial class MainWindow : Window
             ClipToBounds = true
         };
 
+        var imageGrid = new Grid();
         var artwork = landscape
             ? (!string.IsNullOrWhiteSpace(item.Backdrop) ? item.Backdrop : item.Icon)
             : item.Icon;
@@ -1168,9 +1169,52 @@ public partial class MainWindow : Window
                 Stretch = landscape || item.Kind != "live" ? Stretch.UniformToFill : Stretch.Uniform
             };
             BindArtwork(posterImage, artwork, landscape ? 360 : item.Kind == "live" ? 240 : 220);
-            imageBorder.Child = posterImage;
+            imageGrid.Children.Add(posterImage);
         }
 
+        if (item.Favorite)
+        {
+            imageGrid.Children.Add(new Border
+            {
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(7),
+                Background = Brush("#D908060D"),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(6, 3, 6, 3),
+                Child = new TextBlock
+                {
+                    Text = "★",
+                    Foreground = Accent,
+                    FontSize = 11,
+                    FontWeight = FontWeights.Bold
+                }
+            });
+        }
+
+        var watchState = item.Kind == "live" ? null : _store.WatchState(item.Key);
+        if (watchState is { DurationMs: > 0, PositionMs: > 15000, Completed: false })
+        {
+            var percent = Math.Clamp(watchState.PositionMs * 100d / watchState.DurationMs, 1, 99);
+            var progressShell = new Border
+            {
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Background = Brush("#B808060D"),
+                Padding = new Thickness(8, 6, 8, 6)
+            };
+            progressShell.Child = new ProgressBar
+            {
+                Minimum = 0,
+                Maximum = 100,
+                Value = percent,
+                Height = 4,
+                Foreground = Accent,
+                Background = Brush("#50443458")
+            };
+            imageGrid.Children.Add(progressShell);
+        }
+
+        imageBorder.Child = imageGrid;
         stack.Children.Add(imageBorder);
         var title = Txt(item.Name, 11.5, Text, FontWeights.SemiBold, 2, 7, 2, 0);
         title.MaxWidth = width - 12;
@@ -1212,7 +1256,11 @@ public partial class MainWindow : Window
             }
         }
 
-        button.GotKeyboardFocus += (_, _) => Focus(true);
+        button.GotKeyboardFocus += (_, _) =>
+        {
+            Focus(true);
+            button.BringIntoView(new Rect(0, 0, button.ActualWidth, button.ActualHeight));
+        };
         button.LostKeyboardFocus += (_, _) => Focus(false);
         button.MouseEnter += (_, _) => Focus(true);
         button.MouseLeave += (_, _) => Focus(false);
