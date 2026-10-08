@@ -22,6 +22,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private readonly Func<StreamItem, IReadOnlyList<string>>? _recoveryResolver;
     private readonly Func<long, long, Task>? _savePosition;
     private readonly Func<StreamItem, Task>? _onPlaylistItemChanged;
+    private readonly Func<StreamItem, bool>? _favoriteResolver;
     private readonly Func<Task>? _previousAction;
     private readonly Func<Task>? _nextAction;
     private readonly Func<Task<bool>>? _toggleFavorite;
@@ -58,6 +59,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         IReadOnlyList<string>? recoveryUrls = null,
         Func<long, long, Task>? savePosition = null,
         Func<StreamItem, Task>? onPlaylistItemChanged = null,
+        Func<StreamItem, bool>? favoriteResolver = null,
         Func<Task>? previousAction = null,
         Func<Task>? nextAction = null,
         bool? favorite = null,
@@ -96,6 +98,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _recoveryUrls = NormalizeRecoveryUrls(url, recoveryUrls);
         _savePosition = savePosition;
         _onPlaylistItemChanged = onPlaylistItemChanged;
+        _favoriteResolver = favoriteResolver;
         _previousAction = previousAction;
         _nextAction = nextAction;
         _toggleFavorite = toggleFavorite;
@@ -599,6 +602,15 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         if (_onPlaylistItemChanged is not null)
         {
             try { await _onPlaylistItemChanged(item); } catch { }
+        }
+        if (_favoriteResolver is not null)
+        {
+            try
+            {
+                _favorite = _favoriteResolver(item);
+                UpdateFavoriteButton();
+            }
+            catch { }
         }
     }
 
