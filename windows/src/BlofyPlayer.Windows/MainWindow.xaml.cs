@@ -1472,6 +1472,7 @@ public partial class MainWindow : Window
     {
         DisposePreview();
         _detailsOpen = true;
+        HeaderBackButton.Visibility = Visibility.Visible;
         _lastFocusedContentKey = item.Key;
         if (_store.IsLocked(item.Key) && !EnsureParentalAccess()) return;
 
