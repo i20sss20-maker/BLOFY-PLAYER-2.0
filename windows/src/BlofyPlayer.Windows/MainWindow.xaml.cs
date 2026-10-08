@@ -423,6 +423,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private void HeaderBackButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_detailsOpen)
+        {
+            RefreshCurrentPage();
+            return;
+        }
+
+        if (_currentPage != "home")
+        {
+            _currentPage = "home";
+            _store.State.Settings.LastPage = "home";
+            _store.ScheduleSave();
+            RefreshCurrentPage();
+        }
+    }
+
     private void Nav_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string page }) return;
@@ -440,6 +457,9 @@ public partial class MainWindow : Window
     private void RefreshCurrentPage()
     {
         _detailsOpen = false;
+        HeaderBackButton.Visibility = _currentPage == "home"
+            ? Visibility.Collapsed
+            : Visibility.Visible;
         _homeRenderCts?.Cancel();
         DisposePreview();
         if (_currentPage != "home")
