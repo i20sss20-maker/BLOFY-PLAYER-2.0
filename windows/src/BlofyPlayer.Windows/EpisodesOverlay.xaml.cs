@@ -79,7 +79,7 @@ public partial class EpisodesOverlay : UserControl, IDisposable
             SeasonList.SelectedIndex = 0;
             _selectedSeason = seasons[0];
             StatusText.Text = seasons.Count + " مواسم • " + _episodes.Count + " حلقات";
-            Dispatcher.BeginInvoke(() => SeasonList.Focus());
+            _ = Dispatcher.BeginInvoke(() => SeasonList.Focus());
         }
         catch (OperationCanceledException)
         {
@@ -110,7 +110,7 @@ public partial class EpisodesOverlay : UserControl, IDisposable
             EpisodePanel.Children.Add(EpisodeCard(episode));
 
         if (!focusEpisode) return;
-        Dispatcher.BeginInvoke(RestoreEpisodeFocus);
+        _ = Dispatcher.BeginInvoke(RestoreEpisodeFocus);
     }
 
     private void RestoreEpisodeFocus()
@@ -136,7 +136,7 @@ public partial class EpisodesOverlay : UserControl, IDisposable
             if (row is not null) SeasonList.SelectedItem = row;
         }
 
-        Dispatcher.BeginInvoke(() =>
+        _ = Dispatcher.BeginInvoke(() =>
         {
             if (!string.IsNullOrWhiteSpace(_lastEpisodeKey))
                 RestoreEpisodeFocus();
