@@ -1008,18 +1008,19 @@ public partial class MainWindow : Window
         Grid.SetRow(scroll, 1);
         right.Children.Add(scroll);
 
+        IReadOnlyList<StreamItem> filtered = all;
+        int visible = 0;
+        bool appending = false;
+        Button more = null!;
         var footer = Horizontal(0, 10, 0, 0);
         var countLabel = Txt("", 12, Muted, marginLeft: 12, marginTop: 8);
-        var more = Action("↓ عرض المزيد", false, (_, _) => AppendMore(true), 0, 0, 12, 0);
+        more = Action("↓ عرض المزيد", false, (_, _) => AppendMore(true), 0, 0, 12, 0);
         more.MinWidth = 135;
         footer.Children.Add(more);
         footer.Children.Add(countLabel);
         Grid.SetRow(footer, 2);
         right.Children.Add(footer);
 
-        IReadOnlyList<StreamItem> filtered = all;
-        int visible = 0;
-        bool appending = false;
         CancellationTokenSource? filterRequest = null;
         string? remembered = _browserCategoryByKind.TryGetValue(kind, out var chosen) ? chosen : "";
 
@@ -2350,21 +2351,22 @@ public partial class MainWindow : Window
         Grid.SetRow(scroll, 2);
         root.Children.Add(scroll);
 
+        IReadOnlyList<StreamItem> matched = [];
+        IReadOnlyList<StreamItem> displayed = [];
+        var rendered = 0;
+        const int batch = 36;
+        bool adding = false;
+        Button more = null!;
         var footer = Horizontal(0, 12, 0, 0);
-        var more = Action("↓ عرض نتائج إضافية", false, (_, _) => AppendMore(true), 0, 0, 15, 0);
-        more.MinWidth = 175;
         var status = Txt("ابدأ بالكتابة للبحث في المكتبة كاملة", 12, Muted, marginTop: 9);
+        more = Action("↓ عرض نتائج إضافية", false, (_, _) => AppendMore(true), 0, 0, 15, 0);
+        more.MinWidth = 175;
         footer.Children.Add(more);
         footer.Children.Add(status);
         Grid.SetRow(footer, 3);
         root.Children.Add(footer);
 
         string activeKind = "all";
-        IReadOnlyList<StreamItem> matched = [];
-        IReadOnlyList<StreamItem> displayed = [];
-        var rendered = 0;
-        const int batch = 36;
-        bool adding = false;
         CancellationTokenSource? request = null;
         var filterButtons = new Dictionary<string, Button>();
 
