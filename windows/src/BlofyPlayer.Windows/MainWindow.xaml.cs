@@ -1529,12 +1529,20 @@ public partial class MainWindow : Window
     {
         DisposePreview();
         PageTitle.Text = "البحث";
+        PageSubtitle.Text = "ابحث في BLOFY";
         var root = Vertical();
-        var search = new TextBox { FontSize = 17, Height = 44, ToolTip = "ابحث من أول حرف…" };
+        var search = new TextBox
+        {
+            FontSize = 17,
+            Height = 44,
+            ToolTip = "ابحث من أول حرف…"
+        };
         root.Children.Add(search);
+
         var status = Txt("اكتب للبحث…", 11, Muted, marginTop: 8);
         root.Children.Add(status);
-        var results = new WrapPanel { Margin = new Thickness(0, 14, 0, 0) };
+
+        var results = Vertical(0, 10, 0, 0);
         root.Children.Add(results);
 
         async Task RunAsync()
@@ -1556,31 +1564,58 @@ public partial class MainWindow : Window
             status.Text = "جاري البحث…";
             try
             {
-                await Task.Delay(250, token);
+                await Task.Delay(220, token);
                 var snapshot = _catalog?.Snapshot.Streams;
                 if (snapshot is null) return;
 
-                var matches = await Task.Run(() =>
+                var grouped = await Task.Run(() =>
                 {
-                    var list = new List<StreamItem>(72);
+                    var live = new List<StreamItem>(10);
+                    var movies = new List<StreamItem>(12);
+                    var series = new List<StreamItem>(12);
+
                     foreach (var item in snapshot)
                     {
                         token.ThrowIfCancellationRequested();
                         if (!_store.IsContentVisible(item)) continue;
                         if (!NormalizeSearch(item.Name).Contains(q, StringComparison.OrdinalIgnoreCase)) continue;
-                        list.Add(item);
-                        if (list.Count >= 72) break;
+
+                        switch (item.Kind)
+                        {
+                            case "live" when live.Count < 10:
+                                live.Add(item);
+                                break;
+                            case "movie" when movies.Count < 12:
+                                movies.Add(item);
+                                break;
+                            case "series" when series.Count < 12:
+                                series.Add(item);
+                                break;
+                        }
+
+                        if (live.Count >= 10 && movies.Count >= 12 && series.Count >= 12)
+                            break;
                     }
-                    return list;
+
+                    return (Live: live, Movies: movies, Series: series);
                 }, token);
 
-                if (token.IsCancellationRequested || !string.Equals(raw, search.Text, StringComparison.Ordinal)) return;
+                if (token.IsCancellationRequested ||
+                    !string.Equals(raw, search.Text, StringComparison.Ordinal))
+                    return;
+
                 results.Children.Clear();
-                foreach (var item in matches)
-                    results.Children.Add(ContentCard(item, item.Kind == "live" ? 240 : 160));
-                status.Text = matches.Count == 0
+                if (grouped.Live.Count > 0)
+                    results.Children.Add(ContentRow("القنوات", grouped.Live, landscape: true));
+                if (grouped.Movies.Count > 0)
+                    results.Children.Add(ContentRow("الأفلام", grouped.Movies));
+                if (grouped.Series.Count > 0)
+                    results.Children.Add(ContentRow("المسلسلات", grouped.Series));
+
+                var count = grouped.Live.Count + grouped.Movies.Count + grouped.Series.Count;
+                status.Text = count == 0
                     ? "لا توجد نتائج"
-                    : "عرض أول " + matches.Count.ToString("N0") + " نتيجة";
+                    : "عرض أفضل " + count.ToString("N0") + " نتيجة";
             }
             catch (OperationCanceledException) { }
         }
@@ -1595,20 +1630,17 @@ public partial class MainWindow : Window
         var recent = _store.ActiveLibrary().RecentSearches;
         if (recent.Count > 0)
         {
-            root.Children.Insert(1, Txt("عمليات البحث الأخيرة: " + string.Join(" • ", recent.Take(8)),
+            root.Children.Insert(1, Txt(
+                "عمليات البحث الأخيرة: " + string.Join(" • ", recent.Take(8)),
                 11, Muted, marginTop: 8));
         }
 
-        ContentHost.Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        ContentHost.Content = new ScrollViewer
+        {
+            Content = root,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden
+        };
         search.Focus();
-    }
-
-    private static string NormalizeSearch(string value)
-    {
-        return value.Trim().ToLowerInvariant()
-            .Replace("أ", "ا").Replace("إ", "ا").Replace("آ", "ا")
-            .Replace("ة", "ه").Replace("ى", "ي")
-            .Replace("ـ", "");
     }
 
     private void ShowProfiles()
