@@ -163,6 +163,12 @@
                     Style="{StaticResource PlayerPillButton}"
                     MinWidth="92"
                     Height="42"/>
+            <Button x:Name="PersistentPlayPauseButton"
+                    Content="⏸ إيقاف مؤقت"
+                    Click="PlayPause_Click"
+                    Style="{StaticResource PlayerPillButton}"
+                    MinWidth="120"
+                    Height="42"/>
             <Button x:Name="PersistentFullscreenButton"
                     Content="🗗 نافذة"
                     Click="Fullscreen_Click"
