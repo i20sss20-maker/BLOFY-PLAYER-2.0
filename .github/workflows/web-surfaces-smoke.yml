@@ -257,9 +257,18 @@ jobs:
           ra=(root.get('release') or {}).get('app') or {}
           ua=(updates.get('release') or {}).get('app') or {}
           expected=(ua.get('versionCode'),ua.get('versionName'),ua.get('downloadUrl'))
-          assert all(expected)
-          assert (aa.get('versionCode'),aa.get('versionName'),aa.get('downloadUrl')) == expected
-          assert (ra.get('versionCode'),ra.get('versionName'),ra.get('downloadUrl')) == expected
+          # Release metadata is public. Log only code/name/filename — never environment variables or secrets.
+          from urllib.parse import urlparse
+          def safe_release(label, app):
+              url = urlparse(str(app.get('downloadUrl') or ''))
+              print(f"{label}: versionCode={app.get('versionCode')!r} versionName={app.get('versionName')!r} file={url.path.rsplit('/',1)[-1]!r}")
+          for label, app in [('activation API',aa),('main website',ra),('updates service',ua)]:
+              safe_release(label,app)
+          assert all(expected), 'updates release metadata incomplete'
+          assert expected[0] == 2000073, f'approved Android release is 2000073, updates service reported {expected[0]!r}'
+          for label, app in [('activation API',aa),('main website',ra)]:
+              actual=(app.get('versionCode'),app.get('versionName'),app.get('downloadUrl'))
+              assert actual == expected, f'{label} public release metadata differs from updates'
           print(f"release={ua.get('versionName')} ({ua.get('versionCode')})")
           PY
 

@@ -39,3 +39,22 @@ test('public metadata sanitizers reject invalid identity and unsafe URLs',()=>{
   assert.equal(sanitizeVersionName('bad version'),null);
   for(const value of ['http://example.com/a.apk','javascript:alert(1)','https://user:password@example.com/a.apk'])assert.equal(sanitizeHttpsUrl(value),null);
 });
+
+test('unconfigured activation metadata matches the approved public Android release 2000073', () => {
+  const app = appReleaseMetadata({});
+  assert.equal(app.versionCode, 2000073);
+  assert.equal(app.versionName, '2.0.0-rc07.55.5');
+  assert.equal(app.minSupportedVersionCode, 1);
+  assert.equal(app.downloadUrl, 'https://updates.blofyplayer.com/files/releases/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.apk');
+});
+
+test('explicit later metadata can still be configured without silently reverting to an old APK', () => {
+  const app = appReleaseMetadata({
+    BLOFY_APP_VERSION_CODE: '2000074',
+    BLOFY_APP_VERSION_NAME: '2.0.0-rc07.55.6',
+    BLOFY_APP_DOWNLOAD_URL: 'https://updates.blofyplayer.com/files/releases/approved-future.apk'
+  });
+  assert.equal(app.versionCode, 2000074);
+  assert.equal(app.versionName, '2.0.0-rc07.55.6');
+  assert.match(app.downloadUrl, /approved-future\.apk$/);
+});
