@@ -755,6 +755,13 @@ const server = http.createServer(async (req, res) => {
 
 async function start() {
   await initializeDatabase();
+  // Public deployment diagnostics only: never print config variables, credentials, or full request data.
+  console.info('BLOFY_PUBLIC_RELEASE_AT_BOOT', JSON.stringify({
+    versionCode: RELEASE_METADATA.app.versionCode,
+    versionName: RELEASE_METADATA.app.versionName,
+    publishedFallbackCode: 2000073,
+    commitSha: RELEASE_METADATA.commitSha
+  }));
   server.listen(PORT, '0.0.0.0', () => console.log(`BLOFY activation service listening on :${PORT}`));
 }
 
