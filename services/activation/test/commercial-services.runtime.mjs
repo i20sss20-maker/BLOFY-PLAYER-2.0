@@ -114,12 +114,12 @@ test('commercial services: isolated PostgreSQL and actual HTTP contracts',async 
     assert.equal((await pool.query('SELECT status FROM devices WHERE device_id=$1',[ids[0]])).rows[0].status,'blocked');
     assert.equal((await pool.query('SELECT COUNT(*)::int AS n FROM device_playlists WHERE device_id=$1',[recoveredId])).rows[0].n,0);
   });
-  await t.test('plans/status and public policy work; website renewal uses same-origin payment',async()=>{
+  await t.test('plans/status and public policy work; website renewal uses WhatsApp temporarily',async()=>{
     assert.equal((await fetch(origin+'/api/v1/subscriptions/plans')).status,200);
     assert.equal((await request('/api/v1/subscriptions/status',auth(recoveredId))).body.active,true);
     const page=await fetch(origin+'/privacy');assert.equal(page.status,200);assert.match(await page.text(),/privacy-form/);
-    const connect=await (await fetch(origin+'/connect')).text();assert.doesNotMatch(connect,/wa\.me|data-plan/);
-    assert.match(connect,/blofyRenewBtn/);assert.match(connect,/window\.location\.assign\('\/pay#' \+ fragment\)/);
+    const connect=await (await fetch(origin+'/connect')).text();assert.match(connect,/wa\.me\/966568941484/);assert.doesNotMatch(connect,/wa\.me\/966568941484[^"']*activationCode/);
+    assert.match(connect,/blofyRenewBtn/);assert.match(connect,/window\.location\.assign\('https:\/\/wa\.me\/966568941484/);
     assert.match(connect,/مشتركين BLOFY/);assert.match(connect,/\/api\/v1\/subscribers\/session/);
     const support=await request('/api/v1/privacy/support',auth(recoveredId,{message:'استفسار تجريبي معزول عن الخصوصية'}));
     assert.equal(support.status,201);
