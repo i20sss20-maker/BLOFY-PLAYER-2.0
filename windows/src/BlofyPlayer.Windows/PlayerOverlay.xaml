@@ -103,7 +103,7 @@
                   FlowDirection="LeftToRight"
                   PreviewKeyDown="Overlay_KeyDown"
                   MouseMove="Overlay_MouseMove"
-                  MouseDoubleClick="Overlay_MouseDoubleClick">
+                  MouseLeftButtonDown="Overlay_SurfaceMouseLeftButtonDown">
 
         <!-- Keep a failed native video surface from leaving a white desktop pane. -->
         <Border x:Name="PlaybackFailureShade"
