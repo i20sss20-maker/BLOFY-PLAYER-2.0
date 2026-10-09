@@ -51,8 +51,8 @@ for (const path of ['/connect', '/portal', '/']) {
     assert.equal(response.status, 200);
     verifyHtml(response, path);
     assert.match(response.body, /blofyRenewBtn/);
-    assert.match(response.body, /\/pay#/);
-    assert.doesNotMatch(response.body, /wa\.me|data-plan/);
+    assert.match(response.body, /wa\.me\/966568941484/);
+    assert.doesNotMatch(response.body, /\/pay#|data-plan/);
   });
 }
 
