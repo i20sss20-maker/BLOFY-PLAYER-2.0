@@ -20,6 +20,16 @@ test('complete page and APK links exist in initial HTML with no scripts or loadi
   }
 });
 
+test('Google Play remains the primary public install path even without an APK catalogue', () => {
+  for (const options of [{}, { unavailable: true }]) {
+    const html = renderPublicDownloads([], options);
+    assert.match(html, /id="google-play-primary"/);
+    assert.match(html, /https:\/\/play\.google\.com\/store\/apps\/details\?id=tv\.blofy\.player\.v2/);
+    assert.match(html, /href="#versions-title"/);
+    assert.doesNotMatch(html, /id="download-primary"/);
+  }
+});
+
 test('primary sorts first independently of channel or version without mutating catalogue', () => {
   const other = { ...release, versionCode: 2000099, versionName: '2.0.0-test', isPrimary: false, channel: 'stable' };
   const items = [other, release]; const html = renderPublicDownloads(items);

@@ -428,3 +428,12 @@ button,.btn,input,select,textarea{min-height:44px}
   .status-nav a,.status-wrap .actions a,.status-wrap .actions button,
   .source-main .tab,.source-main .button,.source-main button,.not-found .actions a{min-height:46px!important}
 }
+
+/* Official Google Play entry points; retain website-based APK as a secondary option. */
+.play-store-link{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:20px 0 4px}
+.play-store-link a{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:11px 18px;border-radius:14px;background:#7539e8;border:1px solid #a98af5;color:#fff;text-decoration:none;font-weight:800;text-align:center;line-height:1.45}
+.play-store-link a:hover,.play-store-link a:focus-visible{background:#8b54f2;outline:2px solid #e1d3ff;outline-offset:2px}
+.play-store-link a.play-store-apk{background:transparent;border:1px solid rgba(196,171,242,.42);color:#e1d3ff}
+.official-store-links{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;margin:24px auto 16px}
+.official-store-links .btn{min-height:52px;text-align:center}
+@media(max-width:600px){.play-store-link,.official-store-links{display:grid;grid-template-columns:1fr}.play-store-link a,.official-store-links .btn{width:100%;min-width:0}}

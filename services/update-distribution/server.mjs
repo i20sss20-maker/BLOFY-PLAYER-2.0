@@ -10,6 +10,7 @@ import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } fr
 import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload, openRemoteApk } from './app-library.mjs';
 import { observeDownloadCompletion } from './download-metrics.mjs';
 import { recordDownloadCompletion } from './app-library.mjs';
+import { publicSiteRedirect } from './public-site-redirect.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 const APP_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -803,6 +804,15 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://localhost');
     const pathname = url.pathname;
     const method = req.method || '';
+    const canonical = publicSiteRedirect(req.headers.host, method, pathname, url.search);
+    if (canonical) {
+      res.writeHead(308, {
+        ...securityHeaders,
+        location: canonical,
+        'cache-control': 'public, max-age=300'
+      });
+      return res.end();
+    }
 
     if (method === 'POST' && pathname === '/api/internal/releases/upload') {
       return await receiveReleaseUpload(req, res, url);
