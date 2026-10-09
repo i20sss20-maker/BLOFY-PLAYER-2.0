@@ -90,7 +90,9 @@ test('renewal sends customers to the configured WhatsApp number without disclosi
   assert.doesNotMatch(html, /data-plan=/);
 });
 
-test('renewal is also accessible before entering device credentials', () => {
+test('renewal does not require device pairing credentials', () => {
   const html = injected();
-  assert.doesNotMatch(html, /بيانات الجهاز غير مكتملة/);
+  const section = html.split('function installRenewalUi() {')[1].split('function install() {')[0];
+  assert.match(section, /wa\.me\/966568941484/);
+  assert.doesNotMatch(section, /deviceAuth\(\)|activationCode|بيانات الجهاز غير مكتملة/);
 });
