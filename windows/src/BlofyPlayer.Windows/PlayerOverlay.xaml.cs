@@ -19,6 +19,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private readonly DispatcherTimer _hudTimer;
     private readonly DispatcherTimer _channelNumberTimer;
     private readonly DispatcherTimer _zapTimer;
+    private readonly SemaphoreSlim _nativePlaybackGate = new(1, 1);
+    private int _playbackGeneration;
     private CancellationTokenSource? _epgCts;
     private int _pendingZapDelta;
     private readonly IReadOnlyList<StreamItem> _playlist;
@@ -132,6 +134,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             _userPaused = false;
             _lastProgressAt = DateTimeOffset.UtcNow;
             ApplyResumeOnce();
+            ApplyAspect(_settings.Aspect);
             // "Playing" may precede the first video frame. Use the real
             // LibVLCSharp VoutCount property, not reflection on "Vout"
             // (which never existed and made every live channel retry at 10s).
@@ -198,11 +201,17 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         try { VideoView.MediaPlayer = null; } catch { }
         // LibVLC stop/dispose can synchronously wait on the decoder;
         // executing them on WPF's thread locks every navigation control.
-        var release = Task.Run(() =>
+        Interlocked.Increment(ref _playbackGeneration);
+        var release = Task.Run(async () =>
         {
-            try { _player.Stop(); } catch { }
-            try { _player.Dispose(); } catch { }
-            try { _libVlc.Dispose(); } catch { }
+            await _nativePlaybackGate.WaitAsync();
+            try
+            {
+                try { _player.Stop(); } catch { }
+                try { _player.Dispose(); } catch { }
+                try { _libVlc.Dispose(); } catch { }
+            }
+            finally { _nativePlaybackGate.Release(); }
         });
         await Task.WhenAny(release, Task.Delay(2500));
     }
@@ -248,22 +257,46 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             _pendingRecoveryResume = preservePosition;
         }
 
-        using var media = new Media(_libVlc, uri);
-        // Treat the app's own default UA as a hint, not as a reason for
-        // Xtream providers to reject on-demand video outright. A custom UA
-        // selected by the user is always respected.
+        // Native MediaPlayer.Play can block while the server negotiates a
+        // TS/HLS/4K stream. Never call it on the UI dispatcher, otherwise the
+        // remote, ESC, mouse and focus all freeze while connecting.
+        var generation = Interlocked.Increment(ref _playbackGeneration);
         var userAgent = _compatibilityUserAgent ||
             string.IsNullOrWhiteSpace(_settings.UserAgent) ||
             _settings.UserAgent.Equals("BLOFY PLAYER/2.0 (Windows)", StringComparison.Ordinal)
             ? CompatibilityUserAgent : _settings.UserAgent;
-        media.AddOption(":http-user-agent=" + userAgent);
-        // Do not invent a Referer: many IPTV/CDN endpoints validate it, and
-        // the fabricated hostname referrer caused 403 on some streams.
-        media.AddOption(":network-caching=" + (_playlist.Count > 0 ? "450" : "800"));
-        if (_settings.SubtitleLanguage == "off") media.AddOption(":no-spu");
-        if (!_player.Play(media))
-            DispatchPlayerEvent(() => TryRecoverPlayback("المحرك رفض الرابط — تجربة مسار بديل…"));
-        ApplyAspect(_settings.Aspect);
+        var isLive = _playlist.Count > 0;
+        var disableSubtitles = _settings.SubtitleLanguage == "off";
+
+        _ = Task.Run(async () =>
+        {
+            await _nativePlaybackGate.WaitAsync();
+            try
+            {
+                if (_disposed || generation != Volatile.Read(ref _playbackGeneration)) return;
+                using var media = new Media(_libVlc, uri);
+                media.AddOption(":http-user-agent=" + userAgent);
+                // Do not fabricate a Referer for Xtream/CDN requests.
+                media.AddOption(":network-caching=" + (isLive ? "450" : "800"));
+                if (disableSubtitles) media.AddOption(":no-spu");
+                var started = _player.Play(media);
+                if (!started)
+                    DispatchPlayerEvent(() =>
+                    {
+                        if (generation == Volatile.Read(ref _playbackGeneration))
+                            TryRecoverPlayback("المحرك رفض الرابط — تجربة مسار بديل…");
+                    });
+            }
+            catch (Exception)
+            {
+                DispatchPlayerEvent(() =>
+                {
+                    if (generation == Volatile.Read(ref _playbackGeneration))
+                        TryRecoverPlayback("تعذر اتصال محرك الفيديو بالسيرفر…");
+                });
+            }
+            finally { _nativePlaybackGate.Release(); }
+        });
     }
 
     private static List<string> NormalizeRecoveryUrls(string primary, IReadOnlyList<string>? recovery)
