@@ -86,9 +86,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         var options = new List<string>
         {
             "--no-video-title-show",
-            "--network-caching=650",
-            "--live-caching=450",
-            "--file-caching=500",
+            "--network-caching=420",
+            "--live-caching=350",
+            "--file-caching=350",
             "--avcodec-hw=any"
         };
         if (_settings.SubtitleLanguage is "ar" or "auto")
@@ -125,9 +125,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         {
             ApplyResumeOnce();
             _lastProgressAt = DateTimeOffset.UtcNow;
-            LoadingBadge.Visibility = Visibility.Collapsed;
-            RetryPlaybackButton.Visibility = Visibility.Collapsed;
-            PlaybackFailureShade.Visibility = Visibility.Collapsed;
+            // LibVLC's "Playing" may fire before the first decoded video frame.
+            if (HasVideoOutput()) MarkPlaybackReady();
         });
         _player.EncounteredError += (_, _) => DispatchPlayerEvent(() =>
             TryRecoverPlayback("تعذر التشغيل — تجربة مسار بديل…"));
@@ -233,7 +232,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         using var media = new Media(_libVlc, uri);
         media.AddOption(":http-user-agent=" + (_compatibilityUserAgent ? CompatibilityUserAgent : _settings.UserAgent));
         media.AddOption(":http-referrer=" + uri.GetLeftPart(UriPartial.Authority) + "/");
-        media.AddOption(":network-caching=" + (_playlist.Count > 0 ? "450" : "850"));
+        media.AddOption(":network-caching=" + (_playlist.Count > 0 ? "350" : "500"));
         if (_settings.SubtitleLanguage == "off") media.AddOption(":no-spu");
         if (!_player.Play(media))
             DispatchPlayerEvent(() => TryRecoverPlayback("المحرك رفض الرابط — تجربة مسار بديل…"));
@@ -262,13 +261,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     {
         if (_disposed || _playbackFailed) return;
 
-        // Try each stream URL with the configured User-Agent and one standard
-        // browser User-Agent. Some providers reject desktop app-specific agents.
-        // Keep retries finite so a failed source cannot hang the playback screen.
-        var tryCompatibility = !_compatibilityUserAgent &&
+        // Try a DIFFERENT server URL before retrying the same stalled URL
+        // with another User-Agent. A broken episode must not spin for minutes.
+        var haveNextUrl = _recoveryIndex + 1 < _recoveryUrls.Count;
+        var haveAlternateAgent = !_compatibilityUserAgent &&
             !string.Equals(_settings.UserAgent, CompatibilityUserAgent, StringComparison.OrdinalIgnoreCase);
-        var nextIndex = tryCompatibility ? _recoveryIndex : _recoveryIndex + 1;
-        if (nextIndex >= _recoveryUrls.Count || _automaticRecoveries >= 5)
+        var maxRetries = Math.Min(4, Math.Max(1, _recoveryUrls.Count * 2) - 1);
+        if (_automaticRecoveries >= maxRetries || (!haveNextUrl && !haveAlternateAgent))
         {
             _playbackFailed = true;
             LoadingBadge.Visibility = Visibility.Collapsed;
@@ -282,10 +281,11 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
         var preserve = Math.Max(_player.Time, _pendingRecoveryResume);
         _automaticRecoveries++;
-        _recoveryIndex = nextIndex;
-        _compatibilityUserAgent = tryCompatibility;
-        EpgText.Text = tryCompatibility ? "تجربة توافق السيرفر…" : message;
-        LoadingText.Text = message.Replace("…", "");
+        if (haveNextUrl) _recoveryIndex++;
+        else { _recoveryIndex = 0; _compatibilityUserAgent = true; }
+        EpgText.Text = haveNextUrl ? message : "تجربة توافق السيرفر…";
+        LoadingText.Text = "فحص المصدر " + (_automaticRecoveries + 1) +
+                           " / " + (maxRetries + 1) + "…";
         LoadingBadge.Visibility = Visibility.Visible;
         ShowHudBriefly();
         PlayCurrentCandidate(preserve);
@@ -331,6 +331,14 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _player.Time = target;
     }
 
+    private void MarkPlaybackReady()
+    {
+        _videoOutputSeen = true;
+        LoadingBadge.Visibility = Visibility.Collapsed;
+        RetryPlaybackButton.Visibility = Visibility.Collapsed;
+        PlaybackFailureShade.Visibility = Visibility.Collapsed;
+    }
+
     private void RefreshHud()
     {
         var length = Math.Max(0, _player.Length);
@@ -339,16 +347,17 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         if (!SeekSlider.IsMouseCaptureWithin) SeekSlider.Value = Math.Min(time, SeekSlider.Maximum);
         TimeText.Text = Format(time) + " / " + Format(length);
         PlayPauseButton.Content = _player.IsPlaying ? "⏸" : "▶";
+        PersistentPlayPauseButton.Content = _player.IsPlaying ? "⏸ إيقاف مؤقت" : "▶ تشغيل";
         SeekSlider.Visibility = length > 0 ? Visibility.Visible : Visibility.Collapsed;
         PreviousButton.ToolTip = _playlist.Count > 0 ? "القناة السابقة" : "الحلقة السابقة";
         NextButton.ToolTip = _playlist.Count > 0 ? "القناة التالية" : "الحلقة التالية";
 
         if (_disposed || _playbackFailed) return;
-        if (!_videoOutputSeen && HasVideoOutput()) _videoOutputSeen = true;
+        if (!_videoOutputSeen && HasVideoOutput()) MarkPlaybackReady();
 
         if (!_videoOutputSeen &&
             DateTimeOffset.UtcNow - _playStartedAt >
-                TimeSpan.FromSeconds(_playlist.Count > 0 ? 12 : 22))
+                TimeSpan.FromSeconds(_playlist.Count > 0 ? 10 : 16))
         {
             _playStartedAt = DateTimeOffset.UtcNow;
             TryRecoverPlayback("لا توجد صورة — تجربة مسار بديل…");
@@ -371,7 +380,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
         else if (!_player.IsPlaying &&
                  DateTimeOffset.UtcNow - _playStartedAt >
-                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 12 : 22))
+                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 10 : 16))
         {
             TryRecoverPlayback("تأخر بدء التشغيل — تجربة مسار بديل…");
         }
@@ -515,8 +524,11 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
+        if (_disposed) return;
         if (_player.IsPlaying) _player.Pause();
+        else if (_playbackFailed) RetryPlayback_Click(sender, e);
         else _player.Play();
+        RefreshHud();
         ShowHudBriefly();
     }
 
@@ -771,7 +783,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         Hud.Visibility = Visibility.Collapsed;
         TopShade.Visibility = Visibility.Collapsed;
         Cursor = Cursors.None;
-        Focus();
+        VideoOverlaySurface.Focus();
     }
 
     private void Overlay_MouseMove(object sender, MouseEventArgs e) => ShowHudBriefly();
@@ -929,6 +941,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         new Button[]
         {
             PersistentBackButton,
+            PersistentPlayPauseButton,
             PersistentFullscreenButton,
             ChannelListButton,
             LastChannelButton,
@@ -1024,6 +1037,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private async void Overlay_KeyDown(object sender, KeyEventArgs e)
     {
+        // The channel panel owns arrows/Enter; don't swallow its PreviewKeyDown.
+        if (ChannelPanel.Visibility == Visibility.Visible &&
+            e.Key is Key.Up or Key.Down or Key.Left or Key.Right
+                     or Key.PageDown or Key.PageUp or Key.Home or Key.End
+                     or Key.Enter or Key.Return or Key.Space)
+            return;
+
         var digit = DigitFromKey(e.Key);
         if (digit is not null && _playlist.Count > 0 && _urlResolver is not null)
         {
@@ -1098,14 +1118,11 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             {
                 focusedButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }
-            else if (!hudVisible)
-            {
-                ShowHudBriefly();
-                Focus();
-            }
             else
             {
-                HideHud();
+                // Space / OK while focused on video must really pause or resume.
+                PlayPause_Click(this, new RoutedEventArgs());
+                VideoOverlaySurface.Focus();
             }
             e.Handled = true;
             return;
