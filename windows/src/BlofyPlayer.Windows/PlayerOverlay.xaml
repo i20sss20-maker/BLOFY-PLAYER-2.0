@@ -89,10 +89,21 @@
     </UserControl.Resources>
 
     <Grid x:Name="PlayerRoot" Background="Black">
+        <!-- LibVLC WPF uses a native WinForms HWND. Sibling WPF controls are
+             ALWAYS hidden behind video in fullscreen (airspace limitation).
+             VideoView.Content creates the supported independent overlay HWND;
+             playback controls now stay visible and clickable over real video. -->
         <vlc:VideoView x:Name="VideoView"
                        Background="Black"
                        HorizontalAlignment="Stretch"
-                       VerticalAlignment="Stretch"/>
+                       VerticalAlignment="Stretch">
+            <Grid x:Name="VideoOverlaySurface"
+                  Background="#01000000"
+                  Focusable="True"
+                  FlowDirection="LeftToRight"
+                  PreviewKeyDown="Overlay_KeyDown"
+                  MouseMove="Overlay_MouseMove"
+                  MouseDoubleClick="Overlay_MouseDoubleClick">
 
         <!-- Keep a failed native video surface from leaving a white desktop pane. -->
         <Border x:Name="PlaybackFailureShade"
@@ -324,5 +335,7 @@
                 </StackPanel>
             </Grid>
         </Border>
+            </Grid>
+        </vlc:VideoView>
     </Grid>
 </UserControl>
