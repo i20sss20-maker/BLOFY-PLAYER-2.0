@@ -601,4 +601,5 @@
     <string name="system_status_report_copied">تم نسخ تقرير التشخيص</string>
 
     <string name="login_playlist_default_name">قائمة %1$s</string>
+    <string name="search_show_more">عرض نتائج أكثر</string>
 </resources>
