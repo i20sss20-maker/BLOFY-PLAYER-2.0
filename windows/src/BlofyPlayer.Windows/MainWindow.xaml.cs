@@ -1454,7 +1454,10 @@ public partial class MainWindow : Window
 
             try
             {
-                await Task.Delay(180, token);
+                // A receiver remote can traverse dozens of channels in
+                // one second. Debounce preview starts so only a settled
+                // selection spins up the expensive native decoder/EPG calls.
+                await Task.Delay(520, token);
                 if (token.IsCancellationRequested || serial != _liveSelectionSerial) return;
 
                 if (_store.State.Settings.AutoplayLive && _previewPlayback is not null)
