@@ -133,6 +133,7 @@ jobs:
           grep -Fq 'Universal' /tmp/downloads.html
 
           grep -Fq "streamApkDownload" server.mjs
+          grep -Fq "'/latest.apk', '/apk', '/d/blofy'" server.mjs
           grep -Fq "application/vnd.android.package-archive" server.mjs
           grep -Fq "content-disposition" server.mjs
           grep -Fq "openRemoteApk" app-library.mjs
