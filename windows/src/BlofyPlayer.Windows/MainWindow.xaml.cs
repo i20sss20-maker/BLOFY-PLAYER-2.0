@@ -172,7 +172,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private Task ShowPlayerOverlayAsync(
+    private async Task ShowPlayerOverlayAsync(
         string title,
         string url,
         long resumePositionMs = 0,
@@ -194,7 +194,10 @@ public partial class MainWindow : Window
         // LibVLC uses native video windows. Keeping the small preview active
         // while opening fullscreen leaves a ghost HWND over the main player
         // and forces the decoder to run two streams at once (especially 4K).
-        DisposePreview();
+        var teardown = StopAndDisposePreviewAsync();
+        // Native VLC Stop() can block when a 4K decoder is struggling. Give
+        // the previous mini-player time to stop without freezing WPF forever.
+        await Task.WhenAny(teardown, Task.Delay(1500));
         var overlay = new PlayerOverlay(
             title,
             url,
@@ -218,7 +221,6 @@ public partial class MainWindow : Window
             onEnded: onEnded);
 
         PushOverlay(overlay);
-        return Task.CompletedTask;
     }
 
     private void SetOverlayFullscreen(bool enabled)
@@ -3653,20 +3655,20 @@ public partial class MainWindow : Window
             "BLOFY PLAYER");
     }
 
-    private void DisposePreview()
+    private void DisposePreview() => _ = StopAndDisposePreviewAsync();
+
+    private Task StopAndDisposePreviewAsync()
     {
-        // Invalidate pending EPG/channel selection work BEFORE releasing video.
         _liveSelectionSerial++;
         _livePreviewCts?.Cancel();
         _livePreviewCts?.Dispose();
         _livePreviewCts = null;
 
+        // The video HWND must be detached on the dispatcher thread.
         var video = _previewVideoView;
         _previewVideoView = null;
         if (video is not null)
         {
-            // Detach native HWND, not just its media player: otherwise the
-            // invisible preview can still cover the full-screen VLC surface.
             try { video.MediaPlayer = null; } catch { }
             if (video.Parent is Border host && ReferenceEquals(host.Child, video))
                 host.Child = null;
@@ -3674,9 +3676,16 @@ public partial class MainWindow : Window
 
         var preview = _previewPlayback;
         _previewPlayback = null;
-        if (preview is null) return;
-        try { preview.Stop(); } catch { }
-        try { preview.Dispose(); } catch { }
+        if (preview is null) return Task.CompletedTask;
+
+        // Blocking native VLC shutdown was freezing the entire WPF window
+        // whenever the preview's decoder stalled. Detach first and release it
+        // in the background; still await briefly before starting fullscreen.
+        return Task.Run(() =>
+        {
+            try { preview.Stop(); } catch { }
+            try { preview.Dispose(); } catch { }
+        });
     }
 
     private IReadOnlyList<StreamItem> Items(string kind)
