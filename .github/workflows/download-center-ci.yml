@@ -102,6 +102,17 @@ jobs:
           grep -Fq '"ok":true' /tmp/health.json
 
           curl -fsS --max-time 10 http://127.0.0.1:3100/downloads >/tmp/downloads.html
+          grep -Fq 'rel="canonical" href="https://updates.blofyplayer.com/"' /tmp/downloads.html
+          curl -fsS --max-time 10 http://127.0.0.1:3100/robots.txt >/tmp/updates-robots.txt
+          curl -fsS --max-time 10 http://127.0.0.1:3100/sitemap.xml >/tmp/updates-sitemap.xml
+          grep -Fq 'Sitemap: https://updates.blofyplayer.com/sitemap.xml' /tmp/updates-robots.txt
+          grep -Fq '<loc>https://updates.blofyplayer.com/</loc>' /tmp/updates-sitemap.xml
+          html_status="$(curl -sS --max-time 10 -H 'Accept: text/html' -o /tmp/updates-missing.html -w '%{http_code}' http://127.0.0.1:3100/__blofy_missing_route__)"
+          test "$html_status" = 404
+          grep -Fq 'الصفحة غير موجودة' /tmp/updates-missing.html
+          json_status="$(curl -sS --max-time 10 -o /tmp/updates-missing.json -w '%{http_code}' http://127.0.0.1:3100/__blofy_missing_route__)"
+          test "$json_status" = 404
+          grep -Fq '"error":"not_found"' /tmp/updates-missing.json
           grep -Fq 'data-details-toggle' /tmp/downloads.html
           grep -Fq 'class="app-details"' /tmp/downloads.html
           grep -Fq 'id="app-search"' /tmp/downloads.html
