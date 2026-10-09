@@ -56,13 +56,16 @@
 
             <ListBox x:Name="SeasonList" Grid.Column="0"
                      Style="{StaticResource TvListBox}"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
                      SelectionChanged="SeasonList_SelectionChanged"/>
 
             <Border Grid.Column="2" Background="#160D22"
                     BorderBrush="#52FFFFFF" BorderThickness="1"
                     CornerRadius="14" Padding="10">
-                <ScrollViewer VerticalScrollBarVisibility="Hidden"
-                              HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="EpisodeScroll"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              PanningMode="VerticalOnly">
                     <StackPanel x:Name="EpisodePanel"/>
                 </ScrollViewer>
             </Border>
