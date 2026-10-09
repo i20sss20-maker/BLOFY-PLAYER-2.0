@@ -242,8 +242,10 @@ jobs:
             --connect-timeout 8 --max-time 30 https://blofyplayer.com/health > "$tmp/root.json"
           curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 https://updates.blofyplayer.com/health > "$tmp/updates.json"
+          curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 30 https://blofy-activation-portal-production.up.railway.app/health > "$tmp/railway-direct.json"
 
-          python3 - "$tmp/api.json" "$tmp/root.json" "$tmp/updates.json" <<'PY'
+          python3 - "$tmp/api.json" "$tmp/root.json" "$tmp/updates.json" "$tmp/railway-direct.json" <<'PY'
           import json,sys
           api=json.load(open(sys.argv[1],encoding='utf-8'))
           root=json.load(open(sys.argv[2],encoding='utf-8'))
@@ -267,6 +269,11 @@ jobs:
           for label, payload in [('activation API',api),('main website',root),('updates service',updates)]:
               release=payload.get('release') or {}
               print(f"{label}: platform={release.get('platform')!r} commitSha={release.get('commitSha')!r}")
+          direct=json.load(open(sys.argv[4],encoding='utf-8'))
+          drel=direct.get('release') or {}
+          dapp=drel.get('app') or {}
+          safe_release('direct Railway service',dapp)
+          print(f"direct Railway service: platform={drel.get('platform')!r} commitSha={drel.get('commitSha')!r}")
           assert all(expected), 'updates release metadata incomplete'
           assert expected[0] == 2000073, f'approved Android release is 2000073, updates service reported {expected[0]!r}'
           for label, app in [('activation API',aa),('main website',ra)]:
