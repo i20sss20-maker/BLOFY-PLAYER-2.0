@@ -795,6 +795,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         e.Handled = true;
     }
 
+    private void Overlay_SurfaceMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2) return;
+        Fullscreen_Click(sender, new RoutedEventArgs());
+        e.Handled = true;
+    }
+
     private void ChangeChannel(int delta)
     {
         if (_playlist.Count == 0 || _urlResolver is null || delta == 0) return;
