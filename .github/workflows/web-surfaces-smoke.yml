@@ -264,6 +264,9 @@ jobs:
               print(f"{label}: versionCode={app.get('versionCode')!r} versionName={app.get('versionName')!r} file={url.path.rsplit('/',1)[-1]!r}")
           for label, app in [('activation API',aa),('main website',ra),('updates service',ua)]:
               safe_release(label,app)
+          for label, payload in [('activation API',api),('main website',root),('updates service',updates)]:
+              release=payload.get('release') or {}
+              print(f"{label}: platform={release.get('platform')!r} commitSha={release.get('commitSha')!r}")
           assert all(expected), 'updates release metadata incomplete'
           assert expected[0] == 2000073, f'approved Android release is 2000073, updates service reported {expected[0]!r}'
           for label, app in [('activation API',aa),('main website',ra)]:
