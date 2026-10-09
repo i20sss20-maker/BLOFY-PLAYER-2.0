@@ -5,11 +5,11 @@ const VERSION_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const MAX_ANDROID_VERSION_CODE = 2_100_000_000;
 
 const DEFAULT_APP_RELEASE = Object.freeze({
-  versionCode: 2000060,
-  versionName: '2.0.0-rc07.49',
+  versionCode: 2000073,
+  versionName: '2.0.0-rc07.55.5',
   minSupportedVersionCode: 1,
-  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.49/BLOFY-PLAYER-2.0-rc07.49-signed.apk',
-  releaseNotes: 'BLOFY PLAYER 49 — نسخة الإصدار 46 الثابتة كما هي، برقم إصدار أعلى حتى تتثبت كتحديث مباشر فوق 48 بدون حذف بيانات العميل. تم التحقق من اسم الحزمة وشهادة الإنتاج والتوافق المباشر مع الإصدار السابق.'
+  downloadUrl: 'https://updates.blofyplayer.com/files/releases/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.apk',
+  releaseNotes: 'BLOFY PLAYER 55.5 — تحسين توافق أفلام 4K/HEVC، مع Media3 كمحرك أساسي والانتقال إلى LibVLC الداخلي عند الحاجة. مبني فوق إصلاحات الثيم والأداء ومشتركين BLOFY وDirect Xtream.'
 });
 
 export function sanitizeCommitSha(value) {
