@@ -4,3 +4,5 @@ export function contactTarget(phone) {
 }
 
 export function supportUrl(number) { return contactTarget(number) + '?text=' + encodeURIComponent('مرحبا اريد الدعم'); }
+
+export function renewalUrl(number) { return contactTarget(number) + '?text=' + encodeURIComponent('مرحبا اريد التجديد'); }
