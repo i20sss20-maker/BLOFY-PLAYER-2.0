@@ -186,9 +186,16 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 await _savePosition(Math.Max(0, _player.Time), Math.Max(0, _player.Length));
         }
         catch { }
-        try { _player.Stop(); } catch { }
-        _player.Dispose();
-        _libVlc.Dispose();
+        try { VideoView.MediaPlayer = null; } catch { }
+        // LibVLC stop/dispose can synchronously wait on the decoder;
+        // executing them on WPF's thread locks every navigation control.
+        var release = Task.Run(() =>
+        {
+            try { _player.Stop(); } catch { }
+            try { _player.Dispose(); } catch { }
+            try { _libVlc.Dispose(); } catch { }
+        });
+        await Task.WhenAny(release, Task.Delay(2500));
     }
 
     private void PlayCurrentCandidate(long preservePosition = 0)
