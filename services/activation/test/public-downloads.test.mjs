@@ -30,6 +30,17 @@ test('Google Play remains the primary public install path even without an APK ca
   }
 });
 
+test('temporary WhatsApp support and manual renewal remain visible when releases are unavailable', () => {
+  for (const mode of [{}, {unavailable: true}]) {
+    const html = renderPublicDownloads([], mode);
+    assert.match(html, /wa\.me\/966568941484/);
+    assert.match(html, /الدعم الفني عبر واتساب/);
+    assert.match(html, /تجديد التفعيل عبر واتساب/);
+    assert.doesNotMatch(html, /wa\.me\/966568941484[^"]*activationCode/);
+    assert.doesNotMatch(html, /wa\.me\/966568941484[^"]*code%3D/);
+  }
+});
+
 test('primary sorts first independently of channel or version without mutating catalogue', () => {
   const other = { ...release, versionCode: 2000099, versionName: '2.0.0-test', isPrimary: false, channel: 'stable' };
   const items = [other, release]; const html = renderPublicDownloads(items);
