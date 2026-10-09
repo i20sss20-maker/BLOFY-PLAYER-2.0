@@ -49,6 +49,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private long _pendingRecoveryResume;
     private bool _disposed;
     private bool _playbackFailed;
+    private bool _userPaused;
+    private bool _startedPlaying;
+    private readonly List<string> _playbackDiagnostic = new();
     private Point? _lastPointerPosition;
     private bool _compatibilityUserAgent;
     private bool _favorite;
@@ -124,9 +127,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         // wait on the WPF dispatcher, especially while starting/stopping media.
         _player.Playing += (_, _) => DispatchPlayerEvent(() =>
         {
-            ApplyResumeOnce();
+            _startedPlaying = true;
+            _userPaused = false;
             _lastProgressAt = DateTimeOffset.UtcNow;
-            // LibVLC's "Playing" may fire before the first decoded video frame.
+            ApplyResumeOnce();
+            // "Playing" may precede the first video frame. Use the real
+            // LibVLCSharp VoutCount property, not reflection on "Vout"
+            // (which never existed and made every live channel retry at 10s).
             if (HasVideoOutput()) MarkPlaybackReady();
         });
         _player.EncounteredError += (_, _) => DispatchPlayerEvent(() =>
@@ -230,6 +237,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _lastProgressAt = _playStartedAt;
         _lastObservedTime = -1;
         _videoOutputSeen = false;
+        _startedPlaying = false;
+        _userPaused = false;
 
         if (preservePosition > 0)
         {
@@ -238,9 +247,17 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
 
         using var media = new Media(_libVlc, uri);
-        media.AddOption(":http-user-agent=" + (_compatibilityUserAgent ? CompatibilityUserAgent : _settings.UserAgent));
-        media.AddOption(":http-referrer=" + uri.GetLeftPart(UriPartial.Authority) + "/");
-        media.AddOption(":network-caching=" + (_playlist.Count > 0 ? "350" : "500"));
+        // Treat the app's own default UA as a hint, not as a reason for
+        // Xtream providers to reject on-demand video outright. A custom UA
+        // selected by the user is always respected.
+        var userAgent = _compatibilityUserAgent ||
+            string.IsNullOrWhiteSpace(_settings.UserAgent) ||
+            _settings.UserAgent.Equals("BLOFY PLAYER/2.0 (Windows)", StringComparison.Ordinal)
+            ? CompatibilityUserAgent : _settings.UserAgent;
+        media.AddOption(":http-user-agent=" + userAgent);
+        // Do not invent a Referer: many IPTV/CDN endpoints validate it, and
+        // the fabricated hostname referrer caused 403 on some streams.
+        media.AddOption(":network-caching=" + (_playlist.Count > 0 ? "450" : "800"));
         if (_settings.SubtitleLanguage == "off") media.AddOption(":no-spu");
         if (!_player.Play(media))
             DispatchPlayerEvent(() => TryRecoverPlayback("المحرك رفض الرابط — تجربة مسار بديل…"));
@@ -363,10 +380,15 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
         if (_disposed || _playbackFailed) return;
         if (!_videoOutputSeen && HasVideoOutput()) MarkPlaybackReady();
+        // For some encrypted or software-decoded streams VoutCount is delayed,
+        // although the media clock is already moving. Never restart a movie
+        // whose playback is clearly progressing.
+        if (!_videoOutputSeen && _startedPlaying && _playlist.Count == 0 && time > 800)
+            MarkPlaybackReady();
 
-        if (!_videoOutputSeen &&
+        if (!_videoOutputSeen && !_userPaused &&
             DateTimeOffset.UtcNow - _playStartedAt >
-                TimeSpan.FromSeconds(_playlist.Count > 0 ? 10 : 14))
+                TimeSpan.FromSeconds(_playlist.Count > 0 ? 16 : 20))
         {
             _playStartedAt = DateTimeOffset.UtcNow;
             TryRecoverPlayback("لا توجد صورة — تجربة مسار بديل…");
@@ -381,18 +403,16 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 DateTimeOffset.UtcNow - _playStartedAt > TimeSpan.FromSeconds(30))
                 _automaticRecoveries = 0;
         }
-        else if (_player.IsPlaying && time > 0 &&
-                 DateTimeOffset.UtcNow - _lastProgressAt > TimeSpan.FromSeconds(12))
-        {
-            _lastProgressAt = DateTimeOffset.UtcNow;
-            TryRecoverPlayback("توقف البث — إعادة الاتصال…");
-        }
-        else if (!_player.IsPlaying &&
+        else if (!_userPaused && !_player.IsPlaying && !_videoOutputSeen &&
                  DateTimeOffset.UtcNow - _playStartedAt >
-                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 10 : 14))
+                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 16 : 20))
         {
             TryRecoverPlayback("تأخر بدء التشغيل — تجربة مسار بديل…");
         }
+        // Live MPEG-TS often has no seekable clock (Time may remain 0 or
+        // jump). Do not restart a healthy picture based on Time inactivity.
+        // VOD buffering is also not a reason to discard an opened stream:
+        // wait for VLC's explicit EncounteredError instead.
     }
 
     private static string Format(long ms)
@@ -535,9 +555,24 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
         if (_disposed) return;
-        if (_player.IsPlaying) _player.Pause();
-        else if (_playbackFailed) RetryPlayback_Click(sender, e);
-        else _player.Play();
+        if (_player.IsPlaying)
+        {
+            _userPaused = true;
+            _player.Pause();
+        }
+        else if (_playbackFailed)
+        {
+            _userPaused = false;
+            RetryPlayback_Click(sender, e);
+        }
+        else
+        {
+            _userPaused = false;
+            // Pausing for minutes must never activate the start watchdog.
+            _playStartedAt = DateTimeOffset.UtcNow;
+            _lastProgressAt = _playStartedAt;
+            _player.Play();
+        }
         RefreshHud();
         ShowHudBriefly();
     }
@@ -766,15 +801,11 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private bool HasVideoOutput()
     {
-        try
-        {
-            var property = _player.GetType().GetProperty("Vout");
-            if (property?.GetValue(_player) is uint u) return u > 0;
-            if (property?.GetValue(_player) is int i) return i > 0;
-            if (property?.GetValue(_player) is long l) return l > 0;
-        }
-        catch { }
-        return _playlist.Count == 0 && _player.Time > 0;
+        // LibVLCSharp 3.x API: MediaPlayer.VoutCount. The old reflection
+        // lookup of "Vout" always returned null, so live playback started
+        // correctly but was mistakenly restarted exactly ten seconds later.
+        try { return _player.VoutCount > 0; }
+        catch { return false; }
     }
 
     private void ShowHudBriefly()
