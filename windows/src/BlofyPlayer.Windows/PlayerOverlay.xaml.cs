@@ -49,6 +49,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private long _pendingRecoveryResume;
     private bool _disposed;
     private bool _playbackFailed;
+    private Point? _lastPointerPosition;
     private bool _compatibilityUserAgent;
     private bool _favorite;
     private string _channelDigits = "";
@@ -135,7 +136,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _timer.Tick += (_, _) => RefreshHud();
 
-        _hudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+        _hudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
         _hudTimer.Tick += (_, _) => HideHud();
 
         _channelNumberTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
@@ -266,7 +267,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         var haveNextUrl = _recoveryIndex + 1 < _recoveryUrls.Count;
         var haveAlternateAgent = !_compatibilityUserAgent &&
             !string.Equals(_settings.UserAgent, CompatibilityUserAgent, StringComparison.OrdinalIgnoreCase);
-        var maxRetries = Math.Min(4, Math.Max(1, _recoveryUrls.Count * 2) - 1);
+        var maxRetries = Math.Min(2, Math.Max(1, _recoveryUrls.Count * 2) - 1);
         if (_automaticRecoveries >= maxRetries || (!haveNextUrl && !haveAlternateAgent))
         {
             _playbackFailed = true;
@@ -358,7 +359,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
         if (!_videoOutputSeen &&
             DateTimeOffset.UtcNow - _playStartedAt >
-                TimeSpan.FromSeconds(_playlist.Count > 0 ? 10 : 16))
+                TimeSpan.FromSeconds(_playlist.Count > 0 ? 10 : 14))
         {
             _playStartedAt = DateTimeOffset.UtcNow;
             TryRecoverPlayback("لا توجد صورة — تجربة مسار بديل…");
@@ -381,7 +382,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
         else if (!_player.IsPlaying &&
                  DateTimeOffset.UtcNow - _playStartedAt >
-                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 10 : 16))
+                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 10 : 14))
         {
             TryRecoverPlayback("تأخر بدء التشغيل — تجربة مسار بديل…");
         }
@@ -436,6 +437,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         ChannelPanel.Visibility = Visibility.Visible;
         Hud.Visibility = Visibility.Collapsed;
         TopShade.Visibility = Visibility.Collapsed;
+        PersistentTopControls.Visibility = Visibility.Visible;
         if (_index >= 0 && _index < _playlist.Count)
             ChannelList.SelectedIndex = _index;
         ChannelList.UpdateLayout();
@@ -771,8 +773,10 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private void ShowHudBriefly()
     {
         Cursor = Cursors.Arrow;
-        Hud.Visibility = Visibility.Visible;
+        PersistentTopControls.Visibility = Visibility.Visible;
         TopShade.Visibility = Visibility.Visible;
+        Hud.Visibility = ChannelPanel.Visibility == Visibility.Visible
+            ? Visibility.Collapsed : Visibility.Visible;
         _hudTimer.Stop();
         _hudTimer.Start();
     }
@@ -780,14 +784,27 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private void HideHud()
     {
         _hudTimer.Stop();
-        if (!_player.IsPlaying) return;
+        if (!_player.IsPlaying || ChannelPanel.Visibility == Visibility.Visible) return;
+        // All controls must vanish together (including the persistent top bar).
+        // The earlier version hid Hud while leaving PersistentTopControls
+        // visible across the full film, as reported from the real screenshot.
         Hud.Visibility = Visibility.Collapsed;
         TopShade.Visibility = Visibility.Collapsed;
+        PersistentTopControls.Visibility = Visibility.Collapsed;
         Cursor = Cursors.None;
         VideoOverlaySurface.Focus();
     }
 
-    private void Overlay_MouseMove(object sender, MouseEventArgs e) => ShowHudBriefly();
+    private void Overlay_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_disposed) return;
+        var position = e.GetPosition(VideoOverlaySurface);
+        if (_lastPointerPosition is Point last &&
+            Math.Abs(position.X - last.X) < 6 &&
+            Math.Abs(position.Y - last.Y) < 6) return;
+        _lastPointerPosition = position;
+        ShowHudBriefly();
+    }
 
     private void Overlay_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
@@ -797,9 +814,15 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void Overlay_SurfaceMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount != 2) return;
-        Fullscreen_Click(sender, new RoutedEventArgs());
-        e.Handled = true;
+        if (e.ClickCount >= 2)
+        {
+            Fullscreen_Click(sender, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+        // Clicking the bare video brings playback controls back immediately.
+        if (ReferenceEquals(e.OriginalSource, VideoOverlaySurface))
+            ShowHudBriefly();
     }
 
     private void ChangeChannel(int delta)
