@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private ProviderAccount? _activeProvider;
     private PlaybackService? _previewPlayback;
     private VideoView? _previewVideoView;
+    private readonly SemaphoreSlim _previewPlaybackLock = new(1, 1);
     private int _liveSelectionSerial;
     private CancellationTokenSource? _livePreviewCts;
     private string _currentPage = "home";
@@ -1462,11 +1463,30 @@ public partial class MainWindow : Window
                     var url = candidates.FirstOrDefault();
                     if (!string.IsNullOrWhiteSpace(url))
                     {
-                        _previewPlayback.Stop();
-                        _previewPlayback.Play(url, new Dictionary<string, string>
+                        var preview = _previewPlayback;
+                        var headers = new Dictionary<string, string>
                         {
                             ["User-Agent"] = _store.State.Settings.UserAgent
-                        });
+                        };
+                        // Native VLC Stop/Play can block for seconds on bad
+                        // 4K/live streams. Serialize off the WPF thread, and
+                        // skip stale fast-changing selections.
+                        await _previewPlaybackLock.WaitAsync(token);
+                        try
+                        {
+                            token.ThrowIfCancellationRequested();
+                            if (!ReferenceEquals(preview, _previewPlayback)) return;
+                            await Task.Run(() =>
+                            {
+                                if (token.IsCancellationRequested) return;
+                                try { preview.Stop(); } catch { }
+                                if (!token.IsCancellationRequested)
+                                {
+                                    try { preview.Play(url, headers); } catch { }
+                                }
+                            }, token);
+                        }
+                        finally { _previewPlaybackLock.Release(); }
                     }
                 }
 
@@ -3687,10 +3707,15 @@ public partial class MainWindow : Window
         // Blocking native VLC shutdown was freezing the entire WPF window
         // whenever the preview's decoder stalled. Detach first and release it
         // in the background; still await briefly before starting fullscreen.
-        return Task.Run(() =>
+        return Task.Run(async () =>
         {
-            try { preview.Stop(); } catch { }
-            try { preview.Dispose(); } catch { }
+            await _previewPlaybackLock.WaitAsync();
+            try
+            {
+                try { preview.Stop(); } catch { }
+                try { preview.Dispose(); } catch { }
+            }
+            finally { _previewPlaybackLock.Release(); }
         });
     }
 
