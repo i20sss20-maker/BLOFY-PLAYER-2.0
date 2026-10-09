@@ -872,7 +872,7 @@ const server = http.createServer(async (req, res) => {
       return await streamApkDownload(req, res, QA_APK_URL, 'BLOFY-PLAYER-QA-PRODUCTION-SIGNED.apk', 'blofy-qa');
     }
 
-    if (pathname === '/download/latest.apk' || pathname === '/d/blofy') {
+    if (['/download/latest.apk', '/latest.apk', '/apk', '/d/blofy'].includes(pathname)) {
       const release = getActiveRelease();
       if (method === 'GET') {
         recordDownload('blofy').catch(error => console.error('BLOFY download stat failed:', error?.message || error));
