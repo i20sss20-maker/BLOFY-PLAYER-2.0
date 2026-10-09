@@ -81,16 +81,18 @@ test('playlist name remains optional', () => {
   assert.match(html, /Playlist name \(optional\)/);
 });
 
-test('renewal UI routes authenticated device directly to Tap payment page', () => {
+test('renewal sends customers to the configured WhatsApp number without disclosing pairing codes', () => {
   const html = injected();
-  assert.match(html, /الدفع والتجديد/);
-  assert.match(html, /deviceAuth\(\)/);
-  assert.match(html, /new URLSearchParams\(\{ deviceId: state\.deviceId, code: state\.activationCode \}\)/);
-  assert.match(html, /window\.location\.assign\('\/pay#' \+ fragment\)/);
-  assert.doesNotMatch(html, /wa\.me|whatsappNumber|data-plan=/);
+  assert.match(html, /تجديد التفعيل عبر واتساب/);
+  assert.match(html, /wa\.me\/966568941484/);
+  assert.doesNotMatch(html, /window\.location\.assign\('\/pay#/);
+  assert.doesNotMatch(html, /new URLSearchParams\(\{ deviceId: state\.deviceId, code: state\.activationCode \}\)/);
+  assert.doesNotMatch(html, /data-plan=/);
 });
 
-test('renewal UI refuses to continue without QR device credentials', () => {
+test('renewal does not require device pairing credentials', () => {
   const html = injected();
-  assert.match(html, /بيانات الجهاز غير مكتملة/);
+  const section = html.split('function installRenewalUi() {')[1].split('function install() {')[0];
+  assert.match(section, /wa\.me\/966568941484/);
+  assert.doesNotMatch(section, /deviceAuth\(\)|activationCode|بيانات الجهاز غير مكتملة/);
 });

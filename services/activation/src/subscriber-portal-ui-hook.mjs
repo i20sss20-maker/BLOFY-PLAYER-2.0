@@ -21,16 +21,11 @@ export function injectSubscriberPortalUi(html, { allowRenewal = true } = {}) {
     var actions = document.querySelector('.dashboard-head .actions');
     if (!actions || qs('blofyRenewBtn')) return;
     var button = document.createElement('button');
-    button.id = 'blofyRenewBtn'; button.type = 'button'; button.textContent = '💳 الدفع والتجديد';
+    button.id = 'blofyRenewBtn'; button.type = 'button'; button.textContent = '♻ تجديد التفعيل عبر واتساب';
     actions.insertBefore(button, actions.firstChild);
     button.onclick = function () {
-      var state = deviceAuth();
-      if (!state.deviceId || !state.activationCode) {
-        alert('بيانات الجهاز غير مكتملة. أعد فتح الباركود من التطبيق.');
-        return;
-      }
-      var fragment = new URLSearchParams({ deviceId: state.deviceId, code: state.activationCode }).toString();
-      window.location.assign('/pay#' + fragment);
+      // Manual handoff: let the customer enter the device ID; never share the pairing PIN.
+      window.location.assign('https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%B1%D9%8A%D8%AF%20%D8%AA%D8%AC%D8%AF%D9%8A%D8%AF%20%D8%AA%D9%81%D8%B9%D9%8A%D9%84%20BLOFY%20PLAYER%20%D8%B9%D8%A8%D8%B1%20%D9%88%D8%A7%D8%AA%D8%B3%D8%A7%D8%A8.%20%D8%B1%D9%82%D9%85%20%D8%A7%D9%84%D8%AC%D9%87%D8%A7%D8%B2%3A%20');
     };
   }
 `;

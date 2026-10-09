@@ -437,3 +437,11 @@ button,.btn,input,select,textarea{min-height:44px}
 .official-store-links{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;margin:24px auto 16px}
 .official-store-links .btn{min-height:52px;text-align:center}
 @media(max-width:600px){.play-store-link,.official-store-links{display:grid;grid-template-columns:1fr}.play-store-link a,.official-store-links .btn{width:100%;min-width:0}}
+
+/* Temporary WhatsApp support and manual activation renewal. */
+.wa-contact-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:16px 0 8px}
+.wa-contact-actions a{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:11px 18px;border-radius:14px;border:1px solid rgba(99,216,166,.44);background:rgba(28,143,98,.18);color:#d1ffe9;font-weight:800;text-decoration:none;text-align:center;line-height:1.5}
+.wa-contact-actions .wa-contact-renew{border-color:rgba(169,138,245,.55);background:rgba(118,61,218,.22);color:#f0e4ff}
+.wa-contact-actions a:hover,.wa-contact-actions a:focus-visible{border-color:#d7ffd9;outline:2px solid #d7ffd9;outline-offset:2px}
+.wa-payment-note{margin:8px 0 14px!important;color:var(--muted,#aaa4b7);font-size:13px;line-height:1.65}
+@media(max-width:620px){.wa-contact-actions{display:grid;grid-template-columns:1fr}.wa-contact-actions a{width:100%;min-width:0}}

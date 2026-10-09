@@ -298,24 +298,21 @@ test('runtime: ordinary Xtream saves retain the original event handler', async (
   assert.equal(h.requests.length,0); assert.equal(h.legacyCount(),1);
 });
 
-test('runtime: renewal passes credentials only in the same-origin payment fragment', async () => {
+test('runtime: renewal opens WhatsApp without sending private device credentials', async () => {
   const h=harness(); await h.n('blofyRenewBtn').click();
   assert.equal(h.opened.length,1);
   const [url]=h.opened[0];
-  assert.match(url,/^\/pay#/);
-  const parsed=new URL(url,'https://portal.example');
-  assert.equal(parsed.origin,'https://portal.example');
-  assert.equal(parsed.search,'');
-  const fragment=new URLSearchParams(parsed.hash.slice(1));
-  assert.equal(fragment.get('deviceId'),'BLOFY-TEST-0001');
-  assert.equal(fragment.get('code'),'test-only-pin');
-  assert.doesNotMatch(url,/typed-test-password|wa\.me/);
+  assert.match(url,/^https:\/\/wa\.me\/966568941484\?text=/);
+  const destination=new URL(url);
+  assert.match(destination.searchParams.get('text'),/تجديد تفعيل BLOFY PLAYER/);
+  assert.match(destination.searchParams.get('text'),/رقم الجهاز:/);
+  assert.doesNotMatch(url,/test-only-pin|typed-test-password|BLOFY-TEST-0001|activationCode|deviceId/);
 });
 
-test('runtime: missing device credentials cannot open payment', async () => {
+test('runtime: manual renewal is available even if device login has expired', async () => {
   const h=harness({authenticated:false});
   await h.n('blofyRenewBtn').click();
-  assert.equal(h.opened.length,0); assert.equal(h.alerts.length,1);
+  assert.equal(h.opened.length,1); assert.equal(h.alerts.length,0);
 });
 
 test('runtime: injected v5 markup is idempotent', () => {
