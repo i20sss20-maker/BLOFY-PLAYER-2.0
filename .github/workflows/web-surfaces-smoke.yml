@@ -81,10 +81,28 @@ jobs:
           test -f "$health" && cat "$health" || true
           exit 1
 
+      - name: Wait for updates website metadata to deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            if curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              --connect-timeout 8 --max-time 12 https://updates.blofyplayer.com/sitemap.xml > "$RUNNER_TEMP/updates-sitemap.xml" 2>/dev/null \
+              && grep -Fq '<loc>https://updates.blofyplayer.com/</loc>' "$RUNNER_TEMP/updates-sitemap.xml"; then
+              echo "BLOFY updates SEO is deployed"
+              exit 0
+            fi
+            echo "Waiting for update-distribution deploy ($attempt/36)"
+            sleep 5
+          done
+          echo "::error::Update distribution did not serve its sitemap after 3 minutes"
+          exit 1
+
       - name: Verify public BLOFY web surfaces
         shell: bash
         run: |
           set -euo pipefail
+          trap 'echo "::error::BLOFY page check failed at line $LINENO ($BASH_COMMAND)"' ERR
           tmp="$RUNNER_TEMP/blofy-web"
           mkdir -p "$tmp"
 
@@ -145,7 +163,7 @@ jobs:
 
           status="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 -o "$tmp/updates-404.html" -w '%{http_code}' \
-            https://updates.blofyplayer.com/__blofy_missing_route__)"
+            -H 'Accept: text/html' https://updates.blofyplayer.com/__blofy_missing_route__)"
           test "$status" = "404"
           grep -Fq 'BLOFY PLAYER' "$tmp/updates-404.html"
           grep -Fq 'الصفحة غير موجودة' "$tmp/updates-404.html"
