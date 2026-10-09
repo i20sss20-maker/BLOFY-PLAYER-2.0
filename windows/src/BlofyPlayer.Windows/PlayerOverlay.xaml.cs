@@ -1135,7 +1135,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             {
                 if (_playlist.Count > 0 && e.Key == Key.Up)
                     OpenChannelPanel();
-                else if (_playlist.Count == 0 && e.Key is Key.Left or Key.Right && _player.Length > 0)
+                else if (_playlist.Count == 0 && (e.Key is Key.Left or Key.Right) && _player.Length > 0)
                 {
                     Seek(e.Key == Key.Left ? -10_000 : 10_000);
                     ShowHudBriefly();
