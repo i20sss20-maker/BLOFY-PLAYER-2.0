@@ -1,6 +1,7 @@
 import { databaseOptions } from './database-options.mjs';
 import http from 'node:http';
 import { servePrivacyPage } from './privacy-pages.mjs';
+import { serveIndexNowKey } from './indexnow-key.mjs';
 import { createCommercialHandlers } from './commercial-handlers.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
 import { registerDeviceTrial, bindExistingTrial, completePendingTrial } from './trial-registration.mjs';
@@ -696,6 +697,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/status') return await serveStatusPage(res);
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
+    if (serveIndexNowKey(req, res, requestUrl)) return;
     if (req.method === 'GET' && requestUrl.pathname === '/robots.txt') return serveRobots(res);
     if (req.method === 'GET' && requestUrl.pathname === '/sitemap.xml') return serveSitemap(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
