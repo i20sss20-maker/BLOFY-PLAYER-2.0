@@ -25,7 +25,7 @@ import {
   sanitizeDiagnosticMessage,
   sanitizeDiagnosticUrl
 } from './diagnostics-sanitizer.mjs';
-import { activationReleaseMetadata } from './release-metadata.mjs';
+import { activationReleaseMetadata, appReleaseMetadata } from './release-metadata.mjs';
 
 const { Pool } = pg;
 const PORT = Number(process.env.PORT || 8080);
@@ -195,7 +195,7 @@ async function health(res) {
       ok: true,
       database: 'ready',
       playlistEncryption: 'ready',
-      release: RELEASE_METADATA,
+      release: { ...RELEASE_METADATA, app: appReleaseMetadata() },
       time: Date.now()
     });
   } catch (error) {
@@ -203,7 +203,7 @@ async function health(res) {
     return json(res, 503, {
       ok: false,
       database: 'unavailable',
-      release: RELEASE_METADATA,
+      release: { ...RELEASE_METADATA, app: appReleaseMetadata() },
       time: Date.now()
     });
   }
