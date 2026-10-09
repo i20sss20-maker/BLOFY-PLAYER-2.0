@@ -49,6 +49,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private long _pendingRecoveryResume;
     private bool _disposed;
     private bool _playbackFailed;
+    private bool _initializedOnce;
     private bool _userPaused;
     private bool _startedPlaying;
     private readonly List<string> _playbackDiagnostic = new();
@@ -154,7 +155,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
         Loaded += (_, _) =>
         {
-            if (_disposed) return;
+            if (_disposed || _initializedOnce) return;
+            _initializedOnce = true;
             _timer.Start();
             ConfigureControlVisibility();
             UpdateFavoriteButton();
