@@ -319,7 +319,10 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void TryRecoverPlayback(string message)
     {
-        if (_disposed || _playbackFailed) return;
+        if (_disposed || _playbackFailed || _userPaused) return;
+        // Native callbacks from a previous URL may arrive after a quick
+        // channel switch. Never replace a currently rendering new stream.
+        if (_player.IsPlaying && HasVideoOutput()) return;
 
         // Try a DIFFERENT server URL before retrying the same stalled URL
         // with another User-Agent. A broken episode must not spin for minutes.
@@ -366,9 +369,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private async void HandleEnded()
     {
-        if (_playlist.Count > 0 && _index >= 0 && _index + 1 < _playlist.Count)
+        if (_playlist.Count > 0)
         {
-            ChangeChannel(1);
+            // A short/segmented live input may emit EndReached. It is never
+            // a command to switch to the next channel, nor should it restart
+            // a perfectly healthy live video every ten seconds.
+            if (!_disposed && !_userPaused && !_player.IsPlaying)
+                TryRecoverPlayback("انتهى اتصال البث — تجربة المصدر الاحتياطي…");
             return;
         }
 
