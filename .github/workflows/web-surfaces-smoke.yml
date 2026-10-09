@@ -101,14 +101,14 @@ jobs:
       - name: Verify public BLOFY web surfaces
         shell: bash
         run: |
-          set -euo pipefail
-          trap 'echo "::error::BLOFY page check failed at line $LINENO ($BASH_COMMAND)"' ERR
+          set -Eeuo pipefail
+          trap 'rc=$?; echo "::error::BLOFY page check failed at line $LINENO (exit $rc; $BASH_COMMAND)"; echo "DNS lookup for blofyplayer.com:"; getent ahostsv4 blofyplayer.com || true; exit "$rc"' ERR
           tmp="$RUNNER_TEMP/blofy-web"
           mkdir -p "$tmp"
 
           check_html() {
             url="$1"; marker="$2"; out="$3"
-            curl --fail --silent --show-error --location --proto '=https' --tlsv1.2               --connect-timeout 8 --max-time 30 "$url" > "$out"
+            curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2               --connect-timeout 8 --max-time 30 "$url" > "$out"
             grep -Eiq "$marker" "$out"
           }
 
@@ -124,21 +124,21 @@ jobs:
           grep -Fq 'href="/connect"' "$tmp/admin.html"
           check_html "https://blofyplayer.com/sources-admin" "BLOFY|المصادر|Xtream" "$tmp/sources-admin.html"
 
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "https://blofyplayer.com/robots.txt" > "$tmp/robots.txt"
           grep -Fq "Sitemap: https://blofyplayer.com/sitemap.xml" "$tmp/robots.txt"
 
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "https://blofyplayer.com/sitemap.xml" > "$tmp/sitemap.xml"
           grep -Fq "<loc>https://blofyplayer.com/privacy</loc>" "$tmp/sitemap.xml"
           grep -Fq "<loc>https://blofyplayer.com/status</loc>" "$tmp/sitemap.xml"
 
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "https://blofyplayer.com/site-polish.css" > "$tmp/site-polish.css"
+          curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "https://blofyplayer.com/site-polish.css" > "$tmp/site-polish.css"
           grep -Fq -- "--blofy-accent" "$tmp/site-polish.css"
 
           check_html "https://updates.blofyplayer.com/" "BLOFY|تحميل" "$tmp/updates.html"
 
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "https://blofyplayer.com/manifest.webmanifest" > "$tmp/manifest.json"
           python3 - "$tmp/manifest.json" <<'PY'
           import json,sys
@@ -153,15 +153,15 @@ jobs:
           grep -Fq 'rel="canonical" href="https://blofyplayer.com/status"' "$tmp/status.html"
           grep -Fq 'rel="canonical" href="https://updates.blofyplayer.com/"' "$tmp/updates.html"
 
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "https://updates.blofyplayer.com/robots.txt" > "$tmp/updates-robots.txt"
           grep -Fq "Sitemap: https://updates.blofyplayer.com/sitemap.xml" "$tmp/updates-robots.txt"
 
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 "https://updates.blofyplayer.com/sitemap.xml" > "$tmp/updates-sitemap.xml"
           grep -Fq "<loc>https://updates.blofyplayer.com/</loc>" "$tmp/updates-sitemap.xml"
 
-          status="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+          status="$(curl --retry 5 --retry-delay 4 --retry-all-errors --silent --show-error --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 -o "$tmp/updates-404.html" -w '%{http_code}' \
             -H 'Accept: text/html' https://updates.blofyplayer.com/__blofy_missing_route__)"
           test "$status" = "404"
@@ -173,7 +173,7 @@ jobs:
       - name: Verify linked static assets
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
           tmp="$RUNNER_TEMP/blofy-assets"
           mkdir -p "$tmp"
           for path in \
@@ -192,7 +192,7 @@ jobs:
             /manifest.webmanifest
           do
             file="$tmp/$(echo "$path" | tr '/.' '__')"
-            curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
               --connect-timeout 8 --max-time 30 "https://blofyplayer.com$path" > "$file"
             test -s "$file"
           done
@@ -200,31 +200,31 @@ jobs:
       - name: Verify security headers and branded 404
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
           tmp="$RUNNER_TEMP/blofy-web-security"
           mkdir -p "$tmp"
 
-          curl --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --retry 5 --retry-delay 4 --retry-all-errors --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 -D "$tmp/root.headers" -o /dev/null \
             https://blofyplayer.com/
           grep -Eiq '^strict-transport-security: *max-age=31536000' "$tmp/root.headers"
           grep -Eiq '^permissions-policy:.*camera=\(\).*microphone=\(\).*geolocation=\(\)' "$tmp/root.headers"
           grep -Eiq '^x-frame-options: *DENY' "$tmp/root.headers"
 
-          api_root_status="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+          api_root_status="$(curl --retry 5 --retry-delay 4 --retry-all-errors --silent --show-error --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 -D "$tmp/api-root.headers" -o /dev/null -w '%{http_code}' \
             https://api.blofyplayer.com/)"
           test "$api_root_status" = "308"
           grep -Eiq '^location: *https://blofyplayer\.com/' "$tmp/api-root.headers"
 
-          status="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+          status="$(curl --retry 5 --retry-delay 4 --retry-all-errors --silent --show-error --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 -o "$tmp/404.html" -w '%{http_code}' \
             https://blofyplayer.com/__blofy_missing_route__)"
           test "$status" = "404"
           grep -Fq 'BLOFY PLAYER' "$tmp/404.html"
           grep -Fq 'الصفحة غير موجودة' "$tmp/404.html"
 
-          curl --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --retry 5 --retry-delay 4 --retry-all-errors --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 -D "$tmp/updates.headers" -o /dev/null \
             https://updates.blofyplayer.com/
           grep -Eiq '^strict-transport-security: *max-age=31536000' "$tmp/updates.headers"
@@ -232,15 +232,15 @@ jobs:
       - name: Verify stable download and health endpoints
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
           tmp="$RUNNER_TEMP/blofy-health"
           mkdir -p "$tmp"
 
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 https://api.blofyplayer.com/health > "$tmp/api.json"
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 https://blofyplayer.com/health > "$tmp/root.json"
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --connect-timeout 8 --max-time 30 https://updates.blofyplayer.com/health > "$tmp/updates.json"
 
           python3 - "$tmp/api.json" "$tmp/root.json" "$tmp/updates.json" <<'PY'
@@ -271,6 +271,6 @@ jobs:
             https://blofyplayer.com/latest.apk \
             https://blofyplayer.com/apk
           do
-            curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
               --connect-timeout 8 --max-time 45 --range 0-0 --output /dev/null "$url"
           done
