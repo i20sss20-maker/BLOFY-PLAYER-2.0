@@ -13,6 +13,8 @@ on:
       - services/activation/src/sources-admin-hook.mjs
       - services/activation/src/privacy-pages.mjs
       - services/activation/src/release-metadata.mjs
+      - services/activation/src/release-catalog.mjs
+      - services/activation/src/approved-release-rc07555.mjs
       - .github/workflows/web-surfaces-smoke.yml
   workflow_dispatch:
 

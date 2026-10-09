@@ -3,6 +3,7 @@ import { publishApprovedRc0742 } from './approved-release-rc0742.mjs';
 import { publishApprovedRc0744 } from './approved-release-rc0744.mjs';
 import { publishApprovedRc0745 } from './approved-release-rc0745.mjs';
 import { publishApprovedRc0746 } from './approved-release-rc0746.mjs';
+import { publishApprovedRc07555 } from './approved-release-rc07555.mjs';
 import { sanitizeVersionCode, sanitizeVersionName, sanitizeReleaseNotes } from './release-metadata.mjs';
 
 export class ReleaseError extends Error {
@@ -76,6 +77,7 @@ export function createReleaseCatalog(pool, configured = null) {
         await publishApprovedRc0744(client);
         await publishApprovedRc0745(client);
         await publishApprovedRc0746(client);
+        await publishApprovedRc07555(client);
         return;
       }
       const legacy = await client.query("SELECT to_regclass('app_releases') AS name");
@@ -99,6 +101,7 @@ export function createReleaseCatalog(pool, configured = null) {
       await publishApprovedRc0744(client);
       await publishApprovedRc0745(client);
       await publishApprovedRc0746(client);
+        await publishApprovedRc07555(client);
     }).catch(error => { initialized = null; throw error; });
     return initialized;
   }
