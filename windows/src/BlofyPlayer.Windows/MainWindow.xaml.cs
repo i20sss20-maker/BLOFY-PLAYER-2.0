@@ -2079,9 +2079,13 @@ public partial class MainWindow : Window
     private async Task PlayItemAsync(StreamItem item, IReadOnlyList<StreamItem>? livePlaylistOverride = null)
     {
         if (_activeProvider is null) return;
-        string url;
-        if (_activeProvider.ProviderType == "m3u") url = item.DirectSource;
-        else url = _catalog!.Xtream(_activeProvider).StreamUrl(_activeProvider, item, _store.State.Settings.LiveFormat);
+        // Do not start on a generated Xtream URL and only later try the
+        // advertised direct source: that can spend 16+ seconds on a dead path.
+        var candidates = BuildStreamCandidates(item);
+        var url = candidates.FirstOrDefault() ??
+            (_activeProvider.ProviderType == "m3u"
+                ? item.DirectSource
+                : _catalog!.Xtream(_activeProvider).StreamUrl(_activeProvider, item, _store.State.Settings.LiveFormat));
 
         long resume = 0;
         var itemState = _store.WatchState(item.Key);
@@ -2130,7 +2134,7 @@ public partial class MainWindow : Window
             playlistIndex: idx,
             urlResolver: resolver,
             recoveryResolver: recoveryResolver,
-            recoveryUrls: BuildStreamCandidates(item),
+            recoveryUrls: candidates,
             savePosition: item.Kind == "live" ? null : async (pos, len) =>
                 await _store.SaveWatchStateAsync(item.Key, pos, len),
             onPlaylistItemChanged: item.Kind == "live"
@@ -2158,7 +2162,11 @@ public partial class MainWindow : Window
         var episodeState = _store.WatchState(key);
         if (episodeState is not null && !episodeState.Completed && episodeState.PositionMs > 30_000)
             resume = episodeState.PositionMs;
-        var url = _catalog!.Xtream(_activeProvider).EpisodeUrl(_activeProvider, episode);
+        // Prefer the episode URL provided by the server (when valid).
+        // Regenerating the path first can choose a slow/incompatible container.
+        var episodeCandidates = BuildEpisodeCandidates(episode);
+        var url = episodeCandidates.FirstOrDefault() ??
+            _catalog!.Xtream(_activeProvider).EpisodeUrl(_activeProvider, episode);
 
         Func<Task>? nextAction = null;
         var ordered = episodes.OrderBy(e => e.Season).ThenBy(e => e.Episode).ToList();
@@ -2192,7 +2200,7 @@ public partial class MainWindow : Window
             series.Name + " • S" + episode.Season + "E" + episode.Episode,
             url,
             resumePositionMs: resume,
-            recoveryUrls: BuildEpisodeCandidates(episode),
+            recoveryUrls: episodeCandidates,
             savePosition: async (pos, len) => await _store.SaveWatchStateAsync(key, pos, len),
             previousAction: previousManual,
             nextAction: nextManual,
