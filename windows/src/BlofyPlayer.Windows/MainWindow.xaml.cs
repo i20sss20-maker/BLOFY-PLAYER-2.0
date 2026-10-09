@@ -1357,6 +1357,8 @@ public partial class MainWindow : Window
 
         cats.SelectionChanged += (_, _) =>
         {
+            if (cats.SelectedItem is CategoryItem category)
+                _browserCategoryByKind["live"] = category.RemoteId;
             if (channelSearch.Text.Trim().Length == 0) FillChannels();
         };
         categorySearch.TextChanged += (_, _) =>
@@ -1539,8 +1541,12 @@ public partial class MainWindow : Window
         };
 
         cats.ItemsSource = allCategories;
-        cats.SelectedIndex = 0;
-        FillChannels();
+        var selectedGroupId = _browserCategoryByKind.TryGetValue("live", out var rememberedGroup)
+            ? rememberedGroup : "";
+        var initialCategory = allCategories.FirstOrDefault(category =>
+            string.Equals(category.RemoteId, selectedGroupId, StringComparison.Ordinal));
+        cats.SelectedItem = initialCategory ?? allCategories[0];
+        if (channels.ItemsSource is null) FillChannels();
         ContentHost.Content = grid;
         _ = Dispatcher.BeginInvoke(() => FocusSelectedListItem(cats));
     }
