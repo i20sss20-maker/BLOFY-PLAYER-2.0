@@ -40,6 +40,7 @@ public partial class MainWindow : Window
     private ActivationCheckResponse? _activationState;
     private ProviderAccount? _activeProvider;
     private PlaybackService? _previewPlayback;
+    private VideoView? _previewVideoView;
     private int _liveSelectionSerial;
     private CancellationTokenSource? _livePreviewCts;
     private string _currentPage = "home";
@@ -162,7 +163,12 @@ public partial class MainWindow : Window
         {
             _currentOverlay = null;
             OverlayHost.Visibility = Visibility.Collapsed;
-            Focus();
+            // Restore a clean preview when returning from playback. Never
+            // resurrect the old/native mini-player while fullscreen is open.
+            if (_currentPage == "live")
+                ShowLiveBrowser();
+            else
+                Focus();
         }
     }
 
@@ -185,6 +191,10 @@ public partial class MainWindow : Window
         Func<Task<bool>>? toggleFavorite = null,
         Func<Task>? onEnded = null)
     {
+        // LibVLC uses native video windows. Keeping the small preview active
+        // while opening fullscreen leaves a ghost HWND over the main player
+        // and forces the decoder to run two streams at once (especially 4K).
+        DisposePreview();
         var overlay = new PlayerOverlay(
             title,
             url,
@@ -1301,6 +1311,7 @@ public partial class MainWindow : Window
         };
         _previewPlayback = new PlaybackService();
         var video = new VideoView { MediaPlayer = _previewPlayback.MediaPlayer };
+        _previewVideoView = video;
         previewBorder.Child = video;
         right.Children.Add(previewBorder);
 
@@ -3644,10 +3655,28 @@ public partial class MainWindow : Window
 
     private void DisposePreview()
     {
-        if (_previewPlayback is null) return;
-        try { _previewPlayback.Stop(); } catch { }
-        _previewPlayback.Dispose();
+        // Invalidate pending EPG/channel selection work BEFORE releasing video.
+        _liveSelectionSerial++;
+        _livePreviewCts?.Cancel();
+        _livePreviewCts?.Dispose();
+        _livePreviewCts = null;
+
+        var video = _previewVideoView;
+        _previewVideoView = null;
+        if (video is not null)
+        {
+            // Detach native HWND, not just its media player: otherwise the
+            // invisible preview can still cover the full-screen VLC surface.
+            try { video.MediaPlayer = null; } catch { }
+            if (video.Parent is Border host && ReferenceEquals(host.Child, video))
+                host.Child = null;
+        }
+
+        var preview = _previewPlayback;
         _previewPlayback = null;
+        if (preview is null) return;
+        try { preview.Stop(); } catch { }
+        try { preview.Dispose(); } catch { }
     }
 
     private IReadOnlyList<StreamItem> Items(string kind)
