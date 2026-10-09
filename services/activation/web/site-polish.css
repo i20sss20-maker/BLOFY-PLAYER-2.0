@@ -428,3 +428,100 @@ button,.btn,input,select,textarea{min-height:44px}
   .status-nav a,.status-wrap .actions a,.status-wrap .actions button,
   .source-main .tab,.source-main .button,.source-main button,.not-found .actions a{min-height:46px!important}
 }
+
+
+/* BLOFY premium neutral theme v4 — isolated QA polish */
+@font-face{
+  font-family:"BLOFY Arabic";
+  src:url("/IBMPlexSansArabic-Regular.ttf") format("truetype");
+  font-weight:400;
+  font-style:normal;
+  font-display:swap
+}
+@font-face{
+  font-family:"BLOFY Arabic";
+  src:url("/IBMPlexSansArabic-Medium.ttf") format("truetype");
+  font-weight:600 900;
+  font-style:normal;
+  font-display:swap
+}
+:root{
+  --blofy-bg:#07070a;
+  --blofy-panel:rgba(17,16,21,.94);
+  --blofy-panel-2:rgba(25,22,30,.95);
+  --blofy-line:rgba(218,202,236,.11);
+  --blofy-line-strong:rgba(196,162,237,.24);
+  --blofy-accent:#8655d8;
+  --blofy-accent-2:#6740a9;
+  --blofy-muted:#aaa4b0;
+  --blofy-shadow:0 20px 64px rgba(0,0,0,.3)
+}
+html,body,button,input,select,textarea{
+  font-family:"BLOFY Arabic",-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif
+}
+body{
+  background:
+    radial-gradient(circle at 82% -18%,rgba(113,72,171,.14),transparent 36rem),
+    radial-gradient(circle at 8% 105%,rgba(75,54,108,.08),transparent 30rem),
+    linear-gradient(145deg,#07070a,#0b0a0e 52%,#08080b)!important
+}
+.wrap>.nav,.status-head{
+  background:linear-gradient(180deg,rgba(7,7,10,.97),rgba(7,7,10,.78))!important;
+  border-bottom-color:rgba(255,255,255,.055)!important
+}
+.card,.auth-card,.dashboard-panel,.editor-card,.privacy-form,.policy-grid article,.info,.release-card,
+.source-main .panel,.source-main .repo-card{
+  border-color:rgba(216,199,234,.105)!important;
+  background:linear-gradient(145deg,rgba(24,22,29,.94),rgba(11,10,14,.97))!important;
+  box-shadow:0 18px 55px rgba(0,0,0,.24)!important
+}
+.primary,.btn.primary,.primary-button{
+  background:linear-gradient(115deg,#8757db,#6842ad)!important;
+  box-shadow:0 10px 28px rgba(92,58,153,.2)!important
+}
+.eyebrow{
+  color:#c6a8ef!important;
+  border-color:rgba(185,151,229,.18)!important;
+  background:rgba(120,78,176,.07)!important;
+  letter-spacing:0!important
+}
+.portal .brand-stage{
+  background:linear-gradient(90deg,rgba(121,80,174,.045),transparent)!important;
+  border-radius:16px!important
+}
+.portal .dashboard-brandbar{
+  border-color:rgba(216,199,234,.1)!important;
+  background:rgba(15,14,19,.92)!important
+}
+.portal .brand-stage-mark,.portal .dashboard-brand-logo{
+  border-color:rgba(193,158,232,.18)!important;
+  background:rgba(111,70,165,.07)!important
+}
+.portal .playlist,.portal .device-chip,.portal .toggle-row{
+  border-color:rgba(216,199,234,.1)!important
+}
+.portal .playlist:hover{border-color:rgba(193,158,232,.22)!important}
+.admin-shell,.source-shell{
+  background:
+    radial-gradient(circle at 88% -12%,rgba(105,66,156,.1),transparent 34rem),
+    linear-gradient(145deg,#07070a,#0b0a0e 55%,#08080b)!important
+}
+.admin-rail,.source-rail{background:rgba(8,8,11,.96)!important}
+input,select,textarea{
+  background:rgba(8,8,11,.84)!important;
+  border-color:rgba(216,199,234,.11)!important
+}
+input:focus,select:focus,textarea:focus{
+  border-color:rgba(153,105,214,.68)!important;
+  box-shadow:0 0 0 3px rgba(132,82,199,.09)!important
+}
+.loading,.empty-state,.empty{
+  background:rgba(13,12,16,.7)!important;
+  border-color:rgba(216,199,234,.1)!important
+}
+@media(min-width:1200px){
+  .portal .dashboard{max-width:1120px;margin-inline:auto}
+}
+@media(max-width:700px){
+  .card,.auth-card,.dashboard-panel,.editor-card{border-radius:18px!important}
+}

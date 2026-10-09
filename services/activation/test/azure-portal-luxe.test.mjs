@@ -23,9 +23,9 @@ test('portal document exposes BLOFY icon for tabs and saved shortcuts', async ()
   assert.match(html, /rel="apple-touch-icon"[^>]+href="\/blofy-logo\.png"/);
   assert.match(html, /class="brand-logo" src="\/blofy-logo\.png"/);
   assert.match(html, /class="brand-stage"/);
-  assert.match(html, /DEVICE CONTROL/);
+  assert.match(html, /إدارة الجهاز/);
   assert.match(html, /class="dashboard-brandbar"/);
-  assert.match(html, /DEVICE CONTROL CENTER/);
+  assert.match(html, /مركز إدارة الجهاز/);
 });
 
 

@@ -12,19 +12,11 @@ class ActivationManager(
         val desiredDeviceId = DeviceIdentity.deviceId(context)
         val existing = dao.activation()
         if (existing != null) {
-            // rc04 and older derived the Device ID from ANDROID_ID. After an uninstall the
-            // random activation code was lost while the deterministic Device ID returned,
-            // colliding with the old server credential. Move an upgraded installation to the
-            // new installation-scoped ID once, while preserving its visible six-digit code.
+            // Room is the authoritative local copy of an already-provisioned identity.
+            // Never turn an app update into a "new device" merely because preferences were
+            // cleared, renamed, or restored later than the database.
             if (existing.deviceId != desiredDeviceId) {
-                val migrated = existing.copy(
-                    deviceId = desiredDeviceId,
-                    activated = false,
-                    expiresAt = null,
-                    lastCheckAt = System.currentTimeMillis()
-                )
-                dao.replaceActivation(migrated)
-                return migrated
+                DeviceIdentity.adoptDeviceId(context, existing.deviceId)
             }
 
             val reconciledCode = DeviceIdentity.reconcileExistingActivationCode(context, existing.activationCode)
@@ -49,9 +41,22 @@ class ActivationManager(
             ActivationCheckRequest(
                 deviceId = current.deviceId,
                 activationCode = current.activationCode,
-                appVersion = appVersion
+                appVersion = appVersion,
+                recoveryScope = DeviceIdentity.recoveryScope(context)
             )
         )
+
+        val canonicalId = response.canonicalDeviceId
+            ?.takeIf { it.isNotBlank() && it != current.deviceId }
+        if (canonicalId != null) {
+            DeviceIdentity.adoptDeviceId(context, canonicalId)
+            current = current.copy(
+                deviceId = canonicalId,
+                activationCode = DeviceIdentity.activationCode(context)
+            )
+            dao.replaceActivation(current)
+        }
+
         if (response.canUse()) rotatePendingCode(api, current)
         applyRemoteStatus(response.canUse(), response.expiresAt)
         return response

@@ -127,7 +127,7 @@ class PlaylistActivity : AppCompatActivity() {
                 val provider = withContext(Dispatchers.IO) {
                     val dao = BlofyDatabase.get(applicationContext).dao(); val existing = editingProviderId?.let { dao.provider(it) }; val type = if (isM3u) "m3u" else "xtream"
                     val id = existing?.id ?: UUID.nameUUIDFromBytes("$type|$baseUrl|$user".toByteArray()).toString()
-                    val next = ProviderEntity(id, name.text.toString().trim().ifBlank { if (isM3u) "BLOFY M3U" else "BLOFY Server" }, if (isM3u) baseUrl else baseUrl.trimEnd('/'), user, pass, type,
+                    val next = ProviderEntity(id, name.text.toString().trim().ifBlank { if (isM3u) "BLOFY M3U" else "سيرفر BLOFY" }, if (isM3u) baseUrl else baseUrl.trimEnd('/'), user, pass, type,
                         existing?.liveFormat ?: "ts", existing?.preferredTransport ?: "cronet", existing?.preferredEngine ?: "media3", existing?.allowCrossProtocolRedirects ?: true, true, System.currentTimeMillis())
                     val hasCatalog = dao.hasCatalog(id)
                     val cacheReady = hasCatalog && CatalogSyncState.isReady(applicationContext, id)

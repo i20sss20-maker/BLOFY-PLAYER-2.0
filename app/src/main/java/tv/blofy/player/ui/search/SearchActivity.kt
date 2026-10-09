@@ -251,9 +251,9 @@ class SearchActivity : AppCompatActivity() {
     }
 
     private fun kindLabel(kind: String) = when (kind) {
-        "live" -> "LIVE"
-        "movie" -> "MOVIE"
-        "series" -> "SERIES"
+        "live" -> "بث مباشر"
+        "movie" -> "فيلم"
+        "series" -> "مسلسل"
         else -> kind.uppercase()
     }
 

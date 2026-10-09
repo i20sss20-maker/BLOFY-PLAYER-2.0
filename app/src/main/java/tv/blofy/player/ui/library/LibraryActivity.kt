@@ -251,7 +251,7 @@ class LibraryActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
             putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(episode))
             putExtra(PlayerActivity.EXTRA_RESUME_MS, resumeMs)
-            putExtra(PlayerActivity.EXTRA_TITLE, "$seriesName • S${episode.season} E${episode.episode} • ${episode.title}")
+            putExtra(PlayerActivity.EXTRA_TITLE, "$seriesName • الموسم ${episode.season} • الحلقة ${episode.episode} • ${episode.title}")
             putExtra(PlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
             putExtra(PlayerActivity.EXTRA_SEASON, episode.season)
             putExtra(PlayerActivity.EXTRA_EPISODE, episode.episode)
@@ -259,9 +259,9 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun kindLabel(kind: String) = when (kind) {
-        "live" -> "LIVE"
-        "movie" -> "MOVIE"
-        "series" -> "SERIES"
+        "live" -> "بث مباشر"
+        "movie" -> "فيلم"
+        "series" -> "مسلسل"
         else -> kind.uppercase()
     }
 

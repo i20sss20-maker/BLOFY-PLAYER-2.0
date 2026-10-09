@@ -1,6 +1,8 @@
 package tv.blofy.player.core.identity
 
 import android.content.Context
+import android.provider.Settings
+import java.security.MessageDigest
 import java.security.SecureRandom
 
 object DeviceIdentity {
@@ -12,13 +14,10 @@ object DeviceIdentity {
     private val secureRandom = SecureRandom()
 
     /**
-     * Device IDs are installation-scoped, not derived from ANDROID_ID.
-     *
-     * This is intentional: after the app is deleted its local activation credential is lost.
-     * Reusing the same deterministic Device ID with a newly generated activation code would
-     * collide with the old server row and permanently reject the fresh install. A fresh install
-     * now receives a fresh complete identity, while normal app updates keep the same ID because
-     * this value remains in SharedPreferences.
+     * The visible BLOFY ID stays random and server-issued per device record.
+     * A separate, non-visible recovery scope derived from ANDROID_ID lets the activation service
+     * reconnect a clean reinstall to the existing server record without creating a second device.
+     * Normal updates always keep the exact existing visible ID.
      */
     @Synchronized
     fun deviceId(context: Context): String {
@@ -29,6 +28,30 @@ object DeviceIdentity {
                 "Unable to persist the device ID"
             }
         }
+    }
+
+    @Synchronized
+    fun adoptDeviceId(context: Context, canonicalDeviceId: String): String {
+        require(validDeviceId(canonicalDeviceId)) { "Invalid canonical device ID" }
+        check(preferences(context).edit().putString(DEVICE_ID, canonicalDeviceId).commit()) {
+            "Unable to persist canonical device ID"
+        }
+        return canonicalDeviceId
+    }
+
+    /**
+     * Stable, privacy-preserving reinstall hint. The server HMACs this value before storing it.
+     * It is never shown in the UI and is not used as the public device identifier.
+     */
+    fun recoveryScope(context: Context): String {
+        val androidId = Settings.Secure.getString(
+            context.applicationContext.contentResolver,
+            Settings.Secure.ANDROID_ID
+        ).orEmpty().trim()
+        val source = "blofy-device-recovery-v1|${context.packageName}|$androidId"
+        return MessageDigest.getInstance("SHA-256")
+            .digest(source.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
     }
 
     @Synchronized
