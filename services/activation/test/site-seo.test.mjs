@@ -49,3 +49,11 @@ test('social preview metadata always identifies the right canonical landing page
     assert.match(page, /<meta name="twitter:card" content="summary"/);
   }
 });
+
+test('sitemap lists canonical public pages, not the duplicate device sign-in route', () => {
+  const server = readFileSync(new URL('../src/server.mjs', import.meta.url), 'utf8');
+  const sitemap = server.split('function serveSitemap(res) {')[1]?.split('async function servePortalLogo(')[0] || '';
+  assert.match(sitemap, /https:\/\/blofyplayer\.com\/downloads/);
+  assert.match(sitemap, /https:\/\/blofyplayer\.com\/privacy/);
+  assert.doesNotMatch(sitemap, /https:\/\/blofyplayer\.com\/connect/);
+});
