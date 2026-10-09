@@ -2279,6 +2279,21 @@ public partial class MainWindow : Window
         return episodes;
     }
 
+    private static string BuildXtreamMediaUrl(ProviderAccount provider, string kind, string remoteId, string extension)
+    {
+        // The Xtream API's direct_source field is frequently blank, "0", or
+        // a temporary expired URL. Always preserve a generated endpoint as a
+        // fallback instead of having StreamUrl() return direct_source twice.
+        var root = XtreamService.NormalizeBase(provider.BaseUrl);
+        var id = remoteId.Trim();
+        if (Regex.IsMatch(id, @"^\d+\.0+$", RegexOptions.CultureInvariant))
+            id = id.Split('.')[0];
+        var ext = string.IsNullOrWhiteSpace(extension) ? "mp4" : extension.Trim().TrimStart('.');
+        return root + "/" + kind + "/" + Uri.EscapeDataString(provider.Username) +
+               "/" + Uri.EscapeDataString(provider.Password) +
+               "/" + Uri.EscapeDataString(id) + "." + Uri.EscapeDataString(ext);
+    }
+
     private IReadOnlyList<string> BuildStreamCandidates(StreamItem item)
     {
         if (_activeProvider is null || _catalog is null) return Array.Empty<string>();
@@ -2299,19 +2314,23 @@ public partial class MainWindow : Window
             return urls;
         }
 
-        var xtream = _catalog.Xtream(_activeProvider);
+        var provider = _activeProvider;
         if (item.Kind == "live")
         {
             var preferred = _store.State.Settings.LiveFormat == "m3u8" ? "m3u8" : "ts";
             var alternate = preferred == "ts" ? "m3u8" : "ts";
-            Add(xtream.StreamUrl(_activeProvider, item, preferred));
             Add(item.DirectSource);
-            Add(xtream.StreamUrl(_activeProvider, item, alternate));
+            Add(BuildXtreamMediaUrl(provider, "live", item.RemoteId, preferred));
+            Add(BuildXtreamMediaUrl(provider, "live", item.RemoteId, alternate));
         }
         else
         {
             Add(item.DirectSource);
-            Add(xtream.StreamUrl(_activeProvider, item, _store.State.Settings.LiveFormat));
+            Add(BuildXtreamMediaUrl(provider, "movie", item.RemoteId, item.Extension));
+            // Xtream services vary in VOD container support. Keep bounded,
+            // distinct alternatives so failed server links do not dead-end.
+            Add(BuildXtreamMediaUrl(provider, "movie", item.RemoteId,
+                item.Extension.Equals("mkv", StringComparison.OrdinalIgnoreCase) ? "mp4" : "mkv"));
         }
         return urls;
     }
@@ -2330,7 +2349,9 @@ public partial class MainWindow : Window
         }
 
         Add(episode.DirectSource);
-        Add(_catalog.Xtream(_activeProvider).EpisodeUrl(_activeProvider, episode));
+        Add(BuildXtreamMediaUrl(_activeProvider, "series", episode.RemoteId, episode.Extension));
+        Add(BuildXtreamMediaUrl(_activeProvider, "series", episode.RemoteId,
+            episode.Extension.Equals("mkv", StringComparison.OrdinalIgnoreCase) ? "mp4" : "mkv"));
         return urls;
     }
 
