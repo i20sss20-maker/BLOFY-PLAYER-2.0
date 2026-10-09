@@ -28,7 +28,6 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
@@ -279,7 +278,9 @@ class SearchActivity : AppCompatActivity() {
         val q = query.trim()
         if (q.isEmpty()) { results.removeAllViews(); return }
         val dao = BlofyDatabase.get(applicationContext).dao()
-        val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
+        val provider = withContext(Dispatchers.IO) {
+            dao.activeProviderId()?.let { dao.provider(it) }
+        }
         if (provider == null) { showMessage(getString(R.string.login_add_playlist_first)); return }
         val repository = ContentRepository(dao)
         val selectedKind = activeKind
@@ -342,11 +343,42 @@ class SearchActivity : AppCompatActivity() {
                 setPadding(dp(8), dp(6), dp(8), dp(10))
             })
         } else {
-            items.forEachIndexed { index, stream ->
-                val card = resultCard(stream) { guardedOpen(providerId, liveFormat, stream) }
-                if (index == 0) onFirstFocusable(card)
-                addView(card, LinearLayout.LayoutParams(-1, dp(84)).apply { bottomMargin = dp(7) })
+            // Keep initial UI inflation and artwork fetches bounded, even when every kind
+            // matches a large provider catalog. More rows are added only on demand.
+            val cards = LinearLayout(this@SearchActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                clipChildren = false
             }
+            addView(cards, LinearLayout.LayoutParams(-1, -2))
+            val more = Button(this@SearchActivity).apply {
+                text = getString(R.string.search_show_more)
+                isAllCaps = false
+                textSize = 13f
+                minWidth = 0
+                minimumWidth = 0
+                CinemaStyle.styleButton(this)
+            }
+            var rendered = 0
+            fun appendNextBatch(moveFocusToNew: Boolean) {
+                val end = SearchResultBatchPolicy.nextEnd(rendered, items.size)
+                var firstNewCard: View? = null
+                for (index in rendered until end) {
+                    val stream = items[index]
+                    val card = resultCard(stream) { guardedOpen(providerId, liveFormat, stream) }
+                    if (index == 0) onFirstFocusable(card)
+                    if (firstNewCard == null) firstNewCard = card
+                    cards.addView(card, LinearLayout.LayoutParams(-1, dp(84)).apply { bottomMargin = dp(7) })
+                }
+                rendered = end
+                more.visibility = if (rendered < items.size) View.VISIBLE else View.GONE
+                if (moveFocusToNew) firstNewCard?.requestFocus()
+            }
+            more.setOnClickListener { appendNextBatch(more.hasFocus()) }
+            addView(more, LinearLayout.LayoutParams(-1, dp(46)).apply {
+                topMargin = dp(8)
+                bottomMargin = dp(8)
+            })
+            appendNextBatch(false)
         }
     }
 
