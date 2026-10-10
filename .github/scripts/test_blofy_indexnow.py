@@ -14,6 +14,9 @@ class IndexNowSelectionTests(unittest.TestCase):
     def test_guide_change_only_notifies_guide(self):
         self.assertEqual(pages_for_changes(["services/activation/web/guide.html"]), [BASE + "/guide"])
 
+    def test_support_change_only_notifies_support(self):
+        self.assertEqual(pages_for_changes(["services/activation/web/support.html"]), [BASE + "/support"])
+
     def test_all_manual_pages_are_canonical(self):
         self.assertEqual(pages_for_changes([], True), [BASE + p for p in CANONICAL_PAGES])
 
