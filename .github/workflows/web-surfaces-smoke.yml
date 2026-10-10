@@ -132,6 +132,17 @@ jobs:
           grep -Fq '"@type":"BreadcrumbList"' "$tmp/guide.html"
           check_html "https://blofyplayer.com/privacy" "BLOFY|الخصوصية" "$tmp/privacy.html"
           check_html "https://blofyplayer.com/status" "BLOFY|حالة الخدمات" "$tmp/status.html"
+
+          # Public canonical URLs must answer HEAD just like GET for link checkers and crawlers.
+          # Previous production returned false 404 for HEAD / even though GET / was healthy.
+          for path in / /downloads /guide /support /privacy /status /robots.txt /sitemap.xml; do
+            head_status="$(curl --retry 4 --retry-delay 3 --retry-all-errors --silent --show-error --head --proto '=https' --tlsv1.2 \
+              --connect-timeout 8 --max-time 30 --output /dev/null --write-out '%{http_code}' "https://blofyplayer.com$path")"
+            if [[ "$head_status" != "200" ]]; then
+              echo "::error::HEAD https://blofyplayer.com$path returned $head_status (expected 200)"
+              exit 1
+            fi
+          done
           check_html "https://blofyplayer.com/admin" "BLOFY|دخول الإدارة|تسجيل دخول المشرف" "$tmp/admin.html"
           grep -Fq 'id="admin-login"' "$tmp/admin.html"
           grep -Fq 'name="username"' "$tmp/admin.html"
