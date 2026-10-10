@@ -701,14 +701,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
-    if (req.method === 'GET' && requestUrl.pathname === '/status') return await serveStatusPage(res);
-    if (req.method === 'GET' && (requestUrl.pathname === '/guide' || requestUrl.pathname === '/guide/')) return await serveStatusPage(res, 'guide.html');
-    if (req.method === 'GET' && (requestUrl.pathname === '/support' || requestUrl.pathname === '/support/')) return await serveStatusPage(res, 'support.html');
-    if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
+    if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/status') return await serveStatusPage(res);
+    if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/guide' || requestUrl.pathname === '/guide/')) return await serveStatusPage(res, 'guide.html');
+    if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/support' || requestUrl.pathname === '/support/')) return await serveStatusPage(res, 'support.html');
+    if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (serveIndexNowKey(req, res, requestUrl)) return;
-    if (req.method === 'GET' && requestUrl.pathname === '/robots.txt') return serveRobots(res);
-    if (req.method === 'GET' && requestUrl.pathname === '/sitemap.xml') return serveSitemap(res);
+    if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/robots.txt') return serveRobots(res);
+    if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/sitemap.xml') return serveSitemap(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (await commercial(req, res, requestUrl)) return;
     if (await cloud(req, res)) return;
