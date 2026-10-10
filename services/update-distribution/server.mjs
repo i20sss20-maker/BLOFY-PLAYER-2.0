@@ -830,7 +830,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(405, { ...securityHeaders, allow: 'GET, HEAD', 'cache-control': 'no-store' });
         return res.end();
       }
-      return await streamLocalApk(req, res, localReleaseMatch[1], localReleaseMatch[1], 'direct-release');
+      return await streamLocalApk(req, res, localReleaseMatch[1], localReleaseMatch[1], 'blofy');
     }
 
     if (pathname === '/admin' || pathname === '/admin/' || pathname === PUBLIC_ADMIN_PREFIX || pathname === `${PUBLIC_ADMIN_PREFIX}/`) {
