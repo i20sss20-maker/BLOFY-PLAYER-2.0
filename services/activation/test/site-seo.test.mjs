@@ -162,3 +162,15 @@ test('support page is served explicitly and sitemap includes it but still exclud
   assert.match(server, /pathname === '\/support' \|\| requestUrl\.pathname === '\/support\/'/);
   assert.match(server, /serveStatusPage\(res, 'support\.html'\)/);
 });
+
+test('public canonical GET routes also allow HEAD for SEO crawlers and link checks', () => {
+  const server = readFileSync(new URL('../src/server.mjs', import.meta.url), 'utf8');
+  for (const route of ['/', '/guide', '/support', '/status', '/robots.txt', '/sitemap.xml']) {
+    const lines = server.split('\n').filter(line =>
+      line.includes("requestUrl.pathname === '" + route + "'"));
+    assert.ok(lines.length, 'Expected a route for ' + route);
+    assert.ok(lines.some(line => line.includes("['GET', 'HEAD'].includes(req.method)")),
+      'Missing HEAD support on public URL ' + route);
+  }
+  assert.match(server, /if \(req\.method === 'GET' && requestUrl\.pathname === '\/connect'\)/);
+});
