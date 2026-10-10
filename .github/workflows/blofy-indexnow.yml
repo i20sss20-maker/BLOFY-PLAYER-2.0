@@ -1,0 +1,80 @@
+name: BLOFY IndexNow Discovery
+
+# Send only genuinely changed, canonical public pages AFTER production web smoke passes.
+# IndexNow notifies Bing/other participants; it does not submit to Google or guarantee indexing.
+on:
+  workflow_run:
+    workflows: ["BLOFY Web Surfaces Smoke"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: >-
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+
+      - name: Verify public URL selection and ownership key parsing
+        run: python3 -m unittest discover -s .github/scripts -p 'test_blofy_indexnow.py'
+
+      - name: Select changed public URLs
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            python3 .github/scripts/blofy_indexnow.py --all --output "$RUNNER_TEMP/indexnow-payload.json"
+          else
+            git diff --name-only HEAD^ HEAD > "$RUNNER_TEMP/changed-files.txt"
+            python3 .github/scripts/blofy_indexnow.py --changed "$RUNNER_TEMP/changed-files.txt" --output "$RUNNER_TEMP/indexnow-payload.json"
+          fi
+          if [[ -s "$RUNNER_TEMP/indexnow-payload.json" ]]; then
+            echo "notify=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No materially changed public URLs, so no search notification is sent."
+          fi
+
+      - name: Check live pages and public proof file
+        if: steps.changes.outputs.notify == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["key"])' "$RUNNER_TEMP/indexnow-payload.json")"
+          proof="$(curl --retry 3 --retry-delay 2 --retry-all-errors --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            --connect-timeout 8 --max-time 25 "https://blofyplayer.com/${key}.txt")"
+          [[ "$proof" == "$key" ]] || { echo "::error::IndexNow public ownership proof does not match"; exit 1; }
+          python3 - "$RUNNER_TEMP/indexnow-payload.json" <<'PY' > "$RUNNER_TEMP/indexnow-urls.txt"
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding='utf-8'))
+          for url in data['urlList']:
+              print(url)
+          PY
+          while IFS= read -r url; do
+            curl --retry 3 --retry-delay 2 --retry-all-errors --fail --silent --show-error --head --proto '=https' --tlsv1.2 \
+              --connect-timeout 8 --max-time 25 "$url" > /dev/null
+          done < "$RUNNER_TEMP/indexnow-urls.txt"
+
+      - name: Notify IndexNow once for changed canonical pages
+        if: steps.changes.outputs.notify == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --retry 2 --retry-delay 4 --retry-all-errors --fail-with-body --silent --show-error \
+            --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 45 \
+            --request POST --header 'Content-Type: application/json; charset=utf-8' \
+            --data-binary "@$RUNNER_TEMP/indexnow-payload.json" \
+            https://api.indexnow.org/indexnow
+          echo "IndexNow notification accepted. Search indexing is not guaranteed."

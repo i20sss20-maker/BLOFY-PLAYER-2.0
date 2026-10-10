@@ -57,3 +57,14 @@ test('sitemap lists canonical public pages, not the duplicate device sign-in rou
   assert.match(sitemap, /https:\/\/blofyplayer\.com\/privacy/);
   assert.doesNotMatch(sitemap, /https:\/\/blofyplayer\.com\/connect/);
 });
+
+test('public downloads FAQ answers real installation, activation and renewal questions without scripts', () => {
+  assert.match(downloads, /<section class="section install-section" id="faq"/);
+  assert.match(downloads, /كيف أحمل BLOFY PLAYER على التلفزيون/);
+  assert.match(downloads, /كيف أربط الجهاز وأفعّل التطبيق/);
+  assert.match(downloads, /كيف أجدد التفعيل أو أتواصل مع الدعم/);
+  assert.match(downloads, /wa\.me\/966568941484/);
+  assert.match(downloads, /هل يشمل تنزيل التطبيق قنوات أو اشتراك بث/);
+  assert.match(downloads, /<a href="\/connect">بوابة ربط الجهاز<\/a>/);
+  assert.doesNotMatch(downloads, /<script\b/i);
+});

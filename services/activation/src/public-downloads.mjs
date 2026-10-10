@@ -49,7 +49,17 @@ ${primary && !unavailable ? `<a id="download-primary" class="btn download-main" 
 <section id="install-tv" class="card section"><h3>تلفزيون / رسيفر — Downloader</h3><ol><li>اضغط «تنزيل التطبيق الآن» وانتظر اكتمال التنزيل.</li><li>اختر «تثبيت» أو «تحديث»، واسمح بالتثبيت من Downloader عند الطلب.</li><li>افتح BLOFY PLAYER. لا تحذف التطبيق القديم عند التحديث.</li></ol></section>
 <section id="install-phone" class="card section"><h3>جوال / تابلت أندرويد</h3><ol><li>افتح صفحة BLOFY PLAYER على Google Play واضغط «تثبيت». بديلًا عن ذلك يمكن تنزيل APK من الإصدارات أعلاه.</li><li>افتح الملف وامنح إذن التثبيت عند الطلب.</li><li>ثبّت التطبيق أو حدّث نسختك الحالية، ثم افتح BLOFY.</li></ol></section>
 <section id="install-computer" class="card section"><h3>كمبيوتر</h3><p>هذه نسخة أندرويد APK وليست برنامج ويندوز. تشغيلها على الكمبيوتر يحتاج محاكي أندرويد.</p></section>
-</section><div class="notice">تفعيل تطبيق BLOFY وصلاحية اشتراك البث منفصلان.</div></main>
+</section>
+<section class="section install-section" id="faq" aria-labelledby="faq-title">
+<div class="download-section-head"><span class="eyebrow">HELP & FAQ</span><h2 id="faq-title">أسئلة شائعة عن BLOFY PLAYER</h2></div>
+<div class="card section">
+<details><summary>كيف أحمل BLOFY PLAYER على التلفزيون أو الرسيفر؟</summary><p>على أجهزة Android TV والأجهزة المتوافقة، استخدم Google Play إن كان التطبيق متاحًا، أو افتح تطبيق Downloader واكتب <strong dir="ltr">blofyplayer.com/apk</strong> لتنزيل ملف APK الرسمي. لا تحذف النسخة المثبتة إذا كنت تحدّث التطبيق.</p></details>
+<details><summary>هل يعمل BLOFY PLAYER على الجوال والتابلت؟</summary><p>توجد نسخة لأجهزة أندرويد المتوافقة. افتح رابط Google Play بالأعلى للتأكد من توفر التطبيق على جهازك، أو استخدم ملف APK عند الحاجة.</p></details>
+<details><summary>كيف أربط الجهاز وأفعّل التطبيق؟</summary><p>افتح التطبيق لعرض معلومات الربط ثم انتقل إلى <a href="/connect">بوابة ربط الجهاز</a> واتبع التعليمات. لا تشارك رمز الربط المؤقت مع أشخاص غير موثوقين.</p></details>
+<details><summary>كيف أجدد التفعيل أو أتواصل مع الدعم؟</summary><p>التجديد والدعم متاحان حاليًا عبر <a href="https://wa.me/966568941484" rel="noopener noreferrer">واتساب BLOFY PLAYER</a> ريثما تتوفر بوابة الدفع. اذكر رقم جهازك عند طلب التجديد ولا ترسل بيانات حساب قوائم التشغيل.</p></details>
+<details><summary>هل يشمل تنزيل التطبيق قنوات أو اشتراك بث؟</summary><p>لا. BLOFY PLAYER تطبيق لتشغيل قوائم الوسائط التي يضيفها المستخدم ولديه حق الوصول إليها. تفعيل التطبيق لا يعني توفير اشتراك بث أو محتوى.</p></details>
+</div></section>
+<div class="notice">تفعيل تطبيق BLOFY وصلاحية اشتراك البث منفصلان.</div></main>
 <footer class="foot"><a href="/">BLOFY PLAYER</a><a href="/downloads">التحميل</a><a href="/privacy">الخصوصية وحذف البيانات</a><a href="/connect">إدارة جهازك</a><a href="/status">حالة الخدمات</a><a href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%AD%D8%AA%D8%A7%D8%AC%20%D8%AF%D8%B9%D9%85%20%D9%81%D9%86%D9%8A%20%D9%84%D8%AA%D8%B7%D8%A8%D9%8A%D9%82%20BLOFY%20PLAYER." rel="noopener noreferrer">الدعم</a><a href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%B1%D9%8A%D8%AF%20%D8%AA%D8%AC%D8%AF%D9%8A%D8%AF%20%D8%AA%D9%81%D8%B9%D9%8A%D9%84%20BLOFY%20PLAYER%20%D8%B9%D8%A8%D8%B1%20%D9%88%D8%A7%D8%AA%D8%B3%D8%A7%D8%A8.%20%D8%B1%D9%82%D9%85%20%D8%A7%D9%84%D8%AC%D9%87%D8%A7%D8%B2%3A%20" rel="noopener noreferrer">التجديد</a><a href="https://updates.blofyplayer.com" rel="noopener">مركز الإصدارات</a></footer></div></body></html>`;
 }
 
