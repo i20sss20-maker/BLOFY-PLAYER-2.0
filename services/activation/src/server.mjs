@@ -268,8 +268,9 @@ async function servePortal(res, connectOnly = false) {
   res.end(file);
 }
 
-async function serveStatusPage(res) {
-  const file = await readFile(new URL('../web/status.html', import.meta.url));
+async function serveStatusPage(res, fileName = 'status.html') {
+  // Only internal constant filenames are passed; never derive public file paths from URLs.
+  const file = await readFile(new URL('../web/' + fileName, import.meta.url));
   res.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
     'content-length': file.length,
@@ -307,6 +308,7 @@ function serveSitemap(res) {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://blofyplayer.com/</loc></url>
   <url><loc>https://blofyplayer.com/downloads</loc></url>
+  <url><loc>https://blofyplayer.com/guide</loc></url>
   <url><loc>https://blofyplayer.com/privacy</loc></url>
   <url><loc>https://blofyplayer.com/status</loc></url>
 </urlset>`;
@@ -694,6 +696,7 @@ const server = http.createServer(async (req, res) => {
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (req.method === 'GET' && requestUrl.pathname === '/status') return await serveStatusPage(res);
+    if (req.method === 'GET' && (requestUrl.pathname === '/guide' || requestUrl.pathname === '/guide/')) return await serveStatusPage(res, 'guide.html');
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (serveIndexNowKey(req, res, requestUrl)) return;

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0811">
+<meta name="description" content="دليل تثبيت BLOFY PLAYER (بلوفي بلاير) على جوال أندرويد وAndroid TV والرسيفر: التحميل الرسمي من Google Play، تثبيت APK، ربط الجهاز، وإضافة قوائم M3U وXtream Codes.">
+<link rel="canonical" href="https://blofyplayer.com/guide">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/blofy-logo.png">
+<link rel="apple-touch-icon" href="/blofy-logo.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="BLOFY PLAYER">
+<meta property="og:title" content="دليل تثبيت BLOFY PLAYER على التلفزيون والجوال">
+<meta property="og:description" content="خطوات تحميل بلوفي بلاير من Google Play أو APK، ربط الجهاز، وإضافة قوائم التشغيل مع حلول للمشاكل الشائعة.">
+<meta property="og:url" content="https://blofyplayer.com/guide">
+<meta property="og:image" content="https://blofyplayer.com/blofy-logo.png">
+<meta property="og:locale" content="ar_SA">
+<meta name="twitter:card" content="summary">
+<title>طريقة تثبيت BLOFY PLAYER على التلفزيون والجوال | دليل بلوفي بلاير</title>
+<link rel="stylesheet" href="/premium.css">
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;color:#f8f6fc;font-family:system-ui,"Segoe UI",Tahoma,Arial,sans-serif;background:radial-gradient(circle at 82% -12%,rgba(128,64,222,.22),transparent 33rem),linear-gradient(140deg,#090810,#10101b 48%,#080710);line-height:1.9}
+a{color:#d4b5ff}a:focus-visible,summary:focus-visible{outline:2px solid #d3b1ff;outline-offset:4px}
+.guide-wrap{width:min(1030px,calc(100% - 32px));margin-inline:auto}
+.guide-head{min-height:83px;display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid rgba(190,154,255,.15)}
+.guide-brand{display:flex;gap:11px;align-items:center;color:white;text-decoration:none;font-weight:900;letter-spacing:.055em;direction:ltr}
+.guide-brand img{width:43px;height:43px;object-fit:contain}
+.guide-nav{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.guide-nav a{padding:8px 11px;border-radius:12px;color:#d3c9e1;text-decoration:none;font-weight:700;font-size:13px}
+.guide-nav a:hover{background:rgba(161,95,245,.15);color:#fff}
+.guide-hero{padding:58px 0 30px;max-width:830px}.guide-tag{display:inline-block;direction:ltr;font-size:12px;letter-spacing:.11em;color:#c7a0ff;font-weight:850}
+.guide-hero h1{font-size:clamp(31px,5.2vw,56px);line-height:1.33;margin:9px 0 16px}
+.guide-hero p{color:#c4b9d1;font-size:17px;margin:0;max-width:750px}
+.guide-actions{display:flex;gap:11px;flex-wrap:wrap;margin-top:25px}
+.guide-button{display:inline-flex;align-items:center;justify-content:center;min-height:47px;padding:9px 17px;border-radius:13px;background:rgba(255,255,255,.06);border:1px solid rgba(190,154,255,.22);color:#fff;text-decoration:none;font-weight:800}
+.guide-button.primary{background:linear-gradient(115deg,#9d5df4,#703aea);border-color:transparent}
+.guide-button:hover{filter:brightness(1.12)}
+.guide-toc{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0 27px}
+.guide-toc a{font-size:13px;text-decoration:none;color:#d1c8db;padding:8px 12px;border:1px solid rgba(180,140,250,.18);border-radius:12px}
+.guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.guide-card{border:1px solid rgba(183,138,239,.2);border-radius:21px;background:linear-gradient(145deg,rgba(31,25,44,.95),rgba(16,13,24,.97));padding:24px;box-shadow:0 15px 40px rgba(0,0,0,.13)}
+.guide-card.full{grid-column:1/-1}.guide-card h2{font-size:22px;margin:0 0 12px;line-height:1.4}
+.guide-card h3{font-size:17px;margin:17px 0 7px;color:#e1ccff}
+.guide-card p{margin:9px 0;color:#c5bad0}.guide-card ol,.guide-card ul{padding-right:22px;margin:10px 0}
+.guide-card li{padding-right:5px;margin-bottom:11px;color:#e0d9e6}
+.guide-card li::marker{color:#b48bff;font-weight:800}
+.guide-code{display:inline-block;direction:ltr;font-family:ui-monospace,Consolas,monospace;color:#fff;background:rgba(147,106,213,.2);border:1px solid rgba(190,155,255,.16);padding:3px 8px;border-radius:7px;overflow-wrap:anywhere}
+.guide-note{padding:14px 16px;border-right:3px solid #ae7dff;background:rgba(143,92,215,.09);border-radius:8px;color:#d9cee6;margin-top:14px}
+.guide-faq details{padding:13px 0;border-top:1px solid rgba(211,177,255,.15)}.guide-faq details:first-child{border-top:0}
+.guide-faq summary{cursor:pointer;font-weight:800;color:#fff}.guide-faq p{margin:10px 0 0}
+.guide-footer{margin:45px 0 30px;padding-top:18px;border-top:1px solid rgba(190,154,255,.15);color:#ada4ba;font-size:13px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.guide-footer a{color:#c4b1e2;text-decoration:none}
+@media(max-width:700px){.guide-head{padding:15px 0;align-items:flex-start;flex-direction:column}.guide-grid{grid-template-columns:1fr}.guide-card.full{grid-column:auto}.guide-card{padding:19px}.guide-hero{padding:33px 0 22px}.guide-hero p{font-size:15px}.guide-actions a{flex:1 1 180px}.guide-footer{display:grid}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="guide-wrap">
+<header class="guide-head">
+  <a class="guide-brand" href="/"><img src="/blofy-logo.png" alt="">BLOFY PLAYER</a>
+  <nav class="guide-nav" aria-label="الروابط الرئيسية"><a href="/">الرئيسية</a><a href="/downloads">التحميل</a><a href="/connect">ربط الجهاز</a><a href="/status">حالة الخدمات</a></nav>
+</header>
+<main>
+<section class="guide-hero">
+ <span class="guide-tag">BLOFY PLAYER • INSTALLATION GUIDE</span>
+ <h1>دليل تثبيت بلوفي بلاير على التلفزيون والجوال</h1>
+ <p>تعرف على طريقة تحميل BLOFY PLAYER، تثبيت APK على الأجهزة المتوافقة، ربط جهازك بالبوابة، وإضافة قوائم M3U أو Xtream Codes التي تملك حق استخدامها.</p>
+ <div class="guide-actions">
+  <a class="guide-button primary" href="https://play.google.com/store/apps/details?id=tv.blofy.player.v2" rel="noopener noreferrer">تثبيت BLOFY PLAYER من Google Play ↗</a>
+  <a class="guide-button" href="/downloads">تحميل ملف APK الرسمي</a>
+ </div>
+</section>
+<nav class="guide-toc" aria-label="أقسام الدليل">
+<a href="#phone">جوال أندرويد</a><a href="#tv">Android TV والرسيفر</a><a href="#connect">ربط الجهاز</a><a href="#playlist">إضافة قائمة</a><a href="#troubleshoot">حل المشكلات</a>
+</nav>
+<div class="guide-grid">
+ <section class="guide-card" id="phone">
+  <h2>تثبيت التطبيق على الجوال أو التابلت</h2>
+  <ol><li>افتح <a href="https://play.google.com/store/apps/details?id=tv.blofy.player.v2" rel="noopener noreferrer">BLOFY PLAYER في Google Play</a> وتأكد من توافق جهازك.</li><li>اضغط «تثبيت»، ثم افتح التطبيق وانتظر ظهوره.</li><li>إذا تعذر التثبيت من المتجر، استخدم <a href="/downloads">ملف APK الرسمي</a> لجهاز متوافق، وتأكد من موثوقية مصدر التنزيل.</li></ol>
+  <p class="guide-note">للتحديث، ثبّت فوق النسخة الحالية متى كان التوقيع متطابقًا. لا تحذف التطبيق قبل حفظ معلوماتك.</p>
+ </section>
+ <section class="guide-card" id="tv">
+  <h2>التثبيت على Android TV والرسيفر</h2>
+  <ol><li>إذا توفر التطبيق في Google Play على جهازك، استخدم التثبيت المباشر.</li><li>على جهاز يدعم APK، افتح تطبيق Downloader وأدخل العنوان <span class="guide-code">blofyplayer.com/apk</span>.</li><li>نزّل الملف وأكمل التثبيت عند طلب الجهاز. امنح إذن التثبيت للتطبيق الذي تثق به فقط، ثم عطّل الإذن إن لم تعد تحتاجه.</li><li>افتح BLOFY PLAYER باستخدام الريموت.</li></ol>
+  <p class="guide-note">بعض أجهزة التلفزيون غير العاملة بنظام أندرويد لا تدعم APK. استخدم جهاز Android TV أو رسيفر متوافق عند الحاجة.</p>
+ </section>
+ <section class="guide-card" id="connect">
+  <h2>ربط جهاز BLOFY PLAYER</h2>
+  <ol><li>افتح التطبيق واذهب إلى شاشة رقم الجهاز أو رمز الربط.</li><li>من جوالك أو الكمبيوتر افتح <a href="/connect">بوابة ربط الجهاز</a>.</li><li>أدخل البيانات التي يعرضها التطبيق واتبع إرشادات البوابة.</li><li>ارجع للتطبيق وتأكد من اكتمال الربط.</li></ol>
+  <p class="guide-note">لا ترسل رمز الربط أو كلمة مرور قائمة التشغيل لأشخاص غير موثوقين.</p>
+ </section>
+ <section class="guide-card" id="playlist">
+  <h2>إضافة قائمة M3U أو Xtream Codes</h2>
+  <ol><li>بعد ربط الجهاز، افتح إدارة قوائم التشغيل في بوابة الجهاز.</li><li>اختر نوع قائمتك: رابط <strong dir="ltr">M3U/M3U8</strong> أو بيانات <strong dir="ltr">Xtream Codes</strong>.</li><li>أدخل معلومات المزود الذي تملك حق الوصول إليه، ثم احفظ القائمة.</li><li>افتح التطبيق وتأكد من ظهور القائمة أو أعد تحديثها وفق الخيارات المتاحة.</li></ol>
+  <p class="guide-note">التطبيق مشغّل وسائط فقط؛ لا يوفّر قوائم أو قنوات أو اشتراكات محتوى.</p>
+ </section>
+ <section class="guide-card full" id="troubleshoot">
+  <h2>حلول سريعة للمشكلات الشائعة</h2>
+  <div class="guide-faq">
+   <details><summary>تظهر رسالة «التطبيق غير مثبت»</summary><p>تحقق من توافق إصدار أندرويد ونوع المعالج ومساحة التخزين. إذا كنت تحدّث إصدارًا موجودًا، فقد يرفض النظام اختلاف التوقيع. لا تحذف بيانات التطبيق قبل التأكد من وجود نسخة احتياطية أو القدرة على إعادة الربط.</p></details>
+   <details><summary>التطبيق لا يظهر في Google Play</summary><p>قد يختلف التوفر حسب بلد المتجر ونوع الجهاز وإصدار النظام. جرّب فتح <a href="/downloads">صفحة التحميل الرسمية</a> وتحقق من طريقة التثبيت المناسبة لجهازك.</p></details>
+   <details><summary>القنوات أو الأفلام لا تشتغل</summary><p>تأكد من صحة بيانات قائمتك واشتراك المحتوى من مزودك، وجرّب اتصال الإنترنت. إذا استمرت المشكلة، راسل الدعم مع نوع جهازك ووصف المشكلة دون إرسال كلمات المرور.</p></details>
+   <details><summary>كيف أجدد تفعيل التطبيق؟</summary><p>حاليًا يمكنك طلب التجديد عبر <a href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%B1%D9%8A%D8%AF%20%D8%AA%D8%AC%D8%AF%D9%8A%D8%AF%20BLOFY%20PLAYER.%20%D8%B1%D9%82%D9%85%20%D8%A7%D9%84%D8%AC%D9%87%D8%A7%D8%B2%3A%20" rel="noopener noreferrer">واتساب BLOFY PLAYER</a> بإرسال رقم الجهاز. تجديد تفعيل المشغّل منفصل عن اشتراك البث.</p></details>
+  </div>
+ </section>
+</div>
+<section class="guide-hero" aria-label="الدعم والتثبيت">
+<h2>جاهز تبدأ؟</h2>
+<p>نزّل التطبيق رسميًا، واربط جهازك بسهولة، وإذا احتجت مساعدة تواصل مع الدعم.</p>
+<div class="guide-actions"><a class="guide-button primary" href="/downloads">افتح مركز التحميل</a><a class="guide-button" href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%AD%D8%AA%D8%A7%D8%AC%20%D8%AF%D8%B9%D9%85%20BLOFY%20PLAYER." rel="noopener noreferrer">الدعم عبر واتساب</a></div>
+</section>
+</main>
+<footer class="guide-footer">
+ <span>© BLOFY PLAYER — مشغّل وسائط لا يتضمن محتوى بث.</span>
+ <nav aria-label="روابط إضافية"><a href="/privacy">الخصوصية وحذف البيانات</a> · <a href="/status">حالة الخدمات</a> · <a href="/">الموقع الرئيسي</a></nav>
+</footer>
+</div>
+</body>
+</html>

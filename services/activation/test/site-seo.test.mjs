@@ -68,3 +68,25 @@ test('public downloads FAQ answers real installation, activation and renewal que
   assert.match(downloads, /<a href="\/connect">بوابة ربط الجهاز<\/a>/);
   assert.doesNotMatch(downloads, /<script\b/i);
 });
+
+test('official guide is a crawlable Arabic help page linked from both landing pages', () => {
+  const guide = readFileSync(new URL('../web/guide.html', import.meta.url), 'utf8');
+  assert.match(guide, /<html lang="ar" dir="rtl">/);
+  assert.equal(attribute(guide, /<link rel="canonical" href="([^"]+)"/), 'https://blofyplayer.com/guide');
+  assert.match(attribute(guide, /<meta name="description" content="([^"]+)"/), /Android TV/);
+  assert.match(guide, /<h1>دليل تثبيت بلوفي بلاير على التلفزيون والجوال<\/h1>/);
+  assert.match(guide, /play\.google\.com\/store\/apps\/details\?id=tv\.blofy\.player\.v2/);
+  assert.match(guide, /blofyplayer\.com\/apk/);
+  assert.match(guide, /https:\/\/wa\.me\/966568941484/);
+  assert.match(guide, /لا يوفّر قوائم أو قنوات أو اشتراكات محتوى/);
+  assert.doesNotMatch(guide, /<script\b/i);
+  assert.match(home, /<a href="\/guide">دليل التثبيت<\/a>/);
+  assert.match(downloads, /<a href="\/guide">افتح دليل BLOFY PLAYER/);
+});
+
+test('guide appears in the official main domain sitemap', () => {
+  const server = readFileSync(new URL('../src/server.mjs', import.meta.url), 'utf8');
+  const sitemap = server.split('function serveSitemap(res) {')[1]?.split('async function servePortalLogo(')[0] || '';
+  assert.match(sitemap, /<loc>https:\/\/blofyplayer\.com\/guide<\/loc>/);
+  assert.match(server, /pathname === '\/guide' \|\| requestUrl\.pathname === '\/guide\/'/);
+});
