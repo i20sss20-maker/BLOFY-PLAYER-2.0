@@ -4036,8 +4036,8 @@ public partial class MainWindow : Window
                 for (var i = Math.Max(0, at - radius);
                      i <= Math.Min(panel.Children.Count - 1, at + radius); i++)
                 {
-                    if (i != at && panel.Children[i] is Button target)
-                        nearby.Add(target);
+                    if (i != at && panel.Children[i] is Button neighborButton)
+                        nearby.Add(neighborButton);
                 }
                 if (TryFindDirectionalTarget(poster, nearby, key, out var neighbor))
                     return FocusNavigationTarget(neighbor);
