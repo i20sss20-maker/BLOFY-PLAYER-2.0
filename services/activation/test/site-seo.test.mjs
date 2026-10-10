@@ -129,3 +129,36 @@ test('pairing form has crawler noindex but home remains indexable', () => {
   assert.match(pairingRoute, /connectOnly \? \{ 'x-robots-tag': 'noindex,follow' \} : \{\}/);
   assert.doesNotMatch(home, /<meta name="robots" content="noindex/);
 });
+
+test('support and WhatsApp renewal hub is an accessible canonical Arabic public page', () => {
+  const support = readFileSync(new URL('../web/support.html', import.meta.url), 'utf8');
+  assert.match(support, /<html lang="ar" dir="rtl">/);
+  assert.match(attribute(support, /<title>([^<]+)<\/title>/), /دعم BLOFY PLAYER/);
+  assert.equal(attribute(support, /<link rel="canonical" href="([^"]+)"/), 'https://blofyplayer.com/support');
+  assert.match(attribute(support, /<meta name="description" content="([^"]+)"/), /واتساب/);
+  assert.match(support, /<h1>الدعم الفني وتجديد تفعيل بلوفي بلاير<\/h1>/);
+  assert.match(support, /href="https:\/\/wa\.me\/966568941484\?text=/);
+  assert.match(support, /تفعيل تطبيق BLOFY PLAYER منفصل عن اشتراك محتوى البث/);
+  assert.match(support, /لا تشارك كلمات مرور قوائم التشغيل أو رمز الربط المؤقت/);
+  assert.match(support, /href="\/privacy"/);
+  assert.doesNotMatch(support, /<script\b(?![^>]*type="application\/ld\+json")/i);
+  const matches = [...support.matchAll(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/g)];
+  const schemas = matches.map(m => JSON.parse(m[1]));
+  const crumbs = schemas.find(s => s['@type'] === 'BreadcrumbList');
+  assert.ok(crumbs);
+  assert.deepEqual(crumbs.itemListElement.map(item => item.item),
+    ['https://blofyplayer.com/', 'https://blofyplayer.com/support']);
+  assert.match(home, /<a href="\/support">الدعم والتجديد<\/a>/);
+  assert.match(downloads, /<a href="\/support">الدعم والتجديد<\/a>/);
+  const guide = readFileSync(new URL('../web/guide.html', import.meta.url), 'utf8');
+  assert.match(guide, /<a href="\/support">الدعم والتجديد<\/a>/);
+});
+
+test('support page is served explicitly and sitemap includes it but still excludes private pairing', () => {
+  const server = readFileSync(new URL('../src/server.mjs', import.meta.url), 'utf8');
+  const sitemap = server.split('function serveSitemap(res) {')[1]?.split('async function servePortalLogo(')[0] || '';
+  assert.match(sitemap, /<loc>https:\/\/blofyplayer\.com\/support<\/loc>/);
+  assert.doesNotMatch(sitemap, /<loc>https:\/\/blofyplayer\.com\/connect<\/loc>/);
+  assert.match(server, /pathname === '\/support' \|\| requestUrl\.pathname === '\/support\/'/);
+  assert.match(server, /serveStatusPage\(res, 'support\.html'\)/);
+});
