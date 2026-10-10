@@ -1,3 +1,4 @@
+import { withPublicAnalytics, PUBLIC_ANALYTICS_CSP } from './public-analytics.mjs';
 /** Public downloads are server-rendered: no JavaScript, fetch or WebView feature is required. */
 const PATHS = new Set(['/downloads', '/downloads/', '/releases', '/releases/']);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
@@ -29,7 +30,7 @@ export function renderPublicDownloads(items = [], { unavailable = false } = {}) 
   const empty = unavailable
     ? '<section class="card notice" role="alert"><h2>تعذّر قراءة الإصدارات حاليًا</h2><p>أعد تحميل الصفحة بعد قليل. لا تحتاج إلى تغيير إعدادات جهازك.</p><a class="btn primary" href="/downloads">إعادة المحاولة</a></section>'
     : '<section class="card"><p>لا توجد إصدارات متاحة للتحميل حاليًا.</p><a class="btn" href="/downloads">تحديث الصفحة</a></section>';
-  return `<!doctype html>
+  return withPublicAnalytics(`<!doctype html>
 <html lang="ar" dir="rtl"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#07070d">
 <meta name="description" content="تحميل BLOFY PLAYER (بلوفي بلاير) لأجهزة أندرويد من Google Play أو APK. مشغل وسائط يدعم قوائم M3U وXtream Codes الخاصة بك، مع دليل التثبيت وربط الجهاز."><link rel="canonical" href="https://blofyplayer.com/downloads"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta property="og:type" content="website"><meta property="og:site_name" content="BLOFY PLAYER"><meta property="og:title" content="تحميل BLOFY PLAYER (بلوفي بلاير) للأندرويد"><meta property="og:description" content="التحميل الرسمي من Google Play أو APK لأجهزة أندرويد، مع طريقة التثبيت والدعم وربط الجهاز."><meta property="og:url" content="https://blofyplayer.com/downloads"><meta property="og:image" content="https://blofyplayer.com/blofy-logo.png"><meta property="og:locale" content="ar_SA"><meta property="og:image:alt" content="شعار BLOFY PLAYER"><meta name="twitter:card" content="summary"><title>تحميل BLOFY PLAYER (بلوفي بلاير) لأندرويد | Google Play وAPK</title><link rel="stylesheet" href="/premium.css"><link rel="stylesheet" href="/release-manager.css"><link rel="stylesheet" href="/site-polish.css">
@@ -61,7 +62,7 @@ ${primary && !unavailable ? `<a id="download-primary" class="btn download-main" 
 <details><summary>هل يشمل تنزيل التطبيق قنوات أو اشتراك بث؟</summary><p>لا. BLOFY PLAYER تطبيق لتشغيل قوائم الوسائط التي يضيفها المستخدم ولديه حق الوصول إليها. تفعيل التطبيق لا يعني توفير اشتراك بث أو محتوى.</p></details>
 </div></section>
 <div class="notice">تفعيل تطبيق BLOFY وصلاحية اشتراك البث منفصلان.</div></main>
-<footer class="foot"><a href="/">BLOFY PLAYER</a><a href="/downloads">التحميل</a><a href="/support">مركز الدعم</a><a href="/privacy">الخصوصية وحذف البيانات</a><a href="/connect">إدارة جهازك</a><a href="/status">حالة الخدمات</a><a href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%AD%D8%AA%D8%A7%D8%AC%20%D8%AF%D8%B9%D9%85%20%D9%81%D9%86%D9%8A%20%D9%84%D8%AA%D8%B7%D8%A8%D9%8A%D9%82%20BLOFY%20PLAYER." rel="noopener noreferrer">الدعم</a><a href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%B1%D9%8A%D8%AF%20%D8%AA%D8%AC%D8%AF%D9%8A%D8%AF%20%D8%AA%D9%81%D8%B9%D9%8A%D9%84%20BLOFY%20PLAYER%20%D8%B9%D8%A8%D8%B1%20%D9%88%D8%A7%D8%AA%D8%B3%D8%A7%D8%A8.%20%D8%B1%D9%82%D9%85%20%D8%A7%D9%84%D8%AC%D9%87%D8%A7%D8%B2%3A%20" rel="noopener noreferrer">التجديد</a><a href="https://updates.blofyplayer.com" rel="noopener">مركز الإصدارات</a></footer></div></body></html>`;
+<footer class="foot"><a href="/">BLOFY PLAYER</a><a href="/downloads">التحميل</a><a href="/support">مركز الدعم</a><a href="/privacy">الخصوصية وحذف البيانات</a><a href="/connect">إدارة جهازك</a><a href="/status">حالة الخدمات</a><a href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%AD%D8%AA%D8%A7%D8%AC%20%D8%AF%D8%B9%D9%85%20%D9%81%D9%86%D9%8A%20%D9%84%D8%AA%D8%B7%D8%A8%D9%8A%D9%82%20BLOFY%20PLAYER." rel="noopener noreferrer">الدعم</a><a href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%B1%D9%8A%D8%AF%20%D8%AA%D8%AC%D8%AF%D9%8A%D8%AF%20%D8%AA%D9%81%D8%B9%D9%8A%D9%84%20BLOFY%20PLAYER%20%D8%B9%D8%A8%D8%B1%20%D9%88%D8%A7%D8%AA%D8%B3%D8%A7%D8%A8.%20%D8%B1%D9%82%D9%85%20%D8%A7%D9%84%D8%AC%D9%87%D8%A7%D8%B2%3A%20" rel="noopener noreferrer">التجديد</a><a href="https://updates.blofyplayer.com" rel="noopener">مركز الإصدارات</a></footer></div></body></html>`);
 }
 
 export async function servePublicDownloads(req, res, pathname, { list, onError = () => {}, timeoutMs = 8000 }) {
@@ -86,7 +87,7 @@ export async function servePublicDownloads(req, res, pathname, { list, onError =
     'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer',
     'permissions-policy': 'camera=(), microphone=(), geolocation=()',
     'strict-transport-security': 'max-age=31536000',
-    'content-security-policy': "default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'",
+    'content-security-policy': PUBLIC_ANALYTICS_CSP,
     ...(unavailable ? { 'retry-after': '15' } : {})
   });
   res.end(req.method === 'HEAD' ? undefined : body);
