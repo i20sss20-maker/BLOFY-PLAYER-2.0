@@ -79,6 +79,7 @@ test('official guide is a crawlable Arabic help page linked from both landing pa
   assert.match(guide, /blofyplayer\.com\/apk/);
   assert.match(guide, /https:\/\/wa\.me\/966568941484/);
   assert.match(guide, /لا يوفّر قوائم أو قنوات أو اشتراكات محتوى/);
+  assert.match(guide, /انتهت صلاحية رمز الربط/);
   assert.doesNotMatch(guide, /<script\b/i);
   assert.match(home, /<a href="\/guide">دليل التثبيت<\/a>/);
   assert.match(downloads, /<a href="\/guide">افتح دليل BLOFY PLAYER/);

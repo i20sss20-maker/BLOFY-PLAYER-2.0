@@ -63,8 +63,10 @@ jobs:
               print(url)
           PY
           while IFS= read -r url; do
-            curl --retry 3 --retry-delay 2 --retry-all-errors --fail --silent --show-error --head --proto '=https' --tlsv1.2 \
-              --connect-timeout 8 --max-time 25 "$url" > /dev/null
+            # Public SEO pages are GET endpoints; HEAD is not a valid availability probe here.
+            curl --retry 3 --retry-delay 2 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              --connect-timeout 8 --max-time 25 --output /dev/null "$url"
+            echo "Verified public page via GET: $url"
           done < "$RUNNER_TEMP/indexnow-urls.txt"
 
       - name: Notify IndexNow once for changed canonical pages
