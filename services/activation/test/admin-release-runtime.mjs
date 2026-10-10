@@ -31,7 +31,9 @@ try{
   async function publicPage(path='/releases') {
     const r=await fetch(base+path);assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/charset=utf-8/);
     assert.match(r.headers.get('cache-control'),/no-store/);const html=await r.text();
-    assert.match(html,/data-server-rendered="true"/);assert.doesNotMatch(html,/<script\b|جارٍ قراءة|experience\.js|release-manager\.js/);
+    assert.match(html,/data-server-rendered="true"/);
+    assert.match(html,/<script src="\\/public-analytics\\.js" defer><\\/script>/i);
+    assert.doesNotMatch(html,/جارٍ قراءة|experience\\.js|release-manager\\.js|<script\\b(?![^>]*src="\\/public-analytics\\.js")/i);
     return html;
   }
   for(const path of ['/releases','/releases/','/downloads','/downloads/'])assert.ok((await publicPage(path)).includes(initial.versionName));
