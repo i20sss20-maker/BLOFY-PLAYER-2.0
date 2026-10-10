@@ -10,10 +10,11 @@ import re
 
 HOST = "blofyplayer.com"
 BASE = f"https://{HOST}"
-CANONICAL_PAGES = ("/", "/downloads", "/guide", "/privacy", "/status")
+CANONICAL_PAGES = ("/", "/downloads", "/guide", "/support", "/privacy", "/status")
 PER_FILE = {
     "services/activation/web/index.html": ("/",),
     "services/activation/web/guide.html": ("/guide",),
+    "services/activation/web/support.html": ("/support",),
     "services/activation/web/privacy.html": ("/privacy",),
     "services/activation/web/status.html": ("/status",),
     "services/activation/src/public-downloads.mjs": ("/downloads",),
