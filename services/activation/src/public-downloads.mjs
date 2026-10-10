@@ -51,6 +51,7 @@ ${primary && !unavailable ? `<a id="download-primary" class="btn download-main" 
 <section id="install-computer" class="card section"><h3>كمبيوتر</h3><p>هذه نسخة أندرويد APK وليست برنامج ويندوز. تشغيلها على الكمبيوتر يحتاج محاكي أندرويد.</p></section>
 </section>
 <section class="section install-section" id="faq" aria-labelledby="faq-title">
+<p class="download-intro">تبي شرح مفصّل للتثبيت وربط الجهاز وإضافة القوائم؟ <a href="/guide">افتح دليل BLOFY PLAYER لأجهزة أندرويد والتلفزيون</a>.</p>
 <div class="download-section-head"><span class="eyebrow">HELP & FAQ</span><h2 id="faq-title">أسئلة شائعة عن BLOFY PLAYER</h2></div>
 <div class="card section">
 <details><summary>كيف أحمل BLOFY PLAYER على التلفزيون أو الرسيفر؟</summary><p>على أجهزة Android TV والأجهزة المتوافقة، استخدم Google Play إن كان التطبيق متاحًا، أو افتح تطبيق Downloader واكتب <strong dir="ltr">blofyplayer.com/apk</strong> لتنزيل ملف APK الرسمي. لا تحذف النسخة المثبتة إذا كنت تحدّث التطبيق.</p></details>
