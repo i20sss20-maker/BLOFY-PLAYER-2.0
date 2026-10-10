@@ -174,3 +174,25 @@ test('public canonical GET routes also allow HEAD for SEO crawlers and link chec
   }
   assert.match(server, /if \(req\.method === 'GET' && requestUrl\.pathname === '\/connect'\)/);
 });
+
+test('home has one public heading and keeps the logged-in dashboard style', () => {
+  assert.equal((home.match(/<h1\b/g) || []).length, 1);
+  assert.match(home, /<h2 data-i18n="playlistsTitle">قوائم التشغيل<\/h2>/);
+  assert.match(home, /\.dashboard-title-wrap h2 \{/);
+  assert.doesNotMatch(home, /\.dashboard-title-wrap h1 \{/);
+});
+
+test('downloads page remains script-free and has a genuine WhatsApp share link', () => {
+  assert.doesNotMatch(downloads, /<script\b/i);
+  const shareMatch = downloads.match(/<a class="btn" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="مشاركة BLOFY PLAYER على واتساب">/);
+  assert.ok(shareMatch);
+  const link = new URL(shareMatch[1]);
+  assert.equal(link.origin, 'https://api.whatsapp.com');
+  assert.match(link.searchParams.get('text'), /https:\/\/blofyplayer.com\/downloads/);
+  assert.match(link.searchParams.get('text'), /لا يوفّر اشتراك محتوى/);
+  const guide = readFileSync(new URL('../web/guide.html', import.meta.url), 'utf8');
+  assert.match(guide, /شارك التطبيق عبر واتساب/);
+  assert.equal((guide.match(/<h1>/g) || []).length, 1);
+  assert.ok((guide.match(/<title>([^<]+)/)?.[1] || '').length <= 60);
+  assert.ok((guide.match(/<meta name="description" content="([^"]+)"/)?.[1] || '').length <= 160);
+});
