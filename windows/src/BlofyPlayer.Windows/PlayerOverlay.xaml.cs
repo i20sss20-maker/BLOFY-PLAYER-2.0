@@ -51,6 +51,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private long _pendingRecoveryResume;
     private bool _disposed;
     private bool _playbackFailed;
+    private int _hudPolling;
     private bool _initializedOnce;
     private bool _userPaused;
     private bool _startedPlaying;
@@ -148,8 +149,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         });
         _player.EndReached += (_, _) => DispatchPlayerEvent(HandleEnded);
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        _timer.Tick += (_, _) => RefreshHud();
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(750) };
+        _timer.Tick += async (_, _) => await RefreshHudAsync();
 
         _hudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
         _hudTimer.Tick += (_, _) => HideHud();
@@ -451,21 +452,45 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         PlaybackFailureShade.Visibility = Visibility.Collapsed;
     }
 
-    private void RefreshHud()
+    private async Task RefreshHudAsync()
     {
-        var length = Math.Max(0, _player.Length);
-        var time = Math.Max(0, _player.Time);
+        if (_disposed || Interlocked.Exchange(ref _hudPolling, 1) == 1) return;
+        try
+        {
+            // Direct native VLC getter calls on the WPF dispatcher were
+            // occasionally blocking arrow/ESC input while 4K streams stalled.
+            // At most ONE metrics poll runs on a background worker.
+            var snapshot = await Task.Run(() =>
+            {
+                try
+                {
+                    return (Length: Math.Max(0L, _player.Length),
+                            Time: Math.Max(0L, _player.Time),
+                            Playing: _player.IsPlaying,
+                            Video: HasVideoOutput());
+                }
+                catch { return (Length: 0L, Time: 0L, Playing: false, Video: false); }
+            });
+            if (_disposed) return;
+            RefreshHudFromSnapshot(snapshot.Length, snapshot.Time,
+                                   snapshot.Playing, snapshot.Video);
+        }
+        finally { Interlocked.Exchange(ref _hudPolling, 0); }
+    }
+
+    private void RefreshHudFromSnapshot(long length, long time, bool playing, bool videoOutput)
+    {
         SeekSlider.Maximum = Math.Max(1, length);
         if (!SeekSlider.IsMouseCaptureWithin) SeekSlider.Value = Math.Min(time, SeekSlider.Maximum);
         TimeText.Text = Format(time) + " / " + Format(length);
-        PlayPauseButton.Content = _player.IsPlaying ? "⏸" : "▶";
-        PersistentPlayPauseButton.Content = _player.IsPlaying ? "⏸ إيقاف مؤقت" : "▶ تشغيل";
+        PlayPauseButton.Content = playing ? "⏸" : "▶";
+        PersistentPlayPauseButton.Content = playing ? "⏸ إيقاف مؤقت" : "▶ تشغيل";
         SeekSlider.Visibility = length > 0 ? Visibility.Visible : Visibility.Collapsed;
         PreviousButton.ToolTip = _playlist.Count > 0 ? "القناة السابقة" : "الحلقة السابقة";
         NextButton.ToolTip = _playlist.Count > 0 ? "القناة التالية" : "الحلقة التالية";
 
         if (_disposed || _playbackFailed) return;
-        if (!_videoOutputSeen && HasVideoOutput()) MarkPlaybackReady();
+        if (!_videoOutputSeen && videoOutput) MarkPlaybackReady();
         // For some encrypted or software-decoded streams VoutCount is delayed,
         // although the media clock is already moving. Never restart a movie
         // whose playback is clearly progressing.
@@ -489,7 +514,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 DateTimeOffset.UtcNow - _playStartedAt > TimeSpan.FromSeconds(30))
                 _automaticRecoveries = 0;
         }
-        else if (!_userPaused && !_player.IsPlaying && !_videoOutputSeen &&
+        else if (!_userPaused && !playing && !_videoOutputSeen &&
                  DateTimeOffset.UtcNow - _playStartedAt >
                      TimeSpan.FromSeconds(_playlist.Count > 0 ? 16 : 20))
         {
@@ -659,7 +684,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             _lastProgressAt = _playStartedAt;
             _player.Play();
         }
-        RefreshHud();
+        _ = RefreshHudAsync();
         ShowHudBriefly();
     }
 
