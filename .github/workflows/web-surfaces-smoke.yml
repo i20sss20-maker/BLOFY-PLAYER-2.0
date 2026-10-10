@@ -116,8 +116,16 @@ jobs:
 
           check_html "https://blofyplayer.com/" "BLOFY" "$tmp/root.html"
           check_html "https://blofyplayer.com/connect" "BLOFY" "$tmp/connect.html"
+          # Device-only pairing URL should not compete with the official public homepage.
+          grep -Fq '<meta name="robots" content="noindex,follow"' "$tmp/connect.html"
+          if grep -Fq '<meta name="robots" content="noindex' "$tmp/root.html"; then
+            echo "::error::Public homepage must not be marked noindex"
+            exit 1
+          fi
+          grep -Fq '"@type":"SoftwareApplication"' "$tmp/root.html"
           check_html "https://blofyplayer.com/downloads" "BLOFY|تحميل" "$tmp/downloads.html"
           check_html "https://blofyplayer.com/guide" "BLOFY|دليل التثبيت" "$tmp/guide.html"
+          grep -Fq '"@type":"BreadcrumbList"' "$tmp/guide.html"
           check_html "https://blofyplayer.com/privacy" "BLOFY|الخصوصية" "$tmp/privacy.html"
           check_html "https://blofyplayer.com/status" "BLOFY|حالة الخدمات" "$tmp/status.html"
           check_html "https://blofyplayer.com/admin" "BLOFY|دخول الإدارة|تسجيل دخول المشرف" "$tmp/admin.html"
