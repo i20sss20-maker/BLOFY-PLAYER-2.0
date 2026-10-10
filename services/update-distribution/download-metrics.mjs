@@ -11,7 +11,7 @@ export async function ensureDownloadMetrics(client) {
 }
 
 export async function recordCompletedDownload(pool, key) {
-  if (!/^(?:blofy|blofy-qa|app:[a-z0-9]+(?:-[a-z0-9]+)*)$/.test(key)) throw new Error('invalid_download_stat_key');
+  if (!/^(?:blofy|blofy-qa|blofy-verified|app:[a-z0-9]+(?:-[a-z0-9]+)*)$/.test(key)) throw new Error('invalid_download_stat_key');
   await pool.query(`INSERT INTO blofy_download_completions(key,day,completed_count,last_completed_at)
     VALUES($1,(NOW() AT TIME ZONE 'Asia/Riyadh')::date,1,NOW())
     ON CONFLICT(key,day) DO UPDATE SET
