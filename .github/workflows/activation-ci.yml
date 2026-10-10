@@ -63,6 +63,8 @@ jobs:
           agent-browser fill '#deviceId' 'BLOFY-TEST-TEST'
           agent-browser fill '#activationCode' '123456'
           agent-browser click '#loginBtn'
+          agent-browser eval "new Promise(resolve=>setTimeout(()=>resolve(JSON.stringify({loginStatus:document.getElementById('loginStatus')?.textContent, dashboardHidden:document.getElementById('app')?.classList.contains('hidden'),loginBusy:document.getElementById('loginBtn')?.disabled, currentPath:location.pathname})),1200))"
+          agent-browser errors
           agent-browser wait '#newBtn'
           agent-browser snapshot -i
           agent-browser click '#newBtn'
