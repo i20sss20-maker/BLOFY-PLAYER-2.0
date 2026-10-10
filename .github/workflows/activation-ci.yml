@@ -62,7 +62,9 @@ jobs:
           agent-browser snapshot -i
           agent-browser fill '#deviceId' 'BLOFY-TEST-TEST'
           agent-browser fill '#activationCode' '123456'
+          agent-browser eval "window.__ciEvents={click:0,submit:0};document.getElementById('loginBtn').addEventListener('click',()=>window.__ciEvents.click++,true);document.getElementById('deviceForm').addEventListener('submit',()=>window.__ciEvents.submit++,true);'handlers attached'"
           agent-browser click '#loginBtn'
+          agent-browser eval "JSON.stringify({events:window.__ciEvents||null,hasLoginHandler:typeof login,formIsValid:document.getElementById('deviceForm').checkValidity(),dashboardHidden:document.getElementById('app').classList.contains('hidden')})"
           agent-browser eval "JSON.stringify({jsLoaded:typeof login, formValid:document.getElementById('deviceForm').checkValidity(), loginStatus:document.getElementById('loginStatus').textContent, dashboardHidden:document.getElementById('app').classList.contains('hidden')})"
           agent-browser eval "new Promise(resolve=>setTimeout(()=>resolve(JSON.stringify({loginStatus:document.getElementById('loginStatus')?.textContent, dashboardHidden:document.getElementById('app')?.classList.contains('hidden'),loginBusy:document.getElementById('loginBtn')?.disabled, currentPath:location.pathname})),1200))"
           agent-browser errors
