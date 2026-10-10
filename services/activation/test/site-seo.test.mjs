@@ -37,7 +37,7 @@ test('downloads is a distinct Arabic-language landing page with official store l
   assert.match(downloads, /<h1 id="download-title">تحميل BLOFY PLAYER/);
   assert.match(downloads, /play\.google\.com\/store\/apps\/details\?id=tv\.blofy\.player\.v2/);
   // Keep this page static and fast for search engines and low-resource Android TV WebViews.
-  assert.doesNotMatch(downloads, /<script\b/i);
+  assert.doesNotMatch(downloads, /<script\b(?![^>]*type="application\/ld\+json")/i);
   assert.doesNotMatch(downloads, /<meta name="keywords"/);
 });
 
@@ -66,7 +66,7 @@ test('public downloads FAQ answers real installation, activation and renewal que
   assert.match(downloads, /wa\.me\/966568941484/);
   assert.match(downloads, /هل يشمل تنزيل التطبيق قنوات أو اشتراك بث/);
   assert.match(downloads, /<a href="\/connect">بوابة ربط الجهاز<\/a>/);
-  assert.doesNotMatch(downloads, /<script\b/i);
+  assert.doesNotMatch(downloads, /<script\b(?![^>]*type="application\/ld\+json")/i);
 });
 
 test('official guide is a crawlable Arabic help page linked from both landing pages', () => {
@@ -173,4 +173,31 @@ test('public canonical GET routes also allow HEAD for SEO crawlers and link chec
       'Missing HEAD support on public URL ' + route);
   }
   assert.match(server, /if \(req\.method === 'GET' && requestUrl\.pathname === '\/connect'\)/);
+});
+
+test('home has one public heading and keeps the logged-in dashboard style', () => {
+  assert.equal((home.match(/<h1\b/g) || []).length, 1);
+  assert.match(home, /<h2 data-i18n="playlistsTitle">قوائم التشغيل<\/h2>/);
+  assert.match(home, /\.dashboard-title-wrap h2 \{/);
+  assert.doesNotMatch(home, /\.dashboard-title-wrap h1 \{/);
+});
+
+test('downloads page uses crawl-safe breadcrumbs and a genuine WhatsApp share link', () => {
+  const values = [...downloads.matchAll(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/g)]
+    .map(match => JSON.parse(match[1]));
+  const crumbs = values.find(item => item['@type'] === 'BreadcrumbList');
+  assert.ok(crumbs);
+  assert.deepEqual(crumbs.itemListElement.map(item => item.item),
+    ['https://blofyplayer.com/', 'https://blofyplayer.com/downloads']);
+  const shareMatch = downloads.match(/<a class="btn" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="مشاركة BLOFY PLAYER على واتساب">/);
+  assert.ok(shareMatch);
+  const link = new URL(shareMatch[1]);
+  assert.equal(link.origin, 'https://api.whatsapp.com');
+  assert.match(link.searchParams.get('text'), /https:\/\/blofyplayer.com\/downloads/);
+  assert.match(link.searchParams.get('text'), /لا يوفّر اشتراك محتوى/);
+  const guide = readFileSync(new URL('../web/guide.html', import.meta.url), 'utf8');
+  assert.match(guide, /شارك التطبيق عبر واتساب/);
+  assert.equal((guide.match(/<h1>/g) || []).length, 1);
+  assert.ok((guide.match(/<title>([^<]+)/)?.[1] || '').length <= 60);
+  assert.ok((guide.match(/<meta name="description" content="([^"]+)"/)?.[1] || '').length <= 160);
 });
