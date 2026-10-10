@@ -138,6 +138,39 @@ jobs:
           grep -Fq "content-disposition" server.mjs
           grep -Fq "openRemoteApk" app-library.mjs
 
+          # Legacy managed apps can have official store pages rather than a direct APK.
+          # Keep public links functional without weakening direct-APK validation.
+          node --input-type=module <<'NODE'
+          import { upsertApp, closeAppLibrary } from './app-library.mjs';
+          await upsertApp({
+            slug:'ci-official', name:'CI official source', category:'tools', symbol:'CI',
+            iconUrl:'https://example.com/ci.png', description:'CI store-link regression',
+            devices:'Android', version:'1', architecture:'Universal', apkSizeBytes:0,
+            downloadUrl:'https://play.google.com/store/apps/details?id=ci.example',
+            downloadMode:'official', sortOrder:999, enabled:true, featured:false, autoUpdate:false
+          });
+          await closeAppLibrary();
+          NODE
+          curl --silent --show-error --max-time 10 --output /dev/null --dump-header /tmp/official.headers http://127.0.0.1:3100/download/apps/ci-official
+          grep -Eq '^HTTP/[0-9.]+ 302' /tmp/official.headers
+          grep -Fiq 'location: https://play.google.com/store/apps/details?id=ci.example' /tmp/official.headers
+          curl --silent --show-error --max-time 10 http://127.0.0.1:3100/downloads >/tmp/downloads-official.html
+          grep -Fq 'فتح المصدر الرسمي' /tmp/downloads-official.html
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          // Simulate an invalid pre-validation legacy direct row, in the temporary CI DB only.
+          await client.query("update blofy_app_catalog set download_mode='direct' where slug='ci-official'");
+          await client.end();
+          NODE
+          bad_status="$(curl --silent --show-error --max-time 10 --output /tmp/legacy-unavailable.json --write-out '%{http_code}' http://127.0.0.1:3100/d/ci-official)"
+          test "$bad_status" = 503
+          grep -Fq '"error":"app_download_source_unavailable"' /tmp/legacy-unavailable.json
+          curl --silent --show-error --max-time 10 http://127.0.0.1:3100/downloads >/tmp/downloads-legacy.html
+          grep -Fq 'رابط التحميل يحتاج تحديثًا' /tmp/downloads-legacy.html
+
+
           curl -fsS --max-time 10 -u admin:ci-admin-password http://127.0.0.1:3100/admin >/tmp/admin.html
           grep -Fq 'data-admin-filter="healthy"' /tmp/admin.html
           grep -Fq 'CATALOG BACKUPS' /tmp/admin.html
