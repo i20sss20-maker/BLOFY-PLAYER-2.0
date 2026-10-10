@@ -196,3 +196,16 @@ test('downloads page remains script-free and has a genuine WhatsApp share link',
   assert.ok((guide.match(/<title>([^<]+)/)?.[1] || '').length <= 60);
   assert.ok((guide.match(/<meta name="description" content="([^"]+)"/)?.[1] || '').length <= 160);
 });
+
+test('home offers accessible WhatsApp referral to the official download with no secrets', () => {
+  const match = home.match(/<a href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="مشاركة رابط التحميل الرسمي لتطبيق BLOFY PLAYER عبر واتساب">/);
+  assert.ok(match);
+  const href = new URL(match[1]);
+  assert.equal(href.origin, 'https://api.whatsapp.com');
+  assert.equal(href.pathname, '/send');
+  const message = href.searchParams.get('text');
+  assert.match(message, /https:\/\/blofyplayer\.com\/downloads/);
+  assert.match(message, /https:\/\/blofyplayer\.com\/guide/);
+  assert.match(message, /لا يوفّر اشتراك محتوى/);
+  assert.doesNotMatch(message, /activationCode|password|deviceId|رمز الربط/);
+});
