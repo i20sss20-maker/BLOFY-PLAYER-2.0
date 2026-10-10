@@ -1,6 +1,7 @@
 import { databaseOptions } from './database-options.mjs';
 import http from 'node:http';
 import { servePrivacyPage } from './privacy-pages.mjs';
+import { PUBLIC_ANALYTICS_CSP, withPublicAnalytics } from './public-analytics.mjs';
 import { serveIndexNowKey } from './indexnow-key.mjs';
 import { createCommercialHandlers } from './commercial-handlers.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
@@ -257,7 +258,7 @@ async function servePortal(res, connectOnly = false) {
     // The device-pairing form is not a public search landing page.
     source = source.replace('</head>', '  <meta name="robots" content="noindex,follow" />\n</head>');
   }
-  const file = hardenPortalCredentialInputs(source);
+  const file = hardenPortalCredentialInputs(connectOnly ? source : withPublicAnalytics(source));
   res.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
     'content-length': Buffer.byteLength(file),
@@ -268,14 +269,16 @@ async function servePortal(res, connectOnly = false) {
     ...(connectOnly ? { 'x-robots-tag': 'noindex,follow' } : {}),
     'permissions-policy': 'camera=(), microphone=(), geolocation=()',
     'strict-transport-security': 'max-age=31536000',
-    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
+    'content-security-policy': connectOnly ? "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'" : PUBLIC_ANALYTICS_CSP
   });
   res.end(file);
 }
 
 async function serveStatusPage(res, fileName = 'status.html') {
   // Only internal constant filenames are passed; never derive public file paths from URLs.
-  const file = await readFile(new URL('../web/' + fileName, import.meta.url));
+  const publicPage = fileName === 'guide.html' || fileName === 'support.html';
+  const original = await readFile(new URL('../web/' + fileName, import.meta.url));
+  const file = publicPage ? Buffer.from(withPublicAnalytics(original.toString('utf8'))) : original;
   res.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
     'content-length': file.length,
@@ -285,7 +288,7 @@ async function serveStatusPage(res, fileName = 'status.html') {
     'referrer-policy': 'no-referrer',
     'permissions-policy': 'camera=(), microphone=(), geolocation=()',
     'strict-transport-security': 'max-age=31536000',
-    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
+    'content-security-policy': publicPage ? PUBLIC_ANALYTICS_CSP : "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
   });
   res.end(file);
 }
