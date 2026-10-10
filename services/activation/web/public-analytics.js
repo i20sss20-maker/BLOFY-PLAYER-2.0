@@ -11,6 +11,25 @@
   var settings;
   var pagePath = window.location.pathname === '/' ? '/' : window.location.pathname.replace(/\/$/, '');
 
+  // Attribution is limited to explicit public campaign parameters: never forward arbitrary queries.
+  function campaignQuery() {
+    var allowed = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+    var input = new URLSearchParams(window.location.search);
+    var output = new URLSearchParams();
+    allowed.forEach(function (key) {
+      var value = input.get(key);
+      if (value && /^[a-zA-Z0-9_-]{1,64}$/.test(value)) output.set(key, value);
+    });
+    return output.toString() ? '?' + output.toString() : '';
+  }
+  function externalReferrerOrigin() {
+    try {
+      var referrer = new URL(document.referrer);
+      if (referrer.protocol === 'https:' && referrer.hostname !== 'blofyplayer.com' &&
+          referrer.hostname !== 'www.blofyplayer.com') return referrer.origin;
+    } catch (_) { /* missing or malformed referrer */ }
+    return '';
+  }
   function preference() {
     try { return localStorage.getItem(preferenceKey); } catch (_) { return null; }
   }
@@ -24,8 +43,8 @@
     window.gtag = function () { window.dataLayer.push(arguments); };
     window.gtag('js', new Date());
     window.gtag('config', measurementId, {
-      page_location: 'https://blofyplayer.com' + pagePath,
-      page_referrer: '',
+      page_location: 'https://blofyplayer.com' + pagePath + campaignQuery(),
+      page_referrer: externalReferrerOrigin(),
       allow_google_signals: false,
       allow_ad_personalization_signals: false
     });
