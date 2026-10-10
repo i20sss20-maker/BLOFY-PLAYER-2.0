@@ -64,6 +64,7 @@ jobs:
           agent-browser fill '#activationCode' '123456'
           agent-browser eval "window.__ciEvents={click:0,submit:0};document.getElementById('loginBtn').addEventListener('click',()=>window.__ciEvents.click++,true);document.getElementById('deviceForm').addEventListener('submit',()=>window.__ciEvents.submit++,true);'handlers attached'"
           agent-browser eval "(()=>{const e=document.getElementById('loginBtn'),r=e.getBoundingClientRect(),t=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return JSON.stringify({buttonType:e.type,visibility:getComputedStyle(e).visibility,pointerEvents:getComputedStyle(e).pointerEvents,hitTag:t?.tagName,hitId:t?.id,inside:t===e||e.contains(t)})})()"
+          agent-browser eval "document.getElementById('loginBtn').scrollIntoView({block:'center',inline:'nearest'});'loginBtn visible'"
           agent-browser click '#loginBtn'
           agent-browser eval "JSON.stringify({events:window.__ciEvents||null,hasLoginHandler:typeof login,formIsValid:document.getElementById('deviceForm').checkValidity(),dashboardHidden:document.getElementById('app').classList.contains('hidden')})"
           agent-browser eval "JSON.stringify({jsLoaded:typeof login, formValid:document.getElementById('deviceForm').checkValidity(), loginStatus:document.getElementById('loginStatus').textContent, dashboardHidden:document.getElementById('app').classList.contains('hidden')})"
@@ -71,6 +72,7 @@ jobs:
           agent-browser errors
           agent-browser wait '#newBtn'
           agent-browser snapshot -i
+          agent-browser eval "document.getElementById('newBtn').scrollIntoView({block:'center',inline:'nearest'});'newBtn visible'"
           agent-browser click '#newBtn'
           agent-browser select '#providerType' 'blofy'
           agent-browser eval "new Promise((resolve,reject)=>{let n=0;const t=setInterval(()=>{const button=document.getElementById('saveBtn');const select=document.getElementById('providerType');if(button&&select&&select.value==='blofy'&&button.dataset.blofySubscriberInterceptorV6==='1'){clearInterval(t);resolve('BLOFY subscriber interceptor ready');return;}if(++n>50){clearInterval(t);reject(new Error('BLOFY subscriber interceptor not ready'));}},100);})"
@@ -80,6 +82,7 @@ jobs:
           agent-browser fill '#username' 'fixture-user'
           agent-browser fill '#password' 'fixture-password'
           agent-browser eval "(()=>{const expected={name:'Play QA',username:'fixture-user',password:'fixture-password'};for(const [id,value] of Object.entries(expected)){const el=document.getElementById(id);if(!el)throw new Error('Missing field '+id);if(el.value!==value){el.focus();el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}}if(Object.entries(expected).some(([id,value])=>document.getElementById(id).value!==value))throw new Error('Subscriber credentials did not settle');return 'Subscriber form values ready';})()"
+          agent-browser eval "document.getElementById('saveBtn').scrollIntoView({block:'center',inline:'nearest'});'saveBtn visible'"
           agent-browser click '#saveBtn'
           agent-browser eval "new Promise((resolve,reject)=>{let n=0;const t=setInterval(()=>{const names=[...document.querySelectorAll('.playlist h3')].map(x=>x.textContent.trim());const status=document.getElementById('editorStatus')?.textContent?.trim()||'';if(names.includes('Play QA')){clearInterval(t);resolve('Play QA saved and rendered');return;}if(++n>100){clearInterval(t);reject(new Error('Subscriber save did not render; status='+status+'; names='+names.join(',')));}},100);})"
           agent-browser screenshot downloads-evidence/play-connect-saved.png
