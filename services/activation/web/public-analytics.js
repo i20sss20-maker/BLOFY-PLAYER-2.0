@@ -3,7 +3,7 @@
   'use strict';
   var measurementId = 'G-2DYE5WB8BT';
   var preferenceKey = 'blofy.analytics.consent.v1';
-  var publicPaths = ['/', '/guide', '/guide/', '/support', '/support/'];
+  var publicPaths = ['/', '/guide', '/guide/', '/support', '/support/', '/downloads', '/downloads/', '/releases', '/releases/'];
   if (publicPaths.indexOf(window.location.pathname) === -1) return;
 
   var active = false;
@@ -61,6 +61,9 @@
     var eventName = null;
     if (/^https:\/\/play\.google\.com\/store\/apps\/details/.test(href)) eventName = 'google_play_click';
     else if (href === '/downloads' || href === 'https://blofyplayer.com/downloads') eventName = 'downloads_page_click';
+    else if (/^\/(?:download\/latest\.apk|latest\.apk|apk)$/.test(href) ||
+      /^https:\/\/updates\.blofyplayer\.com\/(?:d\/blofy|download\/latest\.apk|latest\.apk|apk)$/.test(href) ||
+      /^https:\/\/[^/?#]+\/[^?#]+\.apk(?:\?[^#]*)?$/.test(href)) eventName = 'apk_download_click';
     else if (/^https:\/\/(api\.whatsapp\.com|wa\.me)\//.test(href)) eventName = 'whatsapp_link_click';
     if (eventName) window.gtag('event', eventName, { page_path: pagePath });
     // Device identifiers, credentials, URL parameters and form values are never forwarded.
