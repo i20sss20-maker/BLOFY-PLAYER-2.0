@@ -65,10 +65,7 @@ public sealed class CatalogViewIndex
             if (pair.Key.Equals("movie", StringComparison.OrdinalIgnoreCase) ||
                 pair.Key.Equals("series", StringComparison.OrdinalIgnoreCase))
             {
-                latest[pair.Key] = pair.Value
-                    .OrderByDescending(x => x.AddedAt)
-                    .Take(32)
-                    .ToList();
+                latest[pair.Key] = TopK(pair.Value, 32, x => x.AddedAt);
             }
         }
 
@@ -92,9 +89,9 @@ public sealed class CatalogViewIndex
 
         var collections = new Dictionary<string, List<StreamItem>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["latest"] = allVod.OrderByDescending(x => x.AddedAt).Take(48).ToList(),
-            ["top"] = allVod.Where(x => RatingValue(x.Rating) > 0)
-                .OrderByDescending(x => RatingValue(x.Rating)).Take(48).ToList(),
+            ["latest"] = TopK(allVod, 48, x => x.AddedAt),
+            ["top"] = TopK(allVod.Where(x => RatingValue(x.Rating) > 0),
+                48, x => RatingValue(x.Rating)),
             ["arabic"] = allVod.Where(x => HasArabic(x.Name) || HasArabic(x.Genre) ||
                 (x.Genre ?? "").Contains("arab", StringComparison.OrdinalIgnoreCase)).Take(48).ToList(),
             ["4k"] = allVod.Where(x =>
@@ -104,6 +101,29 @@ public sealed class CatalogViewIndex
         };
 
         return new CatalogViewIndex(byKind, byCategory, byKey, latest, collections);
+    }
+
+    private static List<StreamItem> TopK(
+        IEnumerable<StreamItem> items, int limit, Func<StreamItem, double> score)
+    {
+        // A provider may contain 100,000+ VOD entries. Sorting all of them
+        // multiple times at startup costs O(n log n) and large temp arrays.
+        // Keep only the 32/48 best entries in a bounded min-heap instead.
+        var heap = new PriorityQueue<StreamItem, double>(limit);
+        foreach (var item in items)
+        {
+            var value = score(item);
+            if (!double.IsFinite(value)) continue;
+            if (heap.Count < limit) { heap.Enqueue(item, value); continue; }
+            if (!heap.TryPeek(out _, out var smallest) || value <= smallest) continue;
+            heap.Dequeue();
+            heap.Enqueue(item, value);
+        }
+        var sorted = new List<(StreamItem Item, double Score)>(heap.Count);
+        while (heap.TryDequeue(out var item, out var priority))
+            sorted.Add((item, priority));
+        sorted.Sort((a, b) => b.Score.CompareTo(a.Score));
+        return sorted.Select(x => x.Item).ToList();
     }
 
     public IReadOnlyList<StreamItem> Kind(string kind) =>

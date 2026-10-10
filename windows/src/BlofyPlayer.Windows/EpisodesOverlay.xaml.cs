@@ -272,8 +272,11 @@ public partial class EpisodesOverlay : UserControl, IDisposable
             return;
         }
 
-        if (Keyboard.FocusedElement == SeasonList &&
-            e.Key is Key.Enter or Key.Left or Key.Right)
+        // Physical, not mirrored, arrows for the Arabic TV layout:
+        // season rail is on the RIGHT, episodes are on the LEFT.
+        // ListBox normally focuses a ListBoxItem (not the ListBox itself).
+        if (SeasonList.IsKeyboardFocusWithin &&
+            e.Key is Key.Enter or Key.Left)
         {
             RenderSeason(_selectedSeason, focusEpisode: true);
             e.Handled = true;
@@ -283,9 +286,15 @@ public partial class EpisodesOverlay : UserControl, IDisposable
         if (Keyboard.FocusedElement is Button focused &&
             focused.Tag is string episodeKey)
         {
-            if (e.Key is Key.Left or Key.Right)
+            if (e.Key == Key.Right)
             {
-                SeasonList.Focus();
+                FocusSeason();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.Left)
+            {
+                // No panel further left; keep focus on the episode.
                 e.Handled = true;
                 return;
             }
@@ -305,6 +314,20 @@ public partial class EpisodesOverlay : UserControl, IDisposable
                 }
             }
         }
+    }
+
+    private void FocusSeason()
+    {
+        var selected = SeasonList.SelectedItem;
+        if (selected is null) { SeasonList.Focus(); return; }
+        SeasonList.ScrollIntoView(selected);
+        SeasonList.UpdateLayout();
+        if (SeasonList.ItemContainerGenerator.ContainerFromItem(selected) is ListBoxItem row)
+        {
+            row.Focus();
+            row.BringIntoView();
+        }
+        else SeasonList.Focus();
     }
 
     private static TextBlock EmptyText(string value) => new()

@@ -13,7 +13,14 @@ public static class ArtworkCache
     private static readonly HttpClient Http = CreateClient();
     private static readonly SemaphoreSlim Gate = new(4, 4);
     private static readonly ConcurrentDictionary<string, WeakReference<BitmapSource>> Memory = new();
-    private static readonly ConcurrentDictionary<string, Task<BitmapSource?>> InFlight = new();
+    // ConcurrentDictionary.GetOrAdd may run the value factory more than once;
+    // Lazy<Task> ensures only one HTTP fetch/decode per poster and width.
+    private static readonly ConcurrentDictionary<string, Lazy<Task<BitmapSource?>>> InFlight = new();
+    private static readonly ConcurrentDictionary<string, BitmapSource> Hot = new();
+    private static readonly ConcurrentQueue<string> HotOrder = new();
+    private const int HotLimit = 192;
+    private static int _newDiskFiles;
+    private static long _nextPruneAtTicks;
     private const long MaxDiskBytes = 600L * 1024 * 1024;
     private const int MaxFiles = 3500;
     private static int _pruneStarted;
@@ -37,10 +44,19 @@ public static class ArtworkCache
             return Task.FromResult<BitmapSource?>(null);
 
         var key = url + "|" + Math.Max(64, decodeWidth);
+        if (Hot.TryGetValue(key, out var strong))
+            return Task.FromResult<BitmapSource?>(strong);
         if (Memory.TryGetValue(key, out var weak) && weak.TryGetTarget(out var cached))
+        {
+            Retain(key, cached);
             return Task.FromResult<BitmapSource?>(cached);
+        }
 
-        return InFlight.GetOrAdd(key, _ => LoadCoreAsync(url, decodeWidth, key, ct));
+        // A single canceled card (e.g. switching categories) must not cancel
+        // a fetch shared with other visible posters.
+        var task = InFlight.GetOrAdd(key, _ => new Lazy<Task<BitmapSource?>>(
+            () => LoadCoreAsync(url, decodeWidth, key, CancellationToken.None))).Value;
+        return ct.CanBeCanceled ? task.WaitAsync(ct) : task;
     }
 
     private static async Task<BitmapSource?> LoadCoreAsync(
@@ -78,7 +94,7 @@ public static class ArtworkCache
                         var temp = disk + ".tmp";
                         await File.WriteAllBytesAsync(temp, bytes, ct).ConfigureAwait(false);
                         File.Move(temp, disk, true);
-                        _ = Task.Run(PruneAsync);
+                        SchedulePrune();
                     }
                     catch { }
                 }
@@ -103,6 +119,7 @@ public static class ArtworkCache
             }, ct).ConfigureAwait(false);
 
             Memory[memoryKey] = new WeakReference<BitmapSource>(bitmap);
+            Retain(memoryKey, bitmap);
             return bitmap;
         }
         catch
@@ -113,6 +130,28 @@ public static class ArtworkCache
         {
             InFlight.TryRemove(memoryKey, out _);
         }
+    }
+
+    private static void Retain(string key, BitmapSource bitmap)
+    {
+        // Keep a small number of decoded posters alive across back/forward.
+        // Weak-only caching was forcing all hidden/reopened cards to decode.
+        if (!Hot.TryAdd(key, bitmap)) return;
+        HotOrder.Enqueue(key);
+        while (Hot.Count > HotLimit && HotOrder.TryDequeue(out var evicted))
+            Hot.TryRemove(evicted, out _);
+    }
+
+    private static void SchedulePrune()
+    {
+        // Avoid walking and sorting thousands of cache files for EVERY poster.
+        // Prune at most once per 5 minutes and after a burst of new images.
+        if (Interlocked.Increment(ref _newDiskFiles) < 64) return;
+        var now = DateTime.UtcNow.Ticks;
+        if (now < Volatile.Read(ref _nextPruneAtTicks)) return;
+        Interlocked.Exchange(ref _newDiskFiles, 0);
+        Interlocked.Exchange(ref _nextPruneAtTicks, now + TimeSpan.FromMinutes(5).Ticks);
+        _ = Task.Run(PruneAsync);
     }
 
     public static long DiskBytes()
@@ -167,6 +206,8 @@ public static class ArtworkCache
     {
         var removed = 0;
         Memory.Clear();
+        Hot.Clear();
+        while (HotOrder.TryDequeue(out _)) { }
         try
         {
             foreach (var path in Directory.EnumerateFiles(Root, "*", SearchOption.TopDirectoryOnly))
@@ -195,7 +236,7 @@ public static class ArtworkCache
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.7");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.12");
         return client;
     }
 }

@@ -89,9 +89,28 @@
     </UserControl.Resources>
 
     <Grid x:Name="PlayerRoot" Background="Black">
+        <!-- LibVLC WPF uses a native WinForms HWND. Sibling WPF controls are
+             ALWAYS hidden behind video in fullscreen (airspace limitation).
+             VideoView.Content creates the supported independent overlay HWND;
+             playback controls now stay visible and clickable over real video. -->
         <vlc:VideoView x:Name="VideoView"
+                       Background="Black"
                        HorizontalAlignment="Stretch"
-                       VerticalAlignment="Stretch"/>
+                       VerticalAlignment="Stretch">
+            <Grid x:Name="VideoOverlaySurface"
+                  Background="#01000000"
+                  Focusable="True"
+                  FlowDirection="LeftToRight"
+                  PreviewKeyDown="Overlay_KeyDown"
+                  MouseMove="Overlay_MouseMove"
+                  MouseLeftButtonDown="Overlay_SurfaceMouseLeftButtonDown">
+
+        <!-- Keep a failed native video surface from leaving a white desktop pane. -->
+        <Border x:Name="PlaybackFailureShade"
+                Background="#F008060D"
+                IsHitTestVisible="False"
+                Visibility="Collapsed"
+                Panel.ZIndex="5"/>
 
         <Border x:Name="LoadingBadge"
                 HorizontalAlignment="Center"
@@ -118,6 +137,31 @@
             </StackPanel>
         </Border>
 
+        <Button x:Name="RetryPlaybackButton"
+                Content="↻ إعادة المحاولة"
+                Click="RetryPlayback_Click"
+                Style="{StaticResource PlayerPillButton}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="0,100,0,0"
+                MinWidth="170"
+                Height="46"
+                FontSize="15"
+                Panel.ZIndex="40"
+                Visibility="Collapsed"/>
+
+        <Button x:Name="CopyPlaybackReportButton"
+                Content="نسخ تقرير التشغيل"
+                Click="CopyPlaybackReport_Click"
+                Style="{StaticResource PlayerPillButton}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="0,205,0,0"
+                MinWidth="170"
+                Height="44"
+                Panel.ZIndex="40"
+                Visibility="Collapsed"/>
+
         <StackPanel x:Name="PersistentTopControls"
                     Orientation="Horizontal"
                     HorizontalAlignment="Left"
@@ -130,6 +174,12 @@
                     Click="Close_Click"
                     Style="{StaticResource PlayerPillButton}"
                     MinWidth="92"
+                    Height="42"/>
+            <Button x:Name="PersistentPlayPauseButton"
+                    Content="⏸ إيقاف مؤقت"
+                    Click="PlayPause_Click"
+                    Style="{StaticResource PlayerPillButton}"
+                    MinWidth="120"
                     Height="42"/>
             <Button x:Name="PersistentFullscreenButton"
                     Content="🗗 نافذة"
@@ -303,5 +353,7 @@
                 </StackPanel>
             </Grid>
         </Border>
+            </Grid>
+        </vlc:VideoView>
     </Grid>
 </UserControl>

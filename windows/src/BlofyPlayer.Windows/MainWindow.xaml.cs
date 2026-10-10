@@ -40,6 +40,8 @@ public partial class MainWindow : Window
     private ActivationCheckResponse? _activationState;
     private ProviderAccount? _activeProvider;
     private PlaybackService? _previewPlayback;
+    private VideoView? _previewVideoView;
+    private readonly SemaphoreSlim _previewPlaybackLock = new(1, 1);
     private int _liveSelectionSerial;
     private CancellationTokenSource? _livePreviewCts;
     private string _currentPage = "home";
@@ -61,6 +63,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, int> _browserPageByKind = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _browserCategoryByKind = new(StringComparer.OrdinalIgnoreCase);
     private string? _lastFocusedContentKey;
+    private TextBox? _activeBrowserSearch;
 
     public MainWindow()
     {
@@ -161,11 +164,16 @@ public partial class MainWindow : Window
         {
             _currentOverlay = null;
             OverlayHost.Visibility = Visibility.Collapsed;
-            Focus();
+            // Restore a clean preview when returning from playback. Never
+            // resurrect the old/native mini-player while fullscreen is open.
+            if (_currentPage == "live")
+                ShowLiveBrowser();
+            else
+                Focus();
         }
     }
 
-    private Task ShowPlayerOverlayAsync(
+    private async Task ShowPlayerOverlayAsync(
         string title,
         string url,
         long resumePositionMs = 0,
@@ -184,6 +192,13 @@ public partial class MainWindow : Window
         Func<Task<bool>>? toggleFavorite = null,
         Func<Task>? onEnded = null)
     {
+        // LibVLC uses native video windows. Keeping the small preview active
+        // while opening fullscreen leaves a ghost HWND over the main player
+        // and forces the decoder to run two streams at once (especially 4K).
+        var teardown = StopAndDisposePreviewAsync();
+        // Native VLC Stop() can block when a 4K decoder is struggling. Give
+        // the previous mini-player time to stop without freezing WPF forever.
+        await Task.WhenAny(teardown, Task.Delay(1500));
         var overlay = new PlayerOverlay(
             title,
             url,
@@ -207,7 +222,6 @@ public partial class MainWindow : Window
             onEnded: onEnded);
 
         PushOverlay(overlay);
-        return Task.CompletedTask;
     }
 
     private void SetOverlayFullscreen(bool enabled)
@@ -390,8 +404,9 @@ public partial class MainWindow : Window
     private async Task SyncCatalogAsync(bool userRequested)
     {
         if (_catalog is null) return;
-        _activeProvider = _store.ActiveProvider();
-        if (_activeProvider is null)
+        var provider = _store.ActiveProvider();
+        _activeProvider = provider;
+        if (provider is null)
         {
             if (userRequested) ShowProviders();
             return;
@@ -402,30 +417,47 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Keep each refresh tied to its own provider/token. A second refresh
+        // must never inherit the first one's token or replace its UI on finish.
         _syncCts?.Cancel();
-        _syncCts = new CancellationTokenSource();
+        var sync = new CancellationTokenSource();
+        _syncCts = sync;
         var progress = new Progress<(int Percent, string Text)>(p =>
         {
-            ProgressText.Text = p.Percent + "% • " + p.Text;
+            if (ReferenceEquals(_syncCts, sync) && !sync.IsCancellationRequested)
+                ProgressText.Text = p.Percent + "% • " + p.Text;
         });
 
         try
         {
-            await Task.Run(() => _catalog.SyncAsync(_activeProvider, progress, _syncCts.Token));
+            var snapshot = await Task.Run(() => _catalog.SyncAsync(provider, progress, sync.Token), sync.Token);
+            if (!ReferenceEquals(_syncCts, sync) || sync.IsCancellationRequested ||
+                _store.ActiveProvider()?.Id != provider.Id) return;
+
             ProgressText.Text = "فهرسة المحتوى…";
-            _viewIndex = await Task.Run(() => CatalogViewIndex.Build(_catalog.Snapshot));
+            var index = await Task.Run(() => CatalogViewIndex.Build(snapshot), sync.Token);
+            if (!ReferenceEquals(_syncCts, sync) || sync.IsCancellationRequested ||
+                _store.ActiveProvider()?.Id != provider.Id) return;
+
+            _viewIndex = index;
             _detailsCache.Clear();
             _episodesCache.Clear();
-            PageSubtitle.Text = _activeProvider.Name + " • " + _catalog.Snapshot.Streams.Count.ToString("N0") + " عنصر";
+            PageSubtitle.Text = provider.Name + " • " + snapshot.Streams.Count.ToString("N0") + " عنصر";
             ProgressText.Text = "جاهز";
             RefreshCurrentPage();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            ProgressText.Text = "تعذر التحديث";
+            if (!ReferenceEquals(_syncCts, sync)) return;
+            ProgressText.Text = "تعذر التحديث • المكتبة السابقة محفوظة";
             if (userRequested)
                 MessageBox.Show(this, ex.Message, "BLOFY PLAYER");
+        }
+        finally
+        {
+            if (ReferenceEquals(_syncCts, sync)) _syncCts = null;
+            sync.Dispose();
         }
     }
 
@@ -489,6 +521,7 @@ public partial class MainWindow : Window
 
     private void RefreshCurrentPage()
     {
+        _activeBrowserSearch = null;
         _detailsOpen = false;
         _pageBackAction = null;
         HeaderBackButton.Visibility = _currentPage == "home"
@@ -891,11 +924,7 @@ public partial class MainWindow : Window
 
     private void ShowBrowser(string kind)
     {
-        if (kind == "live")
-        {
-            ShowLiveBrowser();
-            return;
-        }
+        if (kind == "live") { ShowLiveBrowser(); return; }
 
         DisposePreview();
         var label = kind == "movie" ? "الأفلام" : "المسلسلات";
@@ -909,154 +938,268 @@ public partial class MainWindow : Window
             return;
         }
 
-        var compactCatalog = _store.State.Settings.CatalogDensity == "compact";
-        var posterWidth = compactCatalog ? 138 : 160;
-        var pageSize = compactCatalog ? 42 : 30;
-        var posterCellHeight = (int)Math.Round((posterWidth - 18) * 1.5) + 84;
-        var page = _browserPageByKind.TryGetValue(kind, out var rememberedPage)
-            ? Math.Max(0, rememberedPage)
-            : 0;
+        var compact = _store.State.Settings.CatalogDensity == "compact";
+        var posterWidth = compact ? 138 : 160;
+        var batchSize = compact ? 42 : 30;
+        var cellHeight = (int)Math.Round((posterWidth - 18) * 1.5) + 84;
 
+        // Use two height-constrained columns. A vertical StackPanel directly in
+        // a Grid gives its children infinite height, leaving the poster scroller
+        // unable to scroll on smaller windows.
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(255) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var categoryColumn = new Grid();
+        categoryColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        categoryColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        categoryColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetColumn(categoryColumn, 0);
+        grid.Children.Add(categoryColumn);
+
+        var categoryHeader = Vertical(0, 0, 0, 8);
+        categoryHeader.Children.Add(Txt("الفئات", 17, Accent, FontWeights.Bold, 4, 0, 0, 5));
+        var categorySearch = new TextBox { Height = 38, FontSize = 13, ToolTip = "ابحث عن اسم الفئة" };
+        categoryHeader.Children.Add(categorySearch);
+        categoryColumn.Children.Add(categoryHeader);
 
         var cats = new ListBox
         {
-            Style = Application.Current.FindResource("TvListBox") as Style
+            Style = Application.Current.FindResource("TvListBox") as Style,
+            DisplayMemberPath = "Name",
+            VerticalAlignment = VerticalAlignment.Stretch
         };
         VirtualizingPanel.SetIsVirtualizing(cats, true);
         VirtualizingPanel.SetVirtualizationMode(cats, VirtualizationMode.Recycling);
         ScrollViewer.SetCanContentScroll(cats, true);
+        ScrollViewer.SetVerticalScrollBarVisibility(cats, ScrollBarVisibility.Auto);
+        Grid.SetRow(cats, 1);
+        categoryColumn.Children.Add(cats);
 
-        cats.Items.Add(new CategoryItem { RemoteId = "", Kind = kind, Name = "الكل" });
-        foreach (var cat in (_catalog?.Snapshot.Categories ?? [])
-                     .Where(x => x.Kind == kind && !_store.IsCategoryHidden(kind, x.RemoteId)))
-            cats.Items.Add(cat);
-        cats.DisplayMemberPath = "Name";
-        var rememberedCategory = _browserCategoryByKind.TryGetValue(kind, out var categoryId)
-            ? categoryId
-            : "";
-        var rememberedIndex = 0;
-        for (var i = 0; i < cats.Items.Count; i++)
+        var allCategories = new List<CategoryItem>
         {
-            if (cats.Items[i] is CategoryItem row &&
-                string.Equals(row.RemoteId, rememberedCategory, StringComparison.Ordinal))
-            {
-                rememberedIndex = i;
-                break;
-            }
-        }
-        cats.SelectedIndex = rememberedIndex;
-        Grid.SetColumn(cats, 0);
-        grid.Children.Add(cats);
+            new() { RemoteId = "", Kind = kind, Name = "الكل" }
+        };
+        allCategories.AddRange((_catalog?.Snapshot.Categories ?? [])
+            .Where(x => x.Kind == kind && !_store.IsCategoryHidden(kind, x.RemoteId)));
+        var categoryFoot = Txt(allCategories.Count.ToString("N0") + " فئة  •  ↑↓ للتنقل", 11, Muted, marginTop: 8);
+        Grid.SetRow(categoryFoot, 2);
+        categoryColumn.Children.Add(categoryFoot);
+        categorySearch.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Down or Key.Enter)) return;
+            FocusSelectedListItem(cats);
+            e.Handled = true;
+        };
 
-        var right = Vertical();
+        var right = new Grid();
+        right.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        right.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        right.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetColumn(right, 2);
         grid.Children.Add(right);
 
-        var pageBar = Horizontal(0, 0, 0, 10);
-        right.Children.Add(pageBar);
+        var searchHeader = Vertical(0, 0, 0, 10);
+        var title = Txt("استعرض " + label, 15, Text, FontWeights.SemiBold, 0, 0, 0, 7);
+        searchHeader.Children.Add(title);
+        var contentSearch = new TextBox
+        {
+            Height = 43, FontSize = 15,
+            ToolTip = "ابحث في جميع " + label + " مهما كانت الفئة — من أول حرف"
+        };
+        searchHeader.Children.Add(contentSearch);
+        _activeBrowserSearch = contentSearch;
+        searchHeader.Children.Add(Txt("البحث يشمل كل فئات " + label + " • Enter من الفئات ينقلك للبوسترات", 11, Muted, marginTop: 5));
+        right.Children.Add(searchHeader);
 
         var scroll = new ScrollViewer
         {
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            PanningMode = PanningMode.VerticalOnly,
+            Focusable = false
         };
         var wrap = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
             ItemWidth = posterWidth + 22,
-            ItemHeight = posterCellHeight
+            ItemHeight = cellHeight
         };
         scroll.Content = wrap;
+        contentSearch.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Down or Key.Enter)) return;
+            if (wrap.Children.OfType<Button>().FirstOrDefault() is not Button first) return;
+            first.Focus();
+            first.BringIntoView();
+            e.Handled = true;
+        };
+        Grid.SetRow(scroll, 1);
         right.Children.Add(scroll);
 
-        IReadOnlyList<StreamItem> CurrentItems()
+        IReadOnlyList<StreamItem> filtered = all;
+        int visible = 0;
+        bool appending = false;
+        Button more = null!;
+        var footer = Horizontal(0, 10, 0, 0);
+        var countLabel = Txt("", 12, Muted, marginLeft: 12, marginTop: 8);
+        more = Action("↓ عرض المزيد", false, (_, _) => AppendMore(true), 0, 0, 12, 0);
+        more.MinWidth = 135;
+        footer.Children.Add(more);
+        footer.Children.Add(countLabel);
+        Grid.SetRow(footer, 2);
+        right.Children.Add(footer);
+
+        CancellationTokenSource? filterRequest = null;
+        string? remembered = _browserCategoryByKind.TryGetValue(kind, out var chosen) ? chosen : "";
+
+        IReadOnlyList<StreamItem> CurrentCategory()
         {
-            var selected = cats.SelectedItem as CategoryItem;
-            return selected is null || string.IsNullOrWhiteSpace(selected.RemoteId)
-                ? all
-                : CategoryItems(kind, selected.RemoteId);
+            if (cats.SelectedItem is not CategoryItem category ||
+                string.IsNullOrEmpty(category.RemoteId)) return all;
+            return CategoryItems(kind, category.RemoteId);
         }
 
-        void RenderPage()
+        void AppendMore(bool focusNew = false)
         {
-            var items = CurrentItems();
-            var pages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)pageSize));
-            page = Math.Clamp(page, 0, pages - 1);
-            _browserPageByKind[kind] = page;
+            if (appending || visible >= filtered.Count) return;
+            appending = true;
+            var from = visible;
+            var until = Math.Min(filtered.Count, from + batchSize);
+            for (var i = from; i < until; i++)
+                wrap.Children.Add(ContentCard(filtered[i], posterWidth));
+            visible = until;
+            countLabel.Text = "عرض " + visible.ToString("N0") + " من " +
+                              filtered.Count.ToString("N0") + " " + (kind == "movie" ? "فيلم" : "مسلسل");
+            more.Visibility = visible < filtered.Count ? Visibility.Visible : Visibility.Collapsed;
+            appending = false;
+            if (focusNew && until > from)
+                _ = Dispatcher.BeginInvoke(() =>
+                {
+                    if (!ReferenceEquals(ContentHost.Content, grid)) return;
+                    if (wrap.Children[from] is Button first) { first.Focus(); first.BringIntoView(); }
+                });
+        }
 
-            pageBar.Children.Clear();
-            var previous = Action("‹ السابق", false, (_, _) =>
-            {
-                if (page <= 0) return;
-                page--;
-                RenderPage();
-                scroll.ScrollToTop();
-            });
-            previous.IsEnabled = page > 0;
-
-            var next = Action("التالي ›", false, (_, _) =>
-            {
-                if (page >= pages - 1) return;
-                page++;
-                RenderPage();
-                scroll.ScrollToTop();
-            }, 8);
-            next.IsEnabled = page < pages - 1;
-
-            pageBar.Children.Add(previous);
-            pageBar.Children.Add(next);
-            pageBar.Children.Add(Txt(
-                "صفحة " + (page + 1).ToString("N0") + " من " + pages.ToString("N0") +
-                " • " + items.Count.ToString("N0") + " عنصر",
-                11, Muted, marginLeft: 14));
-
+        void RenderInitial(IReadOnlyList<StreamItem> items)
+        {
+            filtered = items;
+            visible = 0;
             wrap.Children.Clear();
-            var startIndex = page * pageSize;
-            var endIndex = Math.Min(items.Count, startIndex + pageSize);
-            for (var i = startIndex; i < endIndex; i++)
-                wrap.Children.Add(ContentCard(items[i], posterWidth));
-
-            if (!string.IsNullOrWhiteSpace(_lastFocusedContentKey))
-            {
-                var target = wrap.Children.OfType<Button>()
-                    .FirstOrDefault(button => button.Tag is string key &&
-                                              key.Equals(_lastFocusedContentKey, StringComparison.Ordinal));
-                if (target is not null)
-                    _ = Dispatcher.BeginInvoke(() => target.Focus());
-            }
+            scroll.ScrollToTop();
+            more.Visibility = Visibility.Collapsed;
+            countLabel.Text = items.Count == 0 ? "لا توجد نتائج في هذا القسم" : "جاري عرض المحتوى…";
+            AppendMore();
         }
+
+        // Mouse, touch, wheel and keyboard scroll all bring in the next batch
+        // without forcing the customer through hundreds of "التالي" pages.
+        scroll.ScrollChanged += (_, e) =>
+        {
+            if (e.ExtentHeightChange == 0 && e.VerticalChange == 0) return;
+            if (visible < filtered.Count &&
+                scroll.ScrollableHeight - scroll.VerticalOffset < Math.Max(420, scroll.ViewportHeight * .6))
+                AppendMore();
+        };
+        scroll.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.PageDown or Key.End)) return;
+            if (visible >= filtered.Count) return;
+            AppendMore();
+        };
 
         cats.SelectionChanged += (_, _) =>
         {
             if (cats.SelectedItem is CategoryItem selected)
                 _browserCategoryByKind[kind] = selected.RemoteId;
-            page = 0;
-            _browserPageByKind[kind] = 0;
-            RenderPage();
+            // A typed title search spans the entire kind, not merely the current
+            // category; switching categories while not searching is instantaneous.
+            if (contentSearch.Text.Trim().Length == 0)
+                RenderInitial(CurrentCategory());
+        };
+
+        categorySearch.TextChanged += (_, _) =>
+        {
+            var q = NormalizeSearch(categorySearch.Text);
+            var rows = q.Length == 0
+                ? allCategories
+                : allCategories.Where(c => c.RemoteId.Length == 0 ||
+                    NormalizeSearch(c.Name).Contains(q, StringComparison.Ordinal)).ToList();
+            cats.ItemsSource = rows;
+            var preferred = rows.FirstOrDefault(c => c.RemoteId == _browserCategoryByKind.GetValueOrDefault(kind))
+                            ?? rows.FirstOrDefault();
+            cats.SelectedItem = preferred;
+            if (preferred is not null) cats.ScrollIntoView(preferred);
         };
 
         cats.PreviewKeyDown += (_, e) =>
         {
-            if (e.Key is not Key.Enter and not Key.Space) return;
-            var target = !string.IsNullOrWhiteSpace(_lastFocusedContentKey)
-                ? wrap.Children.OfType<Button>()
-                    .FirstOrDefault(button => button.Tag is string key &&
-                                              key.Equals(_lastFocusedContentKey, StringComparison.Ordinal))
-                : null;
-            target ??= wrap.Children.OfType<Button>().FirstOrDefault();
-            if (target is null) return;
-            target.Focus();
-            target.BringIntoView();
+            if (e.Key is Key.PageDown or Key.PageUp or Key.Home or Key.End)
+                return; // WPF virtualized list handles these and ScrollIntoView.
+            if (e.Key is not (Key.Enter or Key.Space)) return;
+            var first = wrap.Children.OfType<Button>().FirstOrDefault();
+            if (first is null) return;
+            first.Focus();
+            first.BringIntoView();
             e.Handled = true;
         };
 
-        RenderPage();
+        contentSearch.TextChanged += (_, _) =>
+        {
+            filterRequest?.Cancel();
+            var request = new CancellationTokenSource();
+            filterRequest = request;
+            _ = SearchCatalogAsync(request);
+        };
+
+        async Task SearchCatalogAsync(CancellationTokenSource request)
+        {
+            var token = request.Token;
+            try
+            {
+                await Task.Delay(170, token);
+                var term = NormalizeSearch(contentSearch.Text);
+                if (term.Length == 0)
+                {
+                    if (!token.IsCancellationRequested && ReferenceEquals(ContentHost.Content, grid))
+                        RenderInitial(CurrentCategory());
+                    return;
+                }
+                countLabel.Text = "جاري البحث في كل " + label + "…";
+                // Do large provider title scans off the UI thread.
+                var matches = await Task.Run(() =>
+                {
+                    var found = new List<StreamItem>();
+                    foreach (var item in all)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        if (NormalizeSearch(item.Name).Contains(term, StringComparison.Ordinal))
+                            found.Add(item);
+                    }
+                    return found;
+                }, token);
+                if (!token.IsCancellationRequested && ReferenceEquals(filterRequest, request) &&
+                    ReferenceEquals(ContentHost.Content, grid))
+                    RenderInitial(matches);
+            }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                if (ReferenceEquals(filterRequest, request)) filterRequest = null;
+                request.Dispose();
+            }
+        }
+
+        cats.ItemsSource = allCategories;
+        cats.SelectedItem = allCategories.FirstOrDefault(c => c.RemoteId == remembered) ?? allCategories[0];
+        RenderInitial(CurrentCategory());
         ContentHost.Content = grid;
-        _ = Dispatcher.BeginInvoke(() => FocusSelectedListItem(cats));
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (!ReferenceEquals(ContentHost.Content, grid)) return;
+            FocusSelectedListItem(cats);
+        });
     }
 
     private void ShowLiveBrowser()
@@ -1078,17 +1221,58 @@ public partial class MainWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
 
+        var categoriesColumn = new Grid();
+        categoriesColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        categoriesColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        categoriesColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetColumn(categoriesColumn, 0);
+        grid.Children.Add(categoriesColumn);
+
+        var categoriesHeading = Vertical(0, 0, 0, 8);
+        categoriesHeading.Children.Add(Txt("فئات البث", 15, Accent, FontWeights.Bold, 0, 0, 0, 6));
+        var categorySearch = new TextBox { Height = 38, FontSize = 12, ToolTip = "ابحث عن اسم فئة البث" };
+        categoriesHeading.Children.Add(categorySearch);
+        categoriesColumn.Children.Add(categoriesHeading);
+
         var cats = new ListBox
         {
-            Style = Application.Current.FindResource("TvListBox") as Style
+            Style = Application.Current.FindResource("TvListBox") as Style,
+            DisplayMemberPath = "Name",
+            VerticalAlignment = VerticalAlignment.Stretch
         };
-        cats.Items.Add(new CategoryItem { RemoteId = "", Kind = "live", Name = "الكل" });
-        foreach (var cat in (_catalog?.Snapshot.Categories ?? [])
-                     .Where(c => c.Kind == "live" && !_store.IsCategoryHidden("live", c.RemoteId)))
-            cats.Items.Add(cat);
-        cats.DisplayMemberPath = "Name";
-        cats.SelectedIndex = 0;
-        grid.Children.Add(cats);
+        ScrollViewer.SetVerticalScrollBarVisibility(cats, ScrollBarVisibility.Auto);
+        VirtualizingPanel.SetIsVirtualizing(cats, true);
+        VirtualizingPanel.SetVirtualizationMode(cats, VirtualizationMode.Recycling);
+        Grid.SetRow(cats, 1);
+        categoriesColumn.Children.Add(cats);
+        var allCategories = new List<CategoryItem>
+        {
+            new() { RemoteId = "", Kind = "live", Name = "الكل" }
+        };
+        allCategories.AddRange((_catalog?.Snapshot.Categories ?? [])
+            .Where(c => c.Kind == "live" && !_store.IsCategoryHidden("live", c.RemoteId)));
+        var categoryCounter = Txt(allCategories.Count.ToString("N0") + " فئة  •  ↑↓ للتنقل", 10, Muted, marginTop: 8);
+        Grid.SetRow(categoryCounter, 2);
+        categoriesColumn.Children.Add(categoryCounter);
+        categorySearch.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Down or Key.Enter)) return;
+            FocusSelectedListItem(cats);
+            e.Handled = true;
+        };
+
+        var channelsColumn = new Grid();
+        channelsColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        channelsColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        channelsColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetColumn(channelsColumn, 2);
+        grid.Children.Add(channelsColumn);
+        var channelHeading = Vertical(0, 0, 0, 8);
+        channelHeading.Children.Add(Txt("القنوات", 15, Accent, FontWeights.Bold, 0, 0, 0, 6));
+        var channelSearch = new TextBox { Height = 38, FontSize = 12, ToolTip = "ابحث في جميع القنوات بغض النظر عن الفئة" };
+        channelHeading.Children.Add(channelSearch);
+        _activeBrowserSearch = channelSearch;
+        channelsColumn.Children.Add(channelHeading);
 
         var channels = new ListBox
         {
@@ -1098,21 +1282,39 @@ public partial class MainWindow : Window
         VirtualizingPanel.SetIsVirtualizing(channels, true);
         VirtualizingPanel.SetVirtualizationMode(channels, VirtualizationMode.Recycling);
         ScrollViewer.SetCanContentScroll(channels, true);
-        Grid.SetColumn(channels, 2);
-        grid.Children.Add(channels);
+        ScrollViewer.SetVerticalScrollBarVisibility(channels, ScrollBarVisibility.Auto);
+        channelSearch.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Down or Key.Enter)) return;
+            FocusSelectedListItem(channels);
+            e.Handled = true;
+        };
+        Grid.SetRow(channels, 1);
+        channelsColumn.Children.Add(channels);
+        var channelCounter = Txt("", 10, Muted, marginTop: 8);
+        Grid.SetRow(channelCounter, 2);
+        channelsColumn.Children.Add(channelCounter);
 
         var right = Vertical();
-        Grid.SetColumn(right, 4);
-        grid.Children.Add(right);
+        var detailsScroll = new ScrollViewer
+        {
+            Content = right,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            PanningMode = PanningMode.VerticalOnly
+        };
+        Grid.SetColumn(detailsScroll, 4);
+        grid.Children.Add(detailsScroll);
 
         var previewBorder = new Border
         {
-            Height = 330, CornerRadius = new CornerRadius(14),
+            Height = 260, CornerRadius = new CornerRadius(14),
             Background = Brushes.Black, BorderBrush = Brush("#665E437A"), BorderThickness = new Thickness(1),
             ClipToBounds = true
         };
         _previewPlayback = new PlaybackService();
         var video = new VideoView { MediaPlayer = _previewPlayback.MediaPlayer };
+        _previewVideoView = video;
         previewBorder.Child = video;
         right.Children.Add(previewBorder);
 
@@ -1134,26 +1336,84 @@ public partial class MainWindow : Window
         right.Children.Add(new ScrollViewer
         {
             Content = epgPanel,
-            MaxHeight = 270,
+            MaxHeight = 180,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         });
 
-        void FillChannels()
+        void FillChannels(IReadOnlyList<StreamItem>? searchMatches = null)
         {
             var selectedCat = cats.SelectedItem as CategoryItem;
-            IReadOnlyList<StreamItem> filtered = selectedCat is null || string.IsNullOrWhiteSpace(selectedCat.RemoteId)
-                ? all
-                : CategoryItems("live", selectedCat.RemoteId);
+            IReadOnlyList<StreamItem> filtered = searchMatches ??
+                (selectedCat is null || string.IsNullOrWhiteSpace(selectedCat.RemoteId)
+                    ? all
+                    : CategoryItems("live", selectedCat.RemoteId));
 
-            channels.ItemsSource = null;
             channels.ItemsSource = filtered;
+            channelCounter.Text = filtered.Count.ToString("N0") + " قناة";
             if (filtered.Count > 0) channels.SelectedIndex = 0;
         }
 
         IReadOnlyList<StreamItem> CurrentLivePlaylist() =>
             channels.ItemsSource as IReadOnlyList<StreamItem> ?? all;
 
-        cats.SelectionChanged += (_, _) => FillChannels();
+        cats.SelectionChanged += (_, _) =>
+        {
+            if (cats.SelectedItem is CategoryItem category)
+                _browserCategoryByKind["live"] = category.RemoteId;
+            if (channelSearch.Text.Trim().Length == 0) FillChannels();
+        };
+        categorySearch.TextChanged += (_, _) =>
+        {
+            var query = NormalizeSearch(categorySearch.Text);
+            var shown = query.Length == 0 ? allCategories
+                : allCategories.Where(cat => cat.RemoteId.Length == 0 ||
+                    NormalizeSearch(cat.Name).Contains(query, StringComparison.Ordinal)).ToList();
+            cats.ItemsSource = shown;
+            cats.SelectedIndex = shown.Count > 0 ? 0 : -1;
+            if (cats.SelectedItem is not null) cats.ScrollIntoView(cats.SelectedItem);
+        };
+
+        CancellationTokenSource? channelFilter = null;
+        channelSearch.TextChanged += (_, _) =>
+        {
+            channelFilter?.Cancel();
+            var task = new CancellationTokenSource();
+            channelFilter = task;
+            _ = SearchChannelsAsync(task);
+        };
+        async Task SearchChannelsAsync(CancellationTokenSource request)
+        {
+            try
+            {
+                await Task.Delay(180, request.Token);
+                var query = NormalizeSearch(channelSearch.Text);
+                if (query.Length == 0)
+                {
+                    if (ReferenceEquals(channelFilter, request) && ReferenceEquals(ContentHost.Content, grid))
+                        FillChannels();
+                    return;
+                }
+                var matching = await Task.Run(() =>
+                {
+                    var matches = new List<StreamItem>();
+                    foreach (var channel in all)
+                    {
+                        request.Token.ThrowIfCancellationRequested();
+                        if (NormalizeSearch(channel.Name).Contains(query, StringComparison.Ordinal))
+                            matches.Add(channel);
+                    }
+                    return matches;
+                }, request.Token);
+                if (ReferenceEquals(channelFilter, request) && ReferenceEquals(ContentHost.Content, grid))
+                    FillChannels(matching);
+            }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                if (ReferenceEquals(channelFilter, request)) channelFilter = null;
+                request.Dispose();
+            }
+        }
 
         cats.PreviewKeyDown += (_, e) =>
         {
@@ -1194,7 +1454,10 @@ public partial class MainWindow : Window
 
             try
             {
-                await Task.Delay(180, token);
+                // A receiver remote can traverse dozens of channels in
+                // one second. Debounce preview starts so only a settled
+                // selection spins up the expensive native decoder/EPG calls.
+                await Task.Delay(520, token);
                 if (token.IsCancellationRequested || serial != _liveSelectionSerial) return;
 
                 if (_store.State.Settings.AutoplayLive && _previewPlayback is not null)
@@ -1203,11 +1466,30 @@ public partial class MainWindow : Window
                     var url = candidates.FirstOrDefault();
                     if (!string.IsNullOrWhiteSpace(url))
                     {
-                        _previewPlayback.Stop();
-                        _previewPlayback.Play(url, new Dictionary<string, string>
+                        var preview = _previewPlayback;
+                        var headers = new Dictionary<string, string>
                         {
                             ["User-Agent"] = _store.State.Settings.UserAgent
-                        });
+                        };
+                        // Native VLC Stop/Play can block for seconds on bad
+                        // 4K/live streams. Serialize off the WPF thread, and
+                        // skip stale fast-changing selections.
+                        await _previewPlaybackLock.WaitAsync(token);
+                        try
+                        {
+                            token.ThrowIfCancellationRequested();
+                            if (!ReferenceEquals(preview, _previewPlayback)) return;
+                            await Task.Run(() =>
+                            {
+                                if (token.IsCancellationRequested) return;
+                                try { preview.Stop(); } catch { }
+                                if (!token.IsCancellationRequested)
+                                {
+                                    try { preview.Play(url, headers); } catch { }
+                                }
+                            }, token);
+                        }
+                        finally { _previewPlaybackLock.Release(); }
                     }
                 }
 
@@ -1281,7 +1563,13 @@ public partial class MainWindow : Window
             }
         };
 
-        FillChannels();
+        cats.ItemsSource = allCategories;
+        var selectedGroupId = _browserCategoryByKind.TryGetValue("live", out var rememberedGroup)
+            ? rememberedGroup : "";
+        var initialCategory = allCategories.FirstOrDefault(category =>
+            string.Equals(category.RemoteId, selectedGroupId, StringComparison.Ordinal));
+        cats.SelectedItem = initialCategory ?? allCategories[0];
+        if (channels.ItemsSource is null) FillChannels();
         ContentHost.Content = grid;
         _ = Dispatcher.BeginInvoke(() => FocusSelectedListItem(cats));
     }
@@ -1504,17 +1792,42 @@ public partial class MainWindow : Window
 
     private async Task ShowDetailsAsync(StreamItem item)
     {
+        if (_store.IsLocked(item.Key) && !EnsureParentalAccess()) return;
+
+        // Preserve the exact category, query, loaded poster batch, scroll offset
+        // and keyboard focus when opening details from deep in a huge catalog.
+        var returnView = ContentHost.Content;
+        var returnSearch = _activeBrowserSearch;
+        var returnTitle = PageTitle.Text;
+        var returnSubtitle = PageSubtitle.Text;
+        var returnPage = _currentPage;
+        var returnFocus = Keyboard.FocusedElement;
         DisposePreview();
         _detailsOpen = true;
-        var detailsReturnPage = _currentPage;
+        _activeBrowserSearch = null;
         _pageBackAction = () =>
         {
-            _currentPage = detailsReturnPage;
-            RefreshCurrentPage();
+            _detailsOpen = false;
+            _currentPage = returnPage;
+            if (returnView is not null)
+            {
+                ContentHost.Content = returnView;
+                _activeBrowserSearch = returnSearch;
+                PageTitle.Text = returnTitle;
+                PageSubtitle.Text = returnSubtitle;
+                HeaderBackButton.Visibility = returnPage == "home"
+                    ? Visibility.Collapsed : Visibility.Visible;
+                UpdateNavigationState();
+                if (returnFocus is FrameworkElement focused)
+                    _ = Dispatcher.BeginInvoke(() =>
+                    {
+                        if (focused.IsVisible) { focused.Focus(); focused.BringIntoView(); }
+                    });
+            }
+            else RefreshCurrentPage();
         };
         HeaderBackButton.Visibility = Visibility.Visible;
         _lastFocusedContentKey = item.Key;
-        if (_store.IsLocked(item.Key) && !EnsureParentalAccess()) return;
 
         PageTitle.Text = item.Kind == "series" ? "BLOFY SERIES" : "BLOFY MOVIE";
         PageSubtitle.Text = item.Name;
@@ -1662,7 +1975,7 @@ public partial class MainWindow : Window
         }
 
         var actions = Horizontal(0, 8, 0, 0);
-        actions.Children.Add(Action("← رجوع", false, (_, _) => RefreshCurrentPage()));
+        actions.Children.Add(Action("← رجوع", false, (_, _) => NavigateBack()));
         if (item.Kind == "movie")
         {
             actions.Children.Add(Action("▶ تشغيل", true, async (_, _) => await PlayItemAsync(item)));
@@ -1808,9 +2121,13 @@ public partial class MainWindow : Window
     private async Task PlayItemAsync(StreamItem item, IReadOnlyList<StreamItem>? livePlaylistOverride = null)
     {
         if (_activeProvider is null) return;
-        string url;
-        if (_activeProvider.ProviderType == "m3u") url = item.DirectSource;
-        else url = _catalog!.Xtream(_activeProvider).StreamUrl(_activeProvider, item, _store.State.Settings.LiveFormat);
+        // Do not start on a generated Xtream URL and only later try the
+        // advertised direct source: that can spend 16+ seconds on a dead path.
+        var candidates = BuildStreamCandidates(item);
+        var url = candidates.FirstOrDefault() ??
+            (_activeProvider.ProviderType == "m3u"
+                ? item.DirectSource
+                : _catalog!.Xtream(_activeProvider).StreamUrl(_activeProvider, item, _store.State.Settings.LiveFormat));
 
         long resume = 0;
         var itemState = _store.WatchState(item.Key);
@@ -1859,7 +2176,7 @@ public partial class MainWindow : Window
             playlistIndex: idx,
             urlResolver: resolver,
             recoveryResolver: recoveryResolver,
-            recoveryUrls: BuildStreamCandidates(item),
+            recoveryUrls: candidates,
             savePosition: item.Kind == "live" ? null : async (pos, len) =>
                 await _store.SaveWatchStateAsync(item.Key, pos, len),
             onPlaylistItemChanged: item.Kind == "live"
@@ -1887,7 +2204,11 @@ public partial class MainWindow : Window
         var episodeState = _store.WatchState(key);
         if (episodeState is not null && !episodeState.Completed && episodeState.PositionMs > 30_000)
             resume = episodeState.PositionMs;
-        var url = _catalog!.Xtream(_activeProvider).EpisodeUrl(_activeProvider, episode);
+        // Prefer the episode URL provided by the server (when valid).
+        // Regenerating the path first can choose a slow/incompatible container.
+        var episodeCandidates = BuildEpisodeCandidates(episode);
+        var url = episodeCandidates.FirstOrDefault() ??
+            _catalog!.Xtream(_activeProvider).EpisodeUrl(_activeProvider, episode);
 
         Func<Task>? nextAction = null;
         var ordered = episodes.OrderBy(e => e.Season).ThenBy(e => e.Episode).ToList();
@@ -1921,7 +2242,7 @@ public partial class MainWindow : Window
             series.Name + " • S" + episode.Season + "E" + episode.Episode,
             url,
             resumePositionMs: resume,
-            recoveryUrls: BuildEpisodeCandidates(episode),
+            recoveryUrls: episodeCandidates,
             savePosition: async (pos, len) => await _store.SaveWatchStateAsync(key, pos, len),
             previousAction: previousManual,
             nextAction: nextManual,
@@ -1958,6 +2279,21 @@ public partial class MainWindow : Window
         return episodes;
     }
 
+    private static string BuildXtreamMediaUrl(ProviderAccount provider, string kind, string remoteId, string extension)
+    {
+        // The Xtream API's direct_source field is frequently blank, "0", or
+        // a temporary expired URL. Always preserve a generated endpoint as a
+        // fallback instead of having StreamUrl() return direct_source twice.
+        var root = XtreamService.NormalizeBase(provider.BaseUrl);
+        var id = remoteId.Trim();
+        if (Regex.IsMatch(id, @"^\d+\.0+$", RegexOptions.CultureInvariant))
+            id = id.Split('.')[0];
+        var ext = string.IsNullOrWhiteSpace(extension) ? "mp4" : extension.Trim().TrimStart('.');
+        return root + "/" + kind + "/" + Uri.EscapeDataString(provider.Username) +
+               "/" + Uri.EscapeDataString(provider.Password) +
+               "/" + Uri.EscapeDataString(id) + "." + Uri.EscapeDataString(ext);
+    }
+
     private IReadOnlyList<string> BuildStreamCandidates(StreamItem item)
     {
         if (_activeProvider is null || _catalog is null) return Array.Empty<string>();
@@ -1978,19 +2314,23 @@ public partial class MainWindow : Window
             return urls;
         }
 
-        var xtream = _catalog.Xtream(_activeProvider);
+        var provider = _activeProvider;
         if (item.Kind == "live")
         {
             var preferred = _store.State.Settings.LiveFormat == "m3u8" ? "m3u8" : "ts";
             var alternate = preferred == "ts" ? "m3u8" : "ts";
-            Add(xtream.StreamUrl(_activeProvider, item, preferred));
             Add(item.DirectSource);
-            Add(xtream.StreamUrl(_activeProvider, item, alternate));
+            Add(BuildXtreamMediaUrl(provider, "live", item.RemoteId, preferred));
+            Add(BuildXtreamMediaUrl(provider, "live", item.RemoteId, alternate));
         }
         else
         {
             Add(item.DirectSource);
-            Add(xtream.StreamUrl(_activeProvider, item, _store.State.Settings.LiveFormat));
+            Add(BuildXtreamMediaUrl(provider, "movie", item.RemoteId, item.Extension));
+            // Xtream services vary in VOD container support. Keep bounded,
+            // distinct alternatives so failed server links do not dead-end.
+            Add(BuildXtreamMediaUrl(provider, "movie", item.RemoteId,
+                item.Extension.Equals("mkv", StringComparison.OrdinalIgnoreCase) ? "mp4" : "mkv"));
         }
         return urls;
     }
@@ -2009,7 +2349,9 @@ public partial class MainWindow : Window
         }
 
         Add(episode.DirectSource);
-        Add(_catalog.Xtream(_activeProvider).EpisodeUrl(_activeProvider, episode));
+        Add(BuildXtreamMediaUrl(_activeProvider, "series", episode.RemoteId, episode.Extension));
+        Add(BuildXtreamMediaUrl(_activeProvider, "series", episode.RemoteId,
+            episode.Extension.Equals("mkv", StringComparison.OrdinalIgnoreCase) ? "mp4" : "mkv"));
         return urls;
     }
 
@@ -2095,118 +2437,233 @@ public partial class MainWindow : Window
     private void ShowSearch()
     {
         DisposePreview();
-        PageTitle.Text = "البحث";
-        PageSubtitle.Text = "ابحث في BLOFY";
-        var root = Vertical();
+        PageTitle.Text = "البحث الشامل";
+        PageSubtitle.Text = "كل الأفلام والمسلسلات والقنوات • بدون حد 12 نتيجة";
+
+        // Grid's star-sized content area lets results genuinely scroll instead
+        // of allowing a StackPanel to extend beyond the bottom of the window.
+        var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var heading = Vertical(0, 0, 0, 10);
+        heading.Children.Add(Txt("ابحث عن فيلم أو مسلسل أو قناة", 18, Text, FontWeights.Bold, 0, 0, 0, 7));
         var search = new TextBox
         {
-            FontSize = 17,
-            Height = 44,
-            ToolTip = "ابحث من أول حرف…"
+            Height = 48,
+            FontSize = 18,
+            ToolTip = "بحث فوري في جميع أقسام مكتبتك، بالاسم العربي أو الإنجليزي"
         };
-        root.Children.Add(search);
+        heading.Children.Add(search);
+        _activeBrowserSearch = search;
+        var recent = _store.ActiveLibrary().RecentSearches.Take(6).ToList();
+        if (recent.Count > 0)
+            heading.Children.Add(Txt("آخر عمليات البحث: " + string.Join("  •  ", recent), 11, Muted, marginTop: 7));
+        root.Children.Add(heading);
 
-        var status = Txt("اكتب للبحث…", 11, Muted, marginTop: 8);
-        root.Children.Add(status);
+        var filters = Horizontal(0, 3, 0, 10);
+        Grid.SetRow(filters, 1);
+        root.Children.Add(filters);
 
-        var results = Vertical(0, 10, 0, 0);
-        root.Children.Add(results);
-
-        async Task RunAsync()
+        var scroll = new ScrollViewer
         {
-            _searchCts?.Cancel();
-            _searchCts?.Dispose();
-            _searchCts = new CancellationTokenSource();
-            var token = _searchCts.Token;
-            var raw = search.Text;
-            var q = NormalizeSearch(raw);
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            PanningMode = PanningMode.VerticalOnly
+        };
+        var wrap = new WrapPanel { Orientation = Orientation.Horizontal, ItemWidth = 182, ItemHeight = 294 };
+        scroll.Content = wrap;
+        search.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Down or Key.Enter)) return;
+            if (wrap.Children.OfType<Button>().FirstOrDefault() is not Button first) return;
+            first.Focus();
+            first.BringIntoView();
+            e.Handled = true;
+        };
+        Grid.SetRow(scroll, 2);
+        root.Children.Add(scroll);
 
-            results.Children.Clear();
-            if (q.Length == 0)
+        IReadOnlyList<StreamItem> matched = [];
+        IReadOnlyList<StreamItem> displayed = [];
+        var rendered = 0;
+        const int batch = 36;
+        bool adding = false;
+        Button more = null!;
+        var footer = Horizontal(0, 12, 0, 0);
+        var status = Txt("ابدأ بالكتابة للبحث في المكتبة كاملة", 12, Muted, marginTop: 9);
+        more = Action("↓ عرض نتائج إضافية", false, (_, _) => AppendMore(true), 0, 0, 15, 0);
+        more.MinWidth = 175;
+        footer.Children.Add(more);
+        footer.Children.Add(status);
+        Grid.SetRow(footer, 3);
+        root.Children.Add(footer);
+
+        string activeKind = "all";
+        CancellationTokenSource? request = null;
+        var filterButtons = new Dictionary<string, Button>();
+
+        void RefreshTabs()
+        {
+            foreach (var (kind, button) in filterButtons)
             {
-                status.Text = "اكتب للبحث…";
-                return;
+                var selected = kind == activeKind;
+                button.Background = selected ? Accent : Surface2;
+                button.Foreground = selected ? Bg : Text;
+                button.BorderBrush = selected ? Accent : Brush("#665E437A");
             }
-
-            status.Text = "جاري البحث…";
-            try
-            {
-                await Task.Delay(220, token);
-                var snapshot = _catalog?.Snapshot.Streams;
-                if (snapshot is null) return;
-
-                var grouped = await Task.Run(() =>
-                {
-                    var live = new List<StreamItem>(10);
-                    var movies = new List<StreamItem>(12);
-                    var series = new List<StreamItem>(12);
-
-                    foreach (var item in snapshot)
-                    {
-                        token.ThrowIfCancellationRequested();
-                        if (!_store.IsContentVisible(item)) continue;
-                        if (!NormalizeSearch(item.Name).Contains(q, StringComparison.OrdinalIgnoreCase)) continue;
-
-                        switch (item.Kind)
-                        {
-                            case "live" when live.Count < 10:
-                                live.Add(item);
-                                break;
-                            case "movie" when movies.Count < 12:
-                                movies.Add(item);
-                                break;
-                            case "series" when series.Count < 12:
-                                series.Add(item);
-                                break;
-                        }
-
-                        if (live.Count >= 10 && movies.Count >= 12 && series.Count >= 12)
-                            break;
-                    }
-
-                    return (Live: live, Movies: movies, Series: series);
-                }, token);
-
-                if (token.IsCancellationRequested ||
-                    !string.Equals(raw, search.Text, StringComparison.Ordinal))
-                    return;
-
-                results.Children.Clear();
-                if (grouped.Live.Count > 0)
-                    results.Children.Add(ContentRow("القنوات", grouped.Live, landscape: true));
-                if (grouped.Movies.Count > 0)
-                    results.Children.Add(ContentRow("الأفلام", grouped.Movies));
-                if (grouped.Series.Count > 0)
-                    results.Children.Add(ContentRow("المسلسلات", grouped.Series));
-
-                var count = grouped.Live.Count + grouped.Movies.Count + grouped.Series.Count;
-                status.Text = count == 0
-                    ? "لا توجد نتائج"
-                    : "عرض أفضل " + count.ToString("N0") + " نتيجة";
-            }
-            catch (OperationCanceledException) { }
         }
 
-        search.TextChanged += async (_, _) => await RunAsync();
+        void AppendMore(bool focusFirst = false)
+        {
+            if (adding || rendered >= displayed.Count) return;
+            adding = true;
+            var firstIndex = rendered;
+            var lastIndex = Math.Min(rendered + batch, displayed.Count);
+            for (var i = firstIndex; i < lastIndex; i++)
+            {
+                var card = ContentCard(displayed[i], 160);
+                card.ToolTip = (displayed[i].Kind switch
+                {
+                    "movie" => "فيلم",
+                    "series" => "مسلسل",
+                    _ => "قناة"
+                }) + " • " + displayed[i].Name;
+                wrap.Children.Add(card);
+            }
+            rendered = lastIndex;
+            more.Visibility = rendered < displayed.Count ? Visibility.Visible : Visibility.Collapsed;
+            status.Text = "عرض " + rendered.ToString("N0") + " من " + displayed.Count.ToString("N0") + " نتيجة";
+            adding = false;
+            if (focusFirst && lastIndex > firstIndex)
+                _ = Dispatcher.BeginInvoke(() =>
+                {
+                    if (!ReferenceEquals(ContentHost.Content, root)) return;
+                    if (wrap.Children[firstIndex] is Button first) { first.Focus(); first.BringIntoView(); }
+                });
+        }
+
+        void ShowMatching()
+        {
+            displayed = activeKind == "all"
+                ? matched
+                : matched.Where(item => item.Kind == activeKind).ToList();
+            rendered = 0;
+            wrap.Children.Clear();
+            scroll.ScrollToTop();
+            more.Visibility = Visibility.Collapsed;
+            if (displayed.Count > 0)
+                AppendMore();
+            else
+                status.Text = search.Text.Trim().Length == 0
+                    ? "ابدأ بالكتابة للبحث في المكتبة كاملة"
+                    : "لا توجد نتائج في هذا القسم";
+        }
+
+        foreach (var (kind, label) in new[]
+        {
+            ("all", "الكل"), ("movie", "الأفلام"),
+            ("series", "المسلسلات"), ("live", "القنوات")
+        })
+        {
+            var key = kind;
+            var button = Action(label, false, (_, _) =>
+            {
+                activeKind = key;
+                RefreshTabs();
+                ShowMatching();
+            }, 0, 0, 10, 0);
+            button.MinWidth = 112;
+            filterButtons.Add(key, button);
+            filters.Children.Add(button);
+        }
+        RefreshTabs();
+
+        scroll.ScrollChanged += (_, e) =>
+        {
+            if (e.ExtentHeightChange == 0 && e.VerticalChange == 0) return;
+            if (rendered < displayed.Count &&
+                scroll.ScrollableHeight - scroll.VerticalOffset < Math.Max(450, scroll.ViewportHeight * .6))
+                AppendMore();
+        };
+        scroll.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is Key.PageDown or Key.End) AppendMore();
+        };
+
+        search.TextChanged += (_, _) =>
+        {
+            request?.Cancel();
+            var current = new CancellationTokenSource();
+            request = current;
+            _ = SearchAsync(current);
+        };
+
+        async Task SearchAsync(CancellationTokenSource current)
+        {
+            var token = current.Token;
+            try
+            {
+                await Task.Delay(180, token);
+                var q = NormalizeSearch(search.Text);
+                if (q.Length == 0)
+                {
+                    if (ReferenceEquals(request, current) && ReferenceEquals(ContentHost.Content, root))
+                    {
+                        matched = [];
+                        ShowMatching();
+                    }
+                    return;
+                }
+
+                status.Text = "جاري البحث عن «" + search.Text.Trim() + "» في جميع الفئات…";
+                // Scan the full locally cached catalog in the background; no
+                // misleading "top 12" cutoff and no blocking the WPF dispatcher.
+                var movies = Items("movie");
+                var series = Items("series");
+                var live = Items("live");
+                var hits = await Task.Run(() =>
+                {
+                    var exactPrefix = new List<StreamItem>();
+                    var remaining = new List<StreamItem>();
+                    foreach (var collection in new[] { movies, series, live })
+                    {
+                        foreach (var item in collection)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            var name = NormalizeSearch(item.Name);
+                            if (name.StartsWith(q, StringComparison.Ordinal)) exactPrefix.Add(item);
+                            else if (name.Contains(q, StringComparison.Ordinal)) remaining.Add(item);
+                        }
+                    }
+                    exactPrefix.AddRange(remaining);
+                    return exactPrefix;
+                }, token);
+
+                if (!token.IsCancellationRequested && ReferenceEquals(request, current) &&
+                    ReferenceEquals(ContentHost.Content, root))
+                {
+                    matched = hits;
+                    ShowMatching();
+                }
+            }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                if (ReferenceEquals(request, current)) request = null;
+                current.Dispose();
+            }
+        }
+
         search.KeyDown += async (_, e) =>
         {
-            if (e.Key != Key.Enter || search.Text.Trim().Length < 2) return;
+            if (e.Key != Key.Enter || search.Text.Trim().Length == 0) return;
             await _store.AddRecentSearchAsync(search.Text);
         };
 
-        var recent = _store.ActiveLibrary().RecentSearches;
-        if (recent.Count > 0)
-        {
-            root.Children.Insert(1, Txt(
-                "عمليات البحث الأخيرة: " + string.Join(" • ", recent.Take(8)),
-                11, Muted, marginTop: 8));
-        }
-
-        ContentHost.Content = new ScrollViewer
-        {
-            Content = root,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden
-        };
+        ContentHost.Content = root;
         search.Focus();
     }
 
@@ -3248,12 +3705,42 @@ public partial class MainWindow : Window
             "BLOFY PLAYER");
     }
 
-    private void DisposePreview()
+    private void DisposePreview() => _ = StopAndDisposePreviewAsync();
+
+    private Task StopAndDisposePreviewAsync()
     {
-        if (_previewPlayback is null) return;
-        try { _previewPlayback.Stop(); } catch { }
-        _previewPlayback.Dispose();
+        _liveSelectionSerial++;
+        _livePreviewCts?.Cancel();
+        _livePreviewCts?.Dispose();
+        _livePreviewCts = null;
+
+        // The video HWND must be detached on the dispatcher thread.
+        var video = _previewVideoView;
+        _previewVideoView = null;
+        if (video is not null)
+        {
+            try { video.MediaPlayer = null; } catch { }
+            if (video.Parent is Border host && ReferenceEquals(host.Child, video))
+                host.Child = null;
+        }
+
+        var preview = _previewPlayback;
         _previewPlayback = null;
+        if (preview is null) return Task.CompletedTask;
+
+        // Blocking native VLC shutdown was freezing the entire WPF window
+        // whenever the preview's decoder stalled. Detach first and release it
+        // in the background; still await briefly before starting fullscreen.
+        return Task.Run(async () =>
+        {
+            await _previewPlaybackLock.WaitAsync();
+            try
+            {
+                try { preview.Stop(); } catch { }
+                try { preview.Dispose(); } catch { }
+            }
+            finally { _previewPlaybackLock.Release(); }
+        });
     }
 
     private IReadOnlyList<StreamItem> Items(string kind)
@@ -3460,6 +3947,14 @@ public partial class MainWindow : Window
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (OverlayHost.Visibility == Visibility.Visible) return;
+        if (e.Key == Key.F && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) &&
+            _activeBrowserSearch is { IsVisible: true } finder)
+        {
+            finder.Focus();
+            finder.SelectAll();
+            e.Handled = true;
+            return;
+        }
         if (e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down)) return;
 
         var focused = Keyboard.FocusedElement as DependencyObject;
@@ -3496,21 +3991,59 @@ public partial class MainWindow : Window
     {
         if (list.Items.Count == 0) return;
         if (list.SelectedIndex < 0) list.SelectedIndex = 0;
+
+        // For virtualized categories the desired item may not have been
+        // realized yet. Scroll it into view before resolving its container.
+        var selected = list.SelectedItem;
+        if (selected is null) { list.Focus(); return; }
+        list.ScrollIntoView(selected);
         list.UpdateLayout();
-        if (list.ItemContainerGenerator.ContainerFromIndex(list.SelectedIndex) is ListBoxItem item)
+        var container = list.ItemContainerGenerator.ContainerFromItem(selected) as ListBoxItem;
+        if (container is not null)
         {
-            item.IsSelected = true;
-            item.Focus();
-            item.BringIntoView();
+            container.Focus();
+            container.BringIntoView();
+            return;
         }
-        else
-        {
-            list.Focus();
-        }
+
+        list.Focus();
+        _ = list.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,
+            new Action(() =>
+            {
+                if (!list.IsLoaded || list.SelectedItem != selected) return;
+                list.ScrollIntoView(selected);
+                if (list.ItemContainerGenerator.ContainerFromItem(selected) is ListBoxItem realized)
+                    realized.Focus();
+            }));
     }
 
     private bool MoveRemoteFocus(FrameworkElement current, Key key)
     {
+        // Fast path: poster cards are direct children of the same WrapPanel.
+        // Scanning the entire WPF visual tree on EVERY arrow press was an
+        // O(all-rendered-posters) bottleneck and caused poor TV-remote control.
+        if (current is Button poster && poster.Tag is string cardKey &&
+            cardKey.Contains(':') && poster.Parent is WrapPanel panel)
+        {
+            var at = panel.Children.IndexOf(poster);
+            if (at >= 0)
+            {
+                var columns = Math.Max(1, (int)Math.Floor(
+                    Math.Max(panel.ActualWidth, panel.ItemWidth) /
+                    Math.Max(1, panel.ItemWidth)));
+                var radius = Math.Max(12, columns * 3 + 2);
+                var nearby = new List<FrameworkElement>();
+                for (var i = Math.Max(0, at - radius);
+                     i <= Math.Min(panel.Children.Count - 1, at + radius); i++)
+                {
+                    if (i != at && panel.Children[i] is Button neighborButton)
+                        nearby.Add(neighborButton);
+                }
+                if (TryFindDirectionalTarget(poster, nearby, key, out var neighbor))
+                    return FocusNavigationTarget(neighbor);
+            }
+        }
+
         var candidates = EnumerateNavigationTargets(RootGrid)
             .Where(target => !ReferenceEquals(target, current))
             .ToList();
