@@ -150,6 +150,18 @@
                 Panel.ZIndex="40"
                 Visibility="Collapsed"/>
 
+        <Button x:Name="CopyPlaybackReportButton"
+                Content="نسخ تقرير التشغيل"
+                Click="CopyPlaybackReport_Click"
+                Style="{StaticResource PlayerPillButton}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="0,205,0,0"
+                MinWidth="170"
+                Height="44"
+                Panel.ZIndex="40"
+                Visibility="Collapsed"/>
+
         <StackPanel x:Name="PersistentTopControls"
                     Orientation="Horizontal"
                     HorizontalAlignment="Left"
