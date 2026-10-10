@@ -130,6 +130,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         // wait on the WPF dispatcher, especially while starting/stopping media.
         _player.Playing += (_, _) => DispatchPlayerEvent(() =>
         {
+            TrackPlayback("محرك VLC بدأ التشغيل");
             _startedPlaying = true;
             _userPaused = false;
             _lastProgressAt = DateTimeOffset.UtcNow;
@@ -141,7 +142,10 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             if (HasVideoOutput()) MarkPlaybackReady();
         });
         _player.EncounteredError += (_, _) => DispatchPlayerEvent(() =>
-            TryRecoverPlayback("تعذر التشغيل — تجربة مسار بديل…"));
+        {
+            TrackPlayback("حدث خطأ من محرك VLC");
+            TryRecoverPlayback("تعذر التشغيل — تجربة مسار بديل…");
+        });
         _player.EndReached += (_, _) => DispatchPlayerEvent(HandleEnded);
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -216,12 +220,40 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         await Task.WhenAny(release, Task.Delay(2500));
     }
 
+    private void TrackPlayback(string eventText)
+    {
+        // No URLs, hostnames, stream IDs, credentials, device IDs or tokens.
+        // Reports can be safely copied to support without revealing accounts.
+        _playbackDiagnostic.Add(DateTime.Now.ToString("HH:mm:ss") + " | " + eventText);
+        if (_playbackDiagnostic.Count > 25) _playbackDiagnostic.RemoveAt(0);
+    }
+
+    private void CopyPlaybackReport_Click(object sender, RoutedEventArgs e)
+    {
+        var report = "BLOFY PLAYER Windows • playback diagnosis" + Environment.NewLine +
+            "Kind: " + (_playlist.Count > 0 ? "Live" : "VOD") + Environment.NewLine +
+            "Output detected: " + _videoOutputSeen + Environment.NewLine +
+            "Playing reported: " + _startedPlaying + Environment.NewLine +
+            "User paused: " + _userPaused + Environment.NewLine +
+            "Alternatives attempted: " + (_automaticRecoveries + 1) + Environment.NewLine +
+            "Events:" + Environment.NewLine +
+            string.Join(Environment.NewLine, _playbackDiagnostic);
+        try
+        {
+            Clipboard.SetText(report);
+            EpgText.Text = "تم نسخ تقرير التشخيص بدون روابط أو كلمات مرور.";
+        }
+        catch { EpgText.Text = "تعذر نسخ التقرير. جرّب مرة أخرى."; }
+        ShowHudBriefly();
+    }
+
     private void PlayCurrentCandidate(long preservePosition = 0)
     {
         if (_recoveryUrls.Count == 0)
         {
             LoadingBadge.Visibility = Visibility.Collapsed;
             RetryPlaybackButton.Visibility = Visibility.Collapsed;
+            CopyPlaybackReportButton.Visibility = Visibility.Visible;
             PlaybackFailureShade.Visibility = Visibility.Visible;
             EpgText.Text = "لا يوجد رابط تشغيل صالح";
             ShowHudBriefly();
@@ -240,6 +272,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
 
         LoadingText.Text = _automaticRecoveries > 0 ? "إعادة الاتصال…" : "جاري التشغيل…";
+        TrackPlayback("محاولة " + (_automaticRecoveries + 1) + " • " +
+            uri.Scheme + " • صيغة " +
+            (Path.GetExtension(uri.AbsolutePath).TrimStart('.') is { Length: > 0 } ext ? ext : "غير معروفة"));
         _playbackFailed = false;
         RetryPlaybackButton.Visibility = Visibility.Collapsed;
         PlaybackFailureShade.Visibility = Visibility.Collapsed;
@@ -332,16 +367,19 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         var maxRetries = Math.Min(2, Math.Max(1, _recoveryUrls.Count * 2) - 1);
         if (_automaticRecoveries >= maxRetries || (!haveNextUrl && !haveAlternateAgent))
         {
+            TrackPlayback("فشل التشغيل بعد انتهاء البدائل • " + message);
             _playbackFailed = true;
             LoadingBadge.Visibility = Visibility.Collapsed;
             PlaybackFailureShade.Visibility = Visibility.Visible;
             EpgText.Text = "تعذر فتح المحتوى. جرّب إعادة المحاولة أو اختر محتوى آخر.";
             RetryPlaybackButton.Visibility = Visibility.Visible;
+            CopyPlaybackReportButton.Visibility = Visibility.Visible;
             ShowHudBriefly();
             RetryPlaybackButton.Focus();
             return;
         }
 
+        TrackPlayback("تجربة رابط بديل • " + message);
         var preserve = Math.Max(_player.Time, _pendingRecoveryResume);
         _automaticRecoveries++;
         if (haveNextUrl) _recoveryIndex++;
@@ -357,6 +395,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private void RetryPlayback_Click(object sender, RoutedEventArgs e)
     {
         if (_disposed || _recoveryUrls.Count == 0) return;
+        CopyPlaybackReportButton.Visibility = Visibility.Collapsed;
+        TrackPlayback("إعادة المحاولة يدويًا");
         _pendingRecoveryResume = Math.Max(_pendingRecoveryResume, _player.Time);
         _resumeApplied = false;
         _recoveryIndex = 0;
@@ -400,8 +440,12 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void MarkPlaybackReady()
     {
+        if (!_videoOutputSeen)
+            TrackPlayback("ظهرت الصورة • " +
+                (DateTimeOffset.UtcNow - _playStartedAt).TotalSeconds.ToString("F1") + " ثانية");
         _videoOutputSeen = true;
         _lastProgressAt = DateTimeOffset.UtcNow;
+        CopyPlaybackReportButton.Visibility = Visibility.Collapsed;
         LoadingBadge.Visibility = Visibility.Collapsed;
         RetryPlaybackButton.Visibility = Visibility.Collapsed;
         PlaybackFailureShade.Visibility = Visibility.Collapsed;
@@ -1052,6 +1096,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         new Button[]
         {
             PersistentBackButton,
+            CopyPlaybackReportButton,
             PersistentPlayPauseButton,
             PersistentFullscreenButton,
             ChannelListButton,
