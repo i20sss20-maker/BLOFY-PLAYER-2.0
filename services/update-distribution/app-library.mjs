@@ -1335,21 +1335,22 @@ export async function recordDownloadCompletion(key) {
 }
 
 export async function getCompletedDownloadStats() {
-  // Server-verified complete file transfers, not link clicks, installations or unique users.
-  // No user identifiers are stored. Report in the same timezone as the daily metrics table.
-  const [meta, totals, daily] = await Promise.all([
-    pool.query('select started_at from blofy_download_metrics_meta where id=1'),
-    pool.query(`select coalesce(sum(completed_count),0)::text as total,
+  // Clean-series only: the legacy 'blofy' key includes older scripted/probe traffic.
+  // A separate key starts a non-backfilled series when this release is deployed.
+  // Counts are successful full server deliveries, not installations or unique humans.
+  const [totals, daily] = await Promise.all([
+    pool.query(`select min(day)::text as first_day,
+      coalesce(sum(completed_count),0)::text as total,
       coalesce(sum(completed_count) filter (where day=(now() at time zone 'Asia/Riyadh')::date),0)::text as today,
       coalesce(sum(completed_count) filter (where day>(now() at time zone 'Asia/Riyadh')::date-7),0)::text as last_seven
-      from blofy_download_completions where key='blofy'`),
+      from blofy_download_completions where key='blofy-verified'`),
     pool.query(`select to_char(day,'YYYY-MM-DD') as date, completed_count::text as count
-      from blofy_download_completions where key='blofy'
+      from blofy_download_completions where key='blofy-verified'
       order by day desc limit 30`)
   ]);
   const counts = totals.rows[0] || {};
   return {
-    startedAt: meta.rows[0]?.started_at ? new Date(meta.rows[0].started_at).toISOString() : null,
+    startedAt: counts.first_day ? counts.first_day + 'T00:00:00+03:00' : null,
     total: Number(counts.total || 0),
     today: Number(counts.today || 0),
     lastSevenDays: Number(counts.last_seven || 0),
