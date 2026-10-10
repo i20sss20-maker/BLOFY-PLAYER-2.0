@@ -275,7 +275,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         LoadingText.Text = _automaticRecoveries > 0 ? "إعادة الاتصال…" : "جاري التشغيل…";
         TrackPlayback("محاولة " + (_automaticRecoveries + 1) + " • " +
             uri.Scheme + " • صيغة " +
-            (Path.GetExtension(uri.AbsolutePath).TrimStart('.') is { Length: > 0 } ext ? ext : "غير معروفة"));
+            (System.IO.Path.GetExtension(uri.AbsolutePath).TrimStart('.') is { Length: > 0 } ext ? ext : "غير معروفة"));
         _playbackFailed = false;
         RetryPlaybackButton.Visibility = Visibility.Collapsed;
         PlaybackFailureShade.Visibility = Visibility.Collapsed;
