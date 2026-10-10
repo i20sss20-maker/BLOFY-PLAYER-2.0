@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { initReleaseStore, getActiveRelease } from './release-store.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
 import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload, openRemoteApk } from './app-library.mjs';
+import { appDownloadAction } from './app-download-policy.mjs';
 import { observeDownloadCompletion } from './download-metrics.mjs';
 import { recordDownloadCompletion } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
@@ -385,6 +386,7 @@ function renderAppLibrary(apps, variants = [], rootUrl = '') {
     const detailsId = `details-${app.slug}`;
     const updated = formatPublicDate(app.versionUpdatedAt || app.updatedAt);
     const appVariants = variantsBySlug.get(app.slug) || [];
+    const appAction = appDownloadAction(app);
     const stableDownloadUrl = `${String(rootUrl || '').replace(/\/$/, '')}/d/${encodeURIComponent(app.slug)}`;
     const variantButtons = appVariants.length > 1
       ? `<div class="variant-options"><strong>نسخ التحميل</strong>${appVariants.map(variant => {
@@ -400,7 +402,9 @@ function renderAppLibrary(apps, variants = [], rootUrl = '') {
         <span class="device-tag">${escapeHtml(meta)}</span>
       </div>
       <div class="app-actions">
-        <a class="app-download" href="/download/apps/${encodeURIComponent(app.slug)}">تحميل APK ↓</a>
+        ${appAction.kind === 'unavailable'
+          ? '<span class="app-more" role="status">رابط التحميل يحتاج تحديثًا</span>'
+          : `<a class="app-download" href="/download/apps/${encodeURIComponent(app.slug)}">${appAction.kind === 'official' ? 'فتح المصدر الرسمي ↗' : 'تحميل APK ↓'}</a>`}
         <button class="app-more" type="button" data-details-toggle data-default-label="${appVariants.length > 1 ? 'نسخ / تفاصيل' : 'تفاصيل'}" aria-expanded="false" aria-controls="${detailsId}">${appVariants.length > 1 ? 'نسخ / تفاصيل' : 'تفاصيل'}</button>
       </div>
       <div class="app-details" id="${detailsId}" hidden>
@@ -410,7 +414,7 @@ function renderAppLibrary(apps, variants = [], rootUrl = '') {
         ${app.apkSizeBytes ? `<span><b>الحجم</b>${escapeHtml(formatApkSize(app.apkSizeBytes))}</span>` : ''}
         <span><b>الأجهزة</b>${escapeHtml(app.devices)}</span>
         ${updated ? `<span><b>آخر تحديث</b>${escapeHtml(updated)}</span>` : ''}
-        <div class="stable-download-link"><strong>رابط مباشر للـ Downloader</strong><a href="${escapeHtml(stableDownloadUrl)}">${escapeHtml(stableDownloadUrl)}</a><button class="copy-link" type="button" data-copy-url="${escapeHtml(stableDownloadUrl)}">نسخ الرابط</button></div>
+${appAction.kind === 'unavailable' ? '<div class="stable-download-link"><strong>لا يوجد رابط تحميل صالح حاليًا؛ تواصل مع الدعم.</strong></div>' : `<div class="stable-download-link"><strong>${appAction.kind === 'official' ? 'رابط المصدر الرسمي' : 'رابط مباشر للـ Downloader'}</strong><a href="${escapeHtml(stableDownloadUrl)}">${escapeHtml(stableDownloadUrl)}</a><button class="copy-link" type="button" data-copy-url="${escapeHtml(stableDownloadUrl)}">نسخ الرابط</button></div>`}
         ${variantButtons}
       </div>
     </article>`;
@@ -894,6 +898,17 @@ const server = http.createServer(async (req, res) => {
     if (appMatch) {
       const app = await getApp(decodeURIComponent(appMatch[1]));
       if (!app) return sendJson(req, res, 404, { ok: false, error: 'app_not_found' });
+      const action = appDownloadAction(app);
+      if (action.kind === 'unavailable') {
+        return sendJson(req, res, 503, { ok: false, error: 'app_download_source_unavailable' });
+      }
+      if (action.kind === 'official') {
+        if (method === 'GET') {
+          recordDownload(`app:${app.slug}`).catch(error => console.error('Official app link metric failed:', error?.message || error));
+        }
+        res.writeHead(302, { ...securityHeaders, location: action.url, 'cache-control': 'no-store, max-age=0' });
+        return res.end();
+      }
       if (method === 'GET') {
         recordDownload(`app:${app.slug}`).catch(error => console.error('App download stat failed:', error?.message || error));
       }

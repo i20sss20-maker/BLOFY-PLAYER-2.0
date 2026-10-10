@@ -3,6 +3,6 @@ WORKDIR /app
 ENV PUBLIC_ADMIN_PREFIX=/releases-admin
 COPY package.json ./
 RUN apk add --no-cache unzip && npm install --omit=dev
-COPY server.mjs admin-panel.mjs release-store.mjs app-library.mjs download-metrics.mjs public-site-redirect.mjs public-search-pages.mjs ./
+COPY server.mjs admin-panel.mjs release-store.mjs app-library.mjs download-metrics.mjs public-site-redirect.mjs public-search-pages.mjs app-download-policy.mjs ./
 EXPOSE 3000
 CMD ["npm","start"]
