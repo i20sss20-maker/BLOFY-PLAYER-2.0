@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises';
 const files = new Map([
   ['/privacy',['privacy.html','text/html; charset=utf-8']],
   ['/delete-account',['privacy.html','text/html; charset=utf-8']],
-  ['/privacy-actions.js',['privacy-actions.js','text/javascript; charset=utf-8']]
+  ['/privacy-actions.js',['privacy-actions.js','text/javascript; charset=utf-8']],
+  ['/public-analytics.js',['public-analytics.js','text/javascript; charset=utf-8']]
 ]);
 export async function servePrivacyPage(req,res,url) {
   if (!files.has(url.pathname) || !['GET','HEAD'].includes(req.method)) return false;
