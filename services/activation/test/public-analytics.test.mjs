@@ -14,7 +14,7 @@ test('GA4 is opt-in only on public pages and never collects device form details'
   assert.doesNotMatch(client, /'\/connect'/);
   assert.match(client, /if \(choice === 'accepted'\) startMeasurement\(\)/);
   assert.match(client, /data-ga-reject/);
-  assert.match(client, /page_location: 'https:\/\/blofyplayer\.com' \+ pagePath/);
+  assert.match(client, /page_location: 'https:\/\/blofyplayer\.com' \+ pagePath \+ campaignQuery\(\)/);
   assert.doesNotMatch(client, /deviceId|activationCode|password|username/);
   assert.match(client, /google_play_click|downloads_page_click/);
 });
