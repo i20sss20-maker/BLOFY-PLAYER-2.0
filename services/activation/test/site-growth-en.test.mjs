@@ -55,5 +55,5 @@ test('English page is served as a public HTML response with GA opt-in and indexe
   const home = read('../web/index.html');
   const downloads = read('../src/public-downloads.mjs');
   assert.match(home, /href="\/en" lang="en"/);
-  assert.match(downloads, /href=\\"\/en\\" lang=\\"en\\"/);
+  assert.match(downloads, /href="\/en" lang="en"/);
 });
