@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - services/activation/web/**
+      - services/activation/web/en.html
       - services/activation/src/public-downloads.mjs
       - services/activation/src/admin-console-hook.mjs
       - services/activation/src/server.mjs
@@ -124,6 +125,9 @@ jobs:
           fi
           grep -Fq '"@type":"SoftwareApplication"' "$tmp/root.html"
           check_html "https://blofyplayer.com/downloads" "BLOFY|تحميل" "$tmp/downloads.html"
+          check_html "https://blofyplayer.com/en" "BLOFY|playlists" "$tmp/en.html"
+          grep -Fq 'rel="canonical" href="https://blofyplayer.com/en"' "$tmp/en.html"
+          grep -Fq 'hreflang="en"' "$tmp/en.html"
           check_html "https://blofyplayer.com/guide" "BLOFY|دليل التثبيت" "$tmp/guide.html"
           check_html "https://blofyplayer.com/support" "BLOFY|تجديد التفعيل" "$tmp/support.html"
           grep -Fq 'rel="canonical" href="https://blofyplayer.com/support"' "$tmp/support.html"
