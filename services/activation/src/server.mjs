@@ -252,7 +252,11 @@ function hardenPortalCredentialInputs(html) {
 
 async function servePortal(res, connectOnly = false) {
   let source = await readFile(new URL('../web/index.html', import.meta.url), 'utf8');
-  if (connectOnly) source = source.replaceAll('href="/"', 'href="/connect"');
+  if (connectOnly) {
+    source = source.replaceAll('href="/"', 'href="/connect"');
+    // The device-pairing form is not a public search landing page.
+    source = source.replace('</head>', '  <meta name="robots" content="noindex,follow" />\n</head>');
+  }
   const file = hardenPortalCredentialInputs(source);
   res.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
@@ -261,6 +265,7 @@ async function servePortal(res, connectOnly = false) {
     'x-content-type-options': 'nosniff',
     'x-frame-options': 'DENY',
     'referrer-policy': 'no-referrer',
+    ...(connectOnly ? { 'x-robots-tag': 'noindex,follow' } : {}),
     'permissions-policy': 'camera=(), microphone=(), geolocation=()',
     'strict-transport-security': 'max-age=31536000',
     'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
