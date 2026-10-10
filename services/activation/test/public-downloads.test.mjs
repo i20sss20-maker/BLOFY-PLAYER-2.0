@@ -7,13 +7,14 @@ import { renderPublicDownloads, servePublicDownloads } from '../src/public-downl
 const release = { versionCode: 2000051, versionName: '2.0.0-rc07.40', isPrimary: true,
   channel: 'testing', downloadUrl: 'https://example.com/blofy-40.apk', releaseNotes: 'تحديث آمن' };
 
-test('complete page and APK links exist in initial HTML with no scripts or loading placeholder', () => {
+test('complete page and APK links exist in initial HTML without requiring scripts or loading placeholders', () => {
   const html = renderPublicDownloads([release]);
   assert.match(html, /data-server-rendered="true"/);
   assert.ok(html.includes('href="https://example.com/blofy-40.apk"'));
   assert.ok(html.includes('href="/download/latest.apk"'));
   assert.match(html, /★ الإصدار الأساسي/);
-  assert.doesNotMatch(html, /<script\b|experience\.js|release-manager\.js|جارٍ قراءة|onclick\s*=/i);
+  assert.match(html, /<script src="\/public-analytics\.js" defer><\/script>/);
+  assert.doesNotMatch(html, /experience\.js|release-manager\.js|جارٍ قراءة|onclick\s*=/i);
   for (const part of ['tv', 'phone', 'computer']) {
     assert.ok(html.includes(`href="#install-${part}"`));
     assert.ok(html.includes(`id="install-${part}"`));
@@ -53,7 +54,7 @@ test('escapes stored text and URL attributes; never turns notes into executable 
   assert.ok(html.includes('&lt;img onerror=&quot;evil&quot;&gt;'));
   assert.ok(html.includes('&lt;script&gt;evil()&lt;/script&gt;'));
   assert.ok(html.includes('href="https://example.com/app.apk?a=1&amp;b=2"'));
-  assert.doesNotMatch(html, /<script\b|<img onerror/);
+  assert.doesNotMatch(html, /<img onerror|<script>evil\(\)<\/script>/);
 });
 
 for (const url of ['http://example.com/a.apk', 'javascript:alert(1)', 'https://user:pass@example.com/a.apk', 'https://example.com/a.apk#part', 'https://example.com/a.html', 'https://example.com/a.apk\n']) {
@@ -68,7 +69,7 @@ test('empty and invalid catalogue does not show an endless loading state', () =>
   for (const items of [[], null, {}, [null, {}]]) {
     const html = renderPublicDownloads(items);
     assert.match(html, /لا توجد إصدارات/);
-    assert.doesNotMatch(html, /جارٍ قراءة|<script\b/);
+    assert.doesNotMatch(html, /جارٍ قراءة|<script>evil\(\)<\/script>/);
   }
 });
 
@@ -93,7 +94,7 @@ test('HTTP GET/HEAD, aliases, live catalogue changes and bounded human-readable 
     for (const path of ['/releases', '/releases/', '/downloads', '/downloads/?reload=1']) {
       const r = await fetch(base + path, { headers: { 'user-agent': 'Mozilla/5.0 Chrome/59.0 Downloader' } });
       assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /charset=utf-8/);
-      assert.match(r.headers.get('cache-control'), /no-store/); assert.match(r.headers.get('content-security-policy'), /script-src 'none'/);
+      assert.match(r.headers.get('cache-control'), /no-store/); assert.match(r.headers.get('content-security-policy'), /www\.googletagmanager\.com/);
       assert.ok((await r.text()).includes(release.downloadUrl));
     }
     let r = await fetch(base + '/releases', { method: 'HEAD' });
@@ -104,7 +105,7 @@ test('HTTP GET/HEAD, aliases, live catalogue changes and bounded human-readable 
     for (mode of ['error', 'hang']) {
       r = await fetch(base + '/releases'); assert.equal(r.status, 503); assert.equal(r.headers.get('retry-after'), '15');
       const html = await r.text(); assert.match(html, /تعذّر قراءة الإصدارات/);
-      assert.doesNotMatch(html, /private-database-detail|جارٍ قراءة|<script\b/);
+      assert.doesNotMatch(html, /private-database-detail|جارٍ قراءة|<script>evil\(\)<\/script>/);
     }
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });

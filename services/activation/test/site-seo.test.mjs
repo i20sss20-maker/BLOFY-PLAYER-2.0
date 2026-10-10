@@ -37,7 +37,9 @@ test('downloads is a distinct Arabic-language landing page with official store l
   assert.match(downloads, /<h1 id="download-title">تحميل BLOFY PLAYER/);
   assert.match(downloads, /play\.google\.com\/store\/apps\/details\?id=tv\.blofy\.player\.v2/);
   // Keep this page static and fast for search engines and low-resource Android TV WebViews.
-  assert.doesNotMatch(downloads, /<script\b/i);
+  assert.match(downloads, /<script src="\/public-analytics\.js" defer><\/script>/i);
+  // Content, links, and SEO metadata are still present without executing JavaScript.
+  assert.doesNotMatch(downloads, /<script\b(?![^>]*src="\/public-analytics\.js")/i);
   assert.doesNotMatch(downloads, /<meta name="keywords"/);
 });
 
@@ -58,7 +60,7 @@ test('sitemap lists canonical public pages, not the duplicate device sign-in rou
   assert.doesNotMatch(sitemap, /https:\/\/blofyplayer\.com\/connect/);
 });
 
-test('public downloads FAQ answers real installation, activation and renewal questions without scripts', () => {
+test('public downloads FAQ answers installation, activation and renewal questions without depending on scripts', () => {
   assert.match(downloads, /<section class="section install-section" id="faq"/);
   assert.match(downloads, /كيف أحمل BLOFY PLAYER على التلفزيون/);
   assert.match(downloads, /كيف أربط الجهاز وأفعّل التطبيق/);
@@ -66,7 +68,9 @@ test('public downloads FAQ answers real installation, activation and renewal que
   assert.match(downloads, /wa\.me\/966568941484/);
   assert.match(downloads, /هل يشمل تنزيل التطبيق قنوات أو اشتراك بث/);
   assert.match(downloads, /<a href="\/connect">بوابة ربط الجهاز<\/a>/);
-  assert.doesNotMatch(downloads, /<script\b/i);
+  assert.match(downloads, /<script src="\/public-analytics\.js" defer><\/script>/i);
+  // Content, links, and SEO metadata are still present without executing JavaScript.
+  assert.doesNotMatch(downloads, /<script\b(?![^>]*src="\/public-analytics\.js")/i);
 });
 
 test('official guide is a crawlable Arabic help page linked from both landing pages', () => {
@@ -182,8 +186,10 @@ test('home has one public heading and keeps the logged-in dashboard style', () =
   assert.doesNotMatch(home, /\.dashboard-title-wrap h1 \{/);
 });
 
-test('downloads page remains script-free and has a genuine WhatsApp share link', () => {
-  assert.doesNotMatch(downloads, /<script\b/i);
+test('downloads page remains server-rendered and has a genuine WhatsApp share link', () => {
+  assert.match(downloads, /<script src="\/public-analytics\.js" defer><\/script>/i);
+  // Content, links, and SEO metadata are still present without executing JavaScript.
+  assert.doesNotMatch(downloads, /<script\b(?![^>]*src="\/public-analytics\.js")/i);
   const shareMatch = downloads.match(/<a class="btn" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="مشاركة BLOFY PLAYER على واتساب">/);
   assert.ok(shareMatch);
   const link = new URL(shareMatch[1]);

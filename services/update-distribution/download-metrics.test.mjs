@@ -65,3 +65,14 @@ test('a real streamed HTTP response records a complete file once, while HEAD rec
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+test('known scripted and scanner user agents cannot inflate completed APK delivery counts', async () => {
+  for (const agent of ['curl/8.5.0', 'python-requests/2.31.0', 'SomeBot/1.0', 'Googlebot/2.1']) {
+    const x=transfer({req:{method:'GET',headers:{'user-agent':agent}}});
+    x.body.emit('data',Buffer.from('APK!'));x.body.emit('end');x.finish();
+    await settled();assert.equal(x.count(),0,agent);
+  }
+  const normal=transfer({req:{method:'GET',headers:{'user-agent':'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36'}}});
+  normal.body.emit('data',Buffer.from('APK!'));normal.body.emit('end');normal.finish();
+  await settled();assert.equal(normal.count(),1);
+});

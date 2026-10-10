@@ -11,6 +11,8 @@ test('GA4 is opt-in only on public pages and never collects device form details'
   assert.match(client, /G-2DYE5WB8BT/);
   assert.match(client, /'\/guide'/);
   assert.match(client, /'\/support'/);
+  assert.match(client, /'\/downloads'/);
+  assert.match(client, /apk_download_click/);
   assert.doesNotMatch(client, /'\/connect'/);
   assert.match(client, /if \(choice === 'accepted'\) startMeasurement\(\)/);
   assert.match(client, /data-ga-reject/);
@@ -27,13 +29,13 @@ test('tag injection is idempotent, has required GA endpoints in CSP', () => {
   assert.match(PUBLIC_ANALYTICS_CSP, /www\.google-analytics\.com/);
 });
 
-test('private connect screen and script-free download page remain unchanged', () => {
+test('private connect screen stays protected and downloads render before optional consent script', () => {
   const server = read('../src/server.mjs');
   assert.match(server, /connectOnly \? source : withPublicAnalytics\(source\)/);
   assert.match(server, /connectOnly \? \{/);
-  assert.doesNotMatch(renderPublicDownloads([]), /<script\b/i);
+  assert.match(renderPublicDownloads([]), /<script src="\/public-analytics\.js" defer><\/script>/);
   const downloadServer = read('../src/public-downloads.mjs');
-  assert.match(downloadServer, /script-src 'none'/);
+  assert.match(downloadServer, /PUBLIC_ANALYTICS_CSP/);
 });
 
 test('analytics disclosure is published in public privacy policy', () => {

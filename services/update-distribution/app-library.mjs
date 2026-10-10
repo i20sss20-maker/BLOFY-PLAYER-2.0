@@ -1334,6 +1334,30 @@ export async function recordDownloadCompletion(key) {
   await recordCompletedDownload(pool, key);
 }
 
+export async function getCompletedDownloadStats() {
+  // Clean-series only: the legacy 'blofy' key includes older scripted/probe traffic.
+  // A separate key starts a non-backfilled series when this release is deployed.
+  // Counts are successful full server deliveries, not installations or unique humans.
+  const [totals, daily] = await Promise.all([
+    pool.query(`select min(day)::text as first_day,
+      coalesce(sum(completed_count),0)::text as total,
+      coalesce(sum(completed_count) filter (where day=(now() at time zone 'Asia/Riyadh')::date),0)::text as today,
+      coalesce(sum(completed_count) filter (where day>(now() at time zone 'Asia/Riyadh')::date-7),0)::text as last_seven
+      from blofy_download_completions where key='blofy-verified'`),
+    pool.query(`select to_char(day,'YYYY-MM-DD') as date, completed_count::text as count
+      from blofy_download_completions where key='blofy-verified'
+      order by day desc limit 30`)
+  ]);
+  const counts = totals.rows[0] || {};
+  return {
+    startedAt: counts.first_day ? counts.first_day + 'T00:00:00+03:00' : null,
+    total: Number(counts.total || 0),
+    today: Number(counts.today || 0),
+    lastSevenDays: Number(counts.last_seven || 0),
+    daily: daily.rows.map(row => ({date:row.date, completed:Number(row.count || 0)}))
+  };
+}
+
 export async function getDownloadStats() {
   const result = await pool.query(
     'select key,download_count,last_download_at from blofy_download_stats order by download_count desc,key asc limit 500'

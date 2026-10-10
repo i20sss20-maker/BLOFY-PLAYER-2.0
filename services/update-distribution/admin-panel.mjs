@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { getActiveRelease, listReleases, upsertRelease, promoteRelease, activateRelease, deleteRelease } from './release-store.mjs';
-import { listApps, upsertApp, deleteApp, inspectRemoteApk, refreshManagedApps, getAppUpdateState, getDownloadStats, getAppHealthState, refreshAppHealth, rollbackApp, listAppAudit, listCatalogBackups, restoreCatalogBackup } from './app-library.mjs';
+import { listApps, upsertApp, deleteApp, inspectRemoteApk, refreshManagedApps, getAppUpdateState, getDownloadStats, getCompletedDownloadStats, getAppHealthState, refreshAppHealth, rollbackApp, listAppAudit, listCatalogBackups, restoreCatalogBackup } from './app-library.mjs';
 
 const ADMIN_USER = 'admin';
 const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || '');
@@ -265,10 +265,11 @@ input,textarea,select,button,.btn{min-height:44px}
 export async function renderAdmin(message = '') {
   const current = getActiveRelease();
   const releases = listReleases();
-  const [apps, updateState, downloadStats, healthState, auditEntries, backups] = await Promise.all([
+  const [apps, updateState, downloadStats, completedDownloads, healthState, auditEntries, backups] = await Promise.all([
     listApps(true),
     getAppUpdateState(),
     getDownloadStats(),
+    getCompletedDownloadStats(),
     getAppHealthState(),
     listAppAudit(30),
     listCatalogBackups(10)
@@ -311,7 +312,7 @@ export async function renderAdmin(message = '') {
       }).join('')
     : '<div class="library-note">عداد التحميلات بدأ من الآن. أول ما تبدأ التحميلات الفعلية تظهر التطبيقات الأكثر تحميلًا هنا.</div>';
 
-  const analyticsBlock = `<section class="card"><span class="section-label">DOWNLOAD & LINK HEALTH</span><div class="top"><div><h2>الإحصائيات وصحة الروابط</h2><p class="muted">هذه أعداد طلبات التنزيل، وتشمل الإعادة والمحاولات غير المكتملة. إحصاء الملفات الكاملة يظهر في لوحة الأجهزة.</p><div class="row" style="margin-top:10px"><span class="pill">الإجمالي ${formatCount(downloadStats.total)}</span><span class="pill">BLOFY ${formatCount(downloadStats.blofyDownloads)}</span><span class="pill">التطبيقات ${formatCount(downloadStats.appDownloads)}</span><span class="pill">روابط سليمة ${formatCount(healthSummary.healthy || 0)}</span>${Number(healthSummary.failed || 0) ? `<span class="pill health-bad">روابط بها مشكلة ${formatCount(healthSummary.failed)}</span>` : ''}<span class="pill">آخر فحص روابط: ${escapeHtml(formatAdminTime(healthState.lastHealthAt))}</span></div></div><div class="row"><form method="post" action="${actionPath('refresh-health')}"><button class="public" type="submit">فحص روابط APK الآن</button></form><form method="post" action="${actionPath('refresh-apps')}"><button type="submit">فحص تحديثات التطبيقات</button></form></div></div><div class="metric-list">${rankedRows}</div></section>`;
+  const analyticsBlock = `<section class="card"><span class="section-label">DOWNLOAD & LINK HEALTH</span><div class="top"><div><h2>الإحصائيات وصحة الروابط</h2><p class="muted">الطلبات ليست تحميلات مكتملة. عداد الملفات الكاملة يسجل فقط اكتمال نقل APK عبر خوادمنا، ويستبعد أدوات الفحص المعروفة؛ وقد يتضمن إعادة تحميل الجهاز نفسه. لا يشمل تثبيت Google Play.</p><div class="row" style="margin-top:10px"><span class="pill health-good">APK مكتمل اليوم ${formatCount(completedDownloads.today)}</span><span class="pill">آخر 7 أيام ${formatCount(completedDownloads.lastSevenDays)}</span><span class="pill">منذ بدء العد ${formatCount(completedDownloads.total)}</span><span class="pill">بدء الرصد: ${escapeHtml(formatAdminTime(completedDownloads.startedAt))}</span></div><div class="row" style="margin-top:10px"><span class="pill">الإجمالي ${formatCount(downloadStats.total)}</span><span class="pill">BLOFY ${formatCount(downloadStats.blofyDownloads)}</span><span class="pill">التطبيقات ${formatCount(downloadStats.appDownloads)}</span><span class="pill">روابط سليمة ${formatCount(healthSummary.healthy || 0)}</span>${Number(healthSummary.failed || 0) ? `<span class="pill health-bad">روابط بها مشكلة ${formatCount(healthSummary.failed)}</span>` : ''}<span class="pill">آخر فحص روابط: ${escapeHtml(formatAdminTime(healthState.lastHealthAt))}</span></div></div><div class="row"><form method="post" action="${actionPath('refresh-health')}"><button class="public" type="submit">فحص روابط APK الآن</button></form><form method="post" action="${actionPath('refresh-apps')}"><button type="submit">فحص تحديثات التطبيقات</button></form></div></div><div class="metric-list">${rankedRows}</div></section>`;
 
   const auditRows = auditEntries.length
     ? auditEntries.map(entry => {

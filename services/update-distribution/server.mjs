@@ -125,7 +125,7 @@ async function streamLocalApk(req, res, filename, downloadName, metricKey) {
   if (req.method === 'HEAD') return res.end();
   const body = createReadStream(filePath, { start, end });
   observeDownloadCompletion({ req, res, body, status, length: String(length), contentRange: headers['content-range'] || '',
-    onComplete: () => recordDownloadCompletion(metricKey),
+    onComplete: () => recordDownloadCompletion(metricKey === 'blofy' ? 'blofy-verified' : metricKey),
     onError: error => console.error('Local APK completion metric failed:', error?.message || error) });
   res.once('close', () => { if (!res.writableFinished) body.destroy(); });
   body.pipe(res);
@@ -272,7 +272,7 @@ async function streamApkDownload(req, res, sourceUrl, filename, metricKey) {
 
   const body = Readable.fromWeb(upstream.body);
   observeDownloadCompletion({ req, res, body, status, length, contentRange,
-    onComplete: () => recordDownloadCompletion(metricKey),
+    onComplete: () => recordDownloadCompletion(metricKey === 'blofy' ? 'blofy-verified' : metricKey),
     onError: error => console.error('APK completion metric failed:', error?.message || error) });
   res.once('close', () => { if (!res.writableFinished) body.destroy(); });
   body.on('error', error => {
@@ -830,7 +830,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(405, { ...securityHeaders, allow: 'GET, HEAD', 'cache-control': 'no-store' });
         return res.end();
       }
-      return await streamLocalApk(req, res, localReleaseMatch[1], localReleaseMatch[1], 'direct-release');
+      return await streamLocalApk(req, res, localReleaseMatch[1], localReleaseMatch[1], 'blofy');
     }
 
     if (pathname === '/admin' || pathname === '/admin/' || pathname === PUBLIC_ADMIN_PREFIX || pathname === `${PUBLIC_ADMIN_PREFIX}/`) {
