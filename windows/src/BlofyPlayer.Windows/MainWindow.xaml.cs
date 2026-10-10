@@ -4019,6 +4019,31 @@ public partial class MainWindow : Window
 
     private bool MoveRemoteFocus(FrameworkElement current, Key key)
     {
+        // Fast path: poster cards are direct children of the same WrapPanel.
+        // Scanning the entire WPF visual tree on EVERY arrow press was an
+        // O(all-rendered-posters) bottleneck and caused poor TV-remote control.
+        if (current is Button poster && poster.Tag is string cardKey &&
+            cardKey.Contains(':') && poster.Parent is WrapPanel panel)
+        {
+            var at = panel.Children.IndexOf(poster);
+            if (at >= 0)
+            {
+                var columns = Math.Max(1, (int)Math.Floor(
+                    Math.Max(panel.ActualWidth, panel.ItemWidth) /
+                    Math.Max(1, panel.ItemWidth)));
+                var radius = Math.Max(12, columns * 3 + 2);
+                var nearby = new List<FrameworkElement>();
+                for (var i = Math.Max(0, at - radius);
+                     i <= Math.Min(panel.Children.Count - 1, at + radius); i++)
+                {
+                    if (i != at && panel.Children[i] is Button target)
+                        nearby.Add(target);
+                }
+                if (TryFindDirectionalTarget(poster, nearby, key, out var neighbor))
+                    return FocusNavigationTarget(neighbor);
+            }
+        }
+
         var candidates = EnumerateNavigationTargets(RootGrid)
             .Where(target => !ReferenceEquals(target, current))
             .ToList();
