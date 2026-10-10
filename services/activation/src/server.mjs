@@ -314,6 +314,7 @@ function serveSitemap(res) {
   <url><loc>https://blofyplayer.com/</loc></url>
   <url><loc>https://blofyplayer.com/downloads</loc></url>
   <url><loc>https://blofyplayer.com/guide</loc></url>
+  <url><loc>https://blofyplayer.com/support</loc></url>
   <url><loc>https://blofyplayer.com/privacy</loc></url>
   <url><loc>https://blofyplayer.com/status</loc></url>
 </urlset>`;
@@ -702,6 +703,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (req.method === 'GET' && requestUrl.pathname === '/status') return await serveStatusPage(res);
     if (req.method === 'GET' && (requestUrl.pathname === '/guide' || requestUrl.pathname === '/guide/')) return await serveStatusPage(res, 'guide.html');
+    if (req.method === 'GET' && (requestUrl.pathname === '/support' || requestUrl.pathname === '/support/')) return await serveStatusPage(res, 'support.html');
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (serveIndexNowKey(req, res, requestUrl)) return;

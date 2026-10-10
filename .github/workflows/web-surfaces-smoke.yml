@@ -125,6 +125,10 @@ jobs:
           grep -Fq '"@type":"SoftwareApplication"' "$tmp/root.html"
           check_html "https://blofyplayer.com/downloads" "BLOFY|تحميل" "$tmp/downloads.html"
           check_html "https://blofyplayer.com/guide" "BLOFY|دليل التثبيت" "$tmp/guide.html"
+          check_html "https://blofyplayer.com/support" "BLOFY|تجديد التفعيل" "$tmp/support.html"
+          grep -Fq 'rel="canonical" href="https://blofyplayer.com/support"' "$tmp/support.html"
+          grep -Fq 'wa.me/966568941484' "$tmp/support.html"
+          grep -Fq '"@type":"BreadcrumbList"' "$tmp/support.html"
           grep -Fq '"@type":"BreadcrumbList"' "$tmp/guide.html"
           check_html "https://blofyplayer.com/privacy" "BLOFY|الخصوصية" "$tmp/privacy.html"
           check_html "https://blofyplayer.com/status" "BLOFY|حالة الخدمات" "$tmp/status.html"
@@ -144,6 +148,7 @@ jobs:
           grep -Fq "<loc>https://blofyplayer.com/privacy</loc>" "$tmp/sitemap.xml"
           grep -Fq "<loc>https://blofyplayer.com/status</loc>" "$tmp/sitemap.xml"
           grep -Fq "<loc>https://blofyplayer.com/guide</loc>" "$tmp/sitemap.xml"
+          grep -Fq "<loc>https://blofyplayer.com/support</loc>" "$tmp/sitemap.xml"
 
           curl --retry 5 --retry-delay 4 --retry-all-errors --fail --silent --show-error --location --proto '=https' --tlsv1.2             --connect-timeout 8 --max-time 30 "https://blofyplayer.com/site-polish.css" > "$tmp/site-polish.css"
           grep -Fq -- "--blofy-accent" "$tmp/site-polish.css"
