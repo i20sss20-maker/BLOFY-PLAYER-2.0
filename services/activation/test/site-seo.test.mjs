@@ -91,3 +91,40 @@ test('guide appears in the official main domain sitemap', () => {
   assert.match(sitemap, /<loc>https:\/\/blofyplayer\.com\/guide<\/loc>/);
   assert.match(server, /pathname === '\/guide' \|\| requestUrl\.pathname === '\/guide\/'/);
 });
+
+test('public home declares accurate Android app metadata without invented price or reviews', () => {
+  const schemas = [...home.matchAll(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/g)].map(m => JSON.parse(m[1]));
+  const app = schemas.find(item => item['@type'] === 'SoftwareApplication');
+  assert.ok(app, 'Missing Android SoftwareApplication structured metadata');
+  assert.equal(app.name, 'BLOFY PLAYER');
+  assert.equal(app.operatingSystem, 'Android');
+  assert.equal(app.applicationCategory, 'MultimediaApplication');
+  assert.equal(app.url, 'https://blofyplayer.com/');
+  assert.equal(app.downloadUrl, 'https://play.google.com/store/apps/details?id=tv.blofy.player.v2');
+  assert.match(app.description, /لا يتضمن قنوات أو اشتراكات بث/);
+  for (const speculative of ['aggregateRating', 'review', 'offers', 'price', 'ratingValue']) {
+    assert.equal(Object.hasOwn(app, speculative), false, speculative + ' must not be invented');
+  }
+});
+
+test('guide structured breadcrumbs point only to canonical public pages', () => {
+  const guide = readFileSync(new URL('../web/guide.html', import.meta.url), 'utf8');
+  const schemas = [...guide.matchAll(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/g)].map(m => JSON.parse(m[1]));
+  const breadcrumbs = schemas.find(item => item['@type'] === 'BreadcrumbList');
+  assert.ok(breadcrumbs);
+  assert.deepEqual(breadcrumbs.itemListElement.map(item => item.item), [
+    'https://blofyplayer.com/', 'https://blofyplayer.com/guide'
+  ]);
+  assert.deepEqual(breadcrumbs.itemListElement.map(item => item.position), [1, 2]);
+  assert.match(downloads, /<a href="\/guide">دليل التثبيت<\/a>/);
+});
+
+test('pairing form has crawler noindex but home remains indexable', () => {
+  const server = readFileSync(new URL('../src/server.mjs', import.meta.url), 'utf8');
+  const pairingRoute = server.split('async function servePortal(res, connectOnly = false) {')[1]
+    ?.split('async function serveStatusPage(')[0] || '';
+  assert.match(pairingRoute, /if \(connectOnly\) \{/);
+  assert.match(pairingRoute, /content="noindex,follow"/);
+  assert.match(pairingRoute, /connectOnly \? \{ 'x-robots-tag': 'noindex,follow' \} : \{\}/);
+  assert.doesNotMatch(home, /<meta name="robots" content="noindex/);
+});
