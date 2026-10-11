@@ -52,6 +52,12 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private bool _disposed;
     private bool _playbackFailed;
     private int _hudPolling;
+    // WPF input handlers must not synchronously query LibVLC during slow/4K buffering.
+    private long _cachedPlaybackTime;
+    private long _cachedPlaybackLength;
+    private bool _cachedPlaying;
+    private bool _cachedMute;
+    private int _seekRequestGeneration;
     private bool _initializedOnce;
     private bool _userPaused;
     private bool _startedPlaying;
@@ -133,6 +139,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         {
             TrackPlayback("محرك VLC بدأ التشغيل");
             _startedPlaying = true;
+            _cachedPlaying = true;
             _userPaused = false;
             _lastProgressAt = DateTimeOffset.UtcNow;
             ApplyResumeOnce();
@@ -145,6 +152,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _player.EncounteredError += (_, _) => DispatchPlayerEvent(() =>
         {
             TrackPlayback("حدث خطأ من محرك VLC");
+            _cachedPlaying = false;
             TryRecoverPlayback("تعذر التشغيل — تجربة مسار بديل…");
         });
         _player.EndReached += (_, _) => DispatchPlayerEvent(HandleEnded);
@@ -200,7 +208,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         try
         {
             if (_savePosition is not null)
-                await _savePosition(Math.Max(0, _player.Time), Math.Max(0, _player.Length));
+                await _savePosition(Math.Max(0, _cachedPlaybackTime), Math.Max(0, _cachedPlaybackLength));
         }
         catch { }
         try { VideoView.MediaPlayer = null; } catch { }
@@ -286,6 +294,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _videoOutputSeen = false;
         _startedPlaying = false;
         _userPaused = false;
+        _cachedPlaying = false;
+        _cachedPlaybackTime = 0;
+        _cachedPlaybackLength = 0;
 
         if (preservePosition > 0)
         {
@@ -358,7 +369,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         if (_disposed || _playbackFailed || _userPaused) return;
         // Native callbacks from a previous URL may arrive after a quick
         // channel switch. Never replace a currently rendering new stream.
-        if (_player.IsPlaying && HasVideoOutput()) return;
+        if (_cachedPlaying && _videoOutputSeen) return;
 
         // Try a DIFFERENT server URL before retrying the same stalled URL
         // with another User-Agent. A broken episode must not spin for minutes.
@@ -381,7 +392,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
 
         TrackPlayback("تجربة رابط بديل • " + message);
-        var preserve = Math.Max(_player.Time, _pendingRecoveryResume);
+        var preserve = Math.Max(_cachedPlaybackTime, _pendingRecoveryResume);
         _automaticRecoveries++;
         if (haveNextUrl) _recoveryIndex++;
         else { _recoveryIndex = 0; _compatibilityUserAgent = true; }
@@ -398,7 +409,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         if (_disposed || _recoveryUrls.Count == 0) return;
         CopyPlaybackReportButton.Visibility = Visibility.Collapsed;
         TrackPlayback("إعادة المحاولة يدويًا");
-        _pendingRecoveryResume = Math.Max(_pendingRecoveryResume, _player.Time);
+        _pendingRecoveryResume = Math.Max(_pendingRecoveryResume, _cachedPlaybackTime);
         _resumeApplied = false;
         _recoveryIndex = 0;
         _automaticRecoveries = 0;
@@ -410,12 +421,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private async void HandleEnded()
     {
+        _cachedPlaying = false;
         if (_playlist.Count > 0)
         {
             // A short/segmented live input may emit EndReached. It is never
             // a command to switch to the next channel, nor should it restart
             // a perfectly healthy live video every ten seconds.
-            if (!_disposed && !_userPaused && !_player.IsPlaying)
+            if (!_disposed && !_userPaused && !_cachedPlaying)
                 TryRecoverPlayback("انتهى اتصال البث — تجربة المصدر الاحتياطي…");
             return;
         }
@@ -436,7 +448,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         if (target <= 0) return;
         _resumeApplied = true;
         _pendingRecoveryResume = 0;
-        _player.Time = target;
+        RequestSeek(target);
     }
 
     private void MarkPlaybackReady()
@@ -460,6 +472,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             // Direct native VLC getter calls on the WPF dispatcher were
             // occasionally blocking arrow/ESC input while 4K streams stalled.
             // At most ONE metrics poll runs on a background worker.
+            var expectedPlayback = Volatile.Read(ref _playbackGeneration);
             var snapshot = await Task.Run(() =>
             {
                 try
@@ -471,7 +484,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 }
                 catch { return (Length: 0L, Time: 0L, Playing: false, Video: false); }
             });
-            if (_disposed) return;
+            if (_disposed || expectedPlayback != Volatile.Read(ref _playbackGeneration)) return;
             RefreshHudFromSnapshot(snapshot.Length, snapshot.Time,
                                    snapshot.Playing, snapshot.Video);
         }
@@ -480,6 +493,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void RefreshHudFromSnapshot(long length, long time, bool playing, bool videoOutput)
     {
+        _cachedPlaybackLength = length;
+        _cachedPlaybackTime = time;
+        _cachedPlaying = playing;
         SeekSlider.Maximum = Math.Max(1, length);
         if (!SeekSlider.IsMouseCaptureWithin) SeekSlider.Value = Math.Min(time, SeekSlider.Maximum);
         TimeText.Text = Format(time) + " / " + Format(length);
@@ -666,25 +682,30 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
         if (_disposed) return;
-        if (_player.IsPlaying)
-        {
-            _userPaused = true;
-            _player.Pause();
-        }
-        else if (_playbackFailed)
+        if (_playbackFailed)
         {
             _userPaused = false;
             RetryPlayback_Click(sender, e);
         }
         else
         {
-            _userPaused = false;
-            // Pausing for minutes must never activate the start watchdog.
-            _playStartedAt = DateTimeOffset.UtcNow;
-            _lastProgressAt = _playStartedAt;
-            _player.Play();
+            var pause = _cachedPlaying;
+            _userPaused = pause;
+            _cachedPlaying = !pause;
+            if (!pause)
+            {
+                // The connection watchdog must not treat a manual resume as a stall.
+                _playStartedAt = DateTimeOffset.UtcNow;
+                _lastProgressAt = _playStartedAt;
+            }
+            QueueNativeAction(() =>
+            {
+                if (pause) _player.Pause();
+                else _player.Play();
+            });
+            PlayPauseButton.Content = pause ? "▶" : "⏸";
+            PersistentPlayPauseButton.Content = pause ? "▶ تشغيل" : "⏸ إيقاف مؤقت";
         }
-        _ = RefreshHudAsync();
         ShowHudBriefly();
     }
 
@@ -752,13 +773,46 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void Seek(long delta)
     {
-        if (_player.Length <= 0) return;
-        _player.Time = Math.Clamp(_player.Time + delta, 0, _player.Length);
+        if (_cachedPlaybackLength <= 0 || _disposed) return;
+        RequestSeek(Math.Clamp(_cachedPlaybackTime + delta, 0, _cachedPlaybackLength));
     }
 
     private void SeekSlider_MouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (_player.Length > 0) _player.Time = (long)SeekSlider.Value;
+        if (_cachedPlaybackLength > 0 && !_disposed)
+            RequestSeek(Math.Clamp((long)SeekSlider.Value, 0, _cachedPlaybackLength));
+    }
+
+    private void RequestSeek(long target)
+    {
+        _cachedPlaybackTime = target;
+        var request = Interlocked.Increment(ref _seekRequestGeneration);
+        // Coalesce repeated remote/keyboard presses; only the most recent seek
+        // is sent to VLC after a slow decoder operation finishes.
+        QueueNativeAction(() =>
+        {
+            if (request == Volatile.Read(ref _seekRequestGeneration))
+                _player.Time = target;
+        });
+    }
+
+    private void QueueNativeAction(Action action)
+    {
+        var expectedPlayback = Volatile.Read(ref _playbackGeneration);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _nativePlaybackGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if (!_disposed && expectedPlayback == Volatile.Read(ref _playbackGeneration))
+                        action();
+                }
+                finally { _nativePlaybackGate.Release(); }
+            }
+            catch { /* A failed remote operation must never crash the dispatcher. */ }
+        });
     }
 
     private void Audio_Click(object sender, RoutedEventArgs e)
@@ -933,7 +987,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private void HideHud()
     {
         _hudTimer.Stop();
-        if (!_player.IsPlaying || ChannelPanel.Visibility == Visibility.Visible) return;
+        if (!_cachedPlaying || ChannelPanel.Visibility == Visibility.Visible) return;
         // All controls must vanish together (including the persistent top bar).
         // The earlier version hid Hud while leaving PersistentTopControls
         // visible across the full film, as reported from the real screenshot.
@@ -1315,7 +1369,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             {
                 if (_playlist.Count > 0 && e.Key == Key.Up)
                     OpenChannelPanel();
-                else if (_playlist.Count == 0 && (e.Key is Key.Left or Key.Right) && _player.Length > 0)
+                else if (_playlist.Count == 0 && (e.Key is Key.Left or Key.Right) && _cachedPlaybackLength > 0)
                 {
                     Seek(e.Key == Key.Left ? -10_000 : 10_000);
                     ShowHudBriefly();
@@ -1340,8 +1394,10 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
         if (e.Key == Key.M)
         {
-            _player.Mute = !_player.Mute;
-            EpgText.Text = _player.Mute ? "الصوت مكتوم" : "الصوت مفعّل";
+            _cachedMute = !_cachedMute;
+            var mute = _cachedMute;
+            QueueNativeAction(() => _player.Mute = mute);
+            EpgText.Text = mute ? "الصوت مكتوم" : "الصوت مفعّل";
             ShowHudBriefly();
             e.Handled = true;
         }
