@@ -19,6 +19,9 @@ public static class ArtworkCache
     private static readonly ConcurrentDictionary<string, BitmapSource> Hot = new();
     private static readonly ConcurrentQueue<string> HotOrder = new();
     private const int HotLimit = 192;
+    private const int WeakLimit = 2048;
+    private const int MaxImageBytes = 8_000_000;
+    private static int _weakTrimStarted;
     private static int _newDiskFiles;
     private static long _nextPruneAtTicks;
     private const long MaxDiskBytes = 600L * 1024 * 1024;
@@ -38,6 +41,8 @@ public static class ArtworkCache
 
     public static Task<BitmapSource?> LoadAsync(string? url, int decodeWidth, CancellationToken ct = default)
     {
+        if (ct.IsCancellationRequested)
+            return Task.FromCanceled<BitmapSource?>(ct);
         if (string.IsNullOrWhiteSpace(url) ||
             !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             uri.Scheme is not ("http" or "https"))
@@ -68,43 +73,99 @@ public static class ArtworkCache
         try
         {
             var disk = DiskPath(url);
-            byte[] bytes;
+            BitmapSource? bitmap = null;
 
-            if (File.Exists(disk))
+            // Never trust stale/corrupt or oversized on-disk poster files.
+            // A broken disk entry must not prevent a fresh network download.
+            try
             {
-                bytes = await File.ReadAllBytesAsync(disk, ct).ConfigureAwait(false);
+                var info = new FileInfo(disk);
+                if (info.Exists)
+                {
+                    if (info.Length is > 0 and <= MaxImageBytes)
+                    {
+                        var cachedBytes = await File.ReadAllBytesAsync(disk, ct).ConfigureAwait(false);
+                        if (cachedBytes.Length <= MaxImageBytes)
+                            bitmap = await DecodeAsync(cachedBytes, decodeWidth, ct).ConfigureAwait(false);
+                    }
+
+                    if (bitmap is null)
+                        info.Delete();
+                }
             }
-            else
+            catch
             {
+                bitmap = null;
+            }
+
+            if (bitmap is null)
+            {
+                byte[]? bytes;
                 await Gate.WaitAsync(ct).ConfigureAwait(false);
                 try
                 {
-                    using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct)
+                    using var response = await Http.GetAsync(
+                        url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength is > MaxImageBytes)
+                        return null;
+
+                    // Content-Length can be missing or deliberately incorrect.
+                    // Stream with a hard cap instead of allocating the entire response.
+                    using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                    bytes = await BoundedPayloadReader.ReadAsync(stream, MaxImageBytes, ct)
                         .ConfigureAwait(false);
-                    if (!response.IsSuccessStatusCode) return null;
-
-                    var length = response.Content.Headers.ContentLength;
-                    if (length is > 8_000_000) return null;
-
-                    bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-                    if (bytes.Length == 0 || bytes.Length > 8_000_000) return null;
-
-                    try
-                    {
-                        var temp = disk + ".tmp";
-                        await File.WriteAllBytesAsync(temp, bytes, ct).ConfigureAwait(false);
-                        File.Move(temp, disk, true);
-                        SchedulePrune();
-                    }
-                    catch { }
                 }
                 finally
                 {
                     Gate.Release();
                 }
+
+                if (bytes is null)
+                    return null;
+
+                // Only persist images that WPF can actually decode. This prevents
+                // caching HTML error pages or a server's invalid image payload.
+                bitmap = await DecodeAsync(bytes, decodeWidth, ct).ConfigureAwait(false);
+                if (bitmap is null)
+                    return null;
+
+                // Width variants have different in-flight keys but share one disk
+                // filename; give each download a private temp file to avoid races.
+                var temp = disk + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    await File.WriteAllBytesAsync(temp, bytes, ct).ConfigureAwait(false);
+                    File.Move(temp, disk, true);
+                    SchedulePrune();
+                }
+                catch { /* Filesystem failures must not block the poster. */ }
+                finally
+                {
+                    try { if (File.Exists(temp)) File.Delete(temp); } catch { }
+                }
             }
 
-            var bitmap = await Task.Run(() =>
+            Memory[memoryKey] = new WeakReference<BitmapSource>(bitmap);
+            TrimWeakMemory();
+            Retain(memoryKey, bitmap);
+            return bitmap;
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            InFlight.TryRemove(memoryKey, out _);
+        }
+    }
+
+    private static async Task<BitmapSource?> DecodeAsync(
+        byte[] bytes, int decodeWidth, CancellationToken ct)
+    {
+        try
+        {
+            return await Task.Run(() =>
             {
                 using var stream = new MemoryStream(bytes, writable: false);
                 var image = new BitmapImage();
@@ -117,18 +178,38 @@ public static class ArtworkCache
                 image.Freeze();
                 return (BitmapSource)image;
             }, ct).ConfigureAwait(false);
-
-            Memory[memoryKey] = new WeakReference<BitmapSource>(bitmap);
-            Retain(memoryKey, bitmap);
-            return bitmap;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static void TrimWeakMemory()
+    {
+        // Weak references do not hold bitmaps, but their dictionary keys would
+        // otherwise grow indefinitely while browsing very large catalogs.
+        if (Memory.Count <= WeakLimit ||
+            Interlocked.CompareExchange(ref _weakTrimStarted, 1, 0) != 0)
+            return;
+
+        try
+        {
+            foreach (var pair in Memory)
+                if (!pair.Value.TryGetTarget(out _))
+                    Memory.TryRemove(pair.Key, out _);
+
+            var excess = Memory.Count - WeakLimit;
+            if (excess > 0)
+                foreach (var key in Memory.Keys)
+                {
+                    if (excess-- <= 0) break;
+                    Memory.TryRemove(key, out _);
+                }
+        }
         finally
         {
-            InFlight.TryRemove(memoryKey, out _);
+            Volatile.Write(ref _weakTrimStarted, 0);
         }
     }
 
@@ -236,7 +317,7 @@ public static class ArtworkCache
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.12");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.13");
         return client;
     }
 }

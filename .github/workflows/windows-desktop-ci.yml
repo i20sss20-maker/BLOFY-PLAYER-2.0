@@ -44,6 +44,9 @@ jobs:
       - name: Restore
         run: dotnet restore windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
 
+      - name: Artwork streaming regression checks
+        run: dotnet run --project windows/tests/ArtworkReaderChecks/ArtworkReaderChecks.csproj -c Release
+
       - name: Build
         run: dotnet build windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj -c Release --no-restore
 
