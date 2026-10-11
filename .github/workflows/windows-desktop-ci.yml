@@ -44,6 +44,18 @@ jobs:
       - name: Restore
         run: dotnet restore windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
 
+      - name: Verify consistent Windows release metadata
+        shell: pwsh
+        run: |
+          $p = Get-Content -Raw windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
+          $i = Get-Content -Raw windows/installer/BlofyPlayer.iss
+          $v = Get-Content -Raw windows/src/BlofyPlayer.Windows/Core/AppBuildInfo.cs
+          if ($p -notmatch '<Version>0\.4\.14</Version>' -or
+              $i -notmatch '#define MyAppVersion "0\.4\.14"' -or
+              $v -notmatch 'const string Version = "0\.4\.14"') {
+            throw "Windows client, application and setup versions disagree"
+          }
+
       - name: Artwork streaming regression checks
         run: dotnet run --project windows/tests/ArtworkReaderChecks/ArtworkReaderChecks.csproj -c Release
 
@@ -70,6 +82,13 @@ jobs:
           & $iscc windows/installer/BlofyPlayer.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Generate installer SHA256
+        shell: pwsh
+        run: |
+          $setup = 'windows/installer/output/BLOFY-PLAYER-Windows-Setup-x64.exe'
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  BLOFY-PLAYER-Windows-Setup-x64.exe" | Set-Content -Encoding Ascii windows/installer/output/SHA256SUMS.txt
+
       - name: Upload portable Windows build
         uses: actions/upload-artifact@v4
         with:
@@ -81,5 +100,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BLOFY-PLAYER-Windows-Setup-x64
-          path: windows/installer/output/BLOFY-PLAYER-Windows-Setup-x64.exe
+          path: |
+            windows/installer/output/BLOFY-PLAYER-Windows-Setup-x64.exe
+            windows/installer/output/SHA256SUMS.txt
           if-no-files-found: error
