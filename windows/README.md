@@ -49,3 +49,13 @@ dotnet restore
 dotnet build -c Release
 dotnet publish -c Release -r win-x64 --self-contained true -o ..\..\publish
 ```
+
+## Windows 0.4.13 — artwork stability (development build)
+
+- Caps network poster bodies at 8 MB even when a server omits or lies about Content-Length, avoiding unbounded RAM allocation.
+- Deletes corrupt/oversized disk cache entries and retries from the network.
+- Writes only successfully decoded images to disk, using unique temporary names for concurrent poster sizes.
+- Bounds weak-reference poster metadata for huge catalogs and skips already-cancelled poster requests.
+- Adds executable regression checks for payload boundaries and cancellation in Windows CI.
+
+This change does **not** imply that every IPTV provider, GPU, 4K stream or device has been tested, and the Windows setup is still unsigned. Do not publish it as a signed production release without real-device smoke tests.
