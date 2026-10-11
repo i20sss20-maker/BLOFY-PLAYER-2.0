@@ -89,7 +89,7 @@ public sealed class BackupPayload
 {
     public int Schema { get; set; } = 2;
     public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-    public string AppVersion { get; set; } = "windows-0.4.7";
+    public string AppVersion { get; set; } = AppBuildInfo.WindowsVersion;
     public string ProviderId { get; set; } = "";
     public string ProviderName { get; set; } = "";
     public string ProfileId { get; set; } = "";
@@ -184,7 +184,7 @@ public static class ProfileCloudService
             BaseAddress = new Uri(BaseUrl),
             Timeout = TimeSpan.FromSeconds(15)
         };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.7");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", AppBuildInfo.UserAgent);
         return client;
     }
 
@@ -478,7 +478,7 @@ public static class WindowsUpdateService
     private static HttpClient NewClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.7");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", AppBuildInfo.UserAgent);
         return client;
     }
 
