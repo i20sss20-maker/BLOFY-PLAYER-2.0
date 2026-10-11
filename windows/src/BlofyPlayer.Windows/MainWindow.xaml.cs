@@ -96,7 +96,7 @@ public partial class MainWindow : Window
                 ProgressText.Text = "تعذر إكمال التهيئة";
                 MessageBox.Show(this,
                     "تعذر إكمال تشغيل BLOFY PLAYER. تم حفظ تقرير الخطأ تلقائيًا.\n\n" +
-                    ex.Message,
+                    SensitiveTextRedactor.Redact(ex.Message),
                     "BLOFY PLAYER", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         };
@@ -452,7 +452,7 @@ public partial class MainWindow : Window
             if (!ReferenceEquals(_syncCts, sync)) return;
             ProgressText.Text = "تعذر التحديث • المكتبة السابقة محفوظة";
             if (userRequested)
-                MessageBox.Show(this, ex.Message, "BLOFY PLAYER");
+                MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER");
         }
         finally
         {
@@ -2008,7 +2008,7 @@ public partial class MainWindow : Window
                         "عيّن PIN من 4 إلى 8 أرقام قبل قفل المحتوى", password: true);
                     if (string.IsNullOrWhiteSpace(newPin)) return;
                     try { await _store.SetParentalPinAsync(newPin); }
-                    catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); return; }
+                    catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); return; }
                 }
                 await _store.SetLockedAsync(item.Key, true);
             }
@@ -2722,7 +2722,7 @@ public partial class MainWindow : Window
                     await _store.SetProfilePinAsync(profile.Id, string.IsNullOrWhiteSpace(pin) ? null : pin);
                     ShowProfiles();
                 }
-                catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+                catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
             }, 8));
 
             if (_store.State.Profiles.Count > 1)
@@ -2746,19 +2746,19 @@ public partial class MainWindow : Window
             var name = UiDialogs.Prompt(this, "ملف جديد", "اسم الملف");
             if (string.IsNullOrWhiteSpace(name)) return;
             try { await _store.CreateProfileAsync(name); ShowProfiles(); }
-            catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+            catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
         }));
         create.Children.Add(Action("+ أطفال", false, async (_, _) =>
         {
             var name = UiDialogs.Prompt(this, "ملف أطفال", "اسم ملف الأطفال", initial: "أطفال");
             if (string.IsNullOrWhiteSpace(name)) return;
             try { await _store.CreateProfileAsync(name, kids: true); ShowProfiles(); }
-            catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+            catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
         }, 8));
         create.Children.Add(Action("+ ضيف", false, async (_, _) =>
         {
             try { await _store.CreateProfileAsync("ضيف", guest: true); ShowProfiles(); }
-            catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+            catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
         }, 8));
         root.Children.Add(create);
 
@@ -2893,7 +2893,7 @@ public partial class MainWindow : Window
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, ex.Message, "BLOFY PLAYER");
+                    MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER");
                     return;
                 }
             }
@@ -2924,7 +2924,7 @@ public partial class MainWindow : Window
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, "تعذر الاتصال بالسيرفر: " + ex.Message, "BLOFY PLAYER");
+                    MessageBox.Show(this, "تعذر الاتصال بالسيرفر: " + SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER");
                     return;
                 }
             }
@@ -3462,7 +3462,7 @@ public partial class MainWindow : Window
                 string.IsNullOrWhiteSpace(pin) ? "تمت إزالة PIN الأبوي." : "تم حفظ PIN الأبوي.",
                 "BLOFY PLAYER");
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
     }
 
     private void UpdateHeaderClock()
@@ -3556,7 +3556,7 @@ public partial class MainWindow : Window
             await File.WriteAllTextAsync(dialog.FileName, BackupService.Export(_store));
             MessageBox.Show(this, "تم حفظ النسخة الاحتياطية بدون بيانات الدخول.", "BLOFY PLAYER");
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
     }
 
     private async Task RestoreBackupAsync()
@@ -3576,7 +3576,7 @@ public partial class MainWindow : Window
             MessageBox.Show(this, "تمت الاستعادة.", "BLOFY PLAYER");
             ShowSettings();
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
     }
 
     private bool CloudReady()
@@ -3596,7 +3596,7 @@ public partial class MainWindow : Window
             var result = await ProfileCloudService.BackupAsync(_store, _identity, timeout.Token);
             MessageBox.Show(this, "تم حفظ الملف في السحابة. Revision " + result.Revision, "BLOFY PLAYER");
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
         finally { ProgressText.Text = ""; }
     }
 
@@ -3619,7 +3619,7 @@ public partial class MainWindow : Window
             MessageBox.Show(this, "تمت استعادة BLOFY Cloud.", "BLOFY PLAYER");
             ShowSettings();
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
         finally { ProgressText.Text = ""; }
     }
 
@@ -3640,7 +3640,7 @@ public partial class MainWindow : Window
                 "تم نسخ الكود للحافظة.",
                 "BLOFY Cloud");
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
     }
 
     private async Task RestorePairCodeAsync()
@@ -3657,7 +3657,7 @@ public partial class MainWindow : Window
             MessageBox.Show(this, "تم نقل بيانات الملف من كود الربط.", "BLOFY PLAYER");
             ShowSettings();
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
     }
 
     private async Task CheckWindowsUpdateAsync()
@@ -3680,7 +3680,7 @@ public partial class MainWindow : Window
             if (result == MessageBoxResult.Yes)
                 Process.Start(new ProcessStartInfo(update.DownloadUrl) { UseShellExecute = true });
         }
-        catch (Exception ex) { MessageBox.Show(this, "تعذر فحص التحديث: " + ex.Message, "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, "تعذر فحص التحديث: " + SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
         finally { ProgressText.Text = ""; }
     }
 
