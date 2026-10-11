@@ -317,7 +317,7 @@ public static class ArtworkCache
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.13");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", AppBuildInfo.UserAgent);
         return client;
     }
 }

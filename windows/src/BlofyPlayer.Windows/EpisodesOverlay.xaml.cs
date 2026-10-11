@@ -92,7 +92,7 @@ public partial class EpisodesOverlay : UserControl, IDisposable
             App.LogCrash("EpisodesOverlay.LoadEpisodes", ex);
             StatusText.Text = "تعذر تحميل الحلقات.";
             RetryButton.Visibility = Visibility.Visible;
-            EpisodePanel.Children.Add(EmptyText(ex.Message));
+            EpisodePanel.Children.Add(EmptyText(SensitiveTextRedactor.Redact(ex.Message)));
         }
     }
 

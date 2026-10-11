@@ -43,7 +43,7 @@ public partial class StartupWindow : Window
             {
                 App.LogCrash("StartupWindow.Loaded", ex);
                 ActivationStateText.Text = "تعذر تجهيز صفحة التفعيل";
-                TrialText.Text = ex.Message;
+                TrialText.Text = SensitiveTextRedactor.Redact(ex.Message);
                 _pollTimer.Start();
             }
         };
@@ -245,7 +245,7 @@ public partial class StartupWindow : Window
         {
             App.LogCrash("Startup loading", ex);
             LoadingTitle.Text = "تعذر إكمال التحميل";
-            LoadingStatus.Text = ex.Message;
+            LoadingStatus.Text = SensitiveTextRedactor.Redact(ex.Message);
             LoadingProgress.Value = 0;
             LoadingPercent.Text = "";
             BackButton.Visibility = Visibility.Visible;
@@ -310,7 +310,7 @@ public partial class StartupWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "BLOFY PLAYER");
+            MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER");
         }
     }
 
