@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/BlofyPlayer.Windows/Core/SensitiveTextRedactor.cs" Link="SensitiveTextRedactor.cs" />
+    <Compile Include="../../src/BlofyPlayer.Windows/Core/AppBuildInfo.cs" Link="AppBuildInfo.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/BoundedPayloadReader.cs" Link="BoundedPayloadReader.cs" />
   </ItemGroup>
 </Project>
