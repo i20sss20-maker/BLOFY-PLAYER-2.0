@@ -152,8 +152,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         _player.EncounteredError += (_, _) => DispatchPlayerEvent(() =>
         {
             TrackPlayback("حدث خطأ من محرك VLC");
-            _cachedPlaying = false;
-            TryRecoverPlayback("تعذر التشغيل — تجربة مسار بديل…");
+            // Native callbacks may be stale after a rapid channel switch.
+            // Recheck a fresh background HUD snapshot before replacing video.
+            _ = RecoverIfStoppedAsync("تعذر التشغيل — تجربة مسار بديل…");
         });
         _player.EndReached += (_, _) => DispatchPlayerEvent(HandleEnded);
 
@@ -421,16 +422,15 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private async void HandleEnded()
     {
-        _cachedPlaying = false;
         if (_playlist.Count > 0)
         {
-            // A short/segmented live input may emit EndReached. It is never
-            // a command to switch to the next channel, nor should it restart
-            // a perfectly healthy live video every ten seconds.
-            if (!_disposed && !_userPaused && !_cachedPlaying)
-                TryRecoverPlayback("انتهى اتصال البث — تجربة المصدر الاحتياطي…");
+            // Live streams may fire delayed EndReached events from a previous
+            // channel. Retry only if the current video is still stopped.
+            if (!_disposed && !_userPaused)
+                _ = RecoverIfStoppedAsync("انتهى اتصال البث — تجربة المصدر الاحتياطي…");
             return;
         }
+        _cachedPlaying = false;
 
         if (_onEnded is null) return;
         try
@@ -439,6 +439,32 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             await _onEnded();
         }
         catch { }
+    }
+
+    private async Task RecoverIfStoppedAsync(string message)
+    {
+        var expectedPlayback = Volatile.Read(ref _playbackGeneration);
+        try
+        {
+            // HUD metrics are polled at 750ms off the dispatcher. Let the
+            // current stream's native playing state catch up after a callback.
+            await Task.Delay(1250).ConfigureAwait(false);
+            if (_disposed || expectedPlayback != Volatile.Read(ref _playbackGeneration) ||
+                Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+                return;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (_disposed || _userPaused ||
+                    expectedPlayback != Volatile.Read(ref _playbackGeneration))
+                    return;
+                if (_cachedPlaying && _videoOutputSeen)
+                    return; // Current video is healthy; discard stale callback.
+                _cachedPlaying = false;
+                TryRecoverPlayback(message);
+            });
+        }
+        catch { /* A closed window must not surface delayed native callbacks. */ }
     }
 
     private void ApplyResumeOnce()
