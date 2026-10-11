@@ -276,7 +276,7 @@ async function servePortal(res, connectOnly = false) {
 
 async function serveStatusPage(res, fileName = 'status.html') {
   // Only internal constant filenames are passed; never derive public file paths from URLs.
-  const publicPage = fileName === 'guide.html' || fileName === 'support.html' || fileName === 'en.html';
+  const publicPage = fileName === 'guide.html' || fileName === 'support.html' || fileName === 'en.html' || fileName === 'es.html' || fileName === 'fr.html';
   const original = await readFile(new URL('../web/' + fileName, import.meta.url));
   const file = publicPage ? Buffer.from(withPublicAnalytics(original.toString('utf8'))) : original;
   res.writeHead(200, {
@@ -317,6 +317,8 @@ function serveSitemap(res) {
   <url><loc>https://blofyplayer.com/</loc></url>
   <url><loc>https://blofyplayer.com/downloads</loc></url>
   <url><loc>https://blofyplayer.com/en</loc></url>
+  <url><loc>https://blofyplayer.com/es</loc></url>
+  <url><loc>https://blofyplayer.com/fr</loc></url>
   <url><loc>https://blofyplayer.com/guide</loc></url>
   <url><loc>https://blofyplayer.com/support</loc></url>
   <url><loc>https://blofyplayer.com/privacy</loc></url>
@@ -707,6 +709,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/status') return await serveStatusPage(res);
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/en' || requestUrl.pathname === '/en/')) return await serveStatusPage(res, 'en.html');
+    if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/es' || requestUrl.pathname === '/es/')) return await serveStatusPage(res, 'es.html');
+    if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/fr' || requestUrl.pathname === '/fr/')) return await serveStatusPage(res, 'fr.html');
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/guide' || requestUrl.pathname === '/guide/')) return await serveStatusPage(res, 'guide.html');
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/support' || requestUrl.pathname === '/support/')) return await serveStatusPage(res, 'support.html');
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
