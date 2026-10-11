@@ -82,6 +82,23 @@ jobs:
           & $iscc windows/installer/BlofyPlayer.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Smoke-test silent installer in isolated folder
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path 'windows/installer/output/BLOFY-PLAYER-Windows-Setup-x64.exe').Path
+          $target = Join-Path $env:RUNNER_TEMP 'BLOFY-Windows-Smoke'
+          $process = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', ("/DIR=" + $target)
+          )
+          if ($process.ExitCode -ne 0) { throw "Silent Windows setup failed: $($process.ExitCode)" }
+          $binary = Join-Path $target 'BLOFY PLAYER.exe'
+          if (!(Test-Path $binary)) { throw "The installed Windows player executable is missing" }
+          $version = (Get-Item $binary).VersionInfo.FileVersion
+          if (!$version.StartsWith("0.4.14")) {
+            throw "Unexpected installed file version: $version"
+          }
+          Write-Host "Installer smoke check passed: $binary ($version)"
+
       - name: Generate installer SHA256
         shell: pwsh
         run: |
