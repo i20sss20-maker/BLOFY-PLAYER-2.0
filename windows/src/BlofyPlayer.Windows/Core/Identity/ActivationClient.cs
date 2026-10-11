@@ -54,7 +54,7 @@ public sealed class ActivationClient : IDisposable
         var payload = new ActivationCheckRequest(
             identity.DeviceId,
             identity.ActivationCode,
-            "windows-0.4.7",
+            BlofyPlayer.Windows.Core.AppBuildInfo.WindowsVersion,
             "windows",
             identity.TrialScope
         );
