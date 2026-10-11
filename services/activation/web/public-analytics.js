@@ -3,7 +3,7 @@
   'use strict';
   var measurementId = 'G-2DYE5WB8BT';
   var preferenceKey = 'blofy.analytics.consent.v1';
-  var publicPaths = ['/', '/guide', '/guide/', '/support', '/support/', '/downloads', '/downloads/', '/releases', '/releases/', '/en', '/en/'];
+  var publicPaths = ['/', '/guide', '/guide/', '/support', '/support/', '/downloads', '/downloads/', '/releases', '/releases/', '/en', '/en/', '/es', '/es/', '/fr', '/fr/'];
   if (publicPaths.indexOf(window.location.pathname) === -1) return;
 
   var active = false;
@@ -80,11 +80,13 @@
   function showChoice() {
     if (banner) return;
     banner = document.createElement('section');
-    banner.setAttribute('aria-label', 'التحكم في إحصاءات الموقع');
+    banner.setAttribute('aria-label', ['/en','/es','/fr'].indexOf(pagePath) >= 0 ? 'Website analytics consent' : 'التحكم في إحصاءات الموقع');
     banner.setAttribute('role', 'region');
-    banner.dir = pagePath === '/en' ? 'ltr' : 'rtl';
+    banner.dir = ['/en', '/es', '/fr'].indexOf(pagePath) >= 0 ? 'ltr' : 'rtl';
     banner.style.cssText = 'position:fixed;bottom:16px;left:16px;right:16px;max-width:470px;z-index:99999;background:#181322;color:#fff;border:1px solid #8652c4;border-radius:16px;padding:16px;box-shadow:0 15px 42px #0008;font:14px/1.8 system-ui,Tahoma,sans-serif';
-    if (pagePath === '/en') banner.innerHTML = "<strong>BLOFY PLAYER site analytics</strong><p style=\"margin:8px 0 12px\">With your permission, Google Analytics helps us understand public page visits. Device IDs, pairing codes and playlist credentials are never included. <a href=\"/privacy\" style=\"color:#d7baff\">Privacy</a></p><div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button type=\"button\" data-ga-accept style=\"cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit\">Accept</button><button type=\"button\" data-ga-reject style=\"cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit\">Reject</button></div>";
+    if (pagePath === '/es') banner.innerHTML = "<strong>Estadísticas del sitio BLOFY PLAYER</strong><p style=\"margin:8px 0 12px\">Solo con tu permiso usamos Google Analytics para conocer las visitas a las páginas públicas. No recopilamos identificadores del dispositivo, códigos de vinculación ni credenciales de listas. <a href=\"/privacy\" style=\"color:#d7baff\">Privacidad</a></p><div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button type=\"button\" data-ga-accept style=\"cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit\">Aceptar</button><button type=\"button\" data-ga-reject style=\"cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit\">Rechazar</button></div>";
+    else if (pagePath === '/fr') banner.innerHTML = "<strong>Statistiques du site BLOFY PLAYER</strong><p style=\"margin:8px 0 12px\">Avec votre autorisation uniquement, Google Analytics nous aide à connaître les visites des pages publiques. Nous ne transmettons pas les identifiants des appareils, les codes d’association ni les identifiants des listes. <a href=\"/privacy\" style=\"color:#d7baff\">Confidentialité</a></p><div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button type=\"button\" data-ga-accept style=\"cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit\">Accepter</button><button type=\"button\" data-ga-reject style=\"cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit\">Refuser</button></div>";
+    else if (pagePath === '/en') banner.innerHTML = "<strong>BLOFY PLAYER site analytics</strong><p style=\"margin:8px 0 12px\">With your permission, Google Analytics helps us understand public page visits. Device IDs, pairing codes and playlist credentials are never included. <a href=\"/privacy\" style=\"color:#d7baff\">Privacy</a></p><div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button type=\"button\" data-ga-accept style=\"cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit\">Accept</button><button type=\"button\" data-ga-reject style=\"cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit\">Reject</button></div>";
     else banner.innerHTML = '<strong>إحصاءات BLOFY PLAYER</strong><p style="margin:8px 0 12px">نستخدم Google Analytics بعد موافقتك فقط لمعرفة أداء صفحات الموقع العامة. لا نرسل بيانات الجهاز أو رموز الربط. <a href="/privacy" style="color:#d7baff">الخصوصية</a></p><div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" data-ga-accept style="cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit">موافق</button><button type="button" data-ga-reject style="cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit">رفض</button></div>';
     document.body.appendChild(banner);
     banner.querySelector('[data-ga-accept]').addEventListener('click', function () { setChoice('accepted'); });
@@ -93,8 +95,8 @@
   function init() {
     settings = document.createElement('button');
     settings.type = 'button';
-    settings.textContent = pagePath === '/en' ? 'Analytics settings' : 'إعدادات الإحصاءات';
-    settings.setAttribute('aria-label', pagePath === '/en' ? 'Change consent for website analytics' : 'تغيير الموافقة على إحصاءات الموقع');
+    settings.textContent = pagePath === '/es' ? 'Opciones de analítica' : pagePath === '/fr' ? 'Paramètres statistiques' : pagePath === '/en' ? 'Analytics settings' : 'إعدادات الإحصاءات';
+    settings.setAttribute('aria-label', ['/en','/es','/fr'].indexOf(pagePath) >= 0 ? 'Change consent for website analytics' : 'تغيير الموافقة على إحصاءات الموقع');
     settings.style.cssText = 'position:fixed;left:10px;bottom:8px;z-index:99998;cursor:pointer;border:1px solid #6f557f;border-radius:9px;background:#171322;color:#e7d9ff;padding:5px 9px;font:11px system-ui,Tahoma,sans-serif';
     settings.addEventListener('click', showChoice);
     document.body.appendChild(settings);
