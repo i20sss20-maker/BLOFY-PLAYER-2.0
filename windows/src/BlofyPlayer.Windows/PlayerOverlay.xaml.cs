@@ -65,6 +65,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private Point? _lastPointerPosition;
     private bool _compatibilityUserAgent;
     private bool _favorite;
+    private StreamItem? _currentItem;
     private string _channelDigits = "";
     private int _previousLiveIndex = -1;
 
@@ -88,7 +89,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         bool? favorite = null,
         Func<Task<bool>>? toggleFavorite = null,
         AppSettings? settings = null,
-        Func<Task>? onEnded = null)
+        Func<Task>? onEnded = null,
+        StreamItem? initialItem = null)
     {
         InitializeComponent();
         _closeHandler = closeHandler;
@@ -116,6 +118,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         VideoView.MediaPlayer = _player;
         _playlist = playlist ?? [];
         _index = playlistIndex;
+        _currentItem = initialItem ?? (_index >= 0 && _index < _playlist.Count ? _playlist[_index] : null);
         _urlResolver = urlResolver;
         _recoveryResolver = recoveryResolver;
         _recoveryUrls = NormalizeRecoveryUrls(url, recoveryUrls);
@@ -309,10 +312,15 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         // TS/HLS/4K stream. Never call it on the UI dispatcher, otherwise the
         // remote, ESC, mouse and focus all freeze while connecting.
         var generation = Interlocked.Increment(ref _playbackGeneration);
-        var userAgent = _compatibilityUserAgent ||
-            string.IsNullOrWhiteSpace(_settings.UserAgent) ||
-            _settings.UserAgent.Equals("BLOFY PLAYER/2.0 (Windows)", StringComparison.Ordinal)
-            ? CompatibilityUserAgent : _settings.UserAgent;
+        var preferredAgent = _currentItem?.UserAgent;
+        var userAgent = _compatibilityUserAgent
+            ? CompatibilityUserAgent
+            : !string.IsNullOrWhiteSpace(preferredAgent)
+                ? preferredAgent
+                : string.IsNullOrWhiteSpace(_settings.UserAgent) ||
+                  _settings.UserAgent.Equals("BLOFY PLAYER/2.0 (Windows)", StringComparison.Ordinal)
+                    ? CompatibilityUserAgent : _settings.UserAgent;
+        var referer = _currentItem?.Referer;
         var isLive = _playlist.Count > 0;
         var disableSubtitles = _settings.SubtitleLanguage == "off";
 
@@ -324,7 +332,10 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 if (_disposed || generation != Volatile.Read(ref _playbackGeneration)) return;
                 using var media = new Media(_libVlc, uri);
                 media.AddOption(":http-user-agent=" + userAgent);
-                // Do not fabricate a Referer for Xtream/CDN requests.
+                // Some M3U services require an explicit per-entry Referer.
+                // Never invent one for generic Xtream/CDN URLs.
+                if (!string.IsNullOrWhiteSpace(referer))
+                    media.AddOption(":http-referrer=" + referer);
                 media.AddOption(":network-caching=" + (isLive ? "450" : "800"));
                 if (disableSubtitles) media.AddOption(":no-spu");
                 var started = _player.Play(media);
@@ -354,7 +365,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         {
             if (string.IsNullOrWhiteSpace(value)) return;
             if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)) return;
-            if (uri.Scheme is not ("http" or "https")) return;
+            if (uri.Scheme is not ("http" or "https" or "rtsp" or "rtmp" or "udp" or "mms")) return;
             if (result.Any(x => x.Equals(value.Trim(), StringComparison.OrdinalIgnoreCase))) return;
             result.Add(value.Trim());
         }
@@ -1096,6 +1107,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             _previousLiveIndex = oldIndex;
 
         var item = _playlist[_index];
+        _currentItem = item;
         TitleText.Text = item.Name;
         TopTitleText.Text = item.Name;
         EpgText.Text = "القناة " + (_index + 1).ToString("N0") + " من " + _playlist.Count.ToString("N0");
