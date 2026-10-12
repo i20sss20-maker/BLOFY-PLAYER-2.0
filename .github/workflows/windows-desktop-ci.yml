@@ -94,7 +94,7 @@ jobs:
           $binary = Join-Path $target 'BLOFY PLAYER.exe'
           if (!(Test-Path $binary)) { throw "The installed Windows player executable is missing" }
           $version = (Get-Item $binary).VersionInfo.FileVersion
-          if (!$version.StartsWith("0.4.14")) {
+          if (!$version.StartsWith("0.4.15")) {
             throw "Unexpected installed file version: $version"
           }
           Write-Host "Installer smoke check passed: $binary ($version)"
