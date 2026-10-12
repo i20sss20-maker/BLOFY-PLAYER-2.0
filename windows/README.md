@@ -77,3 +77,13 @@ This change does **not** imply that every IPTV provider, GPU, 4K stream or devic
 6. Verify copied diagnostics and crash.log contain no credentials or full stream URLs.
 
 A CI success is not certification of real-device 4K, paid-provider compatibility or commercial-release security.
+
+## Windows 0.4.15 — update safety and cache retention
+
+- Download suggestions from the official Windows update feed now accept only HTTPS BLOFY-controlled hosts or assets from this repository's exact GitHub release path. Lookalike hostnames, credentials in URL, non-standard ports and unrelated repositories are rejected.
+- Public GitHub preview/pre-release builds are excluded from the in-app update prompt.
+- Disk artwork cleanup now **keeps newest/most-recently-used images** under the 600MB/3500-file budget; previously it could remove fresh posters when the byte limit was exceeded.
+- Successfully reopened cached posters refresh their last-used timestamp at most once per hour.
+- Windows CI tests updater URL rules, artwork quota logic, streaming byte limits, token redaction, release version agreement, compilation and installed EXE packaging.
+
+**Release status:** unsigned preview for Windows x64; real licensed providers, playback sessions, antivirus reputation, code signing and long-duration 4K remain manual release gates. Do not disable Windows Defender or publish an update as production solely from a green CI build.
