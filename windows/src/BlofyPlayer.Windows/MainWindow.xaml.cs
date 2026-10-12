@@ -1462,7 +1462,14 @@ public partial class MainWindow : Window
                 await Task.Delay(520, token);
                 if (token.IsCancellationRequested || serial != _liveSelectionSerial) return;
 
-                if (_store.State.Settings.AutoplayLive && _previewPlayback is not null)
+                // Avoid decoding 4K twice: the Android full-screen player
+                // switches to a dedicated media surface, while WPF's small
+                // live preview plus fullscreen can exhaust GPU decoder slots.
+                // Keep EPG/navigation available and start UHD on demand.
+                var ultraHd = selected.Name.Contains("4K", StringComparison.OrdinalIgnoreCase) ||
+                              selected.Name.Contains("UHD", StringComparison.OrdinalIgnoreCase) ||
+                              selected.Name.Contains("2160p", StringComparison.OrdinalIgnoreCase);
+                if (_store.State.Settings.AutoplayLive && !ultraHd && _previewPlayback is not null)
                 {
                     var candidates = BuildStreamCandidates(selected);
                     var url = candidates.FirstOrDefault();
