@@ -1,3 +1,4 @@
+using System.IO;
 namespace BlofyPlayer.Windows.Core;
 
 /// <summary>Enforces a hard byte cap for streaming M3U or other untrusted payloads.</summary>
