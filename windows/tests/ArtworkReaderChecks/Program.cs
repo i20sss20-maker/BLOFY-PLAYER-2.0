@@ -52,3 +52,46 @@ Check(SensitiveTextRedactor.Redact("Bearer ABCSECRET").Contains("REDACTED"),
 Check(AppBuildInfo.WindowsVersion == "windows-" + AppBuildInfo.Version &&
       AppBuildInfo.UserAgent.EndsWith("/" + AppBuildInfo.Version),
     "activation and HTTP version metadata agree");
+
+// Untrusted URLs must never be offered as application updates.
+Check(UpdateDownloadPolicy.IsApproved("https://updates.blofyplayer.com/windows/setup.exe"),
+    "official BLOFY updater trusted");
+Check(UpdateDownloadPolicy.IsApproved("https://blofyplayer.com/downloads"),
+    "official downloads page trusted");
+Check(UpdateDownloadPolicy.IsApproved(
+    "https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v0.4.15/BLOFY-Windows-Setup.exe"),
+    "official GitHub Windows release asset trusted");
+Check(!UpdateDownloadPolicy.IsApproved("http://updates.blofyplayer.com/download.exe"),
+    "plain HTTP rejected for Windows updater");
+Check(!UpdateDownloadPolicy.IsApproved("https://updates.blofyplayer.com.evil.test/download.exe"),
+    "lookalike BLOFY hostname rejected");
+Check(!UpdateDownloadPolicy.IsApproved("https://github.com/attacker/evil/releases/download/x/Windows-Setup.exe"),
+    "unrelated GitHub repository rejected");
+Check(!UpdateDownloadPolicy.IsApproved("https://github.com:444/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/x/app.exe"),
+    "non-standard HTTPS updater port rejected");
+Check(!UpdateDownloadPolicy.IsApproved("https://someone:secret@updates.blofyplayer.com/download.exe"),
+    "embedded update URL credentials rejected");
+
+// Most recently used art must survive file-count and byte-quota eviction.
+var now = DateTime.UtcNow;
+var samples = new[]
+{
+    new ArtworkFileEntry("old.img", 4, now.AddDays(-10)),
+    new ArtworkFileEntry("fresh.img", 4, now),
+    new ArtworkFileEntry("middle.img", 4, now.AddDays(-2))
+};
+var evictBySize = ArtworkPrunePolicy.PlanEvictions(samples, 8, 3);
+Check(evictBySize.SequenceEqual(new[] { "old.img" }),
+    "size limit removes oldest artwork, not freshly downloaded posters");
+var evictByCount = ArtworkPrunePolicy.PlanEvictions(samples, 100, 1);
+Check(evictByCount.Count == 2 && !evictByCount.Contains("fresh.img"),
+    "file-count limit retains newest poster");
+Check(ArtworkPrunePolicy.PlanEvictions(samples, 0, 0).Count == 3,
+    "zero cache quota removes all posters");
+Check(ArtworkPrunePolicy.PlanEvictions(samples, 100, 10).Count == 0,
+    "sufficient cache budget keeps all posters");
+Check(ArtworkPrunePolicy.PlanEvictions(
+    new[] { new ArtworkFileEntry("oversize.img", long.MaxValue, now) }, 1024, 1).Count == 1,
+    "oversized artwork cannot overflow quota budget");
+
+Console.WriteLine("All BLOFY Windows 0.4.15 regression checks passed.");
