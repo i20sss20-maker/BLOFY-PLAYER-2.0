@@ -4,11 +4,13 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.text.InputType
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -25,6 +27,8 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.update.BlofyUpdateClient
+import tv.blofy.player.core.playback.PlaybackDrmPolicy
+import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -139,6 +143,8 @@ class SettingsActivity : AppCompatActivity() {
         storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
         addCard(storageCard)
         addCard(actionCard("✓  حالة النظام", "معلومات النسخة والجهاز") { startActivity(Intent(this, SystemStatusActivity::class.java)) })
+        // Available only in debug APKs. Never expose a DRM test field in a release build.
+        if (BuildConfig.DEBUG) addCard(actionCard("🧪  مختبر التشغيل", "HLS / DASH / Widevine تجريبي مرخّص") { showAuthorizedPlaybackProbe() })
         addCard(actionCard("⟲  استعادة الإعدادات", "العودة للوضع الافتراضي") { confirmRestoreDefaults() })
 
         linkFocus(back)
@@ -206,6 +212,52 @@ class SettingsActivity : AppCompatActivity() {
             item.nextFocusLeftId = if (col + 1 < columns && i + 1 < count) grid.getChildAt(i + 1).id else item.id
             item.nextFocusRightId = if (col > 0) grid.getChildAt(i - 1).id else item.id
         }
+    }
+
+    /** Debug-only, in-app media smoke test. URLs are never saved to preferences. */
+    private fun showAuthorizedPlaybackProbe() {
+        if (!BuildConfig.DEBUG) return
+        val video = EditText(this).apply {
+            hint = "رابط فيديو .mpd أو .m3u8"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+        }
+        val license = EditText(this).apply {
+            hint = "رابط ترخيص Widevine HTTPS (اختياري)"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+        }
+        val fields = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+            addView(video)
+            addView(license)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("اختبار بث تملك صلاحية تشغيله")
+            .setMessage("للتجربة على الجهاز فقط. لا تدخل حسابات غيرك أو مفاتيح DRM.")
+            .setView(fields)
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("تشغيل") { _, _ ->
+                val url = video.text.toString().trim()
+                val parsed = runCatching { Uri.parse(url) }.getOrNull()
+                if (parsed?.scheme?.lowercase() !in listOf("https", "http") || parsed?.host.isNullOrBlank()) {
+                    status.text = "أدخل رابط فيديو HTTP/HTTPS صالحًا"
+                    return@setPositiveButton
+                }
+                val licenseUrl = license.text.toString().trim()
+                if (licenseUrl.isNotBlank() && PlaybackDrmPolicy.authorizedWidevineLicenseUrl(licenseUrl) == null) {
+                    status.text = "رابط ترخيص Widevine يجب أن يكون HTTPS صالحًا"
+                    return@setPositiveButton
+                }
+                startActivity(Intent(this, PlayerActivity::class.java).apply {
+                    putExtra(PlayerActivity.EXTRA_URL, url)
+                    putExtra(PlayerActivity.EXTRA_KIND, "movie")
+                    putExtra(PlayerActivity.EXTRA_TITLE, "BLOFY Playback Lab")
+                    if (licenseUrl.isNotBlank()) putExtra(PlayerActivity.EXTRA_WIDEVINE_LICENSE_URL, licenseUrl)
+                })
+            }
+            .show()
     }
 
     private fun confirmRestoreDefaults() {
