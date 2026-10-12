@@ -149,8 +149,12 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8,10"/>
             <Setter Property="ItemContainerStyle" Value="{StaticResource TvListItem}"/>
+            <!-- Categories with hundreds of groups must remain genuinely scrollable. -->
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
-            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Hidden"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
         </Style>
 
         <Style TargetType="TextBox">

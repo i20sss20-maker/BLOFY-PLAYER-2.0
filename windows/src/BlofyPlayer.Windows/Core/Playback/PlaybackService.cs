@@ -13,9 +13,10 @@ public sealed class PlaybackService : IDisposable
 
         LibVlc = new LibVLC(
             "--no-video-title-show",
-            "--network-caching=700",
-            "--live-caching=500",
-            "--file-caching=500",
+            // Preview should load quickly; fullscreen uses its own player.
+            "--network-caching=350",
+            "--live-caching=300",
+            "--file-caching=300",
             "--avcodec-hw=any"
         );
 

@@ -1,4 +1,5 @@
 using System.IO;
+using BlofyPlayer.Windows.Core;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
@@ -18,7 +19,7 @@ public partial class App : Application
             LogCrash("DispatcherUnhandledException", args.Exception);
             MessageBox.Show(
                 "حدث خطأ غير متوقع في BLOFY PLAYER.\nتم حفظ تقرير الخطأ في مجلد التطبيق المحلي.\n\n" +
-                args.Exception.Message,
+                SensitiveTextRedactor.Redact(args.Exception.Message),
                 "BLOFY PLAYER",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -54,12 +55,21 @@ public partial class App : Application
                 .AppendLine("Source: " + source)
                 .AppendLine("OS: " + Environment.OSVersion)
                 .AppendLine("64-bit process: " + Environment.Is64BitProcess)
-                .AppendLine(exception.ToString())
+                .AppendLine(SensitiveTextRedactor.Redact(exception.ToString()))
                 .AppendLine()
                 .ToString();
 
             lock (CrashLock)
+            {
+                // A bad stream could throw repeatedly; preserve the newest
+                // diagnostic while bounding disk use for all accounts.
+                if (File.Exists(path) && new FileInfo(path).Length > 1_000_000)
+                {
+                    var previous = Path.Combine(root, "crash.previous.log");
+                    File.Move(path, previous, overwrite: true);
+                }
                 File.AppendAllText(path, report, Encoding.UTF8);
+            }
         }
         catch
         {

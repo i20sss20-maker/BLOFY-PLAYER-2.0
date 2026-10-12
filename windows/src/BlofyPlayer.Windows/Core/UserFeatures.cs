@@ -89,7 +89,7 @@ public sealed class BackupPayload
 {
     public int Schema { get; set; } = 2;
     public long CreatedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-    public string AppVersion { get; set; } = "windows-0.4.7";
+    public string AppVersion { get; set; } = AppBuildInfo.WindowsVersion;
     public string ProviderId { get; set; } = "";
     public string ProviderName { get; set; } = "";
     public string ProfileId { get; set; } = "";
@@ -184,7 +184,7 @@ public static class ProfileCloudService
             BaseAddress = new Uri(BaseUrl),
             Timeout = TimeSpan.FromSeconds(15)
         };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.7");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", AppBuildInfo.UserAgent);
         return client;
     }
 
@@ -421,7 +421,7 @@ public static class WindowsUpdateService
             var notes = GetString(root, "releaseNotes", "notes");
 
             if (!TryVersion(versionText, out var remote) || remote <= current) return null;
-            if (!ValidHttps(url)) return null;
+            if (!UpdateDownloadPolicy.IsApproved(url)) return null;
             return new WindowsUpdateInfo(versionText, url, LimitNotes(notes));
         }
         catch
@@ -443,6 +443,7 @@ public static class WindowsUpdateService
             foreach (var release in doc.RootElement.EnumerateArray())
             {
                 if (release.TryGetProperty("draft", out var draft) && draft.GetBoolean()) continue;
+                if (release.TryGetProperty("prerelease", out var preview) && preview.GetBoolean()) continue;
                 if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) continue;
 
                 var tag = release.TryGetProperty("tag_name", out var tagValue)
@@ -461,7 +462,7 @@ public static class WindowsUpdateService
                     var url = asset.TryGetProperty("browser_download_url", out var u)
                         ? u.GetString() ?? ""
                         : "";
-                    if (!ValidHttps(url)) continue;
+                    if (!UpdateDownloadPolicy.IsApproved(url)) continue;
 
                     var notes = release.TryGetProperty("body", out var body)
                         ? body.GetString() ?? ""
@@ -478,13 +479,9 @@ public static class WindowsUpdateService
     private static HttpClient NewClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BLOFY-PLAYER-Windows/0.4.7");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", AppBuildInfo.UserAgent);
         return client;
     }
-
-    private static bool ValidHttps(string value) =>
-        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-        uri.Scheme == Uri.UriSchemeHttps;
 
     private static string LimitNotes(string value) =>
         string.IsNullOrWhiteSpace(value) ? "" : value.Length > 600 ? value[..600] : value;
@@ -517,20 +514,20 @@ public static class DiagnosticService
         var root = store.RootPath;
         return string.Join(Environment.NewLine,
             "BLOFY PLAYER — Windows Diagnostics",
-            "Version: Windows 0.4.7",
-            "Device: " + identity.DeviceId,
-            "Activation: " + activation,
+            "Version: Windows " + AppBuildInfo.Version,
+            "Device: [private]",
+            "Activation: " + (string.IsNullOrWhiteSpace(activation) ? "unknown" : "present (details omitted)"),
             "Windows: " + Environment.OSVersion.VersionString,
             "Architecture: " + RuntimeInformation.OSArchitecture,
             "64-bit process: " + Environment.Is64BitProcess,
-            "Profile: " + profile.Name + " (Kids=" + profile.Kids + ", Guest=" + profile.Guest + ")",
-            "Provider: " + (provider?.Name ?? "None"),
+            "Profile: [private] (Kids=" + profile.Kids + ", Guest=" + profile.Guest + ")",
+            "Provider: " + (provider is null ? "None" : "[private]"),
             "Provider type: " + (provider?.ProviderType ?? "-"),
             "Catalog items: " + (catalog?.Streams.Count ?? 0),
             "Categories: " + (catalog?.Categories.Count ?? 0),
             "Favorites: " + library.Favorites.Count,
             "Watch states: " + library.WatchStates.Count,
-            "Data folder: " + root,
+            "Data folder: per-user application storage (path omitted)",
             "Storage: " + FormatBytes(DirectoryBytes(root)),
             "Local time: " + DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")
         );

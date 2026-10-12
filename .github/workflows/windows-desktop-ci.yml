@@ -44,6 +44,21 @@ jobs:
       - name: Restore
         run: dotnet restore windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
 
+      - name: Verify consistent Windows release metadata
+        shell: pwsh
+        run: |
+          $p = Get-Content -Raw windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
+          $i = Get-Content -Raw windows/installer/BlofyPlayer.iss
+          $v = Get-Content -Raw windows/src/BlofyPlayer.Windows/Core/AppBuildInfo.cs
+          if ($p -notmatch '<Version>0\.4\.16</Version>' -or
+              $i -notmatch '#define MyAppVersion "0\.4\.16"' -or
+              $v -notmatch 'const string Version = "0\.4\.16"') {
+            throw "Windows client, application and setup versions disagree"
+          }
+
+      - name: Artwork streaming regression checks
+        run: dotnet run --project windows/tests/ArtworkReaderChecks/ArtworkReaderChecks.csproj -c Release
+
       - name: Build
         run: dotnet build windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj -c Release --no-restore
 
@@ -67,6 +82,30 @@ jobs:
           & $iscc windows/installer/BlofyPlayer.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Smoke-test silent installer in isolated folder
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path 'windows/installer/output/BLOFY-PLAYER-Windows-Setup-x64.exe').Path
+          $target = Join-Path $env:RUNNER_TEMP 'BLOFY-Windows-Smoke'
+          $process = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', ("/DIR=" + $target)
+          )
+          if ($process.ExitCode -ne 0) { throw "Silent Windows setup failed: $($process.ExitCode)" }
+          $binary = Join-Path $target 'BLOFY PLAYER.exe'
+          if (!(Test-Path $binary)) { throw "The installed Windows player executable is missing" }
+          $version = (Get-Item $binary).VersionInfo.FileVersion
+          if (!$version.StartsWith("0.4.16")) {
+            throw "Unexpected installed file version: $version"
+          }
+          Write-Host "Installer smoke check passed: $binary ($version)"
+
+      - name: Generate installer SHA256
+        shell: pwsh
+        run: |
+          $setup = 'windows/installer/output/BLOFY-PLAYER-Windows-Setup-x64.exe'
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  BLOFY-PLAYER-Windows-Setup-x64.exe" | Set-Content -Encoding Ascii windows/installer/output/SHA256SUMS.txt
+
       - name: Upload portable Windows build
         uses: actions/upload-artifact@v4
         with:
@@ -78,5 +117,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BLOFY-PLAYER-Windows-Setup-x64
-          path: windows/installer/output/BLOFY-PLAYER-Windows-Setup-x64.exe
+          path: |
+            windows/installer/output/BLOFY-PLAYER-Windows-Setup-x64.exe
+            windows/installer/output/SHA256SUMS.txt
           if-no-files-found: error
