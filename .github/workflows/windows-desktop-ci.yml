@@ -50,9 +50,9 @@ jobs:
           $p = Get-Content -Raw windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
           $i = Get-Content -Raw windows/installer/BlofyPlayer.iss
           $v = Get-Content -Raw windows/src/BlofyPlayer.Windows/Core/AppBuildInfo.cs
-          if ($p -notmatch '<Version>0\.4\.14</Version>' -or
-              $i -notmatch '#define MyAppVersion "0\.4\.14"' -or
-              $v -notmatch 'const string Version = "0\.4\.14"') {
+          if ($p -notmatch '<Version>0\.4\.15</Version>' -or
+              $i -notmatch '#define MyAppVersion "0\.4\.15"' -or
+              $v -notmatch 'const string Version = "0\.4\.15"') {
             throw "Windows client, application and setup versions disagree"
           }
 
