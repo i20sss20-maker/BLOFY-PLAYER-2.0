@@ -20,6 +20,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private readonly DispatcherTimer _channelNumberTimer;
     private readonly DispatcherTimer _zapTimer;
     private readonly SemaphoreSlim _nativePlaybackGate = new(1, 1);
+    // Cancel pending native operations when the user zaps rapidly or closes the
+    // player. Never queue unbounded stale decoders behind a stalled 4K stream.
+    private CancellationTokenSource _nativeActionCts = new();
     private int _playbackGeneration;
     private CancellationTokenSource? _epgCts;
     private int _pendingZapDelta;
@@ -219,6 +222,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         // LibVLC stop/dispose can synchronously wait on the decoder;
         // executing them on WPF's thread locks every navigation control.
         Interlocked.Increment(ref _playbackGeneration);
+        _nativeActionCts.Cancel();
+        _nativeActionCts.Dispose();
         var release = Task.Run(async () =>
         {
             await _nativePlaybackGate.WaitAsync();
@@ -312,6 +317,11 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         // TS/HLS/4K stream. Never call it on the UI dispatcher, otherwise the
         // remote, ESC, mouse and focus all freeze while connecting.
         var generation = Interlocked.Increment(ref _playbackGeneration);
+        var previousOperation = _nativeActionCts;
+        _nativeActionCts = new CancellationTokenSource();
+        var playbackToken = _nativeActionCts.Token;
+        previousOperation.Cancel();
+        previousOperation.Dispose();
         var preferredAgent = _currentItem?.UserAgent;
         var userAgent = _compatibilityUserAgent
             ? CompatibilityUserAgent
@@ -326,10 +336,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
         _ = Task.Run(async () =>
         {
-            await _nativePlaybackGate.WaitAsync();
+            var entered = false;
             try
             {
-                if (_disposed || generation != Volatile.Read(ref _playbackGeneration)) return;
+                await _nativePlaybackGate.WaitAsync(playbackToken).ConfigureAwait(false);
+                entered = true;
+                if (_disposed || playbackToken.IsCancellationRequested ||
+                    generation != Volatile.Read(ref _playbackGeneration)) return;
                 using var media = new Media(_libVlc, uri);
                 media.AddOption(":http-user-agent=" + userAgent);
                 // Some M3U services require an explicit per-entry Referer.
@@ -346,6 +359,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                             TryRecoverPlayback("المحرك رفض الرابط — تجربة مسار بديل…");
                     });
             }
+            catch (OperationCanceledException) { /* Obsolete channel request. */ }
             catch (Exception)
             {
                 DispatchPlayerEvent(() =>
@@ -354,7 +368,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                         TryRecoverPlayback("تعذر اتصال محرك الفيديو بالسيرفر…");
                 });
             }
-            finally { _nativePlaybackGate.Release(); }
+            finally { if (entered) _nativePlaybackGate.Release(); }
         });
     }
 
@@ -835,20 +849,23 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void QueueNativeAction(Action action)
     {
+        if (_disposed) return;
         var expectedPlayback = Volatile.Read(ref _playbackGeneration);
+        var token = _nativeActionCts.Token;
         _ = Task.Run(async () =>
         {
+            var entered = false;
             try
             {
-                await _nativePlaybackGate.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    if (!_disposed && expectedPlayback == Volatile.Read(ref _playbackGeneration))
-                        action();
-                }
-                finally { _nativePlaybackGate.Release(); }
+                await _nativePlaybackGate.WaitAsync(token).ConfigureAwait(false);
+                entered = true;
+                if (!_disposed && !token.IsCancellationRequested &&
+                    expectedPlayback == Volatile.Read(ref _playbackGeneration))
+                    action();
             }
+            catch (OperationCanceledException) { /* Request superseded or window closed. */ }
             catch { /* A failed remote operation must never crash the dispatcher. */ }
+            finally { if (entered) _nativePlaybackGate.Release(); }
         });
     }
 
