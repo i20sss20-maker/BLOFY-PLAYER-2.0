@@ -421,7 +421,7 @@ public static class WindowsUpdateService
             var notes = GetString(root, "releaseNotes", "notes");
 
             if (!TryVersion(versionText, out var remote) || remote <= current) return null;
-            if (!ValidHttps(url)) return null;
+            if (!UpdateDownloadPolicy.IsApproved(url)) return null;
             return new WindowsUpdateInfo(versionText, url, LimitNotes(notes));
         }
         catch
@@ -443,6 +443,7 @@ public static class WindowsUpdateService
             foreach (var release in doc.RootElement.EnumerateArray())
             {
                 if (release.TryGetProperty("draft", out var draft) && draft.GetBoolean()) continue;
+                if (release.TryGetProperty("prerelease", out var preview) && preview.GetBoolean()) continue;
                 if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) continue;
 
                 var tag = release.TryGetProperty("tag_name", out var tagValue)
@@ -461,7 +462,7 @@ public static class WindowsUpdateService
                     var url = asset.TryGetProperty("browser_download_url", out var u)
                         ? u.GetString() ?? ""
                         : "";
-                    if (!ValidHttps(url)) continue;
+                    if (!UpdateDownloadPolicy.IsApproved(url)) continue;
 
                     var notes = release.TryGetProperty("body", out var body)
                         ? body.GetString() ?? ""
@@ -481,10 +482,6 @@ public static class WindowsUpdateService
         client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", AppBuildInfo.UserAgent);
         return client;
     }
-
-    private static bool ValidHttps(string value) =>
-        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-        uri.Scheme == Uri.UriSchemeHttps;
 
     private static string LimitNotes(string value) =>
         string.IsNullOrWhiteSpace(value) ? "" : value.Length > 600 ? value[..600] : value;

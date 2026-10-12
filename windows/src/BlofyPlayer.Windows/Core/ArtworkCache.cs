@@ -91,6 +91,11 @@ public static class ArtworkCache
 
                     if (bitmap is null)
                         info.Delete();
+                    else if (info.LastWriteTimeUtc < DateTime.UtcNow.AddHours(-1))
+                    {
+                        // Approximate LRU while avoiding a write on every card open.
+                        try { File.SetLastWriteTimeUtc(disk, DateTime.UtcNow); } catch { }
+                    }
                 }
             }
             catch
@@ -254,26 +259,23 @@ public static class ArtworkCache
             var files = Directory.EnumerateFiles(Root, "*.img", SearchOption.TopDirectoryOnly)
                 .Select(path =>
                 {
-                    try { return new FileInfo(path); }
-                    catch { return null; }
+                    try
+                    {
+                        var info = new FileInfo(path);
+                        return new ArtworkFileEntry(info.FullName, info.Length, info.LastWriteTimeUtc);
+                    }
+                    catch { return (ArtworkFileEntry?)null; }
                 })
-                .Where(info => info is not null)
-                .Cast<FileInfo>()
-                .OrderByDescending(info => info.LastWriteTimeUtc)
-                .ToList();
+                .Where(entry => entry.HasValue)
+                .Select(entry => entry!.Value);
 
-            var total = files.Sum(info => info.Length);
-            var keep = 0;
-            foreach (var info in files)
+            // Retain newest, evict oldest. Previous logic scanned newest-first
+            // but deleted those newest files when the byte limit was exceeded.
+            var oldFiles = ArtworkPrunePolicy.PlanEvictions(files, MaxDiskBytes, MaxFiles);
+            foreach (var path in oldFiles)
             {
-                keep++;
-                if (keep <= MaxFiles && total <= MaxDiskBytes) continue;
-                try
-                {
-                    total -= info.Length;
-                    info.Delete();
-                }
-                catch { }
+                try { File.Delete(path); }
+                catch { /* Keep going if a live decoder has an image locked. */ }
             }
         }
         catch { }
