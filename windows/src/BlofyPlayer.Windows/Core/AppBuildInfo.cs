@@ -6,7 +6,7 @@ namespace BlofyPlayer.Windows.Core;
 /// </summary>
 public static class AppBuildInfo
 {
-    public const string Version = "0.4.15";
+    public const string Version = "0.4.16";
     public const string WindowsVersion = "windows-" + Version;
     public const string UserAgent = "BLOFY-PLAYER-Windows/" + Version;
 }
