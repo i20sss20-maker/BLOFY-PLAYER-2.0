@@ -95,3 +95,55 @@ Check(ArtworkPrunePolicy.PlanEvictions(
     "oversized artwork cannot overflow quota budget");
 
 Console.WriteLine("All BLOFY Windows 0.4.15 regression checks passed.");
+
+// Real-world M3U metadata must work without loading a complete playlist into RAM.
+var playlistSample = """
+#EXTM3U
+#EXTINF:-1 tvg-id="sa1" tvg-logo="https://cdn.example/sa.png" group-title="قنوات السعودية",القناة الأولى
+#EXTVLCOPT:http-user-agent=AndroidTV/12
+#EXTVLCOPT:http-referrer=https://ref.example/
+https://cdn.example/live/first.m3u8
+#EXTINF:-1 group-title="Movies" tvg-logo="https://cdn.example/poster.png",Film One
+https://cdn.example/films/movie.mp4|User-Agent=Receiver%2F8&Referer=https%3A%2F%2Fref.example%2F
+#EXTINF:-1,Ignored
+file:///etc/private
+""";
+var parsedM3u = new List<M3uPlaylistEntry>();
+await foreach (var row in M3uPlaylistParser.ReadAsync(new StringReader(playlistSample)))
+    parsedM3u.Add(row);
+Check(parsedM3u.Count == 2, "streamed M3U ignores unsupported local-file URLs");
+Check(parsedM3u[0].Name == "القناة الأولى" && parsedM3u[0].TvgId == "sa1" &&
+      parsedM3u[0].Group == "قنوات السعودية", "Arabic channel and EPG metadata preserved");
+Check(parsedM3u[0].UserAgent == "AndroidTV/12" &&
+      parsedM3u[0].Referer == "https://ref.example/",
+    "#EXTVLCOPT headers extracted for VLC playback");
+Check(parsedM3u[1].Url == "https://cdn.example/films/movie.mp4" &&
+      parsedM3u[1].UserAgent == "Receiver/8" &&
+      parsedM3u[1].Referer == "https://ref.example/",
+    "M3U pipe-suffix headers removed from media URL and applied separately");
+var oversizedLineRejected = false;
+try
+{
+    await foreach (var _ in M3uPlaylistParser.ReadAsync(
+        new StringReader(new string('x', M3uPlaylistParser.MaxLineCharacters + 1)))) { }
+}
+catch (InvalidDataException) { oversizedLineRejected = true; }
+Check(oversizedLineRejected, "M3U overlong lines rejected without growing catalog");
+using var cancelledM3u = new CancellationTokenSource();
+cancelledM3u.Cancel();
+var cancelledParse = false;
+try
+{
+    await foreach (var _ in M3uPlaylistParser.ReadAsync(new StringReader(playlistSample),
+                       cancelledM3u.Token)) { }
+}
+catch (OperationCanceledException) { cancelledParse = true; }
+Check(cancelledParse, "M3U import obeys immediate cancellation");
+await using (var boundedStream = new LengthLimitedStream(new MemoryStream(new byte[12]), 8))
+{
+    var refused = false;
+    try { await boundedStream.ReadAsync(new byte[12].AsMemory()); }
+    catch (InvalidDataException) { refused = true; }
+    Check(refused, "streaming byte cap applies even with missing Content-Length");
+}
+Console.WriteLine("All BLOFY Windows 0.4.16 stream parser checks passed.");

@@ -190,7 +190,8 @@ public partial class MainWindow : Window
         Func<Task>? nextAction = null,
         bool? favorite = null,
         Func<Task<bool>>? toggleFavorite = null,
-        Func<Task>? onEnded = null)
+        Func<Task>? onEnded = null,
+        StreamItem? initialItem = null)
     {
         // LibVLC uses native video windows. Keeping the small preview active
         // while opening fullscreen leaves a ghost HWND over the main player
@@ -219,7 +220,8 @@ public partial class MainWindow : Window
             favorite: favorite,
             toggleFavorite: toggleFavorite,
             settings: _store.State.Settings,
-            onEnded: onEnded);
+            onEnded: onEnded,
+            initialItem: initialItem);
 
         PushOverlay(overlay);
     }
@@ -1460,7 +1462,14 @@ public partial class MainWindow : Window
                 await Task.Delay(520, token);
                 if (token.IsCancellationRequested || serial != _liveSelectionSerial) return;
 
-                if (_store.State.Settings.AutoplayLive && _previewPlayback is not null)
+                // Avoid decoding 4K twice: the Android full-screen player
+                // switches to a dedicated media surface, while WPF's small
+                // live preview plus fullscreen can exhaust GPU decoder slots.
+                // Keep EPG/navigation available and start UHD on demand.
+                var ultraHd = selected.Name.Contains("4K", StringComparison.OrdinalIgnoreCase) ||
+                              selected.Name.Contains("UHD", StringComparison.OrdinalIgnoreCase) ||
+                              selected.Name.Contains("2160p", StringComparison.OrdinalIgnoreCase);
+                if (_store.State.Settings.AutoplayLive && !ultraHd && _previewPlayback is not null)
                 {
                     var candidates = BuildStreamCandidates(selected);
                     var url = candidates.FirstOrDefault();
@@ -1469,8 +1478,12 @@ public partial class MainWindow : Window
                         var preview = _previewPlayback;
                         var headers = new Dictionary<string, string>
                         {
-                            ["User-Agent"] = _store.State.Settings.UserAgent
+                            ["User-Agent"] = string.IsNullOrWhiteSpace(selected.UserAgent)
+                                ? _store.State.Settings.UserAgent
+                                : selected.UserAgent
                         };
+                        if (!string.IsNullOrWhiteSpace(selected.Referer))
+                            headers["Referer"] = selected.Referer;
                         // Native VLC Stop/Play can block for seconds on bad
                         // 4K/live streams. Serialize off the WPF thread, and
                         // skip stale fast-changing selections.
@@ -2193,7 +2206,8 @@ public partial class MainWindow : Window
             {
                 await _store.ToggleFavoriteAsync(currentPlaybackItem);
                 return currentPlaybackItem.Favorite;
-            });
+            },
+            initialItem: item);
     }
 
     private async Task PlayEpisodeAsync(StreamItem series, EpisodeItem episode, IReadOnlyList<EpisodeItem> episodes)
@@ -2303,7 +2317,7 @@ public partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(value)) return;
             if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)) return;
-            if (uri.Scheme is not ("http" or "https")) return;
+            if (uri.Scheme is not ("http" or "https" or "rtsp" or "rtmp" or "udp" or "mms")) return;
             if (urls.Any(x => x.Equals(value.Trim(), StringComparison.OrdinalIgnoreCase))) return;
             urls.Add(value.Trim());
         }

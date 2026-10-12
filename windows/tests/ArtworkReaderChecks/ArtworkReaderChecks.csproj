@@ -10,6 +10,8 @@
     <Compile Include="../../src/BlofyPlayer.Windows/Core/AppBuildInfo.cs" Link="AppBuildInfo.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/UpdateDownloadPolicy.cs" Link="UpdateDownloadPolicy.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/ArtworkPrunePolicy.cs" Link="ArtworkPrunePolicy.cs" />
+    <Compile Include="../../src/BlofyPlayer.Windows/Core/M3uPlaylistParser.cs" Link="M3uPlaylistParser.cs" />
+    <Compile Include="../../src/BlofyPlayer.Windows/Core/LengthLimitedStream.cs" Link="LengthLimitedStream.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/BoundedPayloadReader.cs" Link="BoundedPayloadReader.cs" />
   </ItemGroup>
 </Project>

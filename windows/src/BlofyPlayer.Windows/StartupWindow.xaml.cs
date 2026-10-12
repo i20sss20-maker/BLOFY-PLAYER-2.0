@@ -208,23 +208,29 @@ public partial class StartupWindow : Window
                 using var catalog = new CatalogCoordinator(_store);
                 SetLoading(34, "تجهيز القائمة: " + provider.Name);
 
-                var cached = await Task.Run(() => catalog.LoadCachedAsync(provider));
-                CatalogSnapshot ready;
+                // Android-style fast entry: never wait for a full network IPTV
+                // catalog download before opening the app. Very large Xtream/M3U
+                // subscriptions can take minutes and look like a frozen startup.
+                // MainWindow syncs stale/missing catalogs asynchronously and
+                // retains the last cached catalog throughout the refresh.
+                CatalogSnapshot? cached = null;
+                try
+                {
+                    cached = await Task.Run(() => catalog.LoadCachedAsync(provider));
+                }
+                catch
+                {
+                    // A damaged cache must not block launch or account access.
+                }
                 if (cached is not null && cached.Streams.Count > 0)
                 {
-                    ready = cached;
+                    StartupCatalogTransfer.Store(cached);
                     SetLoading(82, "تم تجهيز بياناتك المحفوظة • " + cached.Streams.Count.ToString("N0") + " عنصر");
                 }
                 else
                 {
-                    var progress = new Progress<(int Percent, string Text)>(value =>
-                    {
-                        var mapped = 34 + (int)Math.Round(value.Percent * 0.58);
-                        SetLoading(Math.Min(92, mapped), value.Text);
-                    });
-                    ready = await Task.Run(() => catalog.SyncAsync(provider, progress));
+                    SetLoading(82, "يفتح BLOFY الآن وسيحمّل القنوات والأفلام في الخلفية");
                 }
-                StartupCatalogTransfer.Store(ready);
             }
             else
             {

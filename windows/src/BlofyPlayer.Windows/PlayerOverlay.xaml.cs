@@ -20,6 +20,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private readonly DispatcherTimer _channelNumberTimer;
     private readonly DispatcherTimer _zapTimer;
     private readonly SemaphoreSlim _nativePlaybackGate = new(1, 1);
+    // Cancel pending native operations when the user zaps rapidly or closes the
+    // player. Never queue unbounded stale decoders behind a stalled 4K stream.
+    private CancellationTokenSource _nativeActionCts = new();
     private int _playbackGeneration;
     private CancellationTokenSource? _epgCts;
     private int _pendingZapDelta;
@@ -65,6 +68,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
     private Point? _lastPointerPosition;
     private bool _compatibilityUserAgent;
     private bool _favorite;
+    private StreamItem? _currentItem;
     private string _channelDigits = "";
     private int _previousLiveIndex = -1;
 
@@ -88,7 +92,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         bool? favorite = null,
         Func<Task<bool>>? toggleFavorite = null,
         AppSettings? settings = null,
-        Func<Task>? onEnded = null)
+        Func<Task>? onEnded = null,
+        StreamItem? initialItem = null)
     {
         InitializeComponent();
         _closeHandler = closeHandler;
@@ -116,6 +121,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         VideoView.MediaPlayer = _player;
         _playlist = playlist ?? [];
         _index = playlistIndex;
+        _currentItem = initialItem ?? (_index >= 0 && _index < _playlist.Count ? _playlist[_index] : null);
         _urlResolver = urlResolver;
         _recoveryResolver = recoveryResolver;
         _recoveryUrls = NormalizeRecoveryUrls(url, recoveryUrls);
@@ -216,6 +222,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         // LibVLC stop/dispose can synchronously wait on the decoder;
         // executing them on WPF's thread locks every navigation control.
         Interlocked.Increment(ref _playbackGeneration);
+        _nativeActionCts.Cancel();
+        _nativeActionCts.Dispose();
         var release = Task.Run(async () =>
         {
             await _nativePlaybackGate.WaitAsync();
@@ -309,22 +317,38 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         // TS/HLS/4K stream. Never call it on the UI dispatcher, otherwise the
         // remote, ESC, mouse and focus all freeze while connecting.
         var generation = Interlocked.Increment(ref _playbackGeneration);
-        var userAgent = _compatibilityUserAgent ||
-            string.IsNullOrWhiteSpace(_settings.UserAgent) ||
-            _settings.UserAgent.Equals("BLOFY PLAYER/2.0 (Windows)", StringComparison.Ordinal)
-            ? CompatibilityUserAgent : _settings.UserAgent;
+        var previousOperation = _nativeActionCts;
+        _nativeActionCts = new CancellationTokenSource();
+        var playbackToken = _nativeActionCts.Token;
+        previousOperation.Cancel();
+        previousOperation.Dispose();
+        var preferredAgent = _currentItem?.UserAgent;
+        var userAgent = _compatibilityUserAgent
+            ? CompatibilityUserAgent
+            : !string.IsNullOrWhiteSpace(preferredAgent)
+                ? preferredAgent
+                : string.IsNullOrWhiteSpace(_settings.UserAgent) ||
+                  _settings.UserAgent.Equals("BLOFY PLAYER/2.0 (Windows)", StringComparison.Ordinal)
+                    ? CompatibilityUserAgent : _settings.UserAgent;
+        var referer = _currentItem?.Referer;
         var isLive = _playlist.Count > 0;
         var disableSubtitles = _settings.SubtitleLanguage == "off";
 
         _ = Task.Run(async () =>
         {
-            await _nativePlaybackGate.WaitAsync();
+            var entered = false;
             try
             {
-                if (_disposed || generation != Volatile.Read(ref _playbackGeneration)) return;
+                await _nativePlaybackGate.WaitAsync(playbackToken).ConfigureAwait(false);
+                entered = true;
+                if (_disposed || playbackToken.IsCancellationRequested ||
+                    generation != Volatile.Read(ref _playbackGeneration)) return;
                 using var media = new Media(_libVlc, uri);
                 media.AddOption(":http-user-agent=" + userAgent);
-                // Do not fabricate a Referer for Xtream/CDN requests.
+                // Some M3U services require an explicit per-entry Referer.
+                // Never invent one for generic Xtream/CDN URLs.
+                if (!string.IsNullOrWhiteSpace(referer))
+                    media.AddOption(":http-referrer=" + referer);
                 media.AddOption(":network-caching=" + (isLive ? "450" : "800"));
                 if (disableSubtitles) media.AddOption(":no-spu");
                 var started = _player.Play(media);
@@ -335,6 +359,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                             TryRecoverPlayback("المحرك رفض الرابط — تجربة مسار بديل…");
                     });
             }
+            catch (OperationCanceledException) { /* Obsolete channel request. */ }
             catch (Exception)
             {
                 DispatchPlayerEvent(() =>
@@ -343,7 +368,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                         TryRecoverPlayback("تعذر اتصال محرك الفيديو بالسيرفر…");
                 });
             }
-            finally { _nativePlaybackGate.Release(); }
+            finally { if (entered) _nativePlaybackGate.Release(); }
         });
     }
 
@@ -354,7 +379,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         {
             if (string.IsNullOrWhiteSpace(value)) return;
             if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)) return;
-            if (uri.Scheme is not ("http" or "https")) return;
+            if (uri.Scheme is not ("http" or "https" or "rtsp" or "rtmp" or "udp" or "mms")) return;
             if (result.Any(x => x.Equals(value.Trim(), StringComparison.OrdinalIgnoreCase))) return;
             result.Add(value.Trim());
         }
@@ -824,84 +849,150 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void QueueNativeAction(Action action)
     {
+        if (_disposed) return;
         var expectedPlayback = Volatile.Read(ref _playbackGeneration);
+        var token = _nativeActionCts.Token;
         _ = Task.Run(async () =>
         {
+            var entered = false;
             try
             {
-                await _nativePlaybackGate.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    if (!_disposed && expectedPlayback == Volatile.Read(ref _playbackGeneration))
-                        action();
-                }
-                finally { _nativePlaybackGate.Release(); }
+                await _nativePlaybackGate.WaitAsync(token).ConfigureAwait(false);
+                entered = true;
+                if (!_disposed && !token.IsCancellationRequested &&
+                    expectedPlayback == Volatile.Read(ref _playbackGeneration))
+                    action();
             }
+            catch (OperationCanceledException) { /* Request superseded or window closed. */ }
             catch { /* A failed remote operation must never crash the dispatcher. */ }
+            finally { if (entered) _nativePlaybackGate.Release(); }
         });
     }
 
-    private void Audio_Click(object sender, RoutedEventArgs e)
+    private async void Audio_Click(object sender, RoutedEventArgs e)
     {
+        if (_disposed) return;
         var menu = new ContextMenu { PlacementTarget = sender as Button, Placement = PlacementMode.Top };
-        if (_player.AudioTrackDescription.Length == 0)
-            menu.Items.Add(new MenuItem { Header = "لا توجد مسارات صوت", IsEnabled = false });
-        else
+        menu.Items.Add(new MenuItem { Header = "جاري فحص المسارات الصوتية…", IsEnabled = false });
+        menu.IsOpen = true;
+        ShowHudBriefly();
+
+        var generation = Volatile.Read(ref _playbackGeneration);
+        var token = _nativeActionCts.Token;
+        try
         {
-            foreach (var track in _player.AudioTrackDescription)
+            // Query LibVLC from the worker, never on WPF's input thread.
+            var snapshot = await Task.Run(async () =>
             {
+                await _nativePlaybackGate.WaitAsync(token).ConfigureAwait(false);
+                try
+                {
+                    return (
+                        Current: _player.AudioTrack,
+                        Tracks: _player.AudioTrackDescription
+                            .Select(track => (Id: track.Id, Name: track.Name))
+                            .ToArray()
+                    );
+                }
+                finally { _nativePlaybackGate.Release(); }
+            }, token);
+            if (_disposed || token.IsCancellationRequested ||
+                generation != Volatile.Read(ref _playbackGeneration)) return;
+
+            menu.Items.Clear();
+            if (snapshot.Tracks.Length == 0)
+                menu.Items.Add(new MenuItem { Header = "لا توجد مسارات صوت", IsEnabled = false });
+            foreach (var track in snapshot.Tracks)
+            {
+                var selectedTrack = track;
                 var item = new MenuItem
                 {
-                    Header = (track.Id == _player.AudioTrack ? "✓  " : "") + track.Name,
-                    Tag = track.Id
+                    Header = (track.Id == snapshot.Current ? "✓  " : "") + track.Name
                 };
                 item.Click += (_, _) =>
                 {
-                    _player.SetAudioTrack((int)item.Tag);
-                    EpgText.Text = "الصوت: " + track.Name;
+                    QueueNativeAction(() => _player.SetAudioTrack(selectedTrack.Id));
+                    EpgText.Text = "الصوت: " + selectedTrack.Name;
                     ShowHudBriefly();
                 };
                 menu.Items.Add(item);
             }
         }
-        menu.IsOpen = true;
-        ShowHudBriefly();
+        catch (OperationCanceledException) { }
+        catch
+        {
+            menu.Items.Clear();
+            menu.Items.Add(new MenuItem { Header = "تعذر قراءة مسارات الصوت", IsEnabled = false });
+        }
     }
 
-    private void Subtitle_Click(object sender, RoutedEventArgs e)
+    private async void Subtitle_Click(object sender, RoutedEventArgs e)
     {
-        var tracks = _player.SpuDescription;
+        if (_disposed) return;
         var menu = new ContextMenu { PlacementTarget = sender as Button, Placement = PlacementMode.Top };
-        var off = new MenuItem { Header = _player.Spu < 0 ? "✓  إيقاف الترجمة" : "إيقاف الترجمة" };
-        off.Click += (_, _) =>
-        {
-            _player.SetSpu(-1);
-            EpgText.Text = "الترجمة: إيقاف";
-            ShowHudBriefly();
-        };
-        menu.Items.Add(off);
-        menu.Items.Add(new Separator());
-
-        foreach (var track in tracks.Where(t => t.Id >= 0))
-        {
-            var item = new MenuItem
-            {
-                Header = (track.Id == _player.Spu ? "✓  " : "") + track.Name,
-                Tag = track.Id
-            };
-            item.Click += (_, _) =>
-            {
-                _player.SetSpu((int)item.Tag);
-                EpgText.Text = "الترجمة: " + track.Name;
-                ShowHudBriefly();
-            };
-            menu.Items.Add(item);
-        }
-
-        if (tracks.Length == 0)
-            menu.Items.Add(new MenuItem { Header = "لا توجد ترجمة مضمّنة", IsEnabled = false });
+        menu.Items.Add(new MenuItem { Header = "جاري فحص الترجمة…", IsEnabled = false });
         menu.IsOpen = true;
         ShowHudBriefly();
+
+        var generation = Volatile.Read(ref _playbackGeneration);
+        var token = _nativeActionCts.Token;
+        try
+        {
+            var snapshot = await Task.Run(async () =>
+            {
+                await _nativePlaybackGate.WaitAsync(token).ConfigureAwait(false);
+                try
+                {
+                    return (
+                        Current: _player.Spu,
+                        Tracks: _player.SpuDescription
+                            .Where(track => track.Id >= 0)
+                            .Select(track => (Id: track.Id, Name: track.Name))
+                            .ToArray()
+                    );
+                }
+                finally { _nativePlaybackGate.Release(); }
+            }, token);
+            if (_disposed || token.IsCancellationRequested ||
+                generation != Volatile.Read(ref _playbackGeneration)) return;
+
+            menu.Items.Clear();
+            var off = new MenuItem
+            {
+                Header = snapshot.Current < 0 ? "✓  إيقاف الترجمة" : "إيقاف الترجمة"
+            };
+            off.Click += (_, _) =>
+            {
+                QueueNativeAction(() => _player.SetSpu(-1));
+                EpgText.Text = "الترجمة: إيقاف";
+                ShowHudBriefly();
+            };
+            menu.Items.Add(off);
+            menu.Items.Add(new Separator());
+            foreach (var track in snapshot.Tracks)
+            {
+                var selectedTrack = track;
+                var item = new MenuItem
+                {
+                    Header = (track.Id == snapshot.Current ? "✓  " : "") + track.Name
+                };
+                item.Click += (_, _) =>
+                {
+                    QueueNativeAction(() => _player.SetSpu(selectedTrack.Id));
+                    EpgText.Text = "الترجمة: " + selectedTrack.Name;
+                    ShowHudBriefly();
+                };
+                menu.Items.Add(item);
+            }
+            if (snapshot.Tracks.Length == 0)
+                menu.Items.Add(new MenuItem { Header = "لا توجد ترجمة مضمّنة", IsEnabled = false });
+        }
+        catch (OperationCanceledException) { }
+        catch
+        {
+            menu.Items.Clear();
+            menu.Items.Add(new MenuItem { Header = "تعذر قراءة مسارات الترجمة", IsEnabled = false });
+        }
     }
 
     private void Fullscreen_Click(object sender, RoutedEventArgs e)
@@ -963,8 +1054,12 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
     private void ApplyAspect(string? mode)
     {
-        try
+        var width = Math.Max(1, (int)ActualWidth);
+        var height = Math.Max(1, (int)ActualHeight);
+        QueueNativeAction(() =>
         {
+            try
+            {
             var type = _player.GetType();
             var aspect = type.GetProperty("AspectRatio");
             var scale = type.GetProperty("Scale");
@@ -981,13 +1076,14 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                     break;
                 case "fill":
                     aspect?.SetValue(_player,
-                        Math.Max(1, (int)ActualWidth) + ":" + Math.Max(1, (int)ActualHeight));
+                        width + ":" + height);
                     break;
                 default:
                     break;
             }
-        }
-        catch { }
+            }
+            catch { /* Native aspect changes cannot block player controls. */ }
+        });
     }
 
     private bool HasVideoOutput()
@@ -1096,6 +1192,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             _previousLiveIndex = oldIndex;
 
         var item = _playlist[_index];
+        _currentItem = item;
         TitleText.Text = item.Name;
         TopTitleText.Text = item.Name;
         EpgText.Text = "القناة " + (_index + 1).ToString("N0") + " من " + _playlist.Count.ToString("N0");
