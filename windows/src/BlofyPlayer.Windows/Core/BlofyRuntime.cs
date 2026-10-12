@@ -43,6 +43,8 @@ public sealed class StreamItem
     public string Icon { get; set; } = "";
     public string Extension { get; set; } = "";
     public string DirectSource { get; set; } = "";
+    public string UserAgent { get; set; } = "";
+    public string Referer { get; set; } = "";
     public string EpgChannelId { get; set; } = "";
     public string Plot { get; set; } = "";
     public string Genre { get; set; } = "";
@@ -1120,57 +1122,85 @@ public sealed class XtreamService : IDisposable
 public sealed class M3uService : IDisposable
 {
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
-    private static readonly Regex Attr = new(@"(?<key>[A-Za-z0-9_-]+)=""(?<value>[^""]*)""", RegexOptions.Compiled);
 
     public async Task<CatalogSnapshot> LoadAsync(ProviderAccount provider, CancellationToken ct = default)
     {
-        string text;
-        if (Uri.TryCreate(provider.M3uUrl, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
-            text = await _http.GetStringAsync(uri, ct);
-        else
-            text = await File.ReadAllTextAsync(provider.M3uUrl, ct);
+        // Streaming parsing avoids a giant GetStringAsync + Split('\n') allocation
+        // and keeps cancellation responsive on large or stalled playlists.
+        if (Uri.TryCreate(provider.M3uUrl, UriKind.Absolute, out var uri) &&
+            uri.Scheme is "http" or "https")
+        {
+            using var inactivity = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            inactivity.CancelAfter(TimeSpan.FromSeconds(45));
+            using var response = await _http.GetAsync(
+                uri, HttpCompletionOption.ResponseHeadersRead, inactivity.Token).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength > M3uPlaylistParser.MaxPlaylistBytes)
+                throw new InvalidDataException("M3U playlist exceeds the maximum supported size.");
 
+            await using var remoteStream = await response.Content.ReadAsStreamAsync(inactivity.Token)
+                .ConfigureAwait(false);
+            await using var bounded = new LengthLimitedStream(remoteStream, M3uPlaylistParser.MaxPlaylistBytes);
+            using var reader = new StreamReader(bounded, Encoding.UTF8, true, 65536);
+            try
+            {
+                return await ParseAsync(provider, reader, inactivity.Token,
+                    () => inactivity.CancelAfter(TimeSpan.FromSeconds(45))).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                throw new TimeoutException("M3U server stopped responding; previous catalog is preserved.", ex);
+            }
+        }
+
+        var file = new FileInfo(provider.M3uUrl);
+        if (!file.Exists) throw new FileNotFoundException("M3U playlist file was not found.");
+        if (file.Length > M3uPlaylistParser.MaxPlaylistBytes)
+            throw new InvalidDataException("M3U playlist exceeds the maximum supported size.");
+        await using var localStream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read,
+            FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var localReader = new StreamReader(localStream, Encoding.UTF8, true, 65536);
+        return await ParseAsync(provider, localReader, ct, null).ConfigureAwait(false);
+    }
+
+    private static async Task<CatalogSnapshot> ParseAsync(
+        ProviderAccount provider, TextReader reader, CancellationToken ct, Action? progress)
+    {
         var categories = new Dictionary<string, CategoryItem>(StringComparer.OrdinalIgnoreCase);
         var streams = new List<StreamItem>();
-        string pendingName = "", pendingLogo = "", pendingGroup = "", pendingTvg = "";
 
-        foreach (var raw in text.Split('\n'))
+        await foreach (var entry in M3uPlaylistParser.ReadAsync(reader, ct))
         {
-            var line = raw.Trim();
-            if (line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase))
+            progress?.Invoke();
+            var group = string.IsNullOrWhiteSpace(entry.Group) ? "القنوات" : entry.Group;
+            var kind = GuessKind(group, entry.Url);
+            var categoryId = kind + ":" + group.ToLowerInvariant();
+            categories.TryAdd(categoryId, new CategoryItem
             {
-                var comma = line.LastIndexOf(',');
-                pendingName = comma >= 0 ? line[(comma + 1)..].Trim() : "Channel";
-                pendingLogo = pendingGroup = pendingTvg = "";
-                foreach (Match match in Attr.Matches(line))
-                {
-                    var key = match.Groups["key"].Value;
-                    var value = match.Groups["value"].Value;
-                    if (key.Equals("tvg-logo", StringComparison.OrdinalIgnoreCase)) pendingLogo = value;
-                    else if (key.Equals("group-title", StringComparison.OrdinalIgnoreCase)) pendingGroup = value;
-                    else if (key.Equals("tvg-id", StringComparison.OrdinalIgnoreCase)) pendingTvg = value;
-                }
-                continue;
-            }
-            if (line.Length == 0 || line.StartsWith('#')) continue;
-            if (!Uri.TryCreate(line, UriKind.Absolute, out _)) continue;
-
-            var group = string.IsNullOrWhiteSpace(pendingGroup) ? "القنوات" : pendingGroup;
-            var catId = group.ToLowerInvariant();
-            categories.TryAdd(catId, new CategoryItem { RemoteId = catId, Kind = "live", Name = group });
-            var id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(line)))[..12];
+                RemoteId = categoryId,
+                Kind = kind,
+                Name = group
+            });
+            var id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                Encoding.UTF8.GetBytes(entry.Url)))[..12];
+            var extension = Uri.TryCreate(entry.Url, UriKind.Absolute, out var mediaUri)
+                ? Path.GetExtension(mediaUri.AbsolutePath).TrimStart('.')
+                : "";
             streams.Add(new StreamItem
             {
-                Key = provider.Id + ":live:" + id,
+                Key = provider.Id + ":" + kind + ":" + id,
                 RemoteId = id,
-                CategoryId = catId,
-                Kind = "live",
-                Name = string.IsNullOrWhiteSpace(pendingName) ? line : pendingName,
-                Icon = pendingLogo,
-                EpgChannelId = pendingTvg,
-                DirectSource = line
+                CategoryId = categoryId,
+                Kind = kind,
+                Name = entry.Name,
+                Icon = entry.Logo,
+                Genre = group,
+                Extension = extension,
+                EpgChannelId = entry.TvgId,
+                DirectSource = entry.Url,
+                UserAgent = entry.UserAgent,
+                Referer = entry.Referer
             });
-            pendingName = pendingLogo = pendingGroup = pendingTvg = "";
         }
 
         return new CatalogSnapshot
@@ -1180,6 +1210,22 @@ public sealed class M3uService : IDisposable
             Categories = categories.Values.ToList(),
             Streams = streams
         };
+    }
+
+    private static string GuessKind(string group, string url)
+    {
+        // A plain M3U has no series/episode data model. Only categorize as a
+        // movie when BOTH a VOD-looking group AND file format suggest VOD.
+        // Avoid moving live movie-themed TV channels into the VOD section.
+        var kind = group.ToLowerInvariant();
+        var vod = kind.Contains("vod") || kind.Contains("movies") ||
+                  kind.Contains("films") || kind.Contains("أفلام") ||
+                  kind.Contains("افلام");
+        if (!vod || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return "live";
+        var ext = Path.GetExtension(uri.AbsolutePath).ToLowerInvariant();
+        return ext is ".mp4" or ".mkv" or ".avi" or ".mov" or ".webm" or ".m4v"
+            ? "movie" : "live";
     }
 
     public void Dispose() => _http.Dispose();
