@@ -49,4 +49,29 @@ class PlaybackMediaTypePolicyTest {
             )
         )
     }
+
+    @Test
+    fun hintsDashForLiveAndVodWithSignedUrls() {
+        assertTrue(PlaybackMediaTypePolicy.shouldHintDash("https://example.com/channel.MPD?token=123#track"))
+        assertTrue(PlaybackMediaTypePolicy.shouldHintDash("https://example.com/movie.mpd"))
+    }
+
+    @Test
+    fun hintsHlsForExplicitVodManifest() {
+        assertTrue(PlaybackMediaTypePolicy.shouldHintHls(
+            contentKind = "movie",
+            configuredFormat = LiveFormat.TS,
+            url = "https://example.com/movie.M3U8?signature=valid"
+        ))
+    }
+
+    @Test
+    fun dashAlwaysOverridesDefaultHlsLiveFormat() {
+        assertFalse(PlaybackMediaTypePolicy.shouldHintHls(
+            contentKind = "live",
+            configuredFormat = LiveFormat.HLS,
+            url = "https://example.com/channel.mpd"
+        ))
+        assertFalse(PlaybackMediaTypePolicy.shouldHintDash("https://example.com/video.ts?manifest=.mpd"))
+    }
 }
