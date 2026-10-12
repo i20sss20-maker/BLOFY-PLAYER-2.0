@@ -30,6 +30,7 @@ class BlofyPlaybackSession(
     private var metric: PlaybackMetric? = null
     private var firstFrameRecorded = false
     private var automaticRetries = 0
+    private var activeWidevineLicenseUrl: String? = null
     private var alternateLiveFormatAttempted = false
     private var lastObservedLivePositionMs = Long.MIN_VALUE
     private var liveStallStartedAtMs = 0L
@@ -115,7 +116,7 @@ class BlofyPlaybackSession(
             })
         }
 
-    fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null) {
+    fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null, widevineLicenseUrl: String? = null) {
         // A channel switch supersedes any queued retry/fallback/watchdog work from the old URL.
         retryHandler.removeCallbacksAndMessages(null)
         automaticRetries = 0
@@ -124,6 +125,8 @@ class BlofyPlaybackSession(
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
         fallbackState.begin(url, fallbackUrl)
+        // Every new channel/item resets DRM, so license settings cannot leak into later playback.
+        activeWidevineLicenseUrl = PlaybackDrmPolicy.authorizedWidevineLicenseUrl(widevineLicenseUrl)
         firstFrameRecorded = false
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
         val item = mediaItem(url)
@@ -207,8 +210,18 @@ class BlofyPlaybackSession(
     private fun mediaItem(url: String): MediaItem = MediaItem.Builder()
         .setUri(url)
         .apply {
-            if (PlaybackMediaTypePolicy.shouldHintHls(contentKind, profile.liveFormat, url)) {
-                setMimeType(MimeTypes.APPLICATION_M3U8)
+            when {
+                PlaybackMediaTypePolicy.shouldHintDash(url) -> setMimeType(MimeTypes.APPLICATION_MPD)
+                PlaybackMediaTypePolicy.shouldHintHls(contentKind, profile.liveFormat, url) ->
+                    setMimeType(MimeTypes.APPLICATION_M3U8)
+            }
+            // Opt-in: only a caller with an authorized HTTPS license endpoint enables Widevine.
+            activeWidevineLicenseUrl?.let { licenseUrl ->
+                setDrmConfiguration(
+                    MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
+                        .setLicenseUri(licenseUrl)
+                        .build()
+                )
             }
         }
         .build()
