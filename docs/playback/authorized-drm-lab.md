@@ -55,9 +55,12 @@ the result of a Chrome/Shaka demo is not a device test for the native player.
 
 This change only modifies the Android/Android TV primary codebase
 (`i20sss20-maker/BLOFY-PLAYER-2.0`). The archived Android projects are not
-the supported distribution channel, and no editable Windows player source
-was present in that repository. The Windows player needs a separate source
-audit and platform DRM evaluation, **not** a claim of completed Widevine support.
+the supported distribution channel. Windows source was subsequently located
+on the **unmerged Windows development branch** `fix/windows-series-stream-hang-20261008`
+(PR #175). It uses **WPF + LibVLC 3.0.24**, not Media3, so this Android PR does
+not enable Widevine on Windows. Clear HLS/DASH tests are possible, but licensed
+Windows DRM requires a distinct CDM-capable playback design and platform QA.
+No production Windows installer has been altered or released.
 
 Keep this as a review branch / pull request until CI and real-device testing
 are complete. No production service, public content source or release pipeline
