@@ -38,6 +38,7 @@ class BlofyPlaybackSession(
     private val fallbackState = PlaybackFallbackState()
     private val retryHandler = Handler(context.mainLooper)
     private val appContext = context.applicationContext
+    private var activeWidevineLicenseUri: String? = null
 
     private val liveStallWatchdog = object : Runnable {
         override fun run() {
@@ -115,7 +116,7 @@ class BlofyPlaybackSession(
             })
         }
 
-    fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null) {
+    fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null, widevineLicenseUri: String? = null) {
         // A channel switch supersedes any queued retry/fallback/watchdog work from the old URL.
         retryHandler.removeCallbacksAndMessages(null)
         automaticRetries = 0
@@ -124,6 +125,8 @@ class BlofyPlaybackSession(
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
         fallbackState.begin(url, fallbackUrl)
+        // Reset on every content switch; license URIs are not shared between items.
+        activeWidevineLicenseUri = PlaybackDrmPolicy.validatedLicenseUri(widevineLicenseUri)
         firstFrameRecorded = false
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
         val item = mediaItem(url)
@@ -207,8 +210,16 @@ class BlofyPlaybackSession(
     private fun mediaItem(url: String): MediaItem = MediaItem.Builder()
         .setUri(url)
         .apply {
-            if (PlaybackMediaTypePolicy.shouldHintHls(contentKind, profile.liveFormat, url)) {
-                setMimeType(MimeTypes.APPLICATION_M3U8)
+            val mime = PlaybackMediaTypePolicy.mimeTypeHint(contentKind, profile.liveFormat, url)
+            if (mime != null) setMimeType(mime)
+            val licenseUri = activeWidevineLicenseUri
+            if (licenseUri != null && PlaybackDrmPolicy.canAttachWidevine(mime)) {
+                // Use only a legitimate license endpoint supplied by the playback caller.
+                setDrmConfiguration(
+                    MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
+                        .setLicenseUri(licenseUri)
+                        .build()
+                )
             }
         }
         .build()
