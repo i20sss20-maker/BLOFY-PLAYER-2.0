@@ -3203,6 +3203,32 @@ public partial class MainWindow : Window
         ShowSettings();
     }
 
+#if DEBUG
+    private async Task ShowDebugPlaybackLabAsync()
+    {
+        var raw = UiDialogs.Prompt(
+            this,
+            "BLOFY Windows — مختبر تشغيل محلي",
+            "رابط HLS / DASH / TS / MP4 مصرح به. HTTPS أو HTTP محلي فقط. لا يدعم Widevine DRM.");
+        if (raw is null) return;
+        if (!PlaybackLabUrlPolicy.TryValidate(raw, out var streamUrl, out var format))
+        {
+            MessageBox.Show(
+                this,
+                "الرابط غير مناسب للتجربة. استخدم https مع امتداد .mpd / .m3u8 / .ts / .mp4، أو http محليًا (localhost).\n" +
+                "لا تدخل كلمات مرور Xtream أو تراخيص Widevine.",
+                "BLOFY LAB",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        // Existing single-player overlay and its normal cleanup logic.
+        // Never save the test URL, log credentials or attempt DRM bypass.
+        await ShowPlayerOverlayAsync("BLOFY QA — " + format + " (clear only)", streamUrl);
+    }
+#endif
+
     private void ShowSettings()
     {
         DisposePreview();
@@ -3300,6 +3326,12 @@ public partial class MainWindow : Window
             SettingActionTile("تشخيص BLOFY", "الجهاز والمكتبة وتقرير الدعم", (_, _) => OpenSubpage(ShowDiagnostics)),
             SettingActionTile("تنظيف التخزين المؤقت", "يحذف الكاش فقط ولا يحذف بياناتك", (_, _) => CleanStorage()),
             SettingActionTile("استعادة الإعدادات الافتراضية", "إرجاع خيارات التشغيل والواجهة للوضع الافتراضي", async (_, _) => await RestoreDefaultSettingsAsync())));
+
+#if DEBUG
+        root.Children.Add(SettingsSection("مختبر التطوير — نسخة Debug فقط",
+            SettingActionTile("🧪 اختبار HLS / DASH", "اختبر فيديو مسموحًا وغير محمي • لا يدعم Widevine على Windows",
+                async (_, _) => await ShowDebugPlaybackLabAsync())));
+#endif
 
         var save = Action("حفظ التغييرات", true, async (_, _) =>
         {

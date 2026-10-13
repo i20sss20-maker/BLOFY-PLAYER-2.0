@@ -99,6 +99,17 @@ jobs:
           }
           Write-Host "Installer smoke check passed: $binary ($version)"
 
+      - name: Build separate Debug playback lab artifact
+        run: dotnet publish windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj -c Debug -r win-x64 --self-contained true -o windows/qa-debug
+
+      - name: Upload Windows Debug playback lab
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-Windows-DEBUG-Playback-Lab-x64
+          path: windows/qa-debug
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Generate installer SHA256
         shell: pwsh
         run: |

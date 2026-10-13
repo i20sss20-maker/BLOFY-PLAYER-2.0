@@ -1,4 +1,5 @@
 using BlofyPlayer.Windows.Core;
+using BlofyPlayer.Windows.Core.Playback;
 
 static void Check(bool condition, string label)
 {
@@ -147,3 +148,29 @@ await using (var boundedStream = new LengthLimitedStream(new MemoryStream(new by
     Check(refused, "streaming byte cap applies even with missing Content-Length");
 }
 Console.WriteLine("All BLOFY Windows 0.4.16 stream parser checks passed.");
+
+
+// QA lab URL policy regressions.
+Check(PlaybackLabUrlPolicy.TryValidate(
+    "https://cdn.example.test/sample.MPD?token=signed", out var dashUrl, out var dashType)
+    && dashType == "DASH" && dashUrl.EndsWith("?token=signed", StringComparison.Ordinal),
+    "authorized DASH QA URL accepted without dropping its query");
+Check(PlaybackLabUrlPolicy.TryValidate(
+    "https://cdn.example.test/movie.m3u8?quality=hd", out _, out var hlsType)
+    && hlsType == "HLS", "HLS QA URL recognized");
+Check(PlaybackLabUrlPolicy.TryValidate(
+    "http://localhost:8787/demo.ts", out _, out var localType)
+    && localType == "TS", "loopback HTTP permitted for local lab");
+Check(!PlaybackLabUrlPolicy.TryValidate("http://remote.example.test/movie.mpd", out _, out _),
+    "insecure remote DASH URL rejected");
+Check(!PlaybackLabUrlPolicy.TryValidate("https://name:pass@cdn.example.test/a.mpd", out _, out _),
+    "credentials in playback URL rejected");
+Check(!PlaybackLabUrlPolicy.TryValidate("https://cdn.example.test/file.mpd#fragment", out _, out _),
+    "URL fragments rejected");
+Check(!PlaybackLabUrlPolicy.TryValidate("https://cdn.example.test/no-extension?path=.mpd", out _, out _),
+    "query strings never masquerade as a DASH filename");
+Check(!PlaybackLabUrlPolicy.TryValidate("file:///C:/secret/video.mpd", out _, out _),
+    "local filesystem URLs rejected");
+Check(!PlaybackLabUrlPolicy.TryValidate("javascript:alert(1)", out _, out _),
+    "non-media URL schemes rejected");
+Console.WriteLine("BLOFY Windows playback lab policy checks passed.");
