@@ -1,7 +1,10 @@
 package tv.blofy.player.core.playback
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import androidx.media3.common.MimeTypes
 import org.junit.Test
 import tv.blofy.player.core.provider.LiveFormat
 
@@ -49,4 +52,32 @@ class PlaybackMediaTypePolicyTest {
             )
         )
     }
+    @Test
+    fun detectsDashForLiveAndMoviesIncludingQueryStrings() {
+        assertEquals(
+            MimeTypes.APPLICATION_MPD,
+            PlaybackMediaTypePolicy.mimeTypeHint("live", LiveFormat.HLS, "https://cdn.example.test/watch/stream.MPD?token=abc")
+        )
+        assertEquals(
+            MimeTypes.APPLICATION_MPD,
+            PlaybackMediaTypePolicy.mimeTypeHint("movie", LiveFormat.TS, "https://cdn.example.test/movies/title.mpd#player")
+        )
+    }
+
+    @Test
+    fun detectsHlsForVodAndDoesNotGuessFromQueryOrHostname() {
+        assertEquals(
+            MimeTypes.APPLICATION_M3U8,
+            PlaybackMediaTypePolicy.mimeTypeHint("movie", LiveFormat.TS, "https://example.test/movies/1.m3u8?token=abc")
+        )
+        assertNull(PlaybackMediaTypePolicy.mimeTypeHint("movie", LiveFormat.TS, "https://example.test/movie/1?file=clip.mpd"))
+        assertNull(PlaybackMediaTypePolicy.mimeTypeHint("movie", LiveFormat.TS, "https://cdn.mpd.example.test/movie/1"))
+        assertNull(PlaybackMediaTypePolicy.mimeTypeHint("live", LiveFormat.HLS, "https://example.test/live/stream.mp4"))
+    }
+
+    @Test
+    fun explicitlyNamedDashOverridesProviderDefaultHls() {
+        assertFalse(PlaybackMediaTypePolicy.shouldHintHls("live", LiveFormat.HLS, "https://example.test/ch/stream.mpd"))
+    }
+
 }
