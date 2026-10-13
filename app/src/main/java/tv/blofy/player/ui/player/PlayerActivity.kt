@@ -124,7 +124,12 @@ class PlayerActivity : AppCompatActivity() {
             }
         })
         buildPlayerUi()
-        session.play(url = url, resumeMs = intent.getLongExtra(EXTRA_RESUME_MS, 0L), fallbackUrl = intent.getStringExtra(EXTRA_FALLBACK_URL))
+        session.play(
+            url = url,
+            resumeMs = intent.getLongExtra(EXTRA_RESUME_MS, 0L),
+            fallbackUrl = intent.getStringExtra(EXTRA_FALLBACK_URL),
+            widevineLicenseUrl = intent.getStringExtra(EXTRA_WIDEVINE_LICENSE_URL)
+        )
         updateTitle(currentTitle)
         refreshFavoriteState()
         if (kind == "live") {
@@ -565,7 +570,7 @@ class PlayerActivity : AppCompatActivity() {
     private data class TrackEntry(val group: Tracks.Group, val index: Int, val label: String)
 
     companion object {
-        const val EXTRA_URL = "url"; const val EXTRA_CONTENT_KEY = "content_key"; const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_KIND = "kind"; const val EXTRA_LIVE_FORMAT = "live_format"; const val EXTRA_PROVIDER_TYPE = "provider_type"; const val EXTRA_PREFERRED_TRANSPORT = "preferred_transport"; const val EXTRA_PREFERRED_ENGINE = "preferred_engine"; const val EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS = "allow_cross_protocol_redirects"; const val EXTRA_FALLBACK_URL = "fallback_url"; const val EXTRA_RESUME_MS = "resume_ms"; const val EXTRA_STREAM_ID = "stream_id"; const val EXTRA_CATEGORY_ID = "category_id"; const val EXTRA_TITLE = "title"; const val EXTRA_SERIES_ID = "series_id"; const val EXTRA_SEASON = "season"; const val EXTRA_EPISODE = "episode"
+        const val EXTRA_URL = "url"; const val EXTRA_CONTENT_KEY = "content_key"; const val EXTRA_PROVIDER_ID = "provider_id"; const val EXTRA_KIND = "kind"; const val EXTRA_LIVE_FORMAT = "live_format"; const val EXTRA_PROVIDER_TYPE = "provider_type"; const val EXTRA_PREFERRED_TRANSPORT = "preferred_transport"; const val EXTRA_PREFERRED_ENGINE = "preferred_engine"; const val EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS = "allow_cross_protocol_redirects"; const val EXTRA_FALLBACK_URL = "fallback_url"; const val EXTRA_WIDEVINE_LICENSE_URL = "widevine_license_url"; const val EXTRA_RESUME_MS = "resume_ms"; const val EXTRA_STREAM_ID = "stream_id"; const val EXTRA_CATEGORY_ID = "category_id"; const val EXTRA_TITLE = "title"; const val EXTRA_SERIES_ID = "series_id"; const val EXTRA_SEASON = "season"; const val EXTRA_EPISODE = "episode"
         private val PURPLE = BlofyTvDesign.Purple; private val PURPLE_SOFT = BlofyTvDesign.PurpleSoft
         private val HUD_NAVIGATION_ACTIONS = setOf(RemoteAction.OK, RemoteAction.UP, RemoteAction.DOWN, RemoteAction.LEFT, RemoteAction.RIGHT)
     }
