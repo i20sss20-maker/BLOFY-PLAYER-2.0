@@ -1,3 +1,4 @@
+using System.Net.Http;
 using BlofyPlayer.Windows.Core;
 using BlofyPlayer.Windows.Core.Identity;
 using System.Diagnostics;
