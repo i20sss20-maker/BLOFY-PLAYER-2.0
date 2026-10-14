@@ -1,5 +1,7 @@
 using BlofyPlayer.Windows.Core;
 using BlofyPlayer.Windows.Core.Playback;
+using System.Net;
+using System.Net.Http;
 
 static void Check(bool condition, string label)
 {
@@ -174,3 +176,39 @@ Check(!PlaybackLabUrlPolicy.TryValidate("file:///C:/secret/video.mpd", out _, ou
 Check(!PlaybackLabUrlPolicy.TryValidate("javascript:alert(1)", out _, out _),
     "non-media URL schemes rejected");
 Console.WriteLine("BLOFY Windows playback lab policy checks passed.");
+
+
+// Credential-free connectivity diagnostics: verify both healthy and failed states.
+static async Task<ConnectionProbe.Result> ProbeFake(HttpStatusCode code, string body)
+{
+    using var client = new HttpClient(new FakeHealthHandler(code, body))
+    {
+        BaseAddress = new Uri("https://api.blofyplayer.com/")
+    };
+    return await ConnectionProbe.CheckAsync(client);
+}
+Check((await ProbeFake(HttpStatusCode.OK, "{\"ok\":true,\"database\":\"ready\"}")).Healthy,
+    "Windows API health reports available server and database");
+Check(!(await ProbeFake(HttpStatusCode.OK, "{\"ok\":true,\"database\":\"unavailable\"}")).Healthy,
+    "degraded database never shown as healthy");
+Check(!(await ProbeFake(HttpStatusCode.ServiceUnavailable, "{\"ok\":false}")).Healthy,
+    "HTTP 503 treated as unavailable");
+Check(!(await ProbeFake(HttpStatusCode.Forbidden, "forbidden")).Healthy,
+    "gateway access denial treated as unavailable");
+Check(!(await ProbeFake(HttpStatusCode.OK, "<html>bad gateway</html>")).Healthy,
+    "non-JSON gateway response not shown as healthy");
+Console.WriteLine("BLOFY Windows connectivity regression checks passed.");
+
+sealed class FakeHealthHandler(HttpStatusCode code, string body) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (request.RequestUri?.AbsolutePath != "/health")
+            throw new InvalidOperationException("A health test must not transmit device credentials.");
+        return Task.FromResult(new HttpResponseMessage(code)
+        {
+            Content = new StringContent(body)
+        });
+    }
+}
