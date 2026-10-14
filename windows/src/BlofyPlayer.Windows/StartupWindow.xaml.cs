@@ -16,6 +16,7 @@ public partial class StartupWindow : Window
     private readonly LocalStore _store = new();
     private readonly DispatcherTimer _pollTimer = new() { Interval = TimeSpan.FromSeconds(4) };
     private ActivationCheckResponse? _activationState;
+    private DateTimeOffset? _activationVerifiedAt;
     private bool _loading;
     private bool _checking;
     private bool _autoEntryStarted;
@@ -68,6 +69,7 @@ public partial class StartupWindow : Window
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
             _activationState = await _activation.CheckAsync(_identity, cancellationToken: timeout.Token);
+            _activationVerifiedAt = _activationState?.CanUse() == true ? DateTimeOffset.UtcNow : null;
             if (_activationState is null)
             {
                 ActivationStateText.Text = "تعذر التحقق من الجهاز";
@@ -193,14 +195,48 @@ public partial class StartupWindow : Window
         try
         {
             SetLoading(8, "التحقق من التفعيل…");
-            using var activationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-            var fresh = await _activation.CheckAsync(_identity, cancellationToken: activationTimeout.Token);
+            // The activation screen just received a successful server response.
+            // Do not block launch on an immediate duplicate request that can fail
+            // while the network changes between the two startup screens.
+            ActivationCheckResponse? fresh = null;
+            if (ActivationEntryPolicy.CanReuseRecentApproval(
+                    _activationState?.CanUse() == true,
+                    _activationState?.ExpiresAt,
+                    _activationVerifiedAt,
+                    DateTimeOffset.UtcNow))
+            {
+                fresh = _activationState;
+            }
+            else
+            {
+                using var activationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                fresh = await _activation.CheckAsync(_identity, cancellationToken: activationTimeout.Token);
+                if (fresh?.CanUse() == true)
+                {
+                    _activationState = fresh;
+                    _activationVerifiedAt = DateTimeOffset.UtcNow;
+                }
+            }
             if (fresh?.CanUse() != true)
                 throw new InvalidOperationException("التفعيل غير متاح الآن. ارجع لصفحة الباركود وحدّث الحالة.");
 
             SetLoading(20, "مزامنة القوائم من موقع BLOFY…");
-            await SyncPortalIntoStoreAsync();
-            StartupSessionTransfer.Store(fresh, portalSynced: true);
+            // Portal sync is optional once activation succeeded. A transient
+            // portal timeout must not hide existing locally saved playlists.
+            var portalSynced = false;
+            try
+            {
+                await SyncPortalIntoStoreAsync();
+                portalSynced = true;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or
+                                       OperationCanceledException or TimeoutException or
+                                       System.Text.Json.JsonException)
+            {
+                App.LogCrash("Startup portal sync unavailable", ex);
+                SetLoading(28, "تعذر تحديث القوائم مؤقتًا — فتح القوائم المحفوظة");
+            }
+            StartupSessionTransfer.Store(fresh, portalSynced: portalSynced);
 
             var provider = _store.ActiveProvider();
             if (provider is not null)
