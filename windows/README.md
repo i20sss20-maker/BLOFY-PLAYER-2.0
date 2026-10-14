@@ -87,3 +87,15 @@ A CI success is not certification of real-device 4K, paid-provider compatibility
 - Windows CI tests updater URL rules, artwork quota logic, streaming byte limits, token redaction, release version agreement, compilation and installed EXE packaging.
 
 **Release status:** unsigned preview for Windows x64; real licensed providers, playback sessions, antivirus reputation, code signing and long-duration 4K remain manual release gates. Do not disable Windows Defender or publish an update as production solely from a green CI build.
+
+## Windows 0.4.17 — Android parity and connectivity recovery (QA preview)
+
+- Sync both **M3U** and **Xtream** lists saved through the official BLOFY device portal. Preserve M3U type and URL when an existing local provider is updated.
+- A verified active/trial device can open with a **previously saved local catalog** even if a portal refresh fails. This does not bypass a blocked or expired activation.
+- Retry a transient activation request once; display the server's explicit blocked state rather than describing it as an Internet failure.
+- Add credential-free **server + database connectivity checks** to activation and the settings/subscription summary. A healthy BLOFY API does **not** mean a third-party content source or license works.
+- Increase LibVLC streaming buffer moderately and consider more **distinct authorized alternative URLs** before concluding playback failed. Preserve signed URL query strings and do not claim Widevine/DRM support.
+- Keep diagnostics private: never paste stream URLs, passwords, device credentials or tokens in public CI logs/issues.
+- Windows x64 artifacts are built automatically for PR validation. Real-device verification remains necessary before distribution.
+
+**QA priority:** Test portal M3U sync, device activation, on/offline startup with cached lists, legitimate Xtream streams, HLS/TS live switching, VOD seeking, audio/subtitles, QR registration and update/rollback on Windows 10/11. Do not promote an unsigned build to stable solely because CI passes.
