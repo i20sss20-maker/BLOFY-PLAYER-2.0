@@ -199,7 +199,19 @@ public partial class StartupWindow : Window
                 throw new InvalidOperationException("التفعيل غير متاح الآن. ارجع لصفحة الباركود وحدّث الحالة.");
 
             SetLoading(20, "مزامنة القوائم من موقع BLOFY…");
-            await SyncPortalIntoStoreAsync();
+            try
+            {
+                await SyncPortalIntoStoreAsync();
+            }
+            catch (Exception ex)
+            {
+                // Portal/network outages must not trap a validly activated device
+                // on the loading screen. Its locally saved lists remain usable.
+                App.LogCrash("Startup portal sync (cached fallback)", ex);
+                SetLoading(20, "تعذرت المزامنة؛ سيتم استخدام قوائمك المحفوظة");
+            }
+            // Do not immediately repeat the failed request from MainWindow.
+            // The user can refresh the portal once connectivity returns.
             StartupSessionTransfer.Store(fresh, portalSynced: true);
 
             var provider = _store.ActiveProvider();
