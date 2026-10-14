@@ -175,3 +175,32 @@ Check(!PlaybackLabUrlPolicy.TryValidate("file:///C:/secret/video.mpd", out _, ou
 Check(!PlaybackLabUrlPolicy.TryValidate("javascript:alert(1)", out _, out _),
     "non-media URL schemes rejected");
 Console.WriteLine("BLOFY Windows playback lab policy checks passed.");
+
+
+var nowForActivation = DateTimeOffset.UtcNow;
+Check(ActivationEntryPolicy.CanReuseRecentApproval(
+        true, nowForActivation.AddDays(1).ToUnixTimeMilliseconds(),
+        nowForActivation.AddSeconds(-5), nowForActivation),
+    "recent verified activation avoids a duplicate startup check");
+Check(!ActivationEntryPolicy.CanReuseRecentApproval(
+        false, null, nowForActivation, nowForActivation),
+    "unapproved activation is never reused");
+Check(!ActivationEntryPolicy.CanReuseRecentApproval(
+        true, null, nowForActivation.AddSeconds(-21), nowForActivation),
+    "stale activation always requires the server");
+Check(!ActivationEntryPolicy.CanReuseRecentApproval(
+        true, null, nowForActivation.AddSeconds(1), nowForActivation),
+    "future-dated approval is rejected");
+Check(!ActivationEntryPolicy.CanReuseRecentApproval(
+        true, nowForActivation.AddSeconds(-1).ToUnixTimeMilliseconds(),
+        nowForActivation, nowForActivation),
+    "expired millisecond entitlement is rejected");
+Check(!ActivationEntryPolicy.CanReuseRecentApproval(
+        true, nowForActivation.AddSeconds(-1).ToUnixTimeSeconds(),
+        nowForActivation, nowForActivation),
+    "expired second entitlement is rejected");
+Check(ActivationEntryPolicy.CanReuseRecentApproval(
+        true, nowForActivation.AddHours(1).ToUnixTimeSeconds(),
+        nowForActivation, nowForActivation),
+    "valid second-based entitlement remains supported");
+Console.WriteLine("BLOFY Windows activation startup recovery checks passed.");
