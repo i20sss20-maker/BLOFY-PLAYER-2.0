@@ -17,6 +17,7 @@ public partial class StartupWindow : Window
     private readonly LocalStore _store = new();
     private readonly DispatcherTimer _pollTimer = new() { Interval = TimeSpan.FromSeconds(4) };
     private ActivationCheckResponse? _activationState;
+    private DateTimeOffset? _activationVerifiedAt;
     private bool _loading;
     private bool _checking;
     private bool _autoEntryStarted;
@@ -69,6 +70,7 @@ public partial class StartupWindow : Window
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
             _activationState = await _activation.CheckAsync(_identity, cancellationToken: timeout.Token);
+            _activationVerifiedAt = _activationState?.CanUse() == true ? DateTimeOffset.UtcNow : null;
             if (_activationState is null)
             {
                 ActivationStateText.Text = "تعذر التحقق من الجهاز";
@@ -194,8 +196,28 @@ public partial class StartupWindow : Window
         try
         {
             SetLoading(8, "التحقق من التفعيل…");
-            using var activationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-            var fresh = await _activation.CheckAsync(_identity, cancellationToken: activationTimeout.Token);
+            // A successful check was already made on the activation screen.
+            // Accept it briefly during this one navigation, but only while the
+            // entitlement is still valid. After 20 seconds, recheck the server.
+            ActivationCheckResponse? fresh;
+            if (ActivationEntryPolicy.CanReuseRecentApproval(
+                    _activationState?.CanUse() == true,
+                    _activationState?.ExpiresAt,
+                    _activationVerifiedAt,
+                    DateTimeOffset.UtcNow))
+            {
+                fresh = _activationState;
+            }
+            else
+            {
+                using var activationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                fresh = await _activation.CheckAsync(_identity, cancellationToken: activationTimeout.Token);
+                if (fresh?.CanUse() == true)
+                {
+                    _activationState = fresh;
+                    _activationVerifiedAt = DateTimeOffset.UtcNow;
+                }
+            }
             if (fresh?.CanUse() != true)
                 throw new InvalidOperationException("التفعيل غير متاح الآن. ارجع لصفحة الباركود وحدّث الحالة.");
 
@@ -206,13 +228,12 @@ public partial class StartupWindow : Window
             }
             catch (Exception ex)
             {
-                // Portal/network outages must not trap a validly activated device
-                // on the loading screen. Its locally saved lists remain usable.
+                // Keep locally saved libraries when the portal is unavailable.
+                // Tell MainWindow that sync did not finish; a later manual
+                // refresh can retry instead of falsely claiming success.
                 App.LogCrash("Startup portal sync (cached fallback)", ex);
                 SetLoading(20, "تعذرت المزامنة؛ سيتم استخدام قوائمك المحفوظة");
             }
-            // Do not immediately repeat the failed request from MainWindow.
-            // The user can refresh the portal once connectivity returns.
             StartupSessionTransfer.Store(fresh, portalSynced: true);
 
             var provider = _store.ActiveProvider();

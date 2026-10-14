@@ -1,5 +1,6 @@
 using BlofyPlayer.Windows.Core;
 using BlofyPlayer.Windows.Core.Playback;
+using BlofyPlayer.Windows.Core.Identity;
 using System.Net;
 using System.Net.Http;
 
@@ -198,6 +199,29 @@ Check(!(await ProbeFake(HttpStatusCode.Forbidden, "forbidden")).Healthy,
 Check(!(await ProbeFake(HttpStatusCode.OK, "<html>bad gateway</html>")).Healthy,
     "non-JSON gateway response not shown as healthy");
 Console.WriteLine("BLOFY Windows connectivity regression checks passed.");
+
+
+var verifiedAt = DateTimeOffset.UtcNow;
+Check(ActivationEntryPolicy.CanReuseRecentApproval(
+    true, verifiedAt.AddDays(1).ToUnixTimeMilliseconds(),
+    verifiedAt.AddSeconds(-3), verifiedAt),
+    "recent online approval avoids duplicate activation network request");
+Check(!ActivationEntryPolicy.CanReuseRecentApproval(
+    false, null, verifiedAt, verifiedAt),
+    "rejected activation is never reused");
+Check(!ActivationEntryPolicy.CanReuseRecentApproval(
+    true, null, verifiedAt.AddSeconds(-21), verifiedAt),
+    "old approval requires a new server check");
+Check(!ActivationEntryPolicy.CanReuseRecentApproval(
+    true, null, verifiedAt.AddSeconds(2), verifiedAt),
+    "future approval timestamp is rejected");
+Check(!ActivationEntryPolicy.CanReuseRecentApproval(
+    true, verifiedAt.AddSeconds(-1).ToUnixTimeMilliseconds(), verifiedAt, verifiedAt),
+    "expired entitlement (milliseconds) is rejected");
+Check(!ActivationEntryPolicy.CanReuseRecentApproval(
+    true, verifiedAt.AddSeconds(-1).ToUnixTimeSeconds(), verifiedAt, verifiedAt),
+    "expired entitlement (seconds) is rejected");
+Console.WriteLine("BLOFY Windows server-verified startup checks passed.");
 
 sealed class FakeHealthHandler(HttpStatusCode code, string body) : HttpMessageHandler
 {
