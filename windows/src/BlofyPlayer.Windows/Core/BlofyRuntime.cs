@@ -1233,11 +1233,17 @@ public sealed class M3uService : IDisposable
 
 public sealed class PortalService : IDisposable
 {
-    private readonly HttpClient _http = new()
+    // Do not redirect device credentials or portal playlist metadata elsewhere.
+    private readonly HttpClient _http = new(new HttpClientHandler { AllowAutoRedirect = false })
     {
         BaseAddress = new Uri(BlofyEndpoints.ServiceBase),
         Timeout = TimeSpan.FromSeconds(10)
     };
+
+    public PortalService()
+    {
+        _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", AppBuildInfo.UserAgent);
+    }
 
     public async Task<List<ProviderAccount>> FetchAsync(BlofyIdentity identity, CancellationToken ct = default)
     {
