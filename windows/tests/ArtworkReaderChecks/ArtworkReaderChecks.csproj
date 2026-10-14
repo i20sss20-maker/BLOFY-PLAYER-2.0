@@ -14,5 +14,6 @@
     <Compile Include="../../src/BlofyPlayer.Windows/Core/LengthLimitedStream.cs" Link="LengthLimitedStream.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/Playback/PlaybackLabUrlPolicy.cs" Link="PlaybackLabUrlPolicy.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/BoundedPayloadReader.cs" Link="BoundedPayloadReader.cs" />
+    <Compile Include="../../src/BlofyPlayer.Windows/Core/ConnectionProbe.cs" Link="ConnectionProbe.cs" />
   </ItemGroup>
 </Project>

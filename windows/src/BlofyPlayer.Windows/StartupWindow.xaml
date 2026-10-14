@@ -82,6 +82,11 @@
                             Style="{StaticResource SecondaryButton}"
                             Padding="20,12" Margin="10,0,0,0"/>
                 </StackPanel>
+                <Button x:Name="ConnectionTestButton" Content="فحص اتصال السيرفر"
+                        Click="ConnectionTestButton_Click"
+                        Style="{StaticResource SecondaryButton}"
+                        Padding="16,9" Margin="0,12,0,0"
+                        HorizontalAlignment="Right"/>
             </StackPanel>
 
             <Border Grid.Column="1" Width="390" Height="520" VerticalAlignment="Center"

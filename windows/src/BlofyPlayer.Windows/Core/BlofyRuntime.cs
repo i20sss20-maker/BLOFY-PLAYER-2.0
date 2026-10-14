@@ -1233,11 +1233,17 @@ public sealed class M3uService : IDisposable
 
 public sealed class PortalService : IDisposable
 {
-    private readonly HttpClient _http = new()
+    // Do not redirect device credentials or portal playlist metadata elsewhere.
+    private readonly HttpClient _http = new(new HttpClientHandler { AllowAutoRedirect = false })
     {
         BaseAddress = new Uri(BlofyEndpoints.ServiceBase),
         Timeout = TimeSpan.FromSeconds(10)
     };
+
+    public PortalService()
+    {
+        _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", AppBuildInfo.UserAgent);
+    }
 
     public async Task<List<ProviderAccount>> FetchAsync(BlofyIdentity identity, CancellationToken ct = default)
     {
@@ -1247,21 +1253,22 @@ public sealed class PortalService : IDisposable
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) return [];
 
-        var raw = new List<(string Id, string Name, string Url, string User, string Pass, bool Active, long UpdatedAt)>();
+        var raw = new List<(string Id, string Name, string Type, string Url, string User, string Pass, bool Active, long UpdatedAt)>();
         foreach (var row in items.EnumerateArray())
         {
             var type = Get(row, "providerType").ToLowerInvariant();
-            if (type != "xtream") continue;
+            if (type is not ("xtream" or "m3u")) continue;
             var id = Get(row, "id");
             var url = Get(row, "baseUrl");
             var user = Get(row, "username");
             var pass = Get(row, "password");
             if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(url) ||
-                string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(pass)) continue;
+                (type == "xtream" && (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(pass)))) continue;
 
             raw.Add((
                 id,
                 Get(row, "name") is { Length: > 0 } name ? name : "BLOFY Server",
+                type,
                 url.TrimEnd('/'),
                 user,
                 pass,
@@ -1270,7 +1277,7 @@ public sealed class PortalService : IDisposable
             ));
         }
 
-        var subscriberRows = raw.Where(x => BlofySubscriberService.IsProxyUrl(x.Url)).ToList();
+        var subscriberRows = raw.Where(x => x.Type == "xtream" && BlofySubscriberService.IsProxyUrl(x.Url)).ToList();
         Dictionary<string, BlofySubscriberSession> resolved = [];
         if (subscriberRows.Count > 0)
         {
@@ -1290,6 +1297,20 @@ public sealed class PortalService : IDisposable
         var result = new List<ProviderAccount>();
         foreach (var row in raw)
         {
+            if (row.Type == "m3u")
+            {
+                result.Add(new ProviderAccount
+                {
+                    Id = row.Id,
+                    Name = row.Name,
+                    ProviderType = "m3u",
+                    M3uUrl = row.Url,
+                    Active = row.Active,
+                    UpdatedAt = row.UpdatedAt
+                });
+                continue;
+            }
+
             if (BlofySubscriberService.IsProxyUrl(row.Url))
             {
                 if (!resolved.TryGetValue(row.User, out var direct)) continue;
@@ -1328,7 +1349,9 @@ public sealed class PortalService : IDisposable
         var managed = !string.IsNullOrWhiteSpace(provider.SubscriberToken);
         var baseUrl = managed
             ? BlofyEndpoints.SubscriberProxy
-            : provider.BaseUrl.TrimEnd('/');
+            : provider.ProviderType.Equals("m3u", StringComparison.OrdinalIgnoreCase)
+                ? provider.M3uUrl.Trim()
+                : provider.BaseUrl.TrimEnd('/');
         var username = managed ? provider.SubscriberToken : provider.Username;
         var password = managed ? "blofy" : provider.Password;
 
@@ -1338,7 +1361,7 @@ public sealed class PortalService : IDisposable
             activationCode = identity.ActivationCode,
             id = provider.Id,
             name = provider.Name,
-            providerType = "xtream",
+            providerType = provider.ProviderType.Equals("m3u", StringComparison.OrdinalIgnoreCase) ? "m3u" : "xtream",
             baseUrl,
             username,
             password,

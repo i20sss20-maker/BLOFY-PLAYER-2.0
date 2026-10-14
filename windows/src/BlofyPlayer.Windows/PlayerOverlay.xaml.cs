@@ -105,9 +105,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         var options = new List<string>
         {
             "--no-video-title-show",
-            "--network-caching=420",
-            "--live-caching=350",
-            "--file-caching=350",
+            "--network-caching=1000",
+            "--live-caching=1000",
+            "--file-caching=600",
             "--avcodec-hw=any"
         };
         if (_settings.SubtitleLanguage is "ar" or "auto")
@@ -349,7 +349,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 // Never invent one for generic Xtream/CDN URLs.
                 if (!string.IsNullOrWhiteSpace(referer))
                     media.AddOption(":http-referrer=" + referer);
-                media.AddOption(":network-caching=" + (isLive ? "450" : "800"));
+                media.AddOption(":network-caching=" + (isLive ? "1200" : "1800"));
                 if (disableSubtitles) media.AddOption(":no-spu");
                 var started = _player.Play(media);
                 if (!started)
@@ -402,7 +402,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         var haveNextUrl = _recoveryIndex + 1 < _recoveryUrls.Count;
         var haveAlternateAgent = !_compatibilityUserAgent &&
             !string.Equals(_settings.UserAgent, CompatibilityUserAgent, StringComparison.OrdinalIgnoreCase);
-        var maxRetries = Math.Min(2, Math.Max(1, _recoveryUrls.Count * 2) - 1);
+        var maxRetries = Math.Min(4, Math.Max(1, _recoveryUrls.Count * 2) - 1);
         if (_automaticRecoveries >= maxRetries || (!haveNextUrl && !haveAlternateAgent))
         {
             TrackPlayback("فشل التشغيل بعد انتهاء البدائل • " + message);

@@ -1,3 +1,4 @@
+using System.Net.Http;
 using BlofyPlayer.Windows.Core;
 using BlofyPlayer.Windows.Core.Identity;
 using System.Diagnostics;
@@ -199,7 +200,19 @@ public partial class StartupWindow : Window
                 throw new InvalidOperationException("التفعيل غير متاح الآن. ارجع لصفحة الباركود وحدّث الحالة.");
 
             SetLoading(20, "مزامنة القوائم من موقع BLOFY…");
-            await SyncPortalIntoStoreAsync();
+            try
+            {
+                await SyncPortalIntoStoreAsync();
+            }
+            catch (Exception ex)
+            {
+                // Portal/network outages must not trap a validly activated device
+                // on the loading screen. Its locally saved lists remain usable.
+                App.LogCrash("Startup portal sync (cached fallback)", ex);
+                SetLoading(20, "تعذرت المزامنة؛ سيتم استخدام قوائمك المحفوظة");
+            }
+            // Do not immediately repeat the failed request from MainWindow.
+            // The user can refresh the portal once connectivity returns.
             StartupSessionTransfer.Store(fresh, portalSynced: true);
 
             var provider = _store.ActiveProvider();
@@ -300,6 +313,32 @@ public partial class StartupWindow : Window
         LoadingProgress.Value = percent;
         LoadingPercent.Text = percent + "%";
         LoadingStatus.Text = status;
+    }
+
+    private async void ConnectionTestButton_Click(object sender, RoutedEventArgs e)
+    {
+        ConnectionTestButton.IsEnabled = false;
+        ConnectionTestButton.Content = "جاري الفحص…";
+        try
+        {
+            using var http = new HttpClient
+            {
+                BaseAddress = new Uri(BlofyEndpoints.ServiceBase),
+                Timeout = TimeSpan.FromSeconds(8)
+            };
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(9));
+            var status = await ConnectionProbe.CheckAsync(http, timeout.Token);
+            TrialText.Text = status.Message;
+        }
+        catch (OperationCanceledException)
+        {
+            TrialText.Text = "انتهت مهلة فحص الاتصال؛ حاول لاحقًا.";
+        }
+        finally
+        {
+            ConnectionTestButton.IsEnabled = true;
+            ConnectionTestButton.Content = "فحص اتصال السيرفر";
+        }
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) =>
