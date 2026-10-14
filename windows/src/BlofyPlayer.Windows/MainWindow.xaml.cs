@@ -3169,8 +3169,29 @@ public partial class MainWindow : Window
             "باقتي • BLOFY PLAYER");
     }
 
-    private void ShowConnectionSummary()
+    private async Task ShowConnectionSummaryAsync()
     {
+        ProgressText.Text = "فحص اتصال BLOFY…";
+        ConnectionProbe.Result health;
+        try
+        {
+            using var client = new HttpClient
+            {
+                BaseAddress = new Uri(BlofyEndpoints.ServiceBase),
+                Timeout = TimeSpan.FromSeconds(8)
+            };
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(9));
+            health = await ConnectionProbe.CheckAsync(client, timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            health = new ConnectionProbe.Result(false, "انتهت مهلة الاتصال.");
+        }
+        finally
+        {
+            ProgressText.Text = "";
+        }
+
         var provider = _activeProvider;
         var providerText = provider is null
             ? "لا يوجد سيرفر نشط"
@@ -3182,11 +3203,13 @@ public partial class MainWindow : Window
         var series = snapshot?.Streams.Count(x => x.Kind == "series") ?? 0;
 
         MessageBox.Show(this,
-            "السيرفر: " + providerText + Environment.NewLine +
-            "القنوات: " + live.ToString("N0") + Environment.NewLine +
-            "الأفلام: " + movies.ToString("N0") + Environment.NewLine +
-            "المسلسلات: " + series.ToString("N0"),
-            "حالة الاشتراك • BLOFY PLAYER");
+            "اتصال خادم BLOFY: " + health.Message + Environment.NewLine +
+            "السيرفر الحالي: " + providerText + Environment.NewLine +
+            "القنوات المخزنة: " + live.ToString("N0") + Environment.NewLine +
+            "الأفلام المخزنة: " + movies.ToString("N0") + Environment.NewLine +
+            "المسلسلات المخزنة: " + series.ToString("N0") + Environment.NewLine +
+            Environment.NewLine + "فحص خادم BLOFY لا يضمن توفر بث مصدر الاشتراك.",
+            "فحص الاتصال • BLOFY PLAYER");
     }
 
     private async Task RestoreDefaultSettingsAsync()
@@ -3272,7 +3295,7 @@ public partial class MainWindow : Window
             SettingTile("حركة الواجهة", "حركة الفوكس والانتقال بين العناصر", motion.Control),
             SettingActionTile("ترتيب وإخفاء أقسام الرئيسية", "رتّب صفوف Home وأخفِ ما لا تحتاجه", (_, _) => OpenSubpage(ShowHomePersonalization)),
             SettingActionTile("باقتي", "مدة التفعيل وحالة الجهاز الحالية", (_, _) => ShowSubscriptionSummary()),
-            SettingActionTile("حالة الاشتراك", "صلاحية المحتوى والسيرفر الحالي", (_, _) => ShowConnectionSummary()),
+            SettingActionTile("حالة الاشتراك", "فحص خادم BLOFY وحالة القوائم الحالية", async (_, _) => await ShowConnectionSummaryAsync()),
             SettingActionTile("بيانات الجهاز والباركود", "عرض رقم الجهاز ورمز التفعيل والباركود", (_, _) => OpenSubpage(ShowActivation)),
             SettingActionTile("الملفات الشخصية", "الرئيسي، الأطفال والضيف وPIN", (_, _) =>
             {
