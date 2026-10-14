@@ -694,6 +694,7 @@ const server = http.createServer(async (req, res) => {
       requestHost === 'api.blofyplayer.com' &&
       ['GET', 'HEAD'].includes(req.method || '') &&
       requestUrl.pathname !== '/health' &&
+      requestUrl.pathname !== '/connect' &&
       !requestUrl.pathname.startsWith('/api/')
     ) {
       const location = 'https://blofyplayer.com' + requestUrl.pathname + requestUrl.search;
