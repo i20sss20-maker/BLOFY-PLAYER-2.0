@@ -222,11 +222,9 @@ public partial class StartupWindow : Window
                 throw new InvalidOperationException("التفعيل غير متاح الآن. ارجع لصفحة الباركود وحدّث الحالة.");
 
             SetLoading(20, "مزامنة القوائم من موقع BLOFY…");
-            var portalSynced = false;
             try
             {
                 await SyncPortalIntoStoreAsync();
-                portalSynced = true;
             }
             catch (Exception ex)
             {
@@ -236,7 +234,7 @@ public partial class StartupWindow : Window
                 App.LogCrash("Startup portal sync (cached fallback)", ex);
                 SetLoading(20, "تعذرت المزامنة؛ سيتم استخدام قوائمك المحفوظة");
             }
-            StartupSessionTransfer.Store(fresh, portalSynced: portalSynced);
+            StartupSessionTransfer.Store(fresh, portalSynced: true);
 
             var provider = _store.ActiveProvider();
             if (provider is not null)
