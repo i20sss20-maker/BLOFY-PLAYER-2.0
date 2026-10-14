@@ -41,11 +41,14 @@ public sealed class ActivationClient : IDisposable
 
     public ActivationClient(string baseUrl = BlofyPlayer.Windows.Core.BlofyEndpoints.ServiceBase)
     {
-        _http = new HttpClient
+        // Never follow a redirect carrying the device activation credential.
+        _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
         {
             BaseAddress = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/"),
             Timeout = TimeSpan.FromSeconds(8)
         };
+        _http.DefaultRequestHeaders.TryAddWithoutValidation(
+            "User-Agent", BlofyPlayer.Windows.Core.AppBuildInfo.UserAgent);
     }
 
     public async Task<ActivationCheckResponse?> CheckAsync(
