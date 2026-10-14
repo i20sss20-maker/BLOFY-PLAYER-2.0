@@ -1,5 +1,6 @@
 using BlofyPlayer.Windows.Core;
 using BlofyPlayer.Windows.Core.Playback;
+using BlofyPlayer.Windows.Core.Identity;
 
 static void Check(bool condition, string label)
 {
