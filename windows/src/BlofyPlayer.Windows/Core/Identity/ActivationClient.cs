@@ -66,8 +66,28 @@ public sealed class ActivationClient : IDisposable
             cancellationToken
         );
 
+        // The activation API intentionally returns 400/403 with a "blocked"
+        // JSON state. Preserve that state instead of calling it a network error.
+        // Never accept a success-like activation from a non-2xx response.
         if (!response.IsSuccessStatusCode)
+        {
+            if (response.StatusCode is System.Net.HttpStatusCode.BadRequest or
+                System.Net.HttpStatusCode.Forbidden)
+            {
+                try
+                {
+                    var rejected = await response.Content.ReadFromJsonAsync<ActivationCheckResponse>(
+                        _json, cancellationToken);
+                    return rejected?.Status.Equals("blocked", StringComparison.OrdinalIgnoreCase) == true
+                        ? rejected : null;
+                }
+                catch (JsonException)
+                {
+                    return null;
+                }
+            }
             return null;
+        }
 
         return await response.Content.ReadFromJsonAsync<ActivationCheckResponse>(_json, cancellationToken);
     }
