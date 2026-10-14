@@ -314,6 +314,32 @@ public partial class StartupWindow : Window
         LoadingStatus.Text = status;
     }
 
+    private async void ConnectionTestButton_Click(object sender, RoutedEventArgs e)
+    {
+        ConnectionTestButton.IsEnabled = false;
+        ConnectionTestButton.Content = "جاري الفحص…";
+        try
+        {
+            using var http = new HttpClient
+            {
+                BaseAddress = new Uri(BlofyEndpoints.ServiceBase),
+                Timeout = TimeSpan.FromSeconds(8)
+            };
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(9));
+            var status = await ConnectionProbe.CheckAsync(http, timeout.Token);
+            TrialText.Text = status.Message;
+        }
+        catch (OperationCanceledException)
+        {
+            TrialText.Text = "انتهت مهلة فحص الاتصال؛ حاول لاحقًا.";
+        }
+        finally
+        {
+            ConnectionTestButton.IsEnabled = true;
+            ConnectionTestButton.Content = "فحص اتصال السيرفر";
+        }
+    }
+
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) =>
         await RefreshActivationAsync();
 
