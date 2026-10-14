@@ -387,6 +387,8 @@ public partial class MainWindow : Window
                 else
                 {
                     existing.Name = item.Name;
+                    existing.ProviderType = item.ProviderType;
+                    existing.M3uUrl = item.M3uUrl;
                     existing.BaseUrl = item.BaseUrl;
                     existing.Username = item.Username;
                     existing.Password = item.Password;
