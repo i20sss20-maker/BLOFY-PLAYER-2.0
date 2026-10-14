@@ -13,6 +13,7 @@
     <Compile Include="../../src/BlofyPlayer.Windows/Core/M3uPlaylistParser.cs" Link="M3uPlaylistParser.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/LengthLimitedStream.cs" Link="LengthLimitedStream.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/Playback/PlaybackLabUrlPolicy.cs" Link="PlaybackLabUrlPolicy.cs" />
+    <Compile Include="../../src/BlofyPlayer.Windows/Core/Identity/ActivationEntryPolicy.cs" Link="ActivationEntryPolicy.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/BoundedPayloadReader.cs" Link="BoundedPayloadReader.cs" />
   </ItemGroup>
 </Project>
