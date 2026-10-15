@@ -236,7 +236,7 @@ Check(PlaybackUserAgentPolicy.Alternative(PlaybackUserAgentPolicy.Browser) ==
     "browser user agent falls back to native VLC");
 Check(PlaybackUserAgentPolicy.Primary("IPTV-Device/1.0", "ignored") == "IPTV-Device/1.0",
     "M3U per-channel user agent is preserved");
-Check(PlaybackUserAgentPolicy.Primary("not-safe\\r\\nheader: injected", null) ==
+Check(PlaybackUserAgentPolicy.Primary("not-safe\r\nheader: injected", null) ==
       PlaybackUserAgentPolicy.Native,
     "unsafe user agent cannot inject VLC HTTP headers");
 Check(PlaybackUserAgentPolicy.Primary(null, null) == PlaybackUserAgentPolicy.Native,
