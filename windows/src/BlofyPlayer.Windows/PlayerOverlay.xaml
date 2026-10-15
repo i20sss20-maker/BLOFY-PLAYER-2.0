@@ -109,10 +109,11 @@
         <Border x:Name="PlaybackFailureShade"
                 Background="#F008060D"
                 IsHitTestVisible="False"
-                Visibility="Collapsed"
+                Visibility="Visible"
                 Panel.ZIndex="5"/>
 
         <Border x:Name="LoadingBadge"
+                Panel.ZIndex="10"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 Background="#D908060D"

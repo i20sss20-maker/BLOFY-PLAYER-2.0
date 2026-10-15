@@ -1,4 +1,5 @@
 using BlofyPlayer.Windows.Core;
+using BlofyPlayer.Windows.Core.Playback;
 using LibVLCSharp.Shared;
 using VlcMediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 using System.Windows;
@@ -12,7 +13,6 @@ namespace BlofyPlayer.Windows;
 
 public partial class PlayerOverlay : UserControl, IAsyncDisposable
 {
-    private const string CompatibilityUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     private readonly LibVLC _libVlc;
     private readonly VlcMediaPlayer _player;
     private readonly DispatcherTimer _timer;
@@ -295,7 +295,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
             (System.IO.Path.GetExtension(uri.AbsolutePath).TrimStart('.') is { Length: > 0 } ext ? ext : "غير معروفة"));
         _playbackFailed = false;
         RetryPlaybackButton.Visibility = Visibility.Collapsed;
-        PlaybackFailureShade.Visibility = Visibility.Collapsed;
+        // Cover the native video HWND until a decoded picture is actually ready.
+        // Otherwise WPF/WinForms can expose a bright white frame during loading.
+        PlaybackFailureShade.Visibility = Visibility.Visible;
         LoadingBadge.Visibility = Visibility.Visible;
         _playStartedAt = DateTimeOffset.UtcNow;
         _lastProgressAt = _playStartedAt;
@@ -322,14 +324,10 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         var playbackToken = _nativeActionCts.Token;
         previousOperation.Cancel();
         previousOperation.Dispose();
-        var preferredAgent = _currentItem?.UserAgent;
+        var primaryAgent = PlaybackUserAgentPolicy.Primary(_currentItem?.UserAgent, _settings.UserAgent);
         var userAgent = _compatibilityUserAgent
-            ? CompatibilityUserAgent
-            : !string.IsNullOrWhiteSpace(preferredAgent)
-                ? preferredAgent
-                : string.IsNullOrWhiteSpace(_settings.UserAgent) ||
-                  _settings.UserAgent.Equals("BLOFY PLAYER/2.0 (Windows)", StringComparison.Ordinal)
-                    ? CompatibilityUserAgent : _settings.UserAgent;
+            ? PlaybackUserAgentPolicy.Alternative(primaryAgent)
+            : primaryAgent;
         var referer = _currentItem?.Referer;
         var isLive = _playlist.Count > 0;
         var disableSubtitles = _settings.SubtitleLanguage == "off";
@@ -349,7 +347,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 // Never invent one for generic Xtream/CDN URLs.
                 if (!string.IsNullOrWhiteSpace(referer))
                     media.AddOption(":http-referrer=" + referer);
-                media.AddOption(":network-caching=" + (isLive ? "1200" : "1800"));
+                // Start VOD faster, while retaining a moderate live buffer.
+                media.AddOption(":network-caching=" + (isLive ? "1000" : "900"));
+                // On a later compatibility retry prefer software decoding:
+                // some Windows GPUs expose an HWND but fail to render TS/HLS
+                // video frames through hardware acceleration.
+                if (_compatibilityUserAgent)
+                    media.AddOption(":avcodec-hw=none");
                 if (disableSubtitles) media.AddOption(":no-spu");
                 var started = _player.Play(media);
                 if (!started)
@@ -400,8 +404,9 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         // Try a DIFFERENT server URL before retrying the same stalled URL
         // with another User-Agent. A broken episode must not spin for minutes.
         var haveNextUrl = _recoveryIndex + 1 < _recoveryUrls.Count;
-        var haveAlternateAgent = !_compatibilityUserAgent &&
-            !string.Equals(_settings.UserAgent, CompatibilityUserAgent, StringComparison.OrdinalIgnoreCase);
+        // The fallback now actually changes the user agent. Previously the
+        // default path used the browser agent on both passes.
+        var haveAlternateAgent = !_compatibilityUserAgent;
         var maxRetries = Math.Min(4, Math.Max(1, _recoveryUrls.Count * 2) - 1);
         if (_automaticRecoveries >= maxRetries || (!haveNextUrl && !haveAlternateAgent))
         {
@@ -566,7 +571,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
 
         if (!_videoOutputSeen && !_userPaused &&
             DateTimeOffset.UtcNow - _playStartedAt >
-                TimeSpan.FromSeconds(_playlist.Count > 0 ? 16 : 20))
+                TimeSpan.FromSeconds(_playlist.Count > 0 ? 12 : 14))
         {
             _playStartedAt = DateTimeOffset.UtcNow;
             TryRecoverPlayback("لا توجد صورة — تجربة مسار بديل…");
@@ -583,7 +588,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
         else if (!_userPaused && !playing && !_videoOutputSeen &&
                  DateTimeOffset.UtcNow - _playStartedAt >
-                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 16 : 20))
+                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 12 : 14))
         {
             TryRecoverPlayback("تأخر بدء التشغيل — تجربة مسار بديل…");
         }
