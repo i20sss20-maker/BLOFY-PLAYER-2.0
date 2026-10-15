@@ -348,6 +348,11 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                     media.AddOption(":http-referrer=" + referer);
                 // Start VOD faster, while retaining a moderate live buffer.
                 media.AddOption(":network-caching=" + (isLive ? "1000" : "900"));
+                // On a later compatibility retry prefer software decoding:
+                // some Windows GPUs expose an HWND but fail to render TS/HLS
+                // video frames through hardware acceleration.
+                if (_compatibilityUserAgent)
+                    media.AddOption(":avcodec-hw=none");
                 if (disableSubtitles) media.AddOption(":no-spu");
                 var started = _player.Play(media);
                 if (!started)
