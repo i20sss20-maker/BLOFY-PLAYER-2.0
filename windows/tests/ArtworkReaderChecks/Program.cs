@@ -223,6 +223,26 @@ Check(!ActivationEntryPolicy.CanReuseRecentApproval(
     "expired entitlement (seconds) is rejected");
 Console.WriteLine("BLOFY Windows server-verified startup checks passed.");
 
+
+// A failed live stream must retry with a *different* HTTP identity.
+Check(PlaybackUserAgentPolicy.Primary(null, "BLOFY PLAYER/2.0 (Windows)") ==
+      PlaybackUserAgentPolicy.Native,
+    "legacy Windows agent resolves to native VLC for live streams");
+Check(PlaybackUserAgentPolicy.Alternative(PlaybackUserAgentPolicy.Native) ==
+      PlaybackUserAgentPolicy.Browser,
+    "live playback switches from VLC to browser user agent");
+Check(PlaybackUserAgentPolicy.Alternative(PlaybackUserAgentPolicy.Browser) ==
+      PlaybackUserAgentPolicy.Native,
+    "browser user agent falls back to native VLC");
+Check(PlaybackUserAgentPolicy.Primary("IPTV-Device/1.0", "ignored") == "IPTV-Device/1.0",
+    "M3U per-channel user agent is preserved");
+Check(PlaybackUserAgentPolicy.Primary("not-safe\\r\\nheader: injected", null) ==
+      PlaybackUserAgentPolicy.Native,
+    "unsafe user agent cannot inject VLC HTTP headers");
+Check(PlaybackUserAgentPolicy.Primary(null, null) == PlaybackUserAgentPolicy.Native,
+    "absent HTTP agent uses VLC-compatible default");
+Console.WriteLine("BLOFY Windows live playback compatibility checks passed.");
+
 sealed class FakeHealthHandler(HttpStatusCode code, string body) : HttpMessageHandler
 {
     protected override Task<HttpResponseMessage> SendAsync(
