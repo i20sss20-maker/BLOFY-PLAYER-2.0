@@ -99,3 +99,15 @@ A CI success is not certification of real-device 4K, paid-provider compatibility
 - Windows x64 artifacts are built automatically for PR validation. Real-device verification remains necessary before distribution.
 
 **QA priority:** Test portal M3U sync, device activation, on/offline startup with cached lists, legitimate Xtream streams, HLS/TS live switching, VOD seeking, audio/subtitles, QR registration and update/rollback on Windows 10/11. Do not promote an unsigned build to stable solely because CI passes.
+
+## Windows 0.4.19 — live and VOD recovery (QA preview)
+
+- Uses VLC's native HTTP agent first for generic streams; a genuinely different browser agent is tried only as a fallback. Explicit per-channel M3U user agents remain authoritative.
+- Releases the live mini-preview connection before fullscreen, reducing clashes for licensed providers that permit only one simultaneous stream.
+- The live mini-preview itself tests up to four distinct URLs, including TS/HLS alternatives, without delaying channel browsing or EPG.
+- Adds a last-resort legacy Xtream live URL pattern, while retaining the provider's original direct URL and signed query parameters unchanged.
+- Keeps an opaque dark loading layer over WPF's native VLC surface until a video output is detected, avoiding a white startup flash.
+- Reduces initial VOD network caching and accelerates bounded retries when no frames are produced.
+- Increases the client, setup and CI-validated version to 0.4.19.
+
+**Acceptance gate:** Windows build and self-contained setup smoke tests must pass. Real-world live/VOD playback still requires testing on Windows 10/11 against *authorized* sources with varying TLS/TS/HLS/container formats; this preview does not add Widevine/DRM decoding or imply that a particular provider is compatible. Preserve an installed rollback version until live video, audio/subtitles, seeking and 20-minute playback are verified.
