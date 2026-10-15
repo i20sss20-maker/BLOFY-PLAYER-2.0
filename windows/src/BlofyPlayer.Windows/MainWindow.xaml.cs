@@ -197,10 +197,20 @@ public partial class MainWindow : Window
         // LibVLC uses native video windows. Keeping the small preview active
         // while opening fullscreen leaves a ghost HWND over the main player
         // and forces the decoder to run two streams at once (especially 4K).
+        var hadPreview = _previewPlayback is not null;
         var teardown = StopAndDisposePreviewAsync();
-        // Native VLC Stop() can block when a 4K decoder is struggling. Give
-        // the previous mini-player time to stop without freezing WPF forever.
-        await Task.WhenAny(teardown, Task.Delay(1500));
+        // Some providers permit a single concurrent live connection. Wait for
+        // the native preview to release its connection before opening fullscreen.
+        // Keep WPF responsive while a slow VLC decoder is shutting down.
+        if (await Task.WhenAny(teardown, Task.Delay(6000)) == teardown)
+        {
+            await teardown;
+            if (hadPreview) await Task.Delay(350);
+        }
+        else
+        {
+            ProgressText.Text = "تعذر إنهاء المعاينة سريعًا؛ قد يتأخر فتح البث";
+        }
         var overlay = new PlayerOverlay(
             title,
             url,
@@ -1481,9 +1491,8 @@ public partial class MainWindow : Window
                         var preview = _previewPlayback;
                         var headers = new Dictionary<string, string>
                         {
-                            ["User-Agent"] = string.IsNullOrWhiteSpace(selected.UserAgent)
-                                ? _store.State.Settings.UserAgent
-                                : selected.UserAgent
+                            ["User-Agent"] = PlaybackUserAgentPolicy.Primary(
+                                selected.UserAgent, _store.State.Settings.UserAgent)
                         };
                         if (!string.IsNullOrWhiteSpace(selected.Referer))
                             headers["Referer"] = selected.Referer;
@@ -2339,6 +2348,12 @@ public partial class MainWindow : Window
             Add(item.DirectSource);
             Add(BuildXtreamMediaUrl(provider, "live", item.RemoteId, preferred));
             Add(BuildXtreamMediaUrl(provider, "live", item.RemoteId, alternate));
+            // Legacy Xtream servers sometimes expose live streams without
+            // the /live/ prefix or file extension. Try only as a last resort.
+            var oldRoot = XtreamService.NormalizeBase(provider.BaseUrl);
+            Add(oldRoot + "/" + Uri.EscapeDataString(provider.Username) +
+                "/" + Uri.EscapeDataString(provider.Password) +
+                "/" + Uri.EscapeDataString(item.RemoteId.Trim()));
         }
         else
         {
