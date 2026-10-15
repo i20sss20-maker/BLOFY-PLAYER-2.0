@@ -346,7 +346,8 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 // Never invent one for generic Xtream/CDN URLs.
                 if (!string.IsNullOrWhiteSpace(referer))
                     media.AddOption(":http-referrer=" + referer);
-                media.AddOption(":network-caching=" + (isLive ? "1200" : "1800"));
+                // Start VOD faster, while retaining a moderate live buffer.
+                media.AddOption(":network-caching=" + (isLive ? "1000" : "900"));
                 if (disableSubtitles) media.AddOption(":no-spu");
                 var started = _player.Play(media);
                 if (!started)
