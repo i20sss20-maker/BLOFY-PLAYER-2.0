@@ -1,4 +1,5 @@
 using BlofyPlayer.Windows.Core;
+using BlofyPlayer.Windows.Core.Playback;
 using LibVLCSharp.Shared;
 using VlcMediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 using System.Windows;
