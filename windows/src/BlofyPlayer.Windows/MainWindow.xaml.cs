@@ -1485,8 +1485,7 @@ public partial class MainWindow : Window
                 if (_store.State.Settings.AutoplayLive && !ultraHd && _previewPlayback is not null)
                 {
                     var candidates = BuildStreamCandidates(selected);
-                    var url = candidates.FirstOrDefault();
-                    if (!string.IsNullOrWhiteSpace(url))
+                    if (candidates.Count > 0)
                     {
                         var preview = _previewPlayback;
                         var headers = new Dictionary<string, string>
@@ -1496,25 +1495,11 @@ public partial class MainWindow : Window
                         };
                         if (!string.IsNullOrWhiteSpace(selected.Referer))
                             headers["Referer"] = selected.Referer;
-                        // Native VLC Stop/Play can block for seconds on bad
-                        // 4K/live streams. Serialize off the WPF thread, and
-                        // skip stale fast-changing selections.
-                        await _previewPlaybackLock.WaitAsync(token);
-                        try
-                        {
-                            token.ThrowIfCancellationRequested();
-                            if (!ReferenceEquals(preview, _previewPlayback)) return;
-                            await Task.Run(() =>
-                            {
-                                if (token.IsCancellationRequested) return;
-                                try { preview.Stop(); } catch { }
-                                if (!token.IsCancellationRequested)
-                                {
-                                    try { preview.Play(url, headers); } catch { }
-                                }
-                            }, token);
-                        }
-                        finally { _previewPlaybackLock.Release(); }
+                        // Keep EPG responsive while preview tries distinct
+                        // TS/HLS sources. Never leave an old decoder running
+                        // across a channel switch or fullscreen transition.
+                        _ = TryPlayLivePreviewCandidatesAsync(
+                            preview, candidates, headers, token, serial);
                     }
                 }
 
@@ -3790,6 +3775,62 @@ public partial class MainWindow : Window
             "المساحة المحررة: " + DiagnosticService.FormatBytes(Math.Max(0, before - after)) +
             Environment.NewLine + "بيانات الدخول والمفضلة والسجل لم تُحذف.",
             "BLOFY PLAYER");
+    }
+
+    private async Task TryPlayLivePreviewCandidatesAsync(
+        PlaybackService preview,
+        IReadOnlyList<string> candidates,
+        IReadOnlyDictionary<string, string> headers,
+        CancellationToken token,
+        int serial)
+    {
+        var entered = false;
+        try
+        {
+            await _previewPlaybackLock.WaitAsync(token).ConfigureAwait(false);
+            entered = true;
+            foreach (var url in candidates.Take(4))
+            {
+                token.ThrowIfCancellationRequested();
+                if (!ReferenceEquals(preview, _previewPlayback) ||
+                    serial != Volatile.Read(ref _liveSelectionSerial)) return;
+
+                // Native VLC calls must run outside WPF and remain serialized
+                // with fullscreen teardown for one-connection IPTV accounts.
+                var started = await Task.Run(() =>
+                {
+                    try
+                    {
+                        preview.Stop();
+                        if (token.IsCancellationRequested) return false;
+                        return preview.Play(url, headers);
+                    }
+                    catch { return false; }
+                }, token).ConfigureAwait(false);
+                if (!started) continue;
+
+                // A successful Play() return only means VLC accepted the URL;
+                // it does NOT mean it decoded a live video frame.
+                for (var tick = 0; tick < 12; tick++)
+                {
+                    await Task.Delay(500, token).ConfigureAwait(false);
+                    if (!ReferenceEquals(preview, _previewPlayback) ||
+                        serial != Volatile.Read(ref _liveSelectionSerial)) return;
+                    var hasVideo = await Task.Run(() =>
+                    {
+                        try { return preview.MediaPlayer.VoutCount > 0; }
+                        catch { return false; }
+                    }, token).ConfigureAwait(false);
+                    if (hasVideo) return;
+                }
+            }
+        }
+        catch (OperationCanceledException) { /* New selection or fullscreen. */ }
+        catch { /* A failed preview must never block the channel list. */ }
+        finally
+        {
+            if (entered) _previewPlaybackLock.Release();
+        }
     }
 
     private void DisposePreview() => _ = StopAndDisposePreviewAsync();
