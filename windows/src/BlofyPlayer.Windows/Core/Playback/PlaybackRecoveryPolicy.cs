@@ -10,7 +10,7 @@ public static class PlaybackRecoveryPolicy
     public static int MaximumRecoveries(int urlCount)
     {
         if (urlCount <= 0) return 0;
-        return Math.Min(5, checked(urlCount > 3 ? 2 * 3 - 1 : 2 * urlCount - 1));
+        return Math.Min(5, urlCount + (urlCount > 1 ? 1 : 0));
     }
 
     public static int CompatibilityStartIndex(int urlCount)
