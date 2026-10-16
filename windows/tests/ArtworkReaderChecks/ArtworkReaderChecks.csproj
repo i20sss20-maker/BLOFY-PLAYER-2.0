@@ -14,6 +14,7 @@
     <Compile Include="../../src/BlofyPlayer.Windows/Core/LengthLimitedStream.cs" Link="LengthLimitedStream.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/Playback/PlaybackLabUrlPolicy.cs" Link="PlaybackLabUrlPolicy.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/Playback/PlaybackUserAgentPolicy.cs" Link="PlaybackUserAgentPolicy.cs" />
+    <Compile Include="../../src/BlofyPlayer.Windows/Core/Playback/PlaybackRecoveryPolicy.cs" Link="PlaybackRecoveryPolicy.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/BoundedPayloadReader.cs" Link="BoundedPayloadReader.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/ConnectionProbe.cs" Link="ConnectionProbe.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/Identity/ActivationEntryPolicy.cs" Link="ActivationEntryPolicy.cs" />
