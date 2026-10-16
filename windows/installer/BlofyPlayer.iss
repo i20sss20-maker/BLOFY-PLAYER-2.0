@@ -1,5 +1,5 @@
 #define MyAppName "BLOFY PLAYER"
-#define MyAppVersion "0.4.21"
+#define MyAppVersion "0.4.22"
 #define MyAppPublisher "BLOFY"
 #define MyAppExeName "BLOFY PLAYER.exe"
 
