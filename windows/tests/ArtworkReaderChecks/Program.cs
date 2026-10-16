@@ -254,14 +254,40 @@ Check(PlaybackRecoveryPolicy.MaximumRecoveries(2) == 3,
 Check(PlaybackRecoveryPolicy.MaximumRecoveries(3) == 4 &&
       PlaybackRecoveryPolicy.MaximumRecoveries(4) == 5,
     "three and four candidates have bounded native and fallback passes");
-Check(PlaybackRecoveryPolicy.MaximumRecoveries(99) == 5,
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(99) == 6,
     "huge URL lists can never trigger unbounded native reconnection");
 Check(PlaybackRecoveryPolicy.CompatibilityStartIndex(1) == 0 &&
       PlaybackRecoveryPolicy.CompatibilityStartIndex(2) == 0 &&
       PlaybackRecoveryPolicy.CompatibilityStartIndex(3) == 1 &&
-      PlaybackRecoveryPolicy.CompatibilityStartIndex(4) == 1,
+      PlaybackRecoveryPolicy.CompatibilityStartIndex(4) == 1 &&
+      PlaybackRecoveryPolicy.CompatibilityStartIndex(5) == 2,
     "compatibility pass prefers a generated live URL over expired direct source");
 Console.WriteLine("BLOFY Windows live recovery planner regression checks passed.");
+
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(5) == 6,
+    "provider-origin URL still allows generated TS and HLS to retry with native VLC");
+
+var privateDirect = "http://10.10.2.7/live/user/pass/42.ts?signature=A%2FB&expires=42";
+var publicProvider = "https://stream.example.test:8443/panel/";
+var originRepair = PlaybackSourceHostPolicy.ProviderOriginFallback(publicProvider, privateDirect);
+Check(originRepair == "https://stream.example.test:8443/live/user/pass/42.ts?signature=A%2FB&expires=42",
+    "Android-style origin fallback preserves exact signed path/query and provider port");
+Check(PlaybackSourceHostPolicy.PreferProviderOrigin(publicProvider, privateDirect),
+    "unreachable private source prefers public provider origin first");
+Check(!PlaybackSourceHostPolicy.PreferProviderOrigin(
+        publicProvider, "https://cdn.example.test/live/42.ts"),
+    "valid public CDN remains the primary source");
+Check(PlaybackSourceHostPolicy.ProviderOriginFallback(
+        publicProvider, "https://stream.example.test:8443/live/42.ts") is null,
+    "identical public origin never yields a duplicate media URL");
+Check(PlaybackSourceHostPolicy.ProviderOriginFallback(
+        "http://localhost:8787", privateDirect) is null,
+    "provider-origin repair never substitutes an internal provider address");
+Check(PlaybackSourceHostPolicy.ProviderOriginFallback(
+        publicProvider, "https://alice:secret@cdn.example.test/live/42.ts") is null,
+    "direct URLs containing embedded user-info cannot leak credentials");
+Console.WriteLine("BLOFY Windows Android direct-source routing checks passed.");
+
 
 sealed class FakeHealthHandler(HttpStatusCode code, string body) : HttpMessageHandler
 {
