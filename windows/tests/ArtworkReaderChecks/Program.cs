@@ -243,6 +243,26 @@ Check(PlaybackUserAgentPolicy.Primary(null, null) == PlaybackUserAgentPolicy.Nat
     "absent HTTP agent uses VLC-compatible default");
 Console.WriteLine("BLOFY Windows live playback compatibility checks passed.");
 
+// A live direct source may expire, so native TS/HLS alternatives must get
+// a chance before the alternate User-Agent is tried on a generated link.
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(0) == 0,
+    "empty stream URL candidates have no automatic retries");
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(1) == 1,
+    "single M3U URL retries once with the alternative HTTP agent");
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(2) == 3,
+    "two TS/HLS candidates both get a secondary compatible agent pass");
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(3) == 4 &&
+      PlaybackRecoveryPolicy.MaximumRecoveries(4) == 5,
+    "three and four candidates have bounded native and fallback passes");
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(99) == 5,
+    "huge URL lists can never trigger unbounded native reconnection");
+Check(PlaybackRecoveryPolicy.CompatibilityStartIndex(1) == 0 &&
+      PlaybackRecoveryPolicy.CompatibilityStartIndex(2) == 0 &&
+      PlaybackRecoveryPolicy.CompatibilityStartIndex(3) == 1 &&
+      PlaybackRecoveryPolicy.CompatibilityStartIndex(4) == 1,
+    "compatibility pass prefers a generated live URL over expired direct source");
+Console.WriteLine("BLOFY Windows live recovery planner regression checks passed.");
+
 sealed class FakeHealthHandler(HttpStatusCode code, string body) : HttpMessageHandler
 {
     protected override Task<HttpResponseMessage> SendAsync(
