@@ -276,7 +276,6 @@
                                               IsHitTestVisible="False"
                                               Content="{TemplateBinding SelectionBoxItem}"
                                               ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                              ContentTemplateSelector="{TemplateBinding SelectionBoxItemTemplateSelector}"
                                               HorizontalAlignment="Right"
                                               VerticalAlignment="Center"
                                               Margin="31,3,12,3"/>
