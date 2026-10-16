@@ -45,6 +45,7 @@
                         <Button Style="{StaticResource NavButton}" Content="●  البث المباشر" Tag="live" Click="Nav_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="▣  الأفلام" Tag="movie" Click="Nav_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="▤  المسلسلات" Tag="series" Click="Nav_Click"/>
+                <Button Style="{StaticResource NavButton}" Content="✧  لك" Tag="for_you" Click="Nav_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="◫  المجموعات" Tag="collections" Click="Nav_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="★  المفضلة" Tag="favorites" Click="Nav_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="⌕  البحث" Tag="search" Click="Nav_Click"/>
