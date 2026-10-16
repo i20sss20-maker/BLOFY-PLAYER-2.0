@@ -505,6 +505,11 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 if (_disposed || _userPaused ||
                     expectedPlayback != Volatile.Read(ref _playbackGeneration))
                     return;
+                // A native error/EOF callback from the previous channel can
+                // arrive just after we stopped it to start the next one. Give
+                // the new stream a short grace period before recovery.
+                if (DateTimeOffset.UtcNow - _playStartedAt < TimeSpan.FromSeconds(4))
+                    return;
                 if (_cachedPlaying && _videoOutputSeen)
                     return; // Current video is healthy; discard stale callback.
                 _cachedPlaying = false;
