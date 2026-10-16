@@ -2326,11 +2326,18 @@ public partial class MainWindow : Window
         }
 
         var provider = _activeProvider;
+        var providerRoute = PlaybackSourceHostPolicy.ProviderOriginFallback(
+            provider.BaseUrl, item.DirectSource);
+        // Private/hidden CDN addresses are not accessible from the viewer's
+        // Windows PC. Android already prefers the provider host in that case.
+        if (PlaybackSourceHostPolicy.PreferProviderOrigin(provider.BaseUrl, item.DirectSource))
+            Add(providerRoute);
+        Add(item.DirectSource);
+        Add(providerRoute);
         if (item.Kind == "live")
         {
             var preferred = _store.State.Settings.LiveFormat == "m3u8" ? "m3u8" : "ts";
             var alternate = preferred == "ts" ? "m3u8" : "ts";
-            Add(item.DirectSource);
             Add(BuildXtreamMediaUrl(provider, "live", item.RemoteId, preferred));
             Add(BuildXtreamMediaUrl(provider, "live", item.RemoteId, alternate));
             // Legacy Xtream servers sometimes expose live streams without
@@ -2342,7 +2349,6 @@ public partial class MainWindow : Window
         }
         else
         {
-            Add(item.DirectSource);
             Add(BuildXtreamMediaUrl(provider, "movie", item.RemoteId, item.Extension));
             // Xtream services vary in VOD container support. Keep bounded,
             // distinct alternatives so failed server links do not dead-end.
@@ -2365,7 +2371,12 @@ public partial class MainWindow : Window
             urls.Add(value.Trim());
         }
 
+        var providerRoute = PlaybackSourceHostPolicy.ProviderOriginFallback(
+            _activeProvider.BaseUrl, episode.DirectSource);
+        if (PlaybackSourceHostPolicy.PreferProviderOrigin(_activeProvider.BaseUrl, episode.DirectSource))
+            Add(providerRoute);
         Add(episode.DirectSource);
+        Add(providerRoute);
         Add(BuildXtreamMediaUrl(_activeProvider, "series", episode.RemoteId, episode.Extension));
         Add(BuildXtreamMediaUrl(_activeProvider, "series", episode.RemoteId,
             episode.Extension.Equals("mkv", StringComparison.OrdinalIgnoreCase) ? "mp4" : "mkv"));
