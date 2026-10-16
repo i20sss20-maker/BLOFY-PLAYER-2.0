@@ -289,6 +289,73 @@ Check(PlaybackSourceHostPolicy.ProviderOriginFallback(
 Console.WriteLine("BLOFY Windows Android direct-source routing checks passed.");
 
 
+
+// Android EPG reminders fire five minutes ahead, survive restarts through
+// serialized state, and must be unique per profile/provider.
+var reminderNow = DateTimeOffset.UtcNow;
+var futureProgram = new EpgReminder
+{
+    ProfileId = "adult",
+    ProviderId = "subscription-one",
+    ChannelKey = "live:42",
+    ChannelName = "BLOFY News",
+    ProgramTitle = "Evening News",
+    StartAtMs = reminderNow.AddMinutes(10).ToUnixTimeMilliseconds()
+};
+Check(EpgReminderPolicy.CanSchedule(reminderNow.AddMinutes(10), reminderNow) &&
+      !EpgReminderPolicy.CanSchedule(reminderNow.AddMinutes(-1), reminderNow),
+    "EPG reminders only schedule future programs");
+Check(!EpgReminderPolicy.ShouldNotify(futureProgram, reminderNow),
+    "do not notify before the five-minute lead window");
+Check(EpgReminderPolicy.ShouldNotify(futureProgram, reminderNow.AddMinutes(5)),
+    "notify five minutes before a scheduled program");
+Check(EpgReminderPolicy.IsSame(futureProgram, "adult", "subscription-one",
+        "live:42", "Evening News", futureProgram.StartAtMs) &&
+      !EpgReminderPolicy.IsSame(futureProgram, "child", "subscription-one",
+        "live:42", "Evening News", futureProgram.StartAtMs),
+    "EPG reminders do not leak across user profiles");
+futureProgram.Notified = true;
+Check(!EpgReminderPolicy.ShouldNotify(futureProgram, reminderNow.AddMinutes(6)),
+    "already dispatched reminders cannot be delivered twice");
+Check(EpgReminderPolicy.IsExpired(futureProgram, reminderNow.AddHours(4)),
+    "expired EPG reminders can be pruned without growing the local database");
+
+var likedSeries = new StreamItem
+{
+    Key = "viewed",
+    Kind = "series",
+    CategoryId = "drama",
+    Genre = "Drama|Crime",
+    Rating = "8"
+};
+var preferredSeries = new StreamItem
+{
+    Key = "preferred",
+    Kind = "series",
+    CategoryId = "drama",
+    Genre = "Drama",
+    Rating = "8.4",
+    AddedAt = 2
+};
+var unrelatedMovie = new StreamItem
+{
+    Key = "different",
+    Kind = "movie",
+    CategoryId = "comedy",
+    Genre = "Comedy",
+    Rating = "8.5",
+    AddedAt = 3
+};
+var recommended = ForYouPolicy.Recommend(
+    [unrelatedMovie, likedSeries, preferredSeries, preferredSeries],
+    [likedSeries], "series", 10);
+Check(recommended.Count == 2 && recommended[0].Key == "preferred" &&
+      recommended[1].Key == "different",
+    "For You prefers locally watched genres while excluding watched and duplicate titles");
+Check(ForYouPolicy.Recommend([preferredSeries], [likedSeries], "series", 0).Count == 0,
+    "For You never renders an unbounded list for an invalid limit");
+Console.WriteLine("BLOFY Windows Android For You and EPG reminder parity checks passed.");
+
 sealed class FakeHealthHandler(HttpStatusCode code, string body) : HttpMessageHandler
 {
     protected override Task<HttpResponseMessage> SendAsync(

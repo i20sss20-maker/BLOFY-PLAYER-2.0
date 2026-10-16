@@ -47,6 +47,8 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _livePreviewCts;
     private string _currentPage = "home";
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(30) };
+    private readonly DispatcherTimer _epgReminderTimer = new() { Interval = TimeSpan.FromSeconds(30) };
+    private bool _checkingReminders;
     private readonly DispatcherTimer _heroTimer = new() { Interval = TimeSpan.FromSeconds(8) };
     private List<StreamItem> _heroCandidates = [];
     private int _heroIndex;
@@ -71,6 +73,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         DeviceIdText.Text = _identity.DeviceId;
         _clockTimer.Tick += (_, _) => UpdateHeaderClock();
+        _epgReminderTimer.Tick += async (_, _) => await CheckEpgRemindersAsync();
         _heroTimer.Tick += (_, _) =>
         {
             if (_currentPage != "home" || _heroCandidates.Count < 2 || _heroHost is null) return;
@@ -90,6 +93,8 @@ public partial class MainWindow : Window
                 await InitializeAsync();
                 UpdateHeaderClock();
                 _clockTimer.Start();
+                _epgReminderTimer.Start();
+                await CheckEpgRemindersAsync();
             }
             catch (Exception ex)
             {
@@ -108,6 +113,7 @@ public partial class MainWindow : Window
             _homeRenderCts?.Cancel();
             _livePreviewCts?.Cancel();
             _clockTimer.Stop();
+            _epgReminderTimer.Stop();
             _heroTimer.Stop();
             DisposePreview();
             _catalog?.Dispose();
@@ -530,7 +536,7 @@ public partial class MainWindow : Window
     }
 
     private static string NormalizeLastPage(string? page) =>
-        page is "home" or "live" or "movie" or "series" or "collections" or "favorites" or "search" or "settings"
+        page is "home" or "live" or "movie" or "series" or "for_you" or "collections" or "favorites" or "search" or "settings"
             ? page
             : "home";
 
@@ -556,6 +562,7 @@ public partial class MainWindow : Window
             case "live": ShowBrowser("live"); break;
             case "movie": ShowBrowser("movie"); break;
             case "series": ShowBrowser("series"); break;
+            case "for_you": ShowForYou(); break;
             case "collections": ShowCollections(); break;
             case "favorites": ShowFavorites(); break;
             case "search": ShowSearch(); break;
@@ -1347,6 +1354,8 @@ public partial class MainWindow : Window
         right.Children.Add(actions);
 
         right.Children.Add(Txt("دليل البرامج EPG", 15, Accent, FontWeights.Bold, 0, 10, 0, 8));
+        right.Children.Add(Action("🔔 تذكيراتي", false,
+            (_, _) => OpenSubpage(ShowEpgReminders), 0, 0, 0, 8));
         var epgPanel = Vertical();
         right.Children.Add(new ScrollViewer
         {
@@ -1558,7 +1567,28 @@ public partial class MainWindow : Window
                     }, 0, 0, 0, 6);
                     button.HorizontalContentAlignment = HorizontalAlignment.Right;
                     button.ToolTip = entry.Description;
-                    epgPanel.Children.Add(button);
+
+                    var row = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        FlowDirection = FlowDirection.RightToLeft,
+                        Margin = new Thickness(0, 0, 0, 6)
+                    };
+                    row.Children.Add(button);
+                    if (EpgReminderPolicy.CanSchedule(entry.Start, now))
+                    {
+                        var alreadySet = IsEpgReminderScheduled(selected, entry);
+                        Button? remind = null;
+                        remind = Action(alreadySet ? "✓ التذكير مفعّل" : "🔔 ذكرني",
+                            false, async (_, _) =>
+                            {
+                                await ToggleEpgReminderAsync(selected, entry);
+                                if (remind is not null) remind.Content = IsEpgReminderScheduled(selected, entry)
+                                    ? "✓ التذكير مفعّل" : "🔔 ذكرني";
+                            }, 0, 0, 0, 0);
+                        row.Children.Add(remind);
+                    }
+                    epgPanel.Children.Add(row);
                 }
             }
             catch (OperationCanceledException)
@@ -2381,6 +2411,213 @@ public partial class MainWindow : Window
         Add(BuildXtreamMediaUrl(_activeProvider, "series", episode.RemoteId,
             episode.Extension.Equals("mkv", StringComparison.OrdinalIgnoreCase) ? "mp4" : "mkv"));
         return urls;
+    }
+
+    private bool IsEpgReminderScheduled(StreamItem channel, EpgItem program)
+    {
+        var list = _store.State.EpgReminders ??= [];
+        return list.Any(x => EpgReminderPolicy.IsSame(x,
+            _store.ActiveProfile().Id, _activeProvider?.Id ?? "",
+            channel.Key, program.Title, program.Start.ToUnixTimeMilliseconds()));
+    }
+
+    private async Task ToggleEpgReminderAsync(StreamItem channel, EpgItem program)
+    {
+        if (_activeProvider is null || !EpgReminderPolicy.CanSchedule(
+                program.Start, DateTimeOffset.UtcNow))
+            return;
+        var reminders = _store.State.EpgReminders ??= [];
+        var profileId = _store.ActiveProfile().Id;
+        var startAtMs = program.Start.ToUnixTimeMilliseconds();
+        var previous = reminders.FirstOrDefault(x => EpgReminderPolicy.IsSame(x,
+            profileId, _activeProvider.Id, channel.Key, program.Title, startAtMs));
+        if (previous is not null)
+            reminders.Remove(previous);
+        else
+        {
+            // Bound persistent reminders so accidental repeated input cannot
+            // grow state.json indefinitely.
+            if (reminders.Count >= 128)
+                reminders.RemoveRange(0, reminders.Count - 127);
+            reminders.Add(new EpgReminder
+            {
+                ProfileId = profileId,
+                ProviderId = _activeProvider.Id,
+                ChannelKey = channel.Key,
+                ChannelName = channel.Name,
+                ProgramTitle = program.Title,
+                StartAtMs = startAtMs
+            });
+        }
+        await _store.SaveAsync();
+    }
+
+    private void ShowEpgReminders()
+    {
+        DisposePreview();
+        PageTitle.Text = "تذكيرات دليل البرامج";
+        PageSubtitle.Text = "تنبيه قبل خمس دقائق • عندما يكون BLOFY مفتوحًا";
+        var list = _store.State.EpgReminders ??= [];
+        var profileId = _store.ActiveProfile().Id;
+        var mine = list.Where(x => x.ProfileId == profileId &&
+                          !EpgReminderPolicy.IsExpired(x, DateTimeOffset.UtcNow))
+            .OrderBy(x => x.StartAtMs).Take(128).ToList();
+        if (mine.Count == 0)
+        {
+            ContentHost.Content = EmptyState("لا توجد تذكيرات",
+                "اختر قناة من البث المباشر ثم اضغط «🔔 ذكرني» بجانب البرنامج القادم.");
+            return;
+        }
+
+        var root = Vertical();
+        root.Children.Add(Txt("يمكن حذف أي تذكير. لا تظهر التنبيهات عند إغلاق التطبيق.",
+            12, Muted, marginBottom: 15));
+        foreach (var reminder in mine)
+        {
+            var row = Horizontal(0, 0, 0, 9);
+            var start = DateTimeOffset.FromUnixTimeMilliseconds(reminder.StartAtMs);
+            var label = start.ToLocalTime().ToString("yyyy/MM/dd HH:mm") +
+                        " • " + reminder.ChannelName + " — " + reminder.ProgramTitle +
+                        (reminder.Notified ? " • تم التنبيه" : "");
+            row.Children.Add(Txt(label, 12, Text));
+            row.Children.Add(Action("حذف", false, async (_, _) =>
+            {
+                list.Remove(reminder);
+                await _store.SaveAsync();
+                ShowEpgReminders();
+            }, 8, 0, 0, 0));
+            root.Children.Add(row);
+        }
+        ContentHost.Content = new ScrollViewer
+        {
+            Content = root,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
+    }
+
+    private async Task CheckEpgRemindersAsync()
+    {
+        if (_checkingReminders || _currentOverlay is not null) return;
+        _checkingReminders = true;
+        try
+        {
+            var reminders = _store.State.EpgReminders ??= [];
+            var now = DateTimeOffset.UtcNow;
+            var removed = reminders.RemoveAll(x => EpgReminderPolicy.IsExpired(x, now));
+            var due = reminders.FirstOrDefault(x =>
+                x.ProfileId == _store.ActiveProfile().Id &&
+                EpgReminderPolicy.ShouldNotify(x, now));
+            if (due is null)
+            {
+                if (removed > 0) await _store.SaveAsync();
+                return;
+            }
+            due.Notified = true;
+            await _store.SaveAsync();
+            var canOpen = _activeProvider?.Id == due.ProviderId &&
+                          _viewIndex.Find(due.ChannelKey) is StreamItem channel &&
+                          _store.IsContentVisible(channel) &&
+                          _activationState?.CanUse() == true;
+            var answer = MessageBox.Show(this,
+                "البرنامج يبدأ بعد قليل\\n" + due.ProgramTitle +
+                "\\nالقناة: " + due.ChannelName +
+                (canOpen ? "\\n\\nفتح القناة الآن؟" : ""),
+                "BLOFY • تذكير دليل البرامج",
+                canOpen ? MessageBoxButton.YesNo : MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            if (canOpen && answer == MessageBoxResult.Yes &&
+                _viewIndex.Find(due.ChannelKey) is StreamItem item)
+                await PlayItemAsync(item);
+        }
+        catch (Exception error)
+        {
+            App.LogCrash("EPG reminders", error);
+        }
+        finally
+        {
+            _checkingReminders = false;
+        }
+    }
+
+    private void ShowForYou()
+    {
+        DisposePreview();
+        PageTitle.Text = "لك";
+        PageSubtitle.Text = "مختارات من مكتبتك حسب مشاهدتك ومفضلتك — على الجهاز فقط";
+        if (_activationState?.CanUse() != true)
+        {
+            ContentHost.Content = ActivationCard();
+            return;
+        }
+
+        // Limit candidate work to the existing, bounded index. Huge Xtream
+        // catalogs must never force a full sort on the WPF UI thread.
+        var watched = _store.WatchStates
+            .OrderByDescending(x => x.UpdatedAt)
+            .Select(x => _viewIndex.Find(x.Key))
+            .Where(x => x is not null && _store.IsContentVisible(x) &&
+                        x.Kind is "movie" or "series")
+            .Cast<StreamItem>()
+            .DistinctBy(x => x.Key)
+            .Take(24)
+            .ToList();
+        var favorites = _store.ActiveLibrary().Favorites
+            .Select(_viewIndex.Find)
+            .Where(x => x is not null && _store.IsContentVisible(x) &&
+                        x.Kind is "movie" or "series")
+            .Cast<StreamItem>()
+            .DistinctBy(x => x.Key)
+            .Take(24)
+            .ToList();
+        var liked = favorites.Concat(watched).DistinctBy(x => x.Key).ToList();
+        var preferredKind = liked.GroupBy(x => x.Kind)
+            .OrderByDescending(x => x.Count()).FirstOrDefault()?.Key ?? "movie";
+        var candidates = _viewIndex.Collection("top")
+            .Concat(_viewIndex.Collection("latest"))
+            .Concat(_viewIndex.Latest("movie"))
+            .Concat(_viewIndex.Latest("series"))
+            .Where(_store.IsContentVisible)
+            .DistinctBy(x => x.Key)
+            .ToList();
+        var recommendations = ForYouPolicy.Recommend(candidates, liked, preferredKind, 18);
+        var continuing = _store.WatchStates
+            .Where(x => !x.Completed && x.PositionMs > 30_000)
+            .OrderByDescending(x => x.UpdatedAt)
+            .Select(x => _viewIndex.Find(x.Key))
+            .Where(x => x is not null && _store.IsContentVisible(x))
+            .Cast<StreamItem>()
+            .DistinctBy(x => x.Key)
+            .Take(18).ToList();
+
+        var root = Vertical();
+        root.Children.Add(Txt(
+            "مقترحات خاصة بملف «" + _store.ActiveProfile().Name +
+            "» • حسب " + (preferredKind == "movie" ? "الأفلام" : "المسلسلات"),
+            12, Muted, marginBottom: 14));
+        if (continuing.Count > 0)
+            root.Children.Add(ContentRow("متابعة المشاهدة", continuing, landscape: true));
+        if (recommendations.Count > 0)
+            root.Children.Add(ContentRow("قد يعجبك", recommendations));
+        if (favorites.Count > 0)
+            root.Children.Add(ContentRow("من مفضلتك", favorites));
+        if (watched.Count > 0)
+            root.Children.Add(ContentRow("شاهدتها مؤخرًا", watched, landscape: true));
+        var latest = _viewIndex.Collection("latest").Where(_store.IsContentVisible).Take(18).ToList();
+        if (latest.Count > 0)
+            root.Children.Add(ContentRow("أضيف حديثًا", latest));
+
+        if (root.Children.Count == 1)
+        {
+            ContentHost.Content = EmptyState(
+                "لا توجد مكتبة بعد",
+                "أضف قائمة Xtream أو M3U وابدأ بمشاهدة المحتوى لتظهر المقترحات هنا.");
+            return;
+        }
+        ContentHost.Content = new ScrollViewer
+        {
+            Content = root,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
     }
 
     private void ShowCollections()
@@ -3352,7 +3589,9 @@ public partial class MainWindow : Window
 
         root.Children.Add(SettingsSection("البث المباشر",
             SettingTile("تشغيل القناة عند تحديدها", "المعاينة التلقائية للبث المباشر", autoplay),
-            SettingTile("صيغة البث", "TS أو HLS حسب السيرفر", liveFormat.Control)));
+            SettingTile("صيغة البث", "TS أو HLS حسب السيرفر", liveFormat.Control),
+            SettingActionTile("تذكيرات دليل البرامج", "تنبيه البرامج قبل خمس دقائق أثناء فتح التطبيق",
+                (_, _) => OpenSubpage(ShowEpgReminders))));
 
         root.Children.Add(SettingsSection("الأفلام والمسلسلات",
             SettingTile("متابعة المشاهدة", "السؤال قبل متابعة آخر نقطة", resume),

@@ -143,6 +143,10 @@ public sealed class PersistentState
     public Dictionary<string, WatchState> WatchStates { get; set; } = [];
     public List<string> RecentSearches { get; set; } = [];
 
+    // Android-parity EPG reminders, scoped per provider/profile. No stream
+    // URLs or subscription credentials are serialized here.
+    public List<EpgReminder> EpgReminders { get; set; } = [];
+
     public AppSettings Settings { get; set; } = new();
 }
 
