@@ -18,6 +18,8 @@
     <Compile Include="../../src/BlofyPlayer.Windows/Core/Playback/PlaybackSourceHostPolicy.cs" Link="PlaybackSourceHostPolicy.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/BoundedPayloadReader.cs" Link="BoundedPayloadReader.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/ConnectionProbe.cs" Link="ConnectionProbe.cs" />
+    <Compile Include="../../src/BlofyPlayer.Windows/Core/EpgReminderPolicy.cs" Link="EpgReminderPolicy.cs" />
+    <Compile Include="../../src/BlofyPlayer.Windows/Core/ForYouPolicy.cs" Link="ForYouPolicy.cs" />
     <Compile Include="../../src/BlofyPlayer.Windows/Core/Identity/ActivationEntryPolicy.cs" Link="ActivationEntryPolicy.cs" />
   </ItemGroup>
 </Project>
