@@ -111,3 +111,14 @@ A CI success is not certification of real-device 4K, paid-provider compatibility
 - Increases the client, setup and CI-validated version to 0.4.19.
 
 **Acceptance gate:** Windows build and self-contained setup smoke tests must pass. Real-world live/VOD playback still requires testing on Windows 10/11 against *authorized* sources with varying TLS/TS/HLS/container formats; this preview does not add Widevine/DRM decoding or imply that a particular provider is compatible. Preserve an installed rollback version until live video, audio/subtitles, seeking and 20-minute playback are verified.
+
+## Windows 0.4.20 — live playback and connection lifecycle (QA preview)
+
+- Stop the previous LibVLC media/socket **before** starting another TS/HLS live source. This reduces overlapping sessions with legitimate one-connection IPTV accounts.
+- Limit URL and alternate HTTP-agent attempts predictably; when an API-provided direct source expires, retry a generated Xtream live URL with the alternate agent rather than retrying the same expired direct URL. No endless reconnection loops.
+- Release the mini-preview's decoder lock between frame checks. Channel fullscreen no longer waits behind four sequential 5–6-second preview watchdog windows.
+- Ignore stale native VLC error callbacks in the first four seconds after a new channel starts, preventing a previous-channel error from immediately changing the new channel.
+- Give slowly starting VOD more time to produce a first decoded video frame instead of automatically interrupting it at ~14 seconds.
+- Version 0.4.20 is separate from 0.4.19 for safe QA comparisons and rollback. All new retry-policy cases are included in the Windows regression runner.
+
+**Not yet certified:** A successful Windows CI and setup smoke-test only establishes build/install health. Use authorized Xtream and M3U test streams on a real Windows 10/11 x64 PC to verify single-connection live playback, TS/HLS switch, 4K decoding, VOD start/seek/subtitles and extended playback before releasing to users. No DRM bypass or stream rebroadcasting is performed.

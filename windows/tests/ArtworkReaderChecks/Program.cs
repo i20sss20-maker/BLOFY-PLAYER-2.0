@@ -226,22 +226,68 @@ Console.WriteLine("BLOFY Windows server-verified startup checks passed.");
 
 // A failed live stream must retry with a *different* HTTP identity.
 Check(PlaybackUserAgentPolicy.Primary(null, "BLOFY PLAYER/2.0 (Windows)") ==
+      PlaybackUserAgentPolicy.Android,
+    "legacy Windows agent resolves to the same HTTP identity as Android Media3");
+Check(PlaybackUserAgentPolicy.Alternative(PlaybackUserAgentPolicy.Android) ==
       PlaybackUserAgentPolicy.Native,
-    "legacy Windows agent resolves to native VLC for live streams");
+    "live playback switches from Android to native VLC agent");
 Check(PlaybackUserAgentPolicy.Alternative(PlaybackUserAgentPolicy.Native) ==
-      PlaybackUserAgentPolicy.Browser,
-    "live playback switches from VLC to browser user agent");
-Check(PlaybackUserAgentPolicy.Alternative(PlaybackUserAgentPolicy.Browser) ==
-      PlaybackUserAgentPolicy.Native,
-    "browser user agent falls back to native VLC");
+      PlaybackUserAgentPolicy.Android,
+    "native VLC agent falls back to Android for explicit VLC profiles");
 Check(PlaybackUserAgentPolicy.Primary("IPTV-Device/1.0", "ignored") == "IPTV-Device/1.0",
     "M3U per-channel user agent is preserved");
 Check(PlaybackUserAgentPolicy.Primary("not-safe\r\nheader: injected", null) ==
-      PlaybackUserAgentPolicy.Native,
+      PlaybackUserAgentPolicy.Android,
     "unsafe user agent cannot inject VLC HTTP headers");
-Check(PlaybackUserAgentPolicy.Primary(null, null) == PlaybackUserAgentPolicy.Native,
-    "absent HTTP agent uses VLC-compatible default");
+Check(PlaybackUserAgentPolicy.Primary(null, null) == PlaybackUserAgentPolicy.Android,
+    "absent HTTP agent uses Android Media3-compatible default");
 Console.WriteLine("BLOFY Windows live playback compatibility checks passed.");
+
+// A live direct source may expire, so native TS/HLS alternatives must get
+// a chance before the alternate User-Agent is tried on a generated link.
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(0) == 0,
+    "empty stream URL candidates have no automatic retries");
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(1) == 1,
+    "single M3U URL retries once with the alternative HTTP agent");
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(2) == 3,
+    "two TS/HLS candidates both get a secondary compatible agent pass");
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(3) == 4 &&
+      PlaybackRecoveryPolicy.MaximumRecoveries(4) == 5,
+    "three and four candidates have bounded native and fallback passes");
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(99) == 6,
+    "huge URL lists can never trigger unbounded native reconnection");
+Check(PlaybackRecoveryPolicy.CompatibilityStartIndex(1) == 0 &&
+      PlaybackRecoveryPolicy.CompatibilityStartIndex(2) == 0 &&
+      PlaybackRecoveryPolicy.CompatibilityStartIndex(3) == 1 &&
+      PlaybackRecoveryPolicy.CompatibilityStartIndex(4) == 1 &&
+      PlaybackRecoveryPolicy.CompatibilityStartIndex(5) == 2,
+    "compatibility pass prefers a generated live URL over expired direct source");
+Console.WriteLine("BLOFY Windows live recovery planner regression checks passed.");
+
+Check(PlaybackRecoveryPolicy.MaximumRecoveries(5) == 6,
+    "provider-origin URL still allows generated TS and HLS to retry with native VLC");
+
+var privateDirect = "http://10.10.2.7/live/user/pass/42.ts?signature=A%2FB&expires=42";
+var publicProvider = "https://stream.example.test:8443/panel/";
+var originRepair = PlaybackSourceHostPolicy.ProviderOriginFallback(publicProvider, privateDirect);
+Check(originRepair == "https://stream.example.test:8443/live/user/pass/42.ts?signature=A%2FB&expires=42",
+    "Android-style origin fallback preserves exact signed path/query and provider port");
+Check(PlaybackSourceHostPolicy.PreferProviderOrigin(publicProvider, privateDirect),
+    "unreachable private source prefers public provider origin first");
+Check(!PlaybackSourceHostPolicy.PreferProviderOrigin(
+        publicProvider, "https://cdn.example.test/live/42.ts"),
+    "valid public CDN remains the primary source");
+Check(PlaybackSourceHostPolicy.ProviderOriginFallback(
+        publicProvider, "https://stream.example.test:8443/live/42.ts") is null,
+    "identical public origin never yields a duplicate media URL");
+Check(PlaybackSourceHostPolicy.ProviderOriginFallback(
+        "http://localhost:8787", privateDirect) is null,
+    "provider-origin repair never substitutes an internal provider address");
+Check(PlaybackSourceHostPolicy.ProviderOriginFallback(
+        publicProvider, "https://alice:secret@cdn.example.test/live/42.ts") is null,
+    "direct URLs containing embedded user-info cannot leak credentials");
+Console.WriteLine("BLOFY Windows Android direct-source routing checks passed.");
+
 
 sealed class FakeHealthHandler(HttpStatusCode code, string body) : HttpMessageHandler
 {

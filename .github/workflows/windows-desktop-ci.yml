@@ -50,9 +50,9 @@ jobs:
           $p = Get-Content -Raw windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
           $i = Get-Content -Raw windows/installer/BlofyPlayer.iss
           $v = Get-Content -Raw windows/src/BlofyPlayer.Windows/Core/AppBuildInfo.cs
-          if ($p -notmatch '<Version>0\.4\.19</Version>' -or
-              $i -notmatch '#define MyAppVersion "0\.4\.19"' -or
-              $v -notmatch 'const string Version = "0\.4\.19"') {
+          if ($p -notmatch '<Version>0\.4\.20</Version>' -or
+              $i -notmatch '#define MyAppVersion "0\.4\.20"' -or
+              $v -notmatch 'const string Version = "0\.4\.20"') {
             throw "Windows client, application and setup versions disagree"
           }
 
@@ -94,7 +94,7 @@ jobs:
           $binary = Join-Path $target 'BLOFY PLAYER.exe'
           if (!(Test-Path $binary)) { throw "The installed Windows player executable is missing" }
           $version = (Get-Item $binary).VersionInfo.FileVersion
-          if (!$version.StartsWith("0.4.19")) {
+          if (!$version.StartsWith("0.4.20")) {
             throw "Unexpected installed file version: $version"
           }
           Write-Host "Installer smoke check passed: $binary ($version)"

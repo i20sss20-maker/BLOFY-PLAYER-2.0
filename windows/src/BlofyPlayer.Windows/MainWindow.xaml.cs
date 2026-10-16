@@ -2326,11 +2326,18 @@ public partial class MainWindow : Window
         }
 
         var provider = _activeProvider;
+        var providerRoute = PlaybackSourceHostPolicy.ProviderOriginFallback(
+            provider.BaseUrl, item.DirectSource);
+        // Private/hidden CDN addresses are not accessible from the viewer's
+        // Windows PC. Android already prefers the provider host in that case.
+        if (PlaybackSourceHostPolicy.PreferProviderOrigin(provider.BaseUrl, item.DirectSource))
+            Add(providerRoute);
+        Add(item.DirectSource);
+        Add(providerRoute);
         if (item.Kind == "live")
         {
             var preferred = _store.State.Settings.LiveFormat == "m3u8" ? "m3u8" : "ts";
             var alternate = preferred == "ts" ? "m3u8" : "ts";
-            Add(item.DirectSource);
             Add(BuildXtreamMediaUrl(provider, "live", item.RemoteId, preferred));
             Add(BuildXtreamMediaUrl(provider, "live", item.RemoteId, alternate));
             // Legacy Xtream servers sometimes expose live streams without
@@ -2342,7 +2349,6 @@ public partial class MainWindow : Window
         }
         else
         {
-            Add(item.DirectSource);
             Add(BuildXtreamMediaUrl(provider, "movie", item.RemoteId, item.Extension));
             // Xtream services vary in VOD container support. Keep bounded,
             // distinct alternatives so failed server links do not dead-end.
@@ -2365,7 +2371,12 @@ public partial class MainWindow : Window
             urls.Add(value.Trim());
         }
 
+        var providerRoute = PlaybackSourceHostPolicy.ProviderOriginFallback(
+            _activeProvider.BaseUrl, episode.DirectSource);
+        if (PlaybackSourceHostPolicy.PreferProviderOrigin(_activeProvider.BaseUrl, episode.DirectSource))
+            Add(providerRoute);
         Add(episode.DirectSource);
+        Add(providerRoute);
         Add(BuildXtreamMediaUrl(_activeProvider, "series", episode.RemoteId, episode.Extension));
         Add(BuildXtreamMediaUrl(_activeProvider, "series", episode.RemoteId,
             episode.Extension.Equals("mkv", StringComparison.OrdinalIgnoreCase) ? "mp4" : "mkv"));
@@ -3198,6 +3209,33 @@ public partial class MainWindow : Window
             ? "لا يوجد سيرفر نشط"
             : provider.Name + " • " + (provider.ProviderType == "m3u" ? "M3U" : "Xtream");
 
+        // A healthy BLOFY activation API does not prove a third-party Xtream
+        // subscription works. Test its player_api endpoint on explicit user
+        // request without printing or exposing provider credentials.
+        var providerHealth = "غير مفحوص";
+        if (string.Equals(provider?.ProviderType, "xtream", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var providerProbe = new XtreamService(_store.State.Settings.UserAgent);
+                using var sourceTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(9));
+                var authenticated = await providerProbe.AuthenticateAsync(provider, sourceTimeout.Token);
+                providerHealth = authenticated
+                    ? "Xtream API يتصل ويوثّق الاشتراك (التشغيل يحتاج اختبارًا منفصلًا)"
+                    : "Xtream API لا يؤكد صلاحية بيانات الاشتراك";
+            }
+            catch (OperationCanceledException)
+            {
+                providerHealth = "انتهت مهلة اتصال Xtream API";
+            }
+            catch
+            {
+                providerHealth = "تعذر الاتصال بخدمة Xtream API";
+            }
+        }
+        else if (string.Equals(provider?.ProviderType, "m3u", StringComparison.OrdinalIgnoreCase))
+            providerHealth = "مصدر M3U — افحص البث من القناة نفسها";
+
         var snapshot = _catalog?.Snapshot;
         var live = snapshot?.Streams.Count(x => x.Kind == "live") ?? 0;
         var movies = snapshot?.Streams.Count(x => x.Kind == "movie") ?? 0;
@@ -3206,6 +3244,7 @@ public partial class MainWindow : Window
         MessageBox.Show(this,
             "اتصال خادم BLOFY: " + health.Message + Environment.NewLine +
             "السيرفر الحالي: " + providerText + Environment.NewLine +
+            "اتصال مصدر المحتوى: " + providerHealth + Environment.NewLine +
             "القنوات المخزنة: " + live.ToString("N0") + Environment.NewLine +
             "الأفلام المخزنة: " + movies.ToString("N0") + Environment.NewLine +
             "المسلسلات المخزنة: " + series.ToString("N0") + Environment.NewLine +
@@ -3784,53 +3823,73 @@ public partial class MainWindow : Window
         CancellationToken token,
         int serial)
     {
-        var entered = false;
         try
         {
-            await _previewPlaybackLock.WaitAsync(token).ConfigureAwait(false);
-            entered = true;
             foreach (var url in candidates.Take(4))
             {
                 token.ThrowIfCancellationRequested();
                 if (!ReferenceEquals(preview, _previewPlayback) ||
                     serial != Volatile.Read(ref _liveSelectionSerial)) return;
 
-                // Native VLC calls must run outside WPF and remain serialized
-                // with fullscreen teardown for one-connection IPTV accounts.
-                var started = await Task.Run(() =>
+                // Only hold this lock for the native Stop/Play call. Holding it
+                // throughout a 6-second video watchdog per candidate made
+                // fullscreen wait up to 24 seconds for the old preview.
+                bool started;
+                await _previewPlaybackLock.WaitAsync(token).ConfigureAwait(false);
+                try
                 {
-                    try
+                    token.ThrowIfCancellationRequested();
+                    if (!ReferenceEquals(preview, _previewPlayback) ||
+                        serial != Volatile.Read(ref _liveSelectionSerial)) return;
+
+                    started = await Task.Run(() =>
                     {
-                        preview.Stop();
-                        if (token.IsCancellationRequested) return false;
-                        return preview.Play(url, headers);
-                    }
-                    catch { return false; }
-                }, token).ConfigureAwait(false);
+                        try
+                        {
+                            preview.Stop();
+                            if (token.IsCancellationRequested) return false;
+                            return preview.Play(url, headers);
+                        }
+                        catch { return false; }
+                    }, token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _previewPlaybackLock.Release();
+                }
                 if (!started) continue;
 
-                // A successful Play() return only means VLC accepted the URL;
-                // it does NOT mean it decoded a live video frame.
-                for (var tick = 0; tick < 12; tick++)
+                // Fullscreen teardown may now acquire the native lock while
+                // these non-blocking frame probes wait for decoded output.
+                for (var tick = 0; tick < 10; tick++)
                 {
                     await Task.Delay(500, token).ConfigureAwait(false);
                     if (!ReferenceEquals(preview, _previewPlayback) ||
                         serial != Volatile.Read(ref _liveSelectionSerial)) return;
-                    var hasVideo = await Task.Run(() =>
+                    // A frame poll can race with native Dispose() after the
+                    // user enters fullscreen. Use the same gate only for the
+                    // very short VoutCount read, never for the 500ms wait.
+                    await _previewPlaybackLock.WaitAsync(token).ConfigureAwait(false);
+                    try
                     {
-                        try { return preview.MediaPlayer.VoutCount > 0; }
-                        catch { return false; }
-                    }, token).ConfigureAwait(false);
-                    if (hasVideo) return;
+                        if (!ReferenceEquals(preview, _previewPlayback) ||
+                            serial != Volatile.Read(ref _liveSelectionSerial)) return;
+                        var hasVideo = await Task.Run(() =>
+                        {
+                            try { return preview.MediaPlayer.VoutCount > 0; }
+                            catch { return false; }
+                        }, token).ConfigureAwait(false);
+                        if (hasVideo) return;
+                    }
+                    finally
+                    {
+                        _previewPlaybackLock.Release();
+                    }
                 }
             }
         }
         catch (OperationCanceledException) { /* New selection or fullscreen. */ }
         catch { /* A failed preview must never block the channel list. */ }
-        finally
-        {
-            if (entered) _previewPlaybackLock.Release();
-        }
     }
 
     private void DisposePreview() => _ = StopAndDisposePreviewAsync();
