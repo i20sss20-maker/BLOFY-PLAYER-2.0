@@ -122,3 +122,27 @@ A CI success is not certification of real-device 4K, paid-provider compatibility
 - Version 0.4.20 is separate from 0.4.19 for safe QA comparisons and rollback. All new retry-policy cases are included in the Windows regression runner.
 
 **Not yet certified:** A successful Windows CI and setup smoke-test only establishes build/install health. Use authorized Xtream and M3U test streams on a real Windows 10/11 x64 PC to verify single-connection live playback, TS/HLS switch, 4K decoding, VOD start/seek/subtitles and extended playback before releasing to users. No DRM bypass or stream rebroadcasting is performed.
+
+## Windows 0.4.21 — Android UI parity: For You + EPG reminders (QA preview)
+
+- Adds the **"لك" (For You)** sidebar page, using favorites, recently watched titles,
+  current profile, matching genre and category, and catalog quality/recency.
+  All recommendations run locally using bounded catalog indexes: no viewing
+  history is uploaded and no full IPTV collection is sorted on the UI thread.
+- Adds five-minute **EPG program reminders** from the live channel guide, plus
+  a reminder manager under Live settings. Reminders are isolated by user
+  profile, linked to the configured provider, deduplicated and persisted
+  without passwords, stream links, or device tokens. Kids profile restrictions
+  are respected when offering to open a reminder.
+- Unlike Android's background WorkManager notifications, Windows reminders
+  are currently **in-app only**, delivered while the BLOFY desktop window is
+  open and not showing a playback overlay. They do not wake a closed app.
+- Includes the live URL/decoder recovery and server-source checks from 0.4.20.
+- CI checks For You selection, bounded catalog behavior, reminder scheduling
+  and isolation, Windows compilation, the self-contained setup, and installer
+  smoke testing.
+
+**QA gates:** Windows 10/11 real-device playback, EPG source coverage,
+parental profile behavior, remote/focus navigation, update/rollback, and
+extended TS/HLS/VOD sessions remain to be verified before a stable release.
+DRM-protected media still require authorized compatible playback support.
