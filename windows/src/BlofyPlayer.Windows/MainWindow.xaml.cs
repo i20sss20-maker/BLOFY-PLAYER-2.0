@@ -530,7 +530,7 @@ public partial class MainWindow : Window
     }
 
     private static string NormalizeLastPage(string? page) =>
-        page is "home" or "live" or "movie" or "series" or "collections" or "favorites" or "search" or "settings"
+        page is "home" or "live" or "movie" or "series" or "for_you" or "collections" or "favorites" or "search" or "settings"
             ? page
             : "home";
 
@@ -556,6 +556,7 @@ public partial class MainWindow : Window
             case "live": ShowBrowser("live"); break;
             case "movie": ShowBrowser("movie"); break;
             case "series": ShowBrowser("series"); break;
+            case "for_you": ShowForYou(); break;
             case "collections": ShowCollections(); break;
             case "favorites": ShowFavorites(); break;
             case "search": ShowSearch(); break;
@@ -2381,6 +2382,87 @@ public partial class MainWindow : Window
         Add(BuildXtreamMediaUrl(_activeProvider, "series", episode.RemoteId,
             episode.Extension.Equals("mkv", StringComparison.OrdinalIgnoreCase) ? "mp4" : "mkv"));
         return urls;
+    }
+
+    private void ShowForYou()
+    {
+        DisposePreview();
+        PageTitle.Text = "لك";
+        PageSubtitle.Text = "مختارات من مكتبتك حسب مشاهدتك ومفضلتك — على الجهاز فقط";
+        if (_activationState?.CanUse() != true)
+        {
+            ContentHost.Content = ActivationCard();
+            return;
+        }
+
+        // Limit candidate work to the existing, bounded index. Huge Xtream
+        // catalogs must never force a full sort on the WPF UI thread.
+        var watched = _store.WatchStates
+            .OrderByDescending(x => x.UpdatedAt)
+            .Select(x => _viewIndex.Find(x.Key))
+            .Where(x => x is not null && _store.IsContentVisible(x) &&
+                        x.Kind is "movie" or "series")
+            .Cast<StreamItem>()
+            .DistinctBy(x => x.Key)
+            .Take(24)
+            .ToList();
+        var favorites = _store.ActiveLibrary().Favorites
+            .Select(_viewIndex.Find)
+            .Where(x => x is not null && _store.IsContentVisible(x) &&
+                        x.Kind is "movie" or "series")
+            .Cast<StreamItem>()
+            .DistinctBy(x => x.Key)
+            .Take(24)
+            .ToList();
+        var liked = favorites.Concat(watched).DistinctBy(x => x.Key).ToList();
+        var preferredKind = liked.GroupBy(x => x.Kind)
+            .OrderByDescending(x => x.Count()).FirstOrDefault()?.Key ?? "movie";
+        var candidates = _viewIndex.Collection("top")
+            .Concat(_viewIndex.Collection("latest"))
+            .Concat(_viewIndex.Latest("movie"))
+            .Concat(_viewIndex.Latest("series"))
+            .Where(_store.IsContentVisible)
+            .DistinctBy(x => x.Key)
+            .ToList();
+        var recommendations = ForYouPolicy.Recommend(candidates, liked, preferredKind, 18);
+        var continuing = _store.WatchStates
+            .Where(x => !x.Completed && x.PositionMs > 30_000)
+            .OrderByDescending(x => x.UpdatedAt)
+            .Select(x => _viewIndex.Find(x.Key))
+            .Where(x => x is not null && _store.IsContentVisible(x))
+            .Cast<StreamItem>()
+            .DistinctBy(x => x.Key)
+            .Take(18).ToList();
+
+        var root = Vertical();
+        root.Children.Add(Txt(
+            "مقترحات خاصة بملف «" + _store.ActiveProfile().Name +
+            "» • حسب " + (preferredKind == "movie" ? "الأفلام" : "المسلسلات"),
+            12, Muted, marginBottom: 14));
+        if (continuing.Count > 0)
+            root.Children.Add(ContentRow("متابعة المشاهدة", continuing, landscape: true));
+        if (recommendations.Count > 0)
+            root.Children.Add(ContentRow("قد يعجبك", recommendations));
+        if (favorites.Count > 0)
+            root.Children.Add(ContentRow("من مفضلتك", favorites));
+        if (watched.Count > 0)
+            root.Children.Add(ContentRow("شاهدتها مؤخرًا", watched, landscape: true));
+        var latest = _viewIndex.Collection("latest").Where(_store.IsContentVisible).Take(18).ToList();
+        if (latest.Count > 0)
+            root.Children.Add(ContentRow("أضيف حديثًا", latest));
+
+        if (root.Children.Count == 1)
+        {
+            ContentHost.Content = EmptyState(
+                "لا توجد مكتبة بعد",
+                "أضف قائمة Xtream أو M3U وابدأ بمشاهدة المحتوى لتظهر المقترحات هنا.");
+            return;
+        }
+        ContentHost.Content = new ScrollViewer
+        {
+            Content = root,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
     }
 
     private void ShowCollections()
