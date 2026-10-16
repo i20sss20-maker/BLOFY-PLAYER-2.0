@@ -341,6 +341,17 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
                 entered = true;
                 if (_disposed || playbackToken.IsCancellationRequested ||
                     generation != Volatile.Read(ref _playbackGeneration)) return;
+                // Explicitly close the previous VLC media/socket before a
+                // replacement stream. LibVLC Play(newMedia) alone may leave a
+                // stalled live socket active on single-connection accounts.
+                // The native gate keeps stop/start serialized off WPF's thread.
+                if (generation > 1)
+                {
+                    try { _player.Stop(); }
+                    catch { /* Continue with the new candidate. */ }
+                }
+                if (_disposed || playbackToken.IsCancellationRequested ||
+                    generation != Volatile.Read(ref _playbackGeneration)) return;
                 using var media = new Media(_libVlc, uri);
                 media.AddOption(":http-user-agent=" + userAgent);
                 // Some M3U services require an explicit per-entry Referer.
@@ -407,7 +418,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         // The fallback now actually changes the user agent. Previously the
         // default path used the browser agent on both passes.
         var haveAlternateAgent = !_compatibilityUserAgent;
-        var maxRetries = Math.Min(4, Math.Max(1, _recoveryUrls.Count * 2) - 1);
+        var maxRetries = PlaybackRecoveryPolicy.MaximumRecoveries(_recoveryUrls.Count);
         if (_automaticRecoveries >= maxRetries || (!haveNextUrl && !haveAlternateAgent))
         {
             TrackPlayback("فشل التشغيل بعد انتهاء البدائل • " + message);
@@ -426,7 +437,13 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         var preserve = Math.Max(_cachedPlaybackTime, _pendingRecoveryResume);
         _automaticRecoveries++;
         if (haveNextUrl) _recoveryIndex++;
-        else { _recoveryIndex = 0; _compatibilityUserAgent = true; }
+        else
+        {
+            // Retry generated TS/HLS sources with a different agent, not an
+            // expired direct_source that already failed.
+            _recoveryIndex = PlaybackRecoveryPolicy.CompatibilityStartIndex(_recoveryUrls.Count);
+            _compatibilityUserAgent = true;
+        }
         EpgText.Text = haveNextUrl ? message : "تجربة توافق السيرفر…";
         LoadingText.Text = "فحص المصدر " + (_automaticRecoveries + 1) +
                            " / " + (maxRetries + 1) + "…";
@@ -569,9 +586,12 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         if (!_videoOutputSeen && _startedPlaying && _playlist.Count == 0 && time > 800)
             MarkPlaybackReady();
 
+        // Give on-demand files extra time for their first keyframe. Aborting
+        // startup at 14 seconds repeatedly can make an otherwise working VOD
+        // look permanently stalled. Live streams keep a shorter recovery path.
         if (!_videoOutputSeen && !_userPaused &&
             DateTimeOffset.UtcNow - _playStartedAt >
-                TimeSpan.FromSeconds(_playlist.Count > 0 ? 12 : 14))
+                TimeSpan.FromSeconds(_playlist.Count > 0 ? 13 : (_startedPlaying ? 28 : 23)))
         {
             _playStartedAt = DateTimeOffset.UtcNow;
             TryRecoverPlayback("لا توجد صورة — تجربة مسار بديل…");
@@ -588,7 +608,7 @@ public partial class PlayerOverlay : UserControl, IAsyncDisposable
         }
         else if (!_userPaused && !playing && !_videoOutputSeen &&
                  DateTimeOffset.UtcNow - _playStartedAt >
-                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 12 : 14))
+                     TimeSpan.FromSeconds(_playlist.Count > 0 ? 13 : 23))
         {
             TryRecoverPlayback("تأخر بدء التشغيل — تجربة مسار بديل…");
         }
