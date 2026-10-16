@@ -3198,6 +3198,33 @@ public partial class MainWindow : Window
             ? "لا يوجد سيرفر نشط"
             : provider.Name + " • " + (provider.ProviderType == "m3u" ? "M3U" : "Xtream");
 
+        // A healthy BLOFY activation API does not prove a third-party Xtream
+        // subscription works. Test its player_api endpoint on explicit user
+        // request without printing or exposing provider credentials.
+        var providerHealth = "غير مفحوص";
+        if (provider?.ProviderType.Equals("xtream", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            try
+            {
+                using var providerProbe = new XtreamService(_store.State.Settings.UserAgent);
+                using var sourceTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(9));
+                var authenticated = await providerProbe.AuthenticateAsync(provider, sourceTimeout.Token);
+                providerHealth = authenticated
+                    ? "Xtream API يتصل ويوثّق الاشتراك (التشغيل يحتاج اختبارًا منفصلًا)"
+                    : "Xtream API لا يؤكد صلاحية بيانات الاشتراك";
+            }
+            catch (OperationCanceledException)
+            {
+                providerHealth = "انتهت مهلة اتصال Xtream API";
+            }
+            catch
+            {
+                providerHealth = "تعذر الاتصال بخدمة Xtream API";
+            }
+        }
+        else if (provider?.ProviderType.Equals("m3u", StringComparison.OrdinalIgnoreCase) == true)
+            providerHealth = "مصدر M3U — افحص البث من القناة نفسها";
+
         var snapshot = _catalog?.Snapshot;
         var live = snapshot?.Streams.Count(x => x.Kind == "live") ?? 0;
         var movies = snapshot?.Streams.Count(x => x.Kind == "movie") ?? 0;
@@ -3206,6 +3233,7 @@ public partial class MainWindow : Window
         MessageBox.Show(this,
             "اتصال خادم BLOFY: " + health.Message + Environment.NewLine +
             "السيرفر الحالي: " + providerText + Environment.NewLine +
+            "اتصال مصدر المحتوى: " + providerHealth + Environment.NewLine +
             "القنوات المخزنة: " + live.ToString("N0") + Environment.NewLine +
             "الأفلام المخزنة: " + movies.ToString("N0") + Environment.NewLine +
             "المسلسلات المخزنة: " + series.ToString("N0") + Environment.NewLine +
