@@ -3827,12 +3827,25 @@ public partial class MainWindow : Window
                     await Task.Delay(500, token).ConfigureAwait(false);
                     if (!ReferenceEquals(preview, _previewPlayback) ||
                         serial != Volatile.Read(ref _liveSelectionSerial)) return;
-                    var hasVideo = await Task.Run(() =>
+                    // A frame poll can race with native Dispose() after the
+                    // user enters fullscreen. Use the same gate only for the
+                    // very short VoutCount read, never for the 500ms wait.
+                    await _previewPlaybackLock.WaitAsync(token).ConfigureAwait(false);
+                    try
                     {
-                        try { return preview.MediaPlayer.VoutCount > 0; }
-                        catch { return false; }
-                    }, token).ConfigureAwait(false);
-                    if (hasVideo) return;
+                        if (!ReferenceEquals(preview, _previewPlayback) ||
+                            serial != Volatile.Read(ref _liveSelectionSerial)) return;
+                        var hasVideo = await Task.Run(() =>
+                        {
+                            try { return preview.MediaPlayer.VoutCount > 0; }
+                            catch { return false; }
+                        }, token).ConfigureAwait(false);
+                        if (hasVideo) return;
+                    }
+                    finally
+                    {
+                        _previewPlaybackLock.Release();
+                    }
                 }
             }
         }
