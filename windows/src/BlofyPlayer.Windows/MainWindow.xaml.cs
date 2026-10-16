@@ -3202,7 +3202,7 @@ public partial class MainWindow : Window
         // subscription works. Test its player_api endpoint on explicit user
         // request without printing or exposing provider credentials.
         var providerHealth = "غير مفحوص";
-        if (provider?.ProviderType.Equals("xtream", StringComparison.OrdinalIgnoreCase) == true)
+        if (string.Equals(provider?.ProviderType, "xtream", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
@@ -3222,7 +3222,7 @@ public partial class MainWindow : Window
                 providerHealth = "تعذر الاتصال بخدمة Xtream API";
             }
         }
-        else if (provider?.ProviderType.Equals("m3u", StringComparison.OrdinalIgnoreCase) == true)
+        else if (string.Equals(provider?.ProviderType, "m3u", StringComparison.OrdinalIgnoreCase))
             providerHealth = "مصدر M3U — افحص البث من القناة نفسها";
 
         var snapshot = _catalog?.Snapshot;
