@@ -146,3 +146,23 @@ A CI success is not certification of real-device 4K, paid-provider compatibility
 parental profile behavior, remote/focus navigation, update/rollback, and
 extended TS/HLS/VOD sessions remain to be verified before a stable release.
 DRM-protected media still require authorized compatible playback support.
+
+## Windows 0.4.22 — dark settings dropdown readability (QA preview)
+
+- Fixes the white popup with nearly invisible light text shown on the Windows
+  settings screenshot. Replaces the native Windows `ComboBox` popup/template
+  with a fully themed dark panel and **opaque dark option rows**.
+- Current choice stays readable when the list is closed; expanded items have
+  distinct hovered, selected and keyboard-focused backgrounds/borders.
+- Applies consistently to language, playback aspect, subtitle/audio selection,
+  TS/HLS format, interface motion, list density and provider selection.
+- Keyboard/remote navigation remains available using the ComboBox's standard
+  `PART_Popup` and generated items; the expanded menu scrolls and is capped
+  to 300 pixels to fit smaller Windows screens.
+- Adds CI regression checks for popup and item colors/selection states in
+  addition to the normal full WPF build and installer smoke test.
+
+**Release check:** still test on Windows 10/11 at 100%, 125% and 150%
+display scaling, including Arabic/English mixed options and keyboard/remote
+navigation before moving out of preview. No source, activation or stream
+settings are changed by this visual fix.
