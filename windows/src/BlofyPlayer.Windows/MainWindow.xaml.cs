@@ -2454,6 +2454,7 @@ public partial class MainWindow : Window
 
     private void ShowEpgReminders()
     {
+        DisposePreview();
         PageTitle.Text = "تذكيرات دليل البرامج";
         PageSubtitle.Text = "تنبيه قبل خمس دقائق • عندما يكون BLOFY مفتوحًا";
         var list = _store.State.EpgReminders ??= [];
