@@ -56,6 +56,10 @@ jobs:
             throw "Windows client, application and setup versions disagree"
           }
 
+      - name: Verify readable dark settings dropdown
+        shell: pwsh
+        run: ./windows/tests/ComboBoxThemeChecks.ps1
+
       - name: Artwork streaming regression checks
         run: dotnet run --project windows/tests/ArtworkReaderChecks/ArtworkReaderChecks.csproj -c Release
 
