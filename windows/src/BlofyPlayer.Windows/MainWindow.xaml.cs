@@ -3784,34 +3784,45 @@ public partial class MainWindow : Window
         CancellationToken token,
         int serial)
     {
-        var entered = false;
         try
         {
-            await _previewPlaybackLock.WaitAsync(token).ConfigureAwait(false);
-            entered = true;
             foreach (var url in candidates.Take(4))
             {
                 token.ThrowIfCancellationRequested();
                 if (!ReferenceEquals(preview, _previewPlayback) ||
                     serial != Volatile.Read(ref _liveSelectionSerial)) return;
 
-                // Native VLC calls must run outside WPF and remain serialized
-                // with fullscreen teardown for one-connection IPTV accounts.
-                var started = await Task.Run(() =>
+                // Only hold this lock for the native Stop/Play call. Holding it
+                // throughout a 6-second video watchdog per candidate made
+                // fullscreen wait up to 24 seconds for the old preview.
+                bool started;
+                await _previewPlaybackLock.WaitAsync(token).ConfigureAwait(false);
+                try
                 {
-                    try
+                    token.ThrowIfCancellationRequested();
+                    if (!ReferenceEquals(preview, _previewPlayback) ||
+                        serial != Volatile.Read(ref _liveSelectionSerial)) return;
+
+                    started = await Task.Run(() =>
                     {
-                        preview.Stop();
-                        if (token.IsCancellationRequested) return false;
-                        return preview.Play(url, headers);
-                    }
-                    catch { return false; }
-                }, token).ConfigureAwait(false);
+                        try
+                        {
+                            preview.Stop();
+                            if (token.IsCancellationRequested) return false;
+                            return preview.Play(url, headers);
+                        }
+                        catch { return false; }
+                    }, token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _previewPlaybackLock.Release();
+                }
                 if (!started) continue;
 
-                // A successful Play() return only means VLC accepted the URL;
-                // it does NOT mean it decoded a live video frame.
-                for (var tick = 0; tick < 12; tick++)
+                // Fullscreen teardown may now acquire the native lock while
+                // these non-blocking frame probes wait for decoded output.
+                for (var tick = 0; tick < 10; tick++)
                 {
                     await Task.Delay(500, token).ConfigureAwait(false);
                     if (!ReferenceEquals(preview, _previewPlayback) ||
@@ -3827,10 +3838,6 @@ public partial class MainWindow : Window
         }
         catch (OperationCanceledException) { /* New selection or fullscreen. */ }
         catch { /* A failed preview must never block the channel list. */ }
-        finally
-        {
-            if (entered) _previewPlaybackLock.Release();
-        }
     }
 
     private void DisposePreview() => _ = StopAndDisposePreviewAsync();
