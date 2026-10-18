@@ -192,7 +192,13 @@ class SearchActivity : AppCompatActivity() {
             showMessage("أضف قائمة تشغيل أولاً")
             return
         }
-        val items = withContext(Dispatchers.IO) { dao.searchStreams(provider.id, normalized, 300) }
+        // Apply category filtering in Room first: a large live-TV catalog must not
+        // crowd all movie/series matches out of the first 300 unfiltered rows.
+        val selectedKind = kindFilter
+        val items = withContext(Dispatchers.IO) {
+            if (selectedKind == "all") dao.searchStreams(provider.id, normalized, 300)
+            else dao.searchCatalog(provider.id, selectedKind, normalized, 300)
+        }
         if (input.text?.toString()?.trim() != normalized) return
         val matchingItems = if (kindFilter == "all") items else items.filter { it.kind == kindFilter }
         results.removeAllViews()
