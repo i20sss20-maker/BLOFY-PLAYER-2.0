@@ -135,6 +135,11 @@ class CatchupActivity : AppCompatActivity() {
             putExtra(PlayerActivity.EXTRA_CONTENT_KEY, "${stream.key}:catchup:${item.startMs}")
             putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
             putExtra(PlayerActivity.EXTRA_KIND, "catchup")
+            putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+            putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+            putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+            putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
             putExtra(PlayerActivity.EXTRA_TITLE, "${stream.name} • ${item.title}")
         })
     }
