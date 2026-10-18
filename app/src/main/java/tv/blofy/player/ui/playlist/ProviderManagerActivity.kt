@@ -75,6 +75,12 @@ class ProviderManagerActivity : AppCompatActivity() {
             topMargin = dp(14); bottomMargin = dp(18)
         })
 
+        root.addView(actionButton("playback-settings", "⚙  إعدادات تشغيل القنوات والفيديو") {
+            startActivity(Intent(this, ProviderPlaybackSettingsActivity::class.java))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (isPhone) 52 else 60)).apply {
+            bottomMargin = dp(12)
+        })
+
         val actions = LinearLayout(this).apply {
             orientation = if (compactPhone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
