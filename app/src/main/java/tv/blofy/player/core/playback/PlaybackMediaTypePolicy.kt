@@ -3,6 +3,12 @@ package tv.blofy.player.core.playback
 import tv.blofy.player.core.provider.LiveFormat
 
 internal object PlaybackMediaTypePolicy {
+    /** Explicit MPD playlists require the Media3 DASH module; never guess DRM keys. */
+    fun shouldHintDash(url: String): Boolean {
+        val path = url.substringBefore('?').substringBefore('#')
+        return path.endsWith(".mpd", ignoreCase = true)
+    }
+
     fun shouldHintHls(contentKind: String, configuredFormat: LiveFormat, url: String): Boolean {
         if (contentKind != "live" && contentKind != "live_preview") return false
         val suffixStart = listOf(url.indexOf('?'), url.indexOf('#'))

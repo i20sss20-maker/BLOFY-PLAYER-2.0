@@ -1,6 +1,9 @@
 package tv.blofy.player.ui.player
 
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -31,6 +34,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.BlofyApp
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.playback.PlaybackSourceProbe
 import tv.blofy.player.core.playback.BlofyPlaybackSession
 import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
@@ -77,6 +82,10 @@ class PlayerActivity : AppCompatActivity() {
     private var errorRetryButton: Button? = null
     private var errorReasonView: TextView? = null
     private var loadingOverlay: LinearLayout? = null
+    private var sourceProbeResult = "لم يُفحص المصدر بعد"
+    private var sourceProbeJob: Job? = null
+    private var sourceProbeView: TextView? = null
+    private var sourceProbeButton: Button? = null
     private var activePrimaryUrl = ""
     private var activeFallbackUrl: String? = null
     private var configuredSources: List<PlaybackSource> = emptyList()
@@ -341,6 +350,30 @@ class PlayerActivity : AppCompatActivity() {
         val retryButton = controlButton("↻  إعادة المحاولة") { retryCurrentPlayback() }
         errorRetryButton = retryButton
         errorOverlay.addView(retryButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compactHud) 52 else 64)))
+        val probeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        val probeButton = controlButton("⌕  فحص المصدر") { checkCurrentSource() }
+        sourceProbeButton = probeButton
+        probeRow.addView(probeButton, LinearLayout.LayoutParams(0, dp(if (compactHud) 46 else 56), 1f).apply {
+            marginEnd = dp(5)
+        })
+        probeRow.addView(controlButton("▤  نسخ تقرير") { copySafePlaybackReport() },
+            LinearLayout.LayoutParams(0, dp(if (compactHud) 46 else 56), 1f))
+        errorOverlay.addView(probeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(8)
+        })
+        sourceProbeView = TextView(this).apply {
+            textSize = if (compactHud) 12f else 14f
+            gravity = Gravity.CENTER
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            visibility = View.GONE
+        }
+        errorOverlay.addView(sourceProbeView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(5)
+        })
         errorOverlay.addView(controlButton("↩  رجوع للقائمة") { finish() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compactHud) 52 else 64)).apply {
             topMargin = dp(8)
         })
@@ -372,6 +405,9 @@ class PlayerActivity : AppCompatActivity() {
         sourceSwitcherButton?.visibility = if (configuredSources.size > 1) View.VISIBLE else View.GONE
         activePrimaryUrl = url
         activeFallbackUrl = configuredSources.getOrNull(1)?.url
+        sourceProbeJob?.cancel()
+        sourceProbeResult = "لم يُفحص المصدر بعد"
+        sourceProbeView?.visibility = View.GONE
         hidePlaybackError()
         loadingOverlay?.visibility = View.VISIBLE
         session.play(url = url, resumeMs = resumeMs, fallbackUrl = activeFallbackUrl)
@@ -392,6 +428,9 @@ class PlayerActivity : AppCompatActivity() {
                 if (currentUri != selected.url) {
                     val resume = if (kind == "live") 0L else session.player.currentPosition.coerceAtLeast(0L)
                     activePrimaryUrl = selected.url
+                    sourceProbeJob?.cancel()
+                    sourceProbeResult = "لم يُفحص المصدر بعد"
+                    sourceProbeView?.visibility = View.GONE
                     // Trying a manually selected backup does not bounce endlessly to the main source.
                     activeFallbackUrl = if (which == 0) sources.getOrNull(1)?.url else null
                     hidePlaybackError()
@@ -408,6 +447,47 @@ class PlayerActivity : AppCompatActivity() {
         if (activePrimaryUrl.isBlank()) return
         val resumeMs = if (kind == "live") 0L else session.player.currentPosition.coerceAtLeast(0L)
         startPlayback(activePrimaryUrl, resumeMs, activeFallbackUrl)
+    }
+
+    private fun checkCurrentSource() {
+        val url = session.player.currentMediaItem?.localConfiguration?.uri?.toString()
+            .orEmpty().ifBlank { activePrimaryUrl }
+        if (url.isBlank() || sourceProbeJob?.isActive == true) return
+        sourceProbeButton?.isEnabled = false
+        sourceProbeView?.visibility = View.VISIBLE
+        sourceProbeView?.text = "جاري فحص استجابة السيرفر…"
+        val checkedUrl = url
+        sourceProbeJob = lifecycleScope.launch {
+            try {
+                val result = PlaybackSourceProbe.inspect(checkedUrl)
+                if (isFinishing || isDestroyed) return@launch
+                // Do not display stale outcomes after the user switches content.
+                if (activePrimaryUrl == checkedUrl ||
+                    session.player.currentMediaItem?.localConfiguration?.uri?.toString() == checkedUrl) {
+                    sourceProbeResult = result
+                    sourceProbeView?.text = result
+                }
+            } finally {
+                sourceProbeButton?.isEnabled = true
+            }
+        }
+    }
+
+    private fun copySafePlaybackReport() {
+        val report = buildString {
+            appendLine("BLOFY PLAYER — تقرير تشغيل آمن")
+            appendLine("الإصدار: ${BuildConfig.VERSION_NAME}")
+            appendLine("البناء: ${BuildConfig.BUILD_SHA.take(12)}")
+            appendLine("القسم: ${kind.takeIf { it in setOf("live", "movie", "episode", "catchup", "live_preview") } ?: "unknown"}")
+            appendLine("المحرك: Media3")
+            appendLine("النقل: ${session.diagnosticTransport()}")
+            appendLine("رمز الخطأ: ${session.diagnosticCode()}")
+            appendLine("اختبار المصدر: $sourceProbeResult")
+            append("لا يتضمن التقرير روابط الفيديو أو بيانات الحساب.")
+        }
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("BLOFY Playback Report", report))
+        Toast.makeText(this, "تم نسخ التقرير بدون رابط أو كلمة مرور", Toast.LENGTH_LONG).show()
     }
 
     private fun showPlaybackError(reason: String) {
@@ -674,6 +754,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStop() { saveResume(); super.onStop() }
     override fun onDestroy() {
+        sourceProbeJob?.cancel()
         digitGeneration++; epgJob?.cancel(); if (::hud.isInitialized) { hud.removeCallbacks(hideHudRunnable); hud.removeCallbacks(progressRunnable) }
         if (::session.isInitialized) session.release(); super.onDestroy()
     }

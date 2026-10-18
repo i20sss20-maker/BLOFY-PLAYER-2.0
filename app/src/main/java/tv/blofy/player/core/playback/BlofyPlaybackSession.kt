@@ -39,6 +39,7 @@ class BlofyPlaybackSession(
     private var useHttpTransport = false
     private var cronetFailedThisSession = false
     private var lastFailureMessage = ""
+    private var lastSafeErrorCode = "NONE"
     private var startupReady = false
     private val startupWatchdog = Runnable {
         if (!startupReady && player.playbackState != Player.STATE_ENDED &&
@@ -48,10 +49,16 @@ class BlofyPlaybackSession(
                 cronetFailedThisSession = true
                 retrySameUrl()
             } else {
-                // A source that never produces READY can otherwise leave an endless black screen.
-                lastFailureMessage = "انتهت مهلة بدء التشغيل. تحقق من اتصال الإنترنت وصلاحية المصدر، أو جرّب مصدرًا آخر."
-                onTerminalError?.invoke(lastFailureMessage)
-                player.stop()
+                // Silent stalls must also try real, provider-configured fallbacks.
+                // Error-based recovery alone does not run when no exception is emitted.
+                val failedUrl = player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+                val alternative = nextFallbackAfter(failedUrl)
+                if (alternative != null) {
+                    playInternalFallback(alternative)
+                } else {
+                    lastFailureMessage = "انتهت مهلة بدء التشغيل لكل المصادر المتاحة. تحقق من الاتصال وصلاحية الاشتراك."
+                    finishWithError(lastFailureMessage)
+                }
             }
         }
     }
@@ -109,6 +116,7 @@ class BlofyPlaybackSession(
                 override fun onPlayerError(error: PlaybackException) {
                     val failure = PlaybackFailurePolicy.from(error)
                     lastFailureMessage = failure.message
+                    lastSafeErrorCode = tv.blofy.player.core.diagnostics.DiagnosticsSanitizer.sanitizeErrorCode(error.errorCodeName) ?: "UNKNOWN"
                     metric?.let {
                         val updated = PlaybackDiagnostics.error(it, error.errorCodeName, error.message)
                         metric = updated
@@ -117,9 +125,7 @@ class BlofyPlaybackSession(
                     // An expired session or forbidden stream cannot be repaired by changing
                     // transports or repeatedly hitting a credential-protected endpoint.
                     if (failure.authFailure || currentMediaItem?.localConfiguration?.uri == null) {
-                        retryHandler.removeCallbacks(startupWatchdog)
-                        onTerminalError?.invoke(lastFailureMessage)
-                        stop()
+                        finishWithError(lastFailureMessage)
                         return
                     }
                     // Cronet can fail on some IPTV/CDN endpoints even when plain HTTP works.
@@ -138,30 +144,15 @@ class BlofyPlaybackSession(
                         val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
                         if (failedUrl.isBlank()) {
                             // Missing media information must still surface a terminal failure.
-                            retryHandler.removeCallbacks(startupWatchdog)
-                            onTerminalError?.invoke(lastFailureMessage)
-                            stop()
+                            finishWithError(lastFailureMessage)
                         } else {
                             retryHandler.post {
-                                val alternateUrl = if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
-                                    ContentUrlResolver.alternateLiveFormat(failedUrl, profile)
+                                val alternative = nextFallbackAfter(failedUrl)
+                                if (alternative != null) {
+                                    playInternalFallback(alternative)
                                 } else {
-                                    null
-                                }
-                                if (alternateUrl != null) {
-                                    alternateLiveFormatAttempted = true
-                                    playInternalFallback(alternateUrl)
-                                } else {
-                                    val configuredFallback = fallbackState.nextConfiguredUrl()
-                                    if (configuredFallback != null) {
-                                        fallbackState.markConfiguredUrlAttempted(configuredFallback)
-                                        playInternalFallback(configuredFallback)
-                                    } else {
-                                        // Stay in BLOFY. Failures never launch another player automatically.
-                                        retryHandler.removeCallbacks(startupWatchdog)
-                                        onTerminalError?.invoke(lastFailureMessage)
-                                        stop()
-                                    }
+                                    // Stay in BLOFY. Failures never launch another player automatically.
+                                    finishWithError(lastFailureMessage)
                                 }
                             }
                         }
@@ -182,6 +173,7 @@ class BlofyPlaybackSession(
         fallbackState.begin(url, fallbackUrl)
         useHttpTransport = cronetFailedThisSession || profile.transport == TransportPreference.HTTP_FIRST
         lastFailureMessage = ""
+        lastSafeErrorCode = "NONE"
         firstFrameRecorded = false
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
         val item = mediaItem(url)
@@ -251,6 +243,22 @@ class BlofyPlaybackSession(
         if (!keepPosition) lastObservedLivePositionMs = Long.MIN_VALUE
     }
 
+    private fun finishWithError(reason: String) {
+        retryHandler.removeCallbacks(startupWatchdog)
+        retryHandler.removeCallbacks(liveStallWatchdog)
+        onTerminalError?.invoke(reason)
+        player.stop()
+    }
+
+    private fun nextFallbackAfter(failedUrl: String): String? {
+        if (failedUrl.isBlank()) return null
+        if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
+            alternateLiveFormatAttempted = true
+            ContentUrlResolver.alternateLiveFormat(failedUrl, profile)?.let { return it }
+        }
+        return fallbackState.nextConfiguredUrl()?.also { fallbackState.markConfiguredUrlAttempted(it) }
+    }
+
     private fun playInternalFallback(url: String) {
         // Existing error fallback behavior stays unchanged. The stall watchdog never selects this path.
         fallbackState.markUrlAttempted(url)
@@ -279,13 +287,19 @@ class BlofyPlaybackSession(
     private fun mediaItem(url: String): MediaItem = MediaItem.Builder()
         .setUri(url)
         .apply {
-            if (PlaybackMediaTypePolicy.shouldHintHls(contentKind, profile.liveFormat, url)) {
+            if (PlaybackMediaTypePolicy.shouldHintDash(url)) {
+                setMimeType(MimeTypes.APPLICATION_MPD)
+            } else if (PlaybackMediaTypePolicy.shouldHintHls(contentKind, profile.liveFormat, url)) {
                 setMimeType(MimeTypes.APPLICATION_M3U8)
             }
         }
         .build()
 
     fun isStarted(): Boolean = player.playbackState == Player.STATE_READY && player.playWhenReady
+
+    /** Safe fields only: no provider URL, credentials or stream identifier. */
+    fun diagnosticCode(): String = lastSafeErrorCode
+    fun diagnosticTransport(): String = if (useHttpTransport) "HTTP" else "CRONET"
 
     fun release() {
         retryHandler.removeCallbacksAndMessages(null)

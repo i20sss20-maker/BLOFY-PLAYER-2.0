@@ -40,6 +40,13 @@ class PlaybackMediaTypePolicyTest {
     }
 
     @Test
+    fun explicitDashManifestIsRecognizedWithoutQueryParameters() {
+        assertTrue(PlaybackMediaTypePolicy.shouldHintDash("https://example.org/stream/manifest.MPD?session=abc"))
+        assertFalse(PlaybackMediaTypePolicy.shouldHintDash("https://example.org/stream/1.mp4"))
+        assertFalse(PlaybackMediaTypePolicy.shouldHintDash("https://example.org/stream/1.m3u8"))
+    }
+
+    @Test
     fun doesNotForceNonLiveContentToHls() {
         assertFalse(
             PlaybackMediaTypePolicy.shouldHintHls(
