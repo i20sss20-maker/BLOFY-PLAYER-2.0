@@ -277,7 +277,9 @@ class HomeActivity : AppCompatActivity() {
         row.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { marginStart = dp(6); marginEnd = dp(6) })
     }
 
-    private fun buildCompactHome(): View {
+    private fun buildCompactHome(): View = CinematicMobileHome(this, ::contentIntent).build()
+
+    private fun buildLegacyCompactHome(): View {
         val phone = deviceKind == DeviceClass.Kind.PHONE
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

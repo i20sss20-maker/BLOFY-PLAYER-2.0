@@ -85,21 +85,30 @@ class MovieDetailsActivity : AppCompatActivity() {
             }
             posterCard.addView(poster, LinearLayout.LayoutParams(dp(if (compact) 190 else 285), dp(if (compact) 285 else 425)))
             ArtworkLoader.load(poster, stream.icon)
-            body.addView(
-                posterCard,
-                LinearLayout.LayoutParams(dp(if (compact) 210 else 310), dp(if (compact) 305 else 450)).apply {
-                    if (compact) {
-                        gravity = Gravity.CENTER_HORIZONTAL
-                        bottomMargin = dp(20)
-                    } else {
-                        marginStart = dp(34)
-                    }
+            if (compact) {
+                val heroArt = ImageView(this@MovieDetailsActivity).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    background = BlofyTvDesign.posterCard(dp(20).toFloat())
+                    clipToOutline = true
+                    contentDescription = stream.name
                 }
-            )
+                ArtworkLoader.load(heroArt, stream.backdrop?.takeIf { it.isNotBlank() } ?: stream.icon)
+                body.addView(heroArt, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(218)).apply {
+                    bottomMargin = dp(19)
+                })
+            } else {
+                body.addView(posterCard, LinearLayout.LayoutParams(dp(310), dp(450)).apply {
+                    marginStart = dp(34)
+                })
+            }
 
             val info = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_VERTICAL or Gravity.END
+                if (compact) {
+                    setPadding(dp(17), dp(20), dp(17), dp(20))
+                    background = BlofyTvDesign.glassPanel(dp(20).toFloat())
+                }
             }
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = stream.name
@@ -192,6 +201,15 @@ class MovieDetailsActivity : AppCompatActivity() {
                 if (compact) LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 else LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
             )
+            if (compact) {
+                val related = CinematicDetailExtras.relatedItems(stream, dao.latestHomeOfKind(provider.id, "movie", 60))
+                CinematicDetailExtras.addRelatedRail(this@MovieDetailsActivity, body, related) { candidate ->
+                    startActivity(Intent(this@MovieDetailsActivity, MovieDetailsActivity::class.java).apply {
+                        putExtra(EXTRA_PROVIDER_ID, provider.id)
+                        putExtra(EXTRA_CONTENT_KEY, candidate.key)
+                    })
+                }
+            }
             play.requestFocus()
         }
     }

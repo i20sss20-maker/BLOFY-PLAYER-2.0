@@ -9,6 +9,8 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import android.widget.Button
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -41,6 +43,8 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var results: LinearLayout
     private lateinit var resultInfo: TextView
     private var searchJob: Job? = null
+    private var kindFilter = "all"
+    private val filterButtons = linkedMapOf<String, Button>()
     private val compact by lazy { resources.configuration.screenWidthDp < 600 }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -109,10 +113,57 @@ class SearchActivity : AppCompatActivity() {
             addView(results)
         }
         root.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 56 else 62)))
+        root.addView(filterRow(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(66)))
         root.addView(resultInfo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         input.requestFocus()
+    }
+
+    private fun filterRow(): HorizontalScrollView {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        listOf("all" to "الكل", "movie" to "الأفلام", "series" to "المسلسلات", "live" to "البث المباشر").forEach { (kind, title) ->
+            val button = Button(this).apply {
+                text = title
+                isAllCaps = false
+                textSize = 13f
+                setTextColor(BlofyTvDesign.TextPrimary)
+                minWidth = 0
+                minHeight = 0
+                setPadding(dp(13), 0, dp(13), 0)
+                setOnClickListener {
+                    if (kindFilter != kind) {
+                        kindFilter = kind
+                        updateFilterStyles()
+                        searchJob?.cancel()
+                        searchJob = lifecycleScope.launch {
+                            runSearch(input.text?.toString().orEmpty(), moveFocus = false)
+                        }
+                    }
+                }
+            }
+            filterButtons[kind] = button
+            row.addView(button, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(43)).apply {
+                marginEnd = dp(8)
+            })
+        }
+        updateFilterStyles()
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
+    }
+
+    private fun updateFilterStyles() {
+        filterButtons.forEach { (kind, button) ->
+            val selected = kind == kindFilter
+            button.background = if (selected) BlofyTvDesign.primaryButton(dp(14).toFloat()) else BlofyTvDesign.glassPanel(dp(14).toFloat())
+            button.contentDescription = button.text.toString() + if (selected) "، محدد" else ""
+        }
     }
 
     private suspend fun runSearch(query: String, moveFocus: Boolean) {
@@ -128,20 +179,21 @@ class SearchActivity : AppCompatActivity() {
             showMessage("أضف قائمة تشغيل أولاً")
             return
         }
-        val items = withContext(Dispatchers.IO) { ContentRepository(dao).search(provider.id, normalized) }
+        val items = withContext(Dispatchers.IO) { dao.searchStreams(provider.id, normalized, 300) }
         if (input.text?.toString()?.trim() != normalized) return
+        val matchingItems = if (kindFilter == "all") items else items.filter { it.kind == kindFilter }
         results.removeAllViews()
-        if (items.isEmpty()) {
-            resultInfo.text = "لا توجد نتائج لـ «$normalized»"
-            showMessage("جرّب كتابة اسم مختلف أو جزء من الاسم")
+        if (matchingItems.isEmpty()) {
+            resultInfo.text = "لا توجد نتائج لـ «$normalized» في هذا القسم"
+            showMessage("جرّب قسمًا آخر أو جزءًا من الاسم")
             return
         }
-            val visibleItems = items.take(100)
-            val liveCount = items.count { it.kind == "live" }
-            val movieCount = items.count { it.kind == "movie" }
-            val seriesCount = items.count { it.kind == "series" }
+            val visibleItems = matchingItems.take(100)
+            val liveCount = matchingItems.count { it.kind == "live" }
+            val movieCount = matchingItems.count { it.kind == "movie" }
+            val seriesCount = matchingItems.count { it.kind == "series" }
             resultInfo.text = buildString {
-                append(if (items.size > visibleItems.size) "عرض أول ${visibleItems.size} من ${items.size}" else "${items.size}")
+                append(if (matchingItems.size > visibleItems.size) "عرض أول ${visibleItems.size} من ${matchingItems.size}" else "${matchingItems.size}")
                 append(" نتيجة")
                 if (liveCount > 0) append("  •  $liveCount قناة")
                 if (movieCount > 0) append("  •  $movieCount فيلم")
