@@ -73,6 +73,12 @@ class PlayerActivity : AppCompatActivity() {
     private var digitBuffer = ""
     private var digitGeneration = 0
     private var autoNextTriggered = false
+    private var playbackErrorOverlay: LinearLayout? = null
+    private var errorRetryButton: Button? = null
+    private var activePrimaryUrl = ""
+    private var activeFallbackUrl: String? = null
+    private var configuredSources: List<PlaybackSource> = emptyList()
+    private var sourceSwitcherButton: Button? = null
 
     private val providerId by lazy { intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty() }
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty() }
@@ -105,10 +111,11 @@ class PlayerActivity : AppCompatActivity() {
 
         val profile = profileFromIntent()
         session = BlofyPlaybackSession(context = this, profile = profile, contentKind = kind.ifBlank { "unknown" }) {
-            Toast.makeText(this, if (kind == "live") "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى" else "تعذر تشغيل هذا المحتوى داخل BLOFY", Toast.LENGTH_LONG).show()
+            showPlaybackError()
         }
         session.player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) hidePlaybackError()
                 if (playbackState == Player.STATE_ENDED && kind == "episode" && !autoNextTriggered) {
                     autoNextTriggered = true
                     playAdjacentEpisode(1, automatic = true)
@@ -124,7 +131,7 @@ class PlayerActivity : AppCompatActivity() {
             }
         })
         buildPlayerUi()
-        session.play(url = url, resumeMs = intent.getLongExtra(EXTRA_RESUME_MS, 0L), fallbackUrl = intent.getStringExtra(EXTRA_FALLBACK_URL))
+        startPlayback(url = url, resumeMs = intent.getLongExtra(EXTRA_RESUME_MS, 0L), fallbackUrl = intent.getStringExtra(EXTRA_FALLBACK_URL))
         updateTitle(currentTitle)
         refreshFavoriteState()
         if (kind == "live") {
@@ -276,7 +283,40 @@ class PlayerActivity : AppCompatActivity() {
             }
             hud.addView(options)
         }
+        // Only offer source selection when this item has a real provider-configured alternative.
+        val sourceButton = controlButton("⛓  مصادر التشغيل") { showSourcePicker() }.apply { visibility = View.GONE }
+        sourceSwitcherButton = sourceButton
+        hud.addView(sourceButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compactHud) 50 else 60)).apply {
+            topMargin = dp(8)
+        })
         root.addView(hud, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+
+        // A terminal playback failure must never leave a silent black screen.
+        val errorOverlay = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+            background = BlofyTvDesign.elevatedSurface(dp(20).toFloat(), emphasis = true)
+            visibility = View.GONE
+        }
+        errorOverlay.addView(TextView(this).apply {
+            text = if (kind == "live") "تعذر تشغيل القناة\nتحقق من المصدر أو أعد المحاولة" else "تعذر تشغيل المحتوى\nأعد المحاولة أو ارجع للقائمة"
+            gravity = Gravity.CENTER
+            textSize = if (compactHud) 17f else 22f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.TextPrimary)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(20)
+        })
+        val retryButton = controlButton("↻  إعادة المحاولة") { retryCurrentPlayback() }
+        errorRetryButton = retryButton
+        errorOverlay.addView(retryButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compactHud) 52 else 64)))
+        errorOverlay.addView(controlButton("↩  رجوع للقائمة") { finish() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compactHud) 52 else 64)).apply {
+            topMargin = dp(8)
+        })
+        playbackErrorOverlay = errorOverlay
+        val errorWidth = minOf(dp(if (compactHud) 310 else 480), resources.displayMetrics.widthPixels - dp(32))
+        root.addView(errorOverlay, FrameLayout.LayoutParams(errorWidth, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         setContentView(root)
         playerView.requestFocus()
         if (kind != "live") hud.post(progressRunnable)
@@ -295,6 +335,63 @@ class PlayerActivity : AppCompatActivity() {
             keepHudVisible()
         }
         setOnClickListener { action() }
+    }
+
+    private fun startPlayback(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null) {
+        configuredSources = PlaybackSourcePolicy.availableSources(url, fallbackUrl)
+        sourceSwitcherButton?.visibility = if (configuredSources.size > 1) View.VISIBLE else View.GONE
+        activePrimaryUrl = url
+        activeFallbackUrl = configuredSources.getOrNull(1)?.url
+        hidePlaybackError()
+        session.play(url = url, resumeMs = resumeMs, fallbackUrl = activeFallbackUrl)
+    }
+
+    private fun showSourcePicker() {
+        val sources = configuredSources
+        if (sources.size < 2) return
+        val currentUri = session.player.currentMediaItem?.localConfiguration?.uri?.toString()
+        val labels = sources.mapIndexed { index, source ->
+            (if (index == 0) "المصدر الرئيسي" else "المصدر الاحتياطي") +
+                (if (source.url == currentUri) "  ✓" else "")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("مصادر التشغيل المتاحة")
+            .setItems(labels.toTypedArray()) { dialog, which ->
+                val selected = sources[which]
+                if (currentUri != selected.url) {
+                    val resume = if (kind == "live") 0L else session.player.currentPosition.coerceAtLeast(0L)
+                    activePrimaryUrl = selected.url
+                    // Trying a manually selected backup does not bounce endlessly to the main source.
+                    activeFallbackUrl = if (which == 0) sources.getOrNull(1)?.url else null
+                    hidePlaybackError()
+                    session.play(selected.url, resumeMs = resume, fallbackUrl = activeFallbackUrl)
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun retryCurrentPlayback() {
+        if (activePrimaryUrl.isBlank()) return
+        val resumeMs = if (kind == "live") 0L else session.player.currentPosition.coerceAtLeast(0L)
+        startPlayback(activePrimaryUrl, resumeMs, activeFallbackUrl)
+    }
+
+    private fun showPlaybackError() {
+        if (isFinishing || isDestroyed) return
+        if (::hud.isInitialized) {
+            keepHudVisible()
+            hud.visibility = View.GONE
+        }
+        playbackErrorOverlay?.visibility = View.VISIBLE
+        errorRetryButton?.requestFocus()
+    }
+
+    private fun hidePlaybackError() {
+        if (playbackErrorOverlay?.visibility != View.VISIBLE) return
+        playbackErrorOverlay?.visibility = View.GONE
+        if (::playerView.isInitialized) playerView.requestFocus()
     }
 
     private fun togglePlayPause() {
@@ -332,6 +429,17 @@ class PlayerActivity : AppCompatActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val routed = RemoteKeyRouter.route(event)
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
+        if (playbackErrorOverlay?.visibility == View.VISIBLE) {
+            return when (routed.action) {
+                RemoteAction.BACK -> { finish(); true }
+                RemoteAction.OK -> {
+                    val target = currentFocus
+                    if (target is Button && target.isShown) target.performClick() else retryCurrentPlayback()
+                    true
+                }
+                else -> super.dispatchKeyEvent(event)
+            }
+        }
         if (hud.visibility == View.VISIBLE && routed.action in HUD_NAVIGATION_ACTIONS) keepHudVisible()
         return when (routed.action) {
             RemoteAction.BACK -> { if (hud.visibility == View.VISIBLE) { hideHud(); true } else { finish(); true } }
@@ -378,7 +486,7 @@ class PlayerActivity : AppCompatActivity() {
             if (automatic) markCurrentCompleted()
             currentContentKey = target.key; currentTitle = target.title; currentSeason = target.season; currentEpisode = target.episode
             updateTitle("S${target.season} E${target.episode} • ${target.title}")
-            session.play(url = ContentUrlResolver.episode(provider, target), resumeMs = 0L, fallbackUrl = ContentUrlResolver.directFallback(target))
+            startPlayback(url = ContentUrlResolver.episode(provider, target), resumeMs = 0L, fallbackUrl = ContentUrlResolver.directFallback(target))
             autoNextTriggered = false; showHudBriefly()
         }
     }
@@ -439,7 +547,7 @@ class PlayerActivity : AppCompatActivity() {
         val profile = providerProfile(provider)
         currentStreamId = stream.remoteId; currentContentKey = stream.key; currentTitle = stream.name
         RecentChannelStore.record(this, provider.id, stream.key); updateTitle(stream.name)
-        session.play(url = ContentUrlResolver.live(provider, profile, stream), fallbackUrl = ContentUrlResolver.directFallback(stream))
+        startPlayback(url = ContentUrlResolver.live(provider, profile, stream), fallbackUrl = ContentUrlResolver.directFallback(stream))
         refreshFavoriteState(); requestShortEpgRefresh(provider, stream); observeEpg(); if (hud.visibility != View.VISIBLE) showHudBriefly()
     }
 

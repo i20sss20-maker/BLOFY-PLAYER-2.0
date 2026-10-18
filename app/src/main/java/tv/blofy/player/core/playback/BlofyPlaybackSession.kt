@@ -83,12 +83,21 @@ class BlofyPlaybackSession(
                         metric = updated
                         PlaybackDiagnosticsUploader.enqueue(appContext, updated)
                     }
+                    // Without a current media URI even the first retry cannot proceed.
+                    // Notify the UI instead of leaving the player in an unresponsive state.
+                    if (currentMediaItem?.localConfiguration?.uri == null) {
+                        onTerminalError?.invoke("")
+                        return
+                    }
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
                         automaticRetries++
                         retryHandler.post { retrySameUrl() }
                     } else {
                         val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
-                        if (failedUrl.isNotBlank()) {
+                        if (failedUrl.isBlank()) {
+                            // Missing media information must still surface a terminal failure.
+                            onTerminalError?.invoke("")
+                        } else {
                             retryHandler.post {
                                 val alternateUrl = if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
                                     ContentUrlResolver.alternateLiveFormat(failedUrl, profile)
