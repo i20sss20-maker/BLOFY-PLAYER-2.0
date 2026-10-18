@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -203,6 +204,7 @@ internal class CinematicTvSpotlight(
             }, LinearLayout.LayoutParams(-1, dp(27)))
             card.setOnClickListener { openItem(provider, item, false) }
             card.setOnFocusChangeListener { view, focused ->
+                if (focused) FocusMemory.save(host, "home", "tv_cinema_poster_${item.key}")
                 view.background = BlofyTvDesign.posterCard(dp(12).toFloat(), focused)
                 view.animate().cancel()
                 view.animate().scaleX(if (focused) 1.045f else 1f)
@@ -230,7 +232,9 @@ internal class CinematicTvSpotlight(
             minHeight = 0
             setTextColor(Color.WHITE)
             typeface = BlofyTvDesign.HeadingTypeface
-            BlofyTvDesign.installTvFocus(this, dp(15).toFloat(), 1.04f, primary)
+            BlofyTvDesign.installTvFocus(this, dp(15).toFloat(), 1.04f, primary) {
+                FocusMemory.save(host, "home", key)
+            }
             setOnClickListener { pressed() }
             registerFocus(key, this)
         }
