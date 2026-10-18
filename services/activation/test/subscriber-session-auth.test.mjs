@@ -39,6 +39,23 @@ test('blocked expired malformed and missing devices cannot create subscriber ses
   const pool=memoryPool(),auth=createSubscriberSessionAuthorizer({pool,keyHex,now,env:{}});
   assert.equal((await auth(req,deviceId,'not-a-pin')).status,403);assert.equal(pool.releases,0);
 });
+test('a valid portal device code normalizes mixed case and Unicode hyphens',async()=>{
+  const auth=createSubscriberSessionAuthorizer({pool:memoryPool(),keyHex,now,env:{}});
+  assert.equal((await auth(req,'blofy‐auth‐test',pin)).allowed,true);
+});
+test('correct device code distinguishes renewal-needed status without weakening wrong-PIN checks',async()=>{
+  const expired=createSubscriberSessionAuthorizer({pool:memoryPool({...row(),status:'expired'}),keyHex,now,env:{}});
+  assert.deepEqual(await expired(req,deviceId,pin),
+    {allowed:false,status:403,error:'device_activation_required'});
+  assert.deepEqual(await expired(req,deviceId,'654321'),
+    {allowed:false,status:403,error:'unauthorized_device'});
+  const endedTrial=createSubscriberSessionAuthorizer({pool:memoryPool({...row(),status:'trial',expires_at:new Date(now()-1000)}),keyHex,now,env:{}});
+  assert.deepEqual(await endedTrial(req,deviceId,pin),
+    {allowed:false,status:403,error:'device_activation_required'});
+  const blocked=createSubscriberSessionAuthorizer({pool:memoryPool({...row(),status:'blocked'}),keyHex,now,env:{}});
+  assert.deepEqual(await blocked(req,deviceId,pin),
+    {allowed:false,status:403,error:'unauthorized_device'});
+});
 test('rate limits return bounded retry information and database failures cannot authorize',async()=>{
   const pool=memoryPool(),auth=createSubscriberSessionAuthorizer({pool,keyHex,now,env:{BLOFY_AUTH_DEVICE_RATE_LIMIT:'1'}});
   assert.equal((await auth(req,deviceId,pin)).allowed,true);
