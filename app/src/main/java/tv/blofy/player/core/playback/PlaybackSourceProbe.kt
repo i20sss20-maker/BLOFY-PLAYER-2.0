@@ -1,5 +1,6 @@
 package tv.blofy.player.core.playback
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -38,6 +39,8 @@ internal object PlaybackSourceProbe {
                     contentType = response.header("Content-Type")
                 )
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             // Never print exception messages: they often embed full URLs with passwords.
             when (e) {
