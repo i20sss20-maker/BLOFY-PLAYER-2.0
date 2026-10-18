@@ -77,6 +77,8 @@ class PlayerActivity : AppCompatActivity() {
     private var errorRetryButton: Button? = null
     private var activePrimaryUrl = ""
     private var activeFallbackUrl: String? = null
+    private var configuredSources: List<PlaybackSource> = emptyList()
+    private var sourceSwitcherButton: Button? = null
 
     private val providerId by lazy { intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty() }
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty() }
@@ -281,6 +283,11 @@ class PlayerActivity : AppCompatActivity() {
             }
             hud.addView(options)
         }
+        // Only offer source selection when this item has a real provider-configured alternative.
+        sourceSwitcherButton = controlButton("⛓  مصادر التشغيل") { showSourcePicker() }.apply { visibility = View.GONE }
+        hud.addView(sourceSwitcherButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compactHud) 50 else 60)).apply {
+            topMargin = dp(8)
+        })
         root.addView(hud, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
 
         // A terminal playback failure must never leave a silent black screen.
@@ -330,10 +337,38 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun startPlayback(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null) {
+        configuredSources = PlaybackSourcePolicy.availableSources(url, fallbackUrl)
+        sourceSwitcherButton?.visibility = if (configuredSources.size > 1) View.VISIBLE else View.GONE
         activePrimaryUrl = url
-        activeFallbackUrl = fallbackUrl
+        activeFallbackUrl = configuredSources.getOrNull(1)?.url
         hidePlaybackError()
-        session.play(url = url, resumeMs = resumeMs, fallbackUrl = fallbackUrl)
+        session.play(url = url, resumeMs = resumeMs, fallbackUrl = activeFallbackUrl)
+    }
+
+    private fun showSourcePicker() {
+        val sources = configuredSources
+        if (sources.size < 2) return
+        val currentUri = session.player.currentMediaItem?.localConfiguration?.uri?.toString()
+        val labels = sources.mapIndexed { index, source ->
+            (if (index == 0) "المصدر الرئيسي" else "المصدر الاحتياطي") +
+                (if (source.url == currentUri) "  ✓" else "")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("مصادر التشغيل المتاحة")
+            .setItems(labels.toTypedArray()) { dialog, which ->
+                val selected = sources[which]
+                if (currentUri != selected.url) {
+                    val resume = if (kind == "live") 0L else session.player.currentPosition.coerceAtLeast(0L)
+                    activePrimaryUrl = selected.url
+                    // Trying a manually selected backup does not bounce endlessly to the main source.
+                    activeFallbackUrl = if (which == 0) sources.getOrNull(1)?.url else null
+                    hidePlaybackError()
+                    session.play(selected.url, resumeMs = resume, fallbackUrl = activeFallbackUrl)
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
     }
 
     private fun retryCurrentPlayback() {
