@@ -98,7 +98,22 @@ class BlofySubscriberActivity : AppCompatActivity() {
                             val session = BlofySubscriberClient.createSession(applicationContext, endpoint, user, pass)
                             val dao = BlofyDatabase.get(applicationContext).dao()
                             val providerId = UUID.nameUUIDFromBytes("blofy-subscriber".toByteArray()).toString()
-                            val next = ProviderEntity(providerId, "مشتركين BLOFY", session.baseUrl, session.username, session.password, "xtream", "ts", "cronet", "media3", true, true, System.currentTimeMillis())
+                            val existing = dao.provider(providerId)
+                            val next = ProviderEntity(
+                                id = providerId,
+                                name = "مشتركين BLOFY",
+                                baseUrl = session.baseUrl,
+                                username = session.username,
+                                password = session.password,
+                                providerType = "xtream",
+                                // Re-linking a subscriber must retain explicit playback choices.
+                                liveFormat = existing?.liveFormat ?: "ts",
+                                preferredTransport = existing?.preferredTransport ?: "cronet",
+                                preferredEngine = existing?.preferredEngine ?: "media3",
+                                allowCrossProtocolRedirects = existing?.allowCrossProtocolRedirects ?: true,
+                                enabled = true,
+                                updatedAt = System.currentTimeMillis()
+                            )
                             val readyCatalog = CatalogSyncState.isReady(applicationContext, providerId) && dao.hasCatalog(providerId)
                             if (!readyCatalog) {
                                 CatalogSyncState.markPending(applicationContext, providerId)
