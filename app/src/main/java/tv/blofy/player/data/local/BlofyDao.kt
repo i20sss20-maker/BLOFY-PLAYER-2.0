@@ -47,6 +47,8 @@ interface BlofyDao {
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (name LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' OR year LIKE '%' || :query || '%') ORDER BY name LIMIT :limit") suspend fun searchCatalog(providerId: String, kind: String, query: String, limit: Int = 300): List<StreamEntity>
 
     @Query("SELECT * FROM streams WHERE key = :contentKey LIMIT 1") suspend fun stream(contentKey: String): StreamEntity?
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = 'series' AND remoteId = :seriesId LIMIT 1")
+    suspend fun seriesByRemoteId(providerId: String, seriesId: String): StreamEntity?
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND favorite = 1 ORDER BY name") fun favorites(providerId: String): Flow<List<StreamEntity>>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND name LIKE '%' || :query || '%' ORDER BY name LIMIT :limit") suspend fun searchStreams(providerId: String, query: String, limit: Int = 80): List<StreamEntity>
     @Query("UPDATE streams SET favorite = :favorite WHERE key = :contentKey") suspend fun setFavorite(contentKey: String, favorite: Boolean)
