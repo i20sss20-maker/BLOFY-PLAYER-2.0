@@ -57,13 +57,9 @@ class SeriesDetailsActivity : AppCompatActivity() {
         }
         root.addView(
             poster,
-            LinearLayout.LayoutParams(dp(if (compact) 205 else 310), dp(if (compact) 305 else 465)).apply {
-                if (compact) {
-                    gravity = Gravity.CENTER_HORIZONTAL
-                    bottomMargin = dp(20)
-                } else {
-                    marginEnd = dp(42)
-                }
+            LinearLayout.LayoutParams(if (compact) LinearLayout.LayoutParams.MATCH_PARENT else dp(310),
+                dp(if (compact) 218 else 465)).apply {
+                if (compact) bottomMargin = dp(19) else marginEnd = dp(42)
             }
         )
 
@@ -71,6 +67,10 @@ class SeriesDetailsActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
             layoutDirection = View.LAYOUT_DIRECTION_RTL
+            if (compact) {
+                setPadding(dp(17), dp(20), dp(17), dp(20))
+                background = BlofyTvDesign.glassPanel(dp(20).toFloat())
+            }
         }
         root.addView(
             panel,
@@ -94,7 +94,7 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
-            ArtworkLoader.load(poster, stream.icon)
+            ArtworkLoader.load(poster, if (compact) stream.backdrop?.takeIf { it.isNotBlank() } ?: stream.icon else stream.icon)
             val allEpisodes = dao.episodes(providerId, stream.remoteId).first()
             val resume = allEpisodes.mapNotNull { episode ->
                 val watch = dao.watchState(episode.key) ?: return@mapNotNull null
@@ -166,6 +166,15 @@ class SeriesDetailsActivity : AppCompatActivity() {
             }
             row.addView(favoriteButton, actionParams(175))
             panel.addView(row)
+            if (compact) {
+                val related = CinematicDetailExtras.relatedItems(stream, dao.latestHomeOfKind(provider.id, "series", 60))
+                CinematicDetailExtras.addRelatedRail(this@SeriesDetailsActivity, root, related) { candidate ->
+                    startActivity(Intent(this@SeriesDetailsActivity, SeriesDetailsActivity::class.java).apply {
+                        putExtra(EXTRA_PROVIDER_ID, provider.id)
+                        putExtra(EXTRA_CONTENT_KEY, candidate.key)
+                    })
+                }
+            }
             primary?.requestFocus()
         }
     }
