@@ -199,7 +199,7 @@ class SearchActivity : AppCompatActivity() {
             if (selectedKind == "all") dao.searchStreams(provider.id, normalized, 300)
             else dao.searchCatalog(provider.id, selectedKind, normalized, 300)
         }
-        if (input.text?.toString()?.trim() != normalized) return
+        if (input.text?.toString()?.trim() != normalized || selectedKind != kindFilter) return
         val matchingItems = if (kindFilter == "all") items else items.filter { it.kind == kindFilter }
         results.removeAllViews()
         if (matchingItems.isEmpty()) {
@@ -273,7 +273,11 @@ class SearchActivity : AppCompatActivity() {
             } else {
                 visibleItems.forEach { stream -> addResultRow(provider.id, provider.liveFormat, stream) }
             }
-        if (moveFocus) results.getChildAt(0)?.requestFocus()
+        if (moveFocus) {
+            val first = results.getChildAt(0)
+            val target = if (first is TextView) results.getChildAt(1) else first
+            (if (target is GridLayout) target.getChildAt(0) else target)?.requestFocus()
+        }
     }
 
     private fun addResultHeading(title: String) {
