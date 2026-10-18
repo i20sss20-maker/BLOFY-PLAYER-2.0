@@ -11,6 +11,8 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.Button
 import android.widget.HorizontalScrollView
+import android.widget.GridLayout
+import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -52,13 +54,24 @@ class SearchActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(if (compact) 16 else 34), dp(if (compact) 20 else 28), dp(if (compact) 16 else 34), dp(if (compact) 22 else 30))
-            background = AppCompatResources.getDrawable(this@SearchActivity, R.drawable.blofy_home_background)
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF170C25.toInt(), 0xFF07050B.toInt(), 0xFF10091A.toInt())
+            )
         }
         root.addView(TextView(this).apply {
-            text = "بحث BLOFY"
+            text = "✦  اكتشف عالم BLOFY"
             BlofyTvDesign.applyTitle(this)
             if (compact) textSize = 27f
-            setPadding(0, 0, 0, dp(10))
+            gravity = Gravity.RIGHT
+            setPadding(0, 0, 0, dp(6))
+        })
+        root.addView(TextView(this).apply {
+            text = "الأفلام  •  المسلسلات  •  القنوات"
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            textSize = 13f
+            gravity = Gravity.RIGHT
+            setPadding(0, 0, 0, dp(15))
         })
         input = EditText(this).apply {
             hint = "اكتب اسم قناة أو فيلم أو مسلسل"
@@ -199,64 +212,122 @@ class SearchActivity : AppCompatActivity() {
                 if (movieCount > 0) append("  •  $movieCount فيلم")
                 if (seriesCount > 0) append("  •  $seriesCount مسلسل")
             }
-            visibleItems.forEach { stream ->
-                val row = LinearLayout(this@SearchActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(if (compact) 10 else 12), dp(if (compact) 6 else 8), dp(if (compact) 10 else 12), dp(if (compact) 6 else 8))
-                    isFocusable = true
-                    isFocusableInTouchMode = true
-                    isClickable = true
-                    background = rowBackground(false)
-                    setOnFocusChangeListener { view, focused ->
-                        view.background = rowBackground(focused)
-                        view.animate().cancel()
-                        view.animate()
-                            .scaleX(if (focused) 1.018f else 1f)
-                            .scaleY(if (focused) 1.018f else 1f)
-                            .translationZ(if (focused) dp(8).toFloat() else 0f)
-                            .setDuration(90)
-                            .start()
+            if (compact) {
+                val catalogItems = visibleItems.filter { it.kind == "movie" || it.kind == "series" }
+                val channels = visibleItems.filter { it.kind == "live" }
+                if (catalogItems.isNotEmpty()) {
+                    addResultHeading("سينما ومسلسلات")
+                    val posterWidth = ((resources.configuration.screenWidthDp - 60) / 3).coerceIn(80, 145)
+                    val grid = GridLayout(this@SearchActivity).apply {
+                        columnCount = 3
+                        alignmentMode = GridLayout.ALIGN_BOUNDS
+                        layoutDirection = View.LAYOUT_DIRECTION_RTL
+                        useDefaultMargins = false
                     }
-                    setOnClickListener { guardedOpen(provider.id, provider.liveFormat, stream) }
-                }
-                val artwork = ImageView(this@SearchActivity).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    setBackgroundColor(BlofyTvDesign.Surface)
-                    contentDescription = stream.name
-                }
-                ArtworkLoader.load(artwork, stream.icon)
-                row.addView(artwork, LinearLayout.LayoutParams(dp(if (compact) 48 else 54), dp(if (compact) 58 else 66)).apply { marginStart = dp(if (compact) 10 else 14) })
-
-                val textBox = LinearLayout(this@SearchActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
-                }
-                textBox.addView(TextView(this@SearchActivity).apply {
-                    text = (if (stream.locked) "🔒  " else "") + stream.name
-                    textSize = if (compact) 15.5f else 17.5f
-                    setTextColor(BlofyTvDesign.TextPrimary)
-                    gravity = Gravity.RIGHT
-                    maxLines = 1
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                })
-                textBox.addView(TextView(this@SearchActivity).apply {
-                    text = when (stream.kind) {
-                        "live" -> "بث مباشر"
-                        "movie" -> "فيلم"
-                        "series" -> "مسلسل"
-                        else -> kindLabel(stream.kind)
+                    catalogItems.forEach { stream ->
+                        val cell = LinearLayout(this@SearchActivity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            background = BlofyTvDesign.posterCard(dp(13).toFloat())
+                            clipToOutline = true
+                            isFocusable = true
+                            isClickable = true
+                            contentDescription = stream.name
+                            setOnClickListener { guardedOpen(provider.id, provider.liveFormat, stream) }
+                            setOnFocusChangeListener { view, focused ->
+                                view.background = BlofyTvDesign.posterCard(dp(13).toFloat(), focused)
+                            }
+                        }
+                        cell.addView(ImageView(this@SearchActivity).apply {
+                            scaleType = ImageView.ScaleType.CENTER_CROP
+                            setBackgroundColor(BlofyTvDesign.Surface)
+                            ArtworkLoader.load(this, stream.icon)
+                        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(posterWidth * 3 / 2)))
+                        cell.addView(TextView(this@SearchActivity).apply {
+                            text = (if (stream.locked) "🔒 " else "") + stream.name
+                            textSize = 12f
+                            typeface = BlofyTvDesign.BodyTypeface
+                            setTextColor(BlofyTvDesign.TextPrimary)
+                            gravity = Gravity.CENTER
+                            maxLines = 2
+                            ellipsize = android.text.TextUtils.TruncateAt.END
+                            setPadding(dp(4), dp(4), dp(4), dp(4))
+                        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)))
+                        grid.addView(cell, GridLayout.LayoutParams().apply {
+                            width = dp(posterWidth)
+                            height = dp(posterWidth * 3 / 2 + 42)
+                            setMargins(dp(2), dp(5), dp(2), dp(5))
+                        })
                     }
-                    textSize = 12.5f
-                    setTextColor(BlofyTvDesign.TextMuted)
-                    gravity = Gravity.RIGHT
-                    setPadding(0, dp(4), 0, 0)
-                })
-                row.addView(textBox, LinearLayout.LayoutParams(0, dp(if (compact) 58 else 66), 1f))
-                results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 72 else 82)).apply { topMargin = dp(if (compact) 5 else 7) })
+                    results.addView(grid)
+                }
+                if (channels.isNotEmpty()) {
+                    addResultHeading("البث المباشر")
+                    channels.forEach { stream -> addResultRow(provider.id, provider.liveFormat, stream) }
+                }
+            } else {
+                visibleItems.forEach { stream -> addResultRow(provider.id, provider.liveFormat, stream) }
             }
         if (moveFocus) results.getChildAt(0)?.requestFocus()
+    }
+
+    private fun addResultHeading(title: String) {
+        results.addView(TextView(this).apply {
+            text = title
+            textSize = 20f
+            typeface = BlofyTvDesign.HeadingTypeface
+            gravity = Gravity.RIGHT
+            setTextColor(BlofyTvDesign.TextPrimary)
+            setPadding(0, dp(15), 0, dp(9))
+        })
+    }
+
+    private fun addResultRow(providerId: String, liveFormat: String, stream: StreamEntity) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            isFocusable = true
+            isClickable = true
+            contentDescription = stream.name
+            background = rowBackground(false)
+            setOnFocusChangeListener { view, focused ->
+                view.background = rowBackground(focused)
+            }
+            setOnClickListener { guardedOpen(providerId, liveFormat, stream) }
+        }
+        row.addView(ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(BlofyTvDesign.Surface)
+            ArtworkLoader.load(this, stream.icon)
+        }, LinearLayout.LayoutParams(dp(62), dp(62)).apply { marginStart = dp(12) })
+        val textBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+        }
+        textBox.addView(TextView(this).apply {
+            text = (if (stream.locked) "🔒  " else "") + stream.name
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            textSize = 16f
+            setTextColor(BlofyTvDesign.TextPrimary)
+            gravity = Gravity.RIGHT
+        })
+        textBox.addView(TextView(this).apply {
+            text = when (stream.kind) {
+                "live" -> "● مباشر"
+                "movie" -> "فيلم"
+                "series" -> "مسلسل"
+                else -> kindLabel(stream.kind)
+            }
+            textSize = 12f
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            gravity = Gravity.RIGHT
+        })
+        row.addView(textBox, LinearLayout.LayoutParams(0, dp(62), 1f))
+        results.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(78)).apply {
+            topMargin = dp(7)
+        })
     }
 
     private fun guardedOpen(providerId: String, liveFormat: String, stream: StreamEntity) {
