@@ -5,6 +5,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -170,15 +172,27 @@ class PlayerActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             visibility = View.GONE
             isClickable = false
-            addView(ProgressBar(this@PlayerActivity), LinearLayout.LayoutParams(dp(44), dp(44)).apply {
+            setBackgroundColor(0xCC090611.toInt())
+            addView(TextView(this@PlayerActivity).apply {
+                text = "✦  BLOFY CINEMA"
+                textSize = 20f
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(BlofyTvDesign.PurpleSoft)
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)).apply {
+                bottomMargin = dp(13)
+            })
+            addView(ProgressBar(this@PlayerActivity).apply {
+                indeterminateTintList = ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
+            }, LinearLayout.LayoutParams(dp(44), dp(44)).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
             })
             addView(TextView(this@PlayerActivity).apply {
-                text = "جاري الاتصال بمصدر الفيديو…"
+                text = "جاري تجهيز الصورة والصوت…"
                 textSize = 15f
                 setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = Gravity.CENTER
-                setPadding(0, dp(12), 0, 0)
+                setPadding(0, dp(14), 0, 0)
             })
         }
         root.addView(loadingOverlay, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -194,7 +208,11 @@ class PlayerActivity : AppCompatActivity() {
         hud = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(if (compactHud) 16 else 30), dp(if (compactHud) 14 else 22), dp(if (compactHud) 16 else 30), dp(if (compactHud) 16 else 26))
-            background = BlofyTvDesign.elevatedSurface(dp(if (compactHud) 20 else 26).toFloat(), emphasis = true)
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xDF23112F.toInt(), 0xFA090611.toInt())).apply {
+                cornerRadius = dp(if (compactHud) 22 else 28).toFloat()
+                setStroke(dp(1), 0x885D367B.toInt())
+            }
             visibility = View.GONE
         }
 
@@ -326,7 +344,7 @@ class PlayerActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(20), dp(20), dp(20), dp(20))
-            background = BlofyTvDesign.elevatedSurface(dp(20).toFloat(), emphasis = true)
+            background = BlofyTvDesign.glassPanel(dp(20).toFloat())
             visibility = View.GONE
         }
         val errorText = TextView(this).apply {
