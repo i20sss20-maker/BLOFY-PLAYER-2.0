@@ -83,6 +83,12 @@ class BlofyPlaybackSession(
                         metric = updated
                         PlaybackDiagnosticsUploader.enqueue(appContext, updated)
                     }
+                    // Without a current media URI even the first retry cannot proceed.
+                    // Notify the UI instead of leaving the player in an unresponsive state.
+                    if (currentMediaItem?.localConfiguration?.uri == null) {
+                        onTerminalError?.invoke("")
+                        return
+                    }
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
                         automaticRetries++
                         retryHandler.post { retrySameUrl() }
