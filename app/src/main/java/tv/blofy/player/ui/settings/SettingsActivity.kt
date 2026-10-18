@@ -135,6 +135,9 @@ class SettingsActivity : AppCompatActivity() {
         addCard(actionCard("▣  ربط الجهاز", "QR ورقم الجهاز ورمز الربط") { startActivity(Intent(this, LoginActivity::class.java)) })
         addCard(actionCard("⇧  فحص التحديث", "تحقق من آخر إصدار رسمي") { checkForUpdate() })
         addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
+        addCard(actionCard("▶  توافق التشغيل", "تبديل TS/HLS وHTTP/Cronet وفحص الاتصال") {
+            startActivity(Intent(this, ProviderPlaybackSettingsActivity::class.java))
+        })
         addCard(actionCard("↻  تحديث المحتوى", "يدوي عند الحاجة فقط") { refreshLibrary() })
         storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
         addCard(storageCard)

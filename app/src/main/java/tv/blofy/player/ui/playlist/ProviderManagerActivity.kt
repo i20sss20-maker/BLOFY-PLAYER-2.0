@@ -27,6 +27,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
+import tv.blofy.player.ui.settings.ProviderPlaybackSettingsActivity
 
 class ProviderManagerActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
@@ -72,6 +73,12 @@ class ProviderManagerActivity : AppCompatActivity() {
         }
         root.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
             topMargin = dp(14); bottomMargin = dp(18)
+        })
+
+        root.addView(actionButton("playback-settings", "⚙  إعدادات تشغيل القنوات والفيديو") {
+            startActivity(Intent(this, ProviderPlaybackSettingsActivity::class.java))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (isPhone) 52 else 60)).apply {
+            bottomMargin = dp(12)
         })
 
         val actions = LinearLayout(this).apply {
