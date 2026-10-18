@@ -10,6 +10,8 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -32,10 +34,12 @@ import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.common.FocusTextAdapter
+import tv.blofy.player.ui.details.CinematicDetailBackdrop
 import tv.blofy.player.ui.player.PlayerActivity
 
 class EpisodesActivity : AppCompatActivity() {
     private lateinit var episodeAdapter: FocusTextAdapter<EpisodeEntity>
+    private var mobileEpisodeAdapter: CinematicEpisodeAdapter? = null
     private lateinit var seasonAdapter: FocusTextAdapter<Int>
     private lateinit var seasonList: RecyclerView
     private lateinit var episodeList: RecyclerView
@@ -48,6 +52,7 @@ class EpisodesActivity : AppCompatActivity() {
     private var restoredOnce = false
     private var syncInProgress = false
     private var loadState = EpisodeLoadState.LOADING
+    private var compactLayout = false
     private val watchProgress = mutableMapOf<String, Int>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,11 +62,17 @@ class EpisodesActivity : AppCompatActivity() {
         val seriesName = intent.getStringExtra(EXTRA_SERIES_NAME).orEmpty()
         if (providerId.isBlank() || seriesId.isBlank()) { finish(); return }
         val compact = resources.configuration.screenWidthDp < 700
+        compactLayout = compact
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(if (compact) 16 else 28), dp(if (compact) 16 else 22), dp(if (compact) 16 else 28), dp(if (compact) 18 else 24))
             background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
+        }
+        val cinematicHeader = FrameLayout(this)
+        if (compact) {
+            root.addView(cinematicHeader, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(188)).apply { bottomMargin = dp(13) })
         }
         root.addView(TextView(this).apply {
             text = seriesName.ifBlank { "الحلقات" }
@@ -115,8 +126,29 @@ class EpisodesActivity : AppCompatActivity() {
                 onFocus = ::selectSeason,
                 itemKey = { it.toString() }
             )
-            episodeList.adapter = episodeAdapter
+            mobileEpisodeAdapter = if (compactLayout) {
+                CinematicEpisodeAdapter { episode -> rememberEpisode(episode); openEpisode(provider, episode) }
+            } else null
+            episodeList.adapter = mobileEpisodeAdapter ?: episodeAdapter
             seasonList.adapter = seasonAdapter
+            if (compactLayout) {
+                val series = withContext(Dispatchers.IO) { dao.seriesByRemoteId(providerId, seriesId) }
+                if (series != null) {
+                    cinematicHeader.addView(
+                        CinematicDetailBackdrop.create(this@EpisodesActivity, series, "المواسم والحلقات"),
+                        FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+                    )
+                } else {
+                    cinematicHeader.addView(TextView(this@EpisodesActivity).apply {
+                        text = "✦  BLOFY SERIES"
+                        gravity = Gravity.CENTER
+                        textSize = 22f
+                        typeface = BlofyTvDesign.HeadingTypeface
+                        setTextColor(BlofyTvDesign.PurpleSoft)
+                        background = BlofyTvDesign.glassPanel(dp(21).toFloat())
+                    }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                }
+            }
             installTvFocusBridge()
             launch { dao.episodes(providerId, seriesId).collect { renderEpisodes(it) } }
             syncEpisodes(provider)
@@ -264,6 +296,7 @@ class EpisodesActivity : AppCompatActivity() {
         if (!::episodeAdapter.isInitialized) return
         val visible = selectedSeason?.let { s -> allEpisodes.filter { it.season == s }.sortedBy { it.episode } } ?: emptyList()
         episodeAdapter.submit(visible)
+        mobileEpisodeAdapter?.submit(visible, watchProgress)
         if (!restoreFocus || !DeviceClass.isTv(this) || visible.isEmpty()) return
         val remembered = FocusMemory.restore(this, episodeMemoryKey())
         val index = visible.indexOfFirst { it.key == remembered }.let { if (it < 0) 0 else it }
