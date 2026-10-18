@@ -57,8 +57,7 @@ class BlofyPlaybackSession(
                     playInternalFallback(alternative)
                 } else {
                     lastFailureMessage = "انتهت مهلة بدء التشغيل لكل المصادر المتاحة. تحقق من الاتصال وصلاحية الاشتراك."
-                    onTerminalError?.invoke(lastFailureMessage)
-                    player.stop()
+                    finishWithError(lastFailureMessage)
                 }
             }
         }
@@ -126,9 +125,7 @@ class BlofyPlaybackSession(
                     // An expired session or forbidden stream cannot be repaired by changing
                     // transports or repeatedly hitting a credential-protected endpoint.
                     if (failure.authFailure || currentMediaItem?.localConfiguration?.uri == null) {
-                        retryHandler.removeCallbacks(startupWatchdog)
-                        onTerminalError?.invoke(lastFailureMessage)
-                        stop()
+                        finishWithError(lastFailureMessage)
                         return
                     }
                     // Cronet can fail on some IPTV/CDN endpoints even when plain HTTP works.
@@ -147,9 +144,7 @@ class BlofyPlaybackSession(
                         val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
                         if (failedUrl.isBlank()) {
                             // Missing media information must still surface a terminal failure.
-                            retryHandler.removeCallbacks(startupWatchdog)
-                            onTerminalError?.invoke(lastFailureMessage)
-                            stop()
+                            finishWithError(lastFailureMessage)
                         } else {
                             retryHandler.post {
                                 val alternative = nextFallbackAfter(failedUrl)
@@ -157,9 +152,7 @@ class BlofyPlaybackSession(
                                     playInternalFallback(alternative)
                                 } else {
                                     // Stay in BLOFY. Failures never launch another player automatically.
-                                    retryHandler.removeCallbacks(startupWatchdog)
-                                    onTerminalError?.invoke(lastFailureMessage)
-                                    stop()
+                                    finishWithError(lastFailureMessage)
                                 }
                             }
                         }
@@ -248,6 +241,13 @@ class BlofyPlaybackSession(
     private fun resetLiveStallTimer(keepPosition: Boolean) {
         liveStallStartedAtMs = 0L
         if (!keepPosition) lastObservedLivePositionMs = Long.MIN_VALUE
+    }
+
+    private fun finishWithError(reason: String) {
+        retryHandler.removeCallbacks(startupWatchdog)
+        retryHandler.removeCallbacks(liveStallWatchdog)
+        onTerminalError?.invoke(reason)
+        player.stop()
     }
 
     private fun nextFallbackAfter(failedUrl: String): String? {
