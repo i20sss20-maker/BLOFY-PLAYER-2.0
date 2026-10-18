@@ -282,7 +282,9 @@ class BlofyPlaybackSession(
     private fun mediaItem(url: String): MediaItem = MediaItem.Builder()
         .setUri(url)
         .apply {
-            if (PlaybackMediaTypePolicy.shouldHintHls(contentKind, profile.liveFormat, url)) {
+            if (PlaybackMediaTypePolicy.shouldHintDash(url)) {
+                setMimeType(MimeTypes.APPLICATION_MPD)
+            } else if (PlaybackMediaTypePolicy.shouldHintHls(contentKind, profile.liveFormat, url)) {
                 setMimeType(MimeTypes.APPLICATION_M3U8)
             }
         }
