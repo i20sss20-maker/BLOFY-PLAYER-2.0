@@ -18,6 +18,13 @@ import androidx.appcompat.content.res.AppCompatResources
 import tv.blofy.player.R
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.playback.ContentUrlResolver
+import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.ui.details.MovieDetailsActivity
+import tv.blofy.player.ui.details.SeriesDetailsActivity
+import tv.blofy.player.ui.player.PlayerActivity
+import tv.blofy.player.ui.series.EpisodesActivity
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.core.theme.ThemeManager
 import tv.blofy.player.core.theme.ThemeProfile
@@ -44,6 +51,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun buildApprovedTvHome(): FrameLayout {
+        val tvCinema = CinematicTvSpotlight(this, ::openTvFeature, ::registerAction)
         val root = FrameLayout(this).apply {
             background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background)
             layoutDirection = View.LAYOUT_DIRECTION_LTR
@@ -78,7 +86,7 @@ class HomeActivity : AppCompatActivity() {
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)))
 
-        main.addView(buildHeroCard(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.55f))
+        main.addView(tvCinema.hero(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.55f))
 
         val middle = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -93,27 +101,46 @@ class HomeActivity : AppCompatActivity() {
         main.addView(middle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.72f))
 
         main.addView(TextView(this).apply {
-            text = "قصص مختارة"
+            text = "اختيارات سينمائية من مكتبتك"
             textSize = 18f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)))
 
-        val stories = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            clipChildren = false
-            clipToPadding = false
-        }
-        addStoryCard(stories, "live_story", "البث المباشر", "شاهد الآن", contentIntent("live"))
-        addStoryCard(stories, "movie_story", "أحدث الأفلام", "سينما", contentIntent("movie"))
-        addStoryCard(stories, "series_story", "أحدث المسلسلات", "حلقات جديدة", contentIntent("series"))
-        addStoryCard(stories, "favorite_story", "المفضلة", "اختياراتك", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
-        addStoryCard(stories, "continue_story", "تابع المشاهدة", "من حيث توقفت", Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_CONTINUE))
-        main.addView(stories, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.62f))
+        main.addView(tvCinema.rail(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.62f))
+        tvCinema.load()
         return root
+    }
+
+    private fun openTvFeature(provider: ProviderEntity, item: StreamEntity, play: Boolean) {
+        when {
+            play && item.kind == "movie" -> startActivity(Intent(this, PlayerActivity::class.java).apply {
+                putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.movie(provider, item))
+                putExtra(PlayerActivity.EXTRA_CONTENT_KEY, item.key)
+                putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id)
+                putExtra(PlayerActivity.EXTRA_KIND, "movie")
+                putExtra(PlayerActivity.EXTRA_PROVIDER_TYPE, provider.providerType)
+                putExtra(PlayerActivity.EXTRA_PREFERRED_TRANSPORT, provider.preferredTransport)
+                putExtra(PlayerActivity.EXTRA_PREFERRED_ENGINE, provider.preferredEngine)
+                putExtra(PlayerActivity.EXTRA_ALLOW_CROSS_PROTOCOL_REDIRECTS, provider.allowCrossProtocolRedirects)
+                putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(item))
+                putExtra(PlayerActivity.EXTRA_TITLE, item.name)
+            })
+            play && item.kind == "series" -> startActivity(Intent(this, EpisodesActivity::class.java).apply {
+                putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, provider.id)
+                putExtra(EpisodesActivity.EXTRA_SERIES_ID, item.remoteId)
+                putExtra(EpisodesActivity.EXTRA_SERIES_NAME, item.name)
+            })
+            item.kind == "movie" -> startActivity(Intent(this, MovieDetailsActivity::class.java).apply {
+                putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
+                putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, item.key)
+            })
+            item.kind == "series" -> startActivity(Intent(this, SeriesDetailsActivity::class.java).apply {
+                putExtra(SeriesDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
+                putExtra(SeriesDetailsActivity.EXTRA_CONTENT_KEY, item.key)
+            })
+        }
     }
 
     private fun buildRightSidebar(): LinearLayout {
@@ -338,7 +365,14 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun registerAction(key: String, view: View) { actionViews[key] = view; if (firstAction == null) firstAction = view }
-    private fun restoreFocus() { if (deviceKind != DeviceClass.Kind.TV) return; val saved = FocusMemory.restore(this, SCREEN_KEY); val target = saved?.let { actionViews[it] } ?: firstAction ?: actionViews.values.firstOrNull(); target?.post { target.requestFocus() } }
+    private fun restoreFocus() {
+        if (deviceKind != DeviceClass.Kind.TV) return
+        val saved = FocusMemory.restore(this, SCREEN_KEY)
+        val target = saved?.let { actionViews[it]?.takeIf(View::isEnabled) }
+            ?: actionViews["side_live"]
+            ?: actionViews.values.firstOrNull { it.isEnabled }
+        target?.post { if (target.isEnabled && !isFinishing) target.requestFocus() }
+    }
 
     private fun sidebarBackground() = BlofyTvDesign.glassPanel(dp(20).toFloat(), false)
     private fun sideItemBackground(focused: Boolean) =
