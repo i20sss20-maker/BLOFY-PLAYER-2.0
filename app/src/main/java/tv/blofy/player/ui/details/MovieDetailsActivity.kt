@@ -86,16 +86,12 @@ class MovieDetailsActivity : AppCompatActivity() {
             posterCard.addView(poster, LinearLayout.LayoutParams(dp(if (compact) 190 else 285), dp(if (compact) 285 else 425)))
             ArtworkLoader.load(poster, stream.icon)
             if (compact) {
-                val heroArt = ImageView(this@MovieDetailsActivity).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    background = BlofyTvDesign.posterCard(dp(20).toFloat())
-                    clipToOutline = true
-                    contentDescription = stream.name
-                }
-                ArtworkLoader.load(heroArt, stream.backdrop?.takeIf { it.isNotBlank() } ?: stream.icon)
-                body.addView(heroArt, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(218)).apply {
-                    bottomMargin = dp(19)
-                })
+                body.addView(
+                    CinematicDetailBackdrop.create(this@MovieDetailsActivity, stream, "أفلام"),
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240)).apply {
+                        bottomMargin = dp(18)
+                    }
+                )
             } else {
                 body.addView(posterCard, LinearLayout.LayoutParams(dp(310), dp(450)).apply {
                     marginStart = dp(34)
