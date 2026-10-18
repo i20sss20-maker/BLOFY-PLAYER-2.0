@@ -37,6 +37,9 @@ internal class CinematicEpisodeAdapter(
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(17), dp(13), dp(17), dp(14))
             background = BlofyTvDesign.glassPanel(dp(19).toFloat())
+            layoutParams = RecyclerView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(10) }
             isClickable = true
             isFocusable = true
         }
