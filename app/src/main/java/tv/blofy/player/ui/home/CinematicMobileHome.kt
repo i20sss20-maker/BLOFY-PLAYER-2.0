@@ -40,6 +40,7 @@ import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
 import tv.blofy.player.ui.search.SearchActivity
+import tv.blofy.player.ui.series.EpisodesActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 
 /**
@@ -397,6 +398,12 @@ internal class CinematicMobileHome(
                     putExtra(PlayerActivity.EXTRA_FALLBACK_URL, ContentUrlResolver.directFallback(item))
                     putExtra(PlayerActivity.EXTRA_TITLE, item.name)
                 })
+                item.kind == "series" && playDirectly -> host.startActivity(
+                    Intent(host, EpisodesActivity::class.java)
+                        .putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, provider.id)
+                        .putExtra(EpisodesActivity.EXTRA_SERIES_ID, item.remoteId)
+                        .putExtra(EpisodesActivity.EXTRA_SERIES_NAME, item.name)
+                )
                 item.kind == "movie" -> host.startActivity(Intent(host, MovieDetailsActivity::class.java)
                     .putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
                     .putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, item.key))
