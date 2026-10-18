@@ -27,6 +27,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
+import tv.blofy.player.ui.settings.ProviderPlaybackSettingsActivity
 
 class ProviderManagerActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
