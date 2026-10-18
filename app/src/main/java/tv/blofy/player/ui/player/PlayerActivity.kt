@@ -75,6 +75,8 @@ class PlayerActivity : AppCompatActivity() {
     private var autoNextTriggered = false
     private var playbackErrorOverlay: LinearLayout? = null
     private var errorRetryButton: Button? = null
+    private var errorReasonView: TextView? = null
+    private var loadingOverlay: LinearLayout? = null
     private var activePrimaryUrl = ""
     private var activeFallbackUrl: String? = null
     private var configuredSources: List<PlaybackSource> = emptyList()
@@ -110,11 +112,12 @@ class PlayerActivity : AppCompatActivity() {
         currentEpisode = intent.getIntExtra(EXTRA_EPISODE, 0)
 
         val profile = profileFromIntent()
-        session = BlofyPlaybackSession(context = this, profile = profile, contentKind = kind.ifBlank { "unknown" }) {
-            showPlaybackError()
+        session = BlofyPlaybackSession(context = this, profile = profile, contentKind = kind.ifBlank { "unknown" }) { reason ->
+            showPlaybackError(reason)
         }
         session.player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                loadingOverlay?.visibility = if (playbackState == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
                 if (playbackState == Player.STATE_READY) hidePlaybackError()
                 if (playbackState == Player.STATE_ENDED && kind == "episode" && !autoNextTriggered) {
                     autoNextTriggered = true
@@ -152,6 +155,24 @@ class PlayerActivity : AppCompatActivity() {
             setShutterBackgroundColor(Color.BLACK)
         }
         root.addView(playerView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+
+        loadingOverlay = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+            isClickable = false
+            addView(ProgressBar(this@PlayerActivity), LinearLayout.LayoutParams(dp(44), dp(44)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            })
+            addView(TextView(this@PlayerActivity).apply {
+                text = "جاري الاتصال بمصدر الفيديو…"
+                textSize = 15f
+                setTextColor(BlofyTvDesign.TextSecondary)
+                gravity = Gravity.CENTER
+                setPadding(0, dp(12), 0, 0)
+            })
+        }
+        root.addView(loadingOverlay, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         channelNumberView = TextView(this).apply {
             textSize = 34f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER
@@ -299,14 +320,23 @@ class PlayerActivity : AppCompatActivity() {
             background = BlofyTvDesign.elevatedSurface(dp(20).toFloat(), emphasis = true)
             visibility = View.GONE
         }
-        errorOverlay.addView(TextView(this).apply {
-            text = if (kind == "live") "تعذر تشغيل القناة\nتحقق من المصدر أو أعد المحاولة" else "تعذر تشغيل المحتوى\nأعد المحاولة أو ارجع للقائمة"
+        val errorText = TextView(this).apply {
+            text = if (kind == "live") "تعذر تشغيل القناة" else "تعذر تشغيل المحتوى"
             gravity = Gravity.CENTER
             textSize = if (compactHud) 17f else 22f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(20)
+        }
+        errorOverlay.addView(errorText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        errorReasonView = TextView(this).apply {
+            text = "تحقق من المصدر أو أعد المحاولة"
+            gravity = Gravity.CENTER
+            textSize = if (compactHud) 13f else 16f
+            setTextColor(BlofyTvDesign.TextSecondary)
+            setPadding(dp(4), dp(12), dp(4), dp(12))
+        }
+        errorOverlay.addView(errorReasonView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(10)
         })
         val retryButton = controlButton("↻  إعادة المحاولة") { retryCurrentPlayback() }
         errorRetryButton = retryButton
@@ -343,6 +373,7 @@ class PlayerActivity : AppCompatActivity() {
         activePrimaryUrl = url
         activeFallbackUrl = configuredSources.getOrNull(1)?.url
         hidePlaybackError()
+        loadingOverlay?.visibility = View.VISIBLE
         session.play(url = url, resumeMs = resumeMs, fallbackUrl = activeFallbackUrl)
     }
 
@@ -364,6 +395,7 @@ class PlayerActivity : AppCompatActivity() {
                     // Trying a manually selected backup does not bounce endlessly to the main source.
                     activeFallbackUrl = if (which == 0) sources.getOrNull(1)?.url else null
                     hidePlaybackError()
+                    loadingOverlay?.visibility = View.VISIBLE
                     session.play(selected.url, resumeMs = resume, fallbackUrl = activeFallbackUrl)
                 }
                 dialog.dismiss()
@@ -378,8 +410,10 @@ class PlayerActivity : AppCompatActivity() {
         startPlayback(activePrimaryUrl, resumeMs, activeFallbackUrl)
     }
 
-    private fun showPlaybackError() {
+    private fun showPlaybackError(reason: String) {
         if (isFinishing || isDestroyed) return
+        loadingOverlay?.visibility = View.GONE
+        errorReasonView?.text = reason.takeIf { it.isNotBlank() } ?: "تحقق من المصدر أو أعد المحاولة"
         if (::hud.isInitialized) {
             keepHudVisible()
             hud.visibility = View.GONE
