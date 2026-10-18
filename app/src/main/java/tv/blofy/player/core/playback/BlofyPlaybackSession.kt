@@ -39,6 +39,7 @@ class BlofyPlaybackSession(
     private var useHttpTransport = false
     private var cronetFailedThisSession = false
     private var lastFailureMessage = ""
+    private var lastSafeErrorCode = "NONE"
     private var startupReady = false
     private val startupWatchdog = Runnable {
         if (!startupReady && player.playbackState != Player.STATE_ENDED &&
@@ -109,6 +110,7 @@ class BlofyPlaybackSession(
                 override fun onPlayerError(error: PlaybackException) {
                     val failure = PlaybackFailurePolicy.from(error)
                     lastFailureMessage = failure.message
+                    lastSafeErrorCode = tv.blofy.player.core.diagnostics.DiagnosticsSanitizer.sanitizeErrorCode(error.errorCodeName) ?: "UNKNOWN"
                     metric?.let {
                         val updated = PlaybackDiagnostics.error(it, error.errorCodeName, error.message)
                         metric = updated
@@ -182,6 +184,7 @@ class BlofyPlaybackSession(
         fallbackState.begin(url, fallbackUrl)
         useHttpTransport = cronetFailedThisSession || profile.transport == TransportPreference.HTTP_FIRST
         lastFailureMessage = ""
+        lastSafeErrorCode = "NONE"
         firstFrameRecorded = false
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
         val item = mediaItem(url)
@@ -286,6 +289,10 @@ class BlofyPlaybackSession(
         .build()
 
     fun isStarted(): Boolean = player.playbackState == Player.STATE_READY && player.playWhenReady
+
+    /** Safe fields only: no provider URL, credentials or stream identifier. */
+    fun diagnosticCode(): String = lastSafeErrorCode
+    fun diagnosticTransport(): String = if (useHttpTransport) "HTTP" else "CRONET"
 
     fun release() {
         retryHandler.removeCallbacksAndMessages(null)
