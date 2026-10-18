@@ -284,8 +284,9 @@ class PlayerActivity : AppCompatActivity() {
             hud.addView(options)
         }
         // Only offer source selection when this item has a real provider-configured alternative.
-        sourceSwitcherButton = controlButton("⛓  مصادر التشغيل") { showSourcePicker() }.apply { visibility = View.GONE }
-        hud.addView(sourceSwitcherButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compactHud) 50 else 60)).apply {
+        val sourceButton = controlButton("⛓  مصادر التشغيل") { showSourcePicker() }.apply { visibility = View.GONE }
+        sourceSwitcherButton = sourceButton
+        hud.addView(sourceButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compactHud) 50 else 60)).apply {
             topMargin = dp(8)
         })
         root.addView(hud, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
