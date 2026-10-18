@@ -49,10 +49,17 @@ class BlofyPlaybackSession(
                 cronetFailedThisSession = true
                 retrySameUrl()
             } else {
-                // A source that never produces READY can otherwise leave an endless black screen.
-                lastFailureMessage = "انتهت مهلة بدء التشغيل. تحقق من اتصال الإنترنت وصلاحية المصدر، أو جرّب مصدرًا آخر."
-                onTerminalError?.invoke(lastFailureMessage)
-                player.stop()
+                // Silent stalls must also try real, provider-configured fallbacks.
+                // Error-based recovery alone does not run when no exception is emitted.
+                val failedUrl = player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+                val alternative = nextFallbackAfter(failedUrl)
+                if (alternative != null) {
+                    playInternalFallback(alternative)
+                } else {
+                    lastFailureMessage = "انتهت مهلة بدء التشغيل لكل المصادر المتاحة. تحقق من الاتصال وصلاحية الاشتراك."
+                    onTerminalError?.invoke(lastFailureMessage)
+                    player.stop()
+                }
             }
         }
     }
@@ -145,25 +152,14 @@ class BlofyPlaybackSession(
                             stop()
                         } else {
                             retryHandler.post {
-                                val alternateUrl = if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
-                                    ContentUrlResolver.alternateLiveFormat(failedUrl, profile)
+                                val alternative = nextFallbackAfter(failedUrl)
+                                if (alternative != null) {
+                                    playInternalFallback(alternative)
                                 } else {
-                                    null
-                                }
-                                if (alternateUrl != null) {
-                                    alternateLiveFormatAttempted = true
-                                    playInternalFallback(alternateUrl)
-                                } else {
-                                    val configuredFallback = fallbackState.nextConfiguredUrl()
-                                    if (configuredFallback != null) {
-                                        fallbackState.markConfiguredUrlAttempted(configuredFallback)
-                                        playInternalFallback(configuredFallback)
-                                    } else {
-                                        // Stay in BLOFY. Failures never launch another player automatically.
-                                        retryHandler.removeCallbacks(startupWatchdog)
-                                        onTerminalError?.invoke(lastFailureMessage)
-                                        stop()
-                                    }
+                                    // Stay in BLOFY. Failures never launch another player automatically.
+                                    retryHandler.removeCallbacks(startupWatchdog)
+                                    onTerminalError?.invoke(lastFailureMessage)
+                                    stop()
                                 }
                             }
                         }
@@ -252,6 +248,15 @@ class BlofyPlaybackSession(
     private fun resetLiveStallTimer(keepPosition: Boolean) {
         liveStallStartedAtMs = 0L
         if (!keepPosition) lastObservedLivePositionMs = Long.MIN_VALUE
+    }
+
+    private fun nextFallbackAfter(failedUrl: String): String? {
+        if (failedUrl.isBlank()) return null
+        if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
+            alternateLiveFormatAttempted = true
+            ContentUrlResolver.alternateLiveFormat(failedUrl, profile)?.let { return it }
+        }
+        return fallbackState.nextConfiguredUrl()?.also { fallbackState.markConfiguredUrlAttempted(it) }
     }
 
     private fun playInternalFallback(url: String) {
