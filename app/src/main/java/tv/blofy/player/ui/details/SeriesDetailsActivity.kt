@@ -55,13 +55,11 @@ class SeriesDetailsActivity : AppCompatActivity() {
             background = BlofyTvDesign.elevatedSurface(dp(20).toFloat(), emphasis = true)
             clipToOutline = true
         }
-        root.addView(
-            poster,
-            LinearLayout.LayoutParams(if (compact) LinearLayout.LayoutParams.MATCH_PARENT else dp(310),
-                dp(if (compact) 218 else 465)).apply {
-                if (compact) bottomMargin = dp(19) else marginEnd = dp(42)
-            }
-        )
+        if (!compact) {
+            root.addView(poster, LinearLayout.LayoutParams(dp(310), dp(465)).apply {
+                marginEnd = dp(42)
+            })
+        }
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -94,7 +92,14 @@ class SeriesDetailsActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.provider(providerId) ?: run { finish(); return@launch }
             val stream = dao.stream(contentKey) ?: run { finish(); return@launch }
-            ArtworkLoader.load(poster, if (compact) stream.backdrop?.takeIf { it.isNotBlank() } ?: stream.icon else stream.icon)
+            if (compact) {
+                root.addView(CinematicDetailBackdrop.create(this@SeriesDetailsActivity, stream, "مسلسلات"),
+                    0, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240)).apply {
+                        bottomMargin = dp(18)
+                    })
+            } else {
+                ArtworkLoader.load(poster, stream.icon)
+            }
             val allEpisodes = dao.episodes(providerId, stream.remoteId).first()
             val resume = allEpisodes.mapNotNull { episode ->
                 val watch = dao.watchState(episode.key) ?: return@mapNotNull null
