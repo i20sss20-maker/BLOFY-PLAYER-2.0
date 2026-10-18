@@ -53,6 +53,10 @@ internal class CinematicMobileHome(
     private val catalogIntent: (String) -> Intent
 ) {
     private val compact = host.resources.configuration.screenWidthDp < 600
+    // Fit nearly three movie posters across a phone, like the cinematic reference.
+    private val posterWidth = if (compact) ((host.resources.configuration.screenWidthDp - 52) / 3)
+        .coerceIn(88, 132) else 164
+    private val posterHeight = if (compact) posterWidth * 3 / 2 + 31 else 255
     private val body = LinearLayout(host).apply {
         orientation = LinearLayout.VERTICAL
         layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -311,15 +315,15 @@ internal class CinematicMobileHome(
         val row = LinearLayout(host).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL }
         items.take(18).forEach { item ->
             val poster = poster(item, provider)
-            row.addView(poster, LinearLayout.LayoutParams(dp(if (compact) 130 else 164), dp(if (compact) 211 else 255)).apply {
-                marginEnd = dp(11)
+            row.addView(poster, LinearLayout.LayoutParams(dp(posterWidth), dp(posterHeight)).apply {
+                marginEnd = dp(10)
             })
         }
         rails.addView(HorizontalScrollView(host).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             addView(row)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compact) 224 else 270)))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(posterHeight + 13)))
     }
 
     private fun addRankedRail(title: String, items: List<StreamEntity>, provider: ProviderEntity) {
@@ -333,13 +337,13 @@ internal class CinematicMobileHome(
                 setTextColor(BlofyTvDesign.TextPrimary)
                 gravity = Gravity.CENTER_VERTICAL
             }, FrameLayout.LayoutParams(dp(73), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.RIGHT))
-            cell.addView(poster(item, provider), FrameLayout.LayoutParams(dp(if (compact) 120 else 155), dp(if (compact) 192 else 240), Gravity.LEFT or Gravity.BOTTOM))
-            row.addView(cell, LinearLayout.LayoutParams(dp(if (compact) 160 else 195), dp(if (compact) 199 else 248)).apply { marginEnd = dp(5) })
+            cell.addView(poster(item, provider), FrameLayout.LayoutParams(dp(if (compact) posterWidth else 155), dp(if (compact) posterHeight else 240), Gravity.LEFT or Gravity.BOTTOM))
+            row.addView(cell, LinearLayout.LayoutParams(dp(if (compact) posterWidth + 40 else 195), dp(if (compact) posterHeight + 6 else 248)).apply { marginEnd = dp(5) })
         }
         rails.addView(HorizontalScrollView(host).apply {
             isHorizontalScrollBarEnabled = false
             addView(row)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compact) 212 else 255)))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compact) posterHeight + 14 else 255)))
     }
 
     private fun poster(item: StreamEntity, provider: ProviderEntity): View {
