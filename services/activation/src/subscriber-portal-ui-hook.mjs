@@ -195,8 +195,11 @@ ${allowRenewal ? renewalStyles : ''}
     if (!response.ok) {
       var code = payload && payload.error;
       if (code === 'subscriber_login_failed') throw new Error('اسم المستخدم أو كلمة المرور غير صحيحة');
-      if (code === 'unauthorized_device') throw new Error('الجهاز غير مفعل أو بيانات الربط غير صحيحة');
+      if (code === 'device_activation_required') throw new Error('الجهاز مرتبط بالموقع لكن تفعيله غير سارٍ. افتح BLOFY PLAYER على الجهاز وأكمل التفعيل أو التجديد، ثم سجّل الخروج من الموقع وأعد الدخول برمز الجهاز الحالي.');
+      if (code === 'unauthorized_device') throw new Error('تعذر التحقق من رقم الجهاز أو رمز الربط. سجّل الخروج من الموقع ثم أدخل الرقم والرمز الظاهرين داخل التطبيق من جديد.');
+      if (code === 'rate_limited') throw new Error('عدد محاولات التحقق كبير. انتظر قليلًا قبل إعادة المحاولة.');
       if (code === 'subscriber_service_unavailable') throw new Error('خدمة مشتركين BLOFY غير متاحة حاليًا');
+      if (code === 'subscriber_bootstrap_unavailable') throw new Error('تعذر الاتصال بسيرفر المشتركين للتحقق من الاشتراك.');
       if (code === 'subscriber_upstream_unavailable') throw new Error('سيرفر المشتركين لا يستجيب حاليًا');
       throw new Error('تعذر تسجيل الدخول إلى مشتركين BLOFY');
     }
