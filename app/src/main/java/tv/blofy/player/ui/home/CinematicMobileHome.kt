@@ -101,10 +101,10 @@ internal class CinematicMobileHome(
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             gravity = Gravity.CENTER_VERTICAL
         }
-        val menu = glyph("☰", "فتح القائمة")
-        row.addView(menu, LinearLayout.LayoutParams(dp(42), dp(46)))
-        menu.setOnClickListener {
-            PopupMenu(host, menu).apply {
+        val menuButton = glyph("☰", "فتح القائمة")
+        row.addView(menuButton, LinearLayout.LayoutParams(dp(42), dp(46)))
+        menuButton.setOnClickListener {
+            PopupMenu(host, menuButton).apply {
                 menu.add("الرئيسية").setOnMenuItemClickListener { true }
                 menu.add("الأفلام").setOnMenuItemClickListener { openCatalog("movie"); true }
                 menu.add("المسلسلات").setOnMenuItemClickListener { openCatalog("series"); true }
