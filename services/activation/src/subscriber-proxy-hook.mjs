@@ -6,6 +6,7 @@ import { Readable, Transform } from 'node:stream';
 import pg from 'pg';
 import { createActivationCredentialCodec } from './auth-protection.mjs';
 import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';
+import { normalizePortalDeviceId } from './portal-pending-auth.mjs';
 import { discoverSubscriberHost, loadPersistedSubscriberHost, savePersistedSubscriberHost } from './subscriber-host-state.mjs';
 
 const { Pool } = pg;
@@ -293,7 +294,7 @@ async function pipeUpstream(req, res, url, token) {
 async function createSubscriberSession(req, res) {
   if (!baseReady()) return sendJson(res, 503, { error: 'subscriber_service_unavailable' });
   const body = await readJson(req);
-  const deviceId = String(body.deviceId || '').trim();
+  const deviceId = normalizePortalDeviceId(body.deviceId);
   const activationCode = String(body.activationCode || '').trim();
   const username = String(body.username || '').trim();
   const password = String(body.password || '');
