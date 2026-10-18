@@ -116,12 +116,10 @@ class BlofyPlaybackSession(
                     }
                     // An expired session or forbidden stream cannot be repaired by changing
                     // transports or repeatedly hitting a credential-protected endpoint.
-                    if (failure.authFailure) {
+                    if (failure.authFailure || currentMediaItem?.localConfiguration?.uri == null) {
+                        retryHandler.removeCallbacks(startupWatchdog)
                         onTerminalError?.invoke(lastFailureMessage)
-                        return
-                    }
-                    if (currentMediaItem?.localConfiguration?.uri == null) {
-                        onTerminalError?.invoke(lastFailureMessage)
+                        stop()
                         return
                     }
                     // Cronet can fail on some IPTV/CDN endpoints even when plain HTTP works.
@@ -140,7 +138,9 @@ class BlofyPlaybackSession(
                         val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
                         if (failedUrl.isBlank()) {
                             // Missing media information must still surface a terminal failure.
+                            retryHandler.removeCallbacks(startupWatchdog)
                             onTerminalError?.invoke(lastFailureMessage)
+                            stop()
                         } else {
                             retryHandler.post {
                                 val alternateUrl = if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
@@ -158,7 +158,9 @@ class BlofyPlaybackSession(
                                         playInternalFallback(configuredFallback)
                                     } else {
                                         // Stay in BLOFY. Failures never launch another player automatically.
+                                        retryHandler.removeCallbacks(startupWatchdog)
                                         onTerminalError?.invoke(lastFailureMessage)
+                                        stop()
                                     }
                                 }
                             }
