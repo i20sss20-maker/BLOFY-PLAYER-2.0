@@ -298,6 +298,7 @@ internal class CinematicMobileHome(
                 item.kind == "series" -> host.startActivity(Intent(host, SeriesDetailsActivity::class.java)
                     .putExtra(SeriesDetailsActivity.EXTRA_PROVIDER_ID, provider.id)
                     .putExtra(SeriesDetailsActivity.EXTRA_CONTENT_KEY, item.key))
+                else -> Unit
             }
         }
         if (item.locked) ParentalGate.requirePin(host) { proceed() } else proceed()
