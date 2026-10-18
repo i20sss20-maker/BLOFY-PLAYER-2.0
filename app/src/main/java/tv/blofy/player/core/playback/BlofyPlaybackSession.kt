@@ -19,6 +19,7 @@ import tv.blofy.player.core.diagnostics.PlaybackDiagnosticsUploader
 import tv.blofy.player.core.diagnostics.PlaybackMetric
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
+import tv.blofy.player.core.provider.TransportPreference
 
 @OptIn(markerClass = [UnstableApi::class])
 class BlofyPlaybackSession(
@@ -35,6 +36,30 @@ class BlofyPlaybackSession(
     private var liveStallStartedAtMs = 0L
     private var lastLiveStallRecoveryAtMs = 0L
     private var liveStallRecoveries = 0
+    private var useHttpTransport = false
+    private var cronetFailedThisSession = false
+    private var lastFailureMessage = ""
+    private var startupReady = false
+    private val startupWatchdog = Runnable {
+        if (!startupReady && player.playbackState != Player.STATE_ENDED &&
+            player.playWhenReady && player.currentMediaItem != null) {
+            if (profile.transport == TransportPreference.CRONET_FIRST && !useHttpTransport) {
+                useHttpTransport = true
+                cronetFailedThisSession = true
+                retrySameUrl()
+            } else {
+                // A source that never produces READY can otherwise leave an endless black screen.
+                lastFailureMessage = "انتهت مهلة بدء التشغيل. تحقق من اتصال الإنترنت وصلاحية المصدر، أو جرّب مصدرًا آخر."
+                onTerminalError?.invoke(lastFailureMessage)
+                player.stop()
+            }
+        }
+    }
+    private val httpMediaSourceFactory by lazy {
+        DefaultMediaSourceFactory(
+            TransportFactory.create(appContext, profile.copy(transport = TransportPreference.HTTP_FIRST))
+        )
+    }
     private val fallbackState = PlaybackFallbackState()
     private val retryHandler = Handler(context.mainLooper)
     private val appContext = context.applicationContext
@@ -62,7 +87,11 @@ class BlofyPlaybackSession(
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_BUFFERING) metric?.let { metric = PlaybackDiagnostics.buffering(it) }
-                    if (playbackState == Player.STATE_READY) resetLiveStallTimer(keepPosition = true)
+                    if (playbackState == Player.STATE_READY) {
+                        startupReady = true
+                        retryHandler.removeCallbacks(startupWatchdog)
+                        resetLiveStallTimer(keepPosition = true)
+                    }
                 }
 
                 override fun onRenderedFirstFrame() {
@@ -78,15 +107,28 @@ class BlofyPlaybackSession(
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
+                    val failure = PlaybackFailurePolicy.from(error)
+                    lastFailureMessage = failure.message
                     metric?.let {
                         val updated = PlaybackDiagnostics.error(it, error.errorCodeName, error.message)
                         metric = updated
                         PlaybackDiagnosticsUploader.enqueue(appContext, updated)
                     }
-                    // Without a current media URI even the first retry cannot proceed.
-                    // Notify the UI instead of leaving the player in an unresponsive state.
-                    if (currentMediaItem?.localConfiguration?.uri == null) {
-                        onTerminalError?.invoke("")
+                    // An expired session or forbidden stream cannot be repaired by changing
+                    // transports or repeatedly hitting a credential-protected endpoint.
+                    if (failure.authFailure || currentMediaItem?.localConfiguration?.uri == null) {
+                        retryHandler.removeCallbacks(startupWatchdog)
+                        onTerminalError?.invoke(lastFailureMessage)
+                        stop()
+                        return
+                    }
+                    // Cronet can fail on some IPTV/CDN endpoints even when plain HTTP works.
+                    // Reuse this Media3 player and retry the *same* item over HttpDataSource.
+                    if (profile.transport == TransportPreference.CRONET_FIRST &&
+                        !useHttpTransport && failure.tryHttpTransport) {
+                        useHttpTransport = true
+                        cronetFailedThisSession = true
+                        retryHandler.post { retrySameUrl() }
                         return
                     }
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
@@ -96,7 +138,9 @@ class BlofyPlaybackSession(
                         val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
                         if (failedUrl.isBlank()) {
                             // Missing media information must still surface a terminal failure.
-                            onTerminalError?.invoke("")
+                            retryHandler.removeCallbacks(startupWatchdog)
+                            onTerminalError?.invoke(lastFailureMessage)
+                            stop()
                         } else {
                             retryHandler.post {
                                 val alternateUrl = if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
@@ -114,7 +158,9 @@ class BlofyPlaybackSession(
                                         playInternalFallback(configuredFallback)
                                     } else {
                                         // Stay in BLOFY. Failures never launch another player automatically.
-                                        onTerminalError?.invoke(failedUrl)
+                                        retryHandler.removeCallbacks(startupWatchdog)
+                                        onTerminalError?.invoke(lastFailureMessage)
+                                        stop()
                                     }
                                 }
                             }
@@ -127,19 +173,23 @@ class BlofyPlaybackSession(
     fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null) {
         // A channel switch supersedes any queued retry/fallback/watchdog work from the old URL.
         retryHandler.removeCallbacksAndMessages(null)
+        startupReady = false
         automaticRetries = 0
         alternateLiveFormatAttempted = false
         liveStallRecoveries = 0
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
         fallbackState.begin(url, fallbackUrl)
+        useHttpTransport = cronetFailedThisSession || profile.transport == TransportPreference.HTTP_FIRST
+        lastFailureMessage = ""
         firstFrameRecorded = false
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
         val item = mediaItem(url)
-        player.setMediaItem(item)
+        setMedia(item)
         player.prepare()
-        if (resumeMs > 0L) player.seekTo(resumeMs)
+        if (resumeMs > 0L && !contentKind.isLiveContent()) player.seekTo(resumeMs)
         player.playWhenReady = true
+        armStartupWatchdog()
         if (contentKind.isLiveContent()) retryHandler.postDelayed(liveStallWatchdog, LIVE_STALL_WATCHDOG_INTERVAL_MS)
     }
 
@@ -148,10 +198,11 @@ class BlofyPlaybackSession(
         val position = player.currentPosition.coerceAtLeast(0L)
         resetLiveStallTimer(keepPosition = false)
         player.stop()
-        player.setMediaItem(item)
+        setMedia(item)
         player.prepare()
         if (!contentKind.isLiveContent() && position > 0L) player.seekTo(position)
         player.playWhenReady = true
+        armStartupWatchdog()
     }
 
     private fun checkLiveStall() {
@@ -208,9 +259,21 @@ class BlofyPlaybackSession(
         resetLiveStallTimer(keepPosition = false)
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
         player.stop()
-        player.setMediaItem(mediaItem(url))
+        setMedia(mediaItem(url))
         player.prepare()
         player.playWhenReady = true
+        armStartupWatchdog()
+    }
+
+    private fun armStartupWatchdog() {
+        retryHandler.removeCallbacks(startupWatchdog)
+        startupReady = false
+        retryHandler.postDelayed(startupWatchdog, STARTUP_TIMEOUT_MS)
+    }
+
+    private fun setMedia(item: MediaItem) {
+        if (useHttpTransport) player.setMediaSource(httpMediaSourceFactory.createMediaSource(item))
+        else player.setMediaItem(item)
     }
 
     private fun mediaItem(url: String): MediaItem = MediaItem.Builder()
@@ -231,6 +294,7 @@ class BlofyPlaybackSession(
 
     private companion object {
         const val MAX_AUTOMATIC_RETRIES = 1
+        const val STARTUP_TIMEOUT_MS = 35_000L
         const val LIVE_STALL_WATCHDOG_INTERVAL_MS = 4_000L
         const val LIVE_STALL_RECOVERY_THRESHOLD_MS = 12_000L
         const val LIVE_STALL_RECOVERY_COOLDOWN_MS = 60_000L

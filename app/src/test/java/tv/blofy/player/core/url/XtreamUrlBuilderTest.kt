@@ -30,6 +30,22 @@ class XtreamUrlBuilderTest {
     }
 
     @Test
+    fun percentEncodesSpecialCharactersInCredentialsAndStreamIds() {
+        assertEquals(
+            "https://example.com/movie/a%3Fb/p%23%20%26/hello%2Fworld.mkv",
+            XtreamUrlBuilder.movie("https://example.com", "a?b", "p# &", "hello/world", ".mkv")
+        )
+    }
+
+    @Test
+    fun invalidMediaExtensionDoesNotInjectQueryIntoPlaybackUrl() {
+        assertEquals(
+            "https://example.com/series/user/pass/55.mp4",
+            XtreamUrlBuilder.episode("https://example.com", "user", "pass", "55", "mp4?bad=1")
+        )
+    }
+
+    @Test
     fun buildsEpisodeWithProviderExtension() {
         assertEquals(
             "https://example.com/series/user/pass/55.mp4",
