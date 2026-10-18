@@ -88,7 +88,10 @@ class BlofyPlaybackSession(
                         retryHandler.post { retrySameUrl() }
                     } else {
                         val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
-                        if (failedUrl.isNotBlank()) {
+                        if (failedUrl.isBlank()) {
+                            // Missing media information must still surface a terminal failure.
+                            onTerminalError?.invoke("")
+                        } else {
                             retryHandler.post {
                                 val alternateUrl = if (!alternateLiveFormatAttempted && contentKind.isLiveContent()) {
                                     ContentUrlResolver.alternateLiveFormat(failedUrl, profile)
