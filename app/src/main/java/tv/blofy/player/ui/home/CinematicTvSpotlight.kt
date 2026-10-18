@@ -46,6 +46,10 @@ internal class CinematicTvSpotlight(
     private var owner: ProviderEntity? = null
     private var featured = emptyList<StreamEntity>()
     private var index = 0
+    // A TV's logical height can be 540dp even at 1080p. Prevent clipping on 720p/1080p boxes.
+    private val compactTv = host.resources.configuration.screenHeightDp < 700
+    private val posterImageHeight = if (compactTv) 61 else 91
+    private val posterCardHeight = posterImageHeight + 27
     private val posterRow = LinearLayout(host).apply {
         orientation = LinearLayout.HORIZONTAL
         layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -112,7 +116,7 @@ internal class CinematicTvSpotlight(
         setPadding(dp(6), 0, dp(6), 0)
         addView(posterRow)
         posterRow.addView(label("جاري تحميل المكتبة…", 15f),
-            LinearLayout.LayoutParams(dp(240), dp(135)))
+            LinearLayout.LayoutParams(dp(240), dp(posterCardHeight)))
     }
 
     fun load() {
@@ -195,7 +199,7 @@ internal class CinematicTvSpotlight(
                 clipToOutline = true
             }
             ArtworkLoader.load(poster, item.icon)
-            card.addView(poster, LinearLayout.LayoutParams(-1, dp(108)))
+            card.addView(poster, LinearLayout.LayoutParams(-1, dp(posterImageHeight)))
             card.addView(label(item.name, 12f).apply {
                 gravity = Gravity.CENTER
                 maxLines = 1
@@ -211,7 +215,7 @@ internal class CinematicTvSpotlight(
                     .scaleY(if (focused) 1.045f else 1f).setDuration(105L).start()
             }
             registerFocus("tv_cinema_poster_${item.key}", card)
-            posterRow.addView(card, LinearLayout.LayoutParams(dp(115), dp(139)).apply { marginEnd = dp(12) })
+            posterRow.addView(card, LinearLayout.LayoutParams(dp(if (compactTv) 118 else 140), dp(posterCardHeight)).apply { marginEnd = dp(12) })
         }
     }
 
@@ -220,7 +224,7 @@ internal class CinematicTvSpotlight(
         info.text = message
         counter.text = "مكتبتك • خصوصيتك"
         posterRow.removeAllViews()
-        posterRow.addView(label(message, 15f), LinearLayout.LayoutParams(-2, dp(135)))
+        posterRow.addView(label(message, 15f), LinearLayout.LayoutParams(-2, dp(posterCardHeight)))
     }
 
     private fun button(title: String, key: String, primary: Boolean = false, pressed: () -> Unit) =
