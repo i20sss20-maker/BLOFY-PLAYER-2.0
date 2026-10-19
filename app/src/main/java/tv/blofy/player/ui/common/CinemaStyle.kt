@@ -21,18 +21,36 @@ object CinemaStyle {
     val Accent = 0xFFC9A6FF.toInt()
     const val ActionHeight = 34
 
-    fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 8) = GradientDrawable().apply {
-        val density = context.resources.displayMetrics.density
-        cornerRadius = radiusDp * density
-        setColor(if (focused && filledFocus) White else Surface)
-        setStroke(((if (focused) 2 else 1) * density).toInt(), if (focused) White else 0x62FFFFFF)
-    }
+    fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 8) =
+        GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            when {
+                focused && filledFocus -> intArrayOf(0xFFF1E5FF.toInt(), Accent)
+                focused -> intArrayOf(0xFF6C448E.toInt(), 0xFF2A173B.toInt())
+                else -> intArrayOf(0xF12A1739.toInt(), 0xF10B0816.toInt())
+            }
+        ).apply {
+            val density = context.resources.displayMetrics.density
+            cornerRadius = radiusDp * density
+            setStroke(((if (focused) 2 else 1) * density).toInt(),
+                if (focused) White else 0x527A5B99)
+        }
 
-    fun buttonBackground(context: Context, primary: Boolean, focused: Boolean) = GradientDrawable().apply {
-        cornerRadius = 6 * context.resources.displayMetrics.density
-        setColor(if (primary) Accent else if (focused) 0xFF684397.toInt() else Surface)
-        setStroke(((if (focused) 2 else 1) * context.resources.displayMetrics.density).toInt(), if (focused) White else 0x62FFFFFF)
-    }
+    fun buttonBackground(context: Context, primary: Boolean, focused: Boolean) =
+        GradientDrawable(
+            GradientDrawable.Orientation.LEFT_RIGHT,
+            when {
+                primary && focused -> intArrayOf(0xFFF1DFFF.toInt(), 0xFFB585F4.toInt())
+                primary -> intArrayOf(Accent, 0xFFAD78E6.toInt())
+                focused -> intArrayOf(0xFF7852A7.toInt(), 0xFF38234D.toInt())
+                else -> intArrayOf(0xFF2B1B3C.toInt(), 0xFF130B1E.toInt())
+            }
+        ).apply {
+            val density = context.resources.displayMetrics.density
+            cornerRadius = 14 * density
+            setStroke(((if (focused) 2 else 1) * density).toInt(),
+                if (focused) White else 0x527A5B99)
+        }
 
     fun styleButton(button: Button, primary: Boolean = false, onFocus: ((Boolean) -> Unit)? = null) {
         val density = button.resources.displayMetrics.density
