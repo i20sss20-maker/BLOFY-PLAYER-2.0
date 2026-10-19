@@ -12,6 +12,7 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -28,14 +29,24 @@ class ProfilesActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val compact = resources.configuration.screenWidthDp < 600
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.TOP
-            setPadding(dp(42), dp(30), dp(42), dp(30))
-            background = AppCompatResources.getDrawable(this@ProfilesActivity, R.drawable.blofy_home_background)
+            setPadding(dp(if (compact) 18 else 42), dp(if (compact) 24 else 30),
+                dp(if (compact) 18 else 42), dp(32))
         }
-        setContentView(root)
+        setContentView(ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF241132.toInt(), 0xFF0D0817.toInt(), 0xFF07050C.toInt())
+            )
+            addView(root)
+        })
         render()
     }
 
@@ -43,8 +54,17 @@ class ProfilesActivity : AppCompatActivity() {
         root.removeAllViews()
         val active = ProfileStore.active(this)
         root.addView(TextView(this).apply {
+            text = "✦  BLOFY CINEMA"
+            textSize = 12f
+            letterSpacing = .10f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            gravity = Gravity.START
+            setPadding(0, 0, 0, dp(8))
+        })
+        root.addView(TextView(this).apply {
             text = getString(R.string.profiles_title)
-            textSize = 30f
+            textSize = if (resources.configuration.screenWidthDp < 600) 27f else 32f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.START
@@ -58,23 +78,52 @@ class ProfilesActivity : AppCompatActivity() {
         })
 
         ProfileStore.all(this).forEachIndexed { index, profile ->
+            val chosen = profile.id == active.id
             val card = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                setPadding(dp(20), dp(12), dp(20), dp(12))
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = resources.configuration.layoutDirection
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
                 isFocusable = true
                 isClickable = true
-                background = cardBg(profile.id == active.id, false)
-                addView(TextView(this@ProfilesActivity).apply {
-                    val lock = if (profile.pinHash != null) "  🔒" else ""
-                    val icon = when { profile.kids -> "🧒"; profile.guest -> "◌"; else -> "👤" }
-                    text = getString(R.string.profiles_card_title, icon, profile.name, lock)
-                    textSize = 19f
-                    typeface = Typeface.DEFAULT_BOLD
+                background = cardBg(chosen, false)
+                contentDescription = profile.name +
+                    if (chosen) "، الملف النشط" else "، اضغط لاختيار الملف"
+
+                val avatar = TextView(this@ProfilesActivity).apply {
+                    text = when {
+                        profile.kids -> "★"
+                        profile.guest -> "◌"
+                        else -> "●"
+                    }
+                    textSize = 29f
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.WHITE)
+                    background = GradientDrawable(
+                        GradientDrawable.Orientation.TL_BR,
+                        if (profile.kids) intArrayOf(0xFF6464BB.toInt(), 0xFF372657.toInt())
+                        else if (profile.guest) intArrayOf(0xFF585071.toInt(), 0xFF24202D.toInt())
+                        else intArrayOf(0xFF9C61D4.toInt(), 0xFF4A285E.toInt())
+                    ).apply {
+                        cornerRadius = dp(18).toFloat()
+                        setStroke(dp(1), 0xAAAD88E1.toInt())
+                    }
+                }
+                addView(avatar, LinearLayout.LayoutParams(dp(63), dp(63)).apply { marginEnd = dp(15) })
+                val labels = LinearLayout(this@ProfilesActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                labels.addView(TextView(this@ProfilesActivity).apply {
+                    text = profile.name + if (profile.pinHash != null) "  🔒" else ""
+                    textSize = 20f
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    typeface = BlofyTvDesign.HeadingTypeface
                     setTextColor(Color.WHITE)
                     gravity = Gravity.START
                 })
-                addView(TextView(this@ProfilesActivity).apply {
+                labels.addView(TextView(this@ProfilesActivity).apply {
                     text = when {
                         profile.guest -> getString(R.string.profiles_guest_meta)
                         profile.kids && profile.pinHash != null -> getString(R.string.profiles_kids_locked_meta)
@@ -82,11 +131,21 @@ class ProfilesActivity : AppCompatActivity() {
                         else -> getString(R.string.profiles_standard_meta)
                     }
                     textSize = 12f
+                    maxLines = 2
                     setTextColor(BlofyTvDesign.TextMuted)
                     gravity = Gravity.START
+                    setPadding(0, dp(4), 0, 0)
                 })
+                addView(labels, LinearLayout.LayoutParams(0, -1, 1f))
+                if (chosen) addView(TextView(this@ProfilesActivity).apply {
+                    text = "✓"
+                    textSize = 22f
+                    gravity = Gravity.CENTER
+                    setTextColor(BlofyTvDesign.PurpleBright)
+                    contentDescription = "الملف النشط"
+                }, LinearLayout.LayoutParams(dp(35), dp(45)))
                 setOnFocusChangeListener { view, focused ->
-                    view.background = cardBg(profile.id == active.id, focused)
+                    view.background = cardBg(chosen, focused)
                     view.animate().cancel()
                     val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.015f) else 1f
                     view.animate()
@@ -98,8 +157,10 @@ class ProfilesActivity : AppCompatActivity() {
                 }
                 setOnClickListener { selectProfile(profile) }
             }
-            root.addView(card, LinearLayout.LayoutParams(-1, dp(92)).apply { bottomMargin = dp(9) })
-            if (index == 0) card.post { card.requestFocus() }
+            root.addView(card, LinearLayout.LayoutParams(-1, dp(96)).apply { bottomMargin = dp(11) })
+            if (index == 0 && resources.configuration.screenWidthDp >= 600) {
+                card.post { card.requestFocus() }
+            }
         }
 
         val profileManagement = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = resources.configuration.layoutDirection }
@@ -306,9 +367,18 @@ class ProfilesActivity : AppCompatActivity() {
         setOnClickListener { action() }
     }
 
-    private fun cardBg(selected: Boolean, focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        when { focused -> intArrayOf(0xFF705987.toInt(), 0xFF3D3248.toInt()); selected -> intArrayOf(0xFF302A38.toInt(), 0xFF201B25.toInt()); else -> intArrayOf(0xFF221E27.toInt(), 0xFF151318.toInt()) }
-    ).apply { cornerRadius = dp(16).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF4A424F.toInt()) }
+    private fun cardBg(selected: Boolean, focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        when {
+            focused -> intArrayOf(0xFF745392.toInt(), 0xFF342344.toInt())
+            selected -> intArrayOf(0xFF402552.toInt(), 0xFF21152E.toInt())
+            else -> intArrayOf(0xEA2D1C3D.toInt(), 0xEE120D1D.toInt())
+        }
+    ).apply {
+        cornerRadius = dp(22).toFloat()
+        setStroke(if (focused) dp(2) else dp(1),
+            if (focused || selected) BlofyTvDesign.PurpleBright else 0x705E4875)
+    }
 
     private fun fieldBg() = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(0xFF201C24.toInt()); setStroke(dp(1), 0xFF514856.toInt()) }
     private fun buttonBg(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
