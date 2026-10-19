@@ -3,12 +3,14 @@ package tv.blofy.player.ui.home
 import tv.blofy.player.ui.common.ContentPresentation
 import tv.blofy.player.ui.common.BlofyTvDesign
 
+import android.app.Dialog
 import android.content.Intent
 import android.content.res.ColorStateList
 import tv.blofy.player.ui.common.CinemaStyle
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.ColorDrawable
 import android.text.TextUtils
 import android.os.Bundle
 import android.os.Handler
@@ -361,7 +363,8 @@ class HomeActivity : AppCompatActivity() {
     private fun hasArabic(value: String): Boolean = value.any { it in '\u0600'..'\u06FF' }
 
     private fun renderHero(item: StreamEntity) {
-        heroKicker?.text = getString(if (item.kind == "series") R.string.home_new_series else R.string.home_new_movie)
+        heroKicker?.text = "✦ BLOFY CINEMA  •  " +
+            getString(if (item.kind == "series") R.string.home_new_series else R.string.home_new_movie)
         heroTitle?.apply {
             text = ContentPresentation.of(item).title
             textDirection = View.TEXT_DIRECTION_FIRST_STRONG
@@ -892,7 +895,7 @@ class HomeActivity : AppCompatActivity() {
         }.also { addView(it, FrameLayout.LayoutParams(-1, -1)) }
         addView(View(this@HomeActivity).apply {
             val direction = if (layoutSpec.compact) GradientDrawable.Orientation.TOP_BOTTOM else if (uiDirection == View.LAYOUT_DIRECTION_RTL) GradientDrawable.Orientation.LEFT_RIGHT else GradientDrawable.Orientation.RIGHT_LEFT
-            background = GradientDrawable(direction, intArrayOf(0x08090B10, 0xA9090B10.toInt(), 0xFA090B10.toInt()))
+            background = GradientDrawable(direction, intArrayOf(0x160B071A, 0x8A1B0D30.toInt(), 0xDD0C0719.toInt(), 0xFD08050F.toInt()))
         }, FrameLayout.LayoutParams(-1, -1))
         val content = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.VERTICAL
@@ -972,6 +975,17 @@ class HomeActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL; layoutDirection = uiDirection
             setPadding(dp(16), 0, dp(12), 0)
         }
+        header.addView(TextView(this).apply {
+            text = "☰"
+            textSize = 25f
+            gravity = Gravity.CENTER
+            contentDescription = "فتح قائمة BLOFY السينمائية"
+            setTextColor(PURPLE_BRIGHT)
+            isClickable = true
+            isFocusable = true
+            background = CinemaStyle.surface(this@HomeActivity, radiusDp = 14)
+            setOnClickListener { showCinematicMenu() }
+        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(5) })
         header.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = "BLOFY PLAYER"
@@ -1018,6 +1032,77 @@ class HomeActivity : AppCompatActivity() {
             collectionIntent(SmartCollectionsActivity.MODE_TOP_RATED)), LinearLayout.LayoutParams(0, -1, 1f))
         root.addView(bottom, LinearLayout.LayoutParams(-1, dp(60)))
         return root
+    }
+
+    /** Cinematic shortcuts only. Uses the Google Play app's existing screens and sessions. */
+    private fun showCinematicMenu() {
+        val dialog = Dialog(this)
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(0xE8090611.toInt())
+            setOnClickListener { dialog.dismiss() }
+        }
+        val drawer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = uiDirection
+            setPadding(dp(22), dp(25), dp(22), dp(25))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(0xFF29183D.toInt(), 0xFF0A0713.toInt())
+            ).apply {
+                cornerRadius = dp(25).toFloat()
+                setStroke(dp(1), 0x947E55A9.toInt())
+            }
+            isClickable = true
+        }
+        drawer.addView(TextView(this).apply {
+            text = "✦ BLOFY CINEMA"
+            textSize = 23f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(PURPLE_BRIGHT)
+            gravity = Gravity.START
+        }, LinearLayout.LayoutParams(-1, dp(62)))
+        val destinations = listOf(
+            "⌂  الرئيسية" to null,
+            "▣  الأفلام" to contentIntent("movie"),
+            "▤  المسلسلات" to contentIntent("series"),
+            "◉  البث المباشر" to contentIntent("live"),
+            "♡  المفضلة" to Intent(this, LibraryActivity::class.java)
+                .putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES),
+            "⌕  البحث" to Intent(this, SearchActivity::class.java),
+            "✦  اكتشف المزيد" to collectionIntent(SmartCollectionsActivity.MODE_TOP_RATED),
+            "⚙  الإعدادات" to Intent(this, SettingsActivity::class.java)
+        )
+        destinations.forEachIndexed { index, (label, destination) ->
+            drawer.addView(TextView(this).apply {
+                text = label
+                textSize = 19f
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setTextColor(if (index == 0) PURPLE_BRIGHT else TEXT_PRIMARY)
+                setPadding(dp(10), 0, dp(10), 0)
+                isFocusable = true
+                isClickable = true
+                contentDescription = label
+                setOnClickListener {
+                    dialog.dismiss()
+                    destination?.let(::startActivity)
+                }
+            }, LinearLayout.LayoutParams(-1, dp(54)))
+        }
+        val scroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(drawer, FrameLayout.LayoutParams(-1, -2))
+        }
+        overlay.addView(scroll, FrameLayout.LayoutParams(
+            minOf(dp(330), resources.displayMetrics.widthPixels - dp(24)),
+            minOf(dp(560), resources.displayMetrics.heightPixels - dp(42)),
+            if (uiDirection == View.LAYOUT_DIRECTION_RTL) Gravity.TOP or Gravity.RIGHT
+            else Gravity.TOP or Gravity.LEFT
+        ).apply { topMargin = dp(18) })
+        dialog.setContentView(overlay)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.show()
+        dialog.window?.setLayout(-1, -1)
     }
 
     private fun touchNav(key: String, icon: Int, label: String, intent: Intent?, iconOnly: Boolean = false) = LinearLayout(this).apply {
@@ -1077,10 +1162,10 @@ class HomeActivity : AppCompatActivity() {
             setStroke(dp(1), BlofyTvDesign.FocusStroke)
         }
     } else roundedColor(Color.TRANSPARENT, 10)
-    private fun heroSurface() = CinemaStyle.surface(this, radiusDp = 16)
+    private fun heroSurface() = CinemaStyle.surface(this, radiusDp = 24)
     private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF4B276A.toInt(), 0xFF20142E.toInt(), 0xFF121019.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF7F56A0.toInt()) }
     private fun featuredSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 18)
-    private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 8)
+    private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
     private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
     private fun compactTile(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 16)
     private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF2B2137.toInt(), 0xFF18131F.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF43344F.toInt()) }
