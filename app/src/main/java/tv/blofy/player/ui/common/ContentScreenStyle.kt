@@ -87,8 +87,8 @@ object ContentScreenStyle {
         )
     ).apply {
         val d = context.resources.displayMetrics.density
-        cornerRadius = 22f * d
-        setStroke((1f * d).toInt().coerceAtLeast(1), 0x42D8BCFF)
+        cornerRadius = 27f * d
+        setStroke((1f * d).toInt().coerceAtLeast(1), 0x548E64BA.toInt())
     }
 
     fun chip(context: Context) = GradientDrawable(
