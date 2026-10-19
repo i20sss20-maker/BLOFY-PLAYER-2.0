@@ -19,17 +19,26 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
     val root = FrameLayout(activity).apply { setBackgroundColor(CinemaStyle.Background) }
     val backdrop = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
-        alpha = .55f
+        alpha = .84f
     }
     val poster = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
-        setBackgroundColor(CinemaStyle.Surface)
+        background = CinemaStyle.surface(activity, radiusDp = 16)
+        clipToOutline = true
     }
     val info = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
         gravity = (if (isTv) Gravity.CENTER_VERTICAL else Gravity.TOP) or Gravity.END
         layoutDirection = activity.resources.configuration.layoutDirection
-        setPadding(dp(if (isTv) 12 else 0), dp(if (isTv) 28 else 8), dp(if (isTv) 12 else 0), dp(if (isTv) 28 else 24))
+        setPadding(dp(if (isTv) 22 else 15), dp(if (isTv) 28 else 18),
+            dp(if (isTv) 22 else 15), dp(if (isTv) 28 else 22))
+        background = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(0xC02A193C.toInt(), 0x9F130A20.toInt(), 0xA5090610.toInt())
+        ).apply {
+            cornerRadius = dp(24).toFloat()
+            setStroke(dp(1), 0x667D5A9A)
+        }
     }
     private val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
     private val profileActions = LinearLayout(activity).apply { tag = "blofy_details_profile_actions" }
@@ -39,7 +48,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         root.addView(View(activity).apply {
             background = GradientDrawable(
                 if (stacked) GradientDrawable.Orientation.TOP_BOTTOM else GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0xC0211237.toInt(), 0xE8211237.toInt(), 0xFA170D29.toInt())
+                intArrayOf(0x65190B2A, 0xBD10081E.toInt(), 0xF6080510.toInt())
             )
         }, FrameLayout.LayoutParams(-1, -1))
         val body = LinearLayout(activity).apply {
@@ -51,8 +60,8 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         val posterHeight = if (isTv) (activity.resources.configuration.screenHeightDp * .72f).toInt().coerceIn(260, 500) else if (stacked) 188 else 210
         val posterWidth = if (isTv) posterHeight * 2 / 3 else if (stacked) 128 else 142
         val card = FrameLayout(activity).apply {
-            setPadding(dp(6), dp(6), dp(6), dp(6))
-            background = CinemaStyle.surface(activity, radiusDp = 12)
+            setPadding(dp(3), dp(3), dp(3), dp(3))
+            background = CinemaStyle.surface(activity, radiusDp = 19)
             addView(poster, FrameLayout.LayoutParams(-1, -1))
         }
         body.addView(card, LinearLayout.LayoutParams(dp(posterWidth), dp(posterHeight)).apply {
