@@ -26,7 +26,7 @@ object CinemaStyle {
         when {
             focused && filledFocus -> intArrayOf(0xFFE6D2FF.toInt(), Accent, 0xFFB882F0.toInt())
             focused -> intArrayOf(0xFF63408A.toInt(), 0xFF3D2756.toInt(), Surface)
-            else -> intArrayOf(Surface, 0xFF180F23.toInt())
+            else -> intArrayOf(0xFF2A183A.toInt(), 0xFF0D0819.toInt())
         }
     ).apply {
         val density = context.resources.displayMetrics.density
@@ -46,7 +46,7 @@ object CinemaStyle {
             else -> intArrayOf(Surface, 0xFF1A1026.toInt())
         }
     ).apply {
-        cornerRadius = 6 * context.resources.displayMetrics.density
+        cornerRadius = 14 * context.resources.displayMetrics.density
         setStroke(
             ((if (focused) 2 else 1) * context.resources.displayMetrics.density).toInt(),
             if (focused) 0xFFF0E1FF.toInt() else 0x52FFFFFF
