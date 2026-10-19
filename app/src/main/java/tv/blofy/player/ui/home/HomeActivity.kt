@@ -1032,9 +1032,14 @@ class HomeActivity : AppCompatActivity() {
                 }
             }, LinearLayout.LayoutParams(-1, dp(54)))
         }
-        overlay.addView(drawer, FrameLayout.LayoutParams(
+        val menuScroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(drawer, FrameLayout.LayoutParams(-1, -2))
+        }
+        overlay.addView(menuScroll, FrameLayout.LayoutParams(
             minOf(dp(330), resources.displayMetrics.widthPixels - dp(24)),
-            -2,
+            minOf(dp(560), resources.displayMetrics.heightPixels - dp(42)),
             if (uiDirection == View.LAYOUT_DIRECTION_RTL) Gravity.TOP or Gravity.RIGHT
             else Gravity.TOP or Gravity.LEFT
         ).apply { topMargin = dp(18) })
