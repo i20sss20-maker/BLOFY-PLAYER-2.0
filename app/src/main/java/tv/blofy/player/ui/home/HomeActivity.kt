@@ -100,13 +100,8 @@ class HomeActivity : AppCompatActivity() {
         middle.addView(buildLastChannelCard(), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.85f))
         main.addView(middle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.72f))
 
-        main.addView(TextView(this).apply {
-            text = "اختيارات سينمائية من مكتبتك"
-            textSize = 18f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)))
+        main.addView(tvCinema.railHeader(), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(38)))
 
         main.addView(tvCinema.rail(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.62f))
         tvCinema.load()
