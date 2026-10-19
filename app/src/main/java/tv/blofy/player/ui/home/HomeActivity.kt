@@ -255,6 +255,7 @@ class HomeActivity : AppCompatActivity() {
         val topTen: List<StreamEntity>,
         val arabic: List<StreamEntity>,
         val ultraHd: List<StreamEntity>,
+        val cinematicCollections: List<CinematicCatalogCollections.Collection>,
         val featured: StreamEntity?
     )
 
@@ -284,9 +285,11 @@ class HomeActivity : AppCompatActivity() {
                     watchStates = history.watchStates,
                     latest = latest.take(22),
                     topRated = rated,
-                    topTen = rated.take(10).ifEmpty { latest.take(10) },
+                    // Never label unrated titles as a ranked Top 10.
+                    topTen = rated.take(10),
                     arabic = arabic,
                     ultraHd = ultra,
+                    cinematicCollections = CinematicCatalogCollections.from(all),
                     featured = rated.firstOrNull { !it.backdrop.isNullOrBlank() }
                         ?: latest.firstOrNull { !it.backdrop.isNullOrBlank() }
                 )
@@ -404,12 +407,27 @@ class HomeActivity : AppCompatActivity() {
         val row = heroDots ?: return
         row.removeAllViews()
         heroCandidates.forEachIndexed { index, _ ->
-            row.addView(View(this).apply {
-                background = GradientDrawable().apply {
-                    cornerRadius = dp(2).toFloat()
-                    setColor(if (index == heroIndex) PURPLE_BRIGHT else 0x667B6A89)
+            val control = FrameLayout(this).apply {
+                isClickable = true
+                isFocusable = false
+                contentDescription = "العمل المميز ${index + 1} من ${heroCandidates.size}"
+                setOnClickListener {
+                    if (heroIndex == index) return@setOnClickListener
+                    heroIndex = index
+                    heroItem = heroCandidates[index]
+                    renderHero(heroCandidates[index])
+                    renderHeroDots()
+                    refreshScheduler.restartHero()
                 }
-            }, LinearLayout.LayoutParams(if (index == heroIndex) dp(14) else dp(4), dp(3)).apply { marginStart = dp(5) })
+            }
+            control.addView(View(this).apply {
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(4).toFloat()
+                    setColor(if (index == heroIndex) PURPLE_BRIGHT else 0x779C79B7)
+                }
+            }, FrameLayout.LayoutParams(
+                if (index == heroIndex) dp(19) else dp(6), dp(5), Gravity.CENTER))
+            row.addView(control, LinearLayout.LayoutParams(dp(if (index == heroIndex) 31 else 23), dp(32)))
         }
     }
 
@@ -447,6 +465,10 @@ class HomeActivity : AppCompatActivity() {
         }
         addShelf(feed, getString(R.string.home_recently_added), getString(R.string.home_recently_added_subtitle), "latest", data.providerId, data.latest)
         addTopTenShelf(feed, data.providerId, data.topTen)
+        data.cinematicCollections.forEachIndexed { index, collection ->
+            addShelf(feed, collection.title, "من الأعمال الموجودة في مكتبتك", "cinema_$index",
+                data.providerId, collection.entries)
+        }
         if (data.topRated.isNotEmpty()) addShelf(feed, getString(R.string.home_top_rated), getString(R.string.home_top_rated_subtitle), "top", data.providerId, data.topRated)
         data.featured?.let { addFeaturedBanner(feed, data.providerId, it) }
         addPromotionBanner(feed)
@@ -548,8 +570,23 @@ class HomeActivity : AppCompatActivity() {
         orientation = LinearLayout.VERTICAL
         layoutDirection = uiDirection
         gravity = Gravity.START
-        setPadding(0, dp(12), dp(4), dp(6))
-        addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
+        setPadding(0, dp(15), dp(4), dp(8))
+        addView(TextView(this@HomeActivity).apply {
+            text = title
+            textSize = if (layoutSpec.compact) 21f else 19f
+            typeface = BlofyTvDesign.HeadingTypeface
+            setTextColor(TEXT_PRIMARY)
+            gravity = Gravity.START
+        })
+        if (subtitle.isNotBlank()) addView(TextView(this@HomeActivity).apply {
+            text = subtitle
+            textSize = 11.5f
+            setTextColor(TEXT_MUTED)
+            gravity = Gravity.START
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(0, dp(2), 0, 0)
+        })
         contentDescription = listOf(title, subtitle).filter(String::isNotBlank).joinToString(". ")
     }
 
@@ -931,7 +968,7 @@ class HomeActivity : AppCompatActivity() {
         heroDots = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
-        }.also { addView(it, FrameLayout.LayoutParams(-2, dp(12), Gravity.BOTTOM or Gravity.END).apply { marginEnd = dp(20); bottomMargin = dp(12) }) }
+        }.also { addView(it, FrameLayout.LayoutParams(-2, dp(32), Gravity.BOTTOM or Gravity.END).apply { marginEnd = dp(12); bottomMargin = dp(5) }) }
         val row = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection; gravity = Gravity.START
             clipChildren = false
