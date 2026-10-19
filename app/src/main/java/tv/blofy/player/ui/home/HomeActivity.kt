@@ -63,6 +63,7 @@ import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.mobile.MobileContentActivity
 import tv.blofy.player.ui.search.SearchActivity
+import tv.blofy.player.ui.profile.ProfilesActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -1033,8 +1034,8 @@ class HomeActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(touchNav("mobile_search", R.drawable.cinema_search, getString(R.string.home_search),
             Intent(this, SearchActivity::class.java), iconOnly = true), LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(touchNav("mobile_settings", R.drawable.cinema_settings, getString(R.string.home_settings),
-            Intent(this, SettingsActivity::class.java), iconOnly = true), LinearLayout.LayoutParams(dp(48), dp(48)))
+        header.addView(touchNav("mobile_profiles", R.drawable.cinema_account, "الملفات الشخصية",
+            Intent(this, ProfilesActivity::class.java), iconOnly = true), LinearLayout.LayoutParams(dp(48), dp(48)))
         root.addView(header, LinearLayout.LayoutParams(-1, dp(52)))
         val tabs = LinearLayout(this).apply {
             layoutDirection = uiDirection; gravity = Gravity.CENTER_VERTICAL
@@ -1107,6 +1108,7 @@ class HomeActivity : AppCompatActivity() {
                 .putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES),
             "⌕  البحث" to Intent(this, SearchActivity::class.java),
             "✦  اكتشف المزيد" to collectionIntent(SmartCollectionsActivity.MODE_TOP_RATED),
+            "♙  الملفات الشخصية" to Intent(this, ProfilesActivity::class.java),
             "⚙  الإعدادات" to Intent(this, SettingsActivity::class.java)
         )
         destinations.forEachIndexed { index, (label, destination) ->
