@@ -272,11 +272,14 @@ class HomeActivity : AppCompatActivity() {
                 val all = snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }
                     ?: dao.latestHomeStreams(provider.id, 320)
                 val history = HomeWatchHistory.load(dao, provider.id)
-                val rated = all.sortedByDescending { ratingValue(it.rating) }
+                val rated = all.filter { !it.locked && it.kind in setOf("movie", "series") }
+                    .sortedByDescending { ratingValue(it.rating) }
                     .filter { ratingValue(it.rating) > 0.0 }.take(24)
                 val arabic = all.filter { hasArabic(it.name) || hasArabic(it.genre.orEmpty()) || it.genre.orEmpty().contains("arab", true) }.take(20)
                 val ultra = all.filter { qualityBadges(it).any { badge -> badge in setOf("4K", "HDR") } }.take(20)
-                val heroes = latest.filter { !it.backdrop.isNullOrBlank() }.take(6).ifEmpty { latest.take(6) }
+                val safeHeroes = latest.filter { !it.locked && it.kind in setOf("movie", "series") }
+                val heroes = safeHeroes.filter { !it.backdrop.isNullOrBlank() }
+                    .take(6).ifEmpty { safeHeroes.take(6) }
                 HomeData(
                     providerId = provider.id,
                     providerName = provider.name,
@@ -292,7 +295,7 @@ class HomeActivity : AppCompatActivity() {
                     ultraHd = ultra,
                     cinematicCollections = CinematicCatalogCollections.from(all),
                     featured = rated.firstOrNull { !it.backdrop.isNullOrBlank() }
-                        ?: latest.firstOrNull { !it.backdrop.isNullOrBlank() }
+                        ?: safeHeroes.firstOrNull { !it.backdrop.isNullOrBlank() }
                 )
             }
 
