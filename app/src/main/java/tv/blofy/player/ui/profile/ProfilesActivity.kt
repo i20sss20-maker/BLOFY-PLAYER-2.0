@@ -113,6 +113,10 @@ class ProfilesActivity : AppCompatActivity() {
                 val labels = LinearLayout(this@ProfilesActivity).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER_VERTICAL
+                    // A tap on the profile name must use exactly the same guarded path
+                    // as tapping the whole card. Keep the nested title accessible.
+                    isClickable = true
+                    setOnClickListener { selectProfile(profile) }
                 }
                 labels.addView(TextView(this@ProfilesActivity).apply {
                     text = profile.name + if (profile.pinHash != null) "  🔒" else ""
