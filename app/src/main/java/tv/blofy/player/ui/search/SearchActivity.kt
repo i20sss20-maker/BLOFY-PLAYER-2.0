@@ -16,6 +16,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.GridLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -64,14 +65,19 @@ class SearchActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         activeKind = initialKind
+        val cinemaPhone = resources.configuration.screenWidthDp < 600
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
-            setPadding(dp(44), dp(30), dp(44), dp(32))
-            background = AppCompatResources.getDrawable(this@SearchActivity, R.drawable.blofy_home_background)
+            setPadding(dp(if (cinemaPhone) 18 else 44), dp(if (cinemaPhone) 22 else 30),
+                dp(if (cinemaPhone) 18 else 44), dp(if (cinemaPhone) 16 else 32))
+            background = if (cinemaPhone) GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF1E1030.toInt(), 0xFF090611.toInt(), 0xFF10091C.toInt())
+            ) else AppCompatResources.getDrawable(this@SearchActivity, R.drawable.blofy_home_background)
         }
         root.addView(TextView(this).apply {
-            text = getString(R.string.ui_search_brand)
+            text = "✦ BLOFY CINEMA"
             textSize = 11.5f
             letterSpacing = .13f
             typeface = Typeface.DEFAULT_BOLD
@@ -80,7 +86,7 @@ class SearchActivity : AppCompatActivity() {
         })
         root.addView(TextView(this).apply {
             text = getString(R.string.search_title)
-            textSize = 26f
+            textSize = if (cinemaPhone) 28f else 26f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.START
@@ -342,12 +348,69 @@ class SearchActivity : AppCompatActivity() {
                 setPadding(dp(8), dp(6), dp(8), dp(10))
             })
         } else {
-            items.forEachIndexed { index, stream ->
-                val card = resultCard(stream) { guardedOpen(providerId, liveFormat, stream) }
-                if (index == 0) onFirstFocusable(card)
-                addView(card, LinearLayout.LayoutParams(-1, dp(84)).apply { bottomMargin = dp(7) })
+            val phoneCinema = resources.configuration.screenWidthDp < 600 &&
+                kind in setOf(KIND_MOVIE, KIND_SERIES)
+            if (phoneCinema) {
+                val cols = 3
+                val width = ((resources.configuration.screenWidthDp - 80) / cols).coerceIn(70, 150)
+                val grid = GridLayout(this@SearchActivity).apply {
+                    columnCount = cols
+                    layoutDirection = resources.configuration.layoutDirection
+                    useDefaultMargins = false
+                }
+                items.forEachIndexed { index, stream ->
+                    val card = cinematicPosterCard(stream, width) {
+                        guardedOpen(providerId, liveFormat, stream)
+                    }
+                    if (index == 0) onFirstFocusable(card)
+                    grid.addView(card, GridLayout.LayoutParams().apply {
+                        this.width = dp(width)
+                        this.height = dp(width * 3 / 2 + 48)
+                        setMargins(dp(3), dp(4), dp(3), dp(6))
+                    })
+                }
+                addView(grid)
+            } else {
+                items.forEachIndexed { index, stream ->
+                    val card = resultCard(stream) { guardedOpen(providerId, liveFormat, stream) }
+                    if (index == 0) onFirstFocusable(card)
+                    addView(card, LinearLayout.LayoutParams(-1, dp(84)).apply { bottomMargin = dp(7) })
+                }
             }
         }
+    }
+
+    /** Uses the same guardedOpen and real poster URLs as the original Play search screen. */
+    private fun cinematicPosterCard(stream: StreamEntity, width: Int, open: () -> Unit): LinearLayout {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = CinemaStyle.surface(this@SearchActivity, radiusDp = 14)
+            clipToOutline = true
+            isClickable = true
+            isFocusable = true
+            contentDescription = ContentPresentation.of(stream).title
+            setOnClickListener { open() }
+            setOnFocusChangeListener { view, focused ->
+                view.background = CinemaStyle.surface(this@SearchActivity, focused, radiusDp = 14)
+            }
+        }
+        val art = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(CinemaStyle.Surface)
+        }
+        card.addView(art, LinearLayout.LayoutParams(-1, dp(width * 3 / 2)))
+        ArtworkLoader.load(art, listOf(stream.icon, stream.backdrop))
+        card.addView(TextView(this).apply {
+            text = (if (stream.locked) "🔒 " else "") + ContentPresentation.of(stream).title
+            textSize = 12f
+            typeface = BlofyTvDesign.MediumTypeface
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(4), dp(3), dp(4), dp(3))
+        }, LinearLayout.LayoutParams(-1, dp(45)))
+        return card
     }
 
     private fun resultCard(stream: StreamEntity, open: () -> Unit): LinearLayout {
