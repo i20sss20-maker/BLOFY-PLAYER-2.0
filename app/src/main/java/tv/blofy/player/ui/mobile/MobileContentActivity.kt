@@ -31,6 +31,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catchup.CatchupActivity
 import tv.blofy.player.ui.catalog.PosterStreamAdapter
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -53,7 +54,7 @@ class MobileContentActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(18), dp(18), dp(18))
-            background = AppCompatResources.getDrawable(this@MobileContentActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@MobileContentActivity)
         }
         root.addView(TextView(this).apply {
             text = "BLOFY"
@@ -75,7 +76,7 @@ class MobileContentActivity : AppCompatActivity() {
             gravity = Gravity.START
             setPadding(dp(4), dp(3), 0, dp(12))
         })
-        categorySpinner = Spinner(this).apply { background = fieldBackground() }
+        categorySpinner = Spinner(this).apply { background = BlofyUiKit.panel(this@MobileContentActivity, radiusDp = 10) }
         categorySpinner.contentDescription = getString(R.string.categories)
         root.addView(categorySpinner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)))
 
@@ -199,12 +200,8 @@ class MobileContentActivity : AppCompatActivity() {
         })
     }
 
-    private fun fieldBackground() = GradientDrawable().apply {
-        cornerRadius = dp(8).toFloat(); setColor(CinemaStyle.Surface)
-    }
-    private fun itemBackground() = GradientDrawable().apply {
-        cornerRadius = dp(8).toFloat(); setColor(CinemaStyle.Surface)
-    }
+    private fun fieldBackground() = BlofyUiKit.panel(this, radiusDp = 10)
+    private fun itemBackground() = BlofyUiKit.panel(this, radiusDp = 10)
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() { streamJob?.cancel(); super.onDestroy() }

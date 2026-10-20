@@ -25,6 +25,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.ui.common.TvUiTuning
@@ -104,7 +105,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             setPadding(dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 14), dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 18))
-            background = AppCompatResources.getDrawable(this@PosterCatalogActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@PosterCatalogActivity)
             clipChildren = false
             clipToPadding = false
         }
@@ -121,7 +122,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.MediumTypeface
             setTextColor(BlofyTvDesign.TextSecondary)
             setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20), 0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20), 0)
-            background = CinemaStyle.surface(this@PosterCatalogActivity)
+            background = BlofyUiKit.panel(this@PosterCatalogActivity)
             isFocusable = true
             isFocusableInTouchMode = deviceKind == DeviceClass.Kind.TV
             isClickable = true
@@ -136,7 +137,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 } else false
             }
             setOnFocusChangeListener { view, focused ->
-                background = CinemaStyle.surface(this@PosterCatalogActivity, focused, filledFocus = true)
+                background = BlofyUiKit.button(this@PosterCatalogActivity, primary = true, focused = focused)
                 setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
                 view.animate().cancel()
                 val scale = if (focused) TvUiTuning.focusScale(this@PosterCatalogActivity, 1.012f) else 1f

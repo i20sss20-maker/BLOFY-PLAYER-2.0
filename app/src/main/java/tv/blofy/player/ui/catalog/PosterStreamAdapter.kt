@@ -17,6 +17,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.core.device.DeviceClass
 
 class PosterStreamAdapter(
@@ -59,7 +60,7 @@ class PosterStreamAdapter(
         }
         val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(Color.rgb(18, 16, 21))
+            background = BlofyUiKit.posterPlaceholder(parent.context)
             clipToOutline = true
         }
         frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -185,11 +186,8 @@ class PosterStreamAdapter(
 
     private fun card(focused: Boolean, radius: Float, stroke: Int) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (focused) {
-            intArrayOf(BlofyTvDesign.SurfaceFocused, BlofyTvDesign.SurfaceRaised, CinemaStyle.Surface)
-        } else {
-            intArrayOf(CinemaStyle.Surface, 0xFF111016.toInt())
-        }
+        if (focused) intArrayOf(BlofyUiKit.SurfaceRaised, BlofyUiKit.PurpleDeep, BlofyUiKit.Surface)
+        else intArrayOf(BlofyUiKit.Surface, BlofyUiKit.BackgroundRaised)
     ).apply {
         cornerRadius = radius
         setStroke(stroke * if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0x45FFFFFF)

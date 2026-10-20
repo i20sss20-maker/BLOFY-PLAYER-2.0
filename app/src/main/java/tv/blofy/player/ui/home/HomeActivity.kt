@@ -2,6 +2,7 @@ package tv.blofy.player.ui.home
 
 import tv.blofy.player.ui.common.ContentPresentation
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -131,7 +132,7 @@ class HomeActivity : AppCompatActivity() {
             tag = "blofy_home_opening"
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@HomeActivity)
             addView(ProgressBar(this@HomeActivity))
             addView(TextView(this@HomeActivity).apply {
                 text = getString(R.string.home_preparing_library)
@@ -722,7 +723,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun buildTvHome(): FrameLayout {
         val root = FrameLayout(this).apply {
-            background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@HomeActivity)
             layoutDirection = uiDirection
         }
         val shell = LinearLayout(this).apply {
@@ -1066,8 +1067,8 @@ class HomeActivity : AppCompatActivity() {
     private fun childrenTextColor(layout: LinearLayout, focused: Boolean) { for (i in 0 until layout.childCount) (layout.getChildAt(i) as? TextView)?.setTextColor(if (focused) Color.WHITE else if (i == layout.childCount - 1) PURPLE_BRIGHT else TEXT_PRIMARY) }
 
     private fun roundedColor(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = dp(radius).toFloat(); setColor(color); stroke?.let { setStroke(dp(1), it) } }
-    private fun surface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
-    private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8D66BC.toInt(), 0xFF5B426F.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFD7C6EA.toInt()) }
+    private fun surface(focused: Boolean) = BlofyUiKit.panel(this, focused, radiusDp = 14)
+    private fun selectedSurface() = BlofyUiKit.button(this, primary = true, focused = true).apply { cornerRadius = dp(15).toFloat() }
     private fun transparentSurface(focused: Boolean) = if (focused) {
         GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
@@ -1077,13 +1078,13 @@ class HomeActivity : AppCompatActivity() {
             setStroke(dp(1), BlofyTvDesign.FocusStroke)
         }
     } else roundedColor(Color.TRANSPARENT, 10)
-    private fun heroSurface() = CinemaStyle.surface(this, radiusDp = 16)
-    private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF342B3D.toInt(), 0xFF211C26.toInt(), 0xFF121015.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF665674.toInt()) }
-    private fun featuredSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 18)
-    private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 8)
-    private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
-    private fun compactTile(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 16)
-    private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF262129.toInt(), 0xFF171419.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF3C3541.toInt()) }
+    private fun heroSurface() = BlofyUiKit.panel(this, radiusDp = 16)
+    private fun promoSurface() = BlofyUiKit.panel(this, radiusDp = 20)
+    private fun featuredSurface(focused: Boolean) = BlofyUiKit.panel(this, focused, radiusDp = 18)
+    private fun posterSurface(focused: Boolean) = BlofyUiKit.panel(this, focused, radiusDp = 8)
+    private fun storySurface(focused: Boolean) = BlofyUiKit.panel(this, focused, radiusDp = 14)
+    private fun compactTile(focused: Boolean) = BlofyUiKit.panel(this, focused, radiusDp = 16)
+    private fun skeletonSurface() = BlofyUiKit.posterPlaceholder(this).apply { cornerRadius = dp(16).toFloat() }
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START }
     private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
