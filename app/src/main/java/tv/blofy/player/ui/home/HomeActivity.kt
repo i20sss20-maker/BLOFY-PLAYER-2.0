@@ -6,6 +6,7 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import android.content.Intent
 import android.content.res.ColorStateList
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.BlofyPreviewStyle
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -131,7 +132,7 @@ class HomeActivity : AppCompatActivity() {
             tag = "blofy_home_opening"
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background)
+            background = BlofyPreviewStyle.screen(this@HomeActivity)
             addView(ProgressBar(this@HomeActivity))
             addView(TextView(this@HomeActivity).apply {
                 text = getString(R.string.home_preparing_library)
@@ -722,13 +723,13 @@ class HomeActivity : AppCompatActivity() {
 
     private fun buildTvHome(): FrameLayout {
         val root = FrameLayout(this).apply {
-            background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background)
+            background = BlofyPreviewStyle.screen(this@HomeActivity)
             layoutDirection = uiDirection
         }
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = uiDirection
-            setPadding(dp(layoutSpec.gutter), dp(14), dp(layoutSpec.gutter), dp(14))
+            setPadding(dp(layoutSpec.gutter), dp(20), dp(layoutSpec.gutter), dp(20))
         }
         root.addView(shell, FrameLayout.LayoutParams(-1, -1))
         // The rail fits all eight rows at 540dp and keeps a scroll fallback for shorter TVs.
@@ -739,10 +740,7 @@ class HomeActivity : AppCompatActivity() {
             isFocusableInTouchMode = false
             descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = GradientDrawable().apply {
-                setColor(CinemaStyle.Surface); cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), 0x66FFFFFF)
-            }
+            background = BlofyPreviewStyle.panel(this@HomeActivity, radiusDp = 18)
             addView(buildSidebar(), FrameLayout.LayoutParams(-1, -2))
         }
         shell.addView(rail, LinearLayout.LayoutParams(dp(layoutSpec.railWidth), -1).apply { marginEnd = dp(12) })
@@ -783,7 +781,7 @@ class HomeActivity : AppCompatActivity() {
             text = worldClockText()
         }
         header.addView(clockLabel, LinearLayout.LayoutParams(dp(if (layoutSpec.width < 900) 188 else 330), -2).apply { marginStart = dp(10) })
-        main.addView(header, LinearLayout.LayoutParams(-1, dp(64)))
+        main.addView(header, LinearLayout.LayoutParams(-1, dp(72)))
         val scroll = ScrollView(this).apply {
             tag = "blofy_home_feed_scroll"
             isVerticalScrollBarEnabled = false
@@ -945,7 +943,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun actionHeroButton(label: String, key: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
         id = View.generateViewId(); text = label
-        CinemaStyle.styleButton(this, primary) { focused ->
+        BlofyPreviewStyle.styleButton(this, primary) { focused ->
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
         }
         setOnClickListener { action() }; registerAction(key, this)
@@ -1066,24 +1064,16 @@ class HomeActivity : AppCompatActivity() {
     private fun childrenTextColor(layout: LinearLayout, focused: Boolean) { for (i in 0 until layout.childCount) (layout.getChildAt(i) as? TextView)?.setTextColor(if (focused) Color.WHITE else if (i == layout.childCount - 1) PURPLE_BRIGHT else TEXT_PRIMARY) }
 
     private fun roundedColor(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = dp(radius).toFloat(); setColor(color); stroke?.let { setStroke(dp(1), it) } }
-    private fun surface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
-    private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8D66BC.toInt(), 0xFF5B426F.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFD7C6EA.toInt()) }
-    private fun transparentSurface(focused: Boolean) = if (focused) {
-        GradientDrawable(
-            GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(0xFF40344B.toInt(), 0xFF29222F.toInt(), 0xFF17141A.toInt())
-        ).apply {
-            cornerRadius = dp(10).toFloat()
-            setStroke(dp(1), BlofyTvDesign.FocusStroke)
-        }
-    } else roundedColor(Color.TRANSPARENT, 10)
-    private fun heroSurface() = CinemaStyle.surface(this, radiusDp = 16)
-    private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF342B3D.toInt(), 0xFF211C26.toInt(), 0xFF121015.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF665674.toInt()) }
-    private fun featuredSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 18)
-    private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 8)
-    private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
-    private fun compactTile(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 16)
-    private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF262129.toInt(), 0xFF171419.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF3C3541.toInt()) }
+    private fun surface(focused: Boolean) = BlofyPreviewStyle.panel(this, focused, 14)
+    private fun selectedSurface() = BlofyPreviewStyle.selectedNav(this)
+    private fun transparentSurface(focused: Boolean) = if (focused) BlofyPreviewStyle.panel(this, true, 10) else roundedColor(Color.TRANSPARENT, 10)
+    private fun heroSurface() = BlofyPreviewStyle.panel(this, radiusDp = 16)
+    private fun promoSurface() = BlofyPreviewStyle.panel(this, radiusDp = 20)
+    private fun featuredSurface(focused: Boolean) = BlofyPreviewStyle.panel(this, focused, 18)
+    private fun posterSurface(focused: Boolean) = BlofyPreviewStyle.panel(this, focused, 8)
+    private fun storySurface(focused: Boolean) = BlofyPreviewStyle.panel(this, focused, 14)
+    private fun compactTile(focused: Boolean) = BlofyPreviewStyle.panel(this, focused, 16)
+    private fun skeletonSurface() = BlofyPreviewStyle.panel(this, false, 16)
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START }
     private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
