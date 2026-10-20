@@ -71,7 +71,7 @@ class HomeActivity : AppCompatActivity() {
         shell.addView(buildRightSidebar(), LinearLayout.LayoutParams(dp(190), LinearLayout.LayoutParams.MATCH_PARENT))
 
         main.addView(TextView(this).apply {
-            text = "اكتشف الآن"
+            text = "سينما BLOFY"
             textSize = 25f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -93,7 +93,7 @@ class HomeActivity : AppCompatActivity() {
         main.addView(middle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.72f))
 
         main.addView(TextView(this).apply {
-            text = "قصص مختارة"
+            text = "اختيارات سينمائية"
             textSize = 18f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -196,7 +196,7 @@ class HomeActivity : AppCompatActivity() {
             gravity = Gravity.RIGHT
         })
         addView(TextView(this@HomeActivity).apply {
-            text = "كل محتواك في مكان واحد"
+            text = "تجربة مشاهدة بمستوى آخر"
             textSize = 36f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
@@ -204,7 +204,7 @@ class HomeActivity : AppCompatActivity() {
             setPadding(0, dp(6), 0, 0)
         })
         addView(TextView(this@HomeActivity).apply {
-            text = "البث المباشر والأفلام والمسلسلات والمفضلة في واجهة واحدة سريعة وواضحة."
+            text = "البث المباشر والأفلام والمسلسلات والمفضلة، بتجربة هادئة وفاخرة على كل شاشة."
             textSize = 17f
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.RIGHT
@@ -289,8 +289,8 @@ class HomeActivity : AppCompatActivity() {
         root.addView(title("BLOFY PLAYER", if (phone) 26f else 32f))
         root.addView(subtitle("كل محتواك. أسرع. أبسط.", if (phone) dp(20) else dp(30)))
         val primary = actionRow(phone)
-        addCompactAction(primary, "live", "البث المباشر", contentIntent("live"))
-        addCompactAction(primary, "movies", "الأفلام", contentIntent("movie"))
+        addCompactAction(primary, "live", "شاهد مباشرة", contentIntent("live"))
+        addCompactAction(primary, "movies", "السينما", contentIntent("movie"))
         addCompactAction(primary, "series", "المسلسلات", contentIntent("series"))
         addCompactAction(primary, "search", "البحث", Intent(this, SearchActivity::class.java))
         root.addView(primary)

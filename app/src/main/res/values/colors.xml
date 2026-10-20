@@ -1,16 +1,16 @@
 <resources>
-    <color name="blofy_black">#06040B</color>
-    <color name="blofy_background_raised">#0B0712</color>
-    <color name="blofy_surface">#140D1F</color>
-    <color name="blofy_surface_alt">#1E132E</color>
-    <color name="blofy_surface_focused">#432463</color>
-    <color name="blofy_purple">#8F44FF</color>
-    <color name="blofy_purple_bright">#BD77FF</color>
-    <color name="blofy_purple_soft">#E2CCFF</color>
-    <color name="blofy_pink_accent">#E75BCB</color>
-    <color name="blofy_mint">#6CEBCC</color>
+    <color name="blofy_black">#08080B</color>
+    <color name="blofy_background_raised">#100D10</color>
+    <color name="blofy_surface">#1A1518</color>
+    <color name="blofy_surface_alt">#241B1F</color>
+    <color name="blofy_surface_focused">#562B35</color>
+    <color name="blofy_purple">#B99152</color>
+    <color name="blofy_purple_bright">#F2D28B</color>
+    <color name="blofy_purple_soft">#FFE8B4</color>
+    <color name="blofy_pink_accent">#8D3046</color>
+    <color name="blofy_mint">#E3C07B</color>
     <color name="blofy_white">#FFFFFF</color>
-    <color name="blofy_text_secondary">#EAE3F1</color>
-    <color name="blofy_text_muted">#B0A6BE</color>
-    <color name="blofy_divider">#48335B</color>
+    <color name="blofy_text_secondary">#ECE5DC</color>
+    <color name="blofy_text_muted">#B8A99E</color>
+    <color name="blofy_divider">#533D3D</color>
 </resources>
