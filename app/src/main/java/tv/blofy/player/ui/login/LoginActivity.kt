@@ -758,8 +758,7 @@ class LoginActivity : AppCompatActivity() {
         typeface = BlofyTvDesign.BodyTypeface
         gravity = Gravity.CENTER
         setTextColor(BlofyTvDesign.TextPrimary)
-        if (deviceKind == DeviceClass.Kind.TV) BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.022f, false)
-        else background = BlofyTvDesign.secondaryButton(dp(16).toFloat(), false)
+        BlofyUiKit.styleButton(this, primary = false)
         setOnClickListener { action() }
     }
 
@@ -770,8 +769,7 @@ class LoginActivity : AppCompatActivity() {
         typeface = BlofyTvDesign.HeadingTypeface
         gravity = Gravity.CENTER
         setTextColor(Color.WHITE)
-        if (deviceKind == DeviceClass.Kind.TV) BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.025f, true)
-        else background = BlofyTvDesign.primaryButton(dp(16).toFloat(), false)
+        BlofyUiKit.styleButton(this, primary = true)
         setOnClickListener { action() }
     }
 
@@ -792,33 +790,13 @@ class LoginActivity : AppCompatActivity() {
         setPadding(0, dp(8), 0, dp(16))
     }
 
-    private fun premiumPanelBackground(accent: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (accent) intArrayOf(0xFF30283A.toInt(), 0xFF201B26.toInt(), 0xFF121015.toInt())
-        else intArrayOf(0xFF26212D.toInt(), 0xFF19161D.toInt(), 0xFF100E13.toInt())
-    ).apply {
-        cornerRadius = dp(26).toFloat()
-        setStroke(dp(1), if (accent) 0xFF806A97.toInt() else 0xFF514857.toInt())
-    }
+    private fun premiumPanelBackground(accent: Boolean) = BlofyUiKit.panel(this, accent, 26)
 
-    private fun premiumFieldBackground(accent: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        if (accent) intArrayOf(0xFF251F2B.toInt(), 0xFF19161D.toInt()) else intArrayOf(0xFF1D1921.toInt(), 0xFF141217.toInt())
-    ).apply {
-        cornerRadius = dp(14).toFloat()
-        setStroke(if (accent) dp(2) else dp(1), if (accent) 0xFF8569A5.toInt() else 0xFF4E4654.toInt())
-    }
+    private fun premiumFieldBackground(accent: Boolean) = BlofyUiKit.panel(this, accent, 14)
 
-    private fun fieldBackground() = GradientDrawable().apply {
-        cornerRadius = dp(14).toFloat()
-        setColor(0xFF19161D.toInt())
-        setStroke(dp(1), 0xFF4D4553.toInt())
-    }
+    private fun fieldBackground() = BlofyUiKit.panel(this, radiusDp = 14)
 
-    private fun statusBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF211C27.toInt(), 0xFF17141A.toInt())).apply {
-        cornerRadius = dp(14).toFloat()
-        setStroke(dp(1), 0xFF5E526B.toInt())
-    }
+    private fun statusBackground() = BlofyUiKit.panel(this, radiusDp = 14)
 
     private fun qrBackground() = GradientDrawable().apply {
         cornerRadius = dp(15).toFloat()
