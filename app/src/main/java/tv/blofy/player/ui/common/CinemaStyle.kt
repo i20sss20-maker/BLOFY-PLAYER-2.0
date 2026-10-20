@@ -14,11 +14,11 @@ import android.widget.LinearLayout
 
 /** Shared cinematic actions: compact visuals and a distinct remote focus state. */
 object CinemaStyle {
-    val Background = 0xFF07070A.toInt()
-    val Surface = 0xFF1A1620.toInt()
+    val Background = 0xFF07040E.toInt()
+    val Surface = 0xFF1D102A.toInt()
     val White = 0xFFF3F4F6.toInt()
-    val Muted = 0xFFBEB7C6.toInt()
-    val Accent = 0xFFC7A8F2.toInt()
+    val Muted = 0xFFC5B5D5.toInt()
+    val Accent = 0xFF9850EA.toInt()
     const val ActionHeight = 34
 
     fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 8) = GradientDrawable(
@@ -40,9 +40,9 @@ object CinemaStyle {
     fun buttonBackground(context: Context, primary: Boolean, focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
-            primary && focused -> intArrayOf(0xFFEADFFC.toInt(), 0xFFD0B7EB.toInt(), 0xFFB18BD5.toInt())
-            primary -> intArrayOf(Accent, 0xFFA97CCE.toInt())
-            focused -> intArrayOf(0xFF5A476B.toInt(), 0xFF392E43.toInt())
+            primary && focused -> intArrayOf(0xFFB970FC.toInt(), 0xFF8A40DA.toInt(), 0xFF6422AC.toInt())
+            primary -> intArrayOf(0xFF9A4DEC.toInt(), 0xFF6B2CB5.toInt())
+            focused -> intArrayOf(0xFF593275.toInt(), 0xFF29153C.toInt())
             else -> intArrayOf(0xFF2B1B3C.toInt(), 0xFF130B1E.toInt())
         }
     ).apply {
@@ -70,10 +70,10 @@ object CinemaStyle {
             backgroundTintList = null
             elevation = 0f
             background = buttonBackground(context, primary, false)
-            setTextColor(if (primary) Background else White)
+            setTextColor(White)
             setOnFocusChangeListener { view, focused ->
                 background = buttonBackground(context, primary, focused)
-                setTextColor(if (primary) Background else White)
+                setTextColor(White)
                 view.animate().cancel()
                 val targetScale = if (focused) TvUiTuning.focusScale(context, 1.028f) else 1f
                 view.animate()
