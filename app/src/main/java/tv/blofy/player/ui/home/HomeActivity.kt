@@ -729,7 +729,7 @@ class HomeActivity : AppCompatActivity() {
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = uiDirection
-            setPadding(dp(layoutSpec.gutter), dp(14), dp(layoutSpec.gutter), dp(14))
+            setPadding(dp(layoutSpec.gutter), dp(20), dp(layoutSpec.gutter), dp(20))
         }
         root.addView(shell, FrameLayout.LayoutParams(-1, -1))
         // The rail fits all eight rows at 540dp and keeps a scroll fallback for shorter TVs.
@@ -740,10 +740,7 @@ class HomeActivity : AppCompatActivity() {
             isFocusableInTouchMode = false
             descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = GradientDrawable().apply {
-                setColor(CinemaStyle.Surface); cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), 0x66FFFFFF)
-            }
+            background = BlofyUiKit.panel(this@HomeActivity, radiusDp = 18)
             addView(buildSidebar(), FrameLayout.LayoutParams(-1, -2))
         }
         shell.addView(rail, LinearLayout.LayoutParams(dp(layoutSpec.railWidth), -1).apply { marginEnd = dp(12) })
@@ -784,7 +781,7 @@ class HomeActivity : AppCompatActivity() {
             text = worldClockText()
         }
         header.addView(clockLabel, LinearLayout.LayoutParams(dp(if (layoutSpec.width < 900) 188 else 330), -2).apply { marginStart = dp(10) })
-        main.addView(header, LinearLayout.LayoutParams(-1, dp(64)))
+        main.addView(header, LinearLayout.LayoutParams(-1, dp(72)))
         val scroll = ScrollView(this).apply {
             tag = "blofy_home_feed_scroll"
             isVerticalScrollBarEnabled = false
@@ -857,11 +854,11 @@ class HomeActivity : AppCompatActivity() {
     private fun sideSelected(icon: Int, label: String) = sideBase(icon, label).apply {
         id = View.generateViewId(); tag = "side_home"
         isFocusable = true; isFocusableInTouchMode = remote; isClickable = true
-        background = CinemaStyle.surface(this@HomeActivity)
-        (getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(PURPLE_BRIGHT)
+        background = BlofyUiKit.panel(this@HomeActivity, radiusDp = 10)
+        (getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(BlofyUiKit.PurpleBright)
         (getChildAt(1) as? TextView)?.setTextColor(PURPLE_BRIGHT)
         setOnFocusChangeListener { view, focused ->
-            view.background = CinemaStyle.surface(this@HomeActivity, focused)
+            view.background = BlofyUiKit.panel(this@HomeActivity, focused, 10)
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, "side_home")
         }
         setOnClickListener {
@@ -946,7 +943,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun actionHeroButton(label: String, key: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
         id = View.generateViewId(); text = label
-        CinemaStyle.styleButton(this, primary) { focused ->
+        BlofyUiKit.styleButton(this, primary) { focused ->
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
         }
         setOnClickListener { action() }; registerAction(key, this)

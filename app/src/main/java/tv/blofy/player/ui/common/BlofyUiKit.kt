@@ -53,7 +53,7 @@ object BlofyUiKit {
         setStroke((if (focused) 2 else 1) * context.resources.displayMetrics.density.toInt().coerceAtLeast(1), if (focused) 0xFFF1E7FD.toInt() else 0x42FFFFFF)
     }
 
-    fun styleButton(button: Button, primary: Boolean = false) {
+    fun styleButton(button: Button, primary: Boolean = false, onFocus: ((Boolean) -> Unit)? = null) {
         button.apply {
             isAllCaps = false
             minHeight = 0
@@ -72,6 +72,7 @@ object BlofyUiKit {
                 view.animate().cancel()
                 val scale = if (focused) TvUiTuning.focusScale(context, 1.025f) else 1f
                 view.animate().scaleX(scale).scaleY(scale).setDuration(TvUiTuning.focusDuration(context, focused)).start()
+                onFocus?.invoke(focused)
             }
         }
     }
