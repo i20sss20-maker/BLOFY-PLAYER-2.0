@@ -83,7 +83,10 @@ class MobileContentActivity : AppCompatActivity() {
         header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(if (compact) 44 else 48)))
         root.addView(header)
 
-        categorySpinner = Spinner(this)
+        categorySpinner = Spinner(this).apply {
+            background = BlofyTvDesign.inputField(dp(14).toFloat(), false)
+            setPadding(dp(14), 0, dp(14), 0)
+        }
         root.addView(categorySpinner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 48 else 52)).apply {
             bottomMargin = dp(if (compact) 8 else 10)
         })

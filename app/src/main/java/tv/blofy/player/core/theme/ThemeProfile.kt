@@ -19,18 +19,18 @@ object BlofyThemes {
         id = "vision",
         loginLayout = "blofy_login_vision",
         homeLayout = "blofy_home_vision",
-        accent = 0xFF8F44FF.toInt(),
-        background = 0xFF06040B.toInt(),
-        surface = 0xFF140D1F.toInt()
+        accent = 0xFFB99152.toInt(),
+        background = 0xFF08080B.toInt(),
+        surface = 0xFF1A1518.toInt()
     )
 
     val CINEMA = ThemeProfile(
         id = "cinema",
         loginLayout = "blofy_login_cinema",
         homeLayout = "blofy_home_cinema",
-        accent = 0xFFBD77FF.toInt(),
-        background = 0xFF050309.toInt(),
-        surface = 0xFF1A1028.toInt(),
+        accent = 0xFFF2D28B.toInt(),
+        background = 0xFF08080B.toInt(),
+        surface = 0xFF241B1F.toInt(),
         focusScale = 1.045f,
         focusElevationDp = 20f,
         motionMs = 120L

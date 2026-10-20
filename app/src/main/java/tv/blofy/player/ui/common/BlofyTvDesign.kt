@@ -66,7 +66,7 @@ object BlofyTvDesign {
         else intArrayOf(0xE6211B1D.toInt(), 0xF20C0B0D.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) PurpleBright else 0x80533B68.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) PurpleBright else 0x805E4743.toInt())
     }
 
     fun primaryButton(radius: Float = 20f, focused: Boolean = false): GradientDrawable = GradientDrawable(
@@ -75,7 +75,7 @@ object BlofyTvDesign {
         else intArrayOf(0xFFC9A562.toInt(), 0xFF8C523F.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else 0xB58B59B6.toInt())
+        setStroke(if (focused) 3 else 1, if (focused) Color.WHITE else 0xB5A47B55.toInt())
     }
 
     fun secondaryButton(radius: Float = 20f, focused: Boolean = false): GradientDrawable = GradientDrawable(
@@ -84,7 +84,7 @@ object BlofyTvDesign {
         else intArrayOf(0xEE261D20.toInt(), 0xEE100D0F.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 3 else 1, if (focused) PurpleSoft else 0x8057406A.toInt())
+        setStroke(if (focused) 3 else 1, if (focused) PurpleSoft else 0x805E4545.toInt())
     }
 
     fun inputField(radius: Float = 18f, focused: Boolean = false): GradientDrawable = GradientDrawable(
@@ -93,7 +93,7 @@ object BlofyTvDesign {
         else intArrayOf(0xEE120E10.toInt(), 0xEE0B0A0B.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 3 else 1, if (focused) PurpleBright else 0x80504061.toInt())
+        setStroke(if (focused) 3 else 1, if (focused) PurpleBright else 0x805A4440.toInt())
     }
 
     fun posterCard(radius: Float = 22f, focused: Boolean = false): GradientDrawable = GradientDrawable(
@@ -102,7 +102,7 @@ object BlofyTvDesign {
         else intArrayOf(0xEE241B1F.toInt(), 0xF10B0A0D.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 3 else 1, if (focused) FocusStroke else 0x66513C65.toInt())
+        setStroke(if (focused) 3 else 1, if (focused) FocusStroke else 0x665F4645.toInt())
     }
 
     fun badge(radius: Float = 14f, accent: Boolean = false): GradientDrawable = GradientDrawable(
@@ -111,7 +111,7 @@ object BlofyTvDesign {
         else intArrayOf(0xAD2A2020.toInt(), 0xAD171012.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(1, if (accent) 0xB57F58A3.toInt() else 0x916D4C8A.toInt())
+        setStroke(1, if (accent) 0xB5C19A5B.toInt() else 0x916C514A.toInt())
     }
 
     fun statusPill(radius: Float = 14f, success: Boolean = false): GradientDrawable = GradientDrawable(
