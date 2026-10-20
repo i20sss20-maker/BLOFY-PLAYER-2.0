@@ -1676,8 +1676,8 @@ open class PlayerActivity : ContentAccessActivity() {
         private const val EPG_REFRESH_DEBOUNCE_MS = 650L
         private const val ZAP_COALESCE_MS = 45L
 
-        private val PURPLE = Color.rgb(201, 165, 98)
-        private val PURPLE_SOFT = Color.rgb(242, 210, 139)
+        private val PURPLE = Color.rgb(229, 9, 20)
+        private val PURPLE_SOFT = Color.rgb(255, 208, 208)
         private val HUD_NAVIGATION_ACTIONS = setOf(
             RemoteAction.OK,
             RemoteAction.UP,

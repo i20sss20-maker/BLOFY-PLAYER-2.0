@@ -13,17 +13,17 @@ object ContentScreenStyle {
     fun actionBackground(context: Context, primary: Boolean, focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
-            primary && focused -> intArrayOf(0xFFFFF1C5.toInt(), 0xFFF2D28B.toInt())
-            primary -> intArrayOf(0xFFF2D28B.toInt(), 0xFFC88D54.toInt())
-            focused -> intArrayOf(0xB06A3E46.toInt(), 0x8A3E272B.toInt())
-            else -> intArrayOf(0x70221D29, 0x50141018)
+            primary && focused -> intArrayOf(0xFFFF6B70.toInt(), 0xFFE50914.toInt())
+            primary -> intArrayOf(0xFFE50914.toInt(), 0xFFB20710.toInt())
+            focused -> intArrayOf(0xB05B1E24.toInt(), 0x8A32161A.toInt())
+            else -> intArrayOf(0x7021262B, 0x50101418)
         }
     ).apply {
         val d = context.resources.displayMetrics.density
         cornerRadius = 16f * d
         setStroke(
             ((if (focused) 2 else 1) * d).toInt(),
-            if (focused) 0xFFFFF4D5.toInt() else 0x4AFFFFFF
+            if (focused) 0xFFFFE7E7.toInt() else 0x3AFFFFFF
         )
     }
 
@@ -65,7 +65,7 @@ object ContentScreenStyle {
     fun softSurface(context: Context, focused: Boolean = false, radiusDp: Int = 14) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) {
-            intArrayOf(0xB06A3E46.toInt(), 0x883E272B.toInt(), 0x5818151D.toInt())
+            intArrayOf(0xB05B1E24.toInt(), 0x8832161A.toInt(), 0x5818151D.toInt())
         } else {
             intArrayOf(0x40231E29, 0x3018151D, 0x24100E13)
         }

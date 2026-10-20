@@ -793,30 +793,30 @@ class LoginActivity : AppCompatActivity() {
 
     private fun premiumPanelBackground(accent: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        if (accent) intArrayOf(0xFF30283A.toInt(), 0xFF201B26.toInt(), 0xFF121015.toInt())
-        else intArrayOf(0xFF26212D.toInt(), 0xFF19161D.toInt(), 0xFF100E13.toInt())
+        if (accent) intArrayOf(0xFF251317.toInt(), 0xFF15171B.toInt(), 0xFF0D0F12.toInt())
+        else intArrayOf(0xFF1A1D21.toInt(), 0xFF121417.toInt(), 0xFF0D0F12.toInt())
     ).apply {
-        cornerRadius = dp(26).toFloat()
-        setStroke(dp(1), if (accent) 0xFF80634B.toInt() else 0xFF514857.toInt())
+        cornerRadius = dp(18).toFloat()
+        setStroke(dp(1), if (accent) 0xFF6B3A3F.toInt() else 0xFF34383D.toInt())
     }
 
     private fun premiumFieldBackground(accent: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        if (accent) intArrayOf(0xFF251F2B.toInt(), 0xFF19161D.toInt()) else intArrayOf(0xFF1D1921.toInt(), 0xFF141217.toInt())
+        if (accent) intArrayOf(0xFF251317.toInt(), 0xFF15171B.toInt()) else intArrayOf(0xFF1A1D21.toInt(), 0xFF121417.toInt())
     ).apply {
         cornerRadius = dp(14).toFloat()
-        setStroke(if (accent) dp(2) else dp(1), if (accent) 0xFFC08B52.toInt() else 0xFF4E4654.toInt())
+        setStroke(if (accent) dp(2) else dp(1), if (accent) 0xFFE50914.toInt() else 0xFF34383D.toInt())
     }
 
     private fun fieldBackground() = GradientDrawable().apply {
         cornerRadius = dp(14).toFloat()
-        setColor(0xFF19161D.toInt())
-        setStroke(dp(1), 0xFF4D4553.toInt())
+        setColor(0xFF15171B.toInt())
+        setStroke(dp(1), 0xFF34383D.toInt())
     }
 
-    private fun statusBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF211C27.toInt(), 0xFF17141A.toInt())).apply {
+    private fun statusBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF21262B.toInt(), 0xFF121417.toInt())).apply {
         cornerRadius = dp(14).toFloat()
-        setStroke(dp(1), 0xFF5E526B.toInt())
+        setStroke(dp(1), 0xFF34383D.toInt())
     }
 
     private fun qrBackground() = GradientDrawable().apply {
@@ -826,7 +826,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun qrFrameBackground() = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xFFF2D28B.toInt(), 0xFFA47B55.toInt(), 0xFF3E272B.toInt())
+        intArrayOf(0xFFE50914.toInt(), 0xFFB20710.toInt(), 0xFF3E171C.toInt())
     ).apply {
         cornerRadius = dp(22).toFloat()
         setStroke(dp(1), BlofyTvDesign.FocusStroke)
@@ -834,7 +834,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun identityPanelBackground() = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0xD92A171A.toInt(), 0xE5160F20.toInt())
+        intArrayOf(0xD93A171C.toInt(), 0xE5160F20.toInt())
     ).apply {
         cornerRadius = dp(16).toFloat()
         setStroke(dp(1), 0xFF8C5A4C.toInt())
@@ -842,13 +842,13 @@ class LoginActivity : AppCompatActivity() {
 
     private fun miniCircle() = GradientDrawable().apply {
         shape = GradientDrawable.OVAL
-        setColor(0xFF29222F.toInt())
-        setStroke(dp(1), 0xFF685878.toInt())
+        setColor(0xFF21262B.toInt())
+        setStroke(dp(1), 0xFF4A5057.toInt())
     }
 
-    private fun emptyBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF211C27.toInt(), 0xFF171419.toInt())).apply {
+    private fun emptyBackground() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF21262B.toInt(), 0xFF121417.toInt())).apply {
         cornerRadius = dp(17).toFloat()
-        setStroke(dp(1), 0xFF4C4351.toInt())
+        setStroke(dp(1), 0xFF34383D.toInt())
     }
 
     private fun playlistCardBackground(active: Boolean, focused: Boolean) = GradientDrawable(

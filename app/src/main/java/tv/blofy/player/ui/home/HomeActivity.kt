@@ -651,7 +651,7 @@ class HomeActivity : AppCompatActivity() {
             id = View.generateViewId(); isFocusable = true; isFocusableInTouchMode = remote; isClickable = true; background = heroSurface(); clipChildren = true
             val art = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; alpha = .50f }
             addView(art, FrameLayout.LayoutParams(-1, -1)); ArtworkLoader.loadPriority(art, listOf(item.backdrop, item.icon))
-            addView(View(this@HomeActivity).apply { background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF5151218.toInt(), 0xB5211B25.toInt(), 0x40121016)) }, FrameLayout.LayoutParams(-1, -1))
+            addView(View(this@HomeActivity).apply { background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF508090B.toInt(), 0xC20D0F12.toInt(), 0x180D0F12)) }, FrameLayout.LayoutParams(-1, -1))
             val copy = LinearLayout(this@HomeActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(28), dp(18), dp(28), dp(18))
                 addView(TextView(this@HomeActivity).apply { text = getString(R.string.home_featured_label); textSize = 11.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
@@ -668,7 +668,7 @@ class HomeActivity : AppCompatActivity() {
             setOnClickListener { openDetails(providerId, item) }
         }
         registerAction("featured", card)
-        parent.addView(card, LinearLayout.LayoutParams(-1, dp(188)).apply { topMargin = dp(4); bottomMargin = dp(12) })
+        parent.addView(card, LinearLayout.LayoutParams(-1, dp(if (compactTv) 220 else 258)).apply { topMargin = dp(4); bottomMargin = dp(18) })
     }
 
     private fun addPromotionBanner(parent: LinearLayout) {
@@ -740,8 +740,8 @@ class HomeActivity : AppCompatActivity() {
             descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             overScrollMode = View.OVER_SCROLL_NEVER
             background = GradientDrawable().apply {
-                setColor(CinemaStyle.Surface); cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), 0x66FFFFFF)
+                setColor(0xCC0D0F12.toInt()); cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), 0x303F454B)
             }
             addView(buildSidebar(), FrameLayout.LayoutParams(-1, -2))
         }
@@ -1067,18 +1067,18 @@ class HomeActivity : AppCompatActivity() {
 
     private fun roundedColor(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = dp(radius).toFloat(); setColor(color); stroke?.let { setStroke(dp(1), it) } }
     private fun surface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
-    private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8C5A4C.toInt(), 0xFF5B3038.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFF2D28B.toInt()) }
+    private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFFE50914.toInt(), 0xFFB20710.toInt())).apply { cornerRadius = dp(10).toFloat(); setStroke(dp(1), 0xFFFF6B70.toInt()) }
     private fun transparentSurface(focused: Boolean) = if (focused) {
         GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(0xFF493035.toInt(), 0xFF292022.toInt(), 0xFF171214.toInt())
+            intArrayOf(0xFF32161A.toInt(), 0xFF1F1417.toInt(), 0xFF0D0F12.toInt())
         ).apply {
             cornerRadius = dp(10).toFloat()
             setStroke(dp(1), BlofyTvDesign.FocusStroke)
         }
     } else roundedColor(Color.TRANSPARENT, 10)
     private fun heroSurface() = CinemaStyle.surface(this, radiusDp = 16)
-    private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF49352F.toInt(), 0xFF2B2021.toInt(), 0xFF121011.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF80634B.toInt()) }
+    private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF3A171C.toInt(), 0xFF211417.toInt(), 0xFF0D0F12.toInt())).apply { cornerRadius = dp(14).toFloat(); setStroke(dp(1), 0xFF6B3A3F.toInt()) }
     private fun featuredSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 18)
     private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 8)
     private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
@@ -1091,9 +1091,9 @@ class HomeActivity : AppCompatActivity() {
     companion object {
         private const val SCREEN_KEY = "home"
         private const val HERO_ROTATION_MS = 8_000L
-        private val PURPLE_BRIGHT = Color.rgb(242, 210, 139)
-        private val TEXT_PRIMARY = Color.rgb(255, 251, 244)
-        private val TEXT_SECONDARY = Color.rgb(236, 229, 220)
-        private val TEXT_MUTED = Color.rgb(184, 169, 158)
+        private val PURPLE_BRIGHT = Color.rgb(229, 9, 20)
+        private val TEXT_PRIMARY = Color.rgb(245, 245, 241)
+        private val TEXT_SECONDARY = Color.rgb(228, 230, 227)
+        private val TEXT_MUTED = Color.rgb(167, 170, 168)
     }
 }

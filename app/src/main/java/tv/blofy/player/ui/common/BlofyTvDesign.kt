@@ -12,25 +12,25 @@ import android.widget.TextView
  */
 object BlofyTvDesign {
     val Background = CinemaStyle.Background
-    val BackgroundRaised = Color.rgb(16, 13, 16)
+    val BackgroundRaised = Color.rgb(13, 15, 18)
     val Surface = CinemaStyle.Surface
-    val SurfaceRaised = Color.rgb(52, 35, 38)
-    val SurfaceFocused = Color.rgb(106, 62, 70)
-    val FocusStroke = Color.rgb(255, 244, 213)
-    val FocusGlow = Color.rgb(214, 181, 110)
+    val SurfaceRaised = Color.rgb(33, 38, 43)
+    val SurfaceFocused = Color.rgb(91, 30, 36)
+    val FocusStroke = Color.rgb(255, 231, 231)
+    val FocusGlow = Color.rgb(242, 198, 109)
 
-    val Purple = Color.rgb(185, 145, 82)
+    val Purple = Color.rgb(178, 7, 16)
     val PurpleBright = CinemaStyle.Accent
-    val PurpleDeep = Color.rgb(126, 78, 52)
-    val PurpleSoft = Color.rgb(255, 232, 180)
-    val Lavender = Color.rgb(255, 232, 180)
-    val Mint = Color.rgb(227, 192, 123)
+    val PurpleDeep = Color.rgb(124, 10, 18)
+    val PurpleSoft = Color.rgb(255, 208, 208)
+    val Lavender = Color.rgb(255, 208, 208)
+    val Mint = Color.rgb(242, 198, 109)
     val Error = Color.rgb(232, 125, 130)
 
     val TextPrimary = CinemaStyle.White
-    val TextSecondary = Color.rgb(236, 229, 220)
+    val TextSecondary = Color.rgb(228, 230, 227)
     val TextMuted = CinemaStyle.Muted
-    val Divider = 0x4A5E4743
+    val Divider = 0x4A34383D
 
     const val HeroTitleSp = 42f
     const val DetailTitleSp = 40f
@@ -95,13 +95,13 @@ object BlofyTvDesign {
     fun primaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) {
-            intArrayOf(0xFFF7DFA6.toInt(), 0xFFD6A85E.toInt(), 0xFFA97645.toInt())
+            intArrayOf(0xFFFF6B70.toInt(), 0xFFE50914.toInt(), 0xFFA80710.toInt())
         } else {
-            intArrayOf(0xFFD09A52.toInt(), 0xFFA97645.toInt(), 0xFF6A3E46.toInt())
+            intArrayOf(0xFFE50914.toInt(), 0xFFB20710.toInt(), 0xFF7C0A12.toInt())
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFFFF4D6.toInt() else 0xFF8A6A55.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) 0xFFFFE7E7.toInt() else 0xFF6B3A3F.toInt())
     }
 
     fun secondaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) =
