@@ -104,7 +104,7 @@ class QuickMenuActivity : AppCompatActivity() {
                 text = icon
                 textSize = 19f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(0xFFB574FF.toInt())
+                setTextColor(0xFFF2D28B.toInt())
                 gravity = Gravity.CENTER
             }, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(9) })
 
@@ -146,7 +146,7 @@ class QuickMenuActivity : AppCompatActivity() {
     private fun itemBackground(focused: Boolean, primary: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
-            focused -> intArrayOf(0xFF715B89.toInt(), 0xFF40344B.toInt())
+            focused -> intArrayOf(0xFF8C5A4C.toInt(), 0xFF3E272B.toInt())
             primary -> intArrayOf(0xFF342A3E.toInt(), 0xFF211B27.toInt())
             else -> intArrayOf(0xE6242029.toInt(), 0xE617141A.toInt())
         }

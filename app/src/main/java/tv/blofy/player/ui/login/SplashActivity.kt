@@ -47,7 +47,7 @@ class SplashActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(54)))
         root.addView(ProgressBar(this).apply {
             isIndeterminate = true
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFFB96CFF.toInt())
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFFF2D28B.toInt())
         }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { topMargin = dp(14) })
         root.addView(statusView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { topMargin = dp(8) })
         setContentView(root)

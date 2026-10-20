@@ -77,11 +77,11 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
 
     private fun valueBackground(focused: Boolean) = android.graphics.drawable.GradientDrawable(
         android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF5A377D.toInt(), 0xFF3A2452.toInt())
+        if (focused) intArrayOf(0xFFC88D54.toInt(), 0xFF3E272B.toInt())
         else intArrayOf(0xFF261936.toInt(), 0xFF1C1228.toInt())
     ).apply {
         cornerRadius = dp(8).toFloat()
-        setStroke(dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF4C365F.toInt())
+        setStroke(dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF5E4743.toInt())
     }
 
     private fun label(size: Float, bold: Boolean) = TextView(context).apply {

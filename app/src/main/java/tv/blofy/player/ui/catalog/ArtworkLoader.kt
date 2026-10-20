@@ -527,7 +527,7 @@ object ArtworkLoader {
     }
 
     private fun cacheKey(url: String, target: Target) = "$url@${target.diskBucket}"
-    private fun skeleton() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF21182D.toInt(), 0xFF30203F.toInt(), 0xFF17111F.toInt())).apply { cornerRadius = 18f }
+    private fun skeleton() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF2A1B1D.toInt(), 0xFF3A2426.toInt(), 0xFF171214.toInt())).apply { cornerRadius = 18f }
     private fun diskFile(cacheDir: File, url: String, target: Target) = File(File(cacheDir, "blofy_posters"), hash(cacheKey(url, target)) + ".jpg")
     private fun hash(value: String) = StableHash.sha256(value)
     private fun sampleSize(w: Int, h: Int, tw: Int, th: Int): Int { var s = 1; while (w / (s * 2) >= tw && h / (s * 2) >= th) s *= 2; return s }

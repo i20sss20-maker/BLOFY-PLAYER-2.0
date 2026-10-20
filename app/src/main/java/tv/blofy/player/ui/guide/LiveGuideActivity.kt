@@ -678,7 +678,7 @@ private class GuideChannelAdapter(
     companion object {
         private fun rowBackground(focused: Boolean, radius: Int) = GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            if (focused) intArrayOf(0xFF705A87.toInt(), 0xFF3D3248.toInt())
+            if (focused) intArrayOf(0xFF8C5A4C.toInt(), 0xFF3E272B.toInt())
             else intArrayOf(0xDB241F29.toInt(), 0xE817141A.toInt())
         ).apply {
             cornerRadius = radius.toFloat()

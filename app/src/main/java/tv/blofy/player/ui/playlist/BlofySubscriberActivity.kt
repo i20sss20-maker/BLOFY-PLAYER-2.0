@@ -301,7 +301,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
     private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = dp(18).toFloat()
         setColor(if (focused) BlofyTvDesign.Purple else BlofyTvDesign.PurpleDeep)
-        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF765F8F.toInt())
+        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF80634B.toInt())
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

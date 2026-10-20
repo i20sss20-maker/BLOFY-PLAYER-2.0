@@ -95,13 +95,13 @@ object BlofyTvDesign {
     fun primaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) {
-            intArrayOf(0xFFC6A1EF.toInt(), 0xFF9B70CF.toInt(), 0xFF724BA7.toInt())
+            intArrayOf(0xFFF7DFA6.toInt(), 0xFFD6A85E.toInt(), 0xFFA97645.toInt())
         } else {
-            intArrayOf(0xFF8B5CC2.toInt(), 0xFF7047A0.toInt(), 0xFF54377A.toInt())
+            intArrayOf(0xFFD09A52.toInt(), 0xFFA97645.toInt(), 0xFF6A3E46.toInt())
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFF1E8FA.toInt() else 0xFF756382.toInt())
+        setStroke(if (focused) 2 else 1, if (focused) 0xFFFFF4D6.toInt() else 0xFF8A6A55.toInt())
     }
 
     fun secondaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) =

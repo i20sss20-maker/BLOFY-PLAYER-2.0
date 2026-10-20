@@ -797,7 +797,7 @@ class LoginActivity : AppCompatActivity() {
         else intArrayOf(0xFF26212D.toInt(), 0xFF19161D.toInt(), 0xFF100E13.toInt())
     ).apply {
         cornerRadius = dp(26).toFloat()
-        setStroke(dp(1), if (accent) 0xFF806A97.toInt() else 0xFF514857.toInt())
+        setStroke(dp(1), if (accent) 0xFF80634B.toInt() else 0xFF514857.toInt())
     }
 
     private fun premiumFieldBackground(accent: Boolean) = GradientDrawable(
@@ -805,7 +805,7 @@ class LoginActivity : AppCompatActivity() {
         if (accent) intArrayOf(0xFF251F2B.toInt(), 0xFF19161D.toInt()) else intArrayOf(0xFF1D1921.toInt(), 0xFF141217.toInt())
     ).apply {
         cornerRadius = dp(14).toFloat()
-        setStroke(if (accent) dp(2) else dp(1), if (accent) 0xFF8569A5.toInt() else 0xFF4E4654.toInt())
+        setStroke(if (accent) dp(2) else dp(1), if (accent) 0xFFC08B52.toInt() else 0xFF4E4654.toInt())
     }
 
     private fun fieldBackground() = GradientDrawable().apply {
@@ -826,7 +826,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun qrFrameBackground() = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xFFC0A6DF.toInt(), 0xFF8669A8.toInt(), 0xFF3A3045.toInt())
+        intArrayOf(0xFFF2D28B.toInt(), 0xFFA47B55.toInt(), 0xFF3E272B.toInt())
     ).apply {
         cornerRadius = dp(22).toFloat()
         setStroke(dp(1), BlofyTvDesign.FocusStroke)
@@ -834,10 +834,10 @@ class LoginActivity : AppCompatActivity() {
 
     private fun identityPanelBackground() = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0xD921142E.toInt(), 0xE5160F20.toInt())
+        intArrayOf(0xD92A171A.toInt(), 0xE5160F20.toInt())
     ).apply {
         cornerRadius = dp(16).toFloat()
-        setStroke(dp(1), 0xFF735394.toInt())
+        setStroke(dp(1), 0xFF8C5A4C.toInt())
     }
 
     private fun miniCircle() = GradientDrawable().apply {
@@ -854,7 +854,7 @@ class LoginActivity : AppCompatActivity() {
     private fun playlistCardBackground(active: Boolean, focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
-            focused -> intArrayOf(0xFF775C94.toInt(), 0xFF4A3A58.toInt(), 0xFF2A222F.toInt())
+            focused -> intArrayOf(0xFF8C5A4C.toInt(), 0xFF3E272B.toInt(), 0xFF2A222F.toInt())
             active -> intArrayOf(0xFF2C2632.toInt(), 0xFF201C25.toInt())
             else -> intArrayOf(0xFF241F29.toInt(), 0xFF171419.toInt())
         }

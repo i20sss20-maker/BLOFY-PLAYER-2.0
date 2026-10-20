@@ -378,7 +378,7 @@ open class PlayerActivity : ContentAccessActivity() {
             setPadding(24, 10, 24, 10)
             background = GradientDrawable().apply {
                 cornerRadius = 18f
-                setColor(Color.argb(225, 43, 18, 76))
+                setColor(Color.argb(225, 74, 42, 44))
                 setStroke(2, PURPLE_SOFT)
             }
             visibility = View.GONE
@@ -443,14 +443,14 @@ open class PlayerActivity : ContentAccessActivity() {
 
         epgView = TextView(this).apply {
             textSize = 15f
-            setTextColor(Color.rgb(214, 203, 228))
+            setTextColor(Color.rgb(236, 229, 220))
             setPadding(0, 0, 0, 16)
             visibility = if (kind == KIND_LIVE) View.VISIBLE else View.GONE
             background = if (kind == KIND_LIVE) {
                 GradientDrawable().apply {
                     cornerRadius = 14f
-                    setColor(0x4D281D39)
-                    setStroke(1, 0x554F3868)
+                    setColor(0x4D3A2426)
+                    setStroke(1, 0x553A2426)
                 }
             } else {
                 null
@@ -477,7 +477,7 @@ open class PlayerActivity : ContentAccessActivity() {
             durationView = TextView(this).apply {
                 text = "00:00"
                 textSize = 11f
-                setTextColor(Color.rgb(190, 180, 205))
+                setTextColor(Color.rgb(184, 169, 158))
                 gravity = Gravity.CENTER
                 isSingleLine = true
                 textDirection = View.TEXT_DIRECTION_LTR
@@ -730,8 +730,8 @@ open class PlayerActivity : ContentAccessActivity() {
         minimumWidth = dp(48); minimumHeight = dp(48)
         fun surface(focused: Boolean) = GradientDrawable().apply {
             cornerRadius = dp(18).toFloat()
-            setColor(if (focused) 0xFF744AC2.toInt() else if (icon == R.drawable.player_pause) 0xFF4E317C.toInt() else 0xB31B1A20.toInt())
-            setStroke(dp(1), if (focused) 0xFFE2D0FF.toInt() else 0x404D455A)
+            setColor(if (focused) 0xFFC88D54.toInt() else if (icon == R.drawable.player_pause) 0xFF8C5A4C.toInt() else 0xB31B1A20.toInt())
+            setStroke(dp(1), if (focused) 0xFFFFF4D6.toInt() else 0x404D455A)
         }
         background = surface(false)
         setOnFocusChangeListener { view, focused ->

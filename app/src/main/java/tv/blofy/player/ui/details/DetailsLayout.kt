@@ -66,7 +66,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         root.addView(View(activity).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                intArrayOf(0x592C1742.toInt(), 0x28160D22.toInt(), 0x4807050B.toInt())
+                intArrayOf(0x593A2226.toInt(), 0x28160D10.toInt(), 0x48080508.toInt())
             )
         }, FrameLayout.LayoutParams(-1, -1))
         val darkEdge = if (activity.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {

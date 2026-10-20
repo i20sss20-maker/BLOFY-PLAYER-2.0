@@ -587,7 +587,7 @@ class HomeActivity : AppCompatActivity() {
                     item.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
                     episodeHint(item.name)?.let(::add)
                 }.joinToString("  •  ")
-                textSize = 10.2f; maxLines = 1; setTextColor(0xFFD9C5EC.toInt()); gravity = Gravity.START
+                textSize = 10.2f; maxLines = 1; setTextColor(0xFFE8C98F.toInt()); gravity = Gravity.START
             })
         }
         addView(text, FrameLayout.LayoutParams(-1, dp(94), Gravity.BOTTOM))

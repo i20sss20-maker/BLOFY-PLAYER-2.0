@@ -480,12 +480,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
         intArrayOf(0xE5251735.toInt(), 0xE3181025.toInt(), 0xE50D0A12.toInt())
     ).apply {
         cornerRadius = TvUiTuning.dp(this@CatalogLoadingActivity, 18).toFloat()
-        setStroke(TvUiTuning.dp(this@CatalogLoadingActivity, 1), 0xFF674A84.toInt())
+        setStroke(TvUiTuning.dp(this@CatalogLoadingActivity, 1), 0xFF80634B.toInt())
     }
 
     private fun percentBadgeBackground() = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xFF7F4AC6.toInt(), 0xFF4C2A73.toInt())
+        intArrayOf(0xFFC88D54.toInt(), 0xFF6A3E46.toInt())
     ).apply {
         cornerRadius = TvUiTuning.dp(this@CatalogLoadingActivity, 16).toFloat()
         setStroke(TvUiTuning.dp(this@CatalogLoadingActivity, 1), BlofyTvDesign.FocusStroke)
@@ -495,7 +495,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
             done -> intArrayOf(0x5538CFA4, 0x33217E67)
-            active -> intArrayOf(0x665F3890, 0x33351F50)
+            active -> intArrayOf(0x666A3E46, 0x333E272B)
             else -> intArrayOf(0x331B1424, 0x22110D17)
         }
     ).apply {
@@ -504,7 +504,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             TvUiTuning.dp(this@CatalogLoadingActivity, 1),
             when {
                 done -> 0x995BDEBB.toInt()
-                active -> 0x998C65B6.toInt()
+                active -> 0x99C88D54.toInt()
                 else -> 0x334E3A60
             }
         )

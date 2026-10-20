@@ -230,7 +230,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     // Intentionally translucent: the current video remains clearly visible behind
                     // the compact list instead of looking like playback was replaced by a menu.
                     setColor(0x7416121E.toInt())
-                    setStroke(dp(1), 0x4D7956A8.toInt())
+                    setStroke(dp(1), 0x4DC08B52.toInt())
                 }
                 elevation = dp(7).toFloat()
                 addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
