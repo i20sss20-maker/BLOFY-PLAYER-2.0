@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.Spinner
@@ -56,26 +57,40 @@ class MobileContentActivity : AppCompatActivity() {
             setPadding(dp(18), dp(18), dp(18), dp(18))
             background = BlofyUiKit.screen(this@MobileContentActivity)
         }
-        root.addView(TextView(this).apply {
-            text = "BLOFY"
-            textSize = 11.5f
-            letterSpacing = .12f
-            typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.PurpleBright)
-            gravity = Gravity.START
-        })
-        root.addView(TextView(this).apply {
-            text = getString(when (kind) {
-                KIND_MOVIE -> R.string.movies
-                KIND_SERIES -> R.string.series
-                else -> R.string.live_tv
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = resources.configuration.layoutDirection
+        }
+        val back = Button(this).apply {
+            text = "‹"
+            contentDescription = getString(R.string.back)
+            BlofyUiKit.styleButton(this, primary = false)
+            setOnClickListener { finish() }
+        }
+        header.addView(back, LinearLayout.LayoutParams(dp(48), dp(42)).apply { marginEnd = dp(10) })
+        header.addView(LinearLayout(this@MobileContentActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@MobileContentActivity).apply {
+                text = "BLOFY"
+                textSize = 11.5f
+                letterSpacing = .12f
+                typeface = BlofyTvDesign.BodyTypeface
+                setTextColor(BlofyTvDesign.PurpleBright)
             })
-            textSize = 25f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(BlofyTvDesign.TextPrimary)
-            gravity = Gravity.START
-            setPadding(dp(4), dp(3), 0, dp(12))
-        })
+            addView(TextView(this@MobileContentActivity).apply {
+                text = getString(when (kind) {
+                    KIND_MOVIE -> R.string.movies
+                    KIND_SERIES -> R.string.series
+                    else -> R.string.live_tv
+                })
+                textSize = 25f
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(BlofyTvDesign.TextPrimary)
+                setPadding(0, dp(3), 0, 0)
+            })
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
         categorySpinner = Spinner(this).apply { background = BlofyUiKit.panel(this@MobileContentActivity, radiusDp = 10) }
         categorySpinner.contentDescription = getString(R.string.categories)
         root.addView(categorySpinner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)))
