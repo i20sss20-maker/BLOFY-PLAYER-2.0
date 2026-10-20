@@ -35,6 +35,7 @@ import tv.blofy.player.ui.settings.RuntimeSettings
 
 class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var categoryAdapter: FocusTextAdapter<CategoryEntity>
+    private var cinemaChips: CinemaCategoryChipAdapter? = null
     private lateinit var posterAdapter: PosterStreamAdapter
     private lateinit var categoryList: RecyclerView
     private lateinit var posterGrid: RecyclerView
@@ -60,6 +61,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         val deviceKind = DeviceClass.detect(this)
         val widthDp = resources.configuration.screenWidthDp.takeIf { it > 0 } ?: resources.configuration.smallestScreenWidthDp
         val compactCatalog = RuntimeSettings.catalogDensity(this) == RuntimeSettings.CatalogDensity.COMPACT
+        val cinemaPhone = deviceKind == DeviceClass.Kind.PHONE
         gridColumns = when (deviceKind) {
             DeviceClass.Kind.TV -> if (compactCatalog) {
                 if (widthDp >= 1600) 7 else if (widthDp >= 1000) 6 else 5
@@ -67,9 +69,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             DeviceClass.Kind.TABLET -> if (compactCatalog) {
                 if (widthDp >= 900) 6 else 5
             } else if (widthDp >= 900) 5 else 4
-            DeviceClass.Kind.PHONE -> if (compactCatalog) {
-                if (widthDp >= 600) 4 else 3
-            } else if (widthDp >= 600) 3 else 2
+            DeviceClass.Kind.PHONE -> if (widthDp >= 490) 4 else 3
         }
         val outerPadding = when (deviceKind) {
             DeviceClass.Kind.TV -> 22
@@ -79,19 +79,19 @@ class PosterCatalogActivity : AppCompatActivity() {
         val railWidth = when (deviceKind) {
             DeviceClass.Kind.TV -> 190
             DeviceClass.Kind.TABLET -> 180
-            DeviceClass.Kind.PHONE -> 112
+            DeviceClass.Kind.PHONE -> 0
         }
         val railGap = when (deviceKind) {
             DeviceClass.Kind.TV -> 16
             DeviceClass.Kind.TABLET -> 12
-            DeviceClass.Kind.PHONE -> 6
+            DeviceClass.Kind.PHONE -> 0
         }
         // Size columns from the space left after the category rail, not the whole screen.
         val contentWidthDp = (widthDp - outerPadding * 2 - railWidth - railGap - 10).coerceAtLeast(1)
         val minimumCardWidthDp = when {
-            compactCatalog && deviceKind == DeviceClass.Kind.PHONE -> 92
+            compactCatalog && deviceKind == DeviceClass.Kind.PHONE -> 93
             compactCatalog -> 108
-            deviceKind == DeviceClass.Kind.PHONE -> 108
+            deviceKind == DeviceClass.Kind.PHONE -> 100
             else -> 132
         }
         gridColumns = (contentWidthDp / minimumCardWidthDp).coerceIn(1, gridColumns)
@@ -104,7 +104,10 @@ class PosterCatalogActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             setPadding(dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 14), dp(outerPadding), dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 18))
-            background = AppCompatResources.getDrawable(this@PosterCatalogActivity, R.drawable.blofy_home_background)
+            background = if (cinemaPhone) android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF190C2D.toInt(), 0xFF0B0716.toInt(), 0xFF07050D.toInt())
+            ) else AppCompatResources.getDrawable(this@PosterCatalogActivity, R.drawable.blofy_home_background)
             clipChildren = false
             clipToPadding = false
         }
@@ -159,14 +162,14 @@ class PosterCatalogActivity : AppCompatActivity() {
         })
 
         val body = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            orientation = if (cinemaPhone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            layoutDirection = if (cinemaPhone) resources.configuration.layoutDirection else View.LAYOUT_DIRECTION_LTR
             clipChildren = false
             clipToPadding = false
         }
 
         val rail = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = if (cinemaPhone) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             gravity = Gravity.TOP
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 5 else 9), dp(8), dp(if (deviceKind == DeviceClass.Kind.PHONE) 5 else 9), dp(8))
@@ -176,11 +179,15 @@ class PosterCatalogActivity : AppCompatActivity() {
         rail.addView(TextView(this).apply {
             text = getString(R.string.categories)
             BlofyTvDesign.applyHeading(this)
-            textSize = if (deviceKind == DeviceClass.Kind.PHONE) 13f else 14f
+            textSize = if (cinemaPhone) 13f else 14f
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (deviceKind == DeviceClass.Kind.PHONE) 38 else 44)))
+            visibility = if (cinemaPhone) View.GONE else View.VISIBLE
+        }, LinearLayout.LayoutParams(if (cinemaPhone) 0 else LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(if (cinemaPhone) 0 else 44)))
         categoryList = RecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@PosterCatalogActivity)
+            layoutManager = if (cinemaPhone) LinearLayoutManager(
+                this@PosterCatalogActivity, LinearLayoutManager.HORIZONTAL, false
+            ) else LinearLayoutManager(this@PosterCatalogActivity)
             // Poster cards have enough internal padding for focus treatment; clip
             // RecyclerView children so recycled rows never paint above the grid bounds.
             clipChildren = true
@@ -190,8 +197,17 @@ class PosterCatalogActivity : AppCompatActivity() {
             setItemViewCacheSize(18)
             preserveFocusAfterLayout = true
         }
-        rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        body.addView(rail, LinearLayout.LayoutParams(dp(railWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(railGap) })
+        if (cinemaPhone) {
+            rail.addView(categoryList, LinearLayout.LayoutParams(0, dp(50), 1f))
+            body.addView(rail, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(55)
+            ).apply { bottomMargin = dp(8) })
+        } else {
+            rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            body.addView(rail, LinearLayout.LayoutParams(dp(railWidth), LinearLayout.LayoutParams.MATCH_PARENT).apply {
+                marginEnd = dp(railGap)
+            })
+        }
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -211,7 +227,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             textSize = when (deviceKind) {
                 DeviceClass.Kind.TV -> 24f
                 DeviceClass.Kind.TABLET -> 24f
-                DeviceClass.Kind.PHONE -> 20f
+                DeviceClass.Kind.PHONE -> 25f
             }
             gravity = Gravity.START
         }, LinearLayout.LayoutParams(0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 38), 1f))
@@ -255,7 +271,9 @@ class PosterCatalogActivity : AppCompatActivity() {
             })
         }
         content.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        body.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        body.addView(content, if (cinemaPhone) LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+        ) else LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         if (deviceKind == DeviceClass.Kind.TV) root.requestFocus()
@@ -271,8 +289,13 @@ class PosterCatalogActivity : AppCompatActivity() {
             onFocus = null,
             itemKey = { it.key }
         )
-        categoryList.adapter = categoryAdapter
-        TwoPaneFocusGuard.registerTopTarget(root, searchBar)
+        if (cinemaPhone) {
+            cinemaChips = CinemaCategoryChipAdapter { loadStreams(categoryRemoteId(it)) }
+            categoryList.adapter = cinemaChips
+        } else {
+            categoryList.adapter = categoryAdapter
+            TwoPaneFocusGuard.registerTopTarget(root, searchBar)
+        }
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -280,6 +303,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             dao.categories(providerId, kind).collect { categories ->
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
+                cinemaChips?.submit(categoryRows, selectedCategoryId)
                 if (loadedItems.isEmpty() && pageJob == null) loadStreams(null)
                 requestInitialContentFocus()
             }
@@ -287,7 +311,7 @@ class PosterCatalogActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (::categoryList.isInitialized && ::posterGrid.isInitialized &&
+        if (DeviceClass.isTv(this) && ::categoryList.isInitialized && ::posterGrid.isInitialized &&
             TwoPaneFocusGuard.handle(event, categoryList, posterGrid,
                 ::requestSelectedCategoryFocus, ::requestPosterFocus)) return true
         return super.dispatchKeyEvent(event)
@@ -301,6 +325,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         }
 
         selectedCategoryId = id
+        cinemaChips?.select(id)
         generation++
         pageJob?.cancel()
         hasMore = true
