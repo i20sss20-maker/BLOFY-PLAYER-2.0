@@ -58,7 +58,7 @@ object BlofyUiKit {
             isAllCaps = false
             minHeight = 0
             minimumHeight = 0
-            setPadding(dp(16), 0, dp(16), 0)
+            setPadding(context.dp(16), 0, context.dp(16), 0)
             gravity = Gravity.CENTER
             textSize = 13f
             setTextColor(if (primary) Background else White)
@@ -68,7 +68,7 @@ object BlofyUiKit {
             isFocusableInTouchMode = DeviceClass.isTv(context)
             setOnFocusChangeListener { view, focused ->
                 view.background = this@BlofyUiKit.button(context, primary, focused)
-                view.setTextColor(if (primary) Background else White)
+                button.setTextColor(if (primary) Background else White)
                 view.animate().cancel()
                 val scale = if (focused) TvUiTuning.focusScale(context, 1.025f) else 1f
                 view.animate().scaleX(scale).scaleY(scale).setDuration(TvUiTuning.focusDuration(context, focused)).start()
