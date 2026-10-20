@@ -949,28 +949,29 @@ class HomeActivity : AppCompatActivity() {
         }
         heroContent = content
         heroKicker = TextView(this@HomeActivity).apply {
-            text = "✦  BLOFY CINEMA"; textSize = 13f
+            text = "✦  BLOFY CINEMA"; textSize = if (remote && compactTv) 11f else 13f
             typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT)
             gravity = Gravity.START; includeFontPadding = false
         }.also { content.addView(it) }
         heroTitle = TextView(this@HomeActivity).apply {
             text = getString(R.string.home_all_content)
-            textSize = if (layoutSpec.compact || compactTv) 30f else 36f
+            textSize = if (remote && compactTv) 24f else if (layoutSpec.compact) 30f else 36f
             typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
             gravity = Gravity.START; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
             includeFontPadding = false; setPadding(0, dp(5), 0, 0)
         }.also { content.addView(it) }
         heroMeta = TextView(this@HomeActivity).apply {
-            text = getString(R.string.home_all_content_meta); textSize = 13f
+            text = getString(R.string.home_all_content_meta); textSize = if (remote && compactTv) 11f else 13f
             setTextColor(0xFFDDD3E9.toInt()); gravity = Gravity.START
             isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
             setPadding(0, dp(5), 0, 0)
         }.also { content.addView(it) }
         heroSubtitle = TextView(this@HomeActivity).apply {
-            text = getString(R.string.home_all_content_subtitle); textSize = 14f
+            text = getString(R.string.home_all_content_subtitle); textSize = if (remote && compactTv) 11f else 14f
             setTextColor(TEXT_SECONDARY); gravity = Gravity.START
-            maxLines = 2; ellipsize = TextUtils.TruncateAt.END
-            setPadding(0, dp(9), 0, dp(14))
+            maxLines = if (remote && compactTv) 1 else 2; ellipsize = TextUtils.TruncateAt.END
+            setPadding(0, dp(if (remote && compactTv) 5 else 9),
+                0, dp(if (remote && compactTv) 7 else 14))
         }.also { content.addView(it) }
         heroDots = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection
