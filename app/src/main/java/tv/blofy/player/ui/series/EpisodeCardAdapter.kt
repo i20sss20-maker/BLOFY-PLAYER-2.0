@@ -22,6 +22,7 @@ import tv.blofy.player.R
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.common.TvUiTuning
 
@@ -98,7 +99,7 @@ internal class EpisodeCardAdapter(
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
-            background = ContentScreenStyle.softSurface(context, false, 18)
+            background = BlofyUiKit.panel(context, false, 18)
         }
         row.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(86)).apply {
             bottomMargin = dp(5)
@@ -108,7 +109,7 @@ internal class EpisodeCardAdapter(
         val frame = FrameLayout(context)
         val image = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = ContentScreenStyle.softSurface(context, false, 12)
+            background = BlofyUiKit.posterPlaceholder(context)
             clipToOutline = true
         }
         frame.addView(image, FrameLayout.LayoutParams(dp(124), dp(70)))

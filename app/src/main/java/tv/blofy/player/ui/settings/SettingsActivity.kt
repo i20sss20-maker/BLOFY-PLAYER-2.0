@@ -31,6 +31,7 @@ import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
@@ -73,7 +74,7 @@ class SettingsActivity : AppCompatActivity() {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             layoutDirection = uiDirection
-            background = AppCompatResources.getDrawable(this@SettingsActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@SettingsActivity)
             overScrollMode = View.OVER_SCROLL_NEVER
         }
         val page = LinearLayout(this).apply {
@@ -119,7 +120,7 @@ class SettingsActivity : AppCompatActivity() {
             setTextColor(CinemaStyle.Muted)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setPadding(dp(14), 0, dp(14), 0)
-            background = CinemaStyle.surface(this@SettingsActivity)
+            background = BlofyUiKit.panel(this@SettingsActivity, radiusDp = 10)
         }
         updateSyncStatus()
         page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)).apply { bottomMargin = dp(12) })

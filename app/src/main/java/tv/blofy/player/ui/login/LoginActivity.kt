@@ -46,6 +46,7 @@ import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
@@ -92,7 +93,7 @@ class LoginActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = direction
             setPadding(dp(32), dp(20), dp(32), dp(20))
-            background = AppCompatResources.getDrawable(this@LoginActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@LoginActivity)
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -269,7 +270,7 @@ class LoginActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             setPadding(dp(24), dp(24), dp(24), dp(24))
-            background = AppCompatResources.getDrawable(this@LoginActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@LoginActivity)
         }
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(150), dp(82)))
         root.addView(title("BLOFY PLAYER", 29f))

@@ -40,6 +40,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.player.PlayerActivity
@@ -83,7 +84,7 @@ class EpisodesActivity : ContentAccessActivity() {
                 dp(if (compact) 14 else if (tablet) 22 else 30),
                 dp(if (compact) 16 else 24)
             )
-            background = AppCompatResources.getDrawable(this@EpisodesActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@EpisodesActivity)
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
