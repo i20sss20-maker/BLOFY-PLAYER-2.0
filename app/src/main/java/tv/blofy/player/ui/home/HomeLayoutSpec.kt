@@ -14,9 +14,9 @@ internal data class HomeLayoutSpec(val width: Int, val height: Int, val remote: 
     }
     val heroHeight = when {
         compact -> (height * .62f).toInt().coerceIn(360, 490)
-        remote && height <= 600 -> (height * .55f).toInt().coerceIn(255, 324)
+        remote && height <= 600 -> (height * .46f).toInt().coerceIn(220, 250)
         remote -> (height * .50f).toInt().coerceIn(310, 400)
         else -> 324
     }
-    val actionHeight = if (remote) 44 else 52
+    val actionHeight = if (remote) 36 else 52
 }
