@@ -15,8 +15,8 @@ object ContentScreenStyle {
         when {
             primary && focused -> intArrayOf(0xFFFF6B70.toInt(), 0xFFE50914.toInt())
             primary -> intArrayOf(0xFFE50914.toInt(), 0xFFB20710.toInt())
-            focused -> intArrayOf(0xB05B1E24.toInt(), 0x8A32161A.toInt())
-            else -> intArrayOf(0x7021262B, 0x50101418)
+            focused -> intArrayOf(0xCC5B1E24.toInt(), 0xCC32161A.toInt())
+            else -> intArrayOf(0xCC15171B.toInt(), 0xCC0D0F12.toInt())
         }
     ).apply {
         val d = context.resources.displayMetrics.density
@@ -65,38 +65,38 @@ object ContentScreenStyle {
     fun softSurface(context: Context, focused: Boolean = false, radiusDp: Int = 14) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) {
-            intArrayOf(0xB05B1E24.toInt(), 0x8832161A.toInt(), 0x5818151D.toInt())
+            intArrayOf(0xCC5B1E24.toInt(), 0xCC32161A.toInt(), 0xCC15171B.toInt())
         } else {
-            intArrayOf(0x40231E29, 0x3018151D, 0x24100E13)
+            intArrayOf(0xCC15171B.toInt(), 0xCC111317.toInt(), 0xCC0D0F12.toInt())
         }
     ).apply {
         val d = context.resources.displayMetrics.density
         cornerRadius = radiusDp * d
         setStroke(
             (1f * d).toInt().coerceAtLeast(1),
-            if (focused) 0x66D6B56E.toInt() else 0x24FFFFFF
+            if (focused) 0xFFE50914.toInt() else 0x3AFFFFFF
         )
     }
 
     fun detailsPanel(context: Context) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         intArrayOf(
-            0x8A302326.toInt(),
-            0x6819151E.toInt(),
-            0x46100E14.toInt()
+            0xE615171B.toInt(),
+            0xD20D0F12.toInt(),
+            0xC008090B.toInt()
         )
     ).apply {
         val d = context.resources.displayMetrics.density
         cornerRadius = 22f * d
-        setStroke((1f * d).toInt().coerceAtLeast(1), 0x36D6B56E)
+        setStroke((1f * d).toInt().coerceAtLeast(1), 0x3AFFFFFF)
     }
 
     fun chip(context: Context) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0x703A2927, 0x4A18141C)
+        intArrayOf(0xCC21262B.toInt(), 0xCC15171B.toInt())
     ).apply {
         val d = context.resources.displayMetrics.density
         cornerRadius = 12f * d
-        setStroke((1f * d).toInt().coerceAtLeast(1), 0x46D6B56E)
+        setStroke((1f * d).toInt().coerceAtLeast(1), 0x3AFFFFFF)
     }
 }

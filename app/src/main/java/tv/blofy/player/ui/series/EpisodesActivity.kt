@@ -110,7 +110,7 @@ class EpisodesActivity : ContentAccessActivity() {
                 textSize = if (compact) 10.5f else 11.5f
                 letterSpacing = .12f
                 typeface = BlofyTvDesign.LabelTypeface
-                setTextColor(BlofyTvDesign.PurpleBright)
+                setTextColor(CinemaStyle.Accent)
                 gravity = Gravity.START
             })
             addView(TextView(this@EpisodesActivity).apply {

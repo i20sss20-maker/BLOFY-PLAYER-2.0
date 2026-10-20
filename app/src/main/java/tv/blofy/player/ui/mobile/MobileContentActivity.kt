@@ -60,7 +60,7 @@ class MobileContentActivity : AppCompatActivity() {
             textSize = 11.5f
             letterSpacing = .12f
             typeface = BlofyTvDesign.BodyTypeface
-            setTextColor(BlofyTvDesign.PurpleBright)
+            setTextColor(CinemaStyle.Accent)
             gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
