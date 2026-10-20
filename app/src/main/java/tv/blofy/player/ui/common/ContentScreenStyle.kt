@@ -13,8 +13,8 @@ object ContentScreenStyle {
     fun actionBackground(context: Context, primary: Boolean, focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
-            primary && focused -> intArrayOf(0xFFF2E9FA.toInt(), 0xFFD8C4EA.toInt())
-            primary -> intArrayOf(0xFFD9C2EA.toInt(), 0xFFB48DD0.toInt())
+            primary && focused -> intArrayOf(0xFFBD7AFF.toInt(), 0xFF8845D4.toInt())
+            primary -> intArrayOf(0xFF9D54E8.toInt(), 0xFF6E2FB3.toInt())
             focused -> intArrayOf(0xB05A4969.toInt(), 0x8A392E43.toInt())
             else -> intArrayOf(0x70221D29, 0x50141018)
         }
@@ -45,11 +45,11 @@ object ContentScreenStyle {
             stateListAnimator = null
             backgroundTintList = null
             elevation = 0f
-            setTextColor(if (primary) 0xFF130B1D.toInt() else Color.WHITE)
+            setTextColor(Color.WHITE)
             background = actionBackground(context, primary, false)
             setOnFocusChangeListener { view, focused ->
                 background = actionBackground(context, primary, focused)
-                setTextColor(if (primary) 0xFF130B1D.toInt() else Color.WHITE)
+                setTextColor(Color.WHITE)
                 view.animate().cancel()
                 val scale = if (focused) TvUiTuning.focusScale(context, 1.018f) else 1f
                 view.animate()
@@ -81,9 +81,9 @@ object ContentScreenStyle {
     fun detailsPanel(context: Context) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         intArrayOf(
-            0x8A25202B.toInt(),
-            0x6819151E.toInt(),
-            0x46100E14.toInt()
+            0xB5221234.toInt(),
+            0xA110091B.toInt(),
+            0x96080613.toInt()
         )
     ).apply {
         val d = context.resources.displayMetrics.density
