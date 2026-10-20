@@ -12,25 +12,25 @@ import android.widget.TextView
  */
 object BlofyTvDesign {
     val Background = CinemaStyle.Background
-    val BackgroundRaised = Color.rgb(14, 12, 18)
+    val BackgroundRaised = Color.rgb(16, 13, 16)
     val Surface = CinemaStyle.Surface
-    val SurfaceRaised = Color.rgb(43, 36, 50)
-    val SurfaceFocused = Color.rgb(82, 67, 100)
-    val FocusStroke = Color.rgb(242, 234, 250)
-    val FocusGlow = Color.rgb(185, 156, 221)
+    val SurfaceRaised = Color.rgb(52, 35, 38)
+    val SurfaceFocused = Color.rgb(106, 62, 70)
+    val FocusStroke = Color.rgb(255, 244, 213)
+    val FocusGlow = Color.rgb(214, 181, 110)
 
-    val Purple = Color.rgb(134, 84, 197)
+    val Purple = Color.rgb(185, 145, 82)
     val PurpleBright = CinemaStyle.Accent
-    val PurpleDeep = Color.rgb(54, 36, 67)
-    val PurpleSoft = Color.rgb(216, 197, 233)
-    val Lavender = Color.rgb(238, 232, 245)
-    val Mint = Color.rgb(91, 220, 187)
-    val Error = Color.rgb(255, 118, 140)
+    val PurpleDeep = Color.rgb(126, 78, 52)
+    val PurpleSoft = Color.rgb(255, 232, 180)
+    val Lavender = Color.rgb(255, 232, 180)
+    val Mint = Color.rgb(227, 192, 123)
+    val Error = Color.rgb(232, 125, 130)
 
     val TextPrimary = CinemaStyle.White
-    val TextSecondary = Color.rgb(218, 215, 222)
+    val TextSecondary = Color.rgb(236, 229, 220)
     val TextMuted = CinemaStyle.Muted
-    val Divider = 0x32FFFFFF
+    val Divider = 0x4A5E4743
 
     const val HeroTitleSp = 42f
     const val DetailTitleSp = 40f

@@ -14,42 +14,43 @@ import android.widget.LinearLayout
 
 /** Shared cinematic actions: compact visuals and a distinct remote focus state. */
 object CinemaStyle {
-    val Background = 0xFF07070A.toInt()
-    val Surface = 0xFF1A1620.toInt()
-    val White = 0xFFF3F4F6.toInt()
-    val Muted = 0xFFBEB7C6.toInt()
-    val Accent = 0xFFC7A8F2.toInt()
+    // Cinema Luxe palette: graphite black, champagne gold and restrained burgundy.
+    val Background = 0xFF08080B.toInt()
+    val Surface = 0xFF21191C.toInt()
+    val White = 0xFFFFFBF4.toInt()
+    val Muted = 0xFFB8A99E.toInt()
+    val Accent = 0xFFF2D28B.toInt()
     const val ActionHeight = 34
 
     fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 8) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         when {
-            focused && filledFocus -> intArrayOf(0xFFE9DCFA.toInt(), Accent, 0xFFAD86D4.toInt())
-            focused -> intArrayOf(0xFF514061.toInt(), 0xFF342A3D.toInt(), Surface)
-            else -> intArrayOf(Surface, 0xFF100E14.toInt())
+            focused && filledFocus -> intArrayOf(0xFFFFE9B0.toInt(), Accent, 0xFFC88D54.toInt())
+            focused -> intArrayOf(0xFF6A3E46.toInt(), 0xFF382326.toInt(), Surface)
+            else -> intArrayOf(Surface, 0xFF100C0E.toInt())
         }
     ).apply {
         val density = context.resources.displayMetrics.density
         cornerRadius = radiusDp * density
         setStroke(
             ((if (focused) 2 else 1) * density).toInt(),
-            if (focused) 0xFFEBDFFD.toInt() else 0x32FFFFFF
+            if (focused) 0xFFFFF4D5.toInt() else 0x4AFFFFFF
         )
     }
 
     fun buttonBackground(context: Context, primary: Boolean, focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
-            primary && focused -> intArrayOf(0xFFEADFFC.toInt(), 0xFFD0B7EB.toInt(), 0xFFB18BD5.toInt())
-            primary -> intArrayOf(Accent, 0xFFA97CCE.toInt())
-            focused -> intArrayOf(0xFF5A476B.toInt(), 0xFF392E43.toInt())
-            else -> intArrayOf(Surface, 0xFF121018.toInt())
+            primary && focused -> intArrayOf(0xFFFFF1C5.toInt(), 0xFFF2D28B.toInt(), 0xFFC88D54.toInt())
+            primary -> intArrayOf(Accent, 0xFFC88D54.toInt())
+            focused -> intArrayOf(0xFF70434B.toInt(), 0xFF3E272B.toInt())
+            else -> intArrayOf(Surface, 0xFF121011.toInt())
         }
     ).apply {
         cornerRadius = 6 * context.resources.displayMetrics.density
         setStroke(
             ((if (focused) 2 else 1) * context.resources.displayMetrics.density).toInt(),
-            if (focused) 0xFFF1E7FD.toInt() else 0x32FFFFFF
+            if (focused) 0xFFFFF4D5.toInt() else 0x4AFFFFFF
         )
     }
 

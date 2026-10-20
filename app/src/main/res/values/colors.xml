@@ -1,9 +1,16 @@
 <resources>
-    <color name="blofy_black">#07050B</color>
-    <color name="blofy_surface">#211332</color>
-    <color name="blofy_surface_alt">#2A183E</color>
-    <color name="blofy_purple">#8750D7</color>
-    <color name="blofy_purple_soft">#D2BBEE</color>
-    <color name="blofy_white">#F3F4F6</color>
-    <color name="blofy_text_muted">#C4B6D8</color>
+    <color name="blofy_black">#08080B</color>
+    <color name="blofy_background_raised">#100D10</color>
+    <color name="blofy_surface">#21191C</color>
+    <color name="blofy_surface_alt">#342326</color>
+    <color name="blofy_surface_focused">#6A3E46</color>
+    <color name="blofy_purple">#B99152</color>
+    <color name="blofy_purple_bright">#F2D28B</color>
+    <color name="blofy_purple_soft">#FFE8B4</color>
+    <color name="blofy_pink_accent">#8D3046</color>
+    <color name="blofy_mint">#E3C07B</color>
+    <color name="blofy_white">#FFFBF4</color>
+    <color name="blofy_text_secondary">#ECE5DC</color>
+    <color name="blofy_text_muted">#B8A99E</color>
+    <color name="blofy_divider">#5E4743</color>
 </resources>

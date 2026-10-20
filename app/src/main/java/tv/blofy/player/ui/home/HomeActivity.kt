@@ -1067,23 +1067,23 @@ class HomeActivity : AppCompatActivity() {
 
     private fun roundedColor(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = dp(radius).toFloat(); setColor(color); stroke?.let { setStroke(dp(1), it) } }
     private fun surface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
-    private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8D66BC.toInt(), 0xFF5B426F.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFD7C6EA.toInt()) }
+    private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8C5A4C.toInt(), 0xFF5B3038.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFF2D28B.toInt()) }
     private fun transparentSurface(focused: Boolean) = if (focused) {
         GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(0xFF40344B.toInt(), 0xFF29222F.toInt(), 0xFF17141A.toInt())
+            intArrayOf(0xFF493035.toInt(), 0xFF292022.toInt(), 0xFF171214.toInt())
         ).apply {
             cornerRadius = dp(10).toFloat()
             setStroke(dp(1), BlofyTvDesign.FocusStroke)
         }
     } else roundedColor(Color.TRANSPARENT, 10)
     private fun heroSurface() = CinemaStyle.surface(this, radiusDp = 16)
-    private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF342B3D.toInt(), 0xFF211C26.toInt(), 0xFF121015.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF665674.toInt()) }
+    private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF49352F.toInt(), 0xFF2B2021.toInt(), 0xFF121011.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF80634B.toInt()) }
     private fun featuredSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 18)
     private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 8)
     private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
     private fun compactTile(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 16)
-    private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF262129.toInt(), 0xFF171419.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF3C3541.toInt()) }
+    private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF302426.toInt(), 0xFF171214.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF4D3835.toInt()) }
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START }
     private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -1091,9 +1091,9 @@ class HomeActivity : AppCompatActivity() {
     companion object {
         private const val SCREEN_KEY = "home"
         private const val HERO_ROTATION_MS = 8_000L
-        private val PURPLE_BRIGHT = Color.rgb(184, 160, 237)
-        private val TEXT_PRIMARY = Color.rgb(249, 247, 252)
-        private val TEXT_SECONDARY = Color.rgb(224, 216, 232)
-        private val TEXT_MUTED = Color.rgb(154, 162, 177)
+        private val PURPLE_BRIGHT = Color.rgb(242, 210, 139)
+        private val TEXT_PRIMARY = Color.rgb(255, 251, 244)
+        private val TEXT_SECONDARY = Color.rgb(236, 229, 220)
+        private val TEXT_MUTED = Color.rgb(184, 169, 158)
     }
 }
