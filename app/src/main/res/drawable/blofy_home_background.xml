@@ -1,5 +1,46 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item><shape android:shape="rectangle"><gradient android:angle="315" android:startColor="#09070E" android:centerColor="#110D19" android:endColor="#08060C" /></shape></item>
-    <item><shape android:shape="rectangle"><gradient android:type="radial" android:centerX="0.94" android:centerY="0.06" android:gradientRadius="820dp" android:startColor="#453D1760" android:endColor="#00100C18" /></shape></item>
-    <item><shape android:shape="rectangle"><gradient android:type="radial" android:centerX="0.08" android:centerY="0.94" android:gradientRadius="700dp" android:startColor="#2E52258D" android:endColor="#0008060C" /></shape></item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="315"
+                android:endColor="#050506"
+                android:startColor="#1B1115" />
+        </shape>
+    </item>
+
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:centerX="0.86"
+                android:centerY="0.06"
+                android:endColor="#001D0D10"
+                android:gradientRadius="720dp"
+                android:startColor="#7A8E4A32"
+                android:type="radial" />
+        </shape>
+    </item>
+
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:centerX="0.12"
+                android:centerY="0.98"
+                android:endColor="#00000000"
+                android:gradientRadius="520dp"
+                android:startColor="#454A251F"
+                android:type="radial" />
+        </shape>
+    </item>
+
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:centerX="0.52"
+                android:centerY="0.42"
+                android:endColor="#00000000"
+                android:gradientRadius="850dp"
+                android:startColor="#191F1415"
+                android:type="radial" />
+        </shape>
+    </item>
 </layer-list>
