@@ -152,13 +152,13 @@ class VlcFallbackActivity : AppCompatActivity() {
             text = "4K · VLC"
             textSize = 11f
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            setTextColor(0xFFF1EAF7.toInt())
+            setTextColor(0xFFE4E6E3.toInt())
             gravity = Gravity.CENTER
             setPadding(dp(10), dp(5), dp(10), dp(5))
             background = GradientDrawable().apply {
                 cornerRadius = dp(12).toFloat()
                 setColor(0xD02A2330.toInt())
-                setStroke(dp(1), 0xFFC08B52.toInt())
+                setStroke(dp(1), 0xFFE50914.toInt())
             }
         })
         root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
@@ -173,7 +173,7 @@ class VlcFallbackActivity : AppCompatActivity() {
             background = GradientDrawable().apply {
                 cornerRadius = dp(16).toFloat()
                 setColor(0xE3211C27.toInt())
-                setStroke(dp(1), 0xFFF2D28B.toInt())
+                setStroke(dp(1), 0xFFE50914.toInt())
             }
         }
         root.addView(notice, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {

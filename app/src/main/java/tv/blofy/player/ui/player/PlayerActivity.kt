@@ -730,8 +730,8 @@ open class PlayerActivity : ContentAccessActivity() {
         minimumWidth = dp(48); minimumHeight = dp(48)
         fun surface(focused: Boolean) = GradientDrawable().apply {
             cornerRadius = dp(18).toFloat()
-            setColor(if (focused) 0xFFC88D54.toInt() else if (icon == R.drawable.player_pause) 0xFF8C5A4C.toInt() else 0xB31B1A20.toInt())
-            setStroke(dp(1), if (focused) 0xFFFFF4D6.toInt() else 0x404D455A)
+            setColor(if (focused) 0xFFB20710.toInt() else if (icon == R.drawable.player_pause) 0xFF5B1E24.toInt() else 0xB31B1A20.toInt())
+            setStroke(dp(1), if (focused) 0xFFFFE7E7.toInt() else 0x404D455A)
         }
         background = surface(false)
         setOnFocusChangeListener { view, focused ->

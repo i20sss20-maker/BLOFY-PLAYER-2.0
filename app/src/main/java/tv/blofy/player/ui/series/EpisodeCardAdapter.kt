@@ -146,7 +146,7 @@ internal class EpisodeCardAdapter(
             progress = 0
             visibility = View.GONE
             progressTintList = ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
-            progressBackgroundTintList = ColorStateList.valueOf(0xFF3A294A.toInt())
+            progressBackgroundTintList = ColorStateList.valueOf(0xFF34383D.toInt())
         }
         textBox.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         textBox.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(19)))

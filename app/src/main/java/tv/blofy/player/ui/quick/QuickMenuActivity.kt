@@ -38,9 +38,9 @@ class QuickMenuActivity : AppCompatActivity() {
             layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(22), dp(16), dp(22), dp(16))
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF28222E.toInt(), 0xFF121015.toInt())).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF15171B.toInt(), 0xFF0D0F12.toInt())).apply {
                 cornerRadius = dp(22).toFloat()
-                setStroke(dp(1), 0xFF62536F.toInt())
+                setStroke(dp(1), 0xFF34383D.toInt())
             }
             elevation = dp(16).toFloat()
         }
@@ -104,7 +104,7 @@ class QuickMenuActivity : AppCompatActivity() {
                 text = icon
                 textSize = 19f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(0xFFF2D28B.toInt())
+                setTextColor(0xFFE50914.toInt())
                 gravity = Gravity.CENTER
             }, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(9) })
 
@@ -121,7 +121,7 @@ class QuickMenuActivity : AppCompatActivity() {
                 addView(TextView(this@QuickMenuActivity).apply {
                     text = subtitle
                     textSize = 10.4f
-                    setTextColor(0xFFB2A7BE.toInt())
+                    setTextColor(0xFFA7AAA8.toInt())
                     gravity = Gravity.START
                 })
             }
@@ -146,13 +146,13 @@ class QuickMenuActivity : AppCompatActivity() {
     private fun itemBackground(focused: Boolean, primary: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
-            focused -> intArrayOf(0xFF8C5A4C.toInt(), 0xFF3E272B.toInt())
+            focused -> intArrayOf(0xFF5B1E24.toInt(), 0xFF32161A.toInt())
             primary -> intArrayOf(0xFF342A3E.toInt(), 0xFF211B27.toInt())
             else -> intArrayOf(0xE6242029.toInt(), 0xE617141A.toInt())
         }
     ).apply {
         cornerRadius = dp(15).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF49414F.toInt())
+        setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF34383D.toInt())
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

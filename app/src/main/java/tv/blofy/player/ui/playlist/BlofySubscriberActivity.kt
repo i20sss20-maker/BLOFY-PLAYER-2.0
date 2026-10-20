@@ -289,19 +289,19 @@ class BlofySubscriberActivity : AppCompatActivity() {
     private fun panelBackground() = GradientDrawable().apply {
         cornerRadius = dp(26).toFloat()
         setColor(0xEE171419.toInt())
-        setStroke(dp(1), 0xFF5E526B.toInt())
+        setStroke(dp(1), 0xFF34383D.toInt())
     }
 
     private fun fieldBackground(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = dp(17).toFloat()
         setColor(0xFF111015.toInt())
-        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF3F3845.toInt())
+        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF34383D.toInt())
     }
 
     private fun buttonBackground(focused: Boolean) = GradientDrawable().apply {
         cornerRadius = dp(18).toFloat()
         setColor(if (focused) BlofyTvDesign.Purple else BlofyTvDesign.PurpleDeep)
-        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF80634B.toInt())
+        setStroke(dp(if (focused) 2 else 1), if (focused) BlofyTvDesign.FocusStroke else 0xFF6B3A3F.toInt())
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

@@ -592,7 +592,7 @@ private class GuideChannelAdapter(
             setImageResource(R.drawable.blofy_logo)
             background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
-                setColor(0xFF171419.toInt())
+                setColor(0xFF121417.toInt())
             }
         }
         root.addView(logo, LinearLayout.LayoutParams(dp(58), dp(58)).apply { marginStart = dp(12) })
@@ -678,11 +678,11 @@ private class GuideChannelAdapter(
     companion object {
         private fun rowBackground(focused: Boolean, radius: Int) = GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            if (focused) intArrayOf(0xFF8C5A4C.toInt(), 0xFF3E272B.toInt())
+            if (focused) intArrayOf(0xFF5B1E24.toInt(), 0xFF32161A.toInt())
             else intArrayOf(0xDB241F29.toInt(), 0xE817141A.toInt())
         ).apply {
             cornerRadius = radius.toFloat()
-            setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF4A424F.toInt())
+            setStroke(if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0xFF34383D.toInt())
         }
     }
 }

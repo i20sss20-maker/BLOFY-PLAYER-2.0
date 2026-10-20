@@ -307,12 +307,12 @@ class ProfilesActivity : AppCompatActivity() {
     }
 
     private fun cardBg(selected: Boolean, focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        when { focused -> intArrayOf(0xFF8C5A4C.toInt(), 0xFF3E272B.toInt()); selected -> intArrayOf(0xFF302A38.toInt(), 0xFF201B25.toInt()); else -> intArrayOf(0xFF221E27.toInt(), 0xFF151318.toInt()) }
-    ).apply { cornerRadius = dp(16).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF4A424F.toInt()) }
+        when { focused -> intArrayOf(0xFF5B1E24.toInt(), 0xFF32161A.toInt()); selected -> intArrayOf(0xFF302A38.toInt(), 0xFF201B25.toInt()); else -> intArrayOf(0xFF221E27.toInt(), 0xFF151318.toInt()) }
+    ).apply { cornerRadius = dp(16).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF34383D.toInt()) }
 
-    private fun fieldBg() = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(0xFF201C24.toInt()); setStroke(dp(1), 0xFF514856.toInt()) }
+    private fun fieldBg() = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(0xFF15171B.toInt()); setStroke(dp(1), 0xFF34383D.toInt()) }
     private fun buttonBg(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF8C5A4C.toInt(), 0xFF3E272B.toInt()) else intArrayOf(0xFF2A252F.toInt(), 0xFF1D1921.toInt())
-    ).apply { cornerRadius = dp(14).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF514856.toInt()) }
+        if (focused) intArrayOf(0xFF5B1E24.toInt(), 0xFF32161A.toInt()) else intArrayOf(0xFF2A252F.toInt(), 0xFF15171B.toInt())
+    ).apply { cornerRadius = dp(14).toFloat(); setStroke(if (focused) dp(2) else dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF34383D.toInt()) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 }

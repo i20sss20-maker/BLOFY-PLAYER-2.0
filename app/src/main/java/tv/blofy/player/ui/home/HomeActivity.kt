@@ -1083,7 +1083,7 @@ class HomeActivity : AppCompatActivity() {
     private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 8)
     private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
     private fun compactTile(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 16)
-    private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF302426.toInt(), 0xFF171214.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF4D3835.toInt()) }
+    private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF21262B.toInt(), 0xFF0D0F12.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF34383D.toInt()) }
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START }
     private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

@@ -23,7 +23,7 @@ class SplashActivity : AppCompatActivity() {
         val statusView = TextView(this).apply {
             text = getString(R.string.splash_opening)
             textSize = 13.5f
-            setTextColor(0xFFB8ABC7.toInt())
+            setTextColor(0xFFA7AAA8.toInt())
             gravity = Gravity.CENTER
         }
         val root = LinearLayout(this).apply {
@@ -47,7 +47,7 @@ class SplashActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(54)))
         root.addView(ProgressBar(this).apply {
             isIndeterminate = true
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFFF2D28B.toInt())
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFFE50914.toInt())
         }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { topMargin = dp(14) })
         root.addView(statusView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { topMargin = dp(8) })
         setContentView(root)

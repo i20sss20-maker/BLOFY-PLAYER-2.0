@@ -197,7 +197,7 @@ class ProfileHomeLayoutLifecycle : Application.ActivityLifecycleCallbacks {
 
         val poster = ImageView(activity).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(0xFF17101F.toInt())
+            setBackgroundColor(0xFF0D0F12.toInt())
         }
         addView(poster, FrameLayout.LayoutParams(-1, -1).apply {
             setMargins(dp(activity, 4), dp(activity, 4), dp(activity, 4), dp(activity, 4))

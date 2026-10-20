@@ -99,7 +99,7 @@ class RecentChannelsActivity : AppCompatActivity() {
                     val logo = ImageView(this@RecentChannelsActivity).apply {
                         scaleType = ImageView.ScaleType.CENTER_INSIDE
                         setPadding(dp(5), dp(5), dp(5), dp(5))
-                        background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0xFF171214.toInt()); setStroke(dp(1), 0xFF5E4743.toInt()) }
+                        background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0xFF0D0F12.toInt()); setStroke(dp(1), 0xFF34383D.toInt()) }
                     }
                     addView(logo, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginStart = dp(14) })
                     if (!stream.icon.isNullOrBlank() || !stream.backdrop.isNullOrBlank()) ArtworkLoader.load(logo, listOf(stream.icon, stream.backdrop)) else logo.setImageResource(R.drawable.blofy_logo)

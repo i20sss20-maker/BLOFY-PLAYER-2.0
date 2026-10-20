@@ -837,7 +837,7 @@ class LoginActivity : AppCompatActivity() {
         intArrayOf(0xD93A171C.toInt(), 0xE5160F20.toInt())
     ).apply {
         cornerRadius = dp(16).toFloat()
-        setStroke(dp(1), 0xFF8C5A4C.toInt())
+        setStroke(dp(1), 0xFF5B1E24.toInt())
     }
 
     private fun miniCircle() = GradientDrawable().apply {
@@ -854,13 +854,13 @@ class LoginActivity : AppCompatActivity() {
     private fun playlistCardBackground(active: Boolean, focused: Boolean) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
-            focused -> intArrayOf(0xFF8C5A4C.toInt(), 0xFF3E272B.toInt(), 0xFF2A222F.toInt())
+            focused -> intArrayOf(0xFF5B1E24.toInt(), 0xFF32161A.toInt(), 0xFF2A222F.toInt())
             active -> intArrayOf(0xFF2C2632.toInt(), 0xFF201C25.toInt())
-            else -> intArrayOf(0xFF241F29.toInt(), 0xFF171419.toInt())
+            else -> intArrayOf(0xFF241F29.toInt(), 0xFF121417.toInt())
         }
     ).apply {
         cornerRadius = dp(17).toFloat()
-        setStroke(if (focused) dp(2) else dp(1), when { focused -> BlofyTvDesign.FocusStroke; active -> 0xFF675A72.toInt(); else -> 0xFF463F49.toInt() })
+        setStroke(if (focused) dp(2) else dp(1), when { focused -> BlofyTvDesign.FocusStroke; active -> 0xFF4A5057.toInt(); else -> 0xFF463F49.toInt() })
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
