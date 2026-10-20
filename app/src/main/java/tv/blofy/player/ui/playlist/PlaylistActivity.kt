@@ -35,6 +35,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.TvUiTuning
 import java.util.UUID
@@ -52,7 +53,7 @@ class PlaylistActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (phone) 22 else 54), dp(if (phone) 24 else 28), dp(if (phone) 22 else 54), dp(if (phone) 24 else 28))
-            background = AppCompatResources.getDrawable(this@PlaylistActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@PlaylistActivity)
         }
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(if (phone) 150 else 170), dp(if (phone) 72 else 76)))
         root.addView(TextView(this).apply {

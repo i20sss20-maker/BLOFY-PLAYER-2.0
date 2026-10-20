@@ -21,6 +21,7 @@ import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.TvUiTuning
 
 class ProfilesActivity : AppCompatActivity() {
@@ -33,7 +34,7 @@ class ProfilesActivity : AppCompatActivity() {
             layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.TOP
             setPadding(dp(42), dp(30), dp(42), dp(30))
-            background = AppCompatResources.getDrawable(this@ProfilesActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@ProfilesActivity)
         }
         setContentView(root)
         render()

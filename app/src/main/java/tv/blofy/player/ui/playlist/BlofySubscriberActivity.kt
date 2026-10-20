@@ -32,6 +32,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.TvUiTuning
 import java.util.UUID
 
@@ -47,7 +48,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
             isFillViewport = true
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = AppCompatResources.getDrawable(this@BlofySubscriberActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@BlofySubscriberActivity)
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

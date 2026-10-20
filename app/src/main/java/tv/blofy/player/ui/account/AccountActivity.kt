@@ -32,6 +32,7 @@ import tv.blofy.player.core.identity.ActivationRemoteClient
 import tv.blofy.player.core.privacy.PrivacyPreferences
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 
 /** Available from Login, including expired licenses. Sensitive actions always require a tap. */
 class AccountActivity : AppCompatActivity() {
@@ -112,7 +113,7 @@ class AccountActivity : AppCompatActivity() {
         action(getString(R.string.account_back)) { finish() }
         setContentView(ScrollView(this).apply {
             isFillViewport = true
-            background = AppCompatResources.getDrawable(this@AccountActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@AccountActivity)
             addView(page)
         })
         actions.firstOrNull()?.requestFocus()

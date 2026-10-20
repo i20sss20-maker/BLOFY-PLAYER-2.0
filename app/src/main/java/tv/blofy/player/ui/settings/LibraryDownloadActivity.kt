@@ -29,6 +29,7 @@ import tv.blofy.player.data.preparation.FullLibrarySyncState
 import tv.blofy.player.data.preparation.FullLibrarySyncWorker
 import tv.blofy.player.data.preparation.PreparationJournal
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -83,7 +84,7 @@ class LibraryDownloadActivity : AppCompatActivity() {
         page.addView(resume, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         setContentView(ScrollView(this).apply {
             isFillViewport = true
-            background = AppCompatResources.getDrawable(this@LibraryDownloadActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@LibraryDownloadActivity)
             addView(page)
         })
         lifecycleScope.launch {

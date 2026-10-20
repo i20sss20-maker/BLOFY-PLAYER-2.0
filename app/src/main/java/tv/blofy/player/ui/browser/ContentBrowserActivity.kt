@@ -45,6 +45,7 @@ import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.catalog.CatalogPageMemory
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -163,7 +164,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             setPadding(dp(if (phoneMode) 10 else 22), dp(if (phoneMode) 10 else 16), dp(if (phoneMode) 10 else 22), dp(if (phoneMode) 10 else 16))
-            background = AppCompatResources.getDrawable(this@ContentBrowserActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@ContentBrowserActivity)
             clipChildren = false
             clipToPadding = false
         }

@@ -19,6 +19,7 @@ import tv.blofy.player.R
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -31,7 +32,7 @@ class ForYouActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = uiDirection
             setPadding(dp(38), dp(28), dp(38), dp(28))
-            background = AppCompatResources.getDrawable(this@ForYouActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@ForYouActivity)
         }
         val title = TextView(this).apply {
             text = getString(R.string.for_you_title)

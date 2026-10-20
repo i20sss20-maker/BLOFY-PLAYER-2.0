@@ -32,6 +32,7 @@ import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import java.text.DateFormat
 import java.util.Date
@@ -47,7 +48,7 @@ class SystemStatusActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val root = ScrollView(this).apply {
             layoutDirection = resources.configuration.layoutDirection
-            background = AppCompatResources.getDrawable(this@SystemStatusActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@SystemStatusActivity)
             isFillViewport = true
             isVerticalScrollBarEnabled = false
         }

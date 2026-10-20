@@ -23,6 +23,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.common.TvUiTuning
@@ -44,7 +45,7 @@ class CatchupActivity : ContentAccessActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(46), dp(34), dp(46), dp(34))
-            background = AppCompatResources.getDrawable(this@CatchupActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@CatchupActivity)
         }
         root.addView(TextView(this).apply {
             text = getString(R.string.catchup_title)

@@ -31,6 +31,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.browser.LiveChannelAdapter
 import tv.blofy.player.ui.catalog.PosterStreamAdapter
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -58,7 +59,7 @@ class SectionSearchActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (compact) 14 else 30), dp(if (compact) 14 else 24), dp(if (compact) 14 else 30), dp(if (compact) 14 else 24))
-            background = AppCompatResources.getDrawable(this@SectionSearchActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@SectionSearchActivity)
             clipChildren = false
             clipToPadding = false
         }

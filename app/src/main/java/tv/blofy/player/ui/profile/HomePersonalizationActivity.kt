@@ -14,6 +14,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 
 class HomePersonalizationActivity : AppCompatActivity() {
     private lateinit var list: LinearLayout
@@ -27,7 +28,7 @@ class HomePersonalizationActivity : AppCompatActivity() {
     private fun render() {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
-            background = AppCompatResources.getDrawable(this@HomePersonalizationActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@HomePersonalizationActivity)
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

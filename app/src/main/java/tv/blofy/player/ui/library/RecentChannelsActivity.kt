@@ -26,6 +26,7 @@ import tv.blofy.player.data.RecentChannelStore
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.player.PlayerActivity
@@ -37,7 +38,7 @@ class RecentChannelsActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(48), dp(34), dp(48), dp(36))
-            background = AppCompatResources.getDrawable(this@RecentChannelsActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@RecentChannelsActivity)
         }
         root.addView(TextView(this).apply {
             text = getString(R.string.brand_live)

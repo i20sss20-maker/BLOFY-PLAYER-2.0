@@ -20,6 +20,7 @@ import tv.blofy.player.R
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 
@@ -36,7 +37,7 @@ class SmartCollectionsActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(34), dp(24), dp(34), dp(28))
-            background = AppCompatResources.getDrawable(this@SmartCollectionsActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@SmartCollectionsActivity)
             clipChildren = false
             clipToPadding = false
         }

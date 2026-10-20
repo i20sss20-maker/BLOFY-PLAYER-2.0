@@ -20,6 +20,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 
 class CategoryManagerActivity : AppCompatActivity() {
@@ -37,7 +38,7 @@ class CategoryManagerActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (isTv) 34 else 18), dp(if (isTv) 26 else 18), dp(if (isTv) 34 else 18), dp(24))
-            background = AppCompatResources.getDrawable(this@CategoryManagerActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@CategoryManagerActivity)
         }
         root.addView(Button(this).apply {
             text = getString(R.string.back)

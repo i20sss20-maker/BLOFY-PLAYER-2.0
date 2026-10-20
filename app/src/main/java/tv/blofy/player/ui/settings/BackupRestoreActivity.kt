@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import java.io.Reader
 import java.text.SimpleDateFormat
@@ -65,7 +66,7 @@ class BackupRestoreActivity : AppCompatActivity() {
             layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.TOP or Gravity.START
             setPadding(dp(42), dp(32), dp(42), dp(36))
-            background = AppCompatResources.getDrawable(this@BackupRestoreActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@BackupRestoreActivity)
         }
         root.addView(Button(this).apply {
             text = getString(R.string.back)

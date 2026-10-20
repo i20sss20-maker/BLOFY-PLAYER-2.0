@@ -20,6 +20,7 @@ import tv.blofy.player.core.cloud.ProfileCloudSync
 import tv.blofy.player.core.profile.ProfileStore
 import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -33,7 +34,7 @@ class CloudSyncActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val scroll = ScrollView(this).apply {
             isFillViewport = true
-            background = AppCompatResources.getDrawable(this@CloudSyncActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@CloudSyncActivity)
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

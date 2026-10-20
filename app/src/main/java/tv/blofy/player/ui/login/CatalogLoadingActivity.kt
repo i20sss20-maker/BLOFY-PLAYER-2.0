@@ -41,6 +41,7 @@ import tv.blofy.player.data.preparation.FullLibrarySyncWorker
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
 import java.util.UUID
@@ -137,7 +138,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 u(if (compact) 14 else if (tablet) 28 else if (shortTv) 38 else 72),
                 u(if (compact) 16 else if (shortTv) 18 else 40)
             )
-            background = AppCompatResources.getDrawable(this@CatalogLoadingActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@CatalogLoadingActivity)
         }
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

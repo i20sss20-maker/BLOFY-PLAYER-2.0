@@ -24,6 +24,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 
@@ -37,7 +38,7 @@ class ProfileWatchlistActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val scroll = ScrollView(this).apply {
             isFillViewport = true
-            background = AppCompatResources.getDrawable(this@ProfileWatchlistActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@ProfileWatchlistActivity)
         }
         list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

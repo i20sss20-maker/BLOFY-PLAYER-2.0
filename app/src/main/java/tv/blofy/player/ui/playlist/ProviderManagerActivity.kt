@@ -33,6 +33,7 @@ import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import java.text.DateFormat
@@ -58,7 +59,7 @@ class ProviderManagerActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(if (isTv) 58 else 18), dp(if (isTv) 34 else 18), dp(if (isTv) 58 else 18), dp(if (isTv) 34 else 22))
-            background = AppCompatResources.getDrawable(this@ProviderManagerActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@ProviderManagerActivity)
             clipChildren = false
             clipToPadding = false
         }

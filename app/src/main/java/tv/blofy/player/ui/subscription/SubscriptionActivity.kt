@@ -24,6 +24,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.subscription.SubscriptionClient
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,7 +39,7 @@ class SubscriptionActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val scroll = ScrollView(this).apply {
             isFillViewport = true
-            background = AppCompatResources.getDrawable(this@SubscriptionActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@SubscriptionActivity)
         }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

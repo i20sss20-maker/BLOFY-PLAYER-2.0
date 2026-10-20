@@ -15,6 +15,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import tv.blofy.player.R
 import tv.blofy.player.core.security.ParentalGate
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 
 class ParentalSettingsActivity : AppCompatActivity() {
@@ -38,7 +39,7 @@ class ParentalSettingsActivity : AppCompatActivity() {
             layoutDirection = resources.configuration.layoutDirection
             gravity = Gravity.TOP or Gravity.START
             setPadding(dp(42), dp(32), dp(42), dp(36))
-            background = AppCompatResources.getDrawable(this@ParentalSettingsActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@ParentalSettingsActivity)
         }
         root.addView(Button(this).apply {
             text = getString(R.string.back)

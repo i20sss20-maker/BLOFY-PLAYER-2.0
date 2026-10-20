@@ -1,4 +1,5 @@
 package tv.blofy.player.ui.login
+import tv.blofy.player.ui.common.BlofyUiKit
 
 import android.content.Intent
 import android.graphics.Color
@@ -29,7 +30,7 @@ class SplashActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            background = AppCompatResources.getDrawable(this@SplashActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@SplashActivity)
             setPadding(dp(32), dp(32), dp(32), dp(32))
         }
         root.addView(ImageView(this).apply {

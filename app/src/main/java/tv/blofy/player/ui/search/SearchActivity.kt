@@ -42,6 +42,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
@@ -68,7 +69,7 @@ class SearchActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(44), dp(30), dp(44), dp(32))
-            background = AppCompatResources.getDrawable(this@SearchActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@SearchActivity)
         }
         root.addView(TextView(this).apply {
             text = getString(R.string.ui_search_brand)

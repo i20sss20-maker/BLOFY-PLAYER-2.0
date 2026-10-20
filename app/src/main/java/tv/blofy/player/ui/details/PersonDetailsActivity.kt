@@ -12,6 +12,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import tv.blofy.player.R
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 
 class PersonDetailsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,7 +27,7 @@ class PersonDetailsActivity : AppCompatActivity() {
             layoutDirection = uiDirection
             gravity = Gravity.TOP
             setPadding(dp(48), dp(36), dp(48), dp(32))
-            background = AppCompatResources.getDrawable(this@PersonDetailsActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@PersonDetailsActivity)
         }
         root.addView(TextView(this).apply {
             text = "BLOFY  •  CAST"

@@ -36,6 +36,7 @@ import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
@@ -59,7 +60,7 @@ class LibraryActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(50), dp(34), dp(50), dp(38))
-            background = AppCompatResources.getDrawable(this@LibraryActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@LibraryActivity)
         }
         root.addView(TextView(this).apply {
             text = getString(R.string.brand_library)
