@@ -25,7 +25,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
     val root = FrameLayout(activity).apply { setBackgroundColor(CinemaStyle.Background) }
     val backdrop = ImageView(activity).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
-        alpha = .88f
+        alpha = .93f
         // Full-screen RenderEffect is expensive on many TV SoCs. Phones/tablets keep the
         // subtle blur; TV uses the cinematic tint/edge gradients below with zero extra GPU blur.
         if (!isTv && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -66,7 +66,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         root.addView(View(activity).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                intArrayOf(0x592C1742.toInt(), 0x28160D22.toInt(), 0x4807050B.toInt())
+                intArrayOf(0x6B321848.toInt(), 0x29120B24.toInt(), 0x4907050B.toInt())
             )
         }, FrameLayout.LayoutParams(-1, -1))
         val darkEdge = if (activity.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
@@ -77,7 +77,7 @@ internal class DetailsLayout(private val activity: AppCompatActivity) {
         root.addView(View(activity).apply {
             background = GradientDrawable(
                 if (stacked) GradientDrawable.Orientation.TOP_BOTTOM else darkEdge,
-                intArrayOf(0xE907050B.toInt(), 0xC10B0712.toInt(), 0x64130A1C.toInt(), 0x1207050B)
+                intArrayOf(0xF307050C.toInt(), 0xB9100817.toInt(), 0x631A0C2B.toInt(), 0x1007050B)
             )
         }, FrameLayout.LayoutParams(-1, -1))
         root.addView(View(activity).apply {

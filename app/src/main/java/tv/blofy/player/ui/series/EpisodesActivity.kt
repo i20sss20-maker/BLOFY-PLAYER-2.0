@@ -7,12 +7,14 @@ import tv.blofy.player.ui.common.CinemaStyle
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
 import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -99,8 +101,8 @@ class EpisodesActivity : ContentAccessActivity() {
             setImageResource(R.drawable.blofy_logo)
         }
         if (!seriesArt.isNullOrBlank()) ArtworkLoader.load(heroArt, seriesArt)
-        header.addView(heroArt, LinearLayout.LayoutParams(dp(if (compact) 86 else 106), dp(if (compact) 58 else 68)).apply {
-            marginEnd = dp(if (compact) 10 else 16)
+        if (!compact) header.addView(heroArt, LinearLayout.LayoutParams(dp(106), dp(68)).apply {
+            marginEnd = dp(16)
         })
         val headerCopy = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -118,7 +120,7 @@ class EpisodesActivity : ContentAccessActivity() {
                 textSize = when (deviceKind) {
                     DeviceClass.Kind.TV -> 24f
                     DeviceClass.Kind.TABLET -> 25f
-                    DeviceClass.Kind.PHONE -> 20f
+                    DeviceClass.Kind.PHONE -> 25f
                 }
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(BlofyTvDesign.TextPrimary)
@@ -138,7 +140,47 @@ class EpisodesActivity : ContentAccessActivity() {
             addView(status)
         }
         header.addView(headerCopy, LinearLayout.LayoutParams(0, -2, 1f))
-        root.addView(header, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+        if (compact) {
+            val cinema = FrameLayout(this).apply {
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    intArrayOf(0xFF301840.toInt(), 0xFF0C0817.toInt())
+                ).apply { cornerRadius = dp(23).toFloat() }
+                clipToOutline = true
+                contentDescription = "مسلسل: $seriesName"
+            }
+            if (!seriesArt.isNullOrBlank()) {
+                cinema.addView(ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    ArtworkLoader.load(this, seriesArt)
+                }, FrameLayout.LayoutParams(-1, -1))
+            }
+            cinema.addView(View(this).apply {
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(0x75170A26, 0xE70C0718.toInt(), 0xFB090611.toInt())
+                )
+            }, FrameLayout.LayoutParams(-1, -1))
+            header.gravity = Gravity.BOTTOM or Gravity.START
+            header.setPadding(dp(18), dp(18), dp(18), dp(20))
+            cinema.addView(TextView(this).apply {
+                text = "✦  BLOFY SERIES"
+                textSize = 11f
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(BlofyTvDesign.PurpleSoft)
+                gravity = Gravity.START
+                setPadding(dp(18), dp(13), dp(18), 0)
+            }, FrameLayout.LayoutParams(-1, dp(43), Gravity.TOP))
+            cinema.addView(header, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+            val cinemaHeight = if (resources.configuration.screenHeightDp < 680) 145 else 186
+            root.addView(cinema, LinearLayout.LayoutParams(-1, dp(cinemaHeight)).apply {
+                bottomMargin = dp(12)
+            })
+        } else {
+            root.addView(header, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(6)
+            })
+        }
         retryButton = actionButton(getString(R.string.episodes_retry)) {
             lifecycleScope.launch { syncEpisodes(currentProvider()) }
         }.apply { visibility = View.GONE }
