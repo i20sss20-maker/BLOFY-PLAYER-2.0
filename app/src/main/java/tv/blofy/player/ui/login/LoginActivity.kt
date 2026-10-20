@@ -46,7 +46,6 @@ import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
-import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
@@ -135,7 +134,7 @@ class LoginActivity : AppCompatActivity() {
             textSize = 10.5f
             letterSpacing = .14f
             typeface = BlofyTvDesign.LabelTypeface
-            setTextColor(CinemaStyle.Accent)
+            setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.CENTER
             background = BlofyTvDesign.badge(dp(12).toFloat())
             setPadding(dp(14), 0, dp(14), 0)
@@ -315,7 +314,7 @@ class LoginActivity : AppCompatActivity() {
         codeView = TextView(this).apply {
             textSize = if (phone) 25f else 34f
             typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(CinemaStyle.Accent)
+            setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.CENTER
         }
         trialView = ActivationStatusView(this)
@@ -508,7 +507,7 @@ class LoginActivity : AppCompatActivity() {
         addView(TextView(this@LoginActivity).apply {
             text = "▶"
             textSize = 18f
-            setTextColor(CinemaStyle.Accent)
+            setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.CENTER
             background = miniCircle()
         }, LinearLayout.LayoutParams(dp(44), dp(44)))
@@ -536,7 +535,7 @@ class LoginActivity : AppCompatActivity() {
             text = "＋"
             textSize = 28f
             typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(CinemaStyle.Accent)
+            setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(dp(54), -1))
         addView(LinearLayout(this@LoginActivity).apply {

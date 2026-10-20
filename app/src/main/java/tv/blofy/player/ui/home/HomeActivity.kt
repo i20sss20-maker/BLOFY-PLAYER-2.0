@@ -385,10 +385,9 @@ class HomeActivity : AppCompatActivity() {
         heroPrimary?.text = getString(if (item.kind == "series") R.string.home_view_series else R.string.home_watch_now)
         heroArtwork?.let {
             it.animate().cancel()
-            it.alpha = .92f
-            it.setBackgroundColor(CinemaStyle.Background)
+            it.alpha = .10f
             ArtworkLoader.loadPriority(it, listOf(item.backdrop, item.icon))
-            it.animate().alpha(.96f).setDuration(330).start()
+            it.animate().alpha(.88f).setDuration(330).start()
         }
         heroContent?.apply {
             animate().cancel()
@@ -405,7 +404,7 @@ class HomeActivity : AppCompatActivity() {
             row.addView(View(this).apply {
                 background = GradientDrawable().apply {
                     cornerRadius = dp(2).toFloat()
-                    setColor(if (index == heroIndex) CinemaStyle.Accent else 0x66747A82)
+                    setColor(if (index == heroIndex) PURPLE_BRIGHT else 0x667B6A89)
                 }
             }, LinearLayout.LayoutParams(if (index == heroIndex) dp(14) else dp(4), dp(3)).apply { marginStart = dp(5) })
         }
@@ -561,7 +560,7 @@ class HomeActivity : AppCompatActivity() {
         clipChildren = false
         clipToOutline = true
 
-        val poster = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(0xFF0D0F12.toInt()) }
+        val poster = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(0xFF151219.toInt()) }
         addView(poster, FrameLayout.LayoutParams(-1, -1).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) })
         ArtworkLoader.loadPriority(poster, if (landscape) listOf(item.backdrop, item.icon) else listOf(item.icon, item.backdrop))
 

@@ -408,7 +408,7 @@ open class PlayerActivity : ContentAccessActivity() {
         connectionNotice = TextView(this).apply {
             textSize = 13f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
             setPadding(dp(18), dp(12), dp(18), dp(12))
-            background = GradientDrawable().apply { setColor(0xED0D0F12.toInt()); cornerRadius = dp(14).toFloat(); setStroke(dp(1), PURPLE_SOFT) }
+            background = GradientDrawable().apply { setColor(0xED17131F.toInt()); cornerRadius = dp(14).toFloat(); setStroke(dp(1), PURPLE_SOFT) }
             isFocusable = true; isClickable = true; visibility = View.GONE
             setOnClickListener { retryPlayback() }
             setOnFocusChangeListener { view, focused -> view.alpha = if (focused) 1f else .85f }
@@ -443,14 +443,14 @@ open class PlayerActivity : ContentAccessActivity() {
 
         epgView = TextView(this).apply {
             textSize = 15f
-            setTextColor(Color.rgb(245, 245, 241))
+            setTextColor(Color.rgb(236, 229, 220))
             setPadding(0, 0, 0, 16)
             visibility = if (kind == KIND_LIVE) View.VISIBLE else View.GONE
             background = if (kind == KIND_LIVE) {
                 GradientDrawable().apply {
                     cornerRadius = 14f
-                    setColor(0x4D32161A)
-                    setStroke(1, 0x553A1A1F)
+                    setColor(0x4D3A2426)
+                    setStroke(1, 0x553A2426)
                 }
             } else {
                 null
