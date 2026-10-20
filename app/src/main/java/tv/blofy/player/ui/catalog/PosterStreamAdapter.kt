@@ -42,7 +42,7 @@ class PosterStreamAdapter(
             isFocusableInTouchMode = DeviceClass.detect(context) == DeviceClass.Kind.TV
             isClickable = true
             setPadding(dp(3), dp(3), dp(3), dp(6))
-            background = card(false, dp(8).toFloat(), dp(1))
+            background = card(false, dp(16).toFloat(), dp(1))
             clipToOutline = true
             elevation = 0f
         }
@@ -59,7 +59,7 @@ class PosterStreamAdapter(
         }
         val image = ImageView(parent.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(Color.rgb(18, 16, 21))
+            setBackgroundColor(0xFF1C0E2A.toInt())
             clipToOutline = true
         }
         frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -72,7 +72,7 @@ class PosterStreamAdapter(
             visibility = View.GONE
             background = GradientDrawable().apply {
                 cornerRadius = dp(8).toFloat()
-                setColor(0xE6191D25.toInt())
+                setColor(0xDA1A0C2B.toInt())
             }
         }
         frame.addView(rating, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { topMargin = dp(7); marginEnd = dp(7) })
@@ -100,7 +100,7 @@ class PosterStreamAdapter(
             includeFontPadding = false
         }
         root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(18)))
-        return Holder(root, image, title, meta, rating, dp(8).toFloat(), dp(1))
+        return Holder(root, image, title, meta, rating, dp(16).toFloat(), dp(1))
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -188,10 +188,11 @@ class PosterStreamAdapter(
         if (focused) {
             intArrayOf(BlofyTvDesign.SurfaceFocused, BlofyTvDesign.SurfaceRaised, CinemaStyle.Surface)
         } else {
-            intArrayOf(CinemaStyle.Surface, 0xFF111016.toInt())
+            intArrayOf(0xFF26163A.toInt(), 0xFF0F0919.toInt())
         }
     ).apply {
         cornerRadius = radius
-        setStroke(stroke * if (focused) 2 else 1, if (focused) BlofyTvDesign.FocusStroke else 0x45FFFFFF)
+        setStroke(stroke * if (focused) 2 else 1,
+            if (focused) 0xFFD2A7FF.toInt() else 0x664F3267)
     }
 }
