@@ -7,6 +7,7 @@ import android.app.AlertDialog
 import android.content.res.Configuration
 import android.graphics.Color
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.BlofyUiKit
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -378,8 +379,8 @@ open class PlayerActivity : ContentAccessActivity() {
             setPadding(24, 10, 24, 10)
             background = GradientDrawable().apply {
                 cornerRadius = 18f
-                setColor(Color.argb(225, 43, 18, 76))
-                setStroke(2, PURPLE_SOFT)
+                setColor(BlofyUiKit.PurpleDeep)
+                setStroke(2, BlofyUiKit.PurpleSoft)
             }
             visibility = View.GONE
         }
@@ -408,7 +409,7 @@ open class PlayerActivity : ContentAccessActivity() {
         connectionNotice = TextView(this).apply {
             textSize = 13f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
             setPadding(dp(18), dp(12), dp(18), dp(12))
-            background = GradientDrawable().apply { setColor(0xED17131F.toInt()); cornerRadius = dp(14).toFloat(); setStroke(dp(1), PURPLE_SOFT) }
+            background = BlofyUiKit.panel(this@PlayerActivity, radiusDp = 14)
             isFocusable = true; isClickable = true; visibility = View.GONE
             setOnClickListener { retryPlayback() }
             setOnFocusChangeListener { view, focused -> view.alpha = if (focused) 1f else .85f }
@@ -449,8 +450,8 @@ open class PlayerActivity : ContentAccessActivity() {
             background = if (kind == KIND_LIVE) {
                 GradientDrawable().apply {
                     cornerRadius = 14f
-                    setColor(0x4D281D39)
-                    setStroke(1, 0x554F3868)
+                    setColor(0x66261B38)
+                    setStroke(1, BlofyUiKit.Purple)
                 }
             } else {
                 null

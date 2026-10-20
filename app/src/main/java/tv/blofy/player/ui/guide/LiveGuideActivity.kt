@@ -48,6 +48,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.common.FocusTextAdapter
@@ -99,7 +100,7 @@ class LiveGuideActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(28), dp(20), dp(28), dp(24))
-            background = AppCompatResources.getDrawable(this@LiveGuideActivity, R.drawable.blofy_home_background)
+            background = BlofyUiKit.screen(this@LiveGuideActivity)
             clipChildren = false
             clipToPadding = false
         }
@@ -527,13 +528,7 @@ class LiveGuideActivity : AppCompatActivity() {
     private fun time(ms: Long) = DeviceLocalTime.format(this, ms, "HH:mm")
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    private fun panelBackground() = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xEE211C27.toInt(), 0xF0141218.toInt())
-    ).apply {
-        cornerRadius = dp(20).toFloat()
-        setStroke(dp(1), 0xFF4B4351.toInt())
-    }
+    private fun panelBackground() = BlofyUiKit.panel(this, radiusDp = 20)
 
     private fun badgeBackground() = GradientDrawable().apply {
         cornerRadius = dp(12).toFloat()

@@ -10,6 +10,7 @@ import android.widget.TextView
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.BlofyUiKit
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.TvUiTuning
 
@@ -39,10 +40,10 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
         valueView.background = valueBackground(false)
         addView(valueView, LayoutParams(-2, -2).apply { topMargin = dp(if (tv) 6 else 9) })
         addView(hintView, LayoutParams(-1, -2).apply { topMargin = dp(if (tv) 3 else 5) })
-        background = CinemaStyle.surface(context, radiusDp = 16)
+        background = BlofyUiKit.panel(context, radiusDp = 16)
         stateListAnimator = null
         setOnFocusChangeListener { view, focused ->
-            background = CinemaStyle.surface(context, focused, radiusDp = 16)
+            background = BlofyUiKit.panel(context, focused, radiusDp = 16)
             valueView.background = valueBackground(focused)
             valueView.setTextColor(if (focused) CinemaStyle.White else CinemaStyle.Accent)
             titleView.setTextColor(CinemaStyle.White)
@@ -75,14 +76,7 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
         info.className = Button::class.java.name
     }
 
-    private fun valueBackground(focused: Boolean) = android.graphics.drawable.GradientDrawable(
-        android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF5A377D.toInt(), 0xFF3A2452.toInt())
-        else intArrayOf(0xFF261936.toInt(), 0xFF1C1228.toInt())
-    ).apply {
-        cornerRadius = dp(8).toFloat()
-        setStroke(dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF4C365F.toInt())
-    }
+    private fun valueBackground(focused: Boolean) = BlofyUiKit.panel(context, focused, 8)
 
     private fun label(size: Float, bold: Boolean) = TextView(context).apply {
         textSize = size
