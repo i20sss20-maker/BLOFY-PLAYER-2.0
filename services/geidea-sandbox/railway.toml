@@ -1,0 +1,13 @@
+# Set the NEW sandbox service's config-file path to this file. Leave the
+# service's root directory at / so the Docker build can reuse the test client.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "services/geidea-sandbox/Dockerfile"
+watchPatterns = ["/services/geidea-sandbox/**", "/services/activation/src/geidea-*.mjs"]
+
+[deploy]
+numReplicas = 1
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

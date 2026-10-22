@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>BLOFYSAT · اختبار Geidea</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><a class="brand" href="/">BLOFY<span>SAT</span></a><span class="badge">Geidea · بيئة تجريبية</span></header>
+    <section class="intro">
+      <p class="eyebrow">بوابة اختبار الدفع</p>
+      <h1>خطوة بخطوة، حتى تتأكد من الدفع.</h1>
+      <p>اختبر مدى وVisa وMastercard ببطاقات Geidea التجريبية فقط. هذه الصفحة لا تفعّل أي اشتراك.</p>
+    </section>
+    <div class="grid">
+      <section class="panel">
+        <div class="panel-heading"><h2>عملية تجريبية جديدة</h2><span class="pill">TEST</span></div>
+        <div class="price"><strong>1.00</strong><span>ريال سعودي</span></div>
+        <p class="muted">مبلغ ثابت للاختبار</p>
+        <form id="test-form">
+          <label for="network">شبكة البطاقة المستهدفة</label>
+          <select id="network" name="network"><option value="mada">مدى</option><option value="visa">Visa</option><option value="mastercard">Mastercard</option></select>
+          <label for="scenario">السيناريو المستهدف</label>
+          <select id="scenario" name="scenario"><option value="success">دفع ناجح</option><option value="decline">رفض الدفع</option><option value="cancel">إلغاء العملية</option></select>
+          <button class="primary" id="create" type="submit">تجهيز جلسة الدفع</button>
+          <button class="secondary new-case" id="new-case" type="button">بدء عملية اختبار أخرى</button>
+        </form>
+        <p id="feedback" role="status" aria-live="polite"></p>
+        <a id="checkout" class="button primary hidden" target="_blank" rel="noopener noreferrer">فتح صفحة Geidea التجريبية ↗</a>
+        <div class="note">أدخل بيانات البطاقة داخل صفحة Geidea فقط. نتيجة الدفع تتأكد بعد مراجعتها من الخادم.</div>
+        <a class="docs" href="https://docs.geidea.net/docs/test-cards" target="_blank" rel="noopener noreferrer">بطاقات الاختبار الرسمية ↗</a>
+      </section>
+      <section class="panel">
+        <div class="panel-heading"><h2>تقدم اختبارات الشبكات</h2><button id="refresh" class="secondary" type="button">تحديث</button></div>
+        <p class="muted">علامة النجاح تعتمد على شبكة البطاقة التي ترجعها Geidea والتحقق من إشعارها.</p>
+        <div class="table-scroll"><table><thead><tr><th>الشبكة</th><th>نجاح</th><th>رفض</th><th>إلغاء</th></tr></thead><tbody id="matrix"></tbody></table></div>
+        <a class="button secondary" href="/api/evidence" download>تنزيل تقرير الاختبارات</a>
+        <p class="muted">الاختبار غير المكتمل يظهر «بانتظار». اختيار الشبكة في النموذج لا يثبت اختبارها.</p>
+      </section>
+    </div>
+    <section class="panel orders-panel">
+      <div class="panel-heading"><h2>آخر العمليات</h2><span class="muted">تُحفظ عند إعادة تشغيل الخدمة</span></div>
+      <div id="orders" aria-live="polite"><p class="muted">جاري تحميل العمليات…</p></div>
+    </section>
+    <footer>BLOFYSAT · Geidea Sandbox <span>اختبار خاص · دون تفعيل اشتراكات</span></footer>
+  </main>
+</body>
+</html>
