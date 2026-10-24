@@ -21,7 +21,11 @@ internal object CatalogPlaybackGate {
     fun playerStarted() { activePlayers.incrementAndGet() }
 
     fun playerStopped() {
-        activePlayers.updateAndGet { previous -> (previous - 1).coerceAtLeast(0) }
+        // Compare-and-set is available on Android API 23, unlike some Java 8 atomics.
+        var current = activePlayers.get()
+        while (current > 0 && !activePlayers.compareAndSet(current, current - 1)) {
+            current = activePlayers.get()
+        }
     }
 
     val isPlaying: Boolean get() = activePlayers.get() > 0
