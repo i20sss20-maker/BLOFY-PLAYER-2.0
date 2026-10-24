@@ -5,6 +5,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CatalogAutoRefreshPolicyTest {
+    @Test fun backgroundSyncDeadlineLeavesTimeForWorkerCleanup() {
+        assertTrue(CatalogAutoRefreshPolicy.MAX_SINGLE_SYNC_MS < 10L * 60_000L)
+        assertTrue(CatalogAutoRefreshPolicy.MAX_SINGLE_SYNC_MS >= 60_000L)
+    }
+
     @Test fun firstRefreshIsDueWithoutTimestamp() {
         assertTrue(CatalogAutoRefreshPolicy.isDue(0L, 1_000_000L))
     }

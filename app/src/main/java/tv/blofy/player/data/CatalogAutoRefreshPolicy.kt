@@ -7,6 +7,9 @@ import java.util.concurrent.atomic.AtomicInteger
 internal object CatalogAutoRefreshPolicy {
     const val INTERVAL_MINUTES = 30L
     const val MINIMUM_GAP_MS = INTERVAL_MINUTES * 60_000L
+    // Ordinary WorkManager jobs have about ten minutes before forced stop.
+    // Leave time for staged SQLite rollback even when an upstream source stalls.
+    const val MAX_SINGLE_SYNC_MS = 7L * 60_000L
 
     /** A successful sync, not a queued or failed attempt, resets the refresh clock. */
     fun isDue(lastCompletedAtMs: Long, nowMs: Long): Boolean =

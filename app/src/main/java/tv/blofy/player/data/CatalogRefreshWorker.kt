@@ -88,7 +88,7 @@ class CatalogRefreshWorker(
         )
         var promoted = false
         return try {
-            val sync = PlaylistSyncPolicy.run {
+            val sync = PlaylistSyncPolicy.run(CatalogAutoRefreshPolicy.MAX_SINGLE_SYNC_MS) {
                 PlaylistManager(XtreamClient.api, dao).syncAll(staged, onProgress = {
                     if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
                 })
