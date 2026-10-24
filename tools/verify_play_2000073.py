@@ -20,6 +20,15 @@ required = {
 }
 missing = sorted(required - registered)
 assert not missing, f"Google Play manifest misses reachable activities: {missing}"
+# TV form-factor declarations are necessary (but not sufficient) for Play TV discovery.
+app = manifest.find("application")
+features = {e.attrib.get(ns + "name"): e.attrib.get(ns + "required") for e in manifest.findall("uses-feature")}
+assert features.get("android.software.leanback") == "false", "TV compatibility declaration missing"
+assert features.get("android.hardware.touchscreen") == "false", "TV must not require touch input"
+assert app is not None and app.attrib.get(ns + "banner"), "Android TV app banner missing"
+splash = next(a for a in activities if a.attrib.get(ns + "name") == ".ui.login.SplashActivity")
+categories = {node.attrib.get(ns + "name") for filt in splash.findall("intent-filter") for node in filt.findall("category")}
+assert "android.intent.category.LEANBACK_LAUNCHER" in categories, "TV launcher entry missing"
 assert all(a.attrib.get(ns + "exported") == "false" for a in activities
            if a.attrib.get(ns + "name") != ".ui.login.SplashActivity")
 app = manifest.find("application")
