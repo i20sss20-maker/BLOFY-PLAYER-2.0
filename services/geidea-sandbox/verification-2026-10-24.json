@@ -1,0 +1,188 @@
+{
+  "verifiedAt": "2026-10-24T08:38:44.386Z",
+  "project": "BLOFY-Geidea-Sandbox",
+  "applicationRevision": "725cc5e8161a594026209444813cfedf618204ac",
+  "deploymentId": "bc6c1e78-f712-4d97-bbd8-968f0e5edcae",
+  "mode": "sandbox",
+  "credentialsEnvironment": "test",
+  "activationsEnabled": false,
+  "amountMinor": 100,
+  "currency": "SAR",
+  "completedCases": 5,
+  "totalPlannedCases": 9,
+  "automatedTests": {
+    "passed": 25,
+    "total": 25,
+    "provider": "synthetic loopback fixtures; separate from hosted checkout tests",
+    "browserJavaScriptSyntax": "passed"
+  },
+  "matrix": [
+    {
+      "network": "visa",
+      "scenarios": [
+        {
+          "scenario": "success",
+          "verified": true
+        },
+        {
+          "scenario": "decline",
+          "verified": true
+        },
+        {
+          "scenario": "cancel",
+          "verified": false
+        }
+      ]
+    },
+    {
+      "network": "mastercard",
+      "scenarios": [
+        {
+          "scenario": "success",
+          "verified": true
+        },
+        {
+          "scenario": "decline",
+          "verified": true
+        },
+        {
+          "scenario": "cancel",
+          "verified": false
+        }
+      ]
+    },
+    {
+      "network": "mada",
+      "scenarios": [
+        {
+          "scenario": "success",
+          "verified": true
+        },
+        {
+          "scenario": "decline",
+          "verified": false
+        },
+        {
+          "scenario": "cancel",
+          "verified": false
+        }
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "network": "visa",
+      "scenario": "cancel",
+      "amountMinor": 100,
+      "currency": "SAR",
+      "status": "pending",
+      "providerStatus": null,
+      "providerDetailedStatus": null,
+      "responseCode": null,
+      "detailedResponseCode": null,
+      "observedNetwork": null,
+      "providerVerified": 0,
+      "callbackVerified": 0,
+      "updatedAt": "2026-10-24T08:21:55.301Z"
+    },
+    {
+      "network": "mada",
+      "scenario": "decline",
+      "amountMinor": 100,
+      "currency": "SAR",
+      "status": "pending",
+      "providerStatus": null,
+      "providerDetailedStatus": null,
+      "responseCode": null,
+      "detailedResponseCode": null,
+      "observedNetwork": null,
+      "providerVerified": 0,
+      "callbackVerified": 0,
+      "updatedAt": "2026-10-24T08:19:04.137Z"
+    },
+    {
+      "network": "mastercard",
+      "scenario": "decline",
+      "amountMinor": 100,
+      "currency": "SAR",
+      "status": "failed",
+      "providerStatus": "Failed",
+      "providerDetailedStatus": "OrderFailed",
+      "responseCode": "700",
+      "detailedResponseCode": "527",
+      "observedNetwork": "mastercard",
+      "providerVerified": 1,
+      "callbackVerified": 1,
+      "updatedAt": "2026-10-24T08:36:07.523Z"
+    },
+    {
+      "network": "visa",
+      "scenario": "decline",
+      "amountMinor": 100,
+      "currency": "SAR",
+      "status": "failed",
+      "providerStatus": "Failed",
+      "providerDetailedStatus": "OrderFailed",
+      "responseCode": "700",
+      "detailedResponseCode": "527",
+      "observedNetwork": "visa",
+      "providerVerified": 1,
+      "callbackVerified": 1,
+      "updatedAt": "2026-10-24T08:36:11.303Z"
+    },
+    {
+      "network": "mada",
+      "scenario": "success",
+      "amountMinor": 100,
+      "currency": "SAR",
+      "status": "paid",
+      "providerStatus": "Success",
+      "providerDetailedStatus": "Paid",
+      "responseCode": "000",
+      "detailedResponseCode": "000",
+      "observedNetwork": "mada",
+      "providerVerified": 1,
+      "callbackVerified": 1,
+      "updatedAt": "2026-10-24T08:17:48.412Z"
+    },
+    {
+      "network": "mastercard",
+      "scenario": "success",
+      "amountMinor": 100,
+      "currency": "SAR",
+      "status": "paid",
+      "providerStatus": "Success",
+      "providerDetailedStatus": "Paid",
+      "responseCode": "000",
+      "detailedResponseCode": "000",
+      "observedNetwork": "mastercard",
+      "providerVerified": 1,
+      "callbackVerified": 1,
+      "updatedAt": "2026-10-24T08:16:32.431Z"
+    },
+    {
+      "network": "visa",
+      "scenario": "success",
+      "amountMinor": 100,
+      "currency": "SAR",
+      "status": "paid",
+      "providerStatus": "Success",
+      "providerDetailedStatus": "Paid",
+      "responseCode": "000",
+      "detailedResponseCode": "000",
+      "observedNetwork": "visa",
+      "providerVerified": 1,
+      "callbackVerified": 1,
+      "updatedAt": "2026-10-24T07:54:41.668Z"
+    }
+  ],
+  "returnPage": "Static public Arabic return page passed actual Mastercard and Mada redirects; it discloses no order data and never marks payments successful.",
+  "remaining": [
+    "Mada decline",
+    "Visa cancellation",
+    "Mastercard cancellation",
+    "Mada cancellation"
+  ],
+  "limitation": "Cloud-browser calls stopped responding and timed out after 300 seconds, including documentation/recovery. Remaining cases are unverified.",
+  "privacy": "Merchant keys, administrator token, card data, customer data, reference/session/order identifiers are excluded."
+}

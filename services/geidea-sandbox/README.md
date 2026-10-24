@@ -5,26 +5,61 @@ This is a **test-only**, password-protected service for the existing Railway pro
 Zid, production database, or production bootstrap code. There is no fulfillment
 endpoint. A successful payment records sandbox evidence only.
 
-## Current verification — 2026-10-23 (Asia/Riyadh)
+## Current verification — 2026-10-24 (Asia/Riyadh)
 
-- GitHub repository and the previous Geidea preparation branch are accessible.
-- A credential-free connectivity probe reached the KSA Create Session endpoint
-  (`GET` returned HTTP 405, the endpoint requires POST). Geidea's KSA checkout
-  JavaScript returned HTTP 200. These prove network reachability only; they do
-  not verify the merchant keys or create a payment session.
-- The Railway connector currently returns `Unknown tool` for both project listing
-  and account lookup. The existing project's actual services, variables, domains
-  and deployment status could **not** be read or modified in this session.
-- Local HTTP integration and security tests use a mocked Geidea provider and
-  synthetic credentials. They are **not** merchant certification transactions.
-  **24/24 tests passed**, including the existing preparation/client tests; the
-  browser JavaScript syntax check also passed. Browser visual QA is still
-  pending: the local Chromium download did not complete successfully.
-- Actual Visa, Mastercard and Mada success, decline and cancellation tests, and
-  verification of real webhook delivery, remain pending access to Railway and
-  deployment with the merchant's **test** credentials.
+The isolated service is deployed at
+<https://blofy-player-20-sandbox.up.railway.app>. Railway deployment
+`bc6c1e78-f712-4d97-bbd8-968f0e5edcae` reached **SUCCESS**, running application
+commit `725cc5e8161a594026209444813cfedf618204ac`. The source is pinned to that
+commit; later branch pushes do not automatically deploy. The sandbox-only volume
+preserved the first Visa payment across the return-page deployment.
 
-No production settings or `main` commits are changed by this service.
+The merchant's Geidea **TEST** credentials were installed only in this service's
+Railway variables after explicit owner approval. Actual signed Create Session
+requests succeeded. The following are real provider test transactions through
+Geidea's hosted checkout, using its official fake cards at **SAR 1.00** each:
+
+| Network | Successful test payment | Decline attempt | Cancellation |
+| --- | --- | --- | --- |
+| Visa | `Success` / `Paid`; signed callback + authenticated order lookup verified | Final `Failed` / `OrderFailed`; signed callback + lookup verified; not paid | Not tested |
+| Mastercard | `Success` / `Paid`; signed callback + authenticated order lookup verified | Final `Failed` / `OrderFailed`; signed callback + lookup verified; not paid | Not tested |
+| Mada | `Success` / `Paid`; signed callback + authenticated order lookup verified | Session created; submission not verified | Not tested |
+
+All three successful orders passed exact amount/currency, merchant/reference,
+`isTest=true`, capture/refund and successful Pay-transaction checks. Signed
+webhooks and authenticated lookups also verified the two final declined orders.
+No activation was performed.
+
+**A declined attempt is not necessarily a final failed order.** In the two
+observed decline cases, Geidea initially kept the order open for retry with
+`InProgress` / `PayFailed` and codes `700` / `527`. Its official
+[callback documentation](https://docs.geidea.net/docs/sample-callback-responses)
+explains that an in-progress payment journey may have no callback until it is
+completed or closed. After the payment journeys closed, signed callbacks arrived
+and authenticated lookups confirmed `Failed` / `OrderFailed`. Both decline cases
+now satisfy the strict signed-callback evidence matrix. The implementation did
+not prematurely mark the in-progress attempts as final failed orders.
+
+Remaining live negative/cancellation cases are **not certified**: the cloud
+browser connection stopped responding during Mada decline form entry and also
+timed out on its documentation/recovery calls. No further browser submissions
+or duplicate creates were attempted after that failure. Complete these cases
+when browser interaction is available, then export fresh evidence.
+
+HTTPS health and protected HTTP endpoints were checked. `/health` reports
+`mode=sandbox`, `activationsEnabled=false` and the deployed revision. Anonymous
+dashboard/order requests return 401. Real Mastercard and Mada checkouts returned
+to the new public, static, data-free Arabic return page with HTTP 200. Redirect
+query parameters never mark an order paid. The dashboard itself was checked by
+authenticated HTTP; full dashboard visual QA remains pending.
+
+**25/25 local HTTP/security tests passed**, including the existing Geidea
+preparation/client tests, and the browser JavaScript syntax check passed. These
+automated tests use loopback HTTP and synthetic/mocked provider data; the real
+test outcomes are separately described above.
+
+This work changes only the sandbox branch/project. It does not merge to `main`,
+configure a production domain/database, or deploy customer activation code.
 
 ## Railway deployment specification
 
@@ -36,13 +71,26 @@ for any existing service/configuration; do not create a duplicate project.
 | Source | `i20sss20-maker/BLOFY-PLAYER-2.0` |
 | Branch | `feature/geidea-sandbox-20261023` |
 | Root directory | `/` (repository root) |
-| Config file path | `/services/geidea-sandbox/railway.toml` |
+| Configuration | Explicit Railway service settings; no config-file override |
 | Dockerfile | `services/geidea-sandbox/Dockerfile` |
-| Public hostname | Dedicated generated `*.up.railway.app` domain |
+| Start command | `node services/geidea-sandbox/src/server.mjs` |
+| Public hostname | `blofy-player-20-sandbox.up.railway.app` |
 | Health path | `/health` |
 | Volume mount | A new sandbox-only volume at `/data` |
 | Replicas | `1` |
 | Database file | `/data/geidea-sandbox.sqlite` |
+
+Verified resource scope:
+
+- Project: `79ca35ec-906f-4f90-bce0-3acefbe07043` (`BLOFY-Geidea-Sandbox`).
+- Environment: `f1937062-5f8b-4e98-868b-d5d275a5ecd9` (`sandbox`).
+- Service: `54772809-94dc-4349-9ecf-f8931af1f6d6` (`BLOFY-PLAYER-2.0`).
+- Volume: `73c1a1f3-ee50-471b-b6bf-7be18292ebd7` (`geidea-sandbox-orders`, `/data`).
+
+The legacy `railway.toml` is a reference only. Current deployment uses the
+explicit Dockerfile/start/health settings above and
+`RAILWAY_DOCKERFILE_PATH=services/geidea-sandbox/Dockerfile`; a deprecated
+Railway config-file override is not connected.
 
 Keep the Railway source service, environment and volumes in the sandbox project.
 Do not copy production variables, point at a production database, attach an
@@ -97,6 +145,9 @@ properties are rejected. No approved customer price is inferred from this amount
 6. Use **التحقق من Geidea** for missed/delayed callbacks. This can verify a payment
    via the provider API, but the test matrix stays incomplete without a verified
    webhook. The matrix uses Geidea's observed card brand, not the selected label.
+   A rejected attempt can remain `InProgress` / `PayFailed` while checkout allows
+   retry; it must not be presented as a paid order or an authenticated final
+   failure callback. The exported provider fields distinguish this condition.
 7. For another transaction, use **بدء عملية اختبار أخرى**. A retry of the same
    request reuses its idempotency key. Failed/ambiguous creates are retained for
    reconciliation and are never automatically recreated under the same key.
