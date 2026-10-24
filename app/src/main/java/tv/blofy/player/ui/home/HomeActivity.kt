@@ -47,6 +47,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogPlaybackGate
 import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.HomeSnapshotStore
 import tv.blofy.player.data.preparation.FullLibrarySyncWorker
