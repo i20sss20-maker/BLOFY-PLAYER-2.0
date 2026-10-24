@@ -22,14 +22,17 @@ internal class CatalogRefreshCheckpoint(private val context: Context, private va
         val expected = fingerprint(source)
         val savedId = prefs.getString(key("stage"), null).orEmpty()
         val ageMs = System.currentTimeMillis() - prefs.getLong(key("created"), 0L)
-        val valid = savedId.isNotBlank() && prefs.getString(key("source"), null) == expected &&
+        val safeStage = savedId.startsWith(STAGING_PREFIX) && savedId != providerId
+        val valid = safeStage && prefs.getString(key("source"), null) == expected &&
             ageMs in 0 until MAX_AGE_MS
         if (savedId.isNotBlank() && !valid) {
-            dao.discardStagedCatalog(savedId)
+            // Never treat a corrupt preference containing a real provider ID as a disposable
+            // candidate. Only app-owned, namespaced staging IDs may be deleted.
+            if (safeStage) dao.discardStagedCatalog(savedId)
             erase(savedId)
         }
 
-        val stageId = if (valid) savedId else UUID.randomUUID().toString()
+        val stageId = if (valid) savedId else STAGING_PREFIX + UUID.randomUUID().toString()
         if (!valid) {
             check(prefs.edit()
                 .putString(key("stage"), stageId)
@@ -88,6 +91,7 @@ internal class CatalogRefreshCheckpoint(private val context: Context, private va
     companion object {
         val SECTIONS = listOf("live", "movie", "series")
         private const val PREFS = "blofy_background_catalog_checkpoint_v1"
+        private const val STAGING_PREFIX = "blofy-refresh-stage-"
         private const val MAX_AGE_MS = 48L * 60L * 60L * 1000L
 
         fun fingerprint(provider: ProviderEntity): String {
