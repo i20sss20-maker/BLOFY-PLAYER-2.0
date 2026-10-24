@@ -86,7 +86,7 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
 
     private fun label(size: Float, bold: Boolean) = TextView(context).apply {
         textSize = size
-        typeface = if (bold) BlofyTvDesign.HeadingTypeface else BlofyTvDesign.BodyTypeface
+        typeface = BlofyTvDesign.preferredTypeface(this, bold)
         setTextColor(CinemaStyle.White)
         gravity = Gravity.START
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO

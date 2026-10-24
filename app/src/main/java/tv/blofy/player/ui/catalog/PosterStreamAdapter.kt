@@ -27,7 +27,13 @@ class PosterStreamAdapter(
 
     init { setHasStableIds(true) }
 
-    fun replace(newItems: List<StreamEntity>) { items.clear(); items.addAll(newItems); notifyDataSetChanged() }
+    fun replace(newItems: List<StreamEntity>) {
+        // Identical snapshots do not need to discard artwork or remote focus.
+        if (items.size == newItems.size && items.indices.all { items[it] == newItems[it] }) return
+        items.clear()
+        items.addAll(newItems)
+        notifyDataSetChanged()
+    }
     fun append(newItems: List<StreamEntity>) { if (newItems.isEmpty()) return; val start = items.size; items.addAll(newItems); notifyItemRangeInserted(start, newItems.size) }
     fun itemAt(position: Int): StreamEntity? = items.getOrNull(position)
     override fun getItemId(position: Int): Long = items[position].key.hashCode().toLong()
@@ -65,7 +71,7 @@ class PosterStreamAdapter(
         frame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         val rating = TextView(parent.context).apply {
             textSize = 9.2f
-            typeface = BlofyTvDesign.LabelTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             setPadding(dp(7), dp(2), dp(7), dp(2))
@@ -79,7 +85,7 @@ class PosterStreamAdapter(
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val title = TextView(parent.context).apply {
             textSize = 11.3f
-            typeface = BlofyTvDesign.MediumTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.START
             maxLines = 2
@@ -91,7 +97,7 @@ class PosterStreamAdapter(
         root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, titleHeight))
         val meta = TextView(parent.context).apply {
             textSize = 9.3f
-            typeface = BlofyTvDesign.MediumTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.START
             maxLines = 1
@@ -139,7 +145,7 @@ class PosterStreamAdapter(
 
     private fun renderFocus(holder: Holder, focused: Boolean) {
         holder.itemView.background = card(focused, holder.radius, holder.stroke)
-        holder.title.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
+        holder.title.typeface = BlofyTvDesign.preferredTypeface(holder.title, bold = focused)
         holder.title.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
         holder.meta.setTextColor(if (focused) BlofyTvDesign.Lavender else CinemaStyle.Muted)
         holder.rating.alpha = if (focused) 1f else .88f

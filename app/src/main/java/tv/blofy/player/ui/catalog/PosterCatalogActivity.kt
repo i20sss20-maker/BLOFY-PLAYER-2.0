@@ -118,7 +118,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 DeviceClass.Kind.TABLET -> 16f
                 DeviceClass.Kind.PHONE -> 14f
             }
-            typeface = BlofyTvDesign.MediumTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextSecondary)
             setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20), 0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 14 else 20), 0)
             background = CinemaStyle.surface(this@PosterCatalogActivity)
@@ -187,7 +187,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             clipToPadding = true
             itemAnimator = null
             setHasFixedSize(true)
-            setItemViewCacheSize(18)
+            setItemViewCacheSize(if (deviceKind == DeviceClass.Kind.TV) 10 else 6)
             preserveFocusAfterLayout = true
         }
         rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -217,7 +217,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 46 else 38), 1f))
         countView = TextView(this).apply {
             textSize = if (deviceKind == DeviceClass.Kind.PHONE) 10.5f else 12f
-            typeface = BlofyTvDesign.MediumTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.Lavender)
             gravity = Gravity.CENTER
             layoutDirection = View.LAYOUT_DIRECTION_LTR
