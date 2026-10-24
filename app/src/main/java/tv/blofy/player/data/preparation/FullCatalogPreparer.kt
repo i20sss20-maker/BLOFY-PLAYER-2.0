@@ -19,6 +19,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogManifestStore
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogPlaybackGate
 import tv.blofy.player.data.CatalogSearchIndex
 import tv.blofy.player.data.HomeSnapshotStore
 import tv.blofy.player.data.SeriesEpisodeParser
@@ -99,9 +100,13 @@ object FullCatalogPreparer {
             val provider = dao.provider(providerId) ?: return@withContext true
             val expectedEpoch = CatalogSyncState.lastUpdatedAt(app, providerId)
             if (expectedEpoch <= 0L || !CatalogSyncState.isReady(app, providerId)) return@withContext true
+            if (CatalogPlaybackGate.isPlaying) return@withContext false
 
             suspend fun ensureCurrentSource() {
                 currentCoroutineContext().ensureActive()
+                // Deep detail and artwork downloads are optional. Yield after the current
+                // bounded unit when a TV or VOD player starts, preserving the journal.
+                if (CatalogPlaybackGate.isPlaying) throw ChunkBudgetReached()
                 val current = dao.provider(providerId)
                 check(
                     CatalogSyncState.isReady(app, providerId) &&
