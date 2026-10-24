@@ -16,6 +16,8 @@ val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse("ht
 val distribution = providers.gradleProperty("BLOFY_DISTRIBUTION").orElse("website").get()
 check(distribution in setOf("website", "play")) { "BLOFY_DISTRIBUTION must be website or play" }
 val googlePlayBuild = distribution == "play"
+// Private Android TV QA builds install next to Play, never overwrite customer packages.
+val privateTvTest = providers.gradleProperty("BLOFY_TV_PRIVATE_TEST").map { it.toBooleanStrict() }.orElse(false).get()
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val updateBaseUrlEscaped = updateBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val buildSha = providers.gradleProperty("BLOFY_BUILD_SHA")
@@ -63,6 +65,12 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            if (privateTvTest) {
+                applicationIdSuffix = ".tvtest"
+                versionNameSuffix = "-tvtest"
+            }
+        }
         getByName("release") {
             isDebuggable = false
             isJniDebuggable = false
