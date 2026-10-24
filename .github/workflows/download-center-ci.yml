@@ -104,6 +104,9 @@ jobs:
           curl -fsS --max-time 10 http://127.0.0.1:3100/downloads >/tmp/downloads.html
           # Newly approved v74 cinematic is visible, but must not replace stable auto-update.
           grep -Fq 'data-cinematic-v74="true"' /tmp/downloads.html
+          grep -Fq 'data-cinematic-v74-patch="true"' /tmp/downloads.html
+          grep -Fq 'href="/download/v74-cinema-fix.apk"' /tmp/downloads.html
+          grep -Fq 'v74-cinema-refresh-qa-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMA-FIX-SIGNED.apk.sha256' /tmp/downloads.html
           grep -Fq 'href="/download/v74-cinematic.apk"' /tmp/downloads.html
           grep -Fq 'v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk.sha256' /tmp/downloads.html
           grep -Fq 'href="/d/blofy"' /tmp/downloads.html
@@ -198,6 +201,9 @@ jobs:
           for attempt in $(seq 1 36); do
             if curl --fail --silent --show-error --location --max-time 20 https://updates.blofyplayer.com/downloads > "$page" 2>/dev/null \
               && grep -Fq 'data-cinematic-v74="true"' "$page" \
+              && grep -Fq 'data-cinematic-v74-patch="true"' "$page" \
+              && grep -Fq 'href="/download/v74-cinema-fix.apk"' "$page" \
+              && grep -Fq 'v74-cinema-refresh-qa-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMA-FIX-SIGNED.apk.sha256' "$page" \
               && grep -Fq 'href="/download/v74-cinematic.apk"' "$page" \
               && grep -Fq 'v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk.sha256' "$page" \
               && grep -Fq 'href="/d/blofy"' "$page"; then
@@ -211,4 +217,9 @@ jobs:
             https://updates.blofyplayer.com/download/v74-cinematic.apk > "$RUNNER_TEMP/cinematic-head.txt"
           grep -iq '^content-type: application/vnd.android.package-archive' "$RUNNER_TEMP/cinematic-head.txt"
           grep -iq '^content-disposition: attachment;' "$RUNNER_TEMP/cinematic-head.txt"
+          curl --fail --silent --show-error --head --location --max-time 90 \
+            https://updates.blofyplayer.com/download/v74-cinema-fix.apk > "$RUNNER_TEMP/cinematic-v74-patch-head.txt"
+          grep -iq '^content-type: application/vnd.android.package-archive' "$RUNNER_TEMP/cinematic-v74-patch-head.txt"
+          grep -iq '^content-disposition: attachment;' "$RUNNER_TEMP/cinematic-v74-patch-head.txt"
+          echo "BLOFY_V74_PATCH_CINEMATIC_RAILWAY_LIVE=PASS"
           echo "BLOFY_V74_CINEMATIC_RAILWAY_LIVE=PASS"
