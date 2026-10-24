@@ -377,7 +377,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun syncSubtitle(): String {
         val active = provider ?: return getString(R.string.setting_manual_only)
         val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
-        val cadence = copy("تلقائي كل 24 ساعة", "Automatic every 24 hours")
+        val cadence = copy("تحديث صامت كل 30 دقيقة تقريبًا", "Silent refresh about every 30 minutes")
         return if (last > 0L) "${getString(R.string.setting_last_refresh, formatSyncTime(last))} • $cadence"
         else cadence
     }
