@@ -326,11 +326,18 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun warmCatalogArtwork() {
+        // Do not saturate old Android TV boxes with 24 offscreen background downloads
+        // while the visible hero/shelf is trying to render and respond to the remote.
+        val warmCount = when {
+            remote && tv.blofy.player.ui.common.TvUiTuning.lowRamTv(this) -> 4
+            remote -> 8
+            else -> 16
+        }
         lifecycleScope.launch {
             val urls = withContext(Dispatchers.IO) {
                 val dao = BlofyDatabase.get(applicationContext).dao()
                 val provider = dao.providersStored().first().firstOrNull() ?: return@withContext emptyList<String?>()
-                dao.latestHomeStreams(provider.id, 36).map { it.backdrop ?: it.icon }
+                dao.latestHomeStreams(provider.id, warmCount).map { it.backdrop ?: it.icon }
             }
             if (urls.isNotEmpty()) ArtworkLoader.warmPrefetch(this@HomeActivity, urls)
         }
