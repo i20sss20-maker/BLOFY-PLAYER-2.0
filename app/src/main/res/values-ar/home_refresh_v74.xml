@@ -5,4 +5,8 @@
     <string name="home_catalog_refresh_done_v74">اكتمل التحديث</string>
     <string name="home_catalog_refresh_failed_v74">تعذّر التحديث، حاول مجددًا</string>
     <string name="home_catalog_refresh_no_source_v74">اختر قائمة أولًا</string>
+    <string name="home_catalog_refresh_offline_v74">بانتظار اتصال الإنترنت</string>
+    <string name="home_catalog_refresh_playback_v74">يبدأ بعد انتهاء المشاهدة</string>
+    <string name="home_catalog_refresh_queued_v74">التحديث في الانتظار…</string>
+    <string name="home_catalog_refresh_saving_v74">حفظ المحتوى…</string>
 </resources>
