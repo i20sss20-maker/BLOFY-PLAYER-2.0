@@ -1,0 +1,8 @@
+<resources>
+    <string name="home_catalog_refresh_v74">Inhalte aktualisieren</string>
+    <string name="home_catalog_refresh_running_v74">Inhalte werden aktualisiert…</string>
+    <string name="home_catalog_refresh_waiting_v74">Warten auf Netzwerk oder Wiedergabe</string>
+    <string name="home_catalog_refresh_done_v74">Inhalte aktualisiert</string>
+    <string name="home_catalog_refresh_failed_v74">Aktualisierung fehlgeschlagen – erneut versuchen</string>
+    <string name="home_catalog_refresh_no_source_v74">Zuerst eine Wiedergabeliste auswählen</string>
+</resources>

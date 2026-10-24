@@ -1,0 +1,8 @@
+<resources>
+    <string name="home_catalog_refresh_v74">Aggiorna contenuti</string>
+    <string name="home_catalog_refresh_running_v74">Aggiornamento dei contenuti…</string>
+    <string name="home_catalog_refresh_waiting_v74">In attesa della rete o della riproduzione</string>
+    <string name="home_catalog_refresh_done_v74">Contenuti aggiornati</string>
+    <string name="home_catalog_refresh_failed_v74">Aggiornamento non riuscito. Riprova</string>
+    <string name="home_catalog_refresh_no_source_v74">Seleziona prima una playlist</string>
+</resources>

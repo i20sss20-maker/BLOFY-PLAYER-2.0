@@ -1,0 +1,8 @@
+<resources>
+    <string name="home_catalog_refresh_v74">Atualizar conteúdo</string>
+    <string name="home_catalog_refresh_running_v74">Atualizando conteúdo…</string>
+    <string name="home_catalog_refresh_waiting_v74">Aguardando conexão ou reprodução</string>
+    <string name="home_catalog_refresh_done_v74">Conteúdo atualizado</string>
+    <string name="home_catalog_refresh_failed_v74">Falha na atualização. Tente novamente</string>
+    <string name="home_catalog_refresh_no_source_v74">Selecione primeiro uma lista</string>
+</resources>
