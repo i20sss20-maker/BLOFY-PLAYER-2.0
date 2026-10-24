@@ -37,6 +37,7 @@ class CatalogRefreshWorker(
     params: WorkerParameters
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
+        return try {
         val app = applicationContext
         val dao = BlofyDatabase.get(app).dao()
         val providerId = inputData.getString(KEY_PROVIDER_ID)
@@ -51,8 +52,15 @@ class CatalogRefreshWorker(
         if (!manual && dao.activeProviderId() != provider.id) return Result.success()
         // Only worker requests serialize during the long download. Normal entry into a
         // committed library must not wait behind hours of provider/network I/O.
-        return workerLocks.getOrPut(provider.id) { Mutex() }.withLock {
+        workerLocks.getOrPut(provider.id) { Mutex() }.withLock {
             refreshCatalog(provider, dao, manual)
+        }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // A temporary encrypted-provider/Room read failure should not permanently
+            // disable periodic work. WorkManager can back off and retry safely.
+            Result.retry()
         }
     }
 
