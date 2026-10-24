@@ -2,7 +2,9 @@ package tv.blofy.player.ui.home
 
 import android.graphics.Rect
 import android.view.View
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
+import android.widget.ScrollView
 import tv.blofy.player.ui.catalog.ArtworkLoader
 
 /**
@@ -17,11 +19,7 @@ internal class HomePosterArtworkBinder(
     private val host: View,
     private val load: (ImageView, List<String?>) -> Unit = ArtworkLoader::loadPriority,
     private val cancel: (ImageView) -> Unit = ArtworkLoader::cancel,
-    private val visible: (ImageView) -> Boolean = { view ->
-        val rect = Rect()
-        view.isAttachedToWindow && view.isShown &&
-            view.getGlobalVisibleRect(rect) && rect.width() > 0 && rect.height() > 0
-    },
+    private val visible: (ImageView) -> Boolean = ::isActuallyVisible,
 ) {
     private val queued = LinkedHashMap<ImageView, List<String?>>()
     private val bound = LinkedHashSet<ImageView>()
@@ -85,4 +83,24 @@ internal class HomePosterArtworkBinder(
     companion object {
         internal const val VISIBLE_BATCH_LIMIT = 8
     }
+}
+
+/**
+ * Some Home shelves deliberately use clipChildren=false so focused posters can
+ * scale past card edges. Check BOTH scroll viewports explicitly: Android's generic
+ * getGlobalVisibleRect may include offscreen children in that configuration.
+ */
+internal fun isActuallyVisible(image: ImageView): Boolean {
+    if (!image.isAttachedToWindow || !image.isShown) return false
+    val imageBounds = Rect()
+    val viewport = Rect()
+    if (!image.getGlobalVisibleRect(imageBounds)) return false
+    var ancestor = image.parent
+    while (ancestor is View) {
+        if (ancestor is ScrollView || ancestor is HorizontalScrollView) {
+            if (!ancestor.getGlobalVisibleRect(viewport) || !imageBounds.intersect(viewport)) return false
+        }
+        ancestor = ancestor.parent
+    }
+    return imageBounds.width() > 0 && imageBounds.height() > 0
 }
