@@ -17,11 +17,24 @@ internal class HomeFocusController(
     private data class Entry(val view: View, val row: View, val sidebar: Boolean)
     private var entries = emptyList<Entry>()
     private var dirty = true
+    internal var rebuildCount = 0
+        private set
+    private var lastRootWidth = -1
+    private var lastRootHeight = -1
+    private var lastRowCount = -1
+    private var lastSidebarCount = -1
     private var disposed = false
     private val repeatGate = HomeDpadRepeatGate()
     private var lastMain: View? = null
     private var pendingFocus: View? = null
-    private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener { dirty = true }
+    // Scroll/focus animation may produce many global-layout events per second.
+    // Geometry (centerX) is read fresh for each key; rebuild the focus tree only
+    // when dimensions or the number of rows/rail actions changes.
+    private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener {
+        if (root.width != lastRootWidth || root.height != lastRootHeight ||
+            feed.childCount != lastRowCount || sidebar.childCount != lastSidebarCount
+        ) dirty = true
+    }
     private val observer = root.viewTreeObserver
 
     init { observer.addOnGlobalLayoutListener(layoutListener) }
@@ -53,7 +66,7 @@ internal class HomeFocusController(
         if (event.action != KeyEvent.ACTION_DOWN) return false
         if (event.isCanceled) return true
         if (root.width <= 0 || feed.width <= 0) return false
-        if (dirty) rebuild()
+        if (dirty || feed.childCount != lastRowCount || sidebar.childCount != lastSidebarCount) rebuild()
         val currentView = root.findFocus()
         if (currentView != null && entries.none { it.view === currentView }) rebuild()
         val usable = entries.filter { attachedAndFocusable(it.view) }
@@ -125,6 +138,11 @@ internal class HomeFocusController(
             val inSidebar = inside(view, sidebar)
             Entry(view, directChild(view, feed) ?: root, inSidebar)
         }
+        lastRootWidth = root.width
+        lastRootHeight = root.height
+        lastRowCount = feed.childCount
+        lastSidebarCount = sidebar.childCount
+        rebuildCount++
         dirty = false
     }
 
