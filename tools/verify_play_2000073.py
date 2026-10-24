@@ -37,7 +37,7 @@ assert app is not None and app.attrib.get(ns + "allowBackup") == "false"
 assert manifest.find("uses-permission[@android:name='android.permission.REQUEST_INSTALL_PACKAGES']", {"android":"http://schemas.android.com/apk/res/android"}) is None, "Play must not request sideload permissions"
 gradle = (root / "app/build.gradle.kts").read_text(encoding="utf-8")
 expected_version_code = os.environ.get("BLOFY_EXPECTED_PLAY_VERSION_CODE", "2000073")
-assert expected_version_code in {"2000073", "2000074"}, "Unexpected release baseline"
+assert expected_version_code in {"2000073", "2000074", "2000075"}, "Unexpected release baseline"
 assert re.search(r"versionCode\s*=\s*" + expected_version_code + r"\b", gradle), (
     f"Audit must keep Google Play {expected_version_code} baseline"
 )
