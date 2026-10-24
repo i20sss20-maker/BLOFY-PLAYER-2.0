@@ -19,6 +19,9 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.LiveData
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -48,6 +51,11 @@ class SettingsActivity : AppCompatActivity() {
     private val sections = mutableListOf<GridLayout>()
     private lateinit var storageCard: SettingCard
     private lateinit var refreshCard: SettingCard
+    private var refreshJobs: LiveData<List<WorkInfo>>? = null
+    private var observedRefreshProvider: String? = null
+    private var refreshState: WorkInfo.State? = null
+    private var refreshStage: String? = null
+    private var refreshRequested = false
     private val prefs by lazy { getSharedPreferences(RuntimeSettings.PREFS, MODE_PRIVATE) }
     private val isRtl: Boolean get() = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
     private val uiDirection: Int get() = if (isRtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
@@ -57,9 +65,14 @@ class SettingsActivity : AppCompatActivity() {
         buildPage()
         lifecycleScope.launch {
             provider = withContext(Dispatchers.IO) {
-                BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
+                val dao = BlofyDatabase.get(applicationContext).dao()
+                dao.activeProviderId()?.let { dao.provider(it) }
+                    ?: dao.providers().first().firstOrNull()
             }
-            if (!isFinishing) updateSyncStatus()
+            if (!isFinishing) {
+                provider?.let { observeRefresh(it.id) }
+                updateSyncStatus()
+            }
         }
     }
 
@@ -123,7 +136,7 @@ class SettingsActivity : AppCompatActivity() {
             background = CinemaStyle.surface(this@SettingsActivity)
         }
         updateSyncStatus()
-        page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)).apply { bottomMargin = dp(12) })
+        page.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { bottomMargin = dp(12) })
 
         addSection(page, copy("عام", "General"))
         addCard(actionCard(getString(R.string.setting_app_language), currentLanguageLabel()) { chooseLanguage() })
@@ -300,7 +313,7 @@ class SettingsActivity : AppCompatActivity() {
         page.addView(TextView(this).apply {
             text = title
             textSize = 17f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(CinemaStyle.White)
             gravity = Gravity.START
             setPadding(dp(5), dp(if (isTv()) 13 else 18), dp(5), dp(if (isTv()) 5 else 8))
@@ -340,6 +353,23 @@ class SettingsActivity : AppCompatActivity() {
         buildPage()
     }
 
+    /** Settings and Home watch the same manual WorkManager task; neither blocks playback. */
+    private fun observeRefresh(providerId: String) {
+        if (observedRefreshProvider == providerId) return
+        refreshJobs?.removeObservers(this)
+        observedRefreshProvider = providerId
+        refreshJobs = WorkManager.getInstance(applicationContext)
+            .getWorkInfosForUniqueWorkLiveData(CatalogRefreshWorker.manualWorkName(providerId))
+            .also { jobs ->
+                jobs.observe(this) { all ->
+                    val current = all.firstOrNull { !it.state.isFinished } ?: all.firstOrNull()
+                    refreshState = current?.state
+                    refreshStage = current?.progress?.getString("catalog_stage")
+                    if (::status.isInitialized) updateSyncStatus()
+                }
+            }
+    }
+
     private fun refreshLibrary() {
         val active = provider ?: run {
             status.text = getString(R.string.setting_no_active_playlist)
@@ -352,6 +382,9 @@ class SettingsActivity : AppCompatActivity() {
             })
             return
         }
+        observeRefresh(active.id)
+        refreshRequested = true
+        refreshState = WorkInfo.State.ENQUEUED
         CatalogRefreshWorker.enqueueNow(applicationContext, active.id)
         status.text = copy(
             "بدأ تحديث المحتوى بالخلفية، وتظل المكتبة محفوظة ومتاحة أثناء المشاهدة.",
@@ -361,12 +394,29 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun updateSyncStatus() {
         val active = provider
-        status.text = if (active == null) {
-            getString(R.string.setting_status_reading)
-        } else {
-            val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
-            if (last > 0L) getString(R.string.setting_status_saved_at, formatSyncTime(last))
-            else getString(R.string.setting_status_saved)
+        status.text = when {
+            active == null -> getString(R.string.setting_status_reading)
+            refreshState == WorkInfo.State.RUNNING -> {
+                val section = when (refreshStage) {
+                    "LIVE" -> getString(R.string.home_live)
+                    "MOVIES" -> getString(R.string.home_movies)
+                    "SERIES" -> getString(R.string.home_series)
+                    else -> null
+                }
+                if (section == null) getString(R.string.home_catalog_refresh_running_v74)
+                else "${getString(R.string.home_catalog_refresh_running_v74)} · $section"
+            }
+            refreshState == WorkInfo.State.ENQUEUED || refreshState == WorkInfo.State.BLOCKED ->
+                getString(R.string.home_catalog_refresh_waiting_v74)
+            refreshRequested && refreshState == WorkInfo.State.SUCCEEDED ->
+                getString(R.string.home_catalog_refresh_done_v74)
+            refreshRequested && (refreshState == WorkInfo.State.FAILED || refreshState == WorkInfo.State.CANCELLED) ->
+                getString(R.string.home_catalog_refresh_failed_v74)
+            else -> {
+                val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
+                if (last > 0L) getString(R.string.setting_status_saved_at, formatSyncTime(last))
+                else getString(R.string.setting_status_saved)
+            }
         }
         if (::refreshCard.isInitialized) refreshCard.bind(getString(R.string.setting_refresh_content), syncSubtitle())
     }
