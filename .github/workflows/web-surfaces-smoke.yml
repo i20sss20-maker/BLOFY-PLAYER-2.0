@@ -125,6 +125,17 @@ jobs:
           fi
           grep -Fq '"@type":"SoftwareApplication"' "$tmp/root.html"
           check_html "https://blofyplayer.com/downloads" "BLOFY|تحميل" "$tmp/downloads.html"
+          # Verify the actual Railway-generated page, not the unused static HTML.
+          grep -Fq 'data-cinematic-v74="true"' "$tmp/downloads.html"
+          grep -Fq 'v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk' "$tmp/downloads.html"
+          grep -Fq 'v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk.sha256' "$tmp/downloads.html"
+          grep -Fq 'id="download-primary"' "$tmp/downloads.html"
+          # The owner's cinematic edition is never silently made the primary/stable APK.
+          if grep -Eiq 'id="download-primary"[^>]+v74-cinematic-approved-20261024' "$tmp/downloads.html"; then
+            echo "::error::Cinematic owner edition incorrectly replaced stable downloader"
+            exit 1
+          fi
+          echo "BLOFY_CINEMATIC_V74_RAILWAY_DOWNLOADS=PASS"
           check_html "https://blofyplayer.com/en" "BLOFY|playlists" "$tmp/en.html"
           check_html "https://blofyplayer.com/es" "BLOFY|Android" "$tmp/es.html"
           check_html "https://blofyplayer.com/fr" "BLOFY|Android" "$tmp/fr.html"
