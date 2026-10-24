@@ -10,9 +10,14 @@ const NETWORKS = ['visa', 'mastercard', 'mada'];
 const SCENARIOS = ['success', 'decline', 'cancel'];
 const ASSETS = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
-  ['/return', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
+]);
+// Geidea can return in a new tab without the dashboard's Basic credentials.
+// These static files disclose no order data and never interpret redirect input.
+const RETURN_ASSETS = new Map([
+  ['/return', ['return.html', 'text/html; charset=utf-8']],
+  ['/return.css', ['return.css', 'text/css; charset=utf-8']],
 ]);
 
 function authenticated(req, token) {
@@ -77,6 +82,12 @@ export function createSandboxServer({ config, store = new OrderStore(config.dbPa
       if (req.method === 'GET' && url.pathname === '/health') {
         return send(res, 200, { status: 'ok', mode: 'sandbox', service: 'blofy-geidea-sandbox',
           activationsEnabled: false, amountMinor: PRICE_MINOR, currency: 'SAR', revision: config.revision });
+      }
+      if (req.method === 'GET' && RETURN_ASSETS.has(url.pathname)) {
+        const [name, type] = RETURN_ASSETS.get(url.pathname);
+        const data = await readFile(new URL('../web/' + name, import.meta.url));
+        res.writeHead(200, { 'content-type': type });
+        return res.end(data);
       }
       if (req.method === 'POST' && url.pathname === '/api/geidea/callback') {
         gate('callback', 90);

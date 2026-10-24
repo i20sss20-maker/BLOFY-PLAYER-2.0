@@ -127,7 +127,7 @@ test('health exposes no credentials; UI, evidence, production routes and mutatio
   assert.equal(health.status, 200);
   assert.equal(health.data.mode, 'sandbox');
   assert.equal(health.data.activationsEnabled, false);
-  for (const path of ['/', '/app.js', '/api/orders', '/api/evidence', '/return?responseCode=000&status=Success']) {
+  for (const path of ['/', '/app.js', '/api/orders', '/api/evidence']) {
     assert.equal((await f.request(path, { auth: false })).status, 401);
   }
   const page = await f.request('/');
@@ -142,6 +142,20 @@ test('health exposes no credentials; UI, evidence, production routes and mutatio
   assert.equal(tampered.status, 400);
   assert.equal(f.provider.creates, 0);
   assert.ok(!JSON.stringify(health.data).includes(password));
+});
+
+test('a public browser return reveals no order data and forged success parameters cannot change an order', async t => {
+  const f = await fixture(t);
+  const reference = (await f.create()).data.order.reference;
+  const result = await f.request('/return?reference=' + reference + '&status=Success&responseCode=000&name=REFLECT-ME', { auth: false });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers.has('www-authenticate'), false);
+  assert.match(result.text, /هذه الصفحة لا تؤكد نجاح الدفع/);
+  for (const secret of [reference, password, admin, key, 'REFLECT-ME']) assert.ok(!result.text.includes(secret));
+  assert.equal((await f.request('/return.css', { auth: false })).status, 200);
+  assert.equal((await f.request('/api/orders', { auth: false })).status, 401);
+  assert.equal(f.store.get(reference).status, 'pending');
+  assert.equal(f.provider.reads, 0);
 });
 
 test('parallel repeated create requests make one provider session; conflicting reuse fails', async t => {
