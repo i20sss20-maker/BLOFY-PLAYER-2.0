@@ -3,7 +3,10 @@ package tv.blofy.player.ui.home
 import tv.blofy.player.ui.common.ContentPresentation
 import tv.blofy.player.ui.common.BlofyTvDesign
 
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.content.res.ColorStateList
 import tv.blofy.player.ui.common.CinemaStyle
 import android.graphics.Color
@@ -108,6 +111,7 @@ class HomeActivity : AppCompatActivity() {
     private var refreshRequestInFlight = false
 
     private val uiHandler = Handler(Looper.getMainLooper())
+    private val hideRefreshMessage = Runnable { if (!refreshBusy) refreshHint?.visibility = View.GONE }
     private var heroCandidates: List<StreamEntity> = emptyList()
     private var heroIndex = 0
 
@@ -895,7 +899,7 @@ class HomeActivity : AppCompatActivity() {
         if (!compact) {
             refreshHint = TextView(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                textSize = 10f
+                textSize = 11f
                 typeface = BlofyTvDesign.preferredTypeface(this)
                 setTextColor(TEXT_SECONDARY)
                 maxLines = 1
@@ -947,6 +951,8 @@ class HomeActivity : AppCompatActivity() {
                     setText(R.string.home_catalog_refresh_no_source_v74)
                     visibility = View.VISIBLE
                 }
+                uiHandler.removeCallbacks(hideRefreshMessage)
+                uiHandler.postDelayed(hideRefreshMessage, 4_000L)
                 return@launch
             }
             if (!CatalogSyncState.isEntryReady(applicationContext, providerId)) {
@@ -964,43 +970,64 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Show a short, actionable state instead of leaving an old WorkManager
+     * ENQUEUED status under the button for the whole browsing session.
+     * WorkManager remains the source of truth; playback and network checks only
+     * improve the wording, never start a second catalog import.
+     */
     private fun renderManualRefreshStatus(state: WorkInfo.State?) {
+        uiHandler.removeCallbacks(hideRefreshMessage)
         val working = state == WorkInfo.State.RUNNING
         val waiting = state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.BLOCKED
+        val finished = state == WorkInfo.State.SUCCEEDED ||
+            state == WorkInfo.State.FAILED || state == WorkInfo.State.CANCELLED
         refreshBusy = working || waiting
-        refreshSpinner?.visibility = if (working || waiting) View.VISIBLE else View.GONE
-        if (!refreshStartedHere && !working && !waiting) {
-            val last = refreshObservedProvider?.let { CatalogSyncState.lastSyncedAt(applicationContext, it) } ?: 0L
-            refreshHint?.apply {
-                if (last > 0L) {
-                    text = getString(R.string.setting_last_refresh,
-                        DeviceLocalTime.format(this@HomeActivity, last, "HH:mm"))
-                    visibility = View.VISIBLE
-                } else visibility = View.GONE
-            }
+        refreshButton?.isEnabled = !refreshBusy
+        refreshSpinner?.visibility = if (refreshBusy) View.VISIBLE else View.GONE
+        // Do not resurrect a stale "completed" / "failed" message on Home re-entry.
+        if (state == null || (finished && !refreshStartedHere)) {
+            refreshHint?.visibility = View.GONE
             return
         }
-        val messageId = when (state) {
-            WorkInfo.State.RUNNING -> R.string.home_catalog_refresh_running_v74
-            WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> R.string.home_catalog_refresh_waiting_v74
-            WorkInfo.State.SUCCEEDED -> R.string.home_catalog_refresh_done_v74
-            WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> R.string.home_catalog_refresh_failed_v74
-            else -> R.string.home_catalog_refresh_waiting_v74
+        val message = when {
+            working -> {
+                val stage = when (refreshStage) {
+                    "LIVE" -> getString(R.string.home_live)
+                    "MOVIES" -> getString(R.string.home_movies)
+                    "SERIES" -> getString(R.string.home_series)
+                    "SAVE" -> getString(R.string.home_catalog_refresh_saving_v74)
+                    else -> null
+                }
+                val label = getString(R.string.home_catalog_refresh_running_v74)
+                if (stage == null) label else "${label} · ${stage}"
+            }
+            waiting && !hasNetworkForRefresh() ->
+                getString(R.string.home_catalog_refresh_offline_v74)
+            waiting && CatalogPlaybackGate.isPlaying ->
+                getString(R.string.home_catalog_refresh_playback_v74)
+            waiting -> getString(R.string.home_catalog_refresh_queued_v74)
+            state == WorkInfo.State.SUCCEEDED -> getString(R.string.home_catalog_refresh_done_v74)
+            else -> getString(R.string.home_catalog_refresh_failed_v74)
         }
         refreshHint?.apply {
-            val stage = if (working) when (refreshStage) {
-                "LIVE" -> getString(R.string.home_live)
-                "MOVIES" -> getString(R.string.home_movies)
-                "SERIES" -> getString(R.string.home_series)
-                else -> null
-            } else null
-            text = if (stage != null) "${getString(messageId)} · $stage" else getString(messageId)
+            text = message
             visibility = View.VISIBLE
         }
-        if (state == WorkInfo.State.SUCCEEDED || state == WorkInfo.State.FAILED || state == WorkInfo.State.CANCELLED) {
+        if (finished) {
+            val succeeded = state == WorkInfo.State.SUCCEEDED
             refreshStartedHere = false
-            if (state == WorkInfo.State.SUCCEEDED) refreshQuietHomeIfChanged()
+            if (succeeded) refreshQuietHomeIfChanged()
+            uiHandler.postDelayed(hideRefreshMessage, 4_000L)
         }
+    }
+
+    private fun hasNetworkForRefresh(): Boolean {
+        val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return true
+        val network = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     private fun buildSidebar() = LinearLayout(this).apply {
