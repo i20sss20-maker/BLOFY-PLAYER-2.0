@@ -5,10 +5,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CatalogManualRefreshRetryPolicyTest {
-    @Test fun manualRefreshStopsAfterThirdFailedAttempt() {
-        assertTrue(CatalogManualRefreshRetryPolicy.shouldRetry(manual = true, runAttemptCount = 0))
-        assertTrue(CatalogManualRefreshRetryPolicy.shouldRetry(manual = true, runAttemptCount = 1))
-        assertFalse(CatalogManualRefreshRetryPolicy.shouldRetry(manual = true, runAttemptCount = 2))
+    @Test fun manualRefreshNeverChainsMultipleSevenMinuteAttempts() {
+        assertFalse(CatalogManualRefreshRetryPolicy.shouldRetry(manual = true, runAttemptCount = 0))
+        assertFalse(CatalogManualRefreshRetryPolicy.shouldRetry(manual = true, runAttemptCount = 1))
         assertFalse(CatalogManualRefreshRetryPolicy.shouldRetry(manual = true, runAttemptCount = 10))
     }
 
