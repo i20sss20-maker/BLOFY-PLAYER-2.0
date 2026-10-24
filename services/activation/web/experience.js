@@ -42,6 +42,23 @@ async function releaseCards(container){try{const {items}=await api('/api/v1/rele
       if(release.downloadUrl&&/^https:\/\//i.test(release.downloadUrl)){const link=node('a','تحميل APK',channel==='stable'?'btn primary':'btn');link.href=release.downloadUrl;link.rel='noopener noreferrer';card.append(link);}
       else card.append(node('p','رابط التحميل لم يُضف بعد.'));
     }container.append(card);
+    // The existing official 73 card remains primary; show 74 directly underneath
+    // only when the signed GitHub release exists and is independently readable.
+    if(channel==='stable' && release && Number(release.versionCode)===2000073){
+      try {
+        const official=await api('/api/v1/releases/website-74');
+        if(official.ready && official.versionCode===2000074 && /^https:\\/\\/github\\.com\\/i.test(official.downloadUrl)){
+          const newer=node('article',null,'card download-card available');
+          newer.append(badge('stable'),node('h3','التحديث الرسمي 74'),
+            node('div',official.versionName+' • 2000074','download-version'),
+            node('p','تحديث بلوفي بلاير لأندرويد TV: تحديث مكتبة صامت، تحسينات التشغيل، وحفظ القوائم عند التحديث. لا تحذف التطبيق الحالي.','content-text'));
+          const link=node('a','تحميل تحديث 74 APK','btn');
+          link.href=official.downloadUrl;link.rel='noopener noreferrer';
+          newer.append(link);
+          container.append(newer);
+        }
+      } catch { /* Signing/build still pending: show only the existing 73 download. */ }
+    }
   }}catch(error){container.replaceChildren(node('p',error.message,'notice'));}}
 
 if(page==='admin-login'){

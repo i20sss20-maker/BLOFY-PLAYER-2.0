@@ -82,6 +82,30 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
       } catch { json(res,503,{ready:false,message:'release_check_unavailable'}); }
       return true;
     }
+    if (req.method==='GET' && pathname==='/api/v1/releases/website-74') {
+      // Public, read-only. Publish a 74 link only AFTER GitHub confirms the
+      // production-signed official asset. Never change the existing 73 release row.
+      try {
+        const response = await fetch(
+          'https://api.github.com/repos/i20sss20-maker/BLOFY-PLAYER-2.0/releases/tags/v2.0.0-rc07.55.6-2000074',
+          { headers: { accept: 'application/vnd.github+json', 'user-agent': 'BLOFY-Official-Download' },
+            signal: AbortSignal.timeout(7000) }
+        );
+        if (response.status===404) { json(res,200,{ready:false}); return true; }
+        if (!response.ok) throw new Error('official_release_lookup_failed');
+        const release = await response.json();
+        const filename='BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk';
+        const asset=release.assets?.find(item=>item.name===filename && item.size>10_000_000);
+        if (release.draft || release.prerelease || release.tag_name!=='v2.0.0-rc07.55.6-2000074' ||
+            !asset || !asset.browser_download_url?.startsWith(
+              'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/')) {
+          json(res,200,{ready:false}); return true;
+        }
+        json(res,200,{ready:true,versionCode:2000074,versionName:'2.0.0-rc07.55.6',
+          filename,downloadUrl:asset.browser_download_url,sizeBytes:asset.size});
+      } catch { json(res,503,{ready:false,message:'release_check_unavailable'}); }
+      return true;
+    }
     if (req.method==='GET' && pathname==='/api/v1/releases') { json(res,200,{items:await releases()}); return true; }
     const admin = pathname.startsWith('/api/v1/admin/experience');
     const portal = pathname.startsWith('/api/v1/portal/experience');
