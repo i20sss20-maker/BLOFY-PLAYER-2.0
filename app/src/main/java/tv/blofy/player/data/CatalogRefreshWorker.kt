@@ -28,7 +28,6 @@ import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.preparation.CatalogLoadPersistence
 import tv.blofy.player.data.remote.XtreamClient
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -81,20 +80,32 @@ class CatalogRefreshWorker(
 
         if (!LocalStorageManager.prepareForCatalogRefresh(app)) return Result.retry()
 
+        // Persist completed sections across ordinary WorkManager's time budget. A retry
+        // skips validated live/movie/series sections instead of starting the full list over.
+        val checkpoint = CatalogRefreshCheckpoint(app, provider.id)
+        val saved = checkpoint.prepare(refreshSource, dao)
         val staged = refreshSource.copy(
-            id = UUID.randomUUID().toString(),
+            id = saved.stagedId,
             enabled = false,
             updatedAt = System.currentTimeMillis()
         )
         var promoted = false
         return try {
             val sync = PlaylistSyncPolicy.run(CatalogAutoRefreshPolicy.MAX_SINGLE_SYNC_MS) {
-                PlaylistManager(XtreamClient.api, dao).syncAll(staged, onProgress = {
-                    if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
-                })
+                PlaylistManager(XtreamClient.api, dao).syncAll(
+                    staged,
+                    completedSections = saved.completed,
+                    onSectionComplete = { kind -> checkpoint.completed(saved, kind, dao) },
+                    onProgress = {
+                        if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
+                    }
+                )
             }
-            if (sync.freshItemCount <= 0 || sync.failedSectionCount > 0) {
-                return if (sync.failedSectionCount > 0) Result.retry() else Result.success()
+            if (sync.failedSectionCount > 0) return Result.retry()
+            if (sync.freshItemCount <= 0) {
+                // A zero-item Xtream reply must never replace the known-good catalog.
+                checkpoint.discard(saved, dao)
+                return Result.retry()
             }
 
             val candidateCounts = CatalogRefreshIntegrityPolicy.Counts(
@@ -105,6 +116,8 @@ class CatalogRefreshWorker(
             // A website host/credential change for the same playlist must not be allowed to replace
             // a known-good 50k/100k library with a truncated but syntactically valid response.
             if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
+                // Valid-looking truncated server replies are not safe to resume indefinitely.
+                checkpoint.discard(saved, dao)
                 return Result.retry()
             }
 
@@ -145,9 +158,9 @@ class CatalogRefreshWorker(
         } catch (_: Exception) {
             if (promoted) Result.success() else Result.retry()
         } finally {
-            if (!promoted) {
-                runCatching { discardStagedCatalogSafely(dao, staged.id) }
-            }
+            // On a timeout/cancellation/temporary error keep the *staged* completed sections.
+            // Incomplete streamed sections are cleared and retried on the next worker run.
+            if (promoted) checkpoint.finish(saved)
         }
     }
 
