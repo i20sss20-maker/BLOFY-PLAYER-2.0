@@ -111,6 +111,7 @@ class HomeActivity : AppCompatActivity() {
     private var refreshStage: String? = null
     private var refreshRequestInFlight = false
     private var refreshActiveSinceMs = 0L
+    private var refreshLastState: WorkInfo.State? = null
     private val refreshStatusPulse = object : Runnable {
         override fun run() {
             if (!refreshBusy || isFinishing || isDestroyed) return
@@ -269,6 +270,7 @@ class HomeActivity : AppCompatActivity() {
         homeResumed = false
         refreshScheduler.stop()
         historyObserver.stop()
+        uiHandler.removeCallbacks(refreshStatusPulse)
         homeFocusController?.resetPress()
         super.onPause()
     }
@@ -1007,22 +1009,44 @@ class HomeActivity : AppCompatActivity() {
      * WorkManager remains the source of truth; playback and network checks only
      * improve the wording, never start a second catalog import.
      */
+    /**
+     * Worker state is authoritative. Do not spin for a queued job (network, playback,
+     * storage or WorkManager backoff). A real RUNNING job may take minutes for 50k+
+     * items, so stop displaying an endless spinner after a short initial indication:
+     * continue showing an honest background-work message until the worker completes.
+     */
     private fun renderManualRefreshStatus(state: WorkInfo.State?) {
+        val active = state == WorkInfo.State.RUNNING ||
+            state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.BLOCKED
+        if (active && refreshActiveSinceMs <= 0L) refreshActiveSinceMs = SystemClock.elapsedRealtime()
+        if (!active) refreshActiveSinceMs = 0L
+        refreshLastState = state
+        uiHandler.removeCallbacks(refreshStatusPulse)
+        updateRefreshFeedback()
+        if (active) uiHandler.postDelayed(refreshStatusPulse, 5_000L)
+    }
+
+    private fun updateRefreshFeedback() {
         uiHandler.removeCallbacks(hideRefreshMessage)
-        val working = state == WorkInfo.State.RUNNING
+        val state = refreshLastState
+        val running = state == WorkInfo.State.RUNNING
         val waiting = state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.BLOCKED
         val finished = state == WorkInfo.State.SUCCEEDED ||
             state == WorkInfo.State.FAILED || state == WorkInfo.State.CANCELLED
-        refreshBusy = working || waiting
+        val elapsed = if (refreshActiveSinceMs <= 0L) 0L else
+            (SystemClock.elapsedRealtime() - refreshActiveSinceMs).coerceAtLeast(0L)
+        refreshBusy = running || waiting
         refreshButton?.isEnabled = !refreshBusy
-        refreshSpinner?.visibility = if (refreshBusy) View.VISIBLE else View.GONE
-        // Do not resurrect a stale "completed" / "failed" message on Home re-entry.
+        // A paused/queued worker must never show a 'still spinning' indicator.
+        refreshSpinner?.visibility =
+            if (running && elapsed < 12_000L) View.VISIBLE else View.GONE
+
         if (state == null || (finished && !refreshStartedHere)) {
             refreshHint?.visibility = View.GONE
             return
         }
         val message = when {
-            working -> {
+            running -> {
                 val stage = when (refreshStage) {
                     "LIVE" -> getString(R.string.home_live)
                     "MOVIES" -> getString(R.string.home_movies)
@@ -1030,7 +1054,9 @@ class HomeActivity : AppCompatActivity() {
                     "SAVE" -> getString(R.string.home_catalog_refresh_saving_v74)
                     else -> null
                 }
-                val label = getString(R.string.home_catalog_refresh_running_v74)
+                val label = getString(if (elapsed >= 12_000L)
+                    R.string.home_catalog_refresh_background_v75 else
+                    R.string.home_catalog_refresh_running_v74)
                 if (stage == null) label else "${label} · ${stage}"
             }
             waiting && !hasNetworkForRefresh() ->
