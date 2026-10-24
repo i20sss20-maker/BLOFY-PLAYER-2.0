@@ -61,12 +61,29 @@ object BlofyTvDesign {
     val BodyTypeface: Typeface by lazy { Typeface.create("sans-serif", Typeface.NORMAL) }
     val MediumTypeface: Typeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
 
-    /** Prefer the platform's modern Arabic sans face without downloading fonts on the TV. */
+    // The SIL OFL-licensed IBM Plex Arabic fonts are bundled locally. Never fetch fonts
+    // during playback; cache both faces after the first TextView render.
+    private var arabicRegular: Typeface? = null
+    private var arabicSemibold: Typeface? = null
+
     fun preferredTypeface(view: TextView, bold: Boolean = false): Typeface {
-        val isArabic = ConfigurationCompat.getLocales(view.resources.configuration)[0]?.language == "ar"
-        return if (isArabic) {
-            Typeface.create("Noto Sans Arabic", if (bold) Typeface.BOLD else Typeface.NORMAL)
-        } else if (bold) HeadingTypeface else MediumTypeface
+        val arabic = ConfigurationCompat.getLocales(view.resources.configuration)[0]?.language == "ar"
+        if (!arabic) return if (bold) HeadingTypeface else MediumTypeface
+        return synchronized(this) {
+            val cached = if (bold) arabicSemibold else arabicRegular
+            cached ?: runCatching {
+                Typeface.createFromAsset(
+                    view.context.applicationContext.assets,
+                    if (bold) "fonts/IBMPlexSansArabic-SemiBold.ttf"
+                    else "fonts/IBMPlexSansArabic-Regular.ttf"
+                )
+            }.getOrElse {
+                // Preserve readability on malformed APKs or vendor font engines.
+                Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
+            }.also { loaded ->
+                if (bold) arabicSemibold = loaded else arabicRegular = loaded
+            }
+        }
     }
 
     fun surface(radius: Float = CardRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
