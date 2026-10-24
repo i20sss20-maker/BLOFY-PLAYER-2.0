@@ -133,7 +133,7 @@ jobs:
         run: python3 tools/check_catalog_queries.py
       - name: Verify Play 2000074 manifest and TV routes
         env:
-          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000075"
+          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000076"
         run: python3 tools/verify_play_2000073.py
       - name: Test lint and assemble
         shell: bash
