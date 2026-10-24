@@ -42,7 +42,8 @@ class HomeRefreshAndClockV74Test {
         ).apply { isAccessible = true }
         assertEquals(View.GONE, spinner.visibility)
         setter.invoke(activity, WorkInfo.State.ENQUEUED)
-        assertEquals(View.VISIBLE, spinner.visibility)
+        // Waiting for network, WorkManager or playback is not active progress.
+        assertEquals(View.GONE, spinner.visibility)
         setter.invoke(activity, WorkInfo.State.RUNNING)
         assertEquals(View.VISIBLE, spinner.visibility)
         setter.invoke(activity, WorkInfo.State.FAILED)
@@ -71,14 +72,53 @@ class HomeRefreshAndClockV74Test {
             isAccessible = true
         }.setBoolean(activity, true)
         setter.invoke(activity, WorkInfo.State.ENQUEUED)
-        assertFalse(button.isEnabled)
+        assertTrue(button.isEnabled)
+        assertEquals(activity.getString(R.string.home_catalog_refresh_cancel_v75), button.text.toString())
         assertEquals(View.VISIBLE, hint.visibility)
         assertFalse(hint.text.toString().contains("أو انتهاء التشغيل"))
         setter.invoke(activity, WorkInfo.State.RUNNING)
-        assertFalse(button.isEnabled)
+        assertTrue(button.isEnabled)
+        assertEquals(activity.getString(R.string.home_catalog_refresh_cancel_v75), button.contentDescription.toString())
         setter.invoke(activity, WorkInfo.State.FAILED)
         assertTrue(button.isEnabled)
         assertEquals(activity.getString(R.string.home_catalog_refresh_failed_v74), hint.text.toString())
+    }
+
+    @Test fun runningRefreshMovesToHonestBackgroundStatusInsteadOfEndlessSpinner() {
+        val activity = home(DeviceClass.Kind.TV)
+        build(activity, "buildTvHome")
+        val spinner = HomeActivity::class.java.getDeclaredField("refreshSpinner").apply {
+            isAccessible = true
+        }.get(activity) as ProgressBar
+        val hint = HomeActivity::class.java.getDeclaredField("refreshHint").apply {
+            isAccessible = true
+        }.get(activity) as TextView
+        val setter = HomeActivity::class.java.getDeclaredMethod(
+            "renderManualRefreshStatus", WorkInfo.State::class.java
+        ).apply { isAccessible = true }
+        setter.invoke(activity, WorkInfo.State.RUNNING)
+        assertEquals(View.VISIBLE, spinner.visibility)
+        HomeActivity::class.java.getDeclaredField("refreshActiveSinceMs").apply {
+            isAccessible = true
+        }.setLong(activity, android.os.SystemClock.elapsedRealtime() - 20_000L)
+        HomeActivity::class.java.getDeclaredMethod("updateRefreshFeedback").apply {
+            isAccessible = true
+        }.invoke(activity)
+        assertEquals(View.GONE, spinner.visibility)
+        assertTrue(hint.text.toString().contains(
+            activity.getString(R.string.home_catalog_refresh_background_v75)
+        ))
+        setter.invoke(activity, WorkInfo.State.SUCCEEDED)
+        assertEquals(View.GONE, spinner.visibility)
+    }
+
+    @Test fun cinematicHomeHasVisibleHeroAccentAndBrandedRoot() {
+        val activity = home(DeviceClass.Kind.TV)
+        val root = build(activity, "buildTvHome")
+        assertEquals("blofy_home_cinema_root_v75", root.tag)
+        val hero = root.findViewWithTag<View>("blofy_home_hero")
+        assertNotNull(hero)
+        assertNotNull(hero.findViewWithTag<View>("blofy_hero_plum_accent_v75"))
     }
 
     @Test fun heroAndShelvesHandleLongMixedLanguageTitles() {
