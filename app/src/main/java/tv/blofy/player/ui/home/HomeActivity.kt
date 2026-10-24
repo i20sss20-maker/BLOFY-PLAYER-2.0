@@ -1040,7 +1040,7 @@ class HomeActivity : AppCompatActivity() {
         val waiting = state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.BLOCKED
         val finished = state == WorkInfo.State.SUCCEEDED ||
             state == WorkInfo.State.FAILED || state == WorkInfo.State.CANCELLED
-        val elapsed = if (refreshActiveSinceMs <= 0L) 0L else
+        val elapsed = if (refreshActiveSinceMs == 0L) 0L else
             (SystemClock.elapsedRealtime() - refreshActiveSinceMs).coerceAtLeast(0L)
         refreshBusy = running || waiting
         refreshButton?.apply {
