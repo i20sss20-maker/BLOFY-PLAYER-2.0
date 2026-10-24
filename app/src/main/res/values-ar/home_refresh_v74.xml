@@ -9,4 +9,5 @@
     <string name="home_catalog_refresh_playback_v74">يبدأ بعد انتهاء المشاهدة</string>
     <string name="home_catalog_refresh_queued_v74">التحديث في الانتظار…</string>
     <string name="home_catalog_refresh_saving_v74">حفظ المحتوى…</string>
+    <string name="home_catalog_refresh_background_v75">التحديث مستمر بالخلفية — تقدر تتابع المشاهدة</string>
 </resources>
