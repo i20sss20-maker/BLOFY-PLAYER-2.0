@@ -1,12 +1,12 @@
-# RC07.55.5 QA: stable rc07.55 baseline with BLOFY production domains
+# RC07.55.6 website release: production-signed based on vetted Android TV 2000073 fixes
 # publish-trigger: rc07.55.6
 name: BLOFY Android TV 2000074 Website Official
 
 on:
   push:
-    branches: [audit/play-2000074-stable-hotfix-20261024]
+    branches: [release/rc07556-2000074-website]
     paths:
-      - .github/workflows/android-tv-owner-signed-test.yml
+      - .github/workflows/android-tv-official-2000074.yml
       - app/**
   workflow_dispatch:
 
@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: blofy-android-tv-2000074-owner-signed-test
+  group: blofy-android-tv-2000074-website-official
   cancel-in-progress: true
 
 env:
