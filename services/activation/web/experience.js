@@ -42,22 +42,21 @@ async function releaseCards(container){try{const {items}=await api('/api/v1/rele
       if(release.downloadUrl&&/^https:\/\//i.test(release.downloadUrl)){const link=node('a','تحميل APK',channel==='stable'?'btn primary':'btn');link.href=release.downloadUrl;link.rel='noopener noreferrer';card.append(link);}
       else card.append(node('p','رابط التحميل لم يُضف بعد.'));
     }container.append(card);
-    // The existing official 73 card remains primary; show 74 directly underneath
-    // only when the signed GitHub release exists and is independently readable.
-    if(channel==='stable' && release && Number(release.versionCode)===2000073){
-      try {
-        const official=await api('/api/v1/releases/website-74');
-        if(official.ready && official.versionCode===2000074 && official.downloadUrl?.startsWith('https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/')){
-          const newer=node('article',null,'card download-card available');
-          newer.append(badge('stable'),node('h3','التحديث الرسمي 74'),
-            node('div',official.versionName+' • 2000074','download-version'),
-            node('p','تحديث بلوفي بلاير لأندرويد TV: تحديث مكتبة صامت، تحسينات التشغيل، وحفظ القوائم عند التحديث. لا تحذف التطبيق الحالي.','content-text'));
-          const link=node('a','تحميل تحديث 74 APK','btn');
-          link.href=official.downloadUrl;link.rel='noopener noreferrer';
-          newer.append(link);
-          container.append(newer);
-        }
-      } catch { /* Signing/build still pending: show only the existing 73 download. */ }
+    // The primary download database may label version 73 as "testing", even though
+    // it is the currently distributed build. Keep its card intact and put the
+    // separately published, production-signed website v74 directly beneath it.
+    // The immutable GitHub release and exact APK asset were verified on 2026-10-24.
+    // Do not depend on /api/v1/releases/website-74: some production gateways return 404.
+    if(page==='downloads' && release && Number(release.versionCode)===2000073){
+      const official74='https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.55.6-2000074/BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk';
+      const newer=node('article',null,'card download-card available');
+      newer.append(badge('stable'),node('h3','التحديث الرسمي 74'),
+        node('div','2.0.0-rc07.55.6 • 2000074','download-version'),
+        node('p','إصدار بلوفي بلاير لأندرويد TV: تحديث صامت للمكتبة وتحسينات التشغيل. ثبّته فوق 73 إذا كان التوقيع متطابقًا، ولا تحذف التطبيق أو تمسح بياناته.','content-text'));
+      const link=node('a','تحميل التحديث الرسمي 74 APK','btn primary');
+      link.href=official74;link.rel='noopener noreferrer';
+      newer.append(link);
+      container.append(newer);
     }
   }}catch(error){container.replaceChildren(node('p',error.message,'notice'));}}
 
