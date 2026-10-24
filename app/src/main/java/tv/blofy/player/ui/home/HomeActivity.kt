@@ -446,6 +446,7 @@ class HomeActivity : AppCompatActivity() {
             feed.addView(row, index++)
         }
         HomeRowOrder.apply(feed, ProfileLibraryStore.homeRows(this))
+        homeFocusController?.invalidate()
         posterArtworkBinder?.pruneDetached()
         feed.post { posterArtworkBinder?.onViewportChanged() }
         if (focused != null && focused.isShown) focused.requestFocus()
@@ -524,6 +525,7 @@ class HomeActivity : AppCompatActivity() {
             feed.addView(row, LinearLayout.LayoutParams(-1, dp(posterHeight + 22)))
         }
         if (hero != null) feed.requestLayout()
+        homeFocusController?.invalidate()
         posterArtworkBinder?.clear()
     }
 
@@ -575,7 +577,8 @@ class HomeActivity : AppCompatActivity() {
 
         feed.alpha = 0f
         feed.translationY = dp(12).toFloat()
-        feed.animate().alpha(1f).translationY(0f).setDuration(280).start()
+        feed.animate().alpha(1f).translationY(0f).setDuration(180).start()
+        homeFocusController?.invalidate()
         // Start only images visible in the opening viewport, not all seven offscreen shelves.
         feed.post { posterArtworkBinder?.onViewportChanged() }
     }
