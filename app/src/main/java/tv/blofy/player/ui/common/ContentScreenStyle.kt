@@ -2,7 +2,6 @@ package tv.blofy.player.ui.common
 
 import android.content.Context
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.widget.Button

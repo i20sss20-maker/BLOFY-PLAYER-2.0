@@ -48,7 +48,7 @@ class PosterStreamAdapter(
             isFocusableInTouchMode = DeviceClass.detect(context) == DeviceClass.Kind.TV
             isClickable = true
             setPadding(dp(3), dp(3), dp(3), dp(6))
-            background = card(false, dp(8).toFloat(), dp(1))
+            background = card(false, dp(12).toFloat(), dp(1))
             clipToOutline = true
             elevation = 0f
         }
@@ -106,7 +106,7 @@ class PosterStreamAdapter(
             includeFontPadding = false
         }
         root.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(18)))
-        return Holder(root, image, title, meta, rating, dp(8).toFloat(), dp(1))
+        return Holder(root, image, title, meta, rating, dp(12).toFloat(), dp(1))
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {

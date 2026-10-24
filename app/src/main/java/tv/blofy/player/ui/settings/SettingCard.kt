@@ -39,10 +39,10 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
         valueView.background = valueBackground(false)
         addView(valueView, LayoutParams(-2, -2).apply { topMargin = dp(if (tv) 6 else 9) })
         addView(hintView, LayoutParams(-1, -2).apply { topMargin = dp(if (tv) 3 else 5) })
-        background = CinemaStyle.surface(context, radiusDp = 16)
+        background = CinemaStyle.surface(context, radiusDp = 18)
         stateListAnimator = null
         setOnFocusChangeListener { view, focused ->
-            background = CinemaStyle.surface(context, focused, radiusDp = 16)
+            background = CinemaStyle.surface(context, focused, radiusDp = 18)
             valueView.background = valueBackground(focused)
             valueView.setTextColor(if (focused) CinemaStyle.White else CinemaStyle.Accent)
             titleView.setTextColor(CinemaStyle.White)
