@@ -84,6 +84,17 @@ class CatalogRefreshCheckpointTest {
         assertTrue(fresh.completed.isEmpty())
     }
 
+    @Test fun corruptedStagePreferenceCannotDeleteRealPlaylist(): Unit = runBlocking(Dispatchers.IO) {
+        val prefs = app.getSharedPreferences("blofy_background_catalog_checkpoint_v1", 0)
+        assertTrue(prefs.edit().putString("${source.id}:stage", source.id).commit())
+        val checkpoint = CatalogRefreshCheckpoint(app, source.id)
+        val recovered = checkpoint.prepare(source, db.dao())
+        assertNotEquals(source.id, recovered.stagedId)
+        assertTrue(recovered.stagedId.startsWith("blofy-refresh-stage-"))
+        assertNotNull(db.dao().provider(source.id))
+        assertNotNull(db.dao().stream(item(source.id, "live", 1).key))
+    }
+
     @Test fun tamperedRowCountInvalidatesCompletedSection(): Unit = runBlocking(Dispatchers.IO) {
         val dao = db.dao()
         val checkpoint = CatalogRefreshCheckpoint(app, source.id)
