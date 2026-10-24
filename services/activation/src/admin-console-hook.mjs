@@ -73,6 +73,13 @@ http.createServer = function withAdminConsole(listener) {
     if (res.writableEnded || res.destroyed) return;
     let url; try { url = new URL(req.url || '/', 'http://localhost'); } catch { return listener(req, res); }
     try {
+      // Only the exact owner's test paths are handled ahead of legacy download redirects.
+      // Production release catalog and admin/session endpoints remain untouched.
+      if (req.method === 'GET' && [
+        '/downloads/android-tv-test', '/android-tv-test.js', '/api/v1/releases/owner-test'
+      ].includes(url.pathname)) {
+        if (await experience.handle(req, res, url)) return;
+      }
       if (await servePublicDownloads(req, res, url.pathname, {
         list: () => catalog.list(),
         onError: error => console.error('public downloads failed:', safeErrorSummary(error))
