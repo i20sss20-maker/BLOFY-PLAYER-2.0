@@ -16,9 +16,9 @@ export function renderCinematicV74PatchCard() {
   return '<section class="official-card" data-cinematic-v74-patch="true" style="margin-top:12px" aria-label="نسخة بلوفي بلاير 74 لتجربة التصحيح">' +
     '<div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY"></div>' +
     '<div class="official-copy">' +
-    '<div class="official-title"><h2 style="margin:0;font-size:20px">BLOFY PLAYER 74 — تجربة إصلاح الثيم والتحديث</h2><span class="badge">نسخة 74 تجريبية محسّنة موقّعة</span></div>' +
+    '<div class="official-title"><h2 style="margin:0;font-size:20px">BLOFY PLAYER 74 — تجربة إصلاح الثيم والتحديث</h2><span class="badge">نسخة تجربة 74 محسّنة موقّعة</span></div>' +
     '<div class="official-desc">بنفسجي سينمائي أوضح في الخلفية والبانر والبوسترات. زر تحديث المحتوى لا يدور أثناء الانتظار، ويعرض العمل بالخلفية ويوفر الإلغاء إذا تعلّق.</div>' +
-    '<div class="official-meta">' + CINEMATIC_V74_PATCH.versionName + ' · Version Code ' + CINEMATIC_V74_PATCH.versionCode + ' · Signed QA APK</div>' +
+    '<div class="official-meta">' + CINEMATIC_V74_PATCH.versionName + ' · Build داخلي ' + CINEMATIC_V74_PATCH.versionCode + ' · Signed QA APK</div>' +
     '<div class="official-meta" style="direction:rtl;text-align:start">تثبّت فوق النسخة 74 المتوافقة دون حذف بياناتك. ما زالت بحاجة لتجربة البث والمكتبة على Android TV فعليًا؛ التحديث التلقائي الرسمي لم يتغيّر.</div>' +
     '<div class="official-meta" style="direction:rtl;text-align:start"><a rel="noopener noreferrer" href="' + CINEMATIC_V74_PATCH_CHECKSUM_URL + '">التحقق من بصمة SHA-256</a></div>' +
     '</div><a class="official-download" href="' + CINEMATIC_V74_PATCH.downloadPath + '">تجربة إصلاح بلوفي 74 ↓</a></section>';
