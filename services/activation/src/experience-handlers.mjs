@@ -13,7 +13,7 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
   const releasePublic = createReleasePublicHandlers({ pool, json, catalog: releaseCatalog });
   const ms = value => value ? new Date(value).getTime() : null;
   const normalized = row => ['active','trial'].includes(row.status) && ms(row.expires_at) && ms(row.expires_at) <= Date.now() ? 'expired' : row.status;
-  const pageFiles = { '/':'landing.html', '/downloads':'downloads.html', '/account':'account.html' };
+  const pageFiles = { '/':'landing.html', '/downloads':'downloads.html', '/account':'account.html', '/tv-test-2000073':'tv-test-2000073.html' };
   const assetFiles = { '/experience.css':'experience.css', '/premium.css':'premium.css', '/experience.js':'experience.js', '/release-manager.js':'release-manager.js', '/app-preview.png':'app-preview.png', '/IBMPlexSansArabic-Regular.ttf':'IBMPlexSansArabic-Regular.ttf', '/IBMPlexSansArabic-Medium.ttf':'IBMPlexSansArabic-Medium.ttf', '/OFL.txt':'OFL.txt' };
 
   async function releases() { return (await releaseCatalog.list()).items; }
