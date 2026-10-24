@@ -12,8 +12,8 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
   const ms = value => value ? new Date(value).getTime() : null;
   const normalized = row => row.trial_registration_pending === true && row.status === 'expired' ? 'pending' :
     ['active','trial'].includes(row.status) && ms(row.expires_at) && ms(row.expires_at) <= Date.now() ? 'expired' : row.status;
-  const pageFiles = { '/':'landing.html', '/downloads':'downloads.html', '/account':'account.html' };
-  const assetFiles = { '/experience.css':'experience.css', '/premium.css':'premium.css', '/experience.js':'experience.js', '/app-preview.png':'app-preview.png', '/IBMPlexSansArabic-Regular.ttf':'IBMPlexSansArabic-Regular.ttf', '/IBMPlexSansArabic-Medium.ttf':'IBMPlexSansArabic-Medium.ttf', '/OFL.txt':'OFL.txt' };
+  const pageFiles = { '/':'landing.html', '/downloads':'downloads.html', '/account':'account.html', '/downloads/android-tv-test':'android-tv-test.html' };
+  const assetFiles = { '/experience.css':'experience.css', '/premium.css':'premium.css', '/experience.js':'experience.js', '/android-tv-test.js':'android-tv-test.js', '/app-preview.png':'app-preview.png', '/IBMPlexSansArabic-Regular.ttf':'IBMPlexSansArabic-Regular.ttf', '/IBMPlexSansArabic-Medium.ttf':'IBMPlexSansArabic-Medium.ttf', '/OFL.txt':'OFL.txt' };
 
   async function releases() {
     const result = await pool.query('SELECT * FROM app_releases ORDER BY channel');
@@ -59,6 +59,28 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
       res.writeHead(200,{'content-type':type+'; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'no-referrer',
         'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"});
       res.end(body); return true;
+    }
+    if (req.method==='GET' && pathname==='/api/v1/releases/owner-test') {
+      // Owner QA is separate from all production release rows and /download/latest.apk.
+      try {
+        const response = await fetch(
+          'https://api.github.com/repos/i20sss20-maker/BLOFY-PLAYER-2.0/releases/tags/blofy-android-tv-2000073-owner-test',
+          { headers: { accept: 'application/vnd.github+json', 'user-agent': 'BLOFY-OWNER-TEST' },
+            signal: AbortSignal.timeout(7000) }
+        );
+        if (response.status===404) { json(res,200,{ready:false,message:'signed_apk_not_published'}); return true; }
+        if (!response.ok) throw new Error('release_lookup_failed');
+        const release = await response.json();
+        const filename = 'BLOFY-PLAYER-ANDROID-TV-2000073-SIGNED-TEST.apk';
+        const asset = release.assets?.find(item => item.name===filename && item.size>10_000_000);
+        if (!release.prerelease || release.draft || !asset ||
+            !asset.browser_download_url?.startsWith('https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/')) {
+          json(res,200,{ready:false,message:'signed_apk_not_published'}); return true;
+        }
+        json(res,200,{ready:true,filename,downloadUrl:asset.browser_download_url,
+          sizeBytes:asset.size,releaseTag:release.tag_name});
+      } catch { json(res,503,{ready:false,message:'release_check_unavailable'}); }
+      return true;
     }
     if (req.method==='GET' && pathname==='/api/v1/releases') { json(res,200,{items:await releases()}); return true; }
     const admin = pathname.startsWith('/api/v1/admin/experience');
