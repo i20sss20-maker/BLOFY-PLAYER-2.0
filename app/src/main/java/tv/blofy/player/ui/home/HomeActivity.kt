@@ -1045,9 +1045,9 @@ class HomeActivity : AppCompatActivity() {
         refreshBusy = running || waiting
         refreshButton?.apply {
             isEnabled = true
-            text = if (refreshBusy) getString(R.string.home_catalog_refresh_cancel_v75)
-                else if (layoutSpec.compact) "↻" else getString(R.string.home_catalog_refresh_v74)
-            contentDescription = text
+            text = if (layoutSpec.compact) { if (refreshBusy) "✕" else "↻" }
+                else getString(if (refreshBusy) R.string.home_catalog_refresh_cancel_v75 else R.string.home_catalog_refresh_v74)
+            contentDescription = getString(if (refreshBusy) R.string.home_catalog_refresh_cancel_v75 else R.string.home_catalog_refresh_v74)
         }
         // A paused/queued worker must never show a 'still spinning' indicator.
         refreshSpinner?.visibility =
