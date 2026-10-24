@@ -823,9 +823,12 @@ class HomeActivity : AppCompatActivity() {
             isFocusableInTouchMode = false
             descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = GradientDrawable().apply {
-                setColor(CinemaStyle.Surface); cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), 0x66FFFFFF)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(0xFF2A1B3C.toInt(), 0xFF1C122A.toInt(), 0xFF130D1F.toInt())
+            ).apply {
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1).coerceAtLeast(1), 0x665B3B7D)
             }
             addView(buildSidebar(), FrameLayout.LayoutParams(-1, -2))
         }
@@ -1048,17 +1051,21 @@ class HomeActivity : AppCompatActivity() {
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
+    /**
+     * BLOFY cinema rail: an iconic navigation tile with a short readable label.
+     * Keep all existing action tags for DPAD/FocusMemory and accessibility.
+     */
     private fun buildSidebar() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
         layoutDirection = uiDirection
-        setPadding(dp(8), dp(12), dp(8), dp(12))
+        setPadding(dp(7), dp(12), dp(7), dp(10))
         clipChildren = false
         addView(ImageView(this@HomeActivity).apply {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = "BLOFY PLAYER"
-        }, LinearLayout.LayoutParams(dp(72), dp(44)).apply { bottomMargin = dp(18) })
+        }, LinearLayout.LayoutParams(dp(72), dp(44)).apply { bottomMargin = dp(13) })
         addView(sideSelected(R.drawable.cinema_home, getString(R.string.home_home)))
         addView(sideAction("side_live", R.drawable.cinema_live, getString(R.string.home_live), contentIntent("live")))
         addView(sideAction("side_movies", R.drawable.cinema_movies, getString(R.string.home_movies), contentIntent("movie")))
@@ -1070,28 +1077,98 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun sideBase(icon: Int, label: String) = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-        layoutDirection = uiDirection; setPadding(dp(9), 0, dp(9), 0)
-        addView(ImageView(this@HomeActivity).apply {
-            setImageResource(icon); imageTintList = ColorStateList.valueOf(TEXT_MUTED)
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        layoutDirection = uiDirection
+        setPadding(dp(7), 0, dp(7), 0)
+        contentDescription = label
+
+        val tile = FrameLayout(this@HomeActivity).apply {
+            tag = "blofy_side_icon_tile"
+            background = sidebarIconSurface(selected = false, focused = false)
+            isFocusable = false
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginEnd = dp(8) })
+        }
+        tile.addView(ImageView(this@HomeActivity).apply {
+            tag = "blofy_side_icon"
+            setImageResource(icon)
+            imageTintList = ColorStateList.valueOf(TEXT_SECONDARY)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, FrameLayout.LayoutParams(dp(19), dp(19), Gravity.CENTER))
+        addView(tile, LinearLayout.LayoutParams(dp(29), dp(29)).apply { marginEnd = dp(7) })
         addView(TextView(this@HomeActivity).apply {
-            text = label; textSize = 12f; typeface = BlofyTvDesign.preferredTypeface(this)
-            setTextColor(TEXT_PRIMARY); gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
+            text = label
+            textSize = 11.5f
+            typeface = BlofyTvDesign.preferredTypeface(this)
+            setTextColor(TEXT_SECONDARY)
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            isSingleLine = true
+            ellipsize = TextUtils.TruncateAt.END
+            includeFontPadding = false
         }, LinearLayout.LayoutParams(0, -1, 1f))
-    }.also { it.layoutParams = LinearLayout.LayoutParams(-1, dp(railRowHeight)).apply { bottomMargin = dp(7) } }
+    }.also {
+        it.layoutParams = LinearLayout.LayoutParams(-1, dp(railRowHeight)).apply {
+            bottomMargin = dp(6)
+        }
+    }
+
+    private fun sidebarRowSurface(selected: Boolean, focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT,
+        when {
+            focused -> intArrayOf(0xFF71449A.toInt(), 0xFF482C6D.toInt(), 0xFF291B3E.toInt())
+            selected -> intArrayOf(0xFF513073.toInt(), 0xFF352147.toInt())
+            else -> intArrayOf(0x332E1D43, 0x221A102A)
+        }
+    ).apply {
+        cornerRadius = dp(12).toFloat()
+        setStroke(
+            dp(if (focused) 2 else 1).coerceAtLeast(1),
+            when {
+                focused -> 0xFFE8CFFF.toInt()
+                selected -> 0xFF885CAD.toInt()
+                else -> 0x2EFFFFFF
+            }
+        )
+    }
+
+    private fun sidebarIconSurface(selected: Boolean, focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        when {
+            focused -> intArrayOf(0xFFB985F5.toInt(), 0xFF7746B8.toInt())
+            selected -> intArrayOf(0xFF8451B6.toInt(), 0xFF553477.toInt())
+            else -> intArrayOf(0xFF30203F.toInt(), 0xFF24172F.toInt())
+        }
+    ).apply {
+        cornerRadius = dp(9).toFloat()
+        setStroke(dp(1).coerceAtLeast(1), if (focused) 0xFFF3E5FF.toInt() else 0x4DAF87D0)
+    }
+
+    private fun updateSidebarAppearance(row: LinearLayout, selected: Boolean, focused: Boolean) {
+        row.background = sidebarRowSurface(selected, focused)
+        val tile = row.getChildAt(0) as? FrameLayout
+        tile?.background = sidebarIconSurface(selected, focused)
+        (tile?.getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(
+            if (selected || focused) Color.WHITE else TEXT_SECONDARY
+        )
+        (row.getChildAt(1) as? TextView)?.apply {
+            setTextColor(if (selected || focused) Color.WHITE else TEXT_SECONDARY)
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = selected || focused)
+        }
+    }
 
     private fun sideSelected(icon: Int, label: String) = sideBase(icon, label).apply {
-        id = View.generateViewId(); tag = "side_home"
-        isFocusable = true; isFocusableInTouchMode = remote; isClickable = true
-        background = CinemaStyle.surface(this@HomeActivity)
-        (getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(PURPLE_BRIGHT)
-        (getChildAt(1) as? TextView)?.setTextColor(PURPLE_BRIGHT)
+        id = View.generateViewId()
+        tag = "side_home"
+        isFocusable = true
+        isFocusableInTouchMode = remote
+        isClickable = true
+        updateSidebarAppearance(this, selected = true, focused = false)
         setOnFocusChangeListener { view, focused ->
-            view.background = CinemaStyle.surface(this@HomeActivity, focused)
+            updateSidebarAppearance(this, selected = true, focused = focused)
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, "side_home")
+            animateFocus(view, focused, 1.025f, 0f, dp(7).toFloat())
         }
         setOnClickListener {
             this@HomeActivity.findViewById<View>(android.R.id.content)
@@ -1100,18 +1177,21 @@ class HomeActivity : AppCompatActivity() {
         }
         registerAction("side_home", this)
     }
+
     private fun sideAction(key: String, icon: Int, label: String, intent: Intent) = sideBase(icon, label).apply {
-        id = View.generateViewId(); tag = key
-        isFocusable = true; isFocusableInTouchMode = remote; isClickable = true
-        background = transparentSurface(false)
+        id = View.generateViewId()
+        tag = key
+        isFocusable = true
+        isFocusableInTouchMode = remote
+        isClickable = true
+        updateSidebarAppearance(this, selected = false, focused = false)
         setOnFocusChangeListener { view, focused ->
-            view.background = transparentSurface(focused)
-            (getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(if (focused) PURPLE_BRIGHT else TEXT_MUTED)
-            (getChildAt(1) as? TextView)?.setTextColor(if (focused) Color.WHITE else TEXT_MUTED)
+            updateSidebarAppearance(this, selected = false, focused = focused)
             if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
-            animateFocus(view, focused, 1f, 0f, 0f)
+            animateFocus(view, focused, 1.025f, 0f, dp(7).toFloat())
         }
-        setOnClickListener { startActivity(intent) }; registerAction(key, this)
+        setOnClickListener { startActivity(intent) }
+        registerAction(key, this)
     }
 
     private fun buildHero() = FrameLayout(this).apply {
