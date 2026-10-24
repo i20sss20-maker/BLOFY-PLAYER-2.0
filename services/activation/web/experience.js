@@ -47,7 +47,7 @@ async function releaseCards(container){try{const {items}=await api('/api/v1/rele
     if(channel==='stable' && release && Number(release.versionCode)===2000073){
       try {
         const official=await api('/api/v1/releases/website-74');
-        if(official.ready && official.versionCode===2000074 && /^https:\\/\\/github\\.com\\/i.test(official.downloadUrl)){
+        if(official.ready && official.versionCode===2000074 && official.downloadUrl?.startsWith('https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/')){
           const newer=node('article',null,'card download-card available');
           newer.append(badge('stable'),node('h3','التحديث الرسمي 74'),
             node('div',official.versionName+' • 2000074','download-version'),
