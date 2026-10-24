@@ -110,6 +110,14 @@ class HomeActivity : AppCompatActivity() {
     private var refreshBusy = false
     private var refreshStage: String? = null
     private var refreshRequestInFlight = false
+    private var refreshActiveSinceMs = 0L
+    private val refreshStatusPulse = object : Runnable {
+        override fun run() {
+            if (!refreshBusy || isFinishing || isDestroyed) return
+            updateRefreshFeedback()
+            uiHandler.postDelayed(this, 5_000L)
+        }
+    }
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private val hideRefreshMessage = Runnable { if (!refreshBusy) refreshHint?.visibility = View.GONE }
@@ -272,6 +280,7 @@ class HomeActivity : AppCompatActivity() {
         historyObserver.stop()
         refreshWork?.removeObservers(this)
         refreshWork = null
+        uiHandler.removeCallbacks(refreshStatusPulse)
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -454,7 +463,7 @@ class HomeActivity : AppCompatActivity() {
             it.animate().cancel()
             it.alpha = .10f
             ArtworkLoader.loadPriority(it, listOf(item.backdrop, item.icon))
-            it.animate().alpha(.88f).setDuration(330).start()
+            it.animate().alpha(.97f).setDuration(330).start()
         }
         heroContent?.apply {
             animate().cancel()
@@ -575,12 +584,12 @@ class HomeActivity : AppCompatActivity() {
         items.take(18).forEachIndexed { index, item ->
             row.addView(
                 posterCard(providerId, item, "poster_${prefix}_${item.kind}_$index", states[item.key], landscape),
-                LinearLayout.LayoutParams(dp(cardWidth), dp(cardHeight)).apply { marginStart = dp(9); marginEnd = dp(3) }
+                LinearLayout.LayoutParams(dp(cardWidth), dp(cardHeight)).apply { marginStart = dp(7); marginEnd = dp(2) }
             )
         }
         scroll.addView(row, FrameLayout.LayoutParams(-2, -1))
         scroll.doOnLayout { scroll.scrollTo(if (uiDirection == View.LAYOUT_DIRECTION_RTL) (row.width - scroll.width).coerceAtLeast(0) else 0, 0) }
-        parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(cardHeight + 22)))
+        parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(cardHeight + 13)))
     }
 
     private fun addTopTenShelf(parent: LinearLayout, providerId: String, items: List<StreamEntity>) {
@@ -605,14 +614,14 @@ class HomeActivity : AppCompatActivity() {
         }
         scroll.addView(row, FrameLayout.LayoutParams(-2, -1))
         scroll.doOnLayout { scroll.scrollTo(if (uiDirection == View.LAYOUT_DIRECTION_RTL) (row.width - scroll.width).coerceAtLeast(0) else 0, 0) }
-        parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(posterHeight + 28)))
+        parent.addView(scroll, LinearLayout.LayoutParams(-1, dp(posterHeight + 19)))
     }
 
     private fun sectionTitle(title: String, subtitle: String) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         layoutDirection = uiDirection
         gravity = Gravity.START
-        setPadding(0, dp(12), dp(4), dp(6))
+        setPadding(0, dp(8), dp(4), dp(4))
         addView(TextView(this@HomeActivity).apply {
             text = title; textSize = 16f
             typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
@@ -652,7 +661,7 @@ class HomeActivity : AppCompatActivity() {
         }
 
         addView(View(this@HomeActivity).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xED0C0812.toInt(), 0x700C0812, Color.TRANSPARENT))
+            background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xF10E0722.toInt(), 0xA7231050.toInt(), Color.TRANSPARENT))
         }, FrameLayout.LayoutParams(-1, dp(94), Gravity.BOTTOM))
 
         val text = LinearLayout(this@HomeActivity).apply {
@@ -806,6 +815,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun buildTvHome(): FrameLayout {
         val root = FrameLayout(this).apply {
+            tag = "blofy_home_cinema_root_v75"
             background = AppCompatResources.getDrawable(this@HomeActivity, R.drawable.blofy_home_background)
             layoutDirection = uiDirection
         }
@@ -875,7 +885,7 @@ class HomeActivity : AppCompatActivity() {
             setPadding(dp(5), dp(5), dp(5), dp(24))
         }
         homeFeed = feed
-        feed.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(layoutSpec.heroHeight)).apply { bottomMargin = dp(8) })
+        feed.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(layoutSpec.heroHeight)).apply { bottomMargin = dp(4) })
         scroll.addView(feed, FrameLayout.LayoutParams(-1, -2))
         main.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
@@ -1202,7 +1212,8 @@ class HomeActivity : AppCompatActivity() {
         }.also { addView(it, FrameLayout.LayoutParams(-1, -1)) }
         addView(View(this@HomeActivity).apply {
             val direction = if (layoutSpec.compact) GradientDrawable.Orientation.TOP_BOTTOM else if (uiDirection == View.LAYOUT_DIRECTION_RTL) GradientDrawable.Orientation.LEFT_RIGHT else GradientDrawable.Orientation.RIGHT_LEFT
-            background = GradientDrawable(direction, intArrayOf(0x08090B10, 0xB5090B10.toInt(), 0xFC090B10.toInt()))
+            // Purple glass is visible even on black/dark poster art: v74's black overlay hid the theme.
+            background = GradientDrawable(direction, intArrayOf(0x0D130A29, 0xBA210E3D.toInt(), 0xF5100925.toInt()))
         }, FrameLayout.LayoutParams(-1, -1))
         val content = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.VERTICAL
@@ -1218,7 +1229,7 @@ class HomeActivity : AppCompatActivity() {
         }.also { content.addView(it) }
         heroTitle = TextView(this@HomeActivity).apply {
             text = getString(R.string.home_all_content)
-            textSize = if (layoutSpec.compact || compactTv) 24f else 30f
+            textSize = if (layoutSpec.compact) 24f else if (compactTv) 27f else 34f
             typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE)
             gravity = Gravity.START; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
             textDirection = View.TEXT_DIRECTION_FIRST_STRONG
@@ -1243,6 +1254,11 @@ class HomeActivity : AppCompatActivity() {
             includeFontPadding = false; setLineSpacing(0f, 1.12f)
             setPadding(0, dp(6), 0, dp(7))
         }.also { content.addView(it) }
+        addView(View(this@HomeActivity).apply {
+            tag = "blofy_hero_plum_accent_v75"
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(0xFFB994FC.toInt(), 0xFF7744C2.toInt(), 0x00572F93))
+        }, FrameLayout.LayoutParams(-1, dp(3), Gravity.BOTTOM))
         heroDots = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
@@ -1396,10 +1412,22 @@ class HomeActivity : AppCompatActivity() {
             setStroke(dp(1), BlofyTvDesign.FocusStroke)
         }
     } else roundedColor(Color.TRANSPARENT, 10)
-    private fun heroSurface() = CinemaStyle.surface(this, radiusDp = 16)
+    private fun heroSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+        intArrayOf(0xFF4B236B.toInt(), 0xFF221035.toInt(), 0xFF0B0818.toInt())).apply {
+        cornerRadius = dp(18).toFloat()
+        setStroke(dp(1).coerceAtLeast(1), 0xFF8657B4.toInt())
+    }
     private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF4B276A.toInt(), 0xFF20142E.toInt(), 0xFF121019.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF7F56A0.toInt()) }
     private fun featuredSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 18)
-    private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 8)
+    private fun posterSurface(focused: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        if (focused) intArrayOf(0xFFAE80E6.toInt(), 0xFF68378C.toInt(), 0xFF261538.toInt())
+        else intArrayOf(0xFF33204C.toInt(), 0xFF1B102A.toInt(), 0xFF10091B.toInt())
+    ).apply {
+        cornerRadius = dp(10).toFloat()
+        setStroke(dp(if (focused) 2 else 1).coerceAtLeast(1),
+            if (focused) 0xFFEEDAFF.toInt() else 0xFF6E438E.toInt())
+    }
     private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
     private fun compactTile(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 16)
     private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF2B2137.toInt(), 0xFF18131F.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF43344F.toInt()) }
