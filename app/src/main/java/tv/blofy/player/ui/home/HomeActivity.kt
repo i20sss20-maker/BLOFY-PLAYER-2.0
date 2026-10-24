@@ -45,6 +45,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.HomeSnapshotStore
+import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.preparation.FullLibrarySyncWorker
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.login.LoginActivity
@@ -158,7 +159,12 @@ class HomeActivity : AppCompatActivity() {
                     finish()
                     return@launch
                 }
-                provider?.let { FullLibrarySyncWorker.enqueue(applicationContext, it.id) }
+                provider?.let {
+                    // Keep the saved library immediately available while WorkManager checks
+                    // for catalog changes on its own 24-hour network/storage-aware schedule.
+                    CatalogRefreshWorker.scheduleAutomatic(applicationContext, it.id)
+                    FullLibrarySyncWorker.enqueue(applicationContext, it.id)
+                }
                 showReadyHome()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { returnToLogin() }
