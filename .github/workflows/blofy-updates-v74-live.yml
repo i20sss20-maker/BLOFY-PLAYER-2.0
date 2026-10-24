@@ -36,7 +36,8 @@ jobs:
           assert release.get('versionCode') == 2000073, 'v73 active download must remain unchanged'
           assert 'BLOFY PLAYER 74 — النسخة المحسّنة' in page, 'Railway page missing Premium v74 card'
           assert '2000074' in page, 'v74 versionCode not visible'
-          assert 'BLOFY-PLAYER-74-PREMIUM-TEST-SIGNED.apk' in page, 'signed Premium v74 link missing'\n          assert 'BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk' not in page, 'old v74 link must be absent'
+          assert 'BLOFY-PLAYER-74-PREMIUM-TEST-SIGNED.apk' in page, 'signed Premium v74 link missing'
+          assert 'BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk' not in page, 'old v74 link must be absent'
           assert page.index('Version Code 2000073') < page.index('BLOFY PLAYER 74 — النسخة المحسّنة'), 'v74 must be below v73'
           print('PASS: Railway v73 remains active, Premium signed v74 replaces old v74 below it.')
           PY
