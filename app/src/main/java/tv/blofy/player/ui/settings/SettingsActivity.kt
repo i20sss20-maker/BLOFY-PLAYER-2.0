@@ -27,6 +27,7 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -344,11 +345,21 @@ class SettingsActivity : AppCompatActivity() {
             status.text = getString(R.string.setting_no_active_playlist)
             return
         }
-        status.text = getString(R.string.setting_refresh_opening)
-        startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
-            putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
-            putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
-        })
+        if (!CatalogSyncState.isReady(applicationContext, active.id)) {
+            // The first import still needs the dedicated recovery/progress screen.
+            status.text = getString(R.string.setting_refresh_opening)
+            startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
+                putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
+            })
+            return
+        }
+        // A previously committed catalog remains usable throughout the refresh. WorkManager
+        // retries temporary network/storage errors without trapping a TV viewer on a spinner.
+        CatalogRefreshWorker.enqueueNow(applicationContext, active.id)
+        status.text = copy(
+            "بدأ تحديث المحتوى بالخلفية. يمكنك متابعة المشاهدة؛ ستبقى المكتبة السابقة متاحة حتى يكتمل التحديث.",
+            "Updating in the background. Keep watching; your saved library stays available until the update completes."
+        )
     }
 
     private fun updateSyncStatus() {
@@ -366,8 +377,9 @@ class SettingsActivity : AppCompatActivity() {
     private fun syncSubtitle(): String {
         val active = provider ?: return getString(R.string.setting_manual_only)
         val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
-        return if (last > 0L) getString(R.string.setting_last_refresh, formatSyncTime(last))
-        else getString(R.string.setting_manual_only)
+        val cadence = copy("تلقائي كل 24 ساعة", "Automatic every 24 hours")
+        return if (last > 0L) "${getString(R.string.setting_last_refresh, formatSyncTime(last))} • $cadence"
+        else cadence
     }
 
     private fun formatSyncTime(value: Long): String {
