@@ -968,7 +968,7 @@ class HomeActivity : AppCompatActivity() {
         val working = state == WorkInfo.State.RUNNING
         val waiting = state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.BLOCKED
         refreshBusy = working || waiting
-        refreshSpinner?.visibility = if (working) View.VISIBLE else View.GONE
+        refreshSpinner?.visibility = if (working || waiting) View.VISIBLE else View.GONE
         if (!refreshStartedHere && !working && !waiting) {
             val last = refreshObservedProvider?.let { CatalogSyncState.lastSyncedAt(applicationContext, it) } ?: 0L
             refreshHint?.apply {

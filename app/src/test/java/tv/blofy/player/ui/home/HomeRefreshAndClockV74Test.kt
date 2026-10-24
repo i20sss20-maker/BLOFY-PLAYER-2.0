@@ -42,7 +42,7 @@ class HomeRefreshAndClockV74Test {
         ).apply { isAccessible = true }
         assertEquals(View.GONE, spinner.visibility)
         setter.invoke(activity, WorkInfo.State.ENQUEUED)
-        assertEquals(View.GONE, spinner.visibility)
+        assertEquals(View.VISIBLE, spinner.visibility)
         setter.invoke(activity, WorkInfo.State.RUNNING)
         assertEquals(View.VISIBLE, spinner.visibility)
         setter.invoke(activity, WorkInfo.State.FAILED)
