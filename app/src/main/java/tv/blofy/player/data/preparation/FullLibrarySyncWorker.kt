@@ -16,6 +16,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogPlaybackGate
 import tv.blofy.player.ui.catalog.ArtworkLoader
 
 class FullLibrarySyncWorker(
@@ -27,6 +28,10 @@ class FullLibrarySyncWorker(
         val providerId = inputData.getString(KEY_PROVIDER_ID).orEmpty()
         if (providerId.isBlank()) return Result.success()
         if (!CatalogSyncState.isReady(applicationContext, providerId)) return Result.success()
+        if (CatalogPlaybackGate.isPlaying) {
+            enqueueContinuation(applicationContext, providerId, 120)
+            return Result.success()
+        }
 
         return try {
             val complete = FullCatalogPreparer.runDurableChunk(
@@ -34,7 +39,8 @@ class FullLibrarySyncWorker(
                 providerId,
                 MAX_RUN_MS
             )
-            if (!complete) enqueueContinuation(applicationContext, providerId)
+            if (!complete) enqueueContinuation(applicationContext, providerId,
+                if (CatalogPlaybackGate.isPlaying) 120 else 2)
             Result.success()
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -85,11 +91,11 @@ class FullLibrarySyncWorker(
                 request(providerId, 0)).result.get(10, TimeUnit.SECONDS)
         }
 
-        private fun enqueueContinuation(context: Context, providerId: String) {
+        private fun enqueueContinuation(context: Context, providerId: String, delaySeconds: Long) {
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
                 workName(providerId),
                 ExistingWorkPolicy.APPEND_OR_REPLACE,
-                request(providerId, 2)
+                request(providerId, delaySeconds)
             )
         }
 

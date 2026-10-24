@@ -27,6 +27,7 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -344,11 +345,18 @@ class SettingsActivity : AppCompatActivity() {
             status.text = getString(R.string.setting_no_active_playlist)
             return
         }
-        status.text = getString(R.string.setting_refresh_opening)
-        startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
-            putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
-            putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
-        })
+        if (!CatalogSyncState.isReady(applicationContext, active.id)) {
+            status.text = getString(R.string.setting_refresh_opening)
+            startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
+                putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
+            })
+            return
+        }
+        CatalogRefreshWorker.enqueueNow(applicationContext, active.id)
+        status.text = copy(
+            "بدأ تحديث المحتوى بالخلفية، وتظل المكتبة محفوظة ومتاحة أثناء المشاهدة.",
+            "Content refresh started silently. The saved library stays available for viewing."
+        )
     }
 
     private fun updateSyncStatus() {
@@ -366,8 +374,9 @@ class SettingsActivity : AppCompatActivity() {
     private fun syncSubtitle(): String {
         val active = provider ?: return getString(R.string.setting_manual_only)
         val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
-        return if (last > 0L) getString(R.string.setting_last_refresh, formatSyncTime(last))
-        else getString(R.string.setting_manual_only)
+        val cadence = copy("تحديث صامت كل 30 دقيقة تقريبًا", "Quiet refresh about every 30 minutes")
+        return if (last > 0L) "${getString(R.string.setting_last_refresh, formatSyncTime(last))} • $cadence"
+        else cadence
     }
 
     private fun formatSyncTime(value: Long): String {

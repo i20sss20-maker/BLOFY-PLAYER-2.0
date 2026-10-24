@@ -15,6 +15,7 @@ import tv.blofy.player.core.identity.ActivationStartupRegistration
 import tv.blofy.player.core.profile.KidsContentGuard
 import tv.blofy.player.core.remote.QuickMenuInterceptor
 import tv.blofy.player.core.update.AppUpdateLifecycle
+import tv.blofy.player.data.CatalogPlaybackLifecycle
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.ResumeStateWriter
 import tv.blofy.player.data.local.BlofyDatabase
@@ -76,6 +77,7 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(AppUpdateLifecycle())
         registerActivityLifecycleCallbacks(tv.blofy.player.core.identity.ActivationLeaseLifecycle())
         registerActivityLifecycleCallbacks(StartupEntryLifecycle())
+        registerActivityLifecycleCallbacks(CatalogPlaybackLifecycle())
         // Record the source screen before the Live overlay wraps the Player window. Playback keeps
         // its existing BACK/HUD handling; this callback only restores the recorded source on finish.
         registerActivityLifecycleCallbacks(PlayerReturnNavigationLifecycle())
