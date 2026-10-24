@@ -1,0 +1,50 @@
+name: BLOFY Updates Railway v74 Live Probe
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/blofy-updates-v74-live.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-railway-update-center:
+    name: Verify v73 and signed v74 on the real Railway website
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Verify live updates.blofyplayer.com (not Vercel)
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://updates.blofyplayer.com'
+          page="$RUNNER_TEMP/blofy-updates-live.html"
+          health="$RUNNER_TEMP/blofy-updates-live.json"
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 4 \
+            --retry-all-errors --connect-timeout 8 --max-time 25 "$base/downloads" > "$page"
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 4 \
+            --retry-all-errors --connect-timeout 8 --max-time 25 "$base/health" > "$health"
+          python3 - "$page" "$health" <<'PY'
+          import json,sys
+          from pathlib import Path
+          page=Path(sys.argv[1]).read_text(encoding='utf-8')
+          health=json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
+          assert health.get('ok') is True, 'Railway updates service health failed'
+          release=(health.get('release') or {}).get('app') or {}
+          assert release.get('versionCode') == 2000073, 'v73 active download must remain unchanged'
+          assert 'التحديث الرسمي 74' in page, 'Railway page does not show official v74 below v73'
+          assert '2000074' in page, 'v74 versionCode not visible'
+          assert 'BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk' in page, 'signed v74 link missing'
+          assert page.index('Version Code 2000073') < page.index('التحديث الرسمي 74'), 'v74 must be below v73'
+          print('PASS: Railway v73 remains active, signed v74 download appears below it.')
+          PY
+      - name: Verify official v74 APK externally accessible
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v2.0.0-rc07.55.6-2000074/BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk'
+          curl --fail --silent --show-error --location --head --retry 3 \
+            --retry-delay 3 --connect-timeout 10 --max-time 40 "$url" >/dev/null
+          echo 'PASS: official signed v74 APK download is reachable'
