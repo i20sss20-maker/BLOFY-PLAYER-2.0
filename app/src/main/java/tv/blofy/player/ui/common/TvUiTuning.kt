@@ -46,6 +46,11 @@ object TvUiTuning {
     fun dp(context: Context, value: Int): Int = (value * context.resources.displayMetrics.density * scale(context)).roundToInt()
     fun sp(context: Context, value: Float): Float = value * scale(context)
 
+    fun lowRamTv(context: Context): Boolean =
+        DeviceClass.detect(context) == DeviceClass.Kind.TV &&
+            (context.applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)
+                ?.isLowRamDevice == true
+
     fun reducedMotion(context: Context): Boolean {
         val app = context.applicationContext
         val preferences = app.getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE)
@@ -55,8 +60,7 @@ object TvUiTuning {
         if (preferences.contains(MOTION_KEY)) {
             return preferences.getString(MOTION_KEY, "smooth") == "reduced"
         }
-        return (app.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)
-            ?.isLowRamDevice == true && DeviceClass.detect(context) == DeviceClass.Kind.TV
+        return lowRamTv(context)
     }
 
     fun focusScale(context: Context, requested: Float): Float =
