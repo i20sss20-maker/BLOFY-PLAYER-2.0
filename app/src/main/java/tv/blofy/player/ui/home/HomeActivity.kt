@@ -1172,8 +1172,8 @@ class HomeActivity : AppCompatActivity() {
             clipChildren = false
         }
         heroPrimary = actionHeroButton(getString(R.string.home_watch_now), "hero_watch", true) { openHeroItem() }
-        row.addView(heroPrimary, LinearLayout.LayoutParams(dp(126), dp(layoutSpec.actionHeight)).apply { marginEnd = dp(10) })
-        row.addView(heroButton(getString(R.string.home_explore_movies), "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(132), dp(layoutSpec.actionHeight)))
+        row.addView(heroPrimary, LinearLayout.LayoutParams(dp(if (layoutSpec.compact) 104 else 126), dp(layoutSpec.actionHeight)).apply { marginEnd = dp(10) })
+        row.addView(heroButton(getString(R.string.home_explore_movies), "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(if (layoutSpec.compact) 122 else 132), dp(layoutSpec.actionHeight)))
         content.addView(CinemaStyle.actionStrip(this@HomeActivity, row))
         val available = layoutSpec.width - layoutSpec.gutter * 2 - layoutSpec.railWidth - 22
         val contentWidth = if (layoutSpec.compact) -1 else dp((available * .68f).toInt().coerceAtLeast(310).coerceAtMost(available))
