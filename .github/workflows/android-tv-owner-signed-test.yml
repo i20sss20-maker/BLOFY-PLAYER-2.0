@@ -230,3 +230,25 @@ jobs:
             --notes "BLOFY Android TV official website APK version 74 (versionCode 2000074, versionName 2.0.0-rc07.55.6). Built from the 2000073 stability baseline with silent catalog refresh, playback protection and stage recovery. R8 release build with Media3/FFmpeg, signed by original BLOFY release certificate; checksum included. This is a direct website APK release, NOT a Google Play rollout. Install over compatible older BLOFY with the SAME signature and lower versionCode; never uninstall or erase data. Verify live/VOD on a real Android TV before broad distribution."
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets \
             --jq 'select(.tagName == "v2.0.0-rc07.55.6-2000074-website" and ([.assets[].name] | index("BLOFY-PLAYER-Android-TV-v74-SIGNED.apk"))) | "Verified official v74 APK uploaded"'
+
+      - name: Publish v74 on BLOFY website after signed APK verification
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/v2.0.0-rc07.55.6-2000074-website/BLOFY-PLAYER-Android-TV-v74-SIGNED.apk"
+          # The binary must be externally resolvable before advertising it to customers.
+          curl --fail --silent --show-error --location --head --retry 3 "$url" >/dev/null
+          # Take ONLY the reviewed, pinned download-page edit from its isolated site branch.
+          git fetch --no-tags --depth=1 origin refs/heads/site/blofy-android-tv-v74-download-20261024
+          git show 2738a708c44a4fbbc195adcd899c3823a44386a8:services/activation/web/downloads.html > "$RUNNER_TEMP/blofy-downloads-74.html"
+          grep -Fq "$url" "$RUNNER_TEMP/blofy-downloads-74.html"
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/services/activation/web/downloads.html?ref=main" --jq .sha)"
+          candidate="$(base64 -w0 < "$RUNNER_TEMP/blofy-downloads-74.html")"
+          jq -n --arg message "site: add official signed Android TV v74 beneath current v73" \
+            --arg content "$candidate" --arg sha "$current_sha" \
+            '{message:$message,content:$content,sha:$sha,branch:"main"}' > "$RUNNER_TEMP/blofy-site-release74.json"
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/services/activation/web/downloads.html" \
+            --input "$RUNNER_TEMP/blofy-site-release74.json" --jq '.commit.sha'
+          echo "v74 official signed APK published; main website source updated. Vercel production deployment follows its Git integration."
