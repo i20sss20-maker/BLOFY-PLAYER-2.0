@@ -127,7 +127,7 @@ jobs:
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
       - name: Verify exact Play 2000074 manifest and TV routes
-        run: python3 tools/verify_play_2000074.py
+        run: python3 tools/verify_play_2000073.py
       - name: Test lint and assemble
         shell: bash
         run: |
