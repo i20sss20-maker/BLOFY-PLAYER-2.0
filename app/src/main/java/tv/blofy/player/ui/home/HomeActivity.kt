@@ -446,7 +446,7 @@ class HomeActivity : AppCompatActivity() {
         }
         heroSubtitle?.apply {
             textDirection = View.TEXT_DIRECTION_FIRST_STRONG
-            text = item.plot?.takeIf(String::isNotBlank)?.take(210)
+            text = item.plot?.takeIf(String::isNotBlank)?.trim()?.take(230)
                 ?: getString(if (item.kind == "series") R.string.home_series_fallback else R.string.home_movie_fallback)
         }
         heroPrimary?.text = getString(if (item.kind == "series") R.string.home_view_series else R.string.home_watch_now)
@@ -613,7 +613,20 @@ class HomeActivity : AppCompatActivity() {
         layoutDirection = uiDirection
         gravity = Gravity.START
         setPadding(0, dp(12), dp(4), dp(6))
-        addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = BlofyTvDesign.preferredTypeface(this); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
+        addView(TextView(this@HomeActivity).apply {
+            text = title; textSize = 16f
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
+            setTextColor(TEXT_PRIMARY); gravity = Gravity.START
+            includeFontPadding = false
+        })
+        if (subtitle.isNotBlank()) addView(TextView(this@HomeActivity).apply {
+            text = subtitle; textSize = 11f
+            typeface = BlofyTvDesign.preferredTypeface(this)
+            setTextColor(TEXT_MUTED); gravity = Gravity.START
+            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            includeFontPadding = false
+            setPadding(0, dp(2), 0, 0)
+        })
         contentDescription = listOf(title, subtitle).filter(String::isNotBlank).joinToString(". ")
     }
 
@@ -647,7 +660,11 @@ class HomeActivity : AppCompatActivity() {
             layoutDirection = uiDirection
             gravity = Gravity.BOTTOM or Gravity.START
             setPadding(dp(10), dp(8), dp(10), dp(10))
-            addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 12.2f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); maxLines = 2; setTextColor(Color.WHITE); gravity = Gravity.START })
+            addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 12.5f
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
+                maxLines = 2; ellipsize = TextUtils.TruncateAt.END
+                textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+                includeFontPadding = false; setTextColor(Color.WHITE); gravity = Gravity.START })
             addView(TextView(this@HomeActivity).apply {
                 text = buildList {
                     item.year?.takeIf(String::isNotBlank)?.let(::add)
@@ -679,7 +696,7 @@ class HomeActivity : AppCompatActivity() {
                 renderHero(item)
                 renderHeroDots()
             }
-            animateFocus(view, focused, 1.015f, 0f, dp(15).toFloat())
+            animateFocus(view, focused, 1.025f, 0f, dp(15).toFloat())
         }
         setOnClickListener { openDetails(providerId, item) }
         registerAction(key, this)
@@ -722,7 +739,7 @@ class HomeActivity : AppCompatActivity() {
             val copy = LinearLayout(this@HomeActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(28), dp(18), dp(28), dp(18))
                 addView(TextView(this@HomeActivity).apply { text = "BLOFY FEATURED"; textSize = 11.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
-                addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 27f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE); gravity = Gravity.START; maxLines = 1 })
+                addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 24f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE); gravity = Gravity.START; maxLines = 2; ellipsize = TextUtils.TruncateAt.END; textDirection = View.TEXT_DIRECTION_FIRST_STRONG })
                 addView(TextView(this@HomeActivity).apply { text = buildList { item.year?.let(::add); item.rating?.let { add("★ $it") }; item.genre?.substringBefore(',')?.let(::add) }.joinToString("   •   "); textSize = 12.5f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = item.plot?.take(150) ?: getString(R.string.home_featured_fallback); textSize = 13f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START; maxLines = 2; setPadding(0, dp(5), 0, 0) })
             }
@@ -1105,7 +1122,7 @@ class HomeActivity : AppCompatActivity() {
         }.also { addView(it, FrameLayout.LayoutParams(-1, -1)) }
         addView(View(this@HomeActivity).apply {
             val direction = if (layoutSpec.compact) GradientDrawable.Orientation.TOP_BOTTOM else if (uiDirection == View.LAYOUT_DIRECTION_RTL) GradientDrawable.Orientation.LEFT_RIGHT else GradientDrawable.Orientation.RIGHT_LEFT
-            background = GradientDrawable(direction, intArrayOf(0x08090B10, 0xA9090B10.toInt(), 0xFA090B10.toInt()))
+            background = GradientDrawable(direction, intArrayOf(0x08090B10, 0xB5090B10.toInt(), 0xFC090B10.toInt()))
         }, FrameLayout.LayoutParams(-1, -1))
         val content = LinearLayout(this@HomeActivity).apply {
             orientation = LinearLayout.VERTICAL
@@ -1121,21 +1138,29 @@ class HomeActivity : AppCompatActivity() {
         }.also { content.addView(it) }
         heroTitle = TextView(this@HomeActivity).apply {
             text = getString(R.string.home_all_content)
-            textSize = if (layoutSpec.compact || compactTv) 24f else 28f
+            textSize = if (layoutSpec.compact || compactTv) 24f else 30f
             typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE)
             gravity = Gravity.START; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
-            includeFontPadding = false; setPadding(0, dp(5), 0, 0)
+            textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+            includeFontPadding = false; setLineSpacing(0f, 1.04f)
+            setPadding(0, dp(5), 0, dp(1))
         }.also { content.addView(it) }
         heroMeta = TextView(this@HomeActivity).apply {
-            text = getString(R.string.home_all_content_meta); textSize = 11f
-            setTextColor(0xFFDDD3E9.toInt()); gravity = Gravity.START
-            isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
+            text = getString(R.string.home_all_content_meta); textSize = 11.5f
+            typeface = BlofyTvDesign.preferredTypeface(this)
+            setTextColor(0xFFE6DCF0.toInt()); gravity = Gravity.START
+            maxLines = 2; ellipsize = TextUtils.TruncateAt.END
+            textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+            includeFontPadding = false
             setPadding(0, dp(5), 0, 0)
         }.also { content.addView(it) }
         heroSubtitle = TextView(this@HomeActivity).apply {
-            text = getString(R.string.home_all_content_subtitle); textSize = 12f
+            text = getString(R.string.home_all_content_subtitle); textSize = 12.5f
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(TEXT_SECONDARY); gravity = Gravity.START
-            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            maxLines = if (compactTv) 1 else 2; ellipsize = TextUtils.TruncateAt.END
+            textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+            includeFontPadding = false; setLineSpacing(0f, 1.12f)
             setPadding(0, dp(6), 0, dp(7))
         }.also { content.addView(it) }
         heroDots = LinearLayout(this@HomeActivity).apply {
@@ -1147,11 +1172,11 @@ class HomeActivity : AppCompatActivity() {
             clipChildren = false
         }
         heroPrimary = actionHeroButton(getString(R.string.home_watch_now), "hero_watch", true) { openHeroItem() }
-        row.addView(heroPrimary, LinearLayout.LayoutParams(dp(104), dp(layoutSpec.actionHeight)).apply { marginEnd = dp(10) })
-        row.addView(heroButton(getString(R.string.home_explore_movies), "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(122), dp(layoutSpec.actionHeight)))
+        row.addView(heroPrimary, LinearLayout.LayoutParams(dp(126), dp(layoutSpec.actionHeight)).apply { marginEnd = dp(10) })
+        row.addView(heroButton(getString(R.string.home_explore_movies), "hero_movies", contentIntent("movie"), false), LinearLayout.LayoutParams(dp(132), dp(layoutSpec.actionHeight)))
         content.addView(CinemaStyle.actionStrip(this@HomeActivity, row))
         val available = layoutSpec.width - layoutSpec.gutter * 2 - layoutSpec.railWidth - 22
-        val contentWidth = if (layoutSpec.compact) -1 else dp((available * .74f).toInt().coerceAtLeast(280).coerceAtMost(available))
+        val contentWidth = if (layoutSpec.compact) -1 else dp((available * .68f).toInt().coerceAtLeast(310).coerceAtMost(available))
         addView(content, FrameLayout.LayoutParams(contentWidth, if (layoutSpec.compact) -2 else -1,
             Gravity.START or if (layoutSpec.compact) Gravity.BOTTOM else Gravity.TOP))
     }
