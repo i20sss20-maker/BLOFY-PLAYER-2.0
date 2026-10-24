@@ -9,4 +9,6 @@
     <string name="home_catalog_refresh_playback_v74">Inicia após a reprodução</string>
     <string name="home_catalog_refresh_queued_v74">Atualização em espera…</string>
     <string name="home_catalog_refresh_saving_v74">A guardar conteúdo…</string>
+    <string name="home_catalog_refresh_background_v75">Atualização em segundo plano — continue a assistir</string>
+    <string name="home_catalog_refresh_cancel_v75">Cancelar atualização</string>
 </resources>

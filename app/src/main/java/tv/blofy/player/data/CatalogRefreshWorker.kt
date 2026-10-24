@@ -80,7 +80,7 @@ class CatalogRefreshWorker(
             )
         ) return Result.success()
         // A streaming player must not compete with a full-library download/SQLite promotion.
-        if (CatalogPlaybackGate.isPlaying) return Result.retry()
+        if (CatalogPlaybackGate.isPlaying) return if (manual) Result.failure() else Result.retry()
         val refreshSource = if (sourceChanged) {
             PortalPlaylistClient.pendingSource(app, dao, provider.id) ?: return retryOrFail(manual)
         } else provider
@@ -168,7 +168,7 @@ class CatalogRefreshWorker(
             Result.success()
         } catch (_: PlaybackInProgressException) {
             // The viewer is watching; retry quietly later with the committed catalog unchanged.
-            Result.retry()
+            if (manual) Result.failure() else Result.retry()
         } catch (_: TimeoutCancellationException) {
             // A provider timeout is retryable; a cancelled Worker must still stop immediately.
             currentCoroutineContext().ensureActive()
@@ -252,7 +252,9 @@ internal suspend fun discardStagedCatalogSafely(dao: BlofyDao, stagedProviderId:
 
 /** No unbounded retries for a user-initiated failed refresh; auto jobs still retry. */
 internal object CatalogManualRefreshRetryPolicy {
-    private const val MAX_MANUAL_ATTEMPTS = 3
+    // One bounded attempt per explicit tap. Large catalog checkpoints survive cancellation
+    // and the user can restart manually; never chain several 7-minute silent retries.
+    private const val MAX_MANUAL_ATTEMPTS = 1
 
     fun shouldRetry(manual: Boolean, runAttemptCount: Int): Boolean =
         !manual || runAttemptCount < MAX_MANUAL_ATTEMPTS - 1

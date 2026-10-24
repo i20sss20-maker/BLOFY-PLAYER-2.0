@@ -9,4 +9,6 @@
     <string name="home_catalog_refresh_playback_v74">Démarre après la lecture</string>
     <string name="home_catalog_refresh_queued_v74">Mise à jour en attente…</string>
     <string name="home_catalog_refresh_saving_v74">Enregistrement du contenu…</string>
+    <string name="home_catalog_refresh_background_v75">Mise à jour en arrière-plan — continuez à regarder</string>
+    <string name="home_catalog_refresh_cancel_v75">Annuler la mise à jour</string>
 </resources>
