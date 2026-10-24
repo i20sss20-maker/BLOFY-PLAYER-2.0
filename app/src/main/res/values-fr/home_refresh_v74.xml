@@ -5,4 +5,8 @@
     <string name="home_catalog_refresh_done_v74">Contenu mis à jour</string>
     <string name="home_catalog_refresh_failed_v74">Échec de la mise à jour. Réessayer</string>
     <string name="home_catalog_refresh_no_source_v74">Sélectionnez d\'abord une liste</string>
+    <string name="home_catalog_refresh_offline_v74">En attente de connexion Internet</string>
+    <string name="home_catalog_refresh_playback_v74">Démarre après la lecture</string>
+    <string name="home_catalog_refresh_queued_v74">Mise à jour en attente…</string>
+    <string name="home_catalog_refresh_saving_v74">Enregistrement du contenu…</string>
 </resources>
