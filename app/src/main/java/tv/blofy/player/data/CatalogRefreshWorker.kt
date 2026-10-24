@@ -60,9 +60,14 @@ class CatalogRefreshWorker(
         } catch (_: Exception) {
             // A temporary encrypted-provider/Room read failure should not permanently
             // disable periodic work. WorkManager can back off and retry safely.
-            Result.retry()
+            retryOrFail(inputData.getBoolean(KEY_MANUAL, false))
         }
     }
+
+    /** Manual failures stop after three attempts so Home can offer another try. */
+    private fun retryOrFail(manual: Boolean): Result =
+        if (CatalogManualRefreshRetryPolicy.shouldRetry(manual, runAttemptCount)) Result.retry()
+        else Result.failure()
 
     private suspend fun refreshCatalog(provider: ProviderEntity, dao: BlofyDao, manual: Boolean): Result {
         val app = applicationContext
@@ -77,7 +82,7 @@ class CatalogRefreshWorker(
         // A streaming player must not compete with a full-library download/SQLite promotion.
         if (CatalogPlaybackGate.isPlaying) return Result.retry()
         val refreshSource = if (sourceChanged) {
-            PortalPlaylistClient.pendingSource(app, dao, provider.id) ?: return Result.retry()
+            PortalPlaylistClient.pendingSource(app, dao, provider.id) ?: return retryOrFail(manual)
         } else provider
 
         val previousCounts = CatalogRefreshIntegrityPolicy.Counts(
@@ -86,7 +91,7 @@ class CatalogRefreshWorker(
             series = dao.catalogCountAll(provider.id, "series")
         )
 
-        if (!LocalStorageManager.prepareForCatalogRefresh(app)) return Result.retry()
+        if (!LocalStorageManager.prepareForCatalogRefresh(app)) return retryOrFail(manual)
 
         // Persist completed sections across ordinary WorkManager's time budget. A retry
         // skips validated live/movie/series sections instead of starting the full list over.
@@ -115,11 +120,11 @@ class CatalogRefreshWorker(
                     }
                 )
             }
-            if (sync.failedSectionCount > 0) return Result.retry()
+            if (sync.failedSectionCount > 0) return retryOrFail(manual)
             if (sync.freshItemCount <= 0) {
                 // A zero-item Xtream reply must never replace the known-good catalog.
                 checkpoint.discard(saved, dao)
-                return Result.retry()
+                return retryOrFail(manual)
             }
 
             val candidateCounts = CatalogRefreshIntegrityPolicy.Counts(
@@ -132,7 +137,7 @@ class CatalogRefreshWorker(
             if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
                 // Valid-looking truncated server replies are not safe to resume indefinitely.
                 checkpoint.discard(saved, dao)
-                return Result.retry()
+                return retryOrFail(manual)
             }
 
             setProgress(androidx.work.workDataOf("catalog_stage" to "SAVE"))
@@ -167,11 +172,11 @@ class CatalogRefreshWorker(
         } catch (_: TimeoutCancellationException) {
             // A provider timeout is retryable; a cancelled Worker must still stop immediately.
             currentCoroutineContext().ensureActive()
-            if (promoted) Result.success() else Result.retry()
+            if (promoted) Result.success() else retryOrFail(manual)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            if (promoted) Result.success() else Result.retry()
+            if (promoted) Result.success() else retryOrFail(manual)
         } finally {
             // On a timeout/cancellation/temporary error keep the *staged* completed sections.
             // Incomplete streamed sections are cleared and retried on the next worker run.
@@ -243,4 +248,12 @@ class CatalogRefreshWorker(
 
 internal suspend fun discardStagedCatalogSafely(dao: BlofyDao, stagedProviderId: String) {
     withContext(NonCancellable + Dispatchers.IO) { dao.discardStagedCatalog(stagedProviderId) }
+}
+
+/** No unbounded retries for a user-initiated failed refresh; auto jobs still retry. */
+internal object CatalogManualRefreshRetryPolicy {
+    private const val MAX_MANUAL_ATTEMPTS = 3
+
+    fun shouldRetry(manual: Boolean, runAttemptCount: Int): Boolean =
+        !manual || runAttemptCount < MAX_MANUAL_ATTEMPTS - 1
 }
