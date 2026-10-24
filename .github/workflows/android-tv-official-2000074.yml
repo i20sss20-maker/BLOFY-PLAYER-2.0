@@ -223,9 +223,10 @@ jobs:
           else
             gh release create "$TAG" "$DEST" signed-test/BLOFY-2000074-SHA256.txt \
               --target "$GITHUB_SHA" \
-                            --title "BLOFY Android TV 2000074 • official website release" \
+              --latest=false \
+              --title "BLOFY Android TV 2000074 • official website release" \
               --notes "Official BLOFY website update 74, production-signed with original BLOFY certificate, versionCode 2000074. This is NOT a Google Play rollout. Website 73 stays available. Install over 73 if signer matches; do not uninstall or clear app data." \
               --repo "$GITHUB_REPOSITORY"
           fi
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease,assets \
-            --jq 'select(.isPrerelease and ([.assets[].name] | index("BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk"))) | "Official 74 signed APK uploaded"'
+            --jq 'select((.isPrerelease | not) and ([.assets[].name] | index("BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk"))) | "Official 74 signed APK uploaded"'
