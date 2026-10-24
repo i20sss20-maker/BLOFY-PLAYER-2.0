@@ -88,6 +88,17 @@ class HomeActivity : AppCompatActivity() {
     private var firstAction: View? = null
     private val actionViews = linkedMapOf<String, View>()
     private var homeFocusController: HomeFocusController? = null
+    private var posterArtworkBinder: HomePosterArtworkBinder? = null
+    private var heroArtworkFingerprint: String? = null
+    private var pendingHeroArtwork: StreamEntity? = null
+    private val heroArtworkPulse = Runnable {
+        val item = pendingHeroArtwork ?: return@Runnable
+        pendingHeroArtwork = null
+        heroArtwork?.let { artwork ->
+            // ArtworkLoader cancels stale URLs when a newer hero wins.
+            ArtworkLoader.loadPriority(artwork, listOf(item.backdrop, item.icon))
+        }
+    }
 
     private var heroItem: StreamEntity? = null
     private var heroProviderId: String? = null
@@ -204,8 +215,11 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun showReadyHome() {
+        posterArtworkBinder?.clear()
         val root = if (layoutSpec.compact) buildCompactHome() else buildTvHome()
         setContentView(root)
+        posterArtworkBinder = HomePosterArtworkBinder(root)
+        heroArtworkFingerprint = null
         scheduledProviderId?.let(::observeManualRefresh)
         if (!remote) {
             ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
@@ -282,6 +296,10 @@ class HomeActivity : AppCompatActivity() {
         historyObserver.stop()
         refreshWork?.removeObservers(this)
         refreshWork = null
+        posterArtworkBinder?.clear()
+        posterArtworkBinder = null
+        uiHandler.removeCallbacks(heroArtworkPulse)
+        pendingHeroArtwork = null
         uiHandler.removeCallbacks(refreshStatusPulse)
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
@@ -428,6 +446,8 @@ class HomeActivity : AppCompatActivity() {
             feed.addView(row, index++)
         }
         HomeRowOrder.apply(feed, ProfileLibraryStore.homeRows(this))
+        posterArtworkBinder?.pruneDetached()
+        feed.post { posterArtworkBinder?.onViewportChanged() }
         if (focused != null && focused.isShown) focused.requestFocus()
         else if (focusedContent != null) {
             actionViews.values.firstOrNull { it.tag == focusedContent && it.isShown }?.requestFocus()
@@ -461,11 +481,14 @@ class HomeActivity : AppCompatActivity() {
                 ?: getString(if (item.kind == "series") R.string.home_series_fallback else R.string.home_movie_fallback)
         }
         heroPrimary?.text = getString(if (item.kind == "series") R.string.home_view_series else R.string.home_watch_now)
-        heroArtwork?.let {
-            it.animate().cancel()
-            it.alpha = .10f
-            ArtworkLoader.loadPriority(it, listOf(item.backdrop, item.icon))
-            it.animate().alpha(.97f).setDuration(330).start()
+        // Moving rapidly across posters should not decode/download a new full hero per keypress.
+        // Keep text instantly responsive and coalesce artwork to the last settled selection.
+        val fingerprint = "${item.key}|${item.backdrop}|${item.icon}"
+        if (fingerprint != heroArtworkFingerprint) {
+            heroArtworkFingerprint = fingerprint
+            pendingHeroArtwork = item
+            uiHandler.removeCallbacks(heroArtworkPulse)
+            uiHandler.postDelayed(heroArtworkPulse, 120L)
         }
         heroContent?.apply {
             animate().cancel()
@@ -501,16 +524,19 @@ class HomeActivity : AppCompatActivity() {
             feed.addView(row, LinearLayout.LayoutParams(-1, dp(posterHeight + 22)))
         }
         if (hero != null) feed.requestLayout()
+        posterArtworkBinder?.clear()
     }
 
     private fun renderNoCatalogState() {
         val feed = homeFeed ?: return
+        posterArtworkBinder?.clear()
         while (feed.childCount > 1) feed.removeViewAt(1)
         feed.addView(emptyState(getString(R.string.home_library_ready), getString(R.string.home_library_ready_hint)))
     }
 
     private fun renderHomeFeed(data: HomeData) {
         val feed = homeFeed ?: return
+        posterArtworkBinder?.clear()
         actionViews.keys.filter { it.startsWith("poster_") || it.startsWith("top10_") || it.endsWith("_story") || it == "featured" }.toList().forEach { actionViews.remove(it) }
         while (feed.childCount > 1) feed.removeViewAt(1)
 
@@ -550,6 +576,8 @@ class HomeActivity : AppCompatActivity() {
         feed.alpha = 0f
         feed.translationY = dp(12).toFloat()
         feed.animate().alpha(1f).translationY(0f).setDuration(280).start()
+        // Start only images visible in the opening viewport, not all seven offscreen shelves.
+        feed.post { posterArtworkBinder?.onViewportChanged() }
     }
 
     private fun addShelf(
@@ -571,6 +599,7 @@ class HomeActivity : AppCompatActivity() {
             clipToPadding = false
             // Keep physical scroll coordinates stable when profile ordering reattaches the row.
             layoutDirection = View.LAYOUT_DIRECTION_LTR
+            setOnScrollChangeListener { _, _, _, _, _ -> posterArtworkBinder?.onViewportChanged() }
         }
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -597,7 +626,11 @@ class HomeActivity : AppCompatActivity() {
     private fun addTopTenShelf(parent: LinearLayout, providerId: String, items: List<StreamEntity>) {
         if (items.isEmpty()) return
         parent.addView(sectionTitle("TOP 10", getString(R.string.home_top10_subtitle)))
-        val scroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; layoutDirection = View.LAYOUT_DIRECTION_LTR; clipToPadding = false }
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER
+            layoutDirection = View.LAYOUT_DIRECTION_LTR; clipToPadding = false
+            setOnScrollChangeListener { _, _, _, _, _ -> posterArtworkBinder?.onViewportChanged() }
+        }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = uiDirection; setPadding(dp(4), dp(6), dp(4), dp(14)); clipChildren = false }
         items.take(10).forEachIndexed { index, item ->
             val wrap = FrameLayout(this)
@@ -653,7 +686,8 @@ class HomeActivity : AppCompatActivity() {
 
         val poster = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(0xFF17101F.toInt()) }
         addView(poster, FrameLayout.LayoutParams(-1, -1).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) })
-        ArtworkLoader.loadPriority(poster, if (landscape) listOf(item.backdrop, item.icon) else listOf(item.icon, item.backdrop))
+        val posterSources = if (landscape) listOf(item.backdrop, item.icon) else listOf(item.icon, item.backdrop)
+        posterArtworkBinder?.stage(poster, posterSources) ?: ArtworkLoader.loadPriority(poster, posterSources)
 
         val badges = qualityBadges(item)
         if (badges.isNotEmpty()) {
@@ -699,6 +733,7 @@ class HomeActivity : AppCompatActivity() {
         setOnFocusChangeListener { view, focused ->
             view.background = posterSurface(focused)
             if (focused) {
+                posterArtworkBinder?.focus(poster)
                 FocusMemory.save(this@HomeActivity, SCREEN_KEY, key)
                 heroItem = item
                 heroProviderId = providerId
@@ -880,6 +915,7 @@ class HomeActivity : AppCompatActivity() {
             isFocusableInTouchMode = false
             overScrollMode = View.OVER_SCROLL_NEVER
             descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
+            setOnScrollChangeListener { _, _, _, _, _ -> posterArtworkBinder?.onViewportChanged() }
         }
         val feed = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; layoutDirection = uiDirection
