@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { CINEMATIC_V75, CINEMATIC_V75_APK_URL, CINEMATIC_V75_CHECKSUM_URL, renderCinematicV75Card } from './cinematic-v75.mjs';
+import { CINEMATIC_V74_DOWNLOAD_PATH } from './cinematic-v74.mjs';
+test('new update-center v75 QA link upgrades v74 without replacing stable download', () => {
+  assert.equal(CINEMATIC_V75.versionCode, 2000075);
+  assert.equal(CINEMATIC_V75.versionName, '2.0.0-rc07.55.7');
+  assert.ok(CINEMATIC_V75_APK_URL.startsWith('https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v75-cinema-refresh-qa-20261024/'));
+  assert.ok(CINEMATIC_V75_APK_URL.endsWith(CINEMATIC_V75.fileName));
+  assert.equal(CINEMATIC_V75_CHECKSUM_URL, CINEMATIC_V75_APK_URL + '.sha256');
+  assert.equal(CINEMATIC_V75.downloadPath, '/download/v75-cinema-fix.apk');
+  assert.notEqual(CINEMATIC_V75.downloadPath, CINEMATIC_V74_DOWNLOAD_PATH);
+  assert.notEqual(CINEMATIC_V75.downloadPath, '/download/latest.apk');
+  const html = renderCinematicV75Card();
+  assert.ok(html.includes('data-cinematic-v75="true"'));
+  assert.ok(html.includes('href="/download/v75-cinema-fix.apk"'));
+  assert.ok(html.includes('href="' + CINEMATIC_V75_CHECKSUM_URL + '"'));
+  assert.ok(html.includes('تثبّت فوق النسخة 74'));
+  assert.ok(html.includes('نسخة تجربة'));
+});
