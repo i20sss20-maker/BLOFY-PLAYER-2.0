@@ -1,10 +1,10 @@
 # RC07.55.5 QA: stable rc07.55 baseline with BLOFY production domains
-# publish-trigger: rc07.55.5
-name: BLOFY Android TV 2000073 Owner-Signed Test
+# publish-trigger: rc07.55.6
+name: BLOFY Android TV 2000074 Official Website Signed Release
 
 on:
   push:
-    branches: [audit/play-2000073-stable-hotfix-20261024]
+    branches: [release/android-tv-2000074-20261024]
     paths:
       - .github/workflows/android-tv-owner-signed-test.yml
       - app/**
@@ -14,15 +14,15 @@ permissions:
   contents: write
 
 concurrency:
-  group: blofy-android-tv-2000073-owner-signed-test
-  cancel-in-progress: true
+  group: blofy-android-tv-2000074-website-release
+  cancel-in-progress: false
 
 env:
   ACTIVATION_BASE_URL: https://api.blofyplayer.com
   UPDATE_BASE_URL: https://updates.blofyplayer.com
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
-  EXPECTED_VERSION_CODE: "2000073"
-  EXPECTED_VERSION_NAME: 2.0.0-rc07.55.5
+  EXPECTED_VERSION_CODE: "2000074"
+  EXPECTED_VERSION_NAME: 2.0.0-rc07.55.6
   EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
   MEDIA3_VERSION: "1.6.1"
   ANDROID_NDK_VERSION: 28.0.13004108
@@ -48,7 +48,7 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Validate rc07.55.5 identity and signing inputs
+      - name: Validate rc07.55.6 identity and signing inputs
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
@@ -61,8 +61,8 @@ jobs:
             [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
           done
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
-          grep -Fq 'versionCode = 2000073' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.55.5"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000074' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.55.6"' app/build.gradle.kts
 
       - name: Install Android native and signing toolchain
         shell: bash
@@ -88,7 +88,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-rc07555-unit-tests-${{ github.sha }}
+          name: BLOFY-rc07556-unit-tests-${{ github.sha }}
           path: |
             app/build/test-results/testDebugUnitTest/*.xml
             app/build/reports/tests/testDebugUnitTest/
@@ -176,8 +176,8 @@ jobs:
             grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/apk-files.txt"
           done
           mkdir -p signed-test
-          cp "$apk" signed-test/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.apk
-          cp "$aab" signed-test/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.aab
+          cp "$apk" signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.apk
+          cp "$aab" signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.aab
           cp "$RUNNER_TEMP/badging.txt" signed-test/apk-badging.txt
           cp "$RUNNER_TEMP/signature.txt" signed-test/apk-signature.txt
           {
@@ -195,7 +195,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-${{ github.sha }}
+          name: BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED-${{ github.sha }}
           path: |
             signed-test/*.apk
             signed-test/SHA256SUMS
@@ -205,28 +205,28 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish separately labeled signed owner-test APK (never change stable catalog)
+      - name: Publish verified official v74 website APK
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="blofy-android-tv-2000073-owner-test"
-          SOURCE="signed-test/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.apk"
-          DEST="signed-test/BLOFY-PLAYER-ANDROID-TV-2000073-SIGNED-TEST.apk"
+          TAG="v2.0.0-rc07.55.6-2000074-website"
+          SOURCE="signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.apk"
+          DEST="signed-test/BLOFY-PLAYER-Android-TV-v74-SIGNED.apk"
           test -s "$SOURCE"
-          cp "$SOURCE" "$DEST"
           (cd signed-test && sha256sum --check SHA256SUMS)
-          printf '%s  %s\n' "$(sha256sum "$DEST" | cut -d' ' -f1)" "$(basename "$DEST")" > signed-test/BLOFY-TEST-SHA256.txt
+          cp "$SOURCE" "$DEST"
+          sha256sum "$DEST" > signed-test/BLOFY-PLAYER-Android-TV-v74-SIGNED.apk.sha256
+          grep -Fq "versionCode='2000074'" signed-test/apk-badging.txt
+          grep -Fq "versionName='2.0.0-rc07.55.6'" signed-test/apk-badging.txt
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$DEST" signed-test/BLOFY-TEST-SHA256.txt --clobber --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$TAG" "$DEST" signed-test/BLOFY-TEST-SHA256.txt \
-              --target "$GITHUB_SHA" \
-              --prerelease \
-              --title "BLOFY Android TV 2000073 • owner test only" \
-              --notes "Owner-only evaluation build of the 2000073 Android TV stability fixes, signed with the verified original BLOFY certificate. Not a Google Play release, not the production/primary download. Install over the same signing certificate and a compatible installed versionCode. Do not delete the existing app or clear data if Android declines the update." \
-              --repo "$GITHUB_REPOSITORY"
+            echo "::error::Release v74 already exists. Refusing to overwrite a published official APK."
+            exit 1
           fi
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease,assets \
-            --jq 'select(.isPrerelease and ([.assets[].name] | index("BLOFY-PLAYER-ANDROID-TV-2000073-SIGNED-TEST.apk"))) | "Signed QA APK uploaded"'
+          gh release create "$TAG" "$DEST" signed-test/BLOFY-PLAYER-Android-TV-v74-SIGNED.apk.sha256 \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "BLOFY PLAYER Android TV 74 • Official Website" \
+            --notes "BLOFY Android TV official website APK version 74 (versionCode 2000074, versionName 2.0.0-rc07.55.6). Built from the 2000073 stability baseline with silent catalog refresh, playback protection and stage recovery. R8 release build with Media3/FFmpeg, signed by original BLOFY release certificate; checksum included. This is a direct website APK release, NOT a Google Play rollout. Install over compatible older BLOFY with the SAME signature and lower versionCode; never uninstall or erase data. Verify live/VOD on a real Android TV before broad distribution."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets \
+            --jq 'select(.tagName == "v2.0.0-rc07.55.6-2000074-website" and ([.assets[].name] | index("BLOFY-PLAYER-Android-TV-v74-SIGNED.apk"))) | "Verified official v74 APK uploaded"'
