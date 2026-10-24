@@ -108,7 +108,7 @@ jobs:
           grep -Fq 'href="/download/v74-remote-qa.apk"' /tmp/downloads.html
           grep -Fq 'v74-remote-performance-qa-20261025/BLOFY-PLAYER-Android-TV-v74-REMOTE-QA-SIGNED.apk.sha256' /tmp/downloads.html
           # The previous 74 QA endpoint remains valid, but is not promoted as the latest trial.
-          grep -Fq 'CINEMATIC_V74_PATCH.downloadPath' services/update-distribution/server.mjs
+          grep -Fq 'CINEMATIC_V74_PATCH.downloadPath' server.mjs
           grep -Fq 'href="/download/v74-cinematic.apk"' /tmp/downloads.html
           grep -Fq 'v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk.sha256' /tmp/downloads.html
           grep -Fq 'href="/d/blofy"' /tmp/downloads.html
