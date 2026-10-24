@@ -104,6 +104,8 @@ class HomeActivity : AppCompatActivity() {
     private var refreshObservedProvider: String? = null
     private var refreshStartedHere = false
     private var refreshBusy = false
+    private var refreshStage: String? = null
+    private var refreshRequestInFlight = false
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private var heroCandidates: List<StreamEntity> = emptyList()
@@ -918,14 +920,19 @@ class HomeActivity : AppCompatActivity() {
             .getWorkInfosForUniqueWorkLiveData(CatalogRefreshWorker.manualWorkName(providerId))
             .also { liveData ->
                 liveData.observe(this) { infos ->
-                    renderManualRefreshStatus(infos.firstOrNull()?.state)
+                    val current = infos.firstOrNull { !it.state.isFinished }
+                        ?: infos.firstOrNull()
+                    refreshStage = current?.progress?.getString("catalog_stage")
+                    renderManualRefreshStatus(current?.state)
                 }
             }
     }
 
     private fun requestManualCatalogRefresh() {
-        if (refreshBusy) return
+        if (refreshBusy || refreshRequestInFlight) return
+        refreshRequestInFlight = true
         lifecycleScope.launch {
+            try {
             val providerId = try {
                 withContext(Dispatchers.IO) {
                     BlofyDatabase.get(applicationContext).dao().activeProviderId()
@@ -951,6 +958,9 @@ class HomeActivity : AppCompatActivity() {
             refreshStartedHere = true
             renderManualRefreshStatus(WorkInfo.State.ENQUEUED)
             CatalogRefreshWorker.enqueueNow(applicationContext, providerId, manual = true)
+            } finally {
+                refreshRequestInFlight = false
+            }
         }
     }
 
@@ -960,7 +970,14 @@ class HomeActivity : AppCompatActivity() {
         refreshBusy = working || waiting
         refreshSpinner?.visibility = if (working) View.VISIBLE else View.GONE
         if (!refreshStartedHere && !working && !waiting) {
-            refreshHint?.visibility = View.GONE
+            val last = refreshObservedProvider?.let { CatalogSyncState.lastSyncedAt(applicationContext, it) } ?: 0L
+            refreshHint?.apply {
+                if (last > 0L) {
+                    text = getString(R.string.setting_last_refresh,
+                        DeviceLocalTime.format(this@HomeActivity, last, "HH:mm"))
+                    visibility = View.VISIBLE
+                } else visibility = View.GONE
+            }
             return
         }
         val messageId = when (state) {
@@ -971,7 +988,13 @@ class HomeActivity : AppCompatActivity() {
             else -> R.string.home_catalog_refresh_waiting_v74
         }
         refreshHint?.apply {
-            setText(messageId)
+            val stage = if (working) when (refreshStage) {
+                "LIVE" -> getString(R.string.home_live)
+                "MOVIES" -> getString(R.string.home_movies)
+                "SERIES" -> getString(R.string.home_series)
+                else -> null
+            } else null
+            text = if (stage != null) "${getString(messageId)} · $stage" else getString(messageId)
             visibility = View.VISIBLE
         }
         if (state == WorkInfo.State.SUCCEEDED || state == WorkInfo.State.FAILED || state == WorkInfo.State.CANCELLED) {

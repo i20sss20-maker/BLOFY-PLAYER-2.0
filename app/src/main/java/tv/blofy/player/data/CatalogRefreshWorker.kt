@@ -98,14 +98,20 @@ class CatalogRefreshWorker(
             updatedAt = System.currentTimeMillis()
         )
         var promoted = false
+        // Persist only coarse stages; saving progress for every Xtream item would slow the TV.
+        var reportedStage: PlaylistSyncStage? = null
         return try {
             val sync = PlaylistSyncPolicy.run(CatalogAutoRefreshPolicy.MAX_SINGLE_SYNC_MS) {
                 PlaylistManager(XtreamClient.api, dao).syncAll(
                     staged,
                     completedSections = saved.completed,
                     onSectionComplete = { kind -> checkpoint.completed(saved, kind, dao) },
-                    onProgress = {
+                    onProgress = { progress ->
                         if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
+                        if (reportedStage != progress.stage) {
+                            reportedStage = progress.stage
+                            setProgress(androidx.work.workDataOf("catalog_stage" to progress.stage.name))
+                        }
                     }
                 )
             }
@@ -129,6 +135,7 @@ class CatalogRefreshWorker(
                 return Result.retry()
             }
 
+            setProgress(androidx.work.workDataOf("catalog_stage" to "SAVE"))
             val refreshedProvider = refreshSource.copy(enabled = true, updatedAt = staged.updatedAt)
             currentCoroutineContext().ensureActive()
             if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
