@@ -81,6 +81,24 @@ class HomeRefreshAndClockV74Test {
         assertEquals(activity.getString(R.string.home_catalog_refresh_failed_v74), hint.text.toString())
     }
 
+    @Test fun heroAndShelvesHandleLongMixedLanguageTitles() {
+        val activity = home(DeviceClass.Kind.TV)
+        val root = build(activity, "buildTvHome")
+        assertNotNull(root.findViewWithTag<View>("blofy_home_hero"))
+        fun heroText(field: String): TextView =
+            HomeActivity::class.java.getDeclaredField(field).apply { isAccessible = true }
+                .get(activity) as TextView
+        assertEquals(2, heroText("heroTitle").maxLines)
+        assertEquals(2, heroText("heroMeta").maxLines)
+        assertTrue(heroText("heroTitle").ellipsize != null)
+
+        val titleWithSubtitle = HomeActivity::class.java.getDeclaredMethod(
+            "sectionTitle", String::class.java, String::class.java
+        ).apply { isAccessible = true }.invoke(activity, "الأحدث", "أفلام ومسلسلات أضيفت حديثًا") as ViewGroup
+        assertEquals(2, titleWithSubtitle.childCount)
+        assertTrue(allText(titleWithSubtitle).contains("أفلام ومسلسلات أضيفت حديثًا"))
+    }
+
     private fun home(kind: DeviceClass.Kind): HomeActivity =
         Robolectric.buildActivity(HomeActivity::class.java).get().also { activity ->
             activity.setTheme(R.style.Theme_Blofy)
