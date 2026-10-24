@@ -41,6 +41,9 @@ internal class HomeFocusController(
 
     fun resetPress() = repeatGate.reset()
 
+    /** Explicitly invalidate when shelves are rebuilt with the same row count. */
+    fun invalidate() { dirty = true }
+
     fun dispose() {
         disposed = true
         if (observer.isAlive) observer.removeOnGlobalLayoutListener(layoutListener)
