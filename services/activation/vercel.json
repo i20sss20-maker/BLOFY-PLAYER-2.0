@@ -9,6 +9,22 @@
   ],
   "routes": [
     {
+      "src": "/download/android-tv-signed-test\\.apk",
+      "status": 307,
+      "headers": {
+        "Location": "https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-android-tv-2000073-owner-test/BLOFY-PLAYER-ANDROID-TV-2000073-SIGNED-TEST.apk",
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "src": "/download/android-tv-test\\.apk",
+      "status": 307,
+      "headers": {
+        "Location": "https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/tv-test-2000073-20261024/BLOFY-PLAYER-Android-TV-TEST.apk",
+        "Cache-Control": "no-store"
+      }
+    },
+    {
       "src": "/downloads(.*)",
       "status": 307,
       "headers": {
