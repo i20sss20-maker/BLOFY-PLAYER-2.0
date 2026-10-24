@@ -706,6 +706,42 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end();
     }
+    // Isolated owner QA page; never change the stable release catalog or install route.
+    if (req.method === 'GET' && ['\/downloads\/android-tv-test','\/android-tv-test.js'].includes(requestUrl.pathname)) {
+      const script = requestUrl.pathname === '/android-tv-test.js';
+      const file = await readFile(new URL(script ? '../web/android-tv-test.js' : '../web/android-tv-test.html', import.meta.url));
+      res.writeHead(200, {
+        'content-type': script ? 'application/javascript; charset=utf-8' : 'text/html; charset=utf-8',
+        'content-length': file.length,
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'referrer-policy': 'no-referrer',
+        'x-frame-options': 'DENY'
+      });
+      res.end(file);
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/v1/releases/owner-test') {
+      const ownerTag = 'blofy-android-tv-2000073-owner-test';
+      const fileName = 'BLOFY-PLAYER-ANDROID-TV-2000073-SIGNED-TEST.apk';
+      const prefix = 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/' + ownerTag + '/';
+      try {
+        const response = await fetch('https://api.github.com/repos/i20sss20-maker/BLOFY-PLAYER-2.0/releases/tags/' + ownerTag, {
+          headers: { accept: 'application/vnd.github+json', 'user-agent': 'BLOFY-OWNER-TV-TEST' },
+          signal: AbortSignal.timeout(5000)
+        });
+        if (!response.ok) return json(res, 200, { ready: false });
+        const release = await response.json();
+        const asset = release.assets?.find(row => row.name === fileName &&
+          row.size > 1_000_000 && row.state === 'uploaded' &&
+          row.browser_download_url === prefix + fileName);
+        if (!release.draft && release.prerelease && asset) {
+          return json(res, 200, { ready: true, filename: fileName,
+            downloadUrl: asset.browser_download_url, sizeBytes: asset.size });
+        }
+      } catch { /* A failed external lookup must never prevent normal site access. */ }
+      return json(res, 200, { ready: false });
+    }
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/status') return await serveStatusPage(res);
