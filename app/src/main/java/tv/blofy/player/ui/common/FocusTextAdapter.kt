@@ -95,7 +95,7 @@ class FocusTextAdapter<T : Any>(
         val context = parent.context
         val view = TextView(context).apply {
             textSize = TvUiTuning.sp(context, 13f)
-            typeface = BlofyTvDesign.MediumTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             layoutDirection = context.resources.configuration.layoutDirection
@@ -117,7 +117,7 @@ class FocusTextAdapter<T : Any>(
             view.setOnFocusChangeListener { focusedView, focused ->
                 val text = focusedView as TextView
                 focusedView.animate().cancel()
-                text.typeface = if (focused) BlofyTvDesign.LabelTypeface else BlofyTvDesign.MediumTypeface
+                text.typeface = BlofyTvDesign.preferredTypeface(text, bold = focused)
                 text.setTextColor(if (focused) CinemaStyle.Background else CinemaStyle.White)
                 focusedView.background = CinemaStyle.surface(context, focused, filledFocus = true)
                 val targetScale = if (focused) TvUiTuning.focusScale(context, 1.012f) else 1f
@@ -144,7 +144,7 @@ class FocusTextAdapter<T : Any>(
         val item = items[position]
         holder.text.text = label(item)
         if (!holder.text.hasFocus()) {
-            holder.text.typeface = BlofyTvDesign.MediumTypeface
+            holder.text.typeface = BlofyTvDesign.preferredTypeface(holder.text)
             holder.text.setTextColor(BlofyTvDesign.TextSecondary)
         }
         holder.text.background = CinemaStyle.surface(holder.text.context, holder.text.hasFocus(), filledFocus = true)

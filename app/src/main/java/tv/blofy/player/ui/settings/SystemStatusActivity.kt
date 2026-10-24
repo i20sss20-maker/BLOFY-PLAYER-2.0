@@ -67,7 +67,8 @@ class SystemStatusActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val snapshot = withContext(Dispatchers.IO) {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val provider = dao.providers().first().firstOrNull()
+                val provider = dao.activeProviderId()?.let { dao.provider(it) }
+                    ?: dao.providers().first().firstOrNull()
                 val live = provider?.let { dao.catalogCountAll(it.id, "live") } ?: 0
                 val movies = provider?.let { dao.catalogCountAll(it.id, "movie") } ?: 0
                 val series = provider?.let { dao.catalogCountAll(it.id, "series") } ?: 0
@@ -81,7 +82,7 @@ class SystemStatusActivity : AppCompatActivity() {
                     fullyReady = provider?.let { CatalogSyncState.isFullyReady(applicationContext, it.id) } == true,
                     metadataReady = provider?.let { CatalogSyncState.isMetadataReady(applicationContext, it.id) } == true,
                     episodesReady = provider?.let { CatalogSyncState.areEpisodesReady(applicationContext, it.id) } == true,
-                    updatedAt = provider?.let { CatalogSyncState.lastUpdatedAt(applicationContext, it.id) } ?: 0L,
+                    updatedAt = provider?.let { CatalogSyncState.lastSyncedAt(applicationContext, it.id) } ?: 0L,
                     live = live,
                     movies = movies,
                     series = series,
@@ -158,14 +159,14 @@ class SystemStatusActivity : AppCompatActivity() {
         content.addView(TextView(this).apply {
             text = getString(R.string.system_status_privacy_note)
             textSize = 11.5f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.START
         })
         content.addView(TextView(this).apply {
             text = getString(R.string.system_status_tagline)
             textSize = 11.5f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.START
             setPadding(0, dp(16), 0, 0)
@@ -183,14 +184,14 @@ class SystemStatusActivity : AppCompatActivity() {
             text = "BLOFY PLAYER"
             textSize = 11.5f
             letterSpacing = .13f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.START
         })
         content.addView(TextView(this).apply {
             text = textValue
             textSize = 30f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(Color.WHITE)
             gravity = Gravity.START
             setPadding(0, dp(4), 0, dp(18))
@@ -207,7 +208,7 @@ class SystemStatusActivity : AppCompatActivity() {
         panel.addView(TextView(this).apply {
             text = title
             textSize = 16f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(Color.WHITE)
             gravity = Gravity.START
             setPadding(0, 0, 0, dp(8))
@@ -226,7 +227,7 @@ class SystemStatusActivity : AppCompatActivity() {
                 addView(TextView(this@SystemStatusActivity).apply {
                     text = value
                     textSize = 12.5f
-                    typeface = BlofyTvDesign.MediumTypeface
+                    typeface = BlofyTvDesign.preferredTypeface(this)
                     setTextColor(BlofyTvDesign.TextSecondary)
                     gravity = Gravity.END
                     maxLines = 1

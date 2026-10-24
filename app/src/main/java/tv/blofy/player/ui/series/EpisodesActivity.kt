@@ -109,7 +109,7 @@ class EpisodesActivity : ContentAccessActivity() {
                 text = "BLOFY SERIES"
                 textSize = if (compact) 10.5f else 11.5f
                 letterSpacing = .12f
-                typeface = BlofyTvDesign.LabelTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(BlofyTvDesign.PurpleBright)
                 gravity = Gravity.START
             })
@@ -120,7 +120,7 @@ class EpisodesActivity : ContentAccessActivity() {
                     DeviceClass.Kind.TABLET -> 25f
                     DeviceClass.Kind.PHONE -> 20f
                 }
-                typeface = BlofyTvDesign.HeadingTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(BlofyTvDesign.TextPrimary)
                 gravity = Gravity.START
                 includeFontPadding = false
@@ -129,7 +129,7 @@ class EpisodesActivity : ContentAccessActivity() {
             status = TextView(this@EpisodesActivity).apply {
                 text = getString(R.string.episodes_preparing)
                 textSize = if (compact) 11.5f else 12.5f
-                typeface = BlofyTvDesign.BodyTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this)
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.START
                 maxLines = 2

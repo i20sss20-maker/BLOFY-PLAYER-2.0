@@ -2,7 +2,6 @@ package tv.blofy.player.ui.playlist
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -86,7 +85,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = getString(R.string.provider_manager_subtitle)
             textSize = if (isTv) 16f else 14f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.START
             setPadding(0, dp(6), 0, 0)
@@ -94,7 +93,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         status = TextView(this).apply {
             text = getString(R.string.provider_manager_subscriber_hint)
             textSize = 13.5f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setTextColor(BlofyTvDesign.PurpleSoft)
             setPadding(dp(14), 0, dp(14), 0)
@@ -133,7 +132,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         root.addView(TextView(this).apply {
             text = getString(R.string.provider_manager_saved_servers)
             textSize = if (isTv) 20f else 18f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(Color.WHITE)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
@@ -222,7 +221,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                 text = getString(R.string.provider_manager_empty)
                 setTextColor(BlofyTvDesign.TextSecondary)
                 textSize = 18f
-                typeface = BlofyTvDesign.BodyTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this)
                 gravity = Gravity.START
                 setLineSpacing(dp(4).toFloat(), 1.12f)
                 setPadding(dp(22), dp(24), dp(22), dp(24))
@@ -250,7 +249,7 @@ class ProviderManagerActivity : AppCompatActivity() {
             info.addView(TextView(this).apply {
                 text = provider.name
                 textSize = 18f
-                typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 gravity = Gravity.START
                 setTextColor(Color.WHITE)
                 maxLines = 1
@@ -264,14 +263,14 @@ class ProviderManagerActivity : AppCompatActivity() {
                     ))
                 }
                 textSize = 13f
-                typeface = BlofyTvDesign.BodyTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this)
                 gravity = Gravity.START
                 setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
             })
             val summary = TextView(this).apply {
                 text = getString(R.string.provider_manager_summary_loading)
                 textSize = 11.5f
-                typeface = BlofyTvDesign.BodyTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this)
                 gravity = Gravity.START
                 maxLines = if (isTv) 1 else 2
                 setTextColor(BlofyTvDesign.TextMuted)
@@ -473,7 +472,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         text = label
         isAllCaps = false
         textSize = if (isTv) 14f else 12.5f
-        typeface = BlofyTvDesign.BodyTypeface
+        typeface = BlofyTvDesign.preferredTypeface(this)
         setTextColor(Color.WHITE)
         stateListAnimator = null
         isEnabled = !refreshingFromWebsite && !changingProvider

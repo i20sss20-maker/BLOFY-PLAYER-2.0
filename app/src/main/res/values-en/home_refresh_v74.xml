@@ -1,0 +1,12 @@
+<resources>
+    <string name="home_catalog_refresh_v74">Refresh content</string>
+    <string name="home_catalog_refresh_running_v74">Updating content…</string>
+    <string name="home_catalog_refresh_waiting_v74">Waiting for network or playback</string>
+    <string name="home_catalog_refresh_done_v74">Content updated</string>
+    <string name="home_catalog_refresh_failed_v74">Update failed — retry</string>
+    <string name="home_catalog_refresh_no_source_v74">Select a playlist first</string>
+    <string name="home_catalog_refresh_offline_v74">Waiting for internet connection</string>
+    <string name="home_catalog_refresh_playback_v74">Starts after playback ends</string>
+    <string name="home_catalog_refresh_queued_v74">Update queued…</string>
+    <string name="home_catalog_refresh_saving_v74">Saving content…</string>
+</resources>

@@ -5,6 +5,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.widget.TextView
+import androidx.core.os.ConfigurationCompat
 
 /**
  * BLOFY's shared visual language. Keep screens visually consistent by defining premium dark-TV
@@ -45,10 +46,10 @@ object BlofyTvDesign {
     const val RailWidth = 250
     const val CategoryRowHeight = 60
     const val LiveListWidth = 455
-    const val CardRadius = 10
-    const val PanelRadius = 14
-    const val ButtonRadius = 8
-    const val BadgeRadius = 10
+    const val CardRadius = 14
+    const val PanelRadius = 18
+    const val ButtonRadius = 12
+    const val BadgeRadius = 12
     const val StandardGap = 18
     const val FocusInMs = 95L
     const val FocusOutMs = 75L
@@ -59,6 +60,31 @@ object BlofyTvDesign {
     val LabelTypeface: Typeface by lazy { Typeface.create("sans-serif-medium", Typeface.BOLD) }
     val BodyTypeface: Typeface by lazy { Typeface.create("sans-serif", Typeface.NORMAL) }
     val MediumTypeface: Typeface by lazy { Typeface.create("sans-serif-medium", Typeface.NORMAL) }
+
+    // The SIL OFL-licensed IBM Plex Arabic fonts are bundled locally. Never fetch fonts
+    // during playback; cache both faces after the first TextView render.
+    private var arabicRegular: Typeface? = null
+    private var arabicSemibold: Typeface? = null
+
+    fun preferredTypeface(view: TextView, bold: Boolean = false): Typeface {
+        val arabic = ConfigurationCompat.getLocales(view.resources.configuration)[0]?.language == "ar"
+        if (!arabic) return if (bold) HeadingTypeface else MediumTypeface
+        return synchronized(this) {
+            val cached = if (bold) arabicSemibold else arabicRegular
+            cached ?: runCatching {
+                Typeface.createFromAsset(
+                    view.context.applicationContext.assets,
+                    if (bold) "fonts/IBMPlexSansArabic-SemiBold.ttf"
+                    else "fonts/IBMPlexSansArabic-Regular.ttf"
+                )
+            }.getOrElse {
+                // Preserve readability on malformed APKs or vendor font engines.
+                Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
+            }.also { loaded ->
+                if (bold) arabicSemibold = loaded else arabicRegular = loaded
+            }
+        }
+    }
 
     fun surface(radius: Float = CardRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
@@ -117,7 +143,7 @@ object BlofyTvDesign {
 
     fun applyTitle(t: TextView) = t.apply {
         textSize = TitleSp
-        typeface = DisplayTypeface
+        typeface = preferredTypeface(this, bold = true)
         setTextColor(TextPrimary)
         includeFontPadding = false
         letterSpacing = -.008f
@@ -125,7 +151,7 @@ object BlofyTvDesign {
 
     fun applyHeroTitle(t: TextView) = t.apply {
         textSize = HeroTitleSp
-        typeface = DisplayTypeface
+        typeface = preferredTypeface(this, bold = true)
         setTextColor(TextPrimary)
         includeFontPadding = false
         letterSpacing = -.015f
@@ -133,7 +159,7 @@ object BlofyTvDesign {
 
     fun applyHeading(t: TextView) = t.apply {
         textSize = HeadingSp
-        typeface = HeadingTypeface
+        typeface = preferredTypeface(this, bold = true)
         setTextColor(TextPrimary)
         includeFontPadding = false
         letterSpacing = -.004f
@@ -141,7 +167,7 @@ object BlofyTvDesign {
 
     fun applyBody(t: TextView) = t.apply {
         textSize = BodySp
-        typeface = BodyTypeface
+        typeface = preferredTypeface(this)
         setTextColor(TextSecondary)
         includeFontPadding = false
         setLineSpacing(0f, 1.18f)
@@ -149,14 +175,14 @@ object BlofyTvDesign {
 
     fun applyLabel(t: TextView) = t.apply {
         textSize = LabelSp
-        typeface = LabelTypeface
+        typeface = preferredTypeface(this, bold = true)
         setTextColor(TextPrimary)
         includeFontPadding = false
     }
 
     fun applyCaption(t: TextView) = t.apply {
         textSize = CaptionSp
-        typeface = MediumTypeface
+        typeface = preferredTypeface(this)
         setTextColor(TextMuted)
         includeFontPadding = false
     }

@@ -1,0 +1,12 @@
+<resources>
+    <string name="home_catalog_refresh_v74">İçeriği yenile</string>
+    <string name="home_catalog_refresh_running_v74">İçerik yenileniyor…</string>
+    <string name="home_catalog_refresh_waiting_v74">Ağ veya oynatmanın bitmesi bekleniyor</string>
+    <string name="home_catalog_refresh_done_v74">İçerik yenilendi</string>
+    <string name="home_catalog_refresh_failed_v74">Yenileme başarısız. Yeniden deneyin</string>
+    <string name="home_catalog_refresh_no_source_v74">Önce bir oynatma listesi seçin</string>
+    <string name="home_catalog_refresh_offline_v74">İnternet bağlantısı bekleniyor</string>
+    <string name="home_catalog_refresh_playback_v74">Oynatma bitince başlayacak</string>
+    <string name="home_catalog_refresh_queued_v74">Güncelleme sırada…</string>
+    <string name="home_catalog_refresh_saving_v74">İçerik kaydediliyor…</string>
+</resources>

@@ -2,7 +2,6 @@ package tv.blofy.player.ui.common
 
 import android.content.Context
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.widget.Button
@@ -20,7 +19,7 @@ object ContentScreenStyle {
         }
     ).apply {
         val d = context.resources.displayMetrics.density
-        cornerRadius = 16f * d
+        cornerRadius = 18f * d
         setStroke(
             ((if (focused) 2 else 1) * d).toInt(),
             if (focused) 0xFFF0DFFF.toInt() else 0x55FFFFFF
@@ -37,7 +36,7 @@ object ContentScreenStyle {
             minimumWidth = 0
             setPadding((16 * d).toInt(), 0, (16 * d).toInt(), 0)
             textSize = 12.5f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            typeface = BlofyTvDesign.preferredTypeface(this)
             gravity = Gravity.CENTER
             isSingleLine = true
             isFocusable = true
