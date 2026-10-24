@@ -4,7 +4,7 @@ name: BLOFY Android TV 2000074 Official Website Signed Release
 
 on:
   push:
-    branches: [release/android-tv-2000074-20261024]
+    branches: [release/android-tv-2000074-cinematic-20261024]
     paths:
       - .github/workflows/android-tv-owner-signed-test.yml
       - app/**
@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: blofy-android-tv-2000074-website-release
+  group: blofy-android-tv-2000074-cinematic-release
   cancel-in-progress: false
 
 env:
@@ -211,44 +211,32 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="v2.0.0-rc07.55.6-2000074-website"
+          TAG="v74-cinematic-approved-20261024"
           SOURCE="signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.apk"
-          DEST="signed-test/BLOFY-PLAYER-Android-TV-v74-SIGNED.apk"
+          DEST="signed-test/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk"
           test -s "$SOURCE"
           (cd signed-test && sha256sum --check SHA256SUMS)
           cp "$SOURCE" "$DEST"
-          sha256sum "$DEST" > signed-test/BLOFY-PLAYER-Android-TV-v74-SIGNED.apk.sha256
+          sha256sum "$DEST" > signed-test/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk.sha256
           grep -Fq "versionCode='2000074'" signed-test/apk-badging.txt
           grep -Fq "versionName='2.0.0-rc07.55.6'" signed-test/apk-badging.txt
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::Release v74 already exists. Refusing to overwrite a published official APK."
+            echo "::error::Release v74 already exists. Refusing to overwrite an existing cinematic v74 APK."
             exit 1
           fi
-          gh release create "$TAG" "$DEST" signed-test/BLOFY-PLAYER-Android-TV-v74-SIGNED.apk.sha256 \
+          gh release create "$TAG" "$DEST" signed-test/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk.sha256 \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "BLOFY PLAYER Android TV 74 • Official Website" \
-            --notes "BLOFY Android TV official website APK version 74 (versionCode 2000074, versionName 2.0.0-rc07.55.6). Built from the 2000073 stability baseline with silent catalog refresh, playback protection and stage recovery. R8 release build with Media3/FFmpeg, signed by original BLOFY release certificate; checksum included. This is a direct website APK release, NOT a Google Play rollout. Install over compatible older BLOFY with the SAME signature and lower versionCode; never uninstall or erase data. Verify live/VOD on a real Android TV before broad distribution."
+            --title "BLOFY PLAYER Android TV 74 • Cinematic Edition" \
+            --notes "BLOFY Android TV official website APK version 74 (versionCode 2000074, versionName 2.0.0-rc07.55.6). Built from the verified v74 cinematic Home RTL navigation branch: new BLOFY purple icon rail, premium Arabic fonts, precise catalog refresh status and original playback engines. R8 release build with Media3/FFmpeg, signed by original BLOFY release certificate; checksum included. This is a direct website APK release, NOT a Google Play rollout. Install over compatible older BLOFY with the SAME signature and lower versionCode; never uninstall or erase data. Verify live/VOD on a real Android TV before broad distribution."
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets \
-            --jq 'select(.tagName == "v2.0.0-rc07.55.6-2000074-website" and ([.assets[].name] | index("BLOFY-PLAYER-Android-TV-v74-SIGNED.apk"))) | "Verified official v74 APK uploaded"'
+            --jq 'select(.tagName == "v74-cinematic-approved-20261024" and ([.assets[].name] | index("BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk"))) | "Verified official v74 APK uploaded"'
 
-      - name: Publish v74 on BLOFY website after signed APK verification
+      # Keep existing website source and existing v73/v74 download assets intact.
+      # Main download card is switched only after the signed GitHub release is verified.
+      - name: Verify published cinematic APK is reachable
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          url="https://github.com/$GITHUB_REPOSITORY/releases/download/v2.0.0-rc07.55.6-2000074-website/BLOFY-PLAYER-Android-TV-v74-SIGNED.apk"
-          # The binary must be externally resolvable before advertising it to customers.
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk"
           curl --fail --silent --show-error --location --head --retry 3 "$url" >/dev/null
-          # Take ONLY the reviewed, pinned download-page edit from its isolated site branch.
-          git fetch --no-tags --depth=1 origin refs/heads/site/blofy-android-tv-v74-download-20261024
-          git show 2738a708c44a4fbbc195adcd899c3823a44386a8:services/activation/web/downloads.html > "$RUNNER_TEMP/blofy-downloads-74.html"
-          grep -Fq "$url" "$RUNNER_TEMP/blofy-downloads-74.html"
-          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/services/activation/web/downloads.html?ref=main" --jq .sha)"
-          candidate="$(base64 -w0 < "$RUNNER_TEMP/blofy-downloads-74.html")"
-          jq -n --arg message "site: add official signed Android TV v74 beneath current v73" \
-            --arg content "$candidate" --arg sha "$current_sha" \
-            '{message:$message,content:$content,sha:$sha,branch:"main"}' > "$RUNNER_TEMP/blofy-site-release74.json"
-          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/services/activation/web/downloads.html" \
-            --input "$RUNNER_TEMP/blofy-site-release74.json" --jq '.commit.sha'
-          echo "v74 official signed APK published; main website source updated. Vercel production deployment follows its Git integration."
+          echo "Signed v74 cinematic APK verified. Website remains unchanged until its link is updated."
