@@ -12,6 +12,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.os.ConfigurationCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -430,7 +431,7 @@ class ProviderManagerActivity : AppCompatActivity() {
             }
             if (cached) {
                 CatalogRefreshWorker.enqueueNow(applicationContext, provider.id, manual = true)
-                status.text = if (resources.configuration.locales[0].language == "ar")
+                status.text = if (ConfigurationCompat.getLocales(resources.configuration).get(0)?.language == "ar")
                     "بدأ تحديث المحتوى بالخلفية. يمكنك متابعة المشاهدة."
                 else "Content refresh started in the background. You can keep watching."
             } else {
