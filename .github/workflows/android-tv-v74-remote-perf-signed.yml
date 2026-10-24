@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: blofy-android-tv-v74-remote-perf-qa
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   ACTIVATION_BASE_URL: https://api.blofyplayer.com
@@ -211,6 +211,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Never publish an older run's APK after UI/performance fixes on this branch.
+          CURRENT_HEAD=$(gh api "repos/$GITHUB_REPOSITORY/branches/fix/v74-tv-remote-performance-20261025" --jq '.commit.sha')
+          if [ "$CURRENT_HEAD" != "$GITHUB_SHA" ]; then
+            echo "::error::This APK is built from an outdated commit ($GITHUB_SHA); branch is $CURRENT_HEAD."
+            exit 1
+          fi
           TAG="v74-remote-performance-qa-20261025"
           SOURCE="signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.apk"
           DEST="signed-test/BLOFY-PLAYER-Android-TV-v74-REMOTE-QA-SIGNED.apk"
