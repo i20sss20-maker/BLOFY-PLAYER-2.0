@@ -1,0 +1,31 @@
+name: BLOFY Geidea Sandbox CI
+
+on:
+  push:
+    branches: [feature/geidea-sandbox-20261023]
+    paths:
+      - 'services/geidea-sandbox/**'
+      - 'services/activation/src/geidea-*.mjs'
+      - '.github/workflows/geidea-sandbox-ci.yml'
+  pull_request:
+    paths:
+      - 'services/geidea-sandbox/**'
+      - 'services/activation/src/geidea-*.mjs'
+      - '.github/workflows/geidea-sandbox-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test isolation, money, idempotency, callbacks, reconciliation and persistence
+        run: node --test services/geidea-sandbox/test/*.test.mjs services/activation/test/geidea-preflight.test.mjs services/activation/test/geidea-sandbox-client.test.mjs
+      - name: Syntax check the sandbox browser script
+        run: node --check services/geidea-sandbox/web/app.js
