@@ -174,7 +174,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             val section = when (kind) { KIND_MOVIE -> getString(R.string.home_movies); KIND_SERIES -> getString(R.string.home_series); else -> getString(R.string.home_live) }
             text = getString(R.string.search_brand_section, section)
             textSize = if (phoneMode) 24f else 29f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             includeFontPadding = false
@@ -284,7 +284,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         catalogStatus = TextView(this@ContentBrowserActivity).apply {
             text = getString(R.string.browser_checking_catalog, catalogLabel())
             textSize = if (phoneMode) 14f else 15f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.PurpleSoft)
         }
         addView(catalogStatus, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -292,7 +292,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             text = getString(R.string.browser_retry)
             isAllCaps = false
             textSize = 14f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextPrimary)
             visibility = View.GONE
             BlofyTvDesign.installTvFocus(this, 16f, 1.025f, false)
@@ -313,7 +313,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             textSize = 18f
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             includeFontPadding = false
@@ -323,7 +323,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         addView(TextView(this@ContentBrowserActivity).apply {
             text = getString(R.string.browser_live_preview_auto)
             textSize = 13f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.Mint)
             gravity = Gravity.START
             setPadding(dp(4), 0, dp(4), dp(10))
@@ -339,7 +339,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         addView(TextView(this@ContentBrowserActivity).apply {
             text = getString(R.string.browser_remote_hint)
             textSize = 12.5f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
             setPadding(dp(4), dp(12), dp(4), 0)
