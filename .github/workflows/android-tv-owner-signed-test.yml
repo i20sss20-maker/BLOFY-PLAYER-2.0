@@ -211,9 +211,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="blofy-android-tv-2000074-website"
+          TAG="v2.0.0-rc07.55.6-2000074"
           SOURCE="signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.apk"
-          DEST="signed-test/BLOFY-PLAYER-ANDROID-TV-2000074-OFFICIAL.apk"
+          DEST="signed-test/BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk"
           test -s "$SOURCE"
           cp "$SOURCE" "$DEST"
           (cd signed-test && sha256sum --check SHA256SUMS)
@@ -229,4 +229,4 @@ jobs:
               --repo "$GITHUB_REPOSITORY"
           fi
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease,assets \
-            --jq 'select((.isPrerelease | not) and ([.assets[].name] | index("BLOFY-PLAYER-ANDROID-TV-2000074-OFFICIAL.apk"))) | "Official 74 APK uploaded"'
+            --jq 'select((.isPrerelease | not) and ([.assets[].name] | index("BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk"))) | "Official 74 APK uploaded"'
