@@ -16,7 +16,9 @@
         !url.pathname.startsWith('/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/')) {
       throw new Error('unsafe-download-url');
     }
-    link.href = url.href;
+    // Keep the download button on the official BLOFY domain; the server redirects
+    // to the checksum-verified, production-signed GitHub pre-release asset.
+    link.href = '/download/android-tv-signed-test.apk';
     link.hidden = false;
     link.rel = 'noopener noreferrer';
     message.textContent = 'تم التحقق من توفر نسخة الاختبار الموقّعة.';
