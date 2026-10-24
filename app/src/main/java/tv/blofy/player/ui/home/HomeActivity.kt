@@ -106,6 +106,7 @@ class HomeActivity : AppCompatActivity() {
 
     private var homeResumed = false
     private var displayedHomeData: HomeData? = null
+    private var scheduledProviderId: String? = null
     private var lastHomeInputAtMs = SystemClock.elapsedRealtime()
     private var displayedCatalogEpoch = 0L
     private var requestedCatalogEpoch = 0L
@@ -163,6 +164,7 @@ class HomeActivity : AppCompatActivity() {
                     return@launch
                 }
                 provider?.let {
+                    scheduledProviderId = it.id
                     CatalogRefreshWorker.scheduleAutomatic(applicationContext, it.id)
                     CatalogRefreshWorker.enqueueIfStale(applicationContext, it.id)
                     FullLibrarySyncWorker.enqueue(applicationContext, it.id)
@@ -216,6 +218,22 @@ class HomeActivity : AppCompatActivity() {
         if (homeFeed != null) {
             refreshScheduler.start()
             historyObserver.start()
+            lifecycleScope.launch {
+                val activeId = withContext(Dispatchers.IO) {
+                    BlofyDatabase.get(applicationContext).dao().activeProviderId()
+                }
+                if (!homeResumed || activeId.isNullOrBlank()) return@launch
+                if (scheduledProviderId != activeId) {
+                    scheduledProviderId = activeId
+                    CatalogRefreshWorker.scheduleAutomatic(applicationContext, activeId)
+                }
+                // Catch up when returning to Home; a running worker is coalesced by unique name.
+                CatalogRefreshWorker.enqueueIfStale(applicationContext, activeId)
+                if (displayedHomeData != null && displayedHomeData?.providerId != activeId) {
+                    lastHomeInputAtMs = SystemClock.elapsedRealtime()
+                    loadHomeExperience()
+                }
+            }
         }
     }
 

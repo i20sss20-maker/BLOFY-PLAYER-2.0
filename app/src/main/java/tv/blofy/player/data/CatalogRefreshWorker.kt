@@ -47,6 +47,9 @@ class CatalogRefreshWorker(
             dao.provider(providerId)
         } ?: return Result.success()
         val manual = inputData.getBoolean(KEY_MANUAL, false)
+        // A pending periodic job for a previously selected account must not
+        // consume data or disk on a different active playlist.
+        if (!manual && dao.activeProviderId() != provider.id) return Result.success()
         // Only worker requests serialize during the long download. Normal entry into a
         // committed library must not wait behind hours of provider/network I/O.
         return workerLocks.getOrPut(provider.id) { Mutex() }.withLock {
@@ -153,6 +156,7 @@ class CatalogRefreshWorker(
         private const val KEY_PROVIDER_ID = "provider_id"
         private const val LEGACY_PERIODIC_NAME = "blofy-catalog-periodic"
         private const val NOW_NAME_PREFIX = "blofy-catalog-now:"
+        private const val MANUAL_NAME_PREFIX = "blofy-catalog-manual:"
         private const val KEY_MANUAL = "manual"
         // Keep the existing unique name so UPDATE replaces the old 24-hour schedule.
         private const val AUTO_PERIODIC_NAME = "blofy-catalog-auto-24h"
@@ -199,7 +203,7 @@ class CatalogRefreshWorker(
                 .setInputData(androidx.work.workDataOf(KEY_PROVIDER_ID to providerId, KEY_MANUAL to manual))
                 .build()
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
-                NOW_NAME_PREFIX + providerId,
+                (if (manual) MANUAL_NAME_PREFIX else NOW_NAME_PREFIX) + providerId,
                 ExistingWorkPolicy.KEEP,
                 request
             )
