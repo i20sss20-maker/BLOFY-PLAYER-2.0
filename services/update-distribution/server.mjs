@@ -431,9 +431,48 @@ ${appAction.kind === 'unavailable' ? '<div class="stable-download-link"><strong>
   </section>`;
 }
 
+// Public read-only check: the signed 74 release is published by a separate GitHub
+// workflow only after certificate, version, FFmpeg and package checks pass.
+const OFFICIAL_74_TAG = 'v2.0.0-rc07.55.6-2000074';
+const OFFICIAL_74_APK = 'BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk';
+let official74Cache = { checkedAt: 0, release: null };
+
+async function verifiedOfficial74() {
+  const now = Date.now();
+  if (now - official74Cache.checkedAt < 90_000) return official74Cache.release;
+  // Mark immediately so concurrent visitors do not stampede the GitHub API.
+  official74Cache.checkedAt = now;
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/i20sss20-maker/BLOFY-PLAYER-2.0/releases/tags/${OFFICIAL_74_TAG}`,
+      { headers: { accept: 'application/vnd.github+json', 'user-agent': 'BLOFY-Official-Download-Center' },
+        signal: AbortSignal.timeout(2500) }
+    );
+    if (!response.ok) { official74Cache.release = null; return null; }
+    const release = await response.json();
+    const asset = release.assets?.find(item => item.name === OFFICIAL_74_APK && item.size > 10_000_000);
+    const valid = !release.draft && !release.prerelease && release.tag_name === OFFICIAL_74_TAG &&
+      asset?.browser_download_url?.startsWith(
+        `https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/${OFFICIAL_74_TAG}/`);
+    official74Cache.release = valid ? { url: asset.browser_download_url, size: asset.size } : null;
+    return official74Cache.release;
+  } catch { official74Cache.release = null; return null; }
+}
+
+function official74Card(verified) {
+  if (!verified) return '';
+  return `<section class="official-card" style="margin-top:12px" aria-label="تحديث بلوفي بلاير 74">
+    <div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY"></div>
+    <div class="official-copy"><div class="official-title"><h2 style="margin:0;font-size:20px">التحديث الرسمي 74</h2><span class="badge">معتمد للموقع</span></div>
+    <div class="official-desc">تحديث مكتبة صامت وتحسينات استقرار Android TV. الإصدار السابق يبقى متاحًا. لا تحذف التطبيق قبل التثبيت.</div>
+    <div class="official-meta">2.0.0-rc07.55.6 · Version Code 2000074</div></div>
+    <a class="official-download" href="${escapeHtml(verified.url)}" rel="noopener noreferrer">تحميل تحديث 74 APK ↓</a>
+  </section>`;
+}
+
 async function downloadPage(req) {
   const release = getActiveRelease();
-  const [apps, variants] = await Promise.all([listApps(), listAppVariants()]);
+  const [apps, variants, official74] = await Promise.all([listApps(), listAppVariants(), verifiedOfficial74()]);
   const rootUrl = publicBase(req);
   const directUrl = `${rootUrl}/d/blofy`;
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#08070e"><meta name="description" content="مركز تحميل BLOFY PLAYER الرسمي لإصدارات أندرويد وملفات APK."><link rel="canonical" href="${UPDATE_SITE_CANONICAL}"><meta property="og:site_name" content="BLOFY PLAYER"><meta property="og:title" content="BLOFY PLAYER | مركز الإصدارات"><meta property="og:url" content="${UPDATE_SITE_CANONICAL}"><title>BLOFY PLAYER | التحميل</title><style>
@@ -505,7 +544,7 @@ main{padding:26px 0 38px}
   .app-actions{grid-template-columns:1fr}.app-more{width:100%}
 }
 @media(pointer:coarse){.official-download,.app-download,.app-more,.filter-chip,.copy-link,.variant-link,.top-links a{min-height:44px}}
-</style></head><body><div class="shell"><header class="topbar"><div class="brand"><div class="mark"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><span class="brand-copy"><strong>BLOFY PLAYER</strong><small>DOWNLOAD CENTER</small></span></div><nav class="top-links" aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav><div class="top-status">مركز التحميل متصل</div></header><main><section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/d/blofy">تحميل BLOFY APK ↓</a></section>${renderAppLibrary(apps, variants, rootUrl)}</main><footer class="foot"><span>BLOFY PLAYER · blofyplayer.com</span><nav aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav></footer></div><script>
+</style></head><body><div class="shell"><header class="topbar"><div class="brand"><div class="mark"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><span class="brand-copy"><strong>BLOFY PLAYER</strong><small>DOWNLOAD CENTER</small></span></div><nav class="top-links" aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav><div class="top-status">مركز التحميل متصل</div></header><main><section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/d/blofy">تحميل BLOFY APK ↓</a></section>${official74Card(official74)}${renderAppLibrary(apps, variants, rootUrl)}</main><footer class="foot"><span>BLOFY PLAYER · blofyplayer.com</span><nav aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav></footer></div><script>
 (() => {
   const rows = [...document.querySelectorAll('[data-app-row]')];
   const search = document.getElementById('app-search');
