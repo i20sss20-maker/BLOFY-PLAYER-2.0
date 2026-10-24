@@ -80,7 +80,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 text = getString(R.string.brand_cinema)
                 textSize = 11.5f
                 letterSpacing = .12f
-                typeface = BlofyTvDesign.HeadingTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(BlofyTvDesign.PurpleBright)
                 gravity = contentGravity
                 setPadding(0, dp(2), 0, dp(4))
@@ -97,7 +97,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
             val titleView = TextView(this@MovieDetailsActivity).apply {
                 text = title
                 textSize = if (metadata?.logoUrl.isNullOrBlank()) 32f else 18f
-                typeface = BlofyTvDesign.HeadingTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(Color.WHITE)
                 gravity = contentGravity
                 maxLines = 2
@@ -127,7 +127,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
             info.addView(TextView(this@MovieDetailsActivity).apply {
                 text = getString(R.string.details_story)
                 textSize = 13f
-                typeface = BlofyTvDesign.HeadingTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(BlofyTvDesign.PurpleSoft)
                 gravity = contentGravity
                 setPadding(0, 0, 0, dp(3))
@@ -138,7 +138,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
                     ?: stream.plot?.takeIf(String::isNotBlank)
                     ?: getString(R.string.details_movie_no_description)
                 textSize = 15f
-                typeface = BlofyTvDesign.BodyTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this)
                 maxLines = 7
                 setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = contentGravity
@@ -149,7 +149,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
 
             val crewView = TextView(this@MovieDetailsActivity).apply {
                 textSize = 11.5f
-                typeface = BlofyTvDesign.MediumTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this)
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = contentGravity
                 setPadding(0, 0, 0, dp(8))
@@ -164,7 +164,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 info.addView(TextView(this@MovieDetailsActivity).apply {
                     text = getString(R.string.details_continue_watching, progress)
                     textSize = 12.5f
-                    typeface = BlofyTvDesign.HeadingTypeface
+                    typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                     setTextColor(BlofyTvDesign.Mint)
                     gravity = contentGravity
                     background = ContentScreenStyle.chip(this@MovieDetailsActivity)

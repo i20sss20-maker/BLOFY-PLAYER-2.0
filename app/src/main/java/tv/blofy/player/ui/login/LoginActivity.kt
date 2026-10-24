@@ -133,7 +133,7 @@ class LoginActivity : AppCompatActivity() {
             text = getString(R.string.brand_link)
             textSize = 10.5f
             letterSpacing = .14f
-            typeface = BlofyTvDesign.LabelTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.CENTER
             background = BlofyTvDesign.badge(dp(12).toFloat())
@@ -248,7 +248,7 @@ class LoginActivity : AppCompatActivity() {
     private fun loginText(labelId: Int, size: Float, heading: Boolean = false) = TextView(this).apply {
         setText(labelId)
         textSize = size
-        typeface = if (heading) BlofyTvDesign.HeadingTypeface else BlofyTvDesign.BodyTypeface
+        typeface = BlofyTvDesign.preferredTypeface(this, bold = heading)
         setTextColor(if (heading) BlofyTvDesign.TextPrimary else BlofyTvDesign.TextSecondary)
         gravity = Gravity.START or Gravity.CENTER_VERTICAL
         includeFontPadding = false
@@ -306,14 +306,14 @@ class LoginActivity : AppCompatActivity() {
         deviceView = TextView(this).apply {
             text = getString(R.string.login_creating_identity)
             textSize = if (phone) 17f else 21f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
             setPadding(dp(12), 0, dp(12), 0)
         }
         codeView = TextView(this).apply {
             textSize = if (phone) 25f else 34f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.CENTER
         }
@@ -327,13 +327,13 @@ class LoginActivity : AppCompatActivity() {
         }
         qrMessage = loginText(R.string.login_qr_loading, 12.5f).apply {
             gravity = Gravity.CENTER
-            typeface = BlofyTvDesign.MediumTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextPrimary)
             setPadding(dp(14), dp(14), dp(14), dp(14))
         }
         status = TextView(this).apply {
             textSize = 14f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.CENTER
             setPadding(dp(10), dp(8), dp(10), dp(8))
@@ -491,7 +491,7 @@ class LoginActivity : AppCompatActivity() {
         info.addView(TextView(this@LoginActivity).apply {
             text = displayName
             textSize = 16f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.TextPrimary)
             maxLines = 1
             gravity = Gravity.START
@@ -499,7 +499,7 @@ class LoginActivity : AppCompatActivity() {
         info.addView(TextView(this@LoginActivity).apply {
             text = if (provider.enabled) getString(R.string.login_active_playlist_type, type) else getString(R.string.login_playlist_press_ok, type)
             textSize = 11.5f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(if (provider.enabled) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
             gravity = Gravity.START
         })
@@ -534,15 +534,15 @@ class LoginActivity : AppCompatActivity() {
         addView(TextView(this@LoginActivity).apply {
             text = "＋"
             textSize = 28f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(dp(54), -1))
         addView(LinearLayout(this@LoginActivity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            addView(TextView(this@LoginActivity).apply { text = getString(R.string.login_add_first_playlist); textSize = 14f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.START })
-            addView(TextView(this@LoginActivity).apply { text = message; textSize = 11.5f; typeface = BlofyTvDesign.BodyTypeface; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.START })
+            addView(TextView(this@LoginActivity).apply { text = getString(R.string.login_add_first_playlist); textSize = 14f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.START })
+            addView(TextView(this@LoginActivity).apply { text = message; textSize = 11.5f; typeface = BlofyTvDesign.preferredTypeface(this); setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.START })
         }, LinearLayout.LayoutParams(0, -1, 1f))
     }
 
@@ -754,7 +754,7 @@ class LoginActivity : AppCompatActivity() {
         text = label
         isAllCaps = false
         textSize = 14.5f
-        typeface = BlofyTvDesign.BodyTypeface
+        typeface = BlofyTvDesign.preferredTypeface(this)
         gravity = Gravity.CENTER
         setTextColor(BlofyTvDesign.TextPrimary)
         if (deviceKind == DeviceClass.Kind.TV) BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.022f, false)
@@ -766,7 +766,7 @@ class LoginActivity : AppCompatActivity() {
         text = label
         isAllCaps = false
         textSize = 15f
-        typeface = BlofyTvDesign.HeadingTypeface
+        typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
         gravity = Gravity.CENTER
         setTextColor(Color.WHITE)
         if (deviceKind == DeviceClass.Kind.TV) BlofyTvDesign.installTvFocus(this, dp(16).toFloat(), 1.025f, true)
@@ -777,7 +777,7 @@ class LoginActivity : AppCompatActivity() {
     private fun title(value: String, size: Float) = TextView(this).apply {
         text = value
         textSize = size
-        typeface = BlofyTvDesign.HeadingTypeface
+        typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
         setTextColor(BlofyTvDesign.TextPrimary)
         gravity = Gravity.CENTER
     }
@@ -785,7 +785,7 @@ class LoginActivity : AppCompatActivity() {
     private fun subtitle(value: String) = TextView(this).apply {
         text = value
         textSize = 16f
-        typeface = BlofyTvDesign.BodyTypeface
+        typeface = BlofyTvDesign.preferredTypeface(this)
         setTextColor(BlofyTvDesign.PurpleSoft)
         gravity = Gravity.CENTER
         setPadding(0, dp(8), 0, dp(16))
