@@ -5,6 +5,8 @@ import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -16,16 +18,21 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalSyncBook
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.BlofyDao
+import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.data.preparation.CatalogLoadPersistence
 import tv.blofy.player.data.remote.XtreamClient
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
-/** Explicit/manual or source-change catalog refresh. Opening a normal saved list never schedules it. */
+/** Atomic, playback-friendly catalog refresh for manual and fast silent periodic updates. */
 class CatalogRefreshWorker(
     appContext: Context,
     params: WorkerParameters
@@ -39,11 +46,26 @@ class CatalogRefreshWorker(
         } else {
             dao.provider(providerId)
         } ?: return Result.success()
+        val manual = inputData.getBoolean(KEY_MANUAL, false)
+        // Only worker requests serialize during the long download. Normal entry into a
+        // committed library must not wait behind hours of provider/network I/O.
+        return workerLocks.getOrPut(provider.id) { Mutex() }.withLock {
+            refreshCatalog(provider, dao, manual)
+        }
+    }
 
+    private suspend fun refreshCatalog(provider: ProviderEntity, dao: BlofyDao, manual: Boolean): Result {
+        val app = applicationContext
         // A first import writes batches before it commits; those rows are not a refresh baseline.
         if (!CatalogSyncState.isReady(app, provider.id) || !dao.hasCatalog(provider.id)) return Result.success()
 
         val sourceChanged = PortalSyncBook.hasPendingSource(app, provider.id)
+        if (!manual && !sourceChanged && !CatalogAutoRefreshPolicy.isDue(
+                CatalogSyncState.lastSyncedAt(app, provider.id), System.currentTimeMillis()
+            )
+        ) return Result.success()
+        // A streaming player must not compete with a full-library download/SQLite promotion.
+        if (CatalogPlaybackGate.isPlaying) return Result.retry()
         val refreshSource = if (sourceChanged) {
             PortalPlaylistClient.pendingSource(app, dao, provider.id) ?: return Result.retry()
         } else provider
@@ -64,7 +86,9 @@ class CatalogRefreshWorker(
         var promoted = false
         return try {
             val sync = PlaylistSyncPolicy.run {
-                PlaylistManager(XtreamClient.api, dao).syncAll(staged)
+                PlaylistManager(XtreamClient.api, dao).syncAll(staged, onProgress = {
+                    if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
+                })
             }
             if (sync.freshItemCount <= 0 || sync.failedSectionCount > 0) {
                 return if (sync.failedSectionCount > 0) Result.retry() else Result.success()
@@ -83,17 +107,22 @@ class CatalogRefreshWorker(
 
             val refreshedProvider = refreshSource.copy(enabled = true, updatedAt = staged.updatedAt)
             currentCoroutineContext().ensureActive()
-            if (sourceChanged) {
-                PortalPlaylistClient.commitPendingSource(app, dao, refreshSource) {
-                    dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
-                    promoted = true
-                    runCatching { CatalogSyncState.markSourceReplaced(app, provider.id) }
-                }
-            } else {
-                withContext(NonCancellable + Dispatchers.IO) {
-                    dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
-                    promoted = true
-                    runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
+            if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
+            // Only the atomic final promotion shares the foreground import lock. This avoids
+            // a background download making Login/CatalogLoading wait before opening old cache.
+            CatalogLoadPersistence.withProviderLock(provider.id) {
+                if (sourceChanged) {
+                    PortalPlaylistClient.commitPendingSource(app, dao, refreshSource) {
+                        dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
+                        promoted = true
+                        runCatching { CatalogSyncState.markSourceReplaced(app, provider.id) }
+                    }
+                } else {
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
+                        promoted = true
+                        runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
+                    }
                 }
             }
 
@@ -101,6 +130,9 @@ class CatalogRefreshWorker(
             // CatalogEnrichmentLifecycle owns that work after its UI quiet period so Room/CPU do not
             // compete with the user just after opening Home.
             Result.success()
+        } catch (_: PlaybackInProgressException) {
+            // The viewer is watching; retry quietly later with the committed catalog unchanged.
+            Result.retry()
         } catch (_: TimeoutCancellationException) {
             // A provider timeout is retryable; a cancelled Worker must still stop immediately.
             currentCoroutineContext().ensureActive()
@@ -117,23 +149,54 @@ class CatalogRefreshWorker(
     }
 
     companion object {
+        private val workerLocks = ConcurrentHashMap<String, Mutex>()
         private const val KEY_PROVIDER_ID = "provider_id"
         private const val LEGACY_PERIODIC_NAME = "blofy-catalog-periodic"
         private const val NOW_NAME_PREFIX = "blofy-catalog-now:"
+        private const val KEY_MANUAL = "manual"
+        // Keep the existing unique name so UPDATE replaces the old 24-hour schedule.
+        private const val AUTO_PERIODIC_NAME = "blofy-catalog-auto-24h"
 
         private val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresStorageNotLow(true)
             .build()
 
         fun cancelLegacyAutomatic(context: Context) {
             WorkManager.getInstance(context.applicationContext).cancelUniqueWork(LEGACY_PERIODIC_NAME)
         }
 
-        fun enqueueNow(context: Context, providerId: String) {
+        /**
+         * One active provider is checked about every 30 minutes when system conditions allow.
+         * Actual runs can be deferred by Android or while the viewer is playing video.
+         */
+        fun scheduleAutomatic(context: Context, providerId: String) {
+            if (providerId.isBlank()) return
+            val request = PeriodicWorkRequestBuilder<CatalogRefreshWorker>(
+                CatalogAutoRefreshPolicy.INTERVAL_MINUTES, TimeUnit.MINUTES
+            )
+                .setConstraints(constraints)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
+                .setInputData(androidx.work.workDataOf(KEY_PROVIDER_ID to providerId, KEY_MANUAL to false))
+                .build()
+            WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
+                AUTO_PERIODIC_NAME, ExistingPeriodicWorkPolicy.UPDATE, request
+            )
+        }
+
+        fun enqueueIfStale(context: Context, providerId: String) {
+            if (CatalogAutoRefreshPolicy.isDue(
+                    CatalogSyncState.lastSyncedAt(context, providerId), System.currentTimeMillis()
+                )
+            ) enqueueNow(context, providerId, manual = false)
+        }
+
+        fun enqueueNow(context: Context, providerId: String, manual: Boolean = true) {
+            if (providerId.isBlank()) return
             val request = OneTimeWorkRequestBuilder<CatalogRefreshWorker>()
                 .setConstraints(constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 20, TimeUnit.SECONDS)
-                .setInputData(androidx.work.workDataOf(KEY_PROVIDER_ID to providerId))
+                .setInputData(androidx.work.workDataOf(KEY_PROVIDER_ID to providerId, KEY_MANUAL to manual))
                 .build()
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
                 NOW_NAME_PREFIX + providerId,
