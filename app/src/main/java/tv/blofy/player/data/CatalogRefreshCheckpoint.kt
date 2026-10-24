@@ -24,7 +24,7 @@ internal class CatalogRefreshCheckpoint(private val context: Context, private va
         val ageMs = System.currentTimeMillis() - prefs.getLong(key("created"), 0L)
         val safeStage = savedId.startsWith(STAGING_PREFIX) && savedId != providerId
         val valid = safeStage && prefs.getString(key("source"), null) == expected &&
-            ageMs in 0 until MAX_AGE_MS
+            ageMs >= 0L && ageMs < MAX_AGE_MS
         if (savedId.isNotBlank() && !valid) {
             // Never treat a corrupt preference containing a real provider ID as a disposable
             // candidate. Only app-owned, namespaced staging IDs may be deleted.
