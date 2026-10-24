@@ -191,7 +191,18 @@ jobs:
             -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app \
             lintDebug assembleDebug
           test -s app/build/outputs/apk/debug/app-debug.apk
-          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/blofy-play-2000073-test-only.apk
+          # Inspect the actual Play-flavored APK manifest after Android manifest merging,
+          # not just src/play XML. This must never request sideload-install permission.
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name aapt -type f | sort -V | tail -n 1)"
+          test -n "$AAPT"
+          "$AAPT" dump permissions "$APK" > "$RUNNER_TEMP/play-apk-permissions.txt"
+          ! grep -Fq android.permission.REQUEST_INSTALL_PACKAGES "$RUNNER_TEMP/play-apk-permissions.txt"
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml > "$RUNNER_TEMP/play-apk-manifest.txt"
+          for route in VlcFallbackActivity LibraryDownloadActivity SectionSearchActivity; do
+            grep -Fq "$route" "$RUNNER_TEMP/play-apk-manifest.txt"
+          done
+          cp "$APK" app/build/outputs/apk/debug/blofy-play-2000073-test-only.apk
       - name: Save Google Play 2000073 debug artifact
         uses: actions/upload-artifact@v4
         with:
