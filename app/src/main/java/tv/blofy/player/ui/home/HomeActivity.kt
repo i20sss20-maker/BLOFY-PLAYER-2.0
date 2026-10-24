@@ -915,7 +915,14 @@ class HomeActivity : AppCompatActivity() {
             } else {
                 typeface = BlofyTvDesign.preferredTypeface(this)
             }
-            setOnClickListener { requestManualCatalogRefresh() }
+            setOnClickListener {
+                if (refreshBusy) {
+                    refreshObservedProvider?.let { providerId ->
+                        WorkManager.getInstance(applicationContext)
+                            .cancelUniqueWork(CatalogRefreshWorker.manualWorkName(providerId))
+                    }
+                } else requestManualCatalogRefresh()
+            }
         }
         wrapper.addView(refreshButton, LinearLayout.LayoutParams(-1, dp(if (compact) 32 else 38)))
         val footer = LinearLayout(this).apply {
@@ -1036,7 +1043,12 @@ class HomeActivity : AppCompatActivity() {
         val elapsed = if (refreshActiveSinceMs <= 0L) 0L else
             (SystemClock.elapsedRealtime() - refreshActiveSinceMs).coerceAtLeast(0L)
         refreshBusy = running || waiting
-        refreshButton?.isEnabled = !refreshBusy
+        refreshButton?.apply {
+            isEnabled = true
+            text = if (refreshBusy) getString(R.string.home_catalog_refresh_cancel_v75)
+                else if (layoutSpec.compact) "↻" else getString(R.string.home_catalog_refresh_v74)
+            contentDescription = text
+        }
         // A paused/queued worker must never show a 'still spinning' indicator.
         refreshSpinner?.visibility =
             if (running && elapsed < 12_000L) View.VISIBLE else View.GONE
