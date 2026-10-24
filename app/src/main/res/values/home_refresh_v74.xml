@@ -10,4 +10,5 @@
     <string name="home_catalog_refresh_queued_v74">Update queued…</string>
     <string name="home_catalog_refresh_saving_v74">Saving content…</string>
     <string name="home_catalog_refresh_background_v75">Updating in background — keep watching</string>
+    <string name="home_catalog_refresh_cancel_v75">Cancel refresh</string>
 </resources>
