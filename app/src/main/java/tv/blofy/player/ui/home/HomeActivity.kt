@@ -65,10 +65,9 @@ import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.mobile.MobileContentActivity
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.SettingsActivity
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
+import androidx.lifecycle.LiveData
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 
 class HomeActivity : AppCompatActivity() {
     internal var savedEntryDeadlineMillis = 8_000L
@@ -98,7 +97,13 @@ class HomeActivity : AppCompatActivity() {
     private var heroDots: LinearLayout? = null
     private var homeFeed: LinearLayout? = null
     private var serverLabel: TextView? = null
-    private var clockLabel: TextView? = null
+    private var refreshButton: Button? = null
+    private var refreshSpinner: ProgressBar? = null
+    private var refreshHint: TextView? = null
+    private var refreshWork: LiveData<List<WorkInfo>>? = null
+    private var refreshObservedProvider: String? = null
+    private var refreshStartedHere = false
+    private var refreshBusy = false
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private var heroCandidates: List<StreamEntity> = emptyList()
@@ -118,7 +123,6 @@ class HomeActivity : AppCompatActivity() {
     private val refreshScheduler = HomeRefreshScheduler(
         uiHandler, 30_000L, HERO_ROTATION_MS,
         refreshClock = {
-            clockLabel?.text = worldClockText()
             if (SystemClock.elapsedRealtime() - lastHomeInputAtMs >= 20_000L) refreshQuietHomeIfChanged()
         },
         rotateHero = {
@@ -186,6 +190,7 @@ class HomeActivity : AppCompatActivity() {
     private fun showReadyHome() {
         val root = if (layoutSpec.compact) buildCompactHome() else buildTvHome()
         setContentView(root)
+        scheduledProviderId?.let(::observeManualRefresh)
         if (!remote) {
             ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
                 val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
@@ -232,6 +237,7 @@ class HomeActivity : AppCompatActivity() {
                 if (!homeResumed || activeId.isNullOrBlank()) return@launch
                 if (scheduledProviderId != activeId) {
                     scheduledProviderId = activeId
+                    observeManualRefresh(activeId)
                     CatalogRefreshWorker.scheduleAutomatic(applicationContext, activeId)
                 }
                 // Catch up when returning to Home; a running worker is coalesced by unique name.
@@ -257,6 +263,8 @@ class HomeActivity : AppCompatActivity() {
         homeFocusController = null
         refreshScheduler.stop()
         historyObserver.stop()
+        refreshWork?.removeObservers(this)
+        refreshWork = null
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -578,7 +586,7 @@ class HomeActivity : AppCompatActivity() {
             val number = TextView(this).apply {
                 text = "${index + 1}"
                 textSize = if (compactTv) 36f else 42f
-                typeface = Typeface.DEFAULT_BOLD
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(0xFF606671.toInt())
                 gravity = Gravity.CENTER_VERTICAL or Gravity.START
                 includeFontPadding = false
@@ -598,7 +606,7 @@ class HomeActivity : AppCompatActivity() {
         layoutDirection = uiDirection
         gravity = Gravity.START
         setPadding(0, dp(12), dp(4), dp(6))
-        addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
+        addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = BlofyTvDesign.preferredTypeface(this); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
         contentDescription = listOf(title, subtitle).filter(String::isNotBlank).joinToString(". ")
     }
 
@@ -632,7 +640,7 @@ class HomeActivity : AppCompatActivity() {
             layoutDirection = uiDirection
             gravity = Gravity.BOTTOM or Gravity.START
             setPadding(dp(10), dp(8), dp(10), dp(10))
-            addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 12.2f; typeface = Typeface.DEFAULT_BOLD; maxLines = 2; setTextColor(Color.WHITE); gravity = Gravity.START })
+            addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 12.2f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); maxLines = 2; setTextColor(Color.WHITE); gravity = Gravity.START })
             addView(TextView(this@HomeActivity).apply {
                 text = buildList {
                     item.year?.takeIf(String::isNotBlank)?.let(::add)
@@ -690,7 +698,7 @@ class HomeActivity : AppCompatActivity() {
     private fun badgeChip(label: String) = TextView(this).apply {
         text = label
         textSize = 8f
-        typeface = Typeface.DEFAULT_BOLD
+        typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
         setTextColor(Color.WHITE)
         gravity = Gravity.CENTER
         setPadding(dp(7), 0, dp(7), 0)
@@ -706,8 +714,8 @@ class HomeActivity : AppCompatActivity() {
             addView(View(this@HomeActivity).apply { background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF5181021.toInt(), 0xB52A1738.toInt(), 0x4017101F)) }, FrameLayout.LayoutParams(-1, -1))
             val copy = LinearLayout(this@HomeActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(28), dp(18), dp(28), dp(18))
-                addView(TextView(this@HomeActivity).apply { text = "BLOFY FEATURED"; textSize = 11.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
-                addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 27f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.START; maxLines = 1 })
+                addView(TextView(this@HomeActivity).apply { text = "BLOFY FEATURED"; textSize = 11.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
+                addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 27f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE); gravity = Gravity.START; maxLines = 1 })
                 addView(TextView(this@HomeActivity).apply { text = buildList { item.year?.let(::add); item.rating?.let { add("★ $it") }; item.genre?.substringBefore(',')?.let(::add) }.joinToString("   •   "); textSize = 12.5f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = item.plot?.take(150) ?: getString(R.string.home_featured_fallback); textSize = 13f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START; maxLines = 2; setPadding(0, dp(5), 0, 0) })
             }
@@ -738,8 +746,8 @@ class HomeActivity : AppCompatActivity() {
             }
             addView(LinearLayout(this@HomeActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(26), dp(14), dp(26), dp(14))
-                addView(TextView(this@HomeActivity).apply { text = "BLOFY SPOTLIGHT"; textSize = 10.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
-                addView(TextView(this@HomeActivity).apply { text = headline; textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.START })
+                addView(TextView(this@HomeActivity).apply { text = "BLOFY SPOTLIGHT"; textSize = 10.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
+                addView(TextView(this@HomeActivity).apply { text = headline; textSize = 22f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 12.5f; maxLines = 2; setTextColor(TEXT_SECONDARY); gravity = Gravity.START })
             }, FrameLayout.LayoutParams(-1, -1))
         }
@@ -748,13 +756,13 @@ class HomeActivity : AppCompatActivity() {
 
     private fun compactEmpty(title: String, subtitle: String) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(20), dp(14), dp(20), dp(14)); background = surface(false)
-        addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
+        addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = BlofyTvDesign.preferredTypeface(this); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
         addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 11.5f; setTextColor(TEXT_MUTED); gravity = Gravity.START })
     }.also { it.layoutParams = LinearLayout.LayoutParams(-1, dp(80)).apply { bottomMargin = dp(10) } }
 
     private fun emptyState(title: String, subtitle: String) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; layoutDirection = uiDirection; setPadding(dp(30), dp(30), dp(30), dp(30)); background = surface(false)
-        addView(TextView(this@HomeActivity).apply { text = title; textSize = 24f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.CENTER })
+        addView(TextView(this@HomeActivity).apply { text = title; textSize = 24f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(TEXT_PRIMARY); gravity = Gravity.CENTER })
         addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 13f; setTextColor(TEXT_MUTED); gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }.also { it.layoutParams = LinearLayout.LayoutParams(-1, dp(220)).apply { topMargin = dp(14) } }
 
@@ -814,7 +822,7 @@ class HomeActivity : AppCompatActivity() {
         })
         welcome.addView(TextView(this).apply {
             text = getString(R.string.home_today); textSize = 20f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(TEXT_PRIMARY); includeFontPadding = false
         }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
         header.addView(welcome, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(18) })
@@ -823,18 +831,8 @@ class HomeActivity : AppCompatActivity() {
             isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
         }
         header.addView(serverLabel, LinearLayout.LayoutParams(0, -2, 1f))
-        clockLabel = TextView(this).apply {
-            textSize = if (layoutSpec.width < 900) 9f else 9.5f
-            setTextColor(TEXT_SECONDARY)
-            gravity = Gravity.END
-            maxLines = 2
-            isSingleLine = false
-            ellipsize = TextUtils.TruncateAt.END
-            includeFontPadding = false
-            setLineSpacing(0f, 1.05f)
-            text = worldClockText()
-        }
-        header.addView(clockLabel, LinearLayout.LayoutParams(dp(if (layoutSpec.width < 900) 188 else 330), -2).apply { marginStart = dp(10) })
+        header.addView(buildRefreshControl(compact = false),
+            LinearLayout.LayoutParams(dp(180), dp(62)).apply { marginStart = dp(12) })
         main.addView(header, LinearLayout.LayoutParams(-1, dp(64)))
         val scroll = ScrollView(this).apply {
             tag = "blofy_home_feed_scroll"
@@ -856,17 +854,129 @@ class HomeActivity : AppCompatActivity() {
         return root
     }
 
-    private fun worldClockText(): String {
-        val now = Date()
-        fun time(zone: String): String = SimpleDateFormat("HH:mm", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone(zone)
-        }.format(now)
 
-        return if (layoutSpec.width < 900) {
-            "الرياض ${time("Asia/Riyadh")}  •  لندن ${time("Europe/London")}"
-        } else {
-            "الرياض ${time("Asia/Riyadh")}  •  دبي ${time("Asia/Dubai")}\n" +
-                "لندن ${time("Europe/London")}  •  نيويورك ${time("America/New_York")}"
+    /** Refresh status follows the real WorkManager job, not an artificial animation timer. */
+    private fun buildRefreshControl(compact: Boolean): LinearLayout {
+        val wrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutDirection = uiDirection
+            tag = "blofy_home_refresh_control"
+        }
+        refreshButton = Button(this).apply {
+            tag = "blofy_home_refresh_button"
+            text = if (compact) "↻" else getString(R.string.home_catalog_refresh_v74)
+            contentDescription = getString(R.string.home_catalog_refresh_v74)
+            CinemaStyle.styleButton(this, primary = false) { focused ->
+                if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, "home_refresh")
+            }
+            if (compact) {
+                textSize = 22f
+                setPadding(0, 0, 0, 0)
+            } else {
+                typeface = BlofyTvDesign.preferredTypeface(this)
+            }
+            setOnClickListener { requestManualCatalogRefresh() }
+        }
+        wrapper.addView(refreshButton, LinearLayout.LayoutParams(-1, dp(if (compact) 32 else 38)))
+        val footer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        refreshSpinner = ProgressBar(this).apply {
+            isIndeterminate = true
+            visibility = View.GONE
+            contentDescription = getString(R.string.home_catalog_refresh_running_v74)
+            indeterminateTintList = ColorStateList.valueOf(PURPLE_BRIGHT)
+        }
+        footer.addView(refreshSpinner, LinearLayout.LayoutParams(dp(if (compact) 12 else 15), dp(if (compact) 12 else 15)))
+        if (!compact) {
+            refreshHint = TextView(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                textSize = 10f
+                typeface = BlofyTvDesign.preferredTypeface(this)
+                setTextColor(TEXT_SECONDARY)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                visibility = View.GONE
+                setPadding(dp(5), 0, 0, 0)
+            }
+            footer.addView(refreshHint, LinearLayout.LayoutParams(-2, dp(20)))
+        }
+        wrapper.addView(footer, LinearLayout.LayoutParams(-1, dp(if (compact) 14 else 20)))
+        registerAction("home_refresh", checkNotNull(refreshButton))
+        return wrapper
+    }
+
+    private fun observeManualRefresh(providerId: String) {
+        if (providerId == refreshObservedProvider) return
+        refreshWork?.removeObservers(this)
+        refreshObservedProvider = providerId
+        refreshStartedHere = false
+        renderManualRefreshStatus(null)
+        refreshWork = WorkManager.getInstance(applicationContext)
+            .getWorkInfosForUniqueWorkLiveData(CatalogRefreshWorker.manualWorkName(providerId))
+            .also { liveData ->
+                liveData.observe(this) { infos ->
+                    renderManualRefreshStatus(infos.firstOrNull()?.state)
+                }
+            }
+    }
+
+    private fun requestManualCatalogRefresh() {
+        if (refreshBusy) return
+        lifecycleScope.launch {
+            val providerId = try {
+                withContext(Dispatchers.IO) {
+                    BlofyDatabase.get(applicationContext).dao().activeProviderId()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (providerId.isNullOrBlank()) {
+                refreshHint?.apply {
+                    setText(R.string.home_catalog_refresh_no_source_v74)
+                    visibility = View.VISIBLE
+                }
+                return@launch
+            }
+            if (!CatalogSyncState.isEntryReady(applicationContext, providerId)) {
+                startActivity(Intent(this@HomeActivity, CatalogLoadingActivity::class.java)
+                    .putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, providerId))
+                return@launch
+            }
+            observeManualRefresh(providerId)
+            refreshStartedHere = true
+            renderManualRefreshStatus(WorkInfo.State.ENQUEUED)
+            CatalogRefreshWorker.enqueueNow(applicationContext, providerId, manual = true)
+        }
+    }
+
+    private fun renderManualRefreshStatus(state: WorkInfo.State?) {
+        val working = state == WorkInfo.State.RUNNING
+        val waiting = state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.BLOCKED
+        refreshBusy = working || waiting
+        refreshSpinner?.visibility = if (working) View.VISIBLE else View.GONE
+        if (!refreshStartedHere && !working && !waiting) {
+            refreshHint?.visibility = View.GONE
+            return
+        }
+        val messageId = when (state) {
+            WorkInfo.State.RUNNING -> R.string.home_catalog_refresh_running_v74
+            WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> R.string.home_catalog_refresh_waiting_v74
+            WorkInfo.State.SUCCEEDED -> R.string.home_catalog_refresh_done_v74
+            WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> R.string.home_catalog_refresh_failed_v74
+            else -> R.string.home_catalog_refresh_waiting_v74
+        }
+        refreshHint?.apply {
+            setText(messageId)
+            visibility = View.VISIBLE
+        }
+        if (state == WorkInfo.State.SUCCEEDED || state == WorkInfo.State.FAILED || state == WorkInfo.State.CANCELLED) {
+            refreshStartedHere = false
+            if (state == WorkInfo.State.SUCCEEDED) refreshQuietHomeIfChanged()
         }
     }
 
@@ -899,7 +1009,7 @@ class HomeActivity : AppCompatActivity() {
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginEnd = dp(8) })
         addView(TextView(this@HomeActivity).apply {
-            text = label; textSize = 12f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            text = label; textSize = 12f; typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(TEXT_PRIMARY); gravity = Gravity.START or Gravity.CENTER_VERTICAL
             isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(0, -1, 1f))
@@ -955,13 +1065,13 @@ class HomeActivity : AppCompatActivity() {
         heroContent = content
         heroKicker = TextView(this@HomeActivity).apply {
             text = "BLOFY PLAYER"; textSize = 10f
-            typeface = Typeface.DEFAULT_BOLD; setTextColor(PURPLE_BRIGHT)
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT)
             gravity = Gravity.START; includeFontPadding = false
         }.also { content.addView(it) }
         heroTitle = TextView(this@HomeActivity).apply {
             text = getString(R.string.home_all_content)
             textSize = if (layoutSpec.compact || compactTv) 24f else 28f
-            typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE)
             gravity = Gravity.START; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
             includeFontPadding = false; setPadding(0, dp(5), 0, 0)
         }.also { content.addView(it) }
@@ -1007,7 +1117,7 @@ class HomeActivity : AppCompatActivity() {
     private fun addStory(row: LinearLayout, key: String, title: String, subtitle: String, intent: Intent) {
         val card = LinearLayout(this).apply {
             id = View.generateViewId(); orientation = LinearLayout.VERTICAL; gravity = Gravity.BOTTOM or Gravity.START; layoutDirection = uiDirection; setPadding(dp(16), dp(13), dp(16), dp(13)); background = storySurface(false); isFocusable = true; isFocusableInTouchMode = remote; isClickable = true
-            addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
+            addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
             addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 11f; setTextColor(TEXT_MUTED); gravity = Gravity.START })
             setOnFocusChangeListener { view, focused -> view.background = storySurface(focused); childrenTextColor(this, focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key); animateFocus(view, focused, 1.015f, 0f, dp(10).toFloat()) }
             setOnClickListener { startActivity(intent) }
@@ -1030,8 +1140,9 @@ class HomeActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(dp(48), dp(44)))
         header.addView(TextView(this).apply {
             text = "BLOFY PLAYER"; textSize = 12f; setTextColor(TEXT_PRIMARY)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            typeface = BlofyTvDesign.preferredTypeface(this)
         }, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(buildRefreshControl(compact = true), LinearLayout.LayoutParams(dp(44), dp(48)).apply { marginEnd = dp(4) })
         header.addView(touchNav("mobile_search", R.drawable.cinema_search, getString(R.string.home_search),
             Intent(this, SearchActivity::class.java), iconOnly = true), LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(touchNav("mobile_settings", R.drawable.cinema_settings, getString(R.string.home_settings),
@@ -1136,7 +1247,7 @@ class HomeActivity : AppCompatActivity() {
     private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
     private fun compactTile(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 16)
     private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF2B2137.toInt(), 0xFF18131F.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF43344F.toInt()) }
-    private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); gravity = Gravity.START }
+    private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(TEXT_PRIMARY); gravity = Gravity.START }
     private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 

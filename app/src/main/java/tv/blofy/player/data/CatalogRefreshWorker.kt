@@ -179,6 +179,8 @@ class CatalogRefreshWorker(
         private const val NOW_NAME_PREFIX = "blofy-catalog-now:"
         private const val MANUAL_NAME_PREFIX = "blofy-catalog-manual:"
         private const val KEY_MANUAL = "manual"
+
+        fun manualWorkName(providerId: String): String = MANUAL_NAME_PREFIX + providerId
         // Keep the existing unique name so UPDATE replaces the old 24-hour schedule.
         private const val AUTO_PERIODIC_NAME = "blofy-catalog-auto-24h"
 
@@ -224,7 +226,7 @@ class CatalogRefreshWorker(
                 .setInputData(androidx.work.workDataOf(KEY_PROVIDER_ID to providerId, KEY_MANUAL to manual))
                 .build()
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
-                (if (manual) MANUAL_NAME_PREFIX else NOW_NAME_PREFIX) + providerId,
+                if (manual) manualWorkName(providerId) else NOW_NAME_PREFIX + providerId,
                 ExistingWorkPolicy.KEEP,
                 request
             )

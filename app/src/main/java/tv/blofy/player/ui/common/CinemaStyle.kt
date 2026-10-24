@@ -14,14 +14,14 @@ import android.widget.LinearLayout
 
 /** Shared cinematic actions: compact visuals and a distinct remote focus state. */
 object CinemaStyle {
-    val Background = 0xFF08060D.toInt()
-    val Surface = 0xFF241536.toInt()
-    val White = 0xFFF3F4F6.toInt()
-    val Muted = 0xFFC9BCD9.toInt()
-    val Accent = 0xFFD0B2FF.toInt()
+    val Background = 0xFF090611.toInt()
+    val Surface = 0xFF21162F.toInt()
+    val White = 0xFFF8F5FC.toInt()
+    val Muted = 0xFFCFC3DD.toInt()
+    val Accent = 0xFFC9A7FF.toInt()
     const val ActionHeight = 34
 
-    fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 8) = GradientDrawable(
+    fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 12) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         when {
             focused && filledFocus -> intArrayOf(0xFFE6D2FF.toInt(), Accent, 0xFFB882F0.toInt())
@@ -46,7 +46,7 @@ object CinemaStyle {
             else -> intArrayOf(Surface, 0xFF1A1026.toInt())
         }
     ).apply {
-        cornerRadius = 6 * context.resources.displayMetrics.density
+        cornerRadius = 10 * context.resources.displayMetrics.density
         setStroke(
             ((if (focused) 2 else 1) * context.resources.displayMetrics.density).toInt(),
             if (focused) 0xFFF0E1FF.toInt() else 0x52FFFFFF
@@ -60,7 +60,7 @@ object CinemaStyle {
             minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0
             setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
             textSize = 12f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            typeface = BlofyTvDesign.preferredTypeface(this)
             gravity = Gravity.CENTER
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.END

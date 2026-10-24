@@ -1,0 +1,8 @@
+<resources>
+    <string name="home_catalog_refresh_v74">تحديث المحتوى</string>
+    <string name="home_catalog_refresh_running_v74">جاري التحديث…</string>
+    <string name="home_catalog_refresh_waiting_v74">بانتظار الشبكة أو انتهاء التشغيل</string>
+    <string name="home_catalog_refresh_done_v74">اكتمل التحديث</string>
+    <string name="home_catalog_refresh_failed_v74">تعذّر التحديث، حاول مجددًا</string>
+    <string name="home_catalog_refresh_no_source_v74">اختر قائمة أولًا</string>
+</resources>
