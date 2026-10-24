@@ -25,6 +25,10 @@
       }
     },
     {
+      "src": "/downloads/android-tv-test/?",
+      "dest": "/src/bootstrap-rc0749.mjs"
+    },
+    {
       "src": "/downloads(.*)",
       "status": 307,
       "headers": {
