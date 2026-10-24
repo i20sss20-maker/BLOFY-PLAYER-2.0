@@ -79,6 +79,26 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (::status.isInitialized) updateSyncStatus()
+        // Provider manager can change the active playlist while Settings is stopped.
+        // Reload only the local active record; never contact the stream provider on UI resume.
+        lifecycleScope.launch {
+            val active = try {
+                withContext(Dispatchers.IO) {
+                    val dao = BlofyDatabase.get(applicationContext).dao()
+                    dao.activeProviderId()?.let { dao.provider(it) }
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (isFinishing || isDestroyed) return@launch
+            if (active != null && provider?.id != active.id) {
+                provider = active
+                observeRefresh(active.id)
+            }
+            if (::status.isInitialized) updateSyncStatus()
+        }
     }
 
     private fun buildPage() {
