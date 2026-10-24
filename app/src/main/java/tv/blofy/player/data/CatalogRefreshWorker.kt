@@ -18,6 +18,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalSyncBook
@@ -27,6 +29,7 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.preparation.CatalogLoadPersistence
 import tv.blofy.player.data.remote.XtreamClient
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /** Atomic, background-only catalog refresh for manual requests and automatic daily checks. */
@@ -43,8 +46,11 @@ class CatalogRefreshWorker(
         } else {
             dao.provider(providerId)
         } ?: return Result.success()
-        // The same lock protects foreground imports and manual/periodic worker requests.
-        return CatalogLoadPersistence.withProviderLock(provider.id) { refreshCatalog(provider, dao) }
+        // Only worker requests serialize during the long download. Normal entry into a
+        // committed library must not wait behind hours of provider/network I/O.
+        return workerLocks.getOrPut(provider.id) { Mutex() }.withLock {
+            refreshCatalog(provider, dao)
+        }
     }
 
     private suspend fun refreshCatalog(provider: ProviderEntity, dao: BlofyDao): Result {
@@ -92,17 +98,21 @@ class CatalogRefreshWorker(
 
             val refreshedProvider = refreshSource.copy(enabled = true, updatedAt = staged.updatedAt)
             currentCoroutineContext().ensureActive()
-            if (sourceChanged) {
-                PortalPlaylistClient.commitPendingSource(app, dao, refreshSource) {
-                    dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
-                    promoted = true
-                    runCatching { CatalogSyncState.markSourceReplaced(app, provider.id) }
-                }
-            } else {
-                withContext(NonCancellable + Dispatchers.IO) {
-                    dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
-                    promoted = true
-                    runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
+            // Only the atomic final promotion shares the foreground import lock. This avoids
+            // a background download making Login/CatalogLoading wait before opening old cache.
+            CatalogLoadPersistence.withProviderLock(provider.id) {
+                if (sourceChanged) {
+                    PortalPlaylistClient.commitPendingSource(app, dao, refreshSource) {
+                        dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
+                        promoted = true
+                        runCatching { CatalogSyncState.markSourceReplaced(app, provider.id) }
+                    }
+                } else {
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
+                        promoted = true
+                        runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
+                    }
                 }
             }
 
@@ -126,6 +136,7 @@ class CatalogRefreshWorker(
     }
 
     companion object {
+        private val workerLocks = ConcurrentHashMap<String, Mutex>()
         private const val KEY_PROVIDER_ID = "provider_id"
         private const val LEGACY_PERIODIC_NAME = "blofy-catalog-periodic"
         private const val NOW_NAME_PREFIX = "blofy-catalog-now:"
