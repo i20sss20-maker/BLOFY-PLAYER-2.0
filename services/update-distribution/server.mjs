@@ -431,10 +431,10 @@ ${appAction.kind === 'unavailable' ? '<div class="stable-download-link"><strong>
   </section>`;
 }
 
-// Public read-only check: the signed 74 release is published by a separate GitHub
-// workflow only after certificate, version, FFmpeg and package checks pass.
-const OFFICIAL_74_TAG = 'v2.0.0-rc07.55.6-2000074';
-const OFFICIAL_74_APK = 'BLOFY-PLAYER-2000074-OFFICIAL-SIGNED.apk';
+// Display only the owner-requested v74 Premium signed QA APK (not the earlier v74).
+// Keep the v73 active release, /d/blofy and update APIs unchanged for existing clients.
+const OFFICIAL_74_TAG = 'v74-premium-owner-test-20261024';
+const OFFICIAL_74_APK = 'BLOFY-PLAYER-74-PREMIUM-TEST-SIGNED.apk';
 let official74Cache = { checkedAt: 0, release: null };
 
 async function verifiedOfficial74() {
@@ -450,8 +450,9 @@ async function verifiedOfficial74() {
     );
     if (!response.ok) { official74Cache.release = null; return null; }
     const release = await response.json();
-    const asset = release.assets?.find(item => item.name === OFFICIAL_74_APK && item.size > 10_000_000);
-    const valid = !release.draft && !release.prerelease && release.tag_name === OFFICIAL_74_TAG &&
+    const asset = release.assets?.find(item => item.name === OFFICIAL_74_APK && item.size > 200_000_000);
+    // The verified file is intentionally a pre-release until the owner tests it.
+    const valid = !release.draft && release.prerelease === true && release.tag_name === OFFICIAL_74_TAG &&
       asset?.browser_download_url?.startsWith(
         `https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/${OFFICIAL_74_TAG}/`);
     official74Cache.release = valid ? { url: asset.browser_download_url, size: asset.size } : null;
@@ -463,10 +464,10 @@ function official74Card(verified) {
   if (!verified) return '';
   return `<section class="official-card" style="margin-top:12px" aria-label="تحديث بلوفي بلاير 74">
     <div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY"></div>
-    <div class="official-copy"><div class="official-title"><h2 style="margin:0;font-size:20px">التحديث الرسمي 74</h2><span class="badge">معتمد للموقع</span></div>
-    <div class="official-desc">تحديث مكتبة صامت وتحسينات استقرار Android TV. الإصدار السابق يبقى متاحًا. لا تحذف التطبيق قبل التثبيت.</div>
-    <div class="official-meta">2.0.0-rc07.55.6 · Version Code 2000074</div></div>
-    <a class="official-download" href="${escapeHtml(verified.url)}" rel="noopener noreferrer">تحميل تحديث 74 APK ↓</a>
+    <div class="official-copy"><div class="official-title"><h2 style="margin:0;font-size:20px">BLOFY PLAYER 74 — النسخة المحسّنة</h2><span class="badge">نسخة تجربة</span></div>
+    <div class="official-desc">ثيم BLOFY البنفسجي، خط عربي جديد، إزالة الساعات العالمية، وزر تحديث المحتوى بمؤشر التحميل. محركات التشغيل لم تُغيّر. جرّبها قبل اعتمادها النهائي.</div>
+    <div class="official-meta">2.0.0-rc07.55.6 · Version Code 2000074 · Signed APK · Test</div></div>
+    <a class="official-download" href="${escapeHtml(verified.url)}" rel="noopener noreferrer">تحميل النسخة 74 المحسّنة ↓</a>
   </section>`;
 }
 
