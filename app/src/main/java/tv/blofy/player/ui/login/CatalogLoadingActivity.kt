@@ -23,6 +23,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import tv.blofy.player.data.preparation.CatalogLoadAttempt
 import tv.blofy.player.data.preparation.CatalogLoadPersistence
 import tv.blofy.player.R
@@ -383,7 +385,20 @@ class CatalogLoadingActivity : AppCompatActivity() {
             } finally {
                 progress.isIndeterminate = false
             }
-            awaitEntryReadyCache(providerId)
+            // Base catalog is already durable. A damaged or slow secondary Home/search
+            // cache must not trap Android TV viewers after a successful DB commit.
+            try {
+                withTimeout(45_000L) { awaitEntryReadyCache(providerId) }
+            } catch (secondary: Exception) {
+                currentCoroutineContext().ensureActive()
+                val baseReady = withContext(Dispatchers.IO) {
+                    CatalogSyncState.isEntryReady(applicationContext, providerId) &&
+                        dao.hasCatalog(providerId)
+                }
+                if (!persistence.catalogCommitted || !baseReady) throw secondary
+                // The committed rows remain readable, with direct bounded Home fallback.
+                FullLibrarySyncWorker.enqueue(applicationContext, providerId)
+            }
             render(100, getString(R.string.catalog_complete))
             delay(120L)
             openHome(providerId)

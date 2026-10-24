@@ -13,8 +13,10 @@ import android.text.TextUtils
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
@@ -42,6 +44,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.HomeSnapshotStore
 import tv.blofy.player.data.preparation.FullLibrarySyncWorker
 import tv.blofy.player.ui.login.CatalogLoadingActivity
@@ -103,6 +106,10 @@ class HomeActivity : AppCompatActivity() {
 
     private var homeResumed = false
     private var displayedHomeData: HomeData? = null
+    private var scheduledProviderId: String? = null
+    private var lastHomeInputAtMs = SystemClock.elapsedRealtime()
+    private var displayedCatalogEpoch = 0L
+    private var requestedCatalogEpoch = 0L
     private val historyObserver by lazy {
         HomeHistoryObserver(lifecycleScope, changes = {
             BlofyDatabase.get(applicationContext).invalidationTracker.createFlow("watch_state")
@@ -112,6 +119,7 @@ class HomeActivity : AppCompatActivity() {
         uiHandler, 30_000L, HERO_ROTATION_MS,
         refreshClock = {
             clockLabel?.text = worldClockText()
+            if (SystemClock.elapsedRealtime() - lastHomeInputAtMs >= 20_000L) refreshQuietHomeIfChanged()
         },
         rotateHero = {
             if (remote && heroCandidates.size > 1 && !isFinishing && heroContent?.hasFocus() != true) {
@@ -155,7 +163,12 @@ class HomeActivity : AppCompatActivity() {
                     finish()
                     return@launch
                 }
-                provider?.let { FullLibrarySyncWorker.enqueue(applicationContext, it.id) }
+                provider?.let {
+                    scheduledProviderId = it.id
+                    CatalogRefreshWorker.scheduleAutomatic(applicationContext, it.id)
+                    CatalogRefreshWorker.enqueueIfStale(applicationContext, it.id)
+                    FullLibrarySyncWorker.enqueue(applicationContext, it.id)
+                }
                 showReadyHome()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { returnToLogin() }
@@ -205,6 +218,29 @@ class HomeActivity : AppCompatActivity() {
         if (homeFeed != null) {
             refreshScheduler.start()
             historyObserver.start()
+            lifecycleScope.launch {
+                val activeId = try {
+                    withContext(Dispatchers.IO) {
+                        BlofyDatabase.get(applicationContext).dao().activeProviderId()
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Never crash an already usable Home because background re-check failed.
+                    return@launch
+                }
+                if (!homeResumed || activeId.isNullOrBlank()) return@launch
+                if (scheduledProviderId != activeId) {
+                    scheduledProviderId = activeId
+                    CatalogRefreshWorker.scheduleAutomatic(applicationContext, activeId)
+                }
+                // Catch up when returning to Home; a running worker is coalesced by unique name.
+                CatalogRefreshWorker.enqueueIfStale(applicationContext, activeId)
+                if (displayedHomeData != null && displayedHomeData?.providerId != activeId) {
+                    lastHomeInputAtMs = SystemClock.elapsedRealtime()
+                    loadHomeExperience()
+                }
+            }
         }
     }
 
@@ -226,8 +262,23 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) lastHomeInputAtMs = SystemClock.elapsedRealtime()
         if (homeFocusController?.handle(event) == true) return true
         return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        lastHomeInputAtMs = SystemClock.elapsedRealtime()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun refreshQuietHomeIfChanged() {
+        val shown = displayedHomeData ?: return
+        val epoch = CatalogSyncState.lastSyncedAt(applicationContext, shown.providerId)
+        if (homeResumed && epoch > displayedCatalogEpoch && epoch > requestedCatalogEpoch) {
+            requestedCatalogEpoch = epoch
+            loadHomeExperience()
+        }
     }
 
     private fun warmCatalogArtwork() {
@@ -297,6 +348,7 @@ class HomeActivity : AppCompatActivity() {
             }
 
             displayedHomeData = data
+            displayedCatalogEpoch = CatalogSyncState.lastSyncedAt(applicationContext, data.providerId)
             serverLabel?.text = data.providerName.ifBlank { "BLOFY" }
             heroProviderId = data.providerId
             heroCandidates = data.heroItems

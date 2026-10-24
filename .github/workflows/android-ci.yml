@@ -126,6 +126,8 @@ jobs:
           fi
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
+      - name: Verify exact Play 2000073 manifest and TV routes
+        run: python3 tools/verify_play_2000073.py
       - name: Test lint and assemble
         shell: bash
         run: |
@@ -179,3 +181,32 @@ jobs:
             app/build/outputs/apk/debug/build-info.txt
           if-no-files-found: error
           retention-days: 30
+      - name: Build Google Play 2000073 debug manifest variant
+        shell: bash
+        run: |
+          set -euxo pipefail
+          # Verifies the Play-only manifest, not just the website/default one.
+          # Debug uses CI keys; it is NOT installable over the published Play app.
+          gradle --no-daemon -PBLOFY_DISTRIBUTION=play \
+            -PBLOFY_ACTIVATION_BASE_URL=https://blofy-player-2-0.vercel.app \
+            lintDebug assembleDebug
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          # Inspect the actual Play-flavored APK manifest after Android manifest merging,
+          # not just src/play XML. This must never request sideload-install permission.
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name aapt -type f | sort -V | tail -n 1)"
+          test -n "$AAPT"
+          "$AAPT" dump permissions "$APK" > "$RUNNER_TEMP/play-apk-permissions.txt"
+          ! grep -Fq android.permission.REQUEST_INSTALL_PACKAGES "$RUNNER_TEMP/play-apk-permissions.txt"
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml > "$RUNNER_TEMP/play-apk-manifest.txt"
+          for route in VlcFallbackActivity LibraryDownloadActivity SectionSearchActivity; do
+            grep -Fq "$route" "$RUNNER_TEMP/play-apk-manifest.txt"
+          done
+          cp "$APK" app/build/outputs/apk/debug/blofy-play-2000073-test-only.apk
+      - name: Save Google Play 2000073 debug artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAY-2000073-TEST-ONLY-${{ github.sha }}
+          path: app/build/outputs/apk/debug/blofy-play-2000073-test-only.apk
+          if-no-files-found: error
+          retention-days: 14

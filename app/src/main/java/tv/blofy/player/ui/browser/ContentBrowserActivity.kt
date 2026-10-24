@@ -34,6 +34,7 @@ import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
+import tv.blofy.player.data.CatalogPlaybackGate
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
@@ -583,7 +584,10 @@ class ContentBrowserActivity : AppCompatActivity() {
         val profile = profile(provider)
         val route = ContentUrlResolver.liveRoute(provider, profile, stream)
         if (previewSession == null) {
+            // Even the small TV channel preview uses a real decoder and network stream.
+            // Treat it as playback so automatic full-library downloads wait.
             previewSession = BlofyPlaybackSession(this, profile, "live_preview")
+            CatalogPlaybackGate.playerStarted()
             previewView?.player = previewSession?.player
         }
         lastPreviewKey = stream.key
@@ -603,8 +607,13 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun stopPreview() {
         previewJob?.cancel()
-        previewSession?.release { previewView?.player = null }
+        val active = previewSession ?: return
         previewSession = null
+        try {
+            active.release { previewView?.player = null }
+        } finally {
+            CatalogPlaybackGate.playerStopped()
+        }
     }
 
     private fun openStream(stream: StreamEntity) {

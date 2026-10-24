@@ -12,6 +12,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.os.ConfigurationCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,7 @@ import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalRefreshFailure
 import tv.blofy.player.core.identity.PortalRefreshFeedback
 import tv.blofy.player.core.remote.FocusMemory
+import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -414,10 +416,30 @@ class ProviderManagerActivity : AppCompatActivity() {
             status.setText(R.string.provider_manager_legacy_unsupported)
             return
         }
-        startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
-            putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id)
-            putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
-        })
+        lifecycleScope.launch {
+            val cached = try {
+                withContext(Dispatchers.IO) {
+                    val dao = BlofyDatabase.get(applicationContext).dao()
+                    CatalogSyncState.isReady(applicationContext, provider.id) &&
+                        dao.hasStreamsForProvider(provider.id)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status.setText(R.string.provider_manager_summary_failed)
+                return@launch
+            }
+            if (cached) {
+                CatalogRefreshWorker.enqueueNow(applicationContext, provider.id, manual = true)
+                status.text = if (ConfigurationCompat.getLocales(resources.configuration).get(0)?.language == "ar")
+                    "بدأ تحديث المحتوى بالخلفية. يمكنك متابعة المشاهدة."
+                else "Content refresh started in the background. You can keep watching."
+            } else {
+                // Initial import and genuine recovery retain their visible progress screen.
+                startActivity(Intent(this@ProviderManagerActivity, CatalogLoadingActivity::class.java)
+                    .putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
+            }
+        }
     }
 
     private fun remove(provider: ProviderEntity) {
