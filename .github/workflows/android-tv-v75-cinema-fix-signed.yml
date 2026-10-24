@@ -176,8 +176,8 @@ jobs:
             grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/apk-files.txt"
           done
           mkdir -p signed-test
-          cp "$apk" signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.apk
-          cp "$aab" signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.aab
+          cp "$apk" signed-test/BLOFY-PLAYER-2.0-rc07.55.7-PRODUCTION-SIGNED.apk
+          cp "$aab" signed-test/BLOFY-PLAYER-2.0-rc07.55.7-PRODUCTION-SIGNED.aab
           cp "$RUNNER_TEMP/badging.txt" signed-test/apk-badging.txt
           cp "$RUNNER_TEMP/signature.txt" signed-test/apk-signature.txt
           {
@@ -195,7 +195,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED-${{ github.sha }}
+          name: BLOFY-PLAYER-2.0-rc07.55.7-PRODUCTION-SIGNED-${{ github.sha }}
           path: |
             signed-test/*.apk
             signed-test/SHA256SUMS
@@ -205,14 +205,14 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish verified official v74 website APK
+      - name: Publish signed v75 QA APK
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="v75-cinema-refresh-qa-20261024"
-          SOURCE="signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.apk"
+          SOURCE="signed-test/BLOFY-PLAYER-2.0-rc07.55.7-PRODUCTION-SIGNED.apk"
           DEST="signed-test/BLOFY-PLAYER-Android-TV-v75-CINEMA-FIX-SIGNED.apk"
           test -s "$SOURCE"
           (cd signed-test && sha256sum --check SHA256SUMS)
@@ -229,7 +229,7 @@ jobs:
             --prerelease --title "BLOFY PLAYER Android TV 75 • Cinematic Refresh QA" \
             --notes "BLOFY Android TV test-signed APK version 75 (versionCode 2000075, versionName 2.0.0-rc07.55.7). Fixes owner-reported weak v74 theme by making the BLOFY plum backdrop, hero and poster focus visibly cinematic. Fixes the endlessly spinning manual refresh by only spinning briefly during active WorkManager execution, showing real queued/background states, offering cancel and bounding each manual attempt. Keeps playlists, database and playback engines. R8 release build with Media3/FFmpeg, signed by original BLOFY release certificate; checksum included. QA prerelease only, not an automatic-update rollout or a Google Play submission. Install over compatible older BLOFY with the SAME signature and lower versionCode; never uninstall or erase data. Verify live/VOD on a real Android TV before broad distribution."
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets \
-            --jq 'select(.tagName == "v75-cinema-refresh-qa-20261024" and ([.assets[].name] | index("BLOFY-PLAYER-Android-TV-v75-CINEMA-FIX-SIGNED.apk"))) | "Verified official v74 APK uploaded"'
+            --jq 'select(.tagName == "v75-cinema-refresh-qa-20261024" and ([.assets[].name] | index("BLOFY-PLAYER-Android-TV-v75-CINEMA-FIX-SIGNED.apk"))) | "Verified signed v75 QA APK uploaded"'
 
       # Keep existing website source and existing v73/v74 download assets intact.
       # Main download card is switched only after the signed GitHub release is verified.
