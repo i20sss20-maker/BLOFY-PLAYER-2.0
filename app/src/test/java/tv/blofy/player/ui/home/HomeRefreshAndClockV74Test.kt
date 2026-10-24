@@ -49,6 +49,38 @@ class HomeRefreshAndClockV74Test {
         assertEquals(View.GONE, spinner.visibility)
     }
 
+
+    @Test fun manualRefreshShowsResultBrieflyAndRestoresButton() {
+        val activity = home(DeviceClass.Kind.TV)
+        build(activity, "buildTvHome")
+        val hint = HomeActivity::class.java.getDeclaredField("refreshHint").apply {
+            isAccessible = true
+        }.get(activity) as TextView
+        val button = HomeActivity::class.java.getDeclaredField("refreshButton").apply {
+            isAccessible = true
+        }.get(activity) as android.widget.Button
+        val setter = HomeActivity::class.java.getDeclaredMethod(
+            "renderManualRefreshStatus", WorkInfo.State::class.java
+        ).apply { isAccessible = true }
+        assertEquals(View.GONE, hint.visibility)
+        // Previously finished work must not leave a stale banner on entry.
+        setter.invoke(activity, WorkInfo.State.SUCCEEDED)
+        assertEquals(View.GONE, hint.visibility)
+
+        HomeActivity::class.java.getDeclaredField("refreshStartedHere").apply {
+            isAccessible = true
+        }.setBoolean(activity, true)
+        setter.invoke(activity, WorkInfo.State.ENQUEUED)
+        assertFalse(button.isEnabled)
+        assertEquals(View.VISIBLE, hint.visibility)
+        assertFalse(hint.text.toString().contains("أو انتهاء التشغيل"))
+        setter.invoke(activity, WorkInfo.State.RUNNING)
+        assertFalse(button.isEnabled)
+        setter.invoke(activity, WorkInfo.State.FAILED)
+        assertTrue(button.isEnabled)
+        assertEquals(activity.getString(R.string.home_catalog_refresh_failed_v74), hint.text.toString())
+    }
+
     private fun home(kind: DeviceClass.Kind): HomeActivity =
         Robolectric.buildActivity(HomeActivity::class.java).get().also { activity ->
             activity.setTheme(R.style.Theme_Blofy)
