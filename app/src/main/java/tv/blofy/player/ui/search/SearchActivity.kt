@@ -74,14 +74,14 @@ class SearchActivity : AppCompatActivity() {
             text = "BLOFY SEARCH"
             textSize = 11.5f
             letterSpacing = .13f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(CinemaStyle.Muted)
             gravity = Gravity.START
         })
         root.addView(TextView(this).apply {
             text = getString(R.string.search_title)
             textSize = 26f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(Color.WHITE)
             gravity = Gravity.START
             setPadding(0, dp(3), 0, dp(4))
@@ -241,7 +241,7 @@ class SearchActivity : AppCompatActivity() {
         recentStrip.addView(TextView(this).apply {
             text = getString(R.string.search_recent)
             textSize = 12f
-            typeface = BlofyTvDesign.MediumTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(dp(86), dp(42)).apply { marginEnd = dp(6) })
@@ -327,7 +327,7 @@ class SearchActivity : AppCompatActivity() {
             val suffix = if (items.size >= SECTION_LIMIT) "+" else ""
             text = getString(R.string.search_section_header, sectionTitle(kind), "${items.size}$suffix")
             textSize = 19f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setPadding(dp(4), 0, dp(4), dp(8))
@@ -377,7 +377,7 @@ class SearchActivity : AppCompatActivity() {
             val copy = LinearLayout(this@SearchActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START }
             copy.addView(TextView(this@SearchActivity).apply {
                 text = if (stream.locked) getString(R.string.search_locked_title, ContentPresentation.of(stream).title) else ContentPresentation.of(stream).title
-                textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 1; gravity = Gravity.START
+                textSize = 14f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE); maxLines = 1; gravity = Gravity.START
                 ellipsize = android.text.TextUtils.TruncateAt.END
             })
             copy.addView(TextView(this@SearchActivity).apply {
@@ -386,7 +386,7 @@ class SearchActivity : AppCompatActivity() {
             addView(copy, LinearLayout.LayoutParams(0, -1, 1f))
 
             val badge = TextView(this@SearchActivity).apply {
-                text = kindLabel(stream.kind); textSize = 10.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(CinemaStyle.Muted); gravity = Gravity.CENTER
+                text = kindLabel(stream.kind); textSize = 10.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(CinemaStyle.Muted); gravity = Gravity.CENTER
                 background = CinemaStyle.surface(this@SearchActivity, radiusDp = 6)
             }
             addView(badge, LinearLayout.LayoutParams(dp(74), dp(34)).apply { marginStart = dp(6) })

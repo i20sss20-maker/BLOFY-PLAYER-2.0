@@ -7,6 +7,7 @@ import android.app.AlertDialog
 import android.content.res.Configuration
 import android.graphics.Color
 import tv.blofy.player.ui.common.CinemaStyle
+import tv.blofy.player.ui.common.BlofyTvDesign
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -372,7 +373,7 @@ open class PlayerActivity : ContentAccessActivity() {
 
         channelNumberView = TextView(this).apply {
             textSize = 34f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             setPadding(24, 10, 24, 10)
@@ -424,7 +425,7 @@ open class PlayerActivity : ContentAccessActivity() {
                 else -> "BLOFY CINEMA"
             }
             textSize = 9f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(PURPLE_SOFT)
             letterSpacing = .08f
             setPadding(0, 0, 0, 5)
@@ -433,7 +434,7 @@ open class PlayerActivity : ContentAccessActivity() {
 
         titleView = TextView(this).apply {
             textSize = 17f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(Color.WHITE)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END

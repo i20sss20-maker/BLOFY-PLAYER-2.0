@@ -89,7 +89,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 text = getString(R.string.brand_series)
                 textSize = 11.5f
                 letterSpacing = .12f
-                typeface = BlofyTvDesign.HeadingTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(BlofyTvDesign.PurpleBright)
                 gravity = Gravity.START
                 setPadding(0, dp(2), 0, dp(4))
@@ -106,7 +106,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             val titleView = TextView(this@SeriesDetailsActivity).apply {
                 text = title
                 textSize = if (metadata?.logoUrl.isNullOrBlank()) 32f else 18f
-                typeface = BlofyTvDesign.HeadingTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(Color.WHITE)
                 gravity = Gravity.START
                 maxLines = 2
@@ -136,7 +136,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = getString(R.string.details_story)
                 textSize = 13f
-                typeface = BlofyTvDesign.HeadingTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(BlofyTvDesign.PurpleSoft)
                 gravity = Gravity.START
                 setPadding(0, 0, 0, dp(3))
@@ -144,7 +144,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             val overviewView = TextView(this@SeriesDetailsActivity).apply {
                 tag = "blofy_details_overview"
                 textSize = 15f
-                typeface = BlofyTvDesign.BodyTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this)
                 maxLines = 7
                 setTextColor(BlofyTvDesign.TextSecondary)
                 gravity = Gravity.START
@@ -154,7 +154,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             panel.addView(overviewView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
             val crewView = TextView(this@SeriesDetailsActivity).apply {
                 textSize = 11.5f
-                typeface = BlofyTvDesign.MediumTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this)
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.START
                 setPadding(0, 0, 0, dp(7))
@@ -172,7 +172,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                         getString(R.string.details_continue_episode, currentResume.episode.season, currentResume.episode.episode)
                     }
                     textSize = 12.5f
-                    typeface = BlofyTvDesign.HeadingTypeface
+                    typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                     setTextColor(BlofyTvDesign.Mint)
                     gravity = Gravity.START
                     background = ContentScreenStyle.chip(this@SeriesDetailsActivity)

@@ -116,14 +116,14 @@ class LiveGuideActivity : AppCompatActivity() {
                 text = getString(R.string.brand_live_guide)
                 textSize = 11.5f
                 letterSpacing = .13f
-                typeface = Typeface.DEFAULT_BOLD
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(BlofyTvDesign.PurpleBright)
                 gravity = Gravity.START
             })
             addView(TextView(this@LiveGuideActivity).apply {
                 text = getString(R.string.guide_title)
                 textSize = 29f
-                typeface = BlofyTvDesign.HeadingTypeface
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 setTextColor(Color.WHITE)
                 gravity = Gravity.START
                 includeFontPadding = false
@@ -133,7 +133,7 @@ class LiveGuideActivity : AppCompatActivity() {
         countView = TextView(this).apply {
             text = getString(R.string.guide_loading)
             textSize = 12.5f
-            typeface = BlofyTvDesign.MediumTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.CENTER
             setPadding(dp(14), 0, dp(14), 0)
@@ -191,7 +191,7 @@ class LiveGuideActivity : AppCompatActivity() {
         guideTitle = TextView(this@LiveGuideActivity).apply {
             text = getString(R.string.guide_select_channel)
             textSize = 27f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(Color.WHITE)
             gravity = Gravity.START
             maxLines = 2
@@ -201,7 +201,7 @@ class LiveGuideActivity : AppCompatActivity() {
         guideMeta = TextView(this@LiveGuideActivity).apply {
             text = getString(R.string.guide_now_next)
             textSize = 12.5f
-            typeface = BlofyTvDesign.MediumTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.START
             setPadding(0, dp(4), 0, dp(18))
@@ -212,7 +212,7 @@ class LiveGuideActivity : AppCompatActivity() {
         nowTitle = TextView(this@LiveGuideActivity).apply {
             text = getString(R.string.guide_program_unavailable)
             textSize = 21f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(Color.WHITE)
             gravity = Gravity.START
             maxLines = 2
@@ -221,7 +221,7 @@ class LiveGuideActivity : AppCompatActivity() {
 
         nowTime = TextView(this@LiveGuideActivity).apply {
             textSize = 13f
-            typeface = BlofyTvDesign.MediumTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.Mint)
             gravity = Gravity.START
             setPadding(0, dp(6), 0, dp(8))
@@ -237,7 +237,7 @@ class LiveGuideActivity : AppCompatActivity() {
 
         nowDescription = TextView(this@LiveGuideActivity).apply {
             textSize = 14f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.START
             maxLines = 5
@@ -249,7 +249,7 @@ class LiveGuideActivity : AppCompatActivity() {
         nextTitle = TextView(this@LiveGuideActivity).apply {
             text = getString(R.string.guide_next_unavailable)
             textSize = 17f
-            typeface = BlofyTvDesign.HeadingTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.START
             maxLines = 2
@@ -268,7 +268,7 @@ class LiveGuideActivity : AppCompatActivity() {
         addView(TextView(this@LiveGuideActivity).apply {
             text = getString(R.string.guide_remote_hint)
             textSize = 11.8f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { gravity = Gravity.BOTTOM })
@@ -278,7 +278,7 @@ class LiveGuideActivity : AppCompatActivity() {
         text = value
         textSize = 11.5f
         letterSpacing = .08f
-        typeface = Typeface.DEFAULT_BOLD
+        typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
         setTextColor(BlofyTvDesign.PurpleBright)
         gravity = Gravity.START
         setPadding(0, 0, 0, dp(8))
@@ -603,7 +603,7 @@ private class GuideChannelAdapter(
         }
         val title = TextView(parent.context).apply {
             textSize = 14f
-            typeface = BlofyTvDesign.LabelTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(Color.WHITE)
             gravity = Gravity.START
             maxLines = 1
@@ -611,7 +611,7 @@ private class GuideChannelAdapter(
         }
         val meta = TextView(parent.context).apply {
             textSize = 10.8f
-            typeface = BlofyTvDesign.BodyTypeface
+            typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.START
             maxLines = 1
@@ -623,7 +623,7 @@ private class GuideChannelAdapter(
 
         val number = TextView(parent.context).apply {
             textSize = 11.5f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             setTextColor(BlofyTvDesign.PurpleSoft)
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
