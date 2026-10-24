@@ -44,6 +44,18 @@ export function renderPublicDownloads(items = [], { unavailable = false } = {}) 
 ${primary && !unavailable ? `<a id="download-primary" class="btn download-main" href="/download/latest.apk"><span>تنزيل APK مباشر</span><span class="download-version" dir="ltr">${escapeHtml(primary.versionName)} · APK</span></a><p class="download-assurance">للتحديث: ثبّت فوق النسخة الحالية ولا تحذف التطبيق القديم.</p><p class="download-assurance">للـ Downloader استخدم الرابط السريع: <strong dir="ltr">blofyplayer.com/apk</strong></p>` : ''}
 </section>
 <section class="download-steps" aria-label="خطوات التثبيت"><article><strong>01</strong><div><h2>نزّل الإصدار</h2><p>التثبيت الموصى به من Google Play، أو استخدم رابط APK البديل عند الحاجة.</p></div></article><article><strong>02</strong><div><h2>ثبّت أو حدّث</h2><p>اسمح بالتثبيت من مصدر التنزيل عند الطلب.</p></div></article><article><strong>03</strong><div><h2>اربط جهازك</h2><p>افتح BLOFY ثم استخدم رقم الجهاز ورمز الربط.</p></div></article></section>
+<section class="section" aria-label="BLOFY PLAYER 74 السينمائي">
+  <article class="card download-card available" data-cinematic-v74="true">
+    <span class="badge">ANDROID TV • BLOFY 74</span>
+    <h2>بلوفي بلاير 74 — الواجهة السينمائية الجديدة</h2>
+    <p class="content-text">تصميم BLOFY البنفسجي الداكن، أيقونات واضحة في القائمة الجانبية، خط عربي أجمل، وبانر وبوسترات محسّنة. مع تحسين عرض حالات تحديث المحتوى والمحافظة على محركات التشغيل.</p>
+    <p class="caption">نسخة APK موقعة بشهادة BLOFY الأصلية؛ غير منشورة على Google Play. يمكنك تثبيتها فوق إصدار أقدم متوافق مع نفس التوقيع. إذا كان جهازك يحمل رقم البناء 2000074 نفسه فقد يرفض التحديث؛ لا تحذف التطبيق أو بياناته.</p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk" rel="noopener noreferrer">تحميل BLOFY PLAYER 74 السينمائية APK</a>
+      <a class="btn" href="https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk.sha256" rel="noopener noreferrer">التحقق من بصمة SHA-256</a>
+    </div>
+  </article>
+</section>
 <section class="download-release-section" aria-labelledby="versions-title"><div class="download-section-head"><span class="eyebrow">AVAILABLE BUILDS</span><h2 id="versions-title">الإصدارات المتاحة</h2></div><div id="releases" data-server-rendered="true">${unavailable ? empty : cards || empty}</div></section>
 <section class="section install-section" aria-labelledby="install-title"><div class="download-section-head"><span class="eyebrow">INSTALL GUIDE</span><h2 id="install-title">طريقة التثبيت حسب جهازك</h2></div>
 <nav class="actions" aria-label="تعليمات التثبيت"><a class="btn" href="#install-tv">تلفزيون / رسيفر</a><a class="btn" href="#install-phone">جوال / تابلت</a><a class="btn" href="#install-computer">كمبيوتر</a></nav>

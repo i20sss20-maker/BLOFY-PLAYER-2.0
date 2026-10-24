@@ -21,6 +21,21 @@ test('complete page and APK links exist in initial HTML without requiring script
   }
 });
 
+test('Railway downloads show the signed cinematic v74 without replacing the stable release', () => {
+  const html = renderPublicDownloads([release]);
+  const url = 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk';
+  assert.match(html, /data-cinematic-v74="true"/);
+  assert.ok(html.includes('href="' + url + '"'));
+  assert.ok(html.includes('href="' + url + '.sha256"'));
+  assert.ok(html.includes('id="download-primary"'));
+  assert.ok(html.includes(release.downloadUrl));
+  assert.ok(html.includes('لا تحذف التطبيق أو بياناته'));
+  assert.ok(html.includes('2000074'));
+  assert.equal((html.match(/data-cinematic-v74="true"/g) || []).length, 1);
+  // The cinematic APK is an optional explicit build, never an implicit stable download.
+  assert.ok(html.indexOf('data-cinematic-v74="true"') < html.indexOf('id="releases"'));
+});
+
 test('Google Play remains the primary public install path even without an APK catalogue', () => {
   for (const options of [{}, { unavailable: true }]) {
     const html = renderPublicDownloads([], options);
