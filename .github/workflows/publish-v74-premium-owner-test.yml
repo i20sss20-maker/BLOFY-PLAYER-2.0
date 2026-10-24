@@ -1,0 +1,56 @@
+name: Publish signed BLOFY 74 owner trial APK
+on:
+  push:
+    branches: [publish/blofy-74-premium-test-20261024]
+    paths: [.github/workflows/publish-v74-premium-owner-test.yml]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Verify and stage the already signed QA APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "i20sss20-maker/BLOFY-PLAYER-2.0"
+          run_id=40065421274
+          source_sha=7e2c6d6df218f138b5872d21915d7592d929cc8f
+          artifact="BLOFY-PLAYER-v74-PRIVATE-QA-SIGNED-$source_sha"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" --jq '.conclusion == "success" and .head_sha == "7e2c6d6df218f138b5872d21915d7592d929cc8f"' | grep -Fxq true
+          mkdir -p private
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir private
+          cd private
+          apk=BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.apk
+          test -s "$apk"
+          test "$(stat -c%s "$apk")" -gt 50000000
+          grep -Fxq "commit=$source_sha" build-info.txt
+          grep -Fxq "production_signed=true" build-info.txt
+          grep -Fxq "r8=true" build-info.txt
+          grep -Fxq "ffmpeg=true" build-info.txt
+          grep -Fq "versionCode='2000074'" apk-badging.txt
+          grep -Fq "versionName='2.0.0-rc07.55.6'" apk-badging.txt
+          sha256sum --check --ignore-missing SHA256SUMS
+          expected_cert=C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+          actual_cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' apk-signature.txt | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$actual_cert" = "$expected_cert"
+          cp "$apk" BLOFY-PLAYER-74-PREMIUM-TEST-SIGNED.apk
+          sha256sum BLOFY-PLAYER-74-PREMIUM-TEST-SIGNED.apk > BLOFY-PLAYER-74-PREMIUM-TEST-SIGNED.apk.sha256
+
+      - name: Publish a distinct labeled test pre-release (no production overwrite)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=v74-premium-owner-test-20261024
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Owner-test tag already exists; refusing overwrite"
+            exit 1
+          fi
+          gh release create "$tag"             private/BLOFY-PLAYER-74-PREMIUM-TEST-SIGNED.apk             private/BLOFY-PLAYER-74-PREMIUM-TEST-SIGNED.apk.sha256             --repo "$GITHUB_REPOSITORY"             --target 7e2c6d6df218f138b5872d21915d7592d929cc8f             --prerelease             --title "BLOFY PLAYER 74 — Premium Test (Owner Review)"             --notes "TEST ONLY. Signed Android TV APK v74 / versionCode 2000074. Includes the new Arabic font, dark-purple UI, removed world clocks, content-refresh button and status. Playback engines, streaming transports, and subscription activation remain unchanged. Not Google Play. Do not uninstall or delete existing app data. If version 74 is already installed, same-code replacement may be refused. Verify live/VOD and favorites on the TV before approval."
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,assets --jq 'select(.tagName == "v74-premium-owner-test-20261024" and .isPrerelease == true and ([.assets[].name] | index("BLOFY-PLAYER-74-PREMIUM-TEST-SIGNED.apk"))) | "Verified BLOFY 74 owner-test APK"'
