@@ -416,10 +416,17 @@ class ProviderManagerActivity : AppCompatActivity() {
             return
         }
         lifecycleScope.launch {
-            val cached = withContext(Dispatchers.IO) {
-                val dao = BlofyDatabase.get(applicationContext).dao()
-                CatalogSyncState.isReady(applicationContext, provider.id) &&
-                    dao.hasStreamsForProvider(provider.id)
+            val cached = try {
+                withContext(Dispatchers.IO) {
+                    val dao = BlofyDatabase.get(applicationContext).dao()
+                    CatalogSyncState.isReady(applicationContext, provider.id) &&
+                        dao.hasStreamsForProvider(provider.id)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                status.setText(R.string.provider_manager_summary_failed)
+                return@launch
             }
             if (cached) {
                 CatalogRefreshWorker.enqueueNow(applicationContext, provider.id, manual = true)

@@ -219,8 +219,15 @@ class HomeActivity : AppCompatActivity() {
             refreshScheduler.start()
             historyObserver.start()
             lifecycleScope.launch {
-                val activeId = withContext(Dispatchers.IO) {
-                    BlofyDatabase.get(applicationContext).dao().activeProviderId()
+                val activeId = try {
+                    withContext(Dispatchers.IO) {
+                        BlofyDatabase.get(applicationContext).dao().activeProviderId()
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Never crash an already usable Home because background re-check failed.
+                    return@launch
                 }
                 if (!homeResumed || activeId.isNullOrBlank()) return@launch
                 if (scheduledProviderId != activeId) {
