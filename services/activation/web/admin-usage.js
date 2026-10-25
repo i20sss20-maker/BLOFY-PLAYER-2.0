@@ -126,6 +126,8 @@ if (document.body.dataset.page === 'admin') {
     for (const [key,label] of [['registered','الأجهزة المسجلة'],['active24h','نشطة خلال 24 ساعة'],['active7d','نشطة خلال 7 أيام'],['active30d','نشطة خلال 30 يومًا'],['registered24h','جديدة خلال 24 ساعة'],['registered7d','جديدة خلال 7 أيام']]) {
       rows.push([label, summary[key] == null ? '' : String(summary[key])]);
     }
+    for (const item of analyticsCache.versions || []) rows.push(['إصدار '+String(item.label), String(item.count)]);
+    for (const item of analyticsCache.platforms || []) rows.push(['نظام '+String(item.label), String(item.count)]);
     rows.push(['اليوم','تسجيلات جديدة']);
     for (const day of analyticsCache.registrations || []) rows.push([String(day.day || ''), String(day.registrations || 0)]);
     const escape = value => '"' + String(value).replace(/"/g,'""') + '"';
