@@ -79,6 +79,29 @@ export function createDeviceAdmin({ pool, requireAdmin, readJson, json, ensureAd
     const now = Date.now();
     return { items:result.rows.map(row=>deviceView(row,now)),total:total.rows[0].total,page:f.page,pageSize:f.limit,counts:counts.rows[0],serverTime:now };
   }
+  async function analytics() {
+    const [summary, versions, platforms, trend] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS registered,
+        COUNT(*) FILTER (WHERE last_seen_at >= NOW()-INTERVAL '24 hours' AND last_seen_at <= NOW())::int AS active24h,
+        COUNT(*) FILTER (WHERE last_seen_at >= NOW()-INTERVAL '7 days' AND last_seen_at <= NOW())::int AS active7d,
+        COUNT(*) FILTER (WHERE last_seen_at >= NOW()-INTERVAL '30 days' AND last_seen_at <= NOW())::int AS active30d,
+        COUNT(*) FILTER (WHERE created_at >= NOW()-INTERVAL '24 hours' AND created_at <= NOW())::int AS registered24h
+        FROM devices`),
+      pool.query(`SELECT COALESCE(NULLIF(last_app_version,''),'غير معروف') AS label,COUNT(*)::int AS count FROM devices GROUP BY 1 ORDER BY count DESC LIMIT 12`),
+      pool.query(`SELECT COALESCE(NULLIF(last_platform,''),'غير معروف') AS label,COUNT(*)::int AS count FROM devices GROUP BY 1 ORDER BY count DESC LIMIT 12`),
+      pool.query(`SELECT TO_CHAR(days.day AT TIME ZONE 'Asia/Riyadh','YYYY-MM-DD') AS day,
+        COUNT(d.device_id)::int AS registrations
+        FROM generate_series(
+          date_trunc('day',NOW() AT TIME ZONE 'Asia/Riyadh')-INTERVAL '13 days',
+          date_trunc('day',NOW() AT TIME ZONE 'Asia/Riyadh'),
+          INTERVAL '1 day') AS days(day)
+        LEFT JOIN devices d ON (d.created_at AT TIME ZONE 'Asia/Riyadh')::date=days.day::date
+        GROUP BY days.day ORDER BY days.day`)
+    ]);
+    return { summary:summary.rows[0], versions:versions.rows, platforms:platforms.rows,
+      registrations:trend.rows, timezone:'Asia/Riyadh',
+      note:'النشاط مبني على آخر تواصل مسجل، وليس إثبات تشغيل التطبيق أو تثبيته.' };
+  }
   async function detail(id) {
     const row = (await pool.query(`SELECT ${columns} ${joins} WHERE d.device_id=$1`,[id])).rows[0];
     if (!row) throw new DeviceAdminError('device_not_found',404);
@@ -122,6 +145,7 @@ export function createDeviceAdmin({ pool, requireAdmin, readJson, json, ensureAd
     if (!requireAdmin(req,res)) return true;
     try {
       const suffix = url.pathname.slice(ROOT.length); const parts = suffix.split('/').filter(Boolean);
+      if (req.method==='GET' && suffix==='/analytics') { await ensure(); json(res,200,await analytics()); return true; }
       if (req.method==='GET' && !suffix) { deviceFilters(url.searchParams); await ensure(); json(res,200,await list(url.searchParams)); return true; }
       let id; try { id=decodeURIComponent(parts[0]||''); } catch { throw new DeviceAdminError('invalid_device'); } if(!ID.test(id)) throw new DeviceAdminError('invalid_device');
       if(parts.length>2) throw new DeviceAdminError('not_found',404);
