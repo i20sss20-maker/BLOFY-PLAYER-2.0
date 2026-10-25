@@ -85,7 +85,9 @@ export function createDeviceAdmin({ pool, requireAdmin, readJson, json, ensureAd
         COUNT(*) FILTER (WHERE last_seen_at >= NOW()-INTERVAL '24 hours' AND last_seen_at <= NOW())::int AS active24h,
         COUNT(*) FILTER (WHERE last_seen_at >= NOW()-INTERVAL '7 days' AND last_seen_at <= NOW())::int AS active7d,
         COUNT(*) FILTER (WHERE last_seen_at >= NOW()-INTERVAL '30 days' AND last_seen_at <= NOW())::int AS active30d,
-        COUNT(*) FILTER (WHERE created_at >= NOW()-INTERVAL '24 hours' AND created_at <= NOW())::int AS registered24h
+        COUNT(*) FILTER (WHERE created_at >= NOW()-INTERVAL '24 hours' AND created_at <= NOW())::int AS registered24h,
+        COUNT(*) FILTER (WHERE created_at >= NOW()-INTERVAL '7 days' AND created_at <= NOW())::int AS registered7d,
+        COUNT(*) FILTER (WHERE created_at >= NOW()-INTERVAL '14 days' AND created_at < NOW()-INTERVAL '7 days')::int AS registeredPrevious7d
         FROM devices`),
       pool.query(`SELECT COALESCE(NULLIF(last_app_version,''),'غير معروف') AS label,COUNT(*)::int AS count FROM devices GROUP BY 1 ORDER BY count DESC LIMIT 12`),
       pool.query(`SELECT COALESCE(NULLIF(last_platform,''),'غير معروف') AS label,COUNT(*)::int AS count FROM devices GROUP BY 1 ORDER BY count DESC LIMIT 12`),
