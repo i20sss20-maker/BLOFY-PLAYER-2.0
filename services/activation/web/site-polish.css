@@ -494,3 +494,19 @@ input[type="number"],input[type="tel"],input[inputmode="numeric"],input[inputmod
  body:not([data-page="admin"]) .portal .hero h1{font-size:clamp(34px,9vw,56px);line-height:1.18}
  body:not([data-page="admin"]) .portal .auth-card{width:100%}
 }
+
+/* Portal responsive overhaul — actual markup: .topbar, .login-layout, .hero-panel */
+body:has(.portal .login-layout) .topbar{width:min(1440px,calc(100% - 40px));min-height:78px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:clamp(12px,2vw,28px);padding-block:10px}
+body:has(.portal .login-layout) .topbar .brand{flex-shrink:0}
+body:has(.portal .login-layout) .topbar .site-links{min-width:0;display:flex;justify-content:center;align-items:center;gap:4px 6px;flex-wrap:wrap}
+body:has(.portal .login-layout) .topbar .site-links>a{min-height:38px;padding-inline:10px;font-size:clamp(11px,.85vw,13px)}
+body:has(.portal .login-layout) .portal{width:min(1440px,calc(100% - 40px));margin-inline:auto}
+body:has(.portal .login-layout) .login-layout{min-height:0;grid-template-columns:minmax(0,1.05fr) minmax(340px,.95fr);align-items:start;gap:clamp(24px,4vw,64px);padding-block:clamp(24px,4vw,60px)}
+body:has(.portal .login-layout) .hero-panel{max-width:100%;min-width:0}
+body:has(.portal .login-layout) .hero-panel h1{max-width:100%;font-size:clamp(38px,4.2vw,66px);line-height:1.18;letter-spacing:-.025em;overflow-wrap:anywhere;margin-block:24px 18px}
+body:has(.portal .login-layout) .hero-panel h1 span{white-space:normal}
+body:has(.portal .login-layout) .hero-panel>p{font-size:clamp(14px,1.3vw,18px)}
+body:has(.portal .login-layout) .auth-card{min-width:0}
+@media(max-width:1100px){body:has(.portal .login-layout) .topbar{grid-template-columns:auto minmax(0,1fr);gap:10px 16px}body:has(.portal .login-layout) .topbar .site-links{grid-column:1/-1;grid-row:2;justify-content:flex-start;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin;padding-bottom:4px}body:has(.portal .login-layout) .topbar .site-links>a{white-space:nowrap;min-height:44px}body:has(.portal .login-layout) .login-layout{grid-template-columns:minmax(0,1fr) minmax(320px,.95fr);gap:24px}}
+@media(max-width:760px){body:has(.portal .login-layout) .topbar,body:has(.portal .login-layout) .portal{width:min(100% - 28px,620px)}body:has(.portal .login-layout) .topbar{grid-template-columns:minmax(0,1fr) auto}body:has(.portal .login-layout) .login-layout{grid-template-columns:minmax(0,1fr);gap:24px;padding-block:20px}body:has(.portal .login-layout) .hero-panel h1{font-size:clamp(30px,8vw,48px);margin-block:18px 12px}body:has(.portal .login-layout) .hero-panel>p{font-size:15px;line-height:1.75}body:has(.portal .login-layout) .auth-card{width:100%;max-width:100%}}
+@media(max-width:420px){body:has(.portal .login-layout) .hero-panel h1{font-size:clamp(28px,8.5vw,36px)}body:has(.portal .login-layout) .brand-stage{padding:10px}body:has(.portal .login-layout) .topbar .brand-logo{width:38px;height:38px}}
