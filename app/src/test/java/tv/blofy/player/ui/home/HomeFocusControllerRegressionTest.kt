@@ -118,6 +118,21 @@ class HomeFocusControllerRegressionTest {
         tap(KeyEvent.KEYCODE_DPAD_DOWN); assertSame(card, root.findFocus())
         tap(KeyEvent.KEYCODE_DPAD_DOWN); focused("poster_latest_movie_1")
     }
+    @Test fun repeatedLayoutEventsDuringDpadAnimationDoNotRewalkAllPosterCards() {
+        focus("hero_watch")
+        tap(KeyEvent.KEYCODE_DPAD_LEFT); focused("hero_movies")
+        val initialBuilds = navigation.rebuildCount
+        assertTrue(initialBuilds > 0)
+        repeat(24) { root.viewTreeObserver.dispatchOnGlobalLayout() }
+        tap(KeyEvent.KEYCODE_DPAD_RIGHT); focused("hero_watch")
+        assertEquals("DPAD should not rebuild the tree for identical layout frames",
+            initialBuilds, navigation.rebuildCount)
+        addRow("poster_added_movie_0", "poster_added_movie_1")
+        layout()
+        tap(KeyEvent.KEYCODE_DPAD_DOWN)
+        assertTrue("Structural row change must rebuild", navigation.rebuildCount > initialBuilds)
+    }
+
     @Test fun rowsFollowActualReorderedHierarchy() {
         focus("hero_movies")
         val bottom = feed.getChildAt(2)

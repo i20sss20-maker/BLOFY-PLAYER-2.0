@@ -24,12 +24,35 @@ class PosterStreamAdapter(
     private val onFocus: (StreamEntity, Int) -> Unit = { _, _ -> }
 ) : RecyclerView.Adapter<PosterStreamAdapter.Holder>() {
     private val items = ArrayList<StreamEntity>(256)
+    private companion object { const val MAX_PARTIAL_CHANGES = 16 }
 
     init { setHasStableIds(true) }
 
     fun replace(newItems: List<StreamEntity>) {
-        // Identical snapshots do not need to discard artwork or remote focus.
-        if (items.size == newItems.size && items.indices.all { items[it] == newItems[it] }) return
+        // When the list identity/order is unchanged (e.g. a metadata refresh),
+        // do not recreate all 200 TV poster holders or discard the DPAD focus.
+        if (items.size == newItems.size) {
+            val changed = ArrayList<Int>()
+            var sameOrder = true
+            for (index in newItems.indices) {
+                if (items[index].key != newItems[index].key) {
+                    sameOrder = false
+                    break
+                }
+                if (items[index] != newItems[index]) changed.add(index)
+            }
+            if (sameOrder) {
+                if (changed.isEmpty()) return
+                items.clear()
+                items.addAll(newItems)
+                if (changed.size <= MAX_PARTIAL_CHANGES) {
+                    changed.forEach(::notifyItemChanged)
+                } else {
+                    notifyDataSetChanged()
+                }
+                return
+            }
+        }
         items.clear()
         items.addAll(newItems)
         notifyDataSetChanged()

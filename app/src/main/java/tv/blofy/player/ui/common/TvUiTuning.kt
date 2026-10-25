@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.common
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
@@ -45,9 +46,22 @@ object TvUiTuning {
     fun dp(context: Context, value: Int): Int = (value * context.resources.displayMetrics.density * scale(context)).roundToInt()
     fun sp(context: Context, value: Float): Float = value * scale(context)
 
-    fun reducedMotion(context: Context): Boolean =
-        context.applicationContext.getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE)
-            .getString(MOTION_KEY, "smooth") == "reduced"
+    fun lowRamTv(context: Context): Boolean =
+        DeviceClass.detect(context) == DeviceClass.Kind.TV &&
+            (context.applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)
+                ?.isLowRamDevice == true
+
+    fun reducedMotion(context: Context): Boolean {
+        val app = context.applicationContext
+        val preferences = app.getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE)
+        // Honor an explicit smooth/reduced selection. On low-RAM Android TV boxes,
+        // default to immediate focus feedback instead of costly scaling/elevation
+        // animations that delay DPAD during image decoding.
+        if (preferences.contains(MOTION_KEY)) {
+            return preferences.getString(MOTION_KEY, "smooth") == "reduced"
+        }
+        return lowRamTv(context)
+    }
 
     fun focusScale(context: Context, requested: Float): Float =
         if (reducedMotion(context)) 1f else requested

@@ -48,6 +48,7 @@ import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
+import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.login.CatalogLoadingActivity
@@ -201,7 +202,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             clipChildren = false
             clipToPadding = false
             itemAnimator = null
-            setItemViewCacheSize(if (phoneMode) 10 else 16)
+            setItemViewCacheSize(if (TvUiTuning.lowRamTv(this@ContentBrowserActivity)) 6 else if (phoneMode) 10 else 16)
             preserveFocusAfterLayout = true
         }
         streamList = RecyclerView(this).apply {
@@ -214,9 +215,9 @@ class ContentBrowserActivity : AppCompatActivity() {
             clipChildren = false
             clipToPadding = false
             itemAnimator = null
-            setItemViewCacheSize(if (phoneMode) 12 else 22)
+            setItemViewCacheSize(if (TvUiTuning.lowRamTv(this@ContentBrowserActivity)) 8 else if (phoneMode) 12 else 22)
             preserveFocusAfterLayout = true
-            recycledViewPool.setMaxRecycledViews(0, 28)
+            recycledViewPool.setMaxRecycledViews(0, if (TvUiTuning.lowRamTv(this@ContentBrowserActivity)) 10 else 28)
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     if (dy <= 0) return

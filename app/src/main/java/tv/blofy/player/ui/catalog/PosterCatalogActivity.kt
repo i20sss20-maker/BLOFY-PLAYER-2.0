@@ -187,7 +187,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             clipToPadding = true
             itemAnimator = null
             setHasFixedSize(true)
-            setItemViewCacheSize(if (deviceKind == DeviceClass.Kind.TV) 10 else 6)
+            setItemViewCacheSize(if (TvUiTuning.lowRamTv(this@PosterCatalogActivity)) 4 else if (deviceKind == DeviceClass.Kind.TV) 10 else 6)
             preserveFocusAfterLayout = true
         }
         rail.addView(categoryList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -243,8 +243,8 @@ class PosterCatalogActivity : AppCompatActivity() {
             clipToPadding = false
             itemAnimator = null
             setHasFixedSize(true)
-            recycledViewPool.setMaxRecycledViews(0, 32)
-            setItemViewCacheSize(14)
+            recycledViewPool.setMaxRecycledViews(0, if (TvUiTuning.lowRamTv(this@PosterCatalogActivity)) 10 else 32)
+            setItemViewCacheSize(if (TvUiTuning.lowRamTv(this@PosterCatalogActivity)) 4 else 14)
             descendantFocusability = 0x40000
             preserveFocusAfterLayout = true
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
