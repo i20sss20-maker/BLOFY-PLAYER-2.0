@@ -102,16 +102,22 @@ jobs:
           grep -Fq '"ok":true' /tmp/health.json
 
           curl -fsS --max-time 10 http://127.0.0.1:3100/downloads >/tmp/downloads.html
-          # Newly approved v74 cinematic is visible, but must not replace stable auto-update.
-          grep -Fq 'data-cinematic-v74="true"' /tmp/downloads.html
+          # Show exactly the official stable build and the newest visible-version 74.
           grep -Fq 'data-v74-display-qa="true"' /tmp/downloads.html
           grep -Fq 'href="/download/v74-display74.apk"' /tmp/downloads.html
           grep -Fq 'v74-display74-remote-qa-20261025/BLOFY-PLAYER-Android-TV-v74-DISPLAY74-SIGNED.apk.sha256' /tmp/downloads.html
-          # The previous 74 QA endpoint remains valid, but is not promoted as the latest trial.
-          grep -Fq 'CINEMATIC_V74_PATCH.downloadPath' server.mjs
-          grep -Fq 'href="/download/v74-cinematic.apk"' /tmp/downloads.html
-          grep -Fq 'v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk.sha256' /tmp/downloads.html
           grep -Fq 'href="/d/blofy"' /tmp/downloads.html
+          test "$(grep -o 'class="official-card"' /tmp/downloads.html | wc -l | tr -d '[:space:]')" = 2
+          ! grep -Fq 'data-cinematic-v74="true"' /tmp/downloads.html
+          ! grep -Fq 'data-cinematic-v74-patch="true"' /tmp/downloads.html
+          ! grep -Fq 'data-v74-remote-qa="true"' /tmp/downloads.html
+          ! grep -Fq 'href="/download/v74-cinematic.apk"' /tmp/downloads.html
+          ! grep -Fq 'href="/download/v74-cinema-fix.apk"' /tmp/downloads.html
+          ! grep -Fq 'href="/download/v74-remote-qa.apk"' /tmp/downloads.html
+          # Old direct APK endpoints stay valid for previously shared links.
+          grep -Fq 'CINEMATIC_V74_PATCH.downloadPath' server.mjs
+          grep -Fq 'CINEMATIC_V74_REMOTE.downloadPath' server.mjs
+          grep -Fq 'CINEMATIC_V74_DOWNLOAD_PATH' server.mjs
           grep -Fq 'id="app-vlc"' /tmp/downloads.html
           grep -Fq 'rel="canonical" href="https://updates.blofyplayer.com/"' /tmp/downloads.html
           curl -fsS --max-time 10 http://127.0.0.1:3100/robots.txt >/tmp/updates-robots.txt
@@ -202,13 +208,14 @@ jobs:
           ready=0
           for attempt in $(seq 1 36); do
             if curl --fail --silent --show-error --location --max-time 20 https://updates.blofyplayer.com/downloads > "$page" 2>/dev/null \
-              && grep -Fq 'data-cinematic-v74="true"' "$page" \
               && grep -Fq 'data-v74-display-qa="true"' "$page" \
               && grep -Fq 'href="/download/v74-display74.apk"' "$page" \
               && grep -Fq 'v74-display74-remote-qa-20261025/BLOFY-PLAYER-Android-TV-v74-DISPLAY74-SIGNED.apk.sha256' "$page" \
-              && grep -Fq 'href="/download/v74-cinematic.apk"' "$page" \
-              && grep -Fq 'v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk.sha256' "$page" \
-              && grep -Fq 'href="/d/blofy"' "$page"; then
+              && grep -Fq 'href="/d/blofy"' "$page" \
+              && [ "$(grep -o 'class="official-card"' "$page" | wc -l | tr -d '[:space:]')" = 2 ] \
+              && ! grep -Fq 'data-cinematic-v74="true"' "$page" \
+              && ! grep -Fq 'data-cinematic-v74-patch="true"' "$page" \
+              && ! grep -Fq 'data-v74-remote-qa="true"' "$page"; then
               ready=1
               break
             fi
@@ -227,6 +234,7 @@ jobs:
             https://updates.blofyplayer.com/download/v74-display74.apk > "$RUNNER_TEMP/display-v74-head.txt"
           grep -iq '^content-type: application/vnd.android.package-archive' "$RUNNER_TEMP/display-v74-head.txt"
           grep -iq '^content-disposition: attachment;' "$RUNNER_TEMP/display-v74-head.txt"
+          echo "BLOFY_OFFICIAL_PLUS_V74_ONLY_RAILWAY_LIVE=PASS"
           echo "BLOFY_V74_VISIBLE_NAME_RAILWAY_LIVE=PASS"
           echo "BLOFY_V74_PATCH_CINEMATIC_RAILWAY_LIVE=PASS"
           echo "BLOFY_V74_CINEMATIC_RAILWAY_LIVE=PASS"
