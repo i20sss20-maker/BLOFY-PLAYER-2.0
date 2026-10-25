@@ -51,6 +51,14 @@ if (document.body.dataset.page === 'admin') {
           deviceMetrics.append(card);
         }
         usageBox.append(deviceMetrics);
+        const currentWeek = Number(activity.summary?.registered7d);
+        const previousWeek = Number(activity.summary?.registeredPrevious7d);
+        if (Number.isFinite(currentWeek) && Number.isFinite(previousWeek) && activity.summary?.registered7d != null && activity.summary?.registeredPrevious7d != null) {
+          const difference = currentWeek - previousWeek;
+          const direction = difference > 0 ? 'زيادة' : difference < 0 ? 'انخفاض' : 'دون تغيير';
+          const comparison = node('p', 'الأجهزة الجديدة خلال 7 أيام: ' + currentWeek.toLocaleString('en-US') + ' مقابل ' + previousWeek.toLocaleString('en-US') + ' في الأيام السبعة السابقة • ' + direction + (difference ? ' بمقدار ' + Math.abs(difference).toLocaleString('en-US') : ''), 'caption');
+          usageBox.append(comparison);
+        }
         for (const [title, rows] of [['إصدارات التطبيق',activity.versions],['أنظمة الأجهزة',activity.platforms]]) {
           const section = node('details');
           section.append(node('summary', title));
