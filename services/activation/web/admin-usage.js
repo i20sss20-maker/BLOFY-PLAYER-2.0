@@ -2,6 +2,7 @@
 
 if (document.body.dataset.page === 'admin') {
   let usageGeneration = 0;
+  let analyticsCache = null;
   const usageBox = node('section', null, 'card usage-card');
   usageBox.id = 'download-usage';
   usageBox.setAttribute('aria-label', 'إحصاءات تحميل BLOFY');
@@ -35,6 +36,7 @@ if (document.body.dataset.page === 'admin') {
       }
       try {
         const activity = await api('/api/v1/admin/device-insights/analytics');
+        analyticsCache = activity;
         if (current !== usageGeneration) return;
         const heading = node('h2', 'نشاط الأجهزة والإصدارات');
         usageBox.append(heading);
@@ -85,10 +87,11 @@ if (document.body.dataset.page === 'admin') {
           item.title = String(row.day) + ': ' + count;
           item.append(number,bar,label); chart.append(item);
         }
+        if (!days.length) history.append(node('p', 'لا توجد بيانات للرسم البياني حاليًا.', 'caption'));
         history.append(chart);
         usageBox.append(history, node('p', activity.note || 'النشاط مبني على آخر تواصل مسجل، وليس عدد مرات تشغيل التطبيق.', 'caption'));
       } catch {
-        usageBox.append(node('p', 'تقارير نشاط الأجهزة غير متاحة حاليًا، وإحصاءات التحميل مستقلة عنها.', 'caption'));
+        usageBox.append(node('p', 'تعذر تحديث تقارير الأجهزة حاليًا. إحصاءات التحميل مستقلة عنها.', 'caption'));
       }
       const insights = node('a', 'عرض تقارير الأجهزة والإصدارات ←', 'btn');
       insights.href = '/api/v1/admin/device-insights';
