@@ -124,7 +124,7 @@ if (document.body.dataset.page === 'admin') {
     rows.push(['اليوم','تسجيلات جديدة']);
     for (const day of analyticsCache.registrations || []) rows.push([String(day.day || ''), String(day.registrations || 0)]);
     const escape = value => '"' + String(value).replace(/"/g,'""') + '"';
-    const csv = '\uFEFF' + rows.map(row => row.map(escape).join(',')).join('\\r\\n');
+    const csv = '\uFEFF' + rows.map(row => row.map(escape).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
     const link = document.createElement('a');
     link.href = url; link.download = 'blofy-device-analytics.csv';
