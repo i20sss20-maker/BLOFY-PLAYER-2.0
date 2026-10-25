@@ -89,7 +89,7 @@ export function createDeviceAdmin({ pool, requireAdmin, readJson, json, ensureAd
         FROM devices`),
       pool.query(`SELECT COALESCE(NULLIF(last_app_version,''),'غير معروف') AS label,COUNT(*)::int AS count FROM devices GROUP BY 1 ORDER BY count DESC LIMIT 12`),
       pool.query(`SELECT COALESCE(NULLIF(last_platform,''),'غير معروف') AS label,COUNT(*)::int AS count FROM devices GROUP BY 1 ORDER BY count DESC LIMIT 12`),
-      pool.query(`SELECT TO_CHAR(days.day AT TIME ZONE 'Asia/Riyadh','YYYY-MM-DD') AS day,
+      pool.query(`SELECT TO_CHAR(days.day,'YYYY-MM-DD') AS day,
         COUNT(d.device_id)::int AS registrations
         FROM generate_series(
           date_trunc('day',NOW() AT TIME ZONE 'Asia/Riyadh')-INTERVAL '13 days',
