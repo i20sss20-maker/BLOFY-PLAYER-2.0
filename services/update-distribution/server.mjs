@@ -466,6 +466,16 @@ async function downloadPage(req) {
 /* Consistent English numeral rendering in the release center */
 html{font-variant-numeric:lining-nums tabular-nums}
 input[type="number"],input[inputmode="numeric"],.apps-count,.app-version,.official-meta,.device-tag{font-variant-numeric:lining-nums tabular-nums}
+/* BLOFY LUX — consistent premium release-center surfaces */
+.topbar{border-bottom-color:rgba(204,167,255,.15);box-shadow:0 12px 40px rgba(0,0,0,.12)}
+.official-card{border-color:rgba(203,164,255,.28);background:linear-gradient(145deg,rgba(38,27,58,.96),rgba(12,10,22,.98));box-shadow:0 26px 75px rgba(0,0,0,.26),0 0 55px rgba(116,65,210,.06)}
+.official-title h1{letter-spacing:-.025em;line-height:1.3}
+.app-row{background:linear-gradient(140deg,rgba(26,20,39,.93),rgba(13,11,21,.96));border-color:rgba(180,140,245,.13)}
+.app-row:focus-within{box-shadow:0 0 0 2px rgba(183,139,255,.18)}
+.app-icon,.official-icon{border:1px solid rgba(187,149,248,.12);background:rgba(137,81,231,.07)}
+.filter-chip.active{border-color:rgba(194,149,255,.48);box-shadow:inset 0 1px rgba(255,255,255,.05)}
+.official-download:focus-visible,.app-download:focus-visible{outline:3px solid #dfc5ff;outline-offset:3px}
+@media(max-width:620px){.official-card{border-radius:20px}.app-row{border-radius:16px}.official-title h1{font-size:clamp(18px,5vw,23px)}}
 /* BLOFY cinematic download-center theme — keyboard/TV-friendly */
 :root{--focus:#c6a4ff}
 html{scroll-behavior:smooth}
