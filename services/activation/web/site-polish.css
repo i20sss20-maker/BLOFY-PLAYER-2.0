@@ -539,3 +539,14 @@ body:has(.portal .login-layout) .auth-card input:focus-visible{outline:2px solid
 body:has(.portal .login-layout) .hero-panel .play-store-link>a{border-radius:14px;transition:transform .18s,filter .18s,box-shadow .18s}
 body:has(.portal .login-layout) .hero-panel .play-store-link>a:hover{transform:translateY(-2px);filter:brightness(1.1);box-shadow:0 14px 32px rgba(100,48,186,.18)}
 @media(prefers-reduced-motion:reduce){body:has(.portal .login-layout) .hero-panel .play-store-link>a{transition:none}body:has(.portal .login-layout) .hero-panel .play-store-link>a:hover{transform:none}}
+
+/* BLOFY LUX shared components — admin, downloads and device portal */
+body[data-page="admin"] .admin-rail{background:linear-gradient(180deg,rgba(24,17,39,.98),rgba(9,8,16,.99))!important;border-inline-end:1px solid rgba(190,146,255,.18)!important}
+body[data-page="admin"] .admin-topbar{border-bottom:1px solid rgba(190,146,255,.10)}
+body[data-page="admin"] .metric{position:relative;overflow:hidden;border:1px solid rgba(190,146,255,.18);border-radius:22px;background:linear-gradient(145deg,rgba(31,23,45,.95),rgba(13,11,22,.97));box-shadow:0 16px 40px rgba(0,0,0,.15)}
+body[data-page="admin"] .metric:before{content:"";position:absolute;inset:0 0 auto;height:1px;background:linear-gradient(90deg,transparent,rgba(216,176,255,.42),transparent);pointer-events:none}
+body[data-page="admin"] .metric strong{font-variant-numeric:lining-nums tabular-nums;direction:ltr;unicode-bidi:isolate}
+body[data-page="admin"] .admin-quick-grid>a{border:1px solid rgba(190,146,255,.17);border-radius:19px;background:linear-gradient(140deg,rgba(28,22,41,.92),rgba(12,10,19,.95));box-shadow:0 12px 30px rgba(0,0,0,.11)}
+body[data-page="admin"] .admin-quick-grid>a:focus-visible{outline:3px solid #c9a6ff;outline-offset:3px}
+body[data-page="downloads"] .card,body[data-page="downloads"] .release-card{border:1px solid rgba(190,146,255,.19);border-radius:22px;background:linear-gradient(145deg,rgba(29,23,43,.94),rgba(12,10,20,.97));box-shadow:0 18px 48px rgba(0,0,0,.18)}
+@media(max-width:760px){body[data-page="admin"] .metric{border-radius:17px}body[data-page="admin"] .admin-quick-grid>a{border-radius:15px}}
