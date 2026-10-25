@@ -39,10 +39,10 @@
   }
   function schedule(){
     clearTimeout(timer);
-    timer=setTimeout(check,60000);
+    if(!document.hidden)timer=setTimeout(check,60000);
   }
   function check(){
-    if(inFlight)return;
+    if(document.hidden||inFlight)return;
     inFlight=true;
     if(lastHealthy===null)render(null,'جارٍ التحقق…');
     var started=performance.now();
@@ -60,6 +60,9 @@
       .catch(function(){lastHealthy=false;record(false,null);render(false,'تعذر الوصول للخدمة أو انتهت المهلة');})
       .finally(function(){inFlight=false;schedule();});
   }
-  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')check();});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden)clearTimeout(timer);
+    else check();
+  });
   check();
 })();
