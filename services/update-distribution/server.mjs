@@ -9,6 +9,7 @@ import { initReleaseStore, getActiveRelease } from './release-store.mjs';
 import { CINEMATIC_V74_APK_URL, CINEMATIC_V74_DOWNLOAD_PATH, CINEMATIC_V74, renderCinematicV74Card } from './cinematic-v74.mjs';
 import { CINEMATIC_V74_PATCH, CINEMATIC_V74_PATCH_APK_URL, renderCinematicV74PatchCard } from './cinematic-v74-patch.mjs';
 import { CINEMATIC_V74_REMOTE, CINEMATIC_V74_REMOTE_APK_URL, renderCinematicV74RemoteCard } from './cinematic-v74-remote.mjs';
+import { CINEMATIC_V74_DISPLAY, CINEMATIC_V74_DISPLAY_APK_URL, renderCinematicV74DisplayCard } from './cinematic-v74-display.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
 import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload, openRemoteApk } from './app-library.mjs';
 import { appDownloadAction } from './app-download-policy.mjs';
@@ -508,7 +509,7 @@ main{padding:26px 0 38px}
   .app-actions{grid-template-columns:1fr}.app-more{width:100%}
 }
 @media(pointer:coarse){.official-download,.app-download,.app-more,.filter-chip,.copy-link,.variant-link,.top-links a{min-height:44px}}
-</style></head><body><div class="shell"><header class="topbar"><div class="brand"><div class="mark"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><span class="brand-copy"><strong>BLOFY PLAYER</strong><small>DOWNLOAD CENTER</small></span></div><nav class="top-links" aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav><div class="top-status">مركز التحميل متصل</div></header><main><section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/d/blofy">تحميل BLOFY APK ↓</a></section>${renderCinematicV74RemoteCard()}${renderCinematicV74Card()}${renderAppLibrary(apps, variants, rootUrl)}</main><footer class="foot"><span>BLOFY PLAYER · blofyplayer.com</span><nav aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav></footer></div><script>
+</style></head><body><div class="shell"><header class="topbar"><div class="brand"><div class="mark"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><span class="brand-copy"><strong>BLOFY PLAYER</strong><small>DOWNLOAD CENTER</small></span></div><nav class="top-links" aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav><div class="top-status">مركز التحميل متصل</div></header><main><section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/d/blofy">تحميل BLOFY APK ↓</a></section>${renderCinematicV74DisplayCard()}${renderCinematicV74Card()}${renderAppLibrary(apps, variants, rootUrl)}</main><footer class="foot"><span>BLOFY PLAYER · blofyplayer.com</span><nav aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav></footer></div><script>
 (() => {
   const rows = [...document.querySelectorAll('[data-app-row]')];
   const search = document.getElementById('app-search');
@@ -882,6 +883,13 @@ const server = http.createServer(async (req, res) => {
     // Separate signed 74 cinematic download, proxied from GitHub through the Railway domain.
     // Do not replace the existing stable /download/latest.apk, /apk or /d/blofy routes.
     // New, independently signed build 2000076; never replace the primary/stable updater.
+    if (pathname === CINEMATIC_V74_DISPLAY.downloadPath) {
+      if (method === 'GET') {
+        recordDownload('blofy-v74-visible74-qa').catch(error => console.error('Visible 74 metric failed:', error?.message || error));
+      }
+      return await streamApkDownload(req, res, CINEMATIC_V74_DISPLAY_APK_URL, CINEMATIC_V74_DISPLAY.fileName, 'blofy-v74-visible74-qa');
+    }
+
     if (pathname === CINEMATIC_V74_REMOTE.downloadPath) {
       if (method === 'GET') {
         recordDownload('blofy-v74-remote-qa').catch(error => console.error('v74 remote QA metric:', error?.message || error));
