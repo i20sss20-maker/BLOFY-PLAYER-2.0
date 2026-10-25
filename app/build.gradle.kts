@@ -16,6 +16,8 @@ val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse("ht
 val distribution = providers.gradleProperty("BLOFY_DISTRIBUTION").orElse("website").get()
 check(distribution in setOf("website", "play")) { "BLOFY_DISTRIBUTION must be website or play" }
 val googlePlayBuild = distribution == "play"
+val xiaomiEdition = providers.gradleProperty("BLOFY_XIAOMI_EDITION").orElse("false").get().equals("true", ignoreCase = true)
+check(!xiaomiEdition || !googlePlayBuild) { "Xiaomi standalone APK requires website distribution" }
 // Isolated QA package: installs beside the Play-signed production application.
 val testSideBySide = providers.gradleProperty("BLOFY_TEST_SIDELOAD").orElse("false").get() == "true"
 check(!testSideBySide || googlePlayBuild) { "Standalone TV test package requires Play distribution" }
@@ -42,11 +44,11 @@ android {
     // Exercise the actual non-debuggable obfuscated target in the isolated R8 CI job.
     testBuildType = if (securityR8Enabled) "release" else "debug"
     defaultConfig {
-        applicationId = "tv.blofy.player.v2"
+        applicationId = if (xiaomiEdition) "tv.blofy.player.xiaomi" else "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
         versionCode = 2000074
-        versionName = "2.0.0-rc07.55.6"
+        versionName = if (xiaomiEdition) "2.0.0-rc07.55.6-xiaomi" else "2.0.0-rc07.55.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
