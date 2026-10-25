@@ -510,3 +510,15 @@ body:has(.portal .login-layout) .auth-card{min-width:0}
 @media(max-width:1100px){body:has(.portal .login-layout) .topbar{grid-template-columns:auto minmax(0,1fr);gap:10px 16px}body:has(.portal .login-layout) .topbar .site-links{grid-column:1/-1;grid-row:2;justify-content:flex-start;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin;padding-bottom:4px}body:has(.portal .login-layout) .topbar .site-links>a{white-space:nowrap;min-height:44px}body:has(.portal .login-layout) .login-layout{grid-template-columns:minmax(0,1fr) minmax(320px,.95fr);gap:24px}}
 @media(max-width:760px){body:has(.portal .login-layout) .topbar,body:has(.portal .login-layout) .portal{width:min(100% - 28px,620px)}body:has(.portal .login-layout) .topbar{grid-template-columns:minmax(0,1fr) auto}body:has(.portal .login-layout) .login-layout{grid-template-columns:minmax(0,1fr);gap:24px;padding-block:20px}body:has(.portal .login-layout) .hero-panel h1{font-size:clamp(30px,8vw,48px);margin-block:18px 12px}body:has(.portal .login-layout) .hero-panel>p{font-size:15px;line-height:1.75}body:has(.portal .login-layout) .auth-card{width:100%;max-width:100%}}
 @media(max-width:420px){body:has(.portal .login-layout) .hero-panel h1{font-size:clamp(28px,8.5vw,36px)}body:has(.portal .login-layout) .brand-stage{padding:10px}body:has(.portal .login-layout) .topbar .brand-logo{width:38px;height:38px}}
+
+/* Final responsive safeguards: touch targets, readable content and overflow */
+body:has(.portal .login-layout) .login-layout>*{min-width:0}
+body:has(.portal .login-layout) .hero-panel .play-store-link{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+body:has(.portal .login-layout) .hero-panel .play-store-link>a{display:inline-flex;align-items:center;justify-content:center;min-height:48px;max-width:100%;white-space:normal;text-align:center}
+body:has(.portal .login-layout) .auth-card input{max-width:100%;min-height:48px;font-variant-numeric:lining-nums tabular-nums}
+body:has(.portal .login-layout) .auth-card button{min-height:46px}
+body:has(.portal .login-layout) .hero-panel .brand-stage{max-width:100%;min-width:0}
+body:has(.portal .login-layout) .brand-stage-copy{min-width:0;overflow-wrap:anywhere}
+body:has(.portal .login-layout) .topbar .site-links{scrollbar-color:rgba(164,114,255,.55) transparent}
+@media(max-width:760px){body:has(.portal .login-layout) .hero-panel .play-store-link>a{flex:1 1 180px}body:has(.portal .login-layout) .hero-panel .wa-contact-actions{display:grid;grid-template-columns:minmax(0,1fr)}body:has(.portal .login-layout) .hero-panel .wa-contact-actions>a{width:100%;min-height:48px}}
+@media(max-width:380px){body:has(.portal .login-layout) .hero-panel .play-store-link{display:grid;grid-template-columns:minmax(0,1fr)}body:has(.portal .login-layout) .hero-panel .play-store-link>a{width:100%}}
