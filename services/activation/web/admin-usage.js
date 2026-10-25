@@ -93,6 +93,7 @@ if (document.body.dataset.page === 'admin') {
         history.append(chart);
         usageBox.append(history, node('p', activity.note || 'النشاط مبني على آخر تواصل مسجل، وليس عدد مرات تشغيل التطبيق.', 'caption'));
       } catch {
+        if (current !== usageGeneration) return;
         exportButton.disabled = !analyticsCache;
         usageBox.append(node('p', 'تعذر تحديث تقارير الأجهزة حاليًا. إحصاءات التحميل مستقلة عنها.', 'caption'));
       }
