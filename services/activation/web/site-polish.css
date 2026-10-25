@@ -483,3 +483,14 @@ body:not([data-page="admin"]) .page-title p{line-height:1.85}
 :root{font-variant-numeric:lining-nums tabular-nums}
 body{font-feature-settings:"lnum" 1}
 input[type="number"],input[type="tel"],input[inputmode="numeric"],input[inputmode="decimal"],time,.metric strong,.usage-metric strong,.apps-count{font-variant-numeric:lining-nums tabular-nums;direction:ltr;unicode-bidi:isolate}
+
+/* Device portal desktop layout: reduce oversized hero and restore clear hierarchy */
+@media(min-width:900px){
+ body:not([data-page="admin"]) .portal .hero h1{font-size:clamp(42px,4.5vw,72px);line-height:1.12}
+ body:not([data-page="admin"]) .portal .auth-card{max-width:100%}
+ body:not([data-page="admin"]) .portal .brand-stage{max-width:100%}
+}
+@media(max-width:760px){
+ body:not([data-page="admin"]) .portal .hero h1{font-size:clamp(34px,9vw,56px);line-height:1.18}
+ body:not([data-page="admin"]) .portal .auth-card{width:100%}
+}
