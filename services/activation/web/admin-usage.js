@@ -27,6 +27,12 @@ if (document.body.dataset.page === 'admin') {
         metrics.append(card);
       }
       usageBox.append(metrics);
+      const requests = Number(data.requests?.blofy);
+      const completed = Number(data.completed?.blofy);
+      if (Number.isFinite(requests) && requests > 0 && Number.isFinite(completed)) {
+        const ratio = node('p', 'الملفات المكتملة مقارنة بالطلبات: ' + (100 * completed / requests).toFixed(1) + '% (مؤشر تقريبي، وليس نسبة نجاح فعلية)', 'caption');
+        usageBox.append(ratio);
+      }
       const insights = node('a', 'عرض تقارير الأجهزة والإصدارات ←', 'btn');
       insights.href = '/api/v1/admin/device-insights';
       usageBox.append(insights, node('p', 'التحميل من الموقع لا يثبت تثبيت التطبيق. إعادة التنزيل تُحسب مرة أخرى؛ العدد ليس عدد أشخاص.', 'caption'));
@@ -47,4 +53,6 @@ if (document.body.dataset.page === 'admin') {
   }
   $('refresh-customers').addEventListener('click', refreshUsage);
   refreshUsage();
+  const usageTimer = setInterval(() => { if (!document.hidden) refreshUsage(); }, 60000);
+  window.addEventListener('pagehide', () => clearInterval(usageTimer), { once: true });
 }
