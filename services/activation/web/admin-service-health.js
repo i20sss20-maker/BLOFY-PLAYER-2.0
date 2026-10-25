@@ -6,6 +6,20 @@
   var timer=null;
   var inFlight=false;
   var lastHealthy=null;
+  var failures=0;
+  var history=[];
+  var detail=document.createElement('small');
+  detail.setAttribute('aria-live','off');
+  detail.style.cssText='display:block;opacity:.75;margin-top:3px';
+  text.parentNode.appendChild(detail;
+  function record(ok,latency){
+    failures=ok?0:failures+1;
+    history.push({ok:ok,latency:latency});
+    if(history.length>10)history.shift();
+    var success=history.filter(function(x){return x.ok;}).length;
+    detail.textContent='آخر 10 فحوصات: '+success+'/'+history.length+' ناجحة'+(failures>=2?' • تنبيه: '+failures+' إخفاقات متتالية':'');
+    root.title='آخر فحص: '+new Date().toLocaleString('ar-SA')+(latency!=null?' • '+latency+'ms':'');
+  }
   function render(ok,label){
     root.classList.toggle('ok',ok===true);
     root.classList.toggle('bad',ok===false);
@@ -28,9 +42,10 @@
         var version=app.versionName?(' • '+app.versionName):'';
         lastHealthy=healthy;
         var latency=Math.round(performance.now()-started);
+        record(healthy,latency);
         render(healthy,healthy?('متصل'+version+' • '+latency+'ms'):'خلل في خدمة أساسية');
       })
-      .catch(function(){lastHealthy=false;render(false,'تعذر الوصول للخدمة أو انتهت المهلة');})
+      .catch(function(){lastHealthy=false;record(false,null);render(false,'تعذر الوصول للخدمة أو انتهت المهلة');})
       .finally(function(){inFlight=false;schedule();});
   }
   document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')check();});
