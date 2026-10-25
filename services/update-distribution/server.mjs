@@ -463,6 +463,9 @@ async function downloadPage(req) {
  .filter-chip{min-height:44px}
 }
 @media(min-width:621px) and (max-width:860px){.app-row{grid-template-columns:54px minmax(0,1fr) auto;gap:12px}.app-actions{min-width:116px}.app-download{min-width:116px}}
+/* Consistent English numeral rendering in the release center */
+html{font-variant-numeric:lining-nums tabular-nums}
+input[type="number"],input[inputmode="numeric"],.apps-count,.app-version,.official-meta,.device-tag{font-variant-numeric:lining-nums tabular-nums}
 /* BLOFY cinematic download-center theme — keyboard/TV-friendly */
 :root{--focus:#c6a4ff}
 html{scroll-behavior:smooth}
