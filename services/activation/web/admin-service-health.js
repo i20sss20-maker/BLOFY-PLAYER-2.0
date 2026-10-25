@@ -25,6 +25,8 @@
     detail.textContent='آخر 10 فحوصات: '+success+'/'+history.length+' ناجحة'+(failures>=2?' • تنبيه: '+failures+' إخفاقات متتالية':'');
     root.dataset.healthFailures=String(failures);
     root.dataset.healthLastCheck=new Date().toISOString();
+    root.dataset.healthHistory=history.map(function(x){return x.ok?'1':'0';}).join('');
+    root.dataset.healthLatency=latency==null?'':String(latency);
     root.title='آخر فحص: '+new Date().toLocaleString('en-US')+(latency!=null?' • '+latency+'ms':'');
     if(failures>=2){
       document.title='⚠ خلل في خدمة BLOFY | '+originalTitle;
@@ -62,7 +64,8 @@
         lastHealthy=healthy;
         var latency=Math.round(performance.now()-started);
         record(healthy,latency);
-        render(healthy,healthy?('متصل'+version+' • '+latency+'ms'):'خلل في خدمة أساسية');
+        var problem=!payload||payload.ok!==true?'استجابة الخدمة غير سليمة':payload.database!=='ready'?'قاعدة البيانات غير جاهزة':'خدمة تشفير القوائم غير جاهزة';
+        render(healthy,healthy?('متصل'+version+' • '+latency+'ms'):problem);
       })
       .catch(function(){lastHealthy=false;record(false,null);render(false,'تعذر الوصول للخدمة أو انتهت المهلة');})
       .finally(function(){clearTimeout(timeout);inFlight=false;schedule();});
