@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check cinematic-v74.mjs && node --check cinematic-v74-patch.mjs && node --check cinematic-v74-remote.mjs && node --check server.mjs && node --check admin-panel.mjs && node --check release-store.mjs && node --check app-library.mjs && node --check public-site-redirect.mjs && node --check public-search-pages.mjs && node --check app-download-policy.mjs && node --test public-site-redirect.test.mjs public-search-pages.test.mjs app-download-policy.test.mjs cinematic-v74.test.mjs cinematic-v74-patch.test.mjs cinematic-v74-remote.test.mjs"
+    "check": "node --check cinematic-v74.mjs && node --check cinematic-v74-patch.mjs && node --check cinematic-v74-remote.mjs && node --check cinematic-v74-display.mjs && node --check server.mjs && node --check admin-panel.mjs && node --check release-store.mjs && node --check app-library.mjs && node --check public-site-redirect.mjs && node --check public-search-pages.mjs && node --check app-download-policy.mjs && node --test public-site-redirect.test.mjs public-search-pages.test.mjs app-download-policy.test.mjs cinematic-v74.test.mjs cinematic-v74-patch.test.mjs cinematic-v74-remote.test.mjs"
   },
   "engines": {
     "node": ">=20"
