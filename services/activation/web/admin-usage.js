@@ -143,5 +143,10 @@ if (document.body.dataset.page === 'admin') {
   $('refresh-customers').addEventListener('click', refreshUsage);
   refreshUsage();
   const usageTimer = setInterval(() => { if (!document.hidden) refreshUsage(); }, 60000);
-  window.addEventListener('pagehide', () => clearInterval(usageTimer), { once: true });
+  const onVisible = () => { if (!document.hidden) refreshUsage(); };
+  document.addEventListener('visibilitychange', onVisible);
+  window.addEventListener('pagehide', () => {
+    clearInterval(usageTimer);
+    document.removeEventListener('visibilitychange', onVisible);
+  }, { once: true });
 }
