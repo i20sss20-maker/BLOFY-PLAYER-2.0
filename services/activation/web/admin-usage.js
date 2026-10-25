@@ -36,10 +36,10 @@ if (document.body.dataset.page === 'admin') {
       }
       try {
         const activity = await api('/api/v1/admin/device-insights/analytics');
+        if (current !== usageGeneration) return;
         analyticsCache = activity;
         exportButton.disabled = false;
         exportButton.title = 'تنزيل البيانات المجمعة الحالية بصيغة CSV';
-        if (current !== usageGeneration) return;
         const heading = node('h2', 'نشاط الأجهزة والإصدارات');
         usageBox.append(heading);
         const deviceMetrics = node('div', null, 'usage-metrics');
