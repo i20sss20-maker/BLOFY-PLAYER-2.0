@@ -550,3 +550,15 @@ body[data-page="admin"] .admin-quick-grid>a{border:1px solid rgba(190,146,255,.1
 body[data-page="admin"] .admin-quick-grid>a:focus-visible{outline:3px solid #c9a6ff;outline-offset:3px}
 body[data-page="downloads"] .card,body[data-page="downloads"] .release-card{border:1px solid rgba(190,146,255,.19);border-radius:22px;background:linear-gradient(145deg,rgba(29,23,43,.94),rgba(12,10,20,.97));box-shadow:0 18px 48px rgba(0,0,0,.18)}
 @media(max-width:760px){body[data-page="admin"] .metric{border-radius:17px}body[data-page="admin"] .admin-quick-grid>a{border-radius:15px}}
+
+/* BLOFY LUX final accessibility and TV interaction pass */
+body:has(.portal .login-layout) :is(a,button,input,select,textarea):focus-visible{outline:3px solid #d6b6ff;outline-offset:3px}
+body:has(.portal .login-layout) .site-links>a:focus-visible{background:rgba(150,90,250,.19)}
+body:has(.portal .login-layout) .auth-card :is(input,button){font-family:inherit}
+body:has(.portal .login-layout) .auth-card :is(input,button):disabled{cursor:not-allowed;opacity:.65}
+body:has(.portal .login-layout) .hero-panel h1,body:has(.portal .login-layout) .auth-card h2{hyphens:none}
+body:has(.portal .login-layout) .hero-panel .play-store-link>a,body:has(.portal .login-layout) .wa-contact-actions>a{touch-action:manipulation}
+@media(hover:none){body:has(.portal .login-layout) .hero-panel .play-store-link>a:hover{transform:none;box-shadow:none}}
+@media(prefers-reduced-motion:reduce){body:has(.portal .login-layout) *,body:has(.portal .login-layout) *::before,body:has(.portal .login-layout) *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+@media(min-width:1600px){body:has(.portal .login-layout) .login-layout{gap:80px}body:has(.portal .login-layout) .hero-panel h1{font-size:66px}}
+@media(max-width:600px){body:has(.portal .login-layout) .hero-panel .brand-stage{max-width:100%}body:has(.portal .login-layout) .hero-panel .brand-stage-copy strong{font-size:clamp(13px,4vw,18px)}}
