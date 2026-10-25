@@ -3,7 +3,7 @@
 const page = document.body.dataset.page;
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => { const el=document.createElement(tag); if(text!=null)el.textContent=text; if(className)el.className=className; return el; };
-const date = value => value ? new Date(value).toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'}) : '—';
+const date = value => value ? new Date(value).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'}) : '—';
 const labels = {active:'ساري',trial:'تجربة',pending:'تسجيل غير مكتمل',expired:'منتهٍ',blocked:'موقوف',open:'مفتوح',resolved:'تم الحل',testing:'تجريبي',stable:'معتمد'};
 const badge = value => node('span',labels[value]||value,'badge '+value);
 const setStatus=(id,text,bad=false)=>{const el=$(id);el.textContent=text;el.classList.toggle('bad',bad);};
@@ -98,7 +98,7 @@ if(page==='admin'){
   const expiry=(value,status)=>status==='pending'?'لم تبدأ التجربة':value?date(value):status==='active'?'مدى الحياة':'—';
   function panel(name){for(const key of ['devices','support','releases'])$(key+'-view').hidden=key!==name;document.querySelectorAll('[data-panel]').forEach(b=>b.setAttribute('aria-current',b.dataset.panel===name?'page':'false'));$('admin-view-title').textContent={devices:'الأجهزة والاشتراكات',support:'طلبات الدعم',releases:'إصدارات التطبيق'}[name];}
   document.querySelectorAll('[data-panel]').forEach(button=>button.addEventListener('click',()=>panel(button.dataset.panel)));
-  async function overview(){const [data,tickets]=await Promise.all([request('overview'),request('tickets')]);$('overview').replaceChildren();for(const [key,label]of [['total','أجهزة مسجّلة'],['active','تفعيل ساري'],['pending','تسجيل غير مكتمل'],['expired','تفعيل منتهٍ'],['support','طلبات دعم']]){const card=node('div',null,'metric');card.append(node('strong',Number(data[key]||0).toLocaleString('ar-SA')),node('span',label));$('overview').append(card);}
+  async function overview(){const [data,tickets]=await Promise.all([request('overview'),request('tickets')]);$('overview').replaceChildren();for(const [key,label]of [['total','أجهزة مسجّلة'],['active','تفعيل ساري'],['pending','تسجيل غير مكتمل'],['expired','تفعيل منتهٍ'],['support','طلبات دعم']]){const card=node('div',null,'metric');card.append(node('strong',Number(data[key]||0).toLocaleString('en-US')),node('span',label));$('overview').append(card);}
     const box=$('open-tickets');box.replaceChildren(node('h2','طلبات الدعم المفتوحة'));for(const ticket of tickets.items){const row=node('div',null,'support-ticket');row.append(node('strong',ticket.device_id),node('p',ticket.description,'content-text'));const button=node('button','فتح سجل الجهاز ←');button.addEventListener('click',()=>openRecord(ticket.device_id));row.append(button);box.append(row);}if(!tickets.items.length)box.append(node('p','كل شيء هادئ. لا توجد طلبات دعم مفتوحة.','empty'));
   }
   let devicePage=1, deviceItems=[];
