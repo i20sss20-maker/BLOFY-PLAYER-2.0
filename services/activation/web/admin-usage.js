@@ -111,6 +111,27 @@ if (document.body.dataset.page === 'admin') {
       retry.type = 'button'; retry.onclick = refreshUsage; usageBox.append(retry);
     }
   }
+  const exportButton = node('button', 'تنزيل تقرير الأجهزة CSV', 'ghost');
+  exportButton.type = 'button';
+  exportButton.setAttribute('aria-label', 'تنزيل ملخص نشاط الأجهزة دون معلومات تعريفية');
+  exportButton.addEventListener('click', () => {
+    if (!analyticsCache) return;
+    const rows = [['المؤشر','القيمة']];
+    const summary = analyticsCache.summary || {};
+    for (const [key,label] of [['registered','الأجهزة المسجلة'],['active24h','نشطة خلال 24 ساعة'],['active7d','نشطة خلال 7 أيام'],['active30d','نشطة خلال 30 يومًا'],['registered24h','جديدة خلال 24 ساعة'],['registered7d','جديدة خلال 7 أيام']]) {
+      rows.push([label, summary[key] == null ? '' : String(summary[key])]);
+    }
+    rows.push(['اليوم','تسجيلات جديدة']);
+    for (const day of analyticsCache.registrations || []) rows.push([String(day.day || ''), String(day.registrations || 0)]);
+    const escape = value => '"' + String(value).replace(/"/g,'""') + '"';
+    const csv = '\uFEFF' + rows.map(row => row.map(escape).join(',')).join('\\r\\n');
+    const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    const link = document.createElement('a');
+    link.href = url; link.download = 'blofy-device-analytics.csv';
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  usageBox.after(exportButton);
   $('refresh-customers').addEventListener('click', refreshUsage);
   refreshUsage();
   const usageTimer = setInterval(() => { if (!document.hidden) refreshUsage(); }, 60000);
