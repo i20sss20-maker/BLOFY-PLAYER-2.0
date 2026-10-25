@@ -6,6 +6,8 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val xiaomiEdition = providers.gradleProperty("BLOFY_XIAOMI_EDITION").orElse("false").get().equals("true", ignoreCase = true)
+
 val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("https://api.blofyplayer.com").get().trim()
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse("https://updates.blofyplayer.com").get().trim()
@@ -28,11 +30,11 @@ android {
     namespace = "tv.blofy.player"
     compileSdk = 36
     defaultConfig {
-        applicationId = "tv.blofy.player.v2"
+        applicationId = if (xiaomiEdition) "tv.blofy.player.xiaomi" else "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
         versionCode = 2000007
-        versionName = "2.0.0-rc06"
+        versionName = if (xiaomiEdition) "2.0.0-rc06-xiaomi" else "2.0.0-rc06"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
