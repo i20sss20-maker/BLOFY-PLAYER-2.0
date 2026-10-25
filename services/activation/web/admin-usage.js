@@ -131,7 +131,11 @@ if (document.body.dataset.page === 'admin') {
     for (const item of analyticsCache.platforms || []) rows.push(['نظام '+String(item.label), String(item.count)]);
     rows.push(['اليوم','تسجيلات جديدة']);
     for (const day of analyticsCache.registrations || []) rows.push([String(day.day || ''), String(day.registrations || 0)]);
-    const escape = value => '"' + String(value).replace(/"/g,'""') + '"';
+    const escape = value => {
+      const text = String(value);
+      const safe = /^[\\s]*[=+@-]/.test(text) ? "'" + text : text;
+      return '"' + safe.replace(/"/g,'""') + '"';
+    };
     const csv = '\uFEFF' + rows.map(row => row.map(escape).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
     const link = document.createElement('a');
