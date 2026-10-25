@@ -37,6 +37,8 @@ if (document.body.dataset.page === 'admin') {
       try {
         const activity = await api('/api/v1/admin/device-insights/analytics');
         analyticsCache = activity;
+        exportButton.disabled = false;
+        exportButton.title = 'تنزيل البيانات المجمعة الحالية بصيغة CSV';
         if (current !== usageGeneration) return;
         const heading = node('h2', 'نشاط الأجهزة والإصدارات');
         usageBox.append(heading);
@@ -91,6 +93,7 @@ if (document.body.dataset.page === 'admin') {
         history.append(chart);
         usageBox.append(history, node('p', activity.note || 'النشاط مبني على آخر تواصل مسجل، وليس عدد مرات تشغيل التطبيق.', 'caption'));
       } catch {
+        exportButton.disabled = !analyticsCache;
         usageBox.append(node('p', 'تعذر تحديث تقارير الأجهزة حاليًا. إحصاءات التحميل مستقلة عنها.', 'caption'));
       }
       const insights = node('a', 'عرض تقارير الأجهزة والإصدارات ←', 'btn');
@@ -113,6 +116,8 @@ if (document.body.dataset.page === 'admin') {
   }
   const exportButton = node('button', 'تنزيل تقرير الأجهزة CSV', 'ghost');
   exportButton.type = 'button';
+  exportButton.disabled = true;
+  exportButton.title = 'يتوفر التقرير بعد تحميل بيانات الأجهزة';
   exportButton.setAttribute('aria-label', 'تنزيل ملخص نشاط الأجهزة دون معلومات تعريفية');
   exportButton.addEventListener('click', () => {
     if (!analyticsCache) return;
