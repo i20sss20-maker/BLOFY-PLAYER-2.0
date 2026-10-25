@@ -1,0 +1,44 @@
+name: Publish Xiaomi v74 standalone test APK
+on:
+  push:
+    branches: [feature/xiaomi-v74-from-signed-source]
+    paths: [.github/workflows/publish-xiaomi-v74-test.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrieve verified Xiaomi APK from successful build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 40243393814 --repo "$GITHUB_REPOSITORY" --name BLOFY-PLAYER-Xiaomi-v74-SIGNED --dir xiaomi
+          test -s xiaomi/BLOFY-PLAYER-Xiaomi-v74-SIGNED.apk
+          (cd xiaomi && sha256sum --check SHA256SUMS)
+          grep -Fq "package: name='tv.blofy.player.xiaomi' versionCode='2000074'" xiaomi/badging.txt
+          grep -Fq "Verified using v2 scheme (APK Signature Scheme v2): true" xiaomi/signature.txt
+      - name: Create standalone TEST prerelease, without changing website or official version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="xiaomi-v74-android9-owner-test-20261026"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Existing test release found; refusing to replace it."
+            exit 1
+          fi
+          gh release create "$tag" \
+            xiaomi/BLOFY-PLAYER-Xiaomi-v74-SIGNED.apk \
+            xiaomi/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 1190f118583212900846c254c3219aba4d2b6387 \
+            --prerelease \
+            --title "BLOFY PLAYER Xiaomi v74 — Android TV 9 Owner Test" \
+            --notes "Standalone Xiaomi test APK from v74 source. Package tv.blofy.player.xiaomi, versionCode 2000074. Installs alongside the official BLOFY app. Tested by CI for signing and Android 9 minimum SDK compatibility; real-device playback and installation are not yet verified. This prerelease does not update the production website or Google Play."
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/BLOFY-PLAYER-Xiaomi-v74-SIGNED.apk"
+          curl --fail --location --head --retry 4 --retry-delay 4 "$url"
+          echo "DIRECT_APK_URL=$url"
