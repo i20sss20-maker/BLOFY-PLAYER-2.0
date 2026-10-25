@@ -445,3 +445,25 @@ button,.btn,input,select,textarea{min-height:44px}
 .wa-contact-actions a:hover,.wa-contact-actions a:focus-visible{border-color:#d7ffd9;outline:2px solid #d7ffd9;outline-offset:2px}
 .wa-payment-note{margin:8px 0 14px!important;color:var(--muted,#aaa4b7);font-size:13px;line-height:1.65}
 @media(max-width:620px){.wa-contact-actions{display:grid;grid-template-columns:1fr}.wa-contact-actions a{width:100%;min-width:0}}
+
+/* 2026 BLOFY visual system: calmer cinematic depth and responsive admin usability */
+:root{--blofy-focus:rgba(188,148,255,.8);--blofy-glass:rgba(18,14,29,.86)}
+body[data-page="admin"],body[data-page="downloads"],body[data-page="admin-login"]{color-scheme:dark;background-color:#08070e}
+body[data-page="admin"] .admin-topbar{gap:clamp(12px,2vw,24px);flex-wrap:wrap}
+body[data-page="admin"] .admin-title{letter-spacing:-.025em;line-height:1.3}
+body[data-page="admin"] .admin-subtitle{line-height:1.8;max-width:62ch}
+body[data-page="admin"] .admin-quick-grid>a{min-height:90px;transition:transform .2s ease,border-color .2s ease,background .2s ease}
+body[data-page="admin"] .admin-quick-grid>a:hover{transform:translateY(-2px);border-color:rgba(190,145,255,.5)}
+body[data-page="admin"] .usage-card{border:1px solid rgba(178,137,255,.23);background:linear-gradient(135deg,rgba(32,23,51,.95),rgba(12,10,20,.97))}
+body[data-page="admin"] .usage-metrics{gap:12px}
+body[data-page="admin"] .usage-metric{min-width:0;border:1px solid rgba(188,148,255,.14);border-radius:16px;background:rgba(8,7,15,.34)}
+body[data-page="admin"] .usage-metric strong{font-variant-numeric:tabular-nums}
+body[data-page="admin"] .blofy-registration-chart{scrollbar-width:thin;scrollbar-color:#7146bd transparent}
+body[data-page="admin"] .blofy-registration-day small{white-space:nowrap;font-variant-numeric:tabular-nums}
+body[data-page="admin"] .table-wrap{max-width:100%;overflow-x:auto;scrollbar-width:thin}
+body[data-page="admin"] table{min-width:680px}
+body[data-page="admin"] .admin-live-service{max-width:100%;border:1px solid rgba(174,138,255,.2);border-radius:15px}
+body[data-page="admin"] .admin-live-service.bad{border-color:rgba(255,120,145,.55)}
+@media(max-width:760px){body[data-page="admin"] .admin-topbar{align-items:flex-start}body[data-page="admin"] .admin-live-service{order:3;width:100%}body[data-page="admin"] .admin-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}body[data-page="admin"] .admin-quick-grid>a{min-width:0}body[data-page="admin"] .usage-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:420px){body[data-page="admin"] .admin-quick-grid,body[data-page="admin"] .usage-metrics{grid-template-columns:1fr}body[data-page="admin"] .admin-title{font-size:23px}}
+@media(prefers-reduced-motion:reduce){body[data-page="admin"] .admin-quick-grid>a{transition:none}body[data-page="admin"] .admin-quick-grid>a:hover{transform:none}}
