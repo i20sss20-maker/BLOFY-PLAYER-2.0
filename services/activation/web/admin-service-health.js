@@ -13,14 +13,14 @@
   var detail=document.createElement('small');
   detail.setAttribute('aria-live','off');
   detail.style.cssText='display:block;opacity:.75;margin-top:3px';
-  text.parentNode.appendChild(detail;
+  text.parentNode.appendChild(detail);
   function record(ok,latency){
     failures=ok?0:failures+1;
     history.push({ok:ok,latency:latency});
     if(history.length>10)history.shift();
     var success=history.filter(function(x){return x.ok;}).length;
     detail.textContent='آخر 10 فحوصات: '+success+'/'+history.length+' ناجحة'+(failures>=2?' • تنبيه: '+failures+' إخفاقات متتالية':'');
-    root.title='آخر فحص: '+new Date().toLocaleString('ar-SA')+(latency!=null?' • '+latency+'ms':'');
+    root.title='آخر فحص: '+new Date().toLocaleString('en-US')+(latency!=null?' • '+latency+'ms':'');
     if(failures>=2){
       document.title='⚠ خلل في خدمة BLOFY | '+originalTitle;
       root.setAttribute('aria-label','تنبيه: تعذر التحقق من خدمة BLOFY مرتين متتاليتين');
