@@ -1,6 +1,6 @@
 # RC07.55.5 QA: stable rc07.55 baseline with BLOFY production domains
-# publish-trigger: rc07.55.6
-name: BLOFY Android TV v74 Remote Performance Signed QA
+# publish-trigger: displayVersion 74
+name: BLOFY Android TV v74 Visible Version 74 Signed QA
 
 on:
   push:
@@ -14,15 +14,15 @@ permissions:
   contents: write
 
 concurrency:
-  group: blofy-android-tv-v74-remote-perf-qa
+  group: blofy-android-tv-v74-display-qa
   cancel-in-progress: true
 
 env:
   ACTIVATION_BASE_URL: https://api.blofyplayer.com
   UPDATE_BASE_URL: https://updates.blofyplayer.com
   EXPECTED_APPLICATION_ID: tv.blofy.player.v2
-  EXPECTED_VERSION_CODE: "2000076"
-  EXPECTED_VERSION_NAME: 2.0.0-rc07.55.6
+  EXPECTED_VERSION_CODE: "2000077"
+  EXPECTED_VERSION_NAME: "74"
   EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
   MEDIA3_VERSION: "1.6.1"
   ANDROID_NDK_VERSION: 28.0.13004108
@@ -48,7 +48,7 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Validate rc07.55.6 identity and signing inputs
+      - name: Validate visible version 74 and production signing inputs
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
@@ -61,8 +61,8 @@ jobs:
             [[ -n "${!value:-}" ]] || { echo "::error::Missing $value"; exit 1; }
           done
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
-          grep -Fq 'versionCode = 2000076' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.55.6"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000077' app/build.gradle.kts
+          grep -Fq 'versionName = "74"' app/build.gradle.kts
 
       - name: Install Android native and signing toolchain
         shell: bash
@@ -88,7 +88,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-rc07556-unit-tests-${{ github.sha }}
+          name: BLOFY-74-display-unit-tests-${{ github.sha }}
           path: |
             app/build/test-results/testDebugUnitTest/*.xml
             app/build/reports/tests/testDebugUnitTest/
@@ -176,8 +176,8 @@ jobs:
             grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/apk-files.txt"
           done
           mkdir -p signed-test
-          cp "$apk" signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.apk
-          cp "$aab" signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.aab
+          cp "$apk" signed-test/BLOFY-PLAYER-74-PRODUCTION-SIGNED.apk
+          cp "$aab" signed-test/BLOFY-PLAYER-74-PRODUCTION-SIGNED.aab
           cp "$RUNNER_TEMP/badging.txt" signed-test/apk-badging.txt
           cp "$RUNNER_TEMP/signature.txt" signed-test/apk-signature.txt
           {
@@ -195,7 +195,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED-${{ github.sha }}
+          name: BLOFY-PLAYER-74-PRODUCTION-SIGNED-${{ github.sha }}
           path: |
             signed-test/*.apk
             signed-test/SHA256SUMS
@@ -217,25 +217,25 @@ jobs:
             echo "::error::This APK is built from an outdated commit ($GITHUB_SHA); branch is $CURRENT_HEAD."
             exit 1
           fi
-          TAG="v74-remote-performance-qa-20261025"
-          SOURCE="signed-test/BLOFY-PLAYER-2.0-rc07.55.6-PRODUCTION-SIGNED.apk"
-          DEST="signed-test/BLOFY-PLAYER-Android-TV-v74-REMOTE-QA-SIGNED.apk"
+          TAG="v74-display74-remote-qa-20261025"
+          SOURCE="signed-test/BLOFY-PLAYER-74-PRODUCTION-SIGNED.apk"
+          DEST="signed-test/BLOFY-PLAYER-Android-TV-v74-DISPLAY74-SIGNED.apk"
           test -s "$SOURCE"
           (cd signed-test && sha256sum --check SHA256SUMS)
           cp "$SOURCE" "$DEST"
-          sha256sum "$DEST" > signed-test/BLOFY-PLAYER-Android-TV-v74-REMOTE-QA-SIGNED.apk.sha256
-          grep -Fq "versionCode='2000076'" signed-test/apk-badging.txt
-          grep -Fq "versionName='2.0.0-rc07.55.6'" signed-test/apk-badging.txt
+          sha256sum "$DEST" > signed-test/BLOFY-PLAYER-Android-TV-v74-DISPLAY74-SIGNED.apk.sha256
+          grep -Fq "versionCode='2000077'" signed-test/apk-badging.txt
+          grep -Fq "versionName='74'" signed-test/apk-badging.txt
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "::error::Release v74 QA already exists. Refusing to overwrite an existing signed APK."
             exit 1
           fi
-          gh release create "$TAG" "$DEST" signed-test/BLOFY-PLAYER-Android-TV-v74-REMOTE-QA-SIGNED.apk.sha256 \
+          gh release create "$TAG" "$DEST" signed-test/BLOFY-PLAYER-Android-TV-v74-DISPLAY74-SIGNED.apk.sha256 \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --prerelease --title "BLOFY PLAYER Android TV 74 • Remote Performance QA" \
-            --notes "BLOFY Android TV test-signed APK version 74 (versionCode 2000076, versionName 2.0.0-rc07.55.6). Fixes owner-reported weak v74 theme by making the BLOFY plum backdrop, hero and poster focus visibly remote performance. Fixes the endlessly spinning manual refresh by only spinning briefly during active WorkManager execution, showing real queued/background states, offering cancel and bounding each manual attempt. Keeps playlists, database and playback engines. R8 release build with Media3/FFmpeg, signed by original BLOFY release certificate; checksum included. QA prerelease only, not an automatic-update rollout or a Google Play submission. Install over compatible older BLOFY with the SAME signature and lower versionCode; never uninstall or erase data. Verify live/VOD on a real Android TV before broad distribution."
+            --notes "BLOFY Android TV test-signed APK version 74 (versionCode 2000077, versionName 74). Fixes owner-reported weak v74 theme by making the BLOFY plum backdrop, hero and poster focus visibly remote performance. Fixes the endlessly spinning manual refresh by only spinning briefly during active WorkManager execution, showing real queued/background states, offering cancel and bounding each manual attempt. Keeps playlists, database and playback engines. R8 release build with Media3/FFmpeg, signed by original BLOFY release certificate; checksum included. QA prerelease only, not an automatic-update rollout or a Google Play submission. Install over compatible older BLOFY with the SAME signature and lower versionCode; never uninstall or erase data. Verify live/VOD on a real Android TV before broad distribution."
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets \
-            --jq 'select(.tagName == "v74-remote-performance-qa-20261025" and ([.assets[].name] | index("BLOFY-PLAYER-Android-TV-v74-REMOTE-QA-SIGNED.apk"))) | "Verified signed v74 QA APK uploaded"'
+            --jq 'select(.tagName == "v74-display74-remote-qa-20261025" and ([.assets[].name] | index("BLOFY-PLAYER-Android-TV-v74-DISPLAY74-SIGNED.apk"))) | "Verified signed v74 QA APK uploaded"'
 
       # Keep existing website source and existing v73/v74 download assets intact.
       # Main download card is switched only after the signed GitHub release is verified.
@@ -243,6 +243,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          url="https://github.com/$GITHUB_REPOSITORY/releases/download/v74-remote-performance-qa-20261025/BLOFY-PLAYER-Android-TV-v74-REMOTE-QA-SIGNED.apk"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/v74-display74-remote-qa-20261025/BLOFY-PLAYER-Android-TV-v74-DISPLAY74-SIGNED.apk"
           curl --fail --silent --show-error --location --head --retry 3 "$url" >/dev/null
           echo "Signed v74 remote-performance QA APK verified. Website release channels not changed."
