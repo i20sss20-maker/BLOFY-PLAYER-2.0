@@ -522,3 +522,20 @@ body:has(.portal .login-layout) .brand-stage-copy{min-width:0;overflow-wrap:anyw
 body:has(.portal .login-layout) .topbar .site-links{scrollbar-color:rgba(164,114,255,.55) transparent}
 @media(max-width:760px){body:has(.portal .login-layout) .hero-panel .play-store-link>a{flex:1 1 180px}body:has(.portal .login-layout) .hero-panel .wa-contact-actions{display:grid;grid-template-columns:minmax(0,1fr)}body:has(.portal .login-layout) .hero-panel .wa-contact-actions>a{width:100%;min-height:48px}}
 @media(max-width:380px){body:has(.portal .login-layout) .hero-panel .play-store-link{display:grid;grid-template-columns:minmax(0,1fr)}body:has(.portal .login-layout) .hero-panel .play-store-link>a{width:100%}}
+
+/* BLOFY LUX — premium cinematic portal, restrained depth and crisp hierarchy */
+body:has(.portal .login-layout){background:radial-gradient(ellipse 55% 48% at 80% 18%,rgba(112,53,202,.20),transparent 76%),radial-gradient(ellipse 40% 44% at 8% 75%,rgba(71,39,147,.12),transparent 78%),#090710}
+body:has(.portal .login-layout) .topbar{border-bottom:1px solid rgba(202,167,255,.12)}
+body:has(.portal .login-layout) .topbar .brand-logo{filter:drop-shadow(0 10px 22px rgba(153,88,255,.38))}
+body:has(.portal .login-layout) .topbar .site-links>a{border:1px solid transparent;border-radius:12px;color:#c3b7d4;transition:color .18s,background .18s,border-color .18s}
+body:has(.portal .login-layout) .topbar .site-links>a:hover,body:has(.portal .login-layout) .topbar .site-links>a:focus-visible{color:#fff;background:rgba(170,119,255,.10);border-color:rgba(183,139,255,.22)}
+body:has(.portal .login-layout) .hero-panel .brand-stage{border:1px solid rgba(183,137,255,.14);border-radius:22px;background:linear-gradient(120deg,rgba(124,70,204,.12),rgba(20,15,31,.28));box-shadow:inset 0 1px rgba(255,255,255,.055)}
+body:has(.portal .login-layout) .hero-panel h1{font-weight:900;text-wrap:balance;text-shadow:0 16px 55px rgba(140,80,250,.12)}
+body:has(.portal .login-layout) .hero-panel .eyebrow{border-color:rgba(197,157,255,.3);background:rgba(125,70,203,.12);box-shadow:0 8px 28px rgba(0,0,0,.15)}
+body:has(.portal .login-layout) .auth-card{position:relative;overflow:hidden;border:1px solid rgba(200,164,255,.24);border-radius:28px;background:linear-gradient(155deg,rgba(33,25,49,.95),rgba(13,11,22,.98));box-shadow:0 30px 85px rgba(0,0,0,.34),0 0 70px rgba(120,64,205,.07)}
+body:has(.portal .login-layout) .auth-card:before{content:"";position:absolute;inset:0 0 auto;height:1px;background:linear-gradient(90deg,transparent,rgba(224,195,255,.65),transparent);pointer-events:none}
+body:has(.portal .login-layout) .auth-card h2{letter-spacing:-.025em;text-wrap:balance}
+body:has(.portal .login-layout) .auth-card input:focus-visible{outline:2px solid #c9a8ff;outline-offset:2px;box-shadow:0 0 0 5px rgba(157,97,255,.12)}
+body:has(.portal .login-layout) .hero-panel .play-store-link>a{border-radius:14px;transition:transform .18s,filter .18s,box-shadow .18s}
+body:has(.portal .login-layout) .hero-panel .play-store-link>a:hover{transform:translateY(-2px);filter:brightness(1.1);box-shadow:0 14px 32px rgba(100,48,186,.18)}
+@media(prefers-reduced-motion:reduce){body:has(.portal .login-layout) .hero-panel .play-store-link>a{transition:none}body:has(.portal .login-layout) .hero-panel .play-store-link>a:hover{transform:none}}
