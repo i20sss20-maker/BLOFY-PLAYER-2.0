@@ -8,6 +8,8 @@
   var lastHealthy=null;
   var failures=0;
   var history=[];
+  var originalTitle=document.title;
+  var warningShown=false;
   var detail=document.createElement('small');
   detail.setAttribute('aria-live','off');
   detail.style.cssText='display:block;opacity:.75;margin-top:3px';
@@ -19,6 +21,16 @@
     var success=history.filter(function(x){return x.ok;}).length;
     detail.textContent='آخر 10 فحوصات: '+success+'/'+history.length+' ناجحة'+(failures>=2?' • تنبيه: '+failures+' إخفاقات متتالية':'');
     root.title='آخر فحص: '+new Date().toLocaleString('ar-SA')+(latency!=null?' • '+latency+'ms':'');
+    if(failures>=2){
+      document.title='⚠ خلل في خدمة BLOFY | '+originalTitle;
+      root.setAttribute('aria-label','تنبيه: تعذر التحقق من خدمة BLOFY مرتين متتاليتين');
+      if(!warningShown){warningShown=true;root.setAttribute('data-health-warning','true');}
+    }else if(ok){
+      document.title=originalTitle;
+      root.removeAttribute('aria-label');
+      root.removeAttribute('data-health-warning');
+      warningShown=false;
+    }
   }
   function render(ok,label){
     root.classList.toggle('ok',ok===true);
