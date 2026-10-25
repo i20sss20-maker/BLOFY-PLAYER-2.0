@@ -46,7 +46,9 @@
     inFlight=true;
     if(lastHealthy===null)render(null,'جارٍ التحقق…');
     var started=performance.now();
-    fetch('/health',{cache:'no-store',headers:{accept:'application/json'},signal:AbortSignal.timeout(10000)})
+    var controller=new AbortController();
+    var timeout=setTimeout(function(){controller.abort();},10000);
+    fetch('/health',{cache:'no-store',credentials:'same-origin',headers:{accept:'application/json'},signal:controller.signal})
       .then(function(response){if(!response.ok)throw new Error('health_'+response.status);return response.json();})
       .then(function(payload){
         var healthy=payload&&payload.ok===true&&payload.database==='ready'&&payload.playlistEncryption==='ready';
@@ -58,7 +60,7 @@
         render(healthy,healthy?('متصل'+version+' • '+latency+'ms'):'خلل في خدمة أساسية');
       })
       .catch(function(){lastHealthy=false;record(false,null);render(false,'تعذر الوصول للخدمة أو انتهت المهلة');})
-      .finally(function(){inFlight=false;schedule();});
+      .finally(function(){clearTimeout(timeout);inFlight=false;schedule();});
   }
   document.addEventListener('visibilitychange',function(){
     if(document.hidden)clearTimeout(timer);
