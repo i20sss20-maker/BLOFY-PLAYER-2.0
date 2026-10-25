@@ -432,6 +432,7 @@ ${appAction.kind === 'unavailable' ? '<div class="stable-download-link"><strong>
       <label class="search-box" for="app-search"><span>⌕</span><input id="app-search" type="search" placeholder="ابحث عن تطبيق..." autocomplete="off" spellcheck="false"><button class="search-clear" id="search-clear" type="button" aria-label="مسح البحث" hidden>×</button></label>
       <div class="filter-bar" aria-label="تصنيف التطبيقات">${filterButtons}</div>
     </div>
+    <p class="apps-help" role="note">اختر تصنيف الجهاز أو ابحث باسم التطبيق. لعرض معلومات الإصدار والحجم وتاريخ التحديث اضغط «تفاصيل»؛ ولنسخ رابط Downloader استخدم زر «نسخ الرابط».</p>
     <div class="app-list">${rows}</div>
     <div class="empty-state" id="empty-state" hidden>ما لقينا تطبيق مطابق للبحث.</div>
   </section>`;
