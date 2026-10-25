@@ -33,6 +33,37 @@ if (document.body.dataset.page === 'admin') {
         const ratio = node('p', 'الملفات المكتملة مقارنة بالطلبات: ' + (100 * completed / requests).toFixed(1) + '% (مؤشر تقريبي، وليس نسبة نجاح فعلية)', 'caption');
         usageBox.append(ratio);
       }
+      try {
+        const activity = await api('/api/v1/admin/device-insights/analytics');
+        if (current !== usageGeneration) return;
+        const heading = node('h2', 'نشاط الأجهزة والإصدارات');
+        usageBox.append(heading);
+        const deviceMetrics = node('div', null, 'usage-metrics');
+        for (const [value, label] of [
+          [activity.summary?.registered, 'الأجهزة المسجلة'],
+          [activity.summary?.active24h, 'تواصلت خلال 24 ساعة'],
+          [activity.summary?.active7d, 'تواصلت خلال 7 أيام'],
+          [activity.summary?.active30d, 'تواصلت خلال 30 يومًا'],
+          [activity.summary?.registered24h, 'أجهزة جديدة خلال 24 ساعة']
+        ]) {
+          const card = node('div', null, 'usage-metric');
+          card.append(node('strong', value == null ? '—' : Number(value).toLocaleString('en-US')), node('span', label));
+          deviceMetrics.append(card);
+        }
+        usageBox.append(deviceMetrics);
+        for (const [title, rows] of [['إصدارات التطبيق',activity.versions],['أنظمة الأجهزة',activity.platforms]]) {
+          const section = node('details');
+          section.append(node('summary', title));
+          for (const row of rows || []) section.append(node('p', String(row.label) + ': ' + Number(row.count).toLocaleString('en-US'), 'caption'));
+          usageBox.append(section);
+        }
+        const history = node('details');
+        history.append(node('summary', 'تسجيل الأجهزة خلال آخر 14 يومًا'));
+        for (const row of activity.registrations || []) history.append(node('p', String(row.day) + ': ' + Number(row.registrations).toLocaleString('en-US'), 'caption'));
+        usageBox.append(history, node('p', activity.note || 'النشاط مبني على آخر تواصل مسجل، وليس عدد مرات تشغيل التطبيق.', 'caption'));
+      } catch {
+        usageBox.append(node('p', 'تقارير نشاط الأجهزة غير متاحة حاليًا، وإحصاءات التحميل مستقلة عنها.', 'caption'));
+      }
       const insights = node('a', 'عرض تقارير الأجهزة والإصدارات ←', 'btn');
       insights.href = '/api/v1/admin/device-insights';
       usageBox.append(insights, node('p', 'التحميل من الموقع لا يثبت تثبيت التطبيق. إعادة التنزيل تُحسب مرة أخرى؛ العدد ليس عدد أشخاص.', 'caption'));
