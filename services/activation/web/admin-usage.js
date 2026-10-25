@@ -22,11 +22,14 @@ if (document.body.dataset.page === 'admin') {
         [data.completed?.today, 'تحميلات مكتملة اليوم', 'اليوم بتوقيت السعودية']
       ]) {
         const card = node('div', null, 'usage-metric');
-        card.append(node('strong', value == null ? '—' : Number(value).toLocaleString('ar-SA')),
+        card.append(node('strong', value == null ? '—' : Number(value).toLocaleString('en-US')),
           node('span', label), node('small', help));
         metrics.append(card);
       }
-      usageBox.append(metrics, node('p', 'التحميل من الموقع لا يثبت تثبيت التطبيق. إعادة التنزيل تُحسب مرة أخرى؛ العدد ليس عدد أشخاص.', 'caption'));
+      usageBox.append(metrics);
+      const insights = node('a', 'عرض تقارير الأجهزة والإصدارات ←', 'btn');
+      insights.href = '/api/v1/admin/device-insights';
+      usageBox.append(insights, node('p', 'التحميل من الموقع لا يثبت تثبيت التطبيق. إعادة التنزيل تُحسب مرة أخرى؛ العدد ليس عدد أشخاص.', 'caption'));
       const detail = node('details');
       detail.append(node('summary', 'كيف تُحسب الأرقام؟'), node('p',
         'نعدّ إرسال ملف APK كاملًا، ونستبعد الطلبات الفاشلة وفحص الروابط والأجزاء المنفصلة من التحميل المجزأ. التحميل المباشر من GitHub وGoogle Play غير مشمول. الأجهزة بالأسفل تُعدّ حسب رقم الجهاز، ولا تزيد مع كل فتح للتطبيق.', 'caption'));
