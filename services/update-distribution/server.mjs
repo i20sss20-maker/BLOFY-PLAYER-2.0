@@ -33,7 +33,9 @@ const securityHeaders = Object.freeze({
   'x-frame-options': 'DENY',
   'referrer-policy': 'no-referrer',
   'strict-transport-security': 'max-age=31536000',
-  'permissions-policy': 'camera=(), microphone=(), geolocation=()'
+  'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+  'cross-origin-resource-policy': 'same-origin',
+  'x-permitted-cross-domain-policies': 'none'
 });
 
 function sendJson(req, res, status, value) {
