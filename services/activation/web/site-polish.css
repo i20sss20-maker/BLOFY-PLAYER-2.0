@@ -478,3 +478,8 @@ body:not([data-page="admin"]) .primary,body:not([data-page="admin"]) a.btn{min-h
 body:not([data-page="admin"]) .page-title h1{line-height:1.16;letter-spacing:-.025em}
 body:not([data-page="admin"]) .page-title p{line-height:1.85}
 @media(max-width:760px){body:not([data-page="admin"]) .wrap>.nav{gap:10px;flex-wrap:wrap;padding-block:10px}body:not([data-page="admin"]) .site-links,body:not([data-page="admin"]) .nav-links{max-width:100%;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin}body:not([data-page="admin"]) .site-links>a,body:not([data-page="admin"]) .nav-links>a{white-space:nowrap}body:not([data-page="admin"]) .page-title h1{font-size:clamp(30px,8vw,48px)}}
+
+/* Western (English) digits across BLOFY public/admin surfaces */
+:root{font-variant-numeric:lining-nums tabular-nums}
+body{font-feature-settings:"lnum" 1}
+input[type="number"],input[type="tel"],input[inputmode="numeric"],input[inputmode="decimal"],time,.metric strong,.usage-metric strong,.apps-count{font-variant-numeric:lining-nums tabular-nums;direction:ltr;unicode-bidi:isolate}
