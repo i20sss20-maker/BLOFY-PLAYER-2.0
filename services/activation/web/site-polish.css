@@ -467,3 +467,14 @@ body[data-page="admin"] .admin-live-service.bad{border-color:rgba(255,120,145,.5
 @media(max-width:760px){body[data-page="admin"] .admin-topbar{align-items:flex-start}body[data-page="admin"] .admin-live-service{order:3;width:100%}body[data-page="admin"] .admin-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}body[data-page="admin"] .admin-quick-grid>a{min-width:0}body[data-page="admin"] .usage-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:420px){body[data-page="admin"] .admin-quick-grid,body[data-page="admin"] .usage-metrics{grid-template-columns:1fr}body[data-page="admin"] .admin-title{font-size:23px}}
 @media(prefers-reduced-motion:reduce){body[data-page="admin"] .admin-quick-grid>a{transition:none}body[data-page="admin"] .admin-quick-grid>a:hover{transform:none}}
+
+/* Shared cinematic refinements for public BLOFY pages */
+body:not([data-page="admin"]) .wrap>.nav{border-bottom:1px solid rgba(189,151,255,.12);box-shadow:0 12px 40px rgba(0,0,0,.12)}
+body:not([data-page="admin"]) .wrap>.nav .brand{min-width:0}
+body:not([data-page="admin"]) .wrap>.nav a{transition:color .18s ease,background .18s ease,border-color .18s ease}
+body:not([data-page="admin"]) .card,body:not([data-page="admin"]) .auth-card,body:not([data-page="admin"]) .dashboard-panel{border-radius:clamp(16px,2vw,24px);border-color:rgba(188,145,255,.18)}
+body:not([data-page="admin"]) h1,body:not([data-page="admin"]) h2{overflow-wrap:break-word;text-wrap:balance}
+body:not([data-page="admin"]) .primary,body:not([data-page="admin"]) a.btn{min-height:44px}
+body:not([data-page="admin"]) .page-title h1{line-height:1.16;letter-spacing:-.025em}
+body:not([data-page="admin"]) .page-title p{line-height:1.85}
+@media(max-width:760px){body:not([data-page="admin"]) .wrap>.nav{gap:10px;flex-wrap:wrap;padding-block:10px}body:not([data-page="admin"]) .site-links,body:not([data-page="admin"]) .nav-links{max-width:100%;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin}body:not([data-page="admin"]) .site-links>a,body:not([data-page="admin"]) .nav-links>a{white-space:nowrap}body:not([data-page="admin"]) .page-title h1{font-size:clamp(30px,8vw,48px)}}
