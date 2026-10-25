@@ -58,8 +58,26 @@ if (document.body.dataset.page === 'admin') {
           usageBox.append(section);
         }
         const history = node('details');
+        history.open = true;
         history.append(node('summary', 'تسجيل الأجهزة خلال آخر 14 يومًا'));
-        for (const row of activity.registrations || []) history.append(node('p', String(row.day) + ': ' + Number(row.registrations).toLocaleString('en-US'), 'caption'));
+        const days = activity.registrations || [];
+        const max = Math.max(1, ...days.map(row => Number(row.registrations) || 0));
+        const chart = node('div', null, 'blofy-registration-chart');
+        chart.setAttribute('role', 'img');
+        chart.setAttribute('aria-label', 'أعداد تسجيل الأجهزة يوميًا خلال آخر 14 يومًا');
+        chart.style.cssText = 'display:flex;align-items:end;gap:8px;min-height:145px;overflow-x:auto;padding:16px 4px 4px';
+        for (const row of days) {
+          const count = Math.max(0, Number(row.registrations) || 0);
+          const item = node('div', null, 'blofy-registration-day');
+          item.style.cssText = 'flex:1;min-width:35px;display:flex;flex-direction:column;align-items:center;gap:6px';
+          const number = node('small', String(count));
+          const bar = node('div');
+          bar.style.cssText = 'width:100%;max-width:32px;height:' + Math.max(3,Math.round(95*count/max)) + 'px;border-radius:7px 7px 2px 2px;background:linear-gradient(180deg,#a878ff,#6131ba)';
+          const label = node('small', String(row.day).slice(5));
+          item.title = String(row.day) + ': ' + count;
+          item.append(number,bar,label); chart.append(item);
+        }
+        history.append(chart);
         usageBox.append(history, node('p', activity.note || 'النشاط مبني على آخر تواصل مسجل، وليس عدد مرات تشغيل التطبيق.', 'caption'));
       } catch {
         usageBox.append(node('p', 'تقارير نشاط الأجهزة غير متاحة حاليًا، وإحصاءات التحميل مستقلة عنها.', 'caption'));
