@@ -570,3 +570,14 @@ body:has(.portal .login-layout) .topbar .language-control{min-width:0}
 body:has(.portal .login-layout) .topbar .language-control select{min-height:44px;max-width:180px}
 @media(max-width:1100px){body:has(.portal .login-layout) .topbar .language-control{justify-self:end}body:has(.portal .login-layout) .topbar .site-links{scroll-snap-type:x proximity}body:has(.portal .login-layout) .topbar .site-links>a{scroll-snap-align:start}}
 @media(max-width:500px){body:has(.portal .login-layout) .topbar .brand-copy{font-size:clamp(12px,3.6vw,16px)}body:has(.portal .login-layout) .topbar .language-control select{max-width:125px}}
+
+/* BLOFY Command Center — responsive monitoring actions */
+.blofy-ops-panel{border:1px solid rgba(185,140,255,.2);border-radius:22px;background:linear-gradient(145deg,rgba(34,25,52,.94),rgba(13,11,22,.98));margin-block:18px;padding:clamp(16px,2.2vw,26px)}
+.blofy-ops-panel .section-top{margin-bottom:15px}
+.blofy-ops-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-block:16px}
+.blofy-ops-actions>a{display:flex;align-items:center;justify-content:center;min-height:52px;padding:12px;text-align:center;color:#efe5ff;text-decoration:none;font-weight:750;border:1px solid rgba(185,140,255,.23);border-radius:14px;background:rgba(137,80,215,.12);transition:background .18s,border-color .18s}
+.blofy-ops-actions>a:hover,.blofy-ops-actions>a:focus-visible{background:rgba(137,80,215,.26);border-color:rgba(211,179,255,.6)}
+.blofy-ops-actions>a:focus-visible{outline:3px solid #d7b7ff;outline-offset:2px}
+@media(max-width:1000px){.blofy-ops-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.blofy-ops-actions{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.blofy-ops-actions>a{transition:none}}
