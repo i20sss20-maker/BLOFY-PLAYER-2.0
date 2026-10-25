@@ -441,6 +441,28 @@ async function downloadPage(req) {
   const rootUrl = publicBase(req);
   const directUrl = `${rootUrl}/d/blofy`;
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#08070e"><meta name="description" content="مركز تحميل BLOFY PLAYER الرسمي لإصدارات أندرويد وملفات APK."><link rel="canonical" href="${UPDATE_SITE_CANONICAL}"><meta property="og:site_name" content="BLOFY PLAYER"><meta property="og:title" content="BLOFY PLAYER | مركز الإصدارات"><meta property="og:url" content="${UPDATE_SITE_CANONICAL}"><title>BLOFY PLAYER | التحميل</title><style>
+/* Responsive touch and remote usability: final cascade layer */
+@media(max-width:620px){
+ .topbar{min-height:64px;gap:8px;flex-wrap:wrap}
+ .top-links{order:3;width:100%;overflow-x:auto;scrollbar-width:thin;justify-content:flex-start;padding-bottom:4px}
+ .top-links a{min-height:44px}
+ .official-card{grid-template-columns:52px minmax(0,1fr);gap:12px;padding:16px}
+ .official-icon{width:50px;height:50px}
+ .official-icon img{width:44px;height:44px}
+ .official-title h1{font-size:clamp(18px,5vw,23px);line-height:1.3}
+ .official-download{grid-column:1/-1;width:100%;min-width:0;min-height:50px}
+ .app-row{grid-template-columns:48px minmax(0,1fr);gap:10px;padding:12px}
+ .app-icon{width:46px;height:46px}.app-icon img{width:40px;height:40px}
+ .app-title-line h3{white-space:normal;overflow-wrap:anywhere;font-size:14px}
+ .app-desc{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:11px}
+ .app-actions{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto;min-width:0}
+ .app-download{min-width:0;min-height:46px;font-size:12px}
+ .app-more{min-height:44px;padding-inline:14px;font-size:11px}
+ .app-details{grid-column:1/-1}
+ .search-box{height:48px}
+ .filter-chip{min-height:44px}
+}
+@media(min-width:621px) and (max-width:860px){.app-row{grid-template-columns:54px minmax(0,1fr) auto;gap:12px}.app-actions{min-width:116px}.app-download{min-width:116px}}
 /* BLOFY cinematic download-center theme — keyboard/TV-friendly */
 :root{--focus:#c6a4ff}
 html{scroll-behavior:smooth}
