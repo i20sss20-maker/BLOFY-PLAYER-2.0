@@ -62,6 +62,13 @@
       .catch(function(){lastHealthy=false;record(false,null);render(false,'تعذر الوصول للخدمة أو انتهت المهلة');})
       .finally(function(){clearTimeout(timeout);inFlight=false;schedule();});
   }
+  root.setAttribute('role','button');
+  root.setAttribute('tabindex','0');
+  root.setAttribute('title','اضغط لتحديث حالة الخدمة');
+  root.addEventListener('click',function(){check();});
+  root.addEventListener('keydown',function(event){
+    if(event.key==='Enter'||event.key===' '){event.preventDefault();check();}
+  });
   document.addEventListener('visibilitychange',function(){
     if(document.hidden)clearTimeout(timer);
     else check();
