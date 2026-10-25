@@ -10,16 +10,21 @@
   var history=[];
   var originalTitle=document.title;
   var warningShown=false;
+  var errorSince=null;
   var detail=document.createElement('small');
   detail.setAttribute('aria-live','off');
   detail.style.cssText='display:block;opacity:.75;margin-top:3px';
   text.parentNode.appendChild(detail);
   function record(ok,latency){
     failures=ok?0:failures+1;
+    if(ok)errorSince=null;
+    else if(errorSince===null)errorSince=Date.now();
     history.push({ok:ok,latency:latency});
     if(history.length>10)history.shift();
     var success=history.filter(function(x){return x.ok;}).length;
     detail.textContent='آخر 10 فحوصات: '+success+'/'+history.length+' ناجحة'+(failures>=2?' • تنبيه: '+failures+' إخفاقات متتالية':'');
+    root.dataset.healthFailures=String(failures);
+    root.dataset.healthLastCheck=new Date().toISOString();
     root.title='آخر فحص: '+new Date().toLocaleString('en-US')+(latency!=null?' • '+latency+'ms':'');
     if(failures>=2){
       document.title='⚠ خلل في خدمة BLOFY | '+originalTitle;
