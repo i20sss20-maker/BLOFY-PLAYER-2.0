@@ -14,7 +14,7 @@ import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } fr
 import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload, openRemoteApk } from './app-library.mjs';
 import { appDownloadAction } from './app-download-policy.mjs';
 import { observeDownloadCompletion } from './download-metrics.mjs';
-import { recordDownloadCompletion } from './app-library.mjs';
+import { recordDownloadCompletion, getDownloadStats } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
@@ -369,7 +369,7 @@ function downloadCategoryLabel(category) {
   })[category] || category;
 }
 
-function renderAppLibrary(apps, variants = [], rootUrl = '') {
+function renderAppLibrary(apps, variants = [], rootUrl = '', counts = {}) {
   if (!apps.length) return '';
   const variantsBySlug = new Map();
   for (const variant of variants) {
@@ -389,6 +389,7 @@ function renderAppLibrary(apps, variants = [], rootUrl = '') {
 
   const rows = apps.map(app => {
     const meta = [app.architecture, formatApkSize(app.apkSizeBytes), app.devices].filter(Boolean).join(' · ');
+    const downloadCount = counts[`app:${app.slug}`]?.downloadCount || 0;
     const searchText = [app.name, app.description, app.devices, app.architecture, app.version, downloadCategoryLabel(app.category)].filter(Boolean).join(' ');
     const isTv = /(?:android tv|google tv|fire tv|\btv\b)/i.test(String(app.devices || ''));
     const detailsId = `details-${app.slug}`;
@@ -407,7 +408,7 @@ function renderAppLibrary(apps, variants = [], rootUrl = '') {
       <div class="app-copy">
         <div class="app-title-line"><h3>${escapeHtml(app.name)}</h3>${app.version ? `<span class="app-version">v${escapeHtml(app.version)}</span>` : ''}${app.featured ? '<span class="mini-badge">موصى به</span>' : ''}${appFreshnessBadge(app)}</div>
         <p class="app-desc">${escapeHtml(app.description)}</p>
-        <span class="device-tag">${escapeHtml(meta)}</span>
+        <span class="device-tag">${escapeHtml(meta)}</span><span class="device-tag" title="عدد طلبات التحميل المسجلة عبر الموقع، وليس عدد مرات التثبيت">⬇ ${Number(downloadCount).toLocaleString("en-US")} طلب تحميل</span>
       </div>
       <div class="app-actions">
         ${appAction.kind === 'unavailable'
@@ -442,7 +443,7 @@ ${appAction.kind === 'unavailable' ? '<div class="stable-download-link"><strong>
 
 async function downloadPage(req) {
   const release = getActiveRelease();
-  const [apps, variants] = await Promise.all([listApps(), listAppVariants()]);
+  const [apps, variants, stats] = await Promise.all([listApps(), listAppVariants(), getDownloadStats()]);
   const rootUrl = publicBase(req);
   const directUrl = `${rootUrl}/d/blofy`;
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#08070e"><meta name="description" content="مركز تحميل BLOFY PLAYER الرسمي لإصدارات أندرويد وملفات APK."><link rel="canonical" href="${UPDATE_SITE_CANONICAL}"><meta property="og:site_name" content="BLOFY PLAYER"><meta property="og:title" content="BLOFY PLAYER | مركز الإصدارات"><meta property="og:url" content="${UPDATE_SITE_CANONICAL}"><title>BLOFY PLAYER | التحميل</title><style>
@@ -563,7 +564,7 @@ main{padding:26px 0 38px}
   .app-actions{grid-template-columns:1fr}.app-more{width:100%}
 }
 @media(pointer:coarse){.official-download,.app-download,.app-more,.filter-chip,.copy-link,.variant-link,.top-links a{min-height:44px}}
-</style></head><body><div class="shell"><header class="topbar"><div class="brand"><div class="mark"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><span class="brand-copy"><strong>BLOFY PLAYER</strong><small>DOWNLOAD CENTER</small></span></div><nav class="top-links" aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav><div class="top-status">مركز التحميل متصل</div></header><main><section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/d/blofy">تحميل BLOFY APK ↓</a></section>${renderCinematicV74DisplayCard()}<section class="official-card" id="xiaomi-v74" aria-label="نسخة شاومي التجريبية"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER Xiaomi"></div><div class="official-copy"><div class="official-title"><h2>BLOFY PLAYER Xiaomi 74</h2><span class="badge">تجريبي · Android TV 9</span></div><div class="official-desc">نسخة مستقلة مخصصة لتجربة التثبيت على Xiaomi MiTV-AESP0. لا تستبدل التطبيق الرسمي، ولم تُختبر بعد على الجهاز الفعلي.</div><div class="official-meta">Version Code 2000074 · APK 229 MB</div><div class="direct-url">updates.blofyplayer.com/download/xiaomi-v74.apk</div></div><a class="official-download" href="/download/xiaomi-v74.apk">تحميل نسخة شاومي APK ↓</a></section>${renderAppLibrary(apps, variants, rootUrl)}</main><footer class="foot"><span>BLOFY PLAYER · blofyplayer.com</span><nav aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav></footer></div><script>
+</style></head><body><div class="shell"><header class="topbar"><div class="brand"><div class="mark"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><span class="brand-copy"><strong>BLOFY PLAYER</strong><small>DOWNLOAD CENTER</small></span></div><nav class="top-links" aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav><div class="top-status">مركز التحميل متصل</div></header><main><section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/d/blofy">تحميل BLOFY APK ↓</a></section>${renderCinematicV74DisplayCard()}<section class="official-card" id="xiaomi-v74" aria-label="نسخة شاومي التجريبية"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER Xiaomi"></div><div class="official-copy"><div class="official-title"><h2>BLOFY PLAYER Xiaomi 74</h2><span class="badge">تجريبي · Android TV 9</span></div><div class="official-desc">نسخة مستقلة مخصصة لتجربة التثبيت على Xiaomi MiTV-AESP0. لا تستبدل التطبيق الرسمي، ولم تُختبر بعد على الجهاز الفعلي.</div><div class="official-meta">Version Code 2000074 · APK 229 MB</div><div class="direct-url">updates.blofyplayer.com/download/xiaomi-v74.apk</div></div><a class="official-download" href="/download/xiaomi-v74.apk">تحميل نسخة شاومي APK ↓</a></section>${renderAppLibrary(apps, variants, rootUrl, stats.byKey)}</main><footer class="foot"><span>BLOFY PLAYER · blofyplayer.com</span><nav aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav></footer></div><script>
 (() => {
   const rows = [...document.querySelectorAll('[data-app-row]')];
   const search = document.getElementById('app-search');
