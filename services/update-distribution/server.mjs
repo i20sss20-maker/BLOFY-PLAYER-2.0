@@ -419,7 +419,7 @@ function renderAppLibrary(apps, variants = [], rootUrl = '', counts = {}) {
         <p class="app-desc">${escapeHtml(app.description)}</p>
         <span class="device-tag">${escapeHtml(meta)}</span><span class="device-tag" title="عدد طلبات التحميل المسجلة عبر الموقع، وليس عدد مرات التثبيت">⬇ ${Number(downloadCount).toLocaleString("en-US")} طلب تحميل</span>
       </div>
-      <div class="app-actions">
+      <div class="app-actions">\n        <a class="app-more" href="/apps/${encodeURIComponent(app.slug)}">صفحة التطبيق ↗</a>
         ${appAction.kind === 'unavailable'
           ? '<span class="app-more" role="status">رابط التحميل يحتاج تحديثًا</span>'
           : `<a class="app-download" href="/download/apps/${encodeURIComponent(app.slug)}">${appAction.kind === 'official' ? 'فتح المصدر الرسمي ↗' : 'تحميل APK ↓'}</a>`}
