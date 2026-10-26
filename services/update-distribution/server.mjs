@@ -612,6 +612,41 @@ main{padding:26px 0 38px}
 @media(max-width:350px){.app-list{grid-template-columns:1fr}}
 @media(min-width:1100px){.app-list{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .app-list>.official-card{display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0;min-height:285px;padding:20px;gap:12px;border-radius:22px}.app-list>.official-card .official-icon{width:88px;height:88px;flex-shrink:0}.app-list>.official-card .official-icon img{width:76px;height:76px}.app-list>.official-card .official-copy{width:100%;flex:1;min-width:0}.app-list>.official-card .official-title{justify-content:center;flex-wrap:wrap}.app-list>.official-card .official-title h1,.app-list>.official-card .official-title h2{font-size:17px}.app-list>.official-card .official-desc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12px}.app-list>.official-card .direct-url{overflow-wrap:anywhere;font-size:10px}.app-list>.official-card .official-download{width:100%;min-width:0;min-height:48px}.app-list>.official-card:focus-within{outline:3px solid #fff;outline-offset:3px}@media(max-width:540px){.app-list>.official-card{min-height:275px;padding:12px}.app-list>.official-card .official-icon{width:66px;height:66px}.app-list>.official-card .official-icon img{width:58px;height:58px}}
+/* Unified BLOFY APPS visual system */
+:root{color-scheme:dark;--blofy-bg:#0b0914;--blofy-panel:#181226;--blofy-border:#3b2b55;--blofy-accent:#995cf5;--blofy-text:#f7f3ff;--blofy-muted:#b8adc9}
+html{scroll-behavior:smooth}
+body{background:radial-gradient(ellipse 85% 420px at 50% 0%,#27153e 0%,#100c1c 65%,#0b0914 100%);color:var(--blofy-text);font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
+.shell{max-width:1320px;margin:auto;padding-inline:clamp(12px,2.6vw,32px)}
+.topbar{border-bottom:1px solid var(--blofy-border);padding-block:16px;gap:14px}
+.brand-copy strong{letter-spacing:.04em}.brand-copy small{color:var(--blofy-muted)}
+.top-links{gap:8px}.top-links a{border:1px solid var(--blofy-border);border-radius:12px;padding:10px 13px;text-decoration:none}
+.top-status{border-radius:999px;font-size:12px}
+.apps-section{padding-top:24px}
+.apps-head{margin:0 0 18px;gap:14px}.apps-head h2{font-size:clamp(20px,2.6vw,28px);line-height:1.35}
+.app-controls{gap:12px;margin-bottom:14px}
+.search-box{border-radius:14px;min-height:48px;background:#191327;border-color:var(--blofy-border)}
+.filter-bar{display:flex;flex-wrap:wrap;gap:7px}
+.filter-chip{border-radius:999px;min-height:42px}
+.apps-help{color:var(--blofy-muted);line-height:1.7}
+.app-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;align-items:stretch}
+.app-list>.app-row,.app-list>.official-card{box-sizing:border-box;min-width:0;min-height:310px;margin:0;padding:20px;border:1px solid var(--blofy-border);border-radius:22px;background:linear-gradient(155deg,#231a35,#15101f 76%);box-shadow:0 8px 28px #0004;transition:border-color .15s,transform .15s}
+.app-list>.app-row:hover,.app-list>.official-card:hover,.app-list>.app-row:focus-within,.app-list>.official-card:focus-within{border-color:#b58bff;transform:translateY(-2px)}
+.app-list>.app-row .app-icon,.app-list>.official-card .official-icon{width:82px;height:82px;margin:0 auto 2px;display:grid;place-items:center;border-radius:20px;background:#ffffff0b}
+.app-list>.app-row .app-icon img,.app-list>.official-card .official-icon img{width:70px;height:70px;object-fit:contain}
+.app-list>.app-row .app-copy,.app-list>.official-card .official-copy{min-width:0;flex:1;text-align:center}
+.app-list>.app-row .app-title-line h3,.app-list>.official-card .official-title h1,.app-list>.official-card .official-title h2{font-size:17px;line-height:1.4;margin:0}
+.app-list>.app-row .app-desc,.app-list>.official-card .official-desc{font-size:12px;line-height:1.6;color:var(--blofy-muted)}
+.app-list>.app-row .app-actions{margin-top:auto;width:100%;display:flex;flex-direction:column;gap:8px}
+.app-list>.app-row .app-download,.app-list>.official-card .official-download{display:flex;justify-content:center;align-items:center;min-height:50px;width:100%;border-radius:13px;background:linear-gradient(120deg,#8143df,#a66bf5);color:white;font-weight:800;text-align:center;text-decoration:none}
+.app-list>.app-row .app-more{min-height:42px;border-radius:12px}
+.app-list>.official-card .official-download{margin-top:auto}
+.app-list>.official-card .direct-url{font-size:10px;color:var(--blofy-muted)}
+.apps-feature{margin:28px 0 18px}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #f8e9ff;outline-offset:3px}
+@media(max-width:560px){.shell{padding-inline:12px}.topbar{gap:10px}.app-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.app-list>.app-row,.app-list>.official-card{min-height:285px;padding:12px;border-radius:16px}.app-list>.app-row .app-icon,.app-list>.official-card .official-icon{width:62px;height:62px}.app-list>.app-row .app-icon img,.app-list>.official-card .official-icon img{width:54px;height:54px}.app-list>.app-row .app-title-line h3,.app-list>.official-card .official-title h1,.app-list>.official-card .official-title h2{font-size:14px}.app-list>.app-row .app-download,.app-list>.official-card .official-download{font-size:12px;padding:10px 6px}.app-list>.official-card .official-meta{font-size:10px}}
+@media(max-width:360px){.app-list{grid-template-columns:1fr}}
+@media(min-width:1150px){.app-list{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.app-list>.app-row,.app-list>.official-card{transition:none}}
 </style></head><body><div class="shell"><header class="topbar"><div class="brand"><div class="mark"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><span class="brand-copy"><strong>BLOFY PLAYER</strong><small>DOWNLOAD CENTER</small></span></div><nav class="top-links" aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav><div class="top-status">مركز التحميل متصل</div></header><main>${renderAppLibrary(apps, variants, rootUrl, stats.byKey, ownCards)}</main><footer class="foot"><span>BLOFY PLAYER · blofyplayer.com</span><nav aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav></footer></div><script>
 (() => {
   const rows = [...document.querySelectorAll('[data-app-row]')];
