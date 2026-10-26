@@ -722,7 +722,7 @@ button{font:inherit;cursor:pointer}.pay-button{display:flex;align-items:center;j
   });
   const sync=$('deviceSync');
   const VALID_DEVICE=/^BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}$/i;
-  const VALID_CODE=/^\d{6}$/;
+  const VALID_CODE=/^\\d{6}$/;
   let lastLookup='';
   function linkedCredentials(value){
     const id=String(value?.deviceId||'').trim().toUpperCase();
@@ -776,7 +776,7 @@ button{font:inherit;cursor:pointer}.pay-button{display:flex;align-items:center;j
       if(customer){
         if(!$('firstName').value.trim()&&customer.name)$('firstName').value=String(customer.name).slice(0,80);
         if(!$('phone').value.trim()&&customer.phone){
-          const raw=String(customer.phone).replace(/[^\d+]/g,'');
+          const raw=String(customer.phone).replace(/[^\\d+]/g,'');
           $('phone').value=raw.startsWith('9665')?'0'+raw.slice(3):raw.slice(0,20);
         }
         if(!$('email').value.trim()&&customer.email)$('email').value=String(customer.email).slice(0,254);
