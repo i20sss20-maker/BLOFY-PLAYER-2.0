@@ -630,7 +630,7 @@ export function createTapPaymentHandlers({
   }
 
   function servePayPage(res) {
-    const body = `<!doctype html>
+    let body = `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
@@ -775,6 +775,7 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
 })();
 </script>
 </body></html>`;
+    if (env.BLOFY_PAYMENT_PROVIDER === 'geidea') body = body.replaceAll('Tap','Geidea');
     res.writeHead(200,{
       'content-type':'text/html; charset=utf-8',
       'content-length':Buffer.byteLength(body),
