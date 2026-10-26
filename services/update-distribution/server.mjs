@@ -387,6 +387,15 @@ function renderAppLibrary(apps, variants = [], rootUrl = '', counts = {}) {
     .map(([key,label], index) => `<button class="filter-chip${index === 0 ? ' active' : ''}" type="button" data-filter="${key}">${label}</button>`)
     .join('');
 
+  const ranked = [...apps].sort((a,b) => (Number(counts['app:' + b.slug]?.downloadCount || 0) - Number(counts['app:' + a.slug]?.downloadCount || 0)) || a.name.localeCompare(b.name));
+  const trending = ranked.filter(app => Number(counts['app:' + app.slug]?.downloadCount || 0) > 0).slice(0, 5);
+  const latest = [...apps].filter(app => app.versionUpdatedAt || app.updatedAt)
+    .sort((a,b) => new Date(b.versionUpdatedAt || b.updatedAt).getTime() - new Date(a.versionUpdatedAt || a.updatedAt).getTime()).slice(0, 5);
+  const featureList = (items, label, type) => items.length
+    ? '<section class="apps-feature" aria-label="' + label + '"><h3>' + label + '</h3><div class="apps-feature-items">' + items.map((app,index) =>
+      '<a href="#app-' + encodeURIComponent(app.slug) + '" class="feature-item"><strong>' + (type === 'popular' ? (index + 1) + '. ' : '') + escapeHtml(app.name) + '</strong><small>' + (type === 'popular' ? '⬇ ' + Number(counts['app:' + app.slug]?.downloadCount || 0).toLocaleString('en-US') + ' طلب' : 'آخر تحديث: ' + escapeHtml(formatPublicDate(app.versionUpdatedAt || app.updatedAt) || '—')) + '</small></a>'
+    ).join('') + '</div></section>' : '';
+  const featuredSections = featureList(trending, '🔥 الأكثر تحميلًا', 'popular') + featureList(latest, '🆕 آخر التحديثات', 'latest');
   const rows = apps.map(app => {
     const meta = [app.architecture, formatApkSize(app.apkSizeBytes), app.devices].filter(Boolean).join(' · ');
     const downloadCount = counts[`app:${app.slug}`]?.downloadCount || 0;
@@ -429,7 +438,7 @@ ${appAction.kind === 'unavailable' ? '<div class="stable-download-link"><strong>
     </article>`;
   }).join('');
 
-  return `<section class="apps-section">
+  return `<section class="apps-section">\n    <style>.apps-feature{margin:18px 0;padding:18px;border:1px solid rgba(167,120,255,.25);border-radius:18px;background:rgba(25,17,42,.65)}.apps-feature h3{margin:0 0 12px}.apps-feature-items{display:flex;gap:10px;overflow-x:auto;padding-bottom:5px}.feature-item{flex:1;min-width:155px;text-decoration:none;color:inherit;border:1px solid rgba(167,120,255,.22);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:7px}.feature-item:hover,.feature-item:focus-visible{border-color:#a878ff;background:rgba(167,120,255,.12)}.feature-item small{opacity:.8}</style>\n    ${featuredSections}
     <div class="apps-head"><h2>تطبيقات للشاشات والرسيفرات</h2><span class="apps-count" id="visible-count">${apps.length}</span></div>
     <div class="app-controls">
       <label class="search-box" for="app-search"><span>⌕</span><input id="app-search" type="search" placeholder="ابحث عن تطبيق..." autocomplete="off" spellcheck="false"><button class="search-clear" id="search-clear" type="button" aria-label="مسح البحث" hidden>×</button></label>
