@@ -1,0 +1,60 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import {minor,plansFromConfig,createSignature,verifyGeideaCallback,verifiedPayment} from '../src/geidea-live.mjs';
+
+const publicKey='12345678-1234-4234-8234-123456789abc';
+const password='a-private-test-password-not-real';
+const id='44444444-4444-4444-8444-444444444444';
+const orderId='55555555-5555-4555-8555-555555555555';
+const config={publicKey,password};
+const order={id,amount_minor:1250,currency:'SAR',provider_reference:null};
+function payment() {
+  return {
+    orderId,merchantReferenceId:id,merchantPublicKey:publicKey,
+    amount:12.5,totalAmount:12.5,currency:'SAR',isTest:false,
+    status:'Success',detailedStatus:'Paid',paymentOperation:'Pay',
+    totalCapturedAmount:12.5,totalRefundedAmount:0,
+    transactions:[{type:'Pay',status:'Success',currency:'SAR',amount:12.5,codes:{responseCode:'000',detailedResponseCode:'000'}}]
+  };
+}
+function callback(p=payment()) {
+  const timeStamp='2026-10-26T12:00:00Z';
+  const data=publicKey+'12.50'+'SAR'+p.orderId+p.status+id+timeStamp;
+  return {order:p,timeStamp,signature:crypto.createHmac('sha256',password).update(data).digest('base64')};
+}
+test('decimal amounts are exact minor units',()=>{
+  assert.equal(minor('12.50'),1250);
+  assert.equal(minor(0),0);
+  assert.throws(()=>minor('0.001'));
+  assert.throws(()=>minor(-1));
+});
+test('create session signature uses Geidea specified HMAC',()=>{
+  assert.equal(createSignature({publicKey,password,amountMinor:1250,reference:id,timestamp:'2026/10/26 12:00:00'}),
+    crypto.createHmac('sha256',password).update(publicKey+'12.50SAR'+id+'2026/10/26 12:00:00').digest('base64'));
+});
+test('Geidea live plans reuse exact configured prices, never invent a plan',()=>{
+  const p=plansFromConfig(JSON.stringify([{planKey:'tap-live-monthly',name:'شهر',priceMinor:1900,durationDays:30,currency:'SAR',maxDevices:1}]));
+  assert.deepEqual(p.map(x=>[x.planKey,x.priceMinor,x.durationDays]),[['geidea-live-monthly',1900,30]]);
+  assert.deepEqual(plansFromConfig(''),[]);
+  assert.throws(()=>plansFromConfig(JSON.stringify([{planKey:'tap-live-test',name:'x',priceMinor:1,currency:'SAR'}])));
+  assert.throws(()=>plansFromConfig(JSON.stringify([{planKey:'tap-live-foo',name:'x',priceMinor:1000,currency:'USD'}])));
+});
+test('live signed callback checks signature, amount, merchant, order and test flag',()=>{
+  assert.equal(verifyGeideaCallback(callback(),order,config),orderId);
+  assert.throws(()=>verifyGeideaCallback({...callback(),signature:'A'.repeat(43)+'='},order,config));
+  assert.throws(()=>verifyGeideaCallback(callback({...payment(),isTest:true}),order,config));
+  assert.throws(()=>verifyGeideaCallback(callback({...payment(),merchantPublicKey:crypto.randomUUID()}),order,config));
+  assert.throws(()=>verifyGeideaCallback(callback({...payment(),amount:13}),order,config));
+});
+test('paid only after actual captured Pay and no refunds',()=>{
+  assert.equal(verifiedPayment(payment(),order,config),'paid');
+  assert.equal(verifiedPayment({...payment(),status:'Failed',detailedStatus:'OrderFailed'},order,config),'failed');
+  assert.equal(verifiedPayment({...payment(),status:'InProgress',detailedStatus:'PayFailed'},order,config),'pending');
+  assert.throws(()=>verifiedPayment({...payment(),isTest:true},order,config));
+  assert.throws(()=>verifiedPayment({...payment(),totalRefundedAmount:1},order,config));
+  assert.throws(()=>verifiedPayment({...payment(),totalCapturedAmount:1},order,config));
+  assert.throws(()=>verifiedPayment({...payment(),transactions:[]},order,config));
+  assert.throws(()=>verifiedPayment({...payment(),merchantReferenceId:crypto.randomUUID()},order,config));
+  assert.throws(()=>verifiedPayment(payment(),{...order,provider_reference:crypto.randomUUID()},config));
+});

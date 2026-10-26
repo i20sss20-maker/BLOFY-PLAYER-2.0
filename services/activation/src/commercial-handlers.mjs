@@ -4,6 +4,7 @@ import { createActivationCredentialCodec } from './auth-protection.mjs';
 import { createGooglePlayReviewHandler } from './google-play-review.mjs';
 import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';
 import { createTapPaymentHandlers } from './tap-payments.mjs';
+import { createGeideaLiveHandlers } from './geidea-live.mjs';
 import { createZidPaymentHandlers } from './zid-payments.mjs';
 import { createZidOAuthHandlers } from './zid-oauth.mjs';
 
@@ -31,6 +32,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
     return deviceId;
   }
   const tapPayments = createTapPaymentHandlers({pool,json,readJson,authorize,schemaSql:ADMIN_CONSOLE_SCHEMA,env});
+  const geideaPayments = createGeideaLiveHandlers({pool,json,readJson,authorize,env});
   const zidOAuth = createZidOAuthHandlers({pool,json,keyHex,env});
   const zidPayments = createZidPaymentHandlers({pool,json,readJson,authorize,env,tokenProvider:zidOAuth.loadTokens});
   async function transaction(action) {
@@ -191,7 +193,9 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
     const path=url.pathname;
     if (await googlePlayReview(req,res,url)) return true;
     if (await zidOAuth(req,res,url)) return true;
+    if (await geideaPayments(req,res,url)) return true;
     if (await zidPayments(req,res,url)) return true;
+    if (env.BLOFY_PAYMENT_PROVIDER === 'geidea' && path === '/api/v1/payments/tap/test-checkout') {json(res,404,{error:'not_found'});return true;}
     if (await tapPayments(req,res,url)) return true;
     const routes=['/api/v1/subscriptions/status','/api/v1/license/recovery/create','/api/v1/license/recovery/restore',
       '/api/v1/device/sessions/revoke','/api/v1/device/identity/migrate','/api/v1/privacy/delete','/api/v1/privacy/support'];
@@ -209,8 +213,8 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
           planName:paid?.planName || (row?.status==='trial'?'تجربة BLOFY':row?.status==='active'?'BLOFY PLAYER':null),
           maxDevices:1,startsAt:paid?.startsAt ?? millis(row?.trial_started_at),
           expiresAt:paid?.expiresAt ?? millis(row?.expires_at),orderId:paid?.orderId || null,
-          purchasesAvailable:zidPayments.selected ? zidPurchasesAvailable : tapPayments.configured,
-          sandbox:zidPayments.selected ? false : tapPayments.sandbox});
+          purchasesAvailable:zidPayments.selected ? zidPurchasesAvailable : env.BLOFY_PAYMENT_PROVIDER==='geidea' ? geideaPayments.configured : tapPayments.configured,
+          sandbox:zidPayments.selected || env.BLOFY_PAYMENT_PROVIDER==='geidea' ? false : tapPayments.sandbox});
       } else if (path.endsWith('/privacy/support')) {
         const message=String(body.message||'').trim();
         if (message.length<3 || message.length>2000) throw new CommercialError('invalid_message');
