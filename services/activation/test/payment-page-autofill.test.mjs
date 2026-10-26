@@ -46,6 +46,8 @@ test('BLOFY checkout reads linked device from same-origin session and private fr
   assert.match(html,/method:'POST'/);
   assert.match(html,/\/api\/v1\/subscriptions\/customer/);
   assert.match(html,/autofillCustomer/);
+  assert.ok(html.includes(String.raw`const VALID_CODE=/^\d{6}$/;`), 'six-digit device PIN must render as a digit regex');
+  assert.ok(html.includes(String.raw`replace(/[^\d+]/g,'')`), 'phone normalization must retain digits');
   assert.doesNotMatch(html,/location\.search.*activationCode/);
 });
 test('Geidea name and phone can be omitted when no saved customer exists; Tap validation remains',async()=>{
