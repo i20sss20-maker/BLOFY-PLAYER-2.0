@@ -817,8 +817,10 @@ button{font:inherit;cursor:pointer}.pay-button{display:flex;align-items:center;j
     }
     if(data.provider==='geidea'){
       paymentProvider='geidea';
-      $('paymentLead').textContent='اختر باقة BLOFY PLAYER ثم ادفع ببطاقة مدى أو Visa أو Mastercard عبر Geidea.';
-      $('paymentFoot').textContent='الدفع بالبطاقات فقط. تُدخل بيانات البطاقة داخل صفحة Geidea الآمنة ولا تمر عبر BLOFY PLAYER.';
+      $('paymentLead').textContent='بيانات جهازك المسجّل تُجلب تلقائياً. اختر باقتك وادفع بمدى أو Visa أو Mastercard عبر Geidea.';
+      $('paymentFoot').textContent='بيانات البطاقة تُدخل فقط داخل نافذة Geidea الآمنة. بيانات التواصل اختيارية إذا لم تكن محفوظة بحساب جهازك.';
+      document.querySelector('label[for="firstName"]').textContent='الاسم (اختياري)';
+      document.querySelector('label[for="phone"]').textContent='رقم الجوال (اختياري)';
     }
     if(data.sandbox){$('sandbox').style.display='block';testPay.style.display='block';}
     plans.innerHTML='';
@@ -861,8 +863,8 @@ button{font:inherit;cursor:pointer}.pay-button{display:flex;align-items:center;j
     const customerPhone=$('phone').value.trim();
     if(!/^BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(deviceId)){setStatus('تحقق من رقم الجهاز.');return}
     if(!/^\\d{6}$/.test(activationCode)){setStatus('كود التفعيل يجب أن يكون 6 أرقام.');return}
-    if(paymentProvider!=='zid'&&customerName.length<2){setStatus('اكتب اسم العميل.');return}
-    if(paymentProvider!=='zid'&&customerPhone.replace(/\\D/g,'').length<9){setStatus('تحقق من رقم الجوال.');return}
+    if(paymentProvider==='tap'&&customerName.length<2){setStatus('اكتب اسم العميل.');return}
+    if(paymentProvider==='tap'&&customerPhone.replace(/\\D/g,'').length<9){setStatus('تحقق من رقم الجوال.');return}
     if(!planKey){setStatus('اختر باقة أولًا.');return}
     pay.disabled=true;setStatus('جاري تجهيز عملية الدفع…');
     try{
