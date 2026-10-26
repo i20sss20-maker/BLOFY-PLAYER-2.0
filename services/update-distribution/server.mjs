@@ -450,6 +450,26 @@ ${appAction.kind === 'unavailable' ? '<div class="stable-download-link"><strong>
   </section>`;
 }
 
+async function appDetailsPage(req, slug) {
+  const app = await getApp(slug);
+  if (!app || !app.enabled) return null;
+  const [variants, stats] = await Promise.all([listAppVariants(), getDownloadStats()]);
+  const ownVariants = variants.filter(item => item.slug === slug);
+  const action = appDownloadAction(app);
+  const rootUrl = publicBase(req);
+  const canonical = rootUrl + '/apps/' + encodeURIComponent(slug);
+  const title = escapeHtml(app.name);
+  const count = Number(stats.byKey['app:' + slug]?.downloadCount || 0).toLocaleString('en-US');
+  const details = [
+    ['الإصدار', app.version || 'غير محدد'], ['التصنيف', downloadCategoryLabel(app.category)],
+    ['الأجهزة', app.devices || 'غير محدد'], ['المعمارية', app.architecture || 'Universal'],
+    ['الحجم', formatApkSize(app.apkSizeBytes) || 'غير محدد'],
+    ['آخر تحديث', formatPublicDate(app.versionUpdatedAt || app.updatedAt) || 'غير محدد']
+  ].map(([label,value]) => '<div class="spec"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>').join('');
+  const options = ownVariants.length > 1 ? '<h2>نسخ التطبيق</h2><div class="variants">' + ownVariants.map(v => '<a href="/d/' + encodeURIComponent(slug) + '/' + encodeURIComponent(v.key) + '">' + escapeHtml(v.label) + '</a>').join('') + '</div>' : '';
+  return '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#100a1c"><meta name="description" content="' + escapeHtml(app.description) + '"><link rel="canonical" href="' + escapeHtml(canonical) + '"><title>' + title + ' | BLOFY APPS</title><style>body{margin:0;background:#0c0915;color:#f5f0ff;font:16px system-ui,Tahoma,sans-serif}main{max-width:850px;margin:auto;padding:28px 18px}a{color:#d8bdff}header{display:flex;align-items:center;gap:18px;margin:32px 0}header img{width:88px;height:88px;object-fit:contain;border-radius:20px;background:#211832}h1{margin:0;font-size:clamp(26px,5vw,40px)}p{line-height:1.9;color:#d0c5dc}.card{border:1px solid #42305c;border-radius:22px;background:#1b1428;padding:22px}.spec{display:flex;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid #392b4d}.spec span{color:#baacd0}.spec strong{text-align:left}.btn,.variants a{display:inline-block;background:#7438c4;color:white;padding:14px 22px;border-radius:12px;text-decoration:none;margin:15px 0}.variants{display:flex;gap:10px;flex-wrap:wrap}.variants a{background:#35244e}a:focus-visible{outline:3px solid #fff}</style></head><body><main><a href="/downloads">← جميع التطبيقات</a><header><img src="' + escapeHtml(app.iconUrl) + '" alt="" loading="lazy"><div><h1>' + title + '</h1><p>' + escapeHtml(downloadCategoryLabel(app.category)) + ' · ⬇ ' + count + ' طلب تحميل عبر الموقع</p></div></header><section class="card"><p>' + escapeHtml(app.description) + '</p>' + details + (action.kind === 'unavailable' ? '<p>رابط التحميل غير متاح حاليًا.</p>' : '<a class="btn" href="/download/apps/' + encodeURIComponent(slug) + '">' + (action.kind === 'official' ? 'فتح المصدر الرسمي ↗' : 'تحميل APK ↓') + '</a>') + '<p>العداد يمثل طلبات التحميل أو فتح المصدر الرسمي، ولا يثبت تثبيت التطبيق.</p>' + options + '<p>رابط Downloader: ' + escapeHtml(rootUrl + '/d/' + slug) + '</p></section></main></body></html>';
+}
+
 async function downloadPage(req) {
   const release = getActiveRelease();
   const [apps, variants, stats] = await Promise.all([listApps(), listAppVariants(), getDownloadStats()]);
@@ -1022,6 +1042,12 @@ const server = http.createServer(async (req, res) => {
         recordDownload(`app:${app.slug}`).catch(error => console.error('App download stat failed:', error?.message || error));
       }
       return await streamApkDownload(req, res, app.downloadUrl, `${app.slug}.apk`, `app:${app.slug}`);
+    }
+
+    const appDetailsMatch = pathname.match(/^\\/apps\\/([a-z0-9]+(?:-[a-z0-9]+)*)\\/?$/i);
+    if (appDetailsMatch && ['GET', 'HEAD'].includes(method)) {
+      const html = await appDetailsPage(req, appDetailsMatch[1].toLowerCase());
+      return html ? sendHtml(req, res, 200, html) : sendHtml(req, res, 404, '<h1>التطبيق غير موجود</h1>');
     }
 
     if (['/', '/downloads', '/downloads/', '/releases', '/releases/'].includes(pathname)) {
