@@ -438,12 +438,12 @@ ${appAction.kind === 'unavailable' ? '<div class="stable-download-link"><strong>
     </article>`;
   }).join('');
 
-  return `<section class="apps-section">\n    <style>.apps-feature{margin:18px 0;padding:18px;border:1px solid rgba(167,120,255,.25);border-radius:18px;background:rgba(25,17,42,.65)}.apps-feature h3{margin:0 0 12px}.apps-feature-items{display:flex;gap:10px;overflow-x:auto;padding-bottom:5px}.feature-item{flex:1;min-width:155px;text-decoration:none;color:inherit;border:1px solid rgba(167,120,255,.22);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:7px}.feature-item:hover,.feature-item:focus-visible{border-color:#a878ff;background:rgba(167,120,255,.12)}.feature-item small{opacity:.8}</style>\n    <div class="apps-head"><div><p class="apps-eyebrow">BLOFY APPS · DOWNLOAD CENTER</p><h2>تطبيقات BLOFY وكل تطبيقات التلفزيون في مكان واحد</h2><p class="apps-intro">اختر التطبيق واضغط تحميل مباشرة من Downloader. تطبيقات BLOFY تظهر أولًا، وبعدها بقية التطبيقات.</p></div><span class="apps-count" id="visible-count">${apps.length}</span></div>
+  return `<section class="apps-section">\n    <style>.apps-feature{margin:18px 0;padding:18px;border:1px solid rgba(167,120,255,.25);border-radius:18px;background:rgba(25,17,42,.65)}.apps-feature h3{margin:0 0 12px}.apps-feature-items{display:flex;gap:10px;overflow-x:auto;padding-bottom:5px}.feature-item{flex:1;min-width:155px;text-decoration:none;color:inherit;border:1px solid rgba(167,120,255,.22);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:7px}.feature-item:hover,.feature-item:focus-visible{border-color:#a878ff;background:rgba(167,120,255,.12)}.feature-item small{opacity:.8}</style>\n    <div class="apps-head"><div><p class="apps-eyebrow">BLOFY APPS · DOWNLOAD CENTER</p><h2>التطبيقات</h2></div><span class="apps-count" id="visible-count">${apps.length}</span></div>
     <div class="app-controls">
-      <label class="search-box" for="app-search"><span>⌕</span><input id="app-search" type="search" placeholder="ابحث عن تطبيق..." autocomplete="off" spellcheck="false"><button class="search-clear" id="search-clear" type="button" aria-label="مسح البحث" hidden>×</button></label>
+      <label class="search-box" for="app-search"><span>⌕</span><input id="app-search" type="search" placeholder="بحث" autocomplete="off" spellcheck="false"><button class="search-clear" id="search-clear" type="button" aria-label="مسح البحث" hidden>×</button></label>
       <div class="filter-bar" aria-label="تصنيف التطبيقات">${filterButtons}</div>
     </div>
-    <p class="apps-help" role="note">اختر تصنيف الجهاز أو ابحث باسم التطبيق. لعرض معلومات الإصدار والحجم وتاريخ التحديث اضغط «تفاصيل»؛ ولنسخ رابط Downloader استخدم زر «نسخ الرابط».</p>
+    
     <div class="app-list">${ownCards}${rows}</div>
     ${featuredSections}
     <div class="empty-state" id="empty-state" hidden>ما لقينا تطبيق مطابق للبحث.</div>
