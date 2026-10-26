@@ -697,6 +697,11 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
       $('paymentFoot').textContent='التفعيل لجهاز واحد بعد تأكيد الدفع. أدخل رقم الجهاز فقط في المتجر؛ كود التفعيل يبقى هنا.';
       for(const name of ['firstName','phone','email']) $(name).closest('.field').style.display='none';
     }
+    if(data.provider==='geidea'){
+      paymentProvider='geidea';
+      $('paymentLead').textContent='اختر باقة BLOFY PLAYER ثم ادفع ببطاقة مدى أو Visa أو Mastercard عبر Geidea.';
+      $('paymentFoot').textContent='الدفع بالبطاقات فقط. تُدخل بيانات البطاقة داخل صفحة Geidea الآمنة ولا تمر عبر BLOFY PLAYER.';
+    }
     if(data.sandbox){$('sandbox').style.display='block';testPay.style.display='block';}
     plans.innerHTML='';
     (data.items||[]).forEach((item,index)=>{
@@ -756,6 +761,26 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
         setStatus(response.status===403?'رقم الجهاز أو كود التفعيل غير صحيح.':'تعذر تجهيز الدفع'+providerCode+'. حاول مرة أخرى.');
         pay.disabled=false;return;
       }
+      if(data.provider==='geidea'){
+        // Card-only mode requires Geidea's standard modal; a redirect can show wallets.
+        if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(data.sessionId||'') ||
+           !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(data.orderId||'') ||
+           typeof window.GeideaCheckout!=='function' || data.checkoutMode!=='modal'){
+          setStatus('تعذر فتح الدفع بالبطاقات. حاول مرة أخرى.');pay.disabled=false;return;
+        }
+        const resultUrl='/api/v1/payments/geidea/return?reference='+encodeURIComponent(data.orderId);
+        try{
+          const payment=new window.GeideaCheckout(
+            ()=>location.assign(resultUrl),
+            ()=>{setStatus('لم تكتمل عملية الدفع. راجع حالتها قبل إعادة المحاولة.');pay.disabled=false;},
+            ()=>{setStatus('أُغلقت نافذة الدفع. لم يتم تأكيد عملية دفع.');pay.disabled=false;}
+          );
+          payment.startPayment(data.sessionId);
+          setStatus('أكمل الدفع ببطاقتك في نافذة Geidea الآمنة.');
+          pay.disabled=false;
+          return;
+        }catch(_){setStatus('تعذر فتح نافذة الدفع الآمنة. حاول مرة أخرى.');pay.disabled=false;return;}
+      }
       if(data.checkoutUrl&&data.requiresDeviceId){
         if($('deviceId').value.trim()!==deviceId||$('activationCode').value.trim()!==activationCode||document.querySelector('input[name=plan]:checked')?.value!==planKey){
           setStatus('تغيّرت بيانات الطلب. تحقق منها ثم تابع.');pay.disabled=false;return;
@@ -775,7 +800,12 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
 })();
 </script>
 </body></html>`;
-    if (env.BLOFY_PAYMENT_PROVIDER === 'geidea') body = body.replaceAll('Tap','Geidea');
+    if (env.BLOFY_PAYMENT_PROVIDER === 'geidea') {
+      body = body.replaceAll('Tap','Geidea').replace(
+        '<script>\n(function(){',
+        '<script src="https://www.ksamerchant.geidea.net/hpp/geideaCheckout.min.js"></script>\n<script>\n(function(){'
+      );
+    }
     res.writeHead(200,{
       'content-type':'text/html; charset=utf-8',
       'content-length':Buffer.byteLength(body),
@@ -785,7 +815,9 @@ button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:
       'referrer-policy':'no-referrer',
       'permissions-policy':'camera=(), microphone=(), geolocation=()',
       'strict-transport-security':'max-age=31536000',
-      'content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
+      'content-security-policy': env.BLOFY_PAYMENT_PROVIDER === 'geidea'
+        ? "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.ksamerchant.geidea.net; connect-src 'self' https://www.ksamerchant.geidea.net https://api.ksamerchant.geidea.net; frame-src https://www.ksamerchant.geidea.net; img-src 'self' data: https://www.ksamerchant.geidea.net; frame-ancestors 'none'"
+        : "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
     });
     res.end(body);
   }

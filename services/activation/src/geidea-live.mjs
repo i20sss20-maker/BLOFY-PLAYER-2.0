@@ -5,7 +5,8 @@ import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const API = 'https://api.ksamerchant.geidea.net';
-const HPP = 'https://www.ksamerchant.geidea.net/hpp/checkout/?';
+// Modal hosted card-entry checkout only; never redirect to an unrestricted wallet-enabled HPP.
+export const CARD_ONLY_WALLETS = Object.freeze(['apple-pay', 'google-pay', 'samsung-pay']);
 const error = (code, status=400) => Object.assign(new Error(code), {status});
 const clean = (v, n=128) => String(v ?? '').trim().slice(0,n);
 
@@ -68,10 +69,14 @@ export function verifiedPayment(provider, order, config) {
       (provider.totalAmount!==undefined && minor(provider.totalAmount)!==Number(order.amount_minor)) ||
       (order.provider_reference && order.provider_reference!==provider.orderId)) throw error('geidea_order_mismatch',409);
   if (provider.status==='Success' && provider.detailedStatus==='Paid') {
-    if (minor(provider.totalCapturedAmount)!==Number(order.amount_minor) ||
+    // Never grant a BLOFY entitlement for Apple Pay / Google Pay / Samsung Pay or another wallet.
+    // Provider read is authoritative. Missing card evidence fails closed.
+    if (provider.paymentMethod?.type!=='Card' || provider.paymentMethod.wallet != null ||
+        minor(provider.totalCapturedAmount)!==Number(order.amount_minor) ||
         minor(provider.totalRefundedAmount)!==0 || provider.paymentOperation!=='Pay' ||
         !Array.isArray(provider.transactions) || !provider.transactions.some(tx =>
           tx.type==='Pay' && tx.status==='Success' && tx.currency==='SAR' &&
+          tx.paymentMethod?.type==='Card' && tx.paymentMethod.wallet == null &&
           minor(tx.amount)===Number(order.amount_minor) &&
           tx.codes?.responseCode==='000' && tx.codes?.detailedResponseCode==='000'))
       throw error('geidea_capture_not_verified',409);
@@ -190,6 +195,10 @@ export function createGeideaLiveHandlers({pool,json,readJson,authorize,env=proce
       amount:(plan.priceMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
       signature:createSignature({publicKey,password,amountMinor:plan.priceMinor,reference:id,timestamp}),
       paymentOperation:'Pay',language:'ar',
+      // Geidea documents hideWallets for its Modal/Drop-in HPP. No express wallets.
+      hideWallets:[...CARD_ONLY_WALLETS],expressCheckouts:[],
+      acceptTabbyPaymentMethod:false,acceptTamaraPaymentMethod:false,
+      appearance:{uiMode:'modal'},
       callbackUrl:base+'/api/v1/payments/geidea/webhook',
       returnUrl:base+'/api/v1/payments/geidea/return?reference='+id
     };
@@ -198,7 +207,10 @@ export function createGeideaLiveHandlers({pool,json,readJson,authorize,env=proce
     catch {return json(res,503,{error:'geidea_session_unavailable',orderId:id});}
     if (!UUID.test(created?.session?.id||'') || Date.parse(created?.session?.expiryDate||'')<=Date.now())
       return json(res,502,{error:'geidea_session_invalid',orderId:id});
-    return json(res,201,{provider:'geidea',orderId:id,checkoutUrl:HPP+created.session.id,status:'PENDING',sandbox:false});
+    // Return the session ID, not a redirect URL. Client MUST launch Geidea modal
+    // so the provider's documented hideWallets setting is honored.
+    return json(res,201,{provider:'geidea',orderId:id,sessionId:created.session.id,
+      checkoutMode:'modal',status:'PENDING',sandbox:false});
   }
   async function returnPage(res,url) {
     const ref=url.searchParams.get('reference');
