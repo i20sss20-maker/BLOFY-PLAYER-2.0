@@ -1013,6 +1013,12 @@ const server = http.createServer(async (req, res) => {
       return await streamApkDownload(req, res, release.downloadUrl, `BLOFY-PLAYER-${release.versionName}.apk`, 'blofy');
     }
 
+    const appDetailsMatch = pathname.match(new RegExp("^/apps/([a-z0-9]+(?:-[a-z0-9]+)*)/?$", "i"));
+    if (appDetailsMatch && ['GET', 'HEAD'].includes(method)) {
+      const html = await appDetailsPage(req, appDetailsMatch[1].toLowerCase());
+      return html ? sendHtml(req, res, 200, html) : sendHtml(req, res, 404, '<h1>التطبيق غير موجود</h1>');
+    }
+
     const variantMatch = pathname.match(/^\/(?:d|apps|download\/apps)\/([a-z0-9-]+)\/([a-z0-9-]+)$/i);
     if (variantMatch) {
       const variant = await getAppVariant(decodeURIComponent(variantMatch[1]), decodeURIComponent(variantMatch[2]));
@@ -1042,12 +1048,6 @@ const server = http.createServer(async (req, res) => {
         recordDownload(`app:${app.slug}`).catch(error => console.error('App download stat failed:', error?.message || error));
       }
       return await streamApkDownload(req, res, app.downloadUrl, `${app.slug}.apk`, `app:${app.slug}`);
-    }
-
-    const appDetailsMatch = pathname.match(new RegExp("^/apps/([a-z0-9]+(?:-[a-z0-9]+)*)/?$", "i"));
-    if (appDetailsMatch && ['GET', 'HEAD'].includes(method)) {
-      const html = await appDetailsPage(req, appDetailsMatch[1].toLowerCase());
-      return html ? sendHtml(req, res, 200, html) : sendHtml(req, res, 404, '<h1>التطبيق غير موجود</h1>');
     }
 
     if (['/', '/downloads', '/downloads/', '/releases', '/releases/'].includes(pathname)) {
