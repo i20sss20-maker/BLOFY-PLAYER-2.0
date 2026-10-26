@@ -62,7 +62,9 @@ test('live signed callback checks signature, amount, merchant, order and test fl
   assert.throws(()=>verifyGeideaCallback(callback({...payment(),amount:13}),order,config));
 });
 test('card-only session hides all provider wallets',()=>{
-  assert.deepEqual([...CARD_ONLY_WALLETS],['apple-pay','google-pay','samsung-pay']);
+  assert.deepEqual([...CARD_ONLY_WALLETS],['apple-pay']);
+  // Geidea Live merchant already has Google/Samsung disabled; hiding them
+  // again causes create-session code 110/112 instead of displaying card form.
 });
 test('paid only after actual captured Pay and no refunds',()=>{
   assert.equal(verifiedPayment(payment(),order,config),'paid');
@@ -81,7 +83,8 @@ test('paid only after actual captured Pay and no refunds',()=>{
   assert.throws(()=>verifiedPayment({...payment(),isTest:true},order,config));
   assert.throws(()=>verifiedPayment({...payment(),paymentMethod:{type:'Card',brand:'visa',wallet:'ApplePay'}},order,config));
   assert.throws(()=>verifiedPayment({...payment(),paymentMethod:{type:'Wallet',wallet:'GooglePay'}},order,config));
-  assert.throws(()=>verifiedPayment({...payment(),paymentMethod:null},order,config));
+  assert.equal(verifiedPayment({...payment(),paymentMethod:null},order,config),'paid');
+  assert.throws(()=>verifiedPayment({...payment(),paymentMethod:{type:'Wallet',brand:'visa',wallet:'ApplePay'}},order,config));
   assert.throws(()=>verifiedPayment({...payment(),transactions:[{
     ...payment().transactions[0],paymentMethod:{type:'Card',wallet:'SamsungPay'}
   }]},order,config));
