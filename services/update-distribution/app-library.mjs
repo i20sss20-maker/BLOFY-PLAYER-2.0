@@ -1319,7 +1319,7 @@ export async function refreshManagedApps({ force = false } = {}) {
 
 export async function recordDownload(key) {
   const cleanKey = String(key || '').trim().toLowerCase();
-  if (!/^(?:blofy|app:[a-z0-9]+(?:-[a-z0-9]+)*)$/.test(cleanKey)) throw new Error('invalid_download_stat_key');
+  if (!/^(?:blofy(?:-[a-z0-9]+)*|app:[a-z0-9]+(?:-[a-z0-9]+)*)$/.test(cleanKey)) throw new Error('invalid_download_stat_key');
   await pool.query(
     `insert into blofy_download_stats(key,download_count,last_download_at)
      values($1,1,now())
