@@ -637,36 +637,78 @@ export function createTapPaymentHandlers({
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BLOFY PLAYER — الدفع</title>
 <style>
-:root{color-scheme:dark;--bg:#0e0819;--card:#1b102f;--line:#6d45a9;--accent:#b598f5;--muted:#bdb5ca}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#2a1450 0,#0e0819 48%);font-family:system-ui,-apple-system,Segoe UI,Tahoma,sans-serif;color:#fff}
-.wrap{width:min(94vw,760px);margin:auto;padding:48px 0}.brand{text-align:center;font-weight:900;letter-spacing:.08em;color:var(--accent);font-size:20px}.card{margin-top:18px;background:#1b102fee;border:1px solid #6d45a977;border-radius:26px;padding:26px;box-shadow:0 28px 90px #0008}
-h1{font-size:30px;margin:0 0 8px;text-align:center}.lead{color:var(--muted);text-align:center;line-height:1.8;margin:0 0 22px}.sandbox{display:none;margin:0 0 18px;padding:11px 14px;border-radius:14px;background:#d49b1b20;border:1px solid #d49b1b66;color:#ffd77b;text-align:center;font-weight:700}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:grid;gap:7px}.field.full{grid-column:1/-1}label{font-size:13px;color:#d5cfe0}input{width:100%;border:1px solid #ffffff22;background:#0d0818;color:#fff;border-radius:14px;padding:14px 15px;font:inherit;outline:none}input:focus{border-color:var(--accent);box-shadow:0 0 0 3px #b598f522}
-.plans{display:grid;gap:12px;margin-top:20px}.plan{display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid #ffffff1f;background:#120a21;border-radius:16px;padding:16px;cursor:pointer}.plan:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 3px #b598f51c}.plan strong{display:block}.plan small{color:var(--muted)}.price{font-weight:900;color:#d9c8ff;white-space:nowrap}
-button{width:100%;margin-top:20px;border:0;border-radius:15px;padding:15px;font:inherit;font-weight:900;cursor:pointer;background:linear-gradient(135deg,#8458d8,#b987f0);color:#fff}button:disabled{opacity:.5;cursor:wait}.status{min-height:28px;margin-top:14px;text-align:center;color:#e2dceb}.foot{font-size:12px;color:#8e849e;text-align:center;margin-top:18px;line-height:1.8}
-@media(max-width:620px){.wrap{padding:22px 0}.card{padding:20px}.grid{grid-template-columns:1fr}.field.full{grid-column:auto}h1{font-size:25px}}
+:root{color-scheme:dark;--bg:#07070d;--surface:rgba(18,15,29,.88);--surface-solid:#12101d;--surface-alt:#1b162a;--surface-hover:#251d35;--accent:#8b37ff;--accent-2:#b16cff;--accent-blue:#3421ff;--accent-soft:rgba(139,55,255,.14);--text:#fff;--muted:#aaa4b7;--line:rgba(184,140,255,.19);--line-accent:rgba(164,97,255,.34);--success:#52df9a;--danger:#ff6b79;--shadow:0 28px 90px rgba(0,0,0,.45)}
+*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;min-height:100vh;overflow-x:hidden;background:radial-gradient(circle at 84% -20%,rgba(109,32,217,.28),transparent 44%),linear-gradient(145deg,#07070d,#0b0911 52%,#09080f);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #b98cff;outline-offset:3px}
+.wrap{width:min(94vw,1110px);margin:0 auto;padding:0 0 48px}
+.topbar{display:flex;gap:18px;align-items:center;justify-content:space-between;padding:24px 2px;border-bottom:1px solid var(--line)}
+.brand{display:flex;gap:12px;align-items:center;min-width:0}.brand img{width:50px;height:50px;object-fit:contain;border-radius:16px;background:#181026;padding:4px;border:1px solid var(--line)}.brand-name strong{display:block;font-size:23px;font-weight:900;letter-spacing:.06em}.brand-name small{display:block;font-size:10px;letter-spacing:.3em;font-weight:800;color:#b995ff}
+.nav-links{display:flex;flex-wrap:wrap;align-items:center;gap:9px}.nav-links a{padding:10px 15px;border:1px solid var(--line);background:rgba(27,22,42,.72);border-radius:13px;color:#eae3fa;font-size:13px;font-weight:750;transition:background .2s,border-color .2s}.nav-links a:hover{background:var(--surface-hover);border-color:var(--line-accent)}.nav-links .nav-primary{background:var(--accent-soft);border-color:var(--line-accent);color:#ead7ff}
+.layout{display:grid;grid-template-columns:minmax(275px,.85fr) minmax(0,1.15fr);gap:23px;align-items:start;margin-top:28px}.intro-panel,.card{border:1px solid var(--line);border-radius:28px;box-shadow:var(--shadow)}.intro-panel{padding:33px 30px;background:linear-gradient(150deg,rgba(58,23,97,.59),rgba(18,15,29,.93) 58%),radial-gradient(circle at 8% 8%,rgba(139,55,255,.25),transparent 55%);min-height:470px;position:relative;overflow:hidden}.intro-panel:before{content:"";position:absolute;width:240px;height:240px;border-radius:50%;border:1px solid rgba(180,100,255,.1);top:-145px;left:-100px;box-shadow:0 0 0 42px rgba(123,43,228,.035),0 0 0 84px rgba(123,43,228,.025);pointer-events:none}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;background:var(--accent-soft);border:1px solid var(--line-accent);border-radius:999px;color:#d5b7ff;padding:8px 12px;font-size:11px;font-weight:850;letter-spacing:.09em}.eyebrow:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 12px #b16cff}.intro-panel h1{font-size:clamp(30px,4vw,44px);line-height:1.35;font-weight:900;letter-spacing:-.035em;margin:26px 0 14px}.intro-panel h1 span{color:#bd89ff}.intro-panel .lead{font-size:15px;line-height:2;color:#bcb4cc;margin:0}.benefits{display:grid;gap:14px;margin-top:34px}.benefit{display:flex;align-items:center;gap:12px;color:#e1d9ec;font-size:13px}.benefit b{display:grid;place-items:center;background:var(--accent-soft);border:1px solid var(--line-accent);border-radius:12px;width:35px;height:35px;color:#c798ff;font-size:17px}
+.card{background:var(--surface);padding:30px;backdrop-filter:blur(16px)}.card-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.step{font-size:11px;font-weight:850;color:#bc9aef;letter-spacing:.14em}.card h2{font-size:25px;margin:8px 0 6px}.sublead{font-size:13px;line-height:1.8;color:var(--muted);margin:0 0 25px}.section-title{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;font-weight:850;color:#eee6f9;margin:24px 0 12px}.section-title small{font-size:11px;color:var(--muted);font-weight:600}.section-line{border:0;height:1px;background:var(--line);margin:24px 0 0}
+.sync-hint{padding:9px 11px;font-size:12px;border:1px solid var(--line);background:#161021;border-radius:11px;color:#b7a7cc;margin:8px 0 16px;line-height:1.7}.sync-hint.linked{border-color:rgba(82,223,154,.28);background:rgba(82,223,154,.06);color:#91eac2}.sync-hint:empty{display:none}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.field{display:grid;gap:7px;min-width:0}.field.full{grid-column:1/-1}label{font-size:12px;color:#bfb4d1;font-weight:700}
+.field input{width:100%;min-width:0;border:1px solid rgba(184,140,255,.18);background:#0c0a12;color:#fff;border-radius:13px;padding:13px 14px;font:inherit;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s}.field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.field input::placeholder{color:#777084}.field input:read-only{background:#110e1a;color:#d6cae5}
+.plans{display:grid;gap:10px}.plan{display:flex;gap:14px;align-items:center;justify-content:space-between;padding:17px 15px;border-radius:15px;cursor:pointer;background:#100d18;border:1px solid var(--line);transition:border-color .2s,background .2s,transform .2s}.plan:hover{background:var(--surface-hover);transform:translateY(-1px)}.plan:has(input:checked){border-color:#9256ed;background:rgba(139,55,255,.12);box-shadow:0 0 0 2px rgba(139,55,255,.09)}.plan strong{display:block;font-size:14px;color:#fff}.plan small{display:block;color:var(--muted);font-size:12px;margin-top:5px}.price{font-weight:900;color:#d7b4ff;white-space:nowrap;font-size:16px}
+button{font:inherit;cursor:pointer}.pay-button{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;border:1px solid rgba(194,139,255,.44);border-radius:14px;margin-top:22px;padding:16px;background:linear-gradient(120deg,#7e22ce,#8b37ff 58%,#a44fff);box-shadow:0 12px 32px rgba(104,36,224,.26);font-size:15px;font-weight:850;color:#fff}.pay-button:hover:not(:disabled){filter:brightness(1.1)}.pay-button:disabled{opacity:.5;cursor:not-allowed}.test-button{width:100%;padding:13px;margin-top:8px;border-radius:12px;color:#fff;background:#1b162a;border:1px solid var(--line)}
+.status{min-height:23px;margin-top:13px;text-align:center;font-size:12px;line-height:1.7;color:#d7c9ea}.foot{font-size:11px;color:#a99bb9;text-align:center;margin:14px 0 0;line-height:1.9}.footerbar{margin:32px auto 0;padding:17px 2px;display:flex;flex-wrap:wrap;gap:15px;justify-content:space-between;border-top:1px solid var(--line);font-size:12px;color:#948ba7}.footerbar a{color:#c6a1ff}.sandbox{display:none;margin:16px 0;padding:12px;background:#e7a52c1c;border:1px solid #d5a53050;color:#ffdc8c;border-radius:13px;text-align:center;font-size:13px}
+@media(max-width:870px){.layout{grid-template-columns:1fr;gap:16px}.intro-panel{min-height:0;padding:26px}.benefits{display:flex;flex-wrap:wrap;margin-top:18px}.intro-panel h1{font-size:32px;margin:18px 0 8px}.topbar{padding:15px 0}.card{padding:24px}}
+@media(max-width:540px){.wrap{width:min(94vw,460px)}.topbar{align-items:flex-start}.nav-links{justify-content:flex-end}.nav-links a{font-size:11px;padding:9px}.nav-links a:nth-child(2){display:none}.brand img{width:40px;height:40px}.brand-name strong{font-size:17px}.brand-name small{font-size:8px}.intro-panel,.card{border-radius:21px;padding:20px}.intro-panel h1{font-size:27px}.benefits{gap:8px}.benefit{font-size:11px}.benefit b{width:28px;height:28px}.grid{grid-template-columns:1fr}.field.full{grid-column:auto}.card h2{font-size:22px}.card-top{display:block}.plan{padding:14px 12px}.price{font-size:14px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
 <main class="wrap">
-  <div class="brand">BLOFY PLAYER</div>
-  <section class="card">
-    <h1>تفعيل وتجديد الاشتراك</h1>
-    <p class="lead" id="paymentLead">أدخل بيانات جهازك، اختر الباقة، وبعدها تنتقل لصفحة Tap الآمنة لإكمال الدفع.</p>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="BLOFY PLAYER الرئيسية">
+      <img src="/blofy-logo.png" alt="" width="50" height="50">
+      <span class="brand-name"><strong>BLOFY</strong><small>PLAYER</small></span>
+    </a>
+    <nav class="nav-links" aria-label="روابط بلوفي">
+      <a href="/">الرئيسية</a>
+      <a href="/downloads">التحميل</a>
+      <a class="nav-primary" href="/connect">إدارة الجهاز</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <section class="intro-panel" aria-labelledby="payTitle">
+      <span class="eyebrow">BLOFY PLAYER · SECURE ACTIVATION</span>
+      <h1 id="payTitle">تفعيل جهازك<br><span>بكل سهولة.</span></h1>
+      <p class="lead">تفعيل وتجديد BLOFY PLAYER من حساب جهازك مباشرة. نفس تجربة موقع بلوفي، بخطوات واضحة ودفع آمن.</p>
+      <div class="benefits">
+        <div class="benefit"><b>✓</b><span>ربط تلقائي لبيانات جهازك المسجّل</span></div>
+        <div class="benefit"><b>✓</b><span>تفعيل اشتراك الجهاز بعد تأكيد الدفع</span></div>
+        <div class="benefit"><b>✓</b><span>مدى وVisa وMastercard فقط عبر Geidea</span></div>
+      </div>
+    </section>
+    <section class="card" aria-labelledby="checkoutTitle">
+      <div class="card-top"><span class="step">BLOFY · CHECKOUT</span><span class="eyebrow">بوابة التفعيل الرسمية</span></div>
+      <h2 id="checkoutTitle">تفعيل وتجديد الاشتراك</h2>
+      <p class="sublead" id="paymentLead">بيانات جهازك المسجّل تظهر تلقائياً؛ اختر الباقة وأكمل الدفع بشكل آمن.</p>
+      <div class="sync-hint" id="deviceSync" role="status" aria-live="polite">إذا سبق ربط جهازك بهذه الصفحة، سنجلب بياناته تلقائياً.</div>
     <div class="sandbox" id="sandbox">وضع تجريبي — لن يتم خصم مبلغ حقيقي</div>
+    <div class="section-title">بيانات الجهاز <small>تُملأ تلقائياً من ربط بلوفي</small></div>
     <div class="grid">
-      <div class="field"><label for="deviceId">رقم الجهاز</label><input id="deviceId" autocomplete="off" placeholder="BLOFY-XXXX-XXXX"></div>
-      <div class="field"><label for="activationCode">كود التفعيل</label><input id="activationCode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••••"></div>
-      <div class="field"><label for="firstName">الاسم</label><input id="firstName" autocomplete="name" maxlength="80" placeholder="اسم العميل"></div>
-      <div class="field"><label for="phone">رقم الجوال</label><input id="phone" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="05xxxxxxxx"></div>
-      <div class="field full"><label for="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" maxlength="254" placeholder="اختياري"></div>
+      <div class="field"><label for="deviceId">رقم الجهاز</label><input id="deviceId" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="BLOFY-XXXX-XXXX"></div>
+      <div class="field"><label for="activationCode">رمز ربط الجهاز</label><input id="activationCode" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••••"></div>
     </div>
+    <div class="section-title">بيانات العميل <small>قابلة للتعديل</small></div>
+    <div class="grid">
+      <div class="field"><label for="firstName">الاسم</label><input id="firstName" autocomplete="name" maxlength="80" placeholder="اسم العميل"></div>
+      <div class="field"><label for="phone">رقم الجوال</label><input id="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="05xxxxxxxx"></div>
+      <div class="field full"><label for="email">البريد الإلكتروني (اختياري)</label><input id="email" type="email" autocomplete="email" maxlength="254" placeholder="name@example.com"></div>
+    </div>
+    <hr class="section-line">
+    <div class="section-title">اختر باقة الاشتراك <small>الأسعار المعتمدة فقط</small></div>
     <div class="plans" id="plans"></div>
-    <button id="pay" disabled>متابعة إلى الدفع</button>
-    <button id="testPay" style="display:none;background:#23143d;border:1px solid #b598f566">اختبار Tap بدون رقم جهاز</button>
+    <button class="pay-button" id="pay" disabled>متابعة إلى الدفع الآمن <span aria-hidden="true">←</span></button>
+    <button class="test-button" id="testPay" style="display:none">اختبار الدفع التجريبي</button>
     <div class="status" id="status"></div>
     <div class="foot" id="paymentFoot">بيانات البطاقة لا تمر عبر BLOFY PLAYER؛ يتم إدخالها مباشرة في صفحة Tap. لا تشارك كود التفعيل مع أي شخص.</div>
-  </section>
+    </section>
+  </div>
+  <footer class="footerbar"><span>© BLOFY PLAYER · موقع التفعيل الرسمي</span><span><a href="/privacy">الخصوصية</a> · <a href="/support">الدعم</a></span></footer>
 </main>
 <script>
 (function(){
