@@ -53,10 +53,6 @@ export function verifyGeideaCallback(payload, order, config) {
       typeof stamp!=='string' || !stamp || stamp.length>80 ||
       (payload.timeStamp && payload.timestamp && payload.timeStamp!==payload.timestamp) ||
       !/^[A-Za-z0-9+/]{43}=$/.test(payload.signature || '')) throw error('geidea_invalid_callback',401);
-  const expected=Buffer.from(createSignature({publicKey:config.publicKey,password:config.password,
-    amountMinor:Number(order.amount_minor),currency:order.currency,reference:order.id,timestamp:stamp}
-    ).replace(/.+/,()=>'')); // replaced below with status-aware provider HMAC
-  void expected;
   const data=config.publicKey+(Number(order.amount_minor)/100).toFixed(2)+order.currency+
     p.orderId+p.status+order.id+stamp;
   const hash=crypto.createHmac('sha256',config.password).update(data,'utf8').digest();
@@ -217,10 +213,10 @@ export function createGeideaLiveHandlers({pool,json,readJson,authorize,env=proce
     if (!selected) return false;
     const p=url.pathname;
     if (p==='/api/v1/subscriptions/plans' && req.method==='GET') {
-      return json(res,200,{provider:'geidea',sandbox:false,purchasesAvailable:configured&&configuredPlans.some(p=>p.active),
+      json(res,200,{provider:'geidea',sandbox:false,purchasesAvailable:configured&&configuredPlans.some(p=>p.active),
         items:configured?configuredPlans.filter(p=>p.active).map(p=>({
           planKey:p.planKey,name:p.name,durationDays:p.durationDays,maxDevices:1,priceMinor:p.priceMinor,currency:'SAR'
-        })):[]}) || true;
+        })):[]});return true;
     }
     if (p==='/api/v1/subscriptions/checkout' && req.method==='POST') {await checkout(req,res);return true;}
     if (p==='/api/v1/payments/geidea/webhook' && req.method==='POST') {await webhook(req,res);return true;}
