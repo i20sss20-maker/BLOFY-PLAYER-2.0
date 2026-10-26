@@ -927,6 +927,11 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/health' || pathname === '/release.json') return sendJson(req, res, 200, healthPayload());
 
+    if (pathname === '/tv' || pathname === '/tv/') {
+      const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#130b24"><title>BLOFY PLAYER | تحميل التلفزيون</title><style>*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#39215d,#130b24 65%);color:#fff;font-family:system-ui,Arial,sans-serif;min-height:100vh;display:grid;place-items:center;text-align:center;padding:28px}.panel{width:min(760px,100%);padding:44px 28px;border:1px solid #ffffff30;border-radius:26px;background:#ffffff0a}h1{font-size:clamp(30px,5vw,48px);margin:0 0 16px}p{font-size:clamp(18px,2.6vw,24px);line-height:1.7;color:#d6cde8}.btn{display:block;background:#8d50ef;color:white;border:2px solid transparent;border-radius:18px;padding:22px 15px;font-size:clamp(20px,3vw,28px);font-weight:700;text-decoration:none;margin:24px auto;max-width:550px}.btn:focus,.btn:hover{outline:4px solid #fff;outline-offset:4px;background:#ad75ff}.secondary{background:transparent;border-color:#a57de0}.small{font-size:16px;color:#bcb0d0}</style></head><body><main class="panel"><h1>BLOFY PLAYER</h1><p>تحميل نسخة شاومي التجريبية 74 لأجهزة Android TV 9</p><a class="btn" href="/download/xiaomi-v74.apk" autofocus>تحميل BLOFY PLAYER Xiaomi APK</a><a class="btn secondary" href="/downloads">موقع تحديثات BLOFY PLAYER</a><p class="small">نسخة مستقلة للتجربة، لا تستبدل التطبيق الرسمي. حجم التحميل حوالي 229 ميجابايت.</p></main></body></html>`;
+      return sendHtml(req, res, 200, html);
+    }
+
     if (pathname === XIAOMI_V74_DOWNLOAD_PATH) {
       if (method === 'GET') recordDownload('blofy-xiaomi-v74-test').catch(error => console.error('Xiaomi download metric failed:', error?.message || error));
       return await streamApkDownload(req, res, XIAOMI_V74_APK_URL, 'BLOFY-PLAYER-Xiaomi-v74-SIGNED.apk', 'blofy-xiaomi-v74-test');
