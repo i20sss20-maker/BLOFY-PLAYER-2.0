@@ -720,10 +720,86 @@ button{font:inherit;cursor:pointer}.pay-button{display:flex;align-items:center;j
   for(const name of ['deviceId','activationCode']) $(name).addEventListener('input',()=>{
     if(merchantCheckout){merchantCheckout=null;pay.textContent='متابعة إلى الدفع';setStatus('تحقق من بيانات الجهاز ثم تابع.');}
   });
+  const sync=$('deviceSync');
+  const VALID_DEVICE=/^BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}$/i;
+  const VALID_CODE=/^\d{6}$/;
+  let lastLookup='';
+  function linkedCredentials(value){
+    const id=String(value?.deviceId||'').trim().toUpperCase();
+    const code=String(value?.activationCode||value?.code||'').trim();
+    return VALID_DEVICE.test(id)&&VALID_CODE.test(code)?{deviceId:id,activationCode:code}:null;
+  }
+  function syncMessage(message,linked){
+    if(!sync)return;
+    sync.textContent=message;
+    sync.classList.toggle('linked',!!linked);
+  }
   function fillFragment(){
+    // QR credentials stay in the hash; clean it before following any links.
     const p=new URLSearchParams(location.hash.replace(/^#/,''));
-    if(p.get('deviceId')) $('deviceId').value=p.get('deviceId');
-    if(p.get('code')) $('activationCode').value=p.get('code');
+    const had=p.has('deviceId')||p.has('activationCode')||p.has('code');
+    if(!had)return null;
+    const creds=linkedCredentials({
+      deviceId:p.get('deviceId'),
+      activationCode:p.get('code')||p.get('activationCode')
+    });
+    p.delete('deviceId');p.delete('activationCode');p.delete('code');
+    const rest=p.toString();
+    try{history.replaceState(history.state,document.title,location.pathname+location.search+(rest?'#'+rest:''));}catch(_){}
+    return creds;
+  }
+  function savedDevice(){
+    try{return linkedCredentials(JSON.parse(sessionStorage.getItem('blofyDevice')||'null'));}catch(_){return null;}
+  }
+  async function autofillCustomer(){
+    const creds=linkedCredentials({deviceId:$('deviceId').value,activationCode:$('activationCode').value});
+    if(!creds)return;
+    const lookup=creds.deviceId+':'+creds.activationCode;
+    if(lastLookup===lookup)return;
+    lastLookup=lookup;
+    syncMessage('جاري ربط بيانات جهازك وملف العميل…',false);
+    try{
+      const response=await fetch('/api/v1/subscriptions/customer',{
+        method:'POST',headers:{'content-type':'application/json',accept:'application/json'},
+        cache:'no-store',credentials:'same-origin',
+        body:JSON.stringify(creds)
+      });
+      if(!response.ok){
+        lastLookup='';
+        syncMessage('تعذر استرجاع بيانات العميل تلقائياً. تحقق من رقم الجهاز ورمز الربط.',false);
+        return;
+      }
+      const data=await response.json();
+      const current=linkedCredentials({deviceId:$('deviceId').value,activationCode:$('activationCode').value});
+      if(!current||current.deviceId!==creds.deviceId||current.activationCode!==creds.activationCode)return;
+      const customer=data?.customer;
+      if(customer){
+        if(!$('firstName').value.trim()&&customer.name)$('firstName').value=String(customer.name).slice(0,80);
+        if(!$('phone').value.trim()&&customer.phone){
+          const raw=String(customer.phone).replace(/[^\d+]/g,'');
+          $('phone').value=raw.startsWith('9665')?'0'+raw.slice(3):raw.slice(0,20);
+        }
+        if(!$('email').value.trim()&&customer.email)$('email').value=String(customer.email).slice(0,254);
+      }
+      syncMessage(customer?'تم ربط جهازك واسترجاع بيانات العميل المسجلة. راجعها وأكمل الناقص.':'تم ربط جهازك تلقائياً. أكمل معلومات العميل لأول عملية دفع.',true);
+    }catch(_){
+      lastLookup='';
+      syncMessage('تم تعبئة رقم الجهاز، ولكن تعذر جلب بيانات العميل. يمكنك إكمالها يدوياً.',false);
+    }
+  }
+  function startAutoFill(){
+    const creds=fillFragment()||savedDevice();
+    if(creds){
+      $('deviceId').value=creds.deviceId;
+      $('activationCode').value=creds.activationCode;
+      autofillCustomer();
+    }else{
+      syncMessage('بيانات جهازك تُملأ تلقائياً عند الدخول من بوابة BLOFY PLAYER المرتبطة. يمكنك إدخالها هنا أيضاً.',false);
+    }
+    for(const field of ['deviceId','activationCode']){
+      $(field).addEventListener('change',()=>{lastLookup='';autofillCustomer();});
+      $(field).addEventListener('blur',()=>autofillCustomer());
+    }
   }
   function price(item){
     const n=(Number(item.priceMinor||0)/100).toFixed(2);
@@ -837,7 +913,7 @@ button{font:inherit;cursor:pointer}.pay-button{display:flex;align-items:center;j
       setStatus('تعذر فتح صفحة الدفع.');pay.disabled=false;
     }catch(_){setStatus('تعذر الاتصال بالخادم. حاول مرة أخرى.');pay.disabled=false}
   });
-  fillFragment();
+  startAutoFill();
   loadPlans().catch(()=>{setStatus('تعذر تحميل الباقات.');pay.disabled=true});
 })();
 </script>
