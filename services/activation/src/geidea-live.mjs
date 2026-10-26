@@ -6,7 +6,10 @@ import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const API = 'https://api.ksamerchant.geidea.net';
 // Modal hosted card-entry checkout only; never redirect to an unrestricted wallet-enabled HPP.
-export const CARD_ONLY_WALLETS = Object.freeze(['apple-pay', 'google-pay', 'samsung-pay']);
+// Merchant settings already disable Google Pay and Samsung Pay (verified by
+// non-paying Geidea Live preflight 2026-10-26). Hiding a disabled wallet makes
+// Geidea reject session creation with HPP error 110/112.
+export const CARD_ONLY_WALLETS = Object.freeze(['apple-pay']);
 const error = (code, status=400) => Object.assign(new Error(code), {status});
 const clean = (v, n=128) => String(v ?? '').trim().slice(0,n);
 
@@ -71,8 +74,12 @@ export function verifiedPayment(provider, order, config) {
   if (provider.status==='Success' && provider.detailedStatus==='Paid') {
     // Never grant a BLOFY entitlement for Apple Pay / Google Pay / Samsung Pay or another wallet.
     // Provider read is authoritative. Missing card evidence fails closed.
-    if (provider.paymentMethod?.type!=='Card' || provider.paymentMethod.wallet != null ||
-        !['mada','visa','mastercard'].includes(String(provider.paymentMethod?.brand||'').toLowerCase()) ||
+    // The order-level paymentMethod is optional in Geidea order lookups.
+    // The captured transaction's paymentMethod is mandatory and verified below.
+    if ((provider.paymentMethod != null && (
+          provider.paymentMethod.type!=='Card' || provider.paymentMethod.wallet != null ||
+          !['mada','visa','mastercard'].includes(String(provider.paymentMethod.brand||'').toLowerCase())
+        )) ||
         minor(provider.totalCapturedAmount)!==Number(order.amount_minor) ||
         minor(provider.totalRefundedAmount)!==0 || provider.paymentOperation!=='Pay' ||
         !Array.isArray(provider.transactions) || !provider.transactions.some(tx =>
@@ -197,7 +204,8 @@ export function createGeideaLiveHandlers({pool,json,readJson,authorize,env=proce
       amount:(plan.priceMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
       signature:createSignature({publicKey,password,amountMinor:plan.priceMinor,reference:id,timestamp}),
       paymentOperation:'Pay',language:'ar',
-      // Geidea documents hideWallets for its Modal/Drop-in HPP. No express wallets.
+      // Apple Pay explicitly hidden. Google Pay and Samsung Pay are disabled
+      // at merchant level; specifying them here produces Geidea error 110/112.
       hideWallets:[...CARD_ONLY_WALLETS],expressCheckouts:[],
       acceptTabbyPaymentMethod:false,acceptTamaraPaymentMethod:false,
       appearance:{uiMode:'modal'},
