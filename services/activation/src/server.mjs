@@ -690,6 +690,19 @@ const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
     const requestHost = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+    // Apple Pay merchant-domain verification, supplied by Geidea. Public and immutable.
+    if (['GET','HEAD'].includes(req.method || '') &&
+        requestUrl.pathname === '/.well-known/apple-developer-merchantid-domain-association') {
+      const association = await readFile(new URL('../web/.well-known/apple-developer-merchantid-domain-association', import.meta.url));
+      res.writeHead(200, {
+        'content-type':'application/octet-stream',
+        'content-length':association.length,
+        'cache-control':'public, max-age=3600',
+        'x-content-type-options':'nosniff',
+        'strict-transport-security':'max-age=31536000'
+      });
+      return res.end(req.method === 'HEAD' ? undefined : association);
+    }
     if (
       requestHost === 'api.blofyplayer.com' &&
       ['GET', 'HEAD'].includes(req.method || '') &&
