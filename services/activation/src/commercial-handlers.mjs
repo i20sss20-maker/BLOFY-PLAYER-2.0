@@ -197,14 +197,31 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
     if (await zidPayments(req,res,url)) return true;
     if (env.BLOFY_PAYMENT_PROVIDER === 'geidea' && path === '/api/v1/payments/tap/test-checkout') {json(res,404,{error:'not_found'});return true;}
     if (await tapPayments(req,res,url)) return true;
-    const routes=['/api/v1/subscriptions/status','/api/v1/license/recovery/create','/api/v1/license/recovery/restore',
+    const routes=['/api/v1/subscriptions/status','/api/v1/subscriptions/customer','/api/v1/license/recovery/create','/api/v1/license/recovery/restore',
       '/api/v1/device/sessions/revoke','/api/v1/device/identity/migrate','/api/v1/privacy/delete','/api/v1/privacy/support'];
     if (!routes.includes(path)) return false;
     if (req.method!=='POST') {json(res,405,{error:'method_not_allowed'});return true;}
     try {
       const body=await readJson(req),deviceId=await authorize(req,res,body);
       if (!deviceId) return true;
-      if (path==='/api/v1/subscriptions/status') {
+      if (path==='/api/v1/subscriptions/customer') {
+        // Customer autofill is accessible only after the same device ID + PIN proof
+        // required for paid checkout. Never query another device's PII.
+        const present=(await pool.query("SELECT to_regclass('public.device_customers') AS table_name")).rows[0]?.table_name;
+        const customer=present
+          ? (await pool.query(
+              'SELECT customer_name,customer_email,customer_phone FROM device_customers WHERE device_id=$1',
+              [deviceId])).rows[0]
+          : null;
+        json(res,200,{
+          deviceId,
+          customer:customer ? {
+            name:String(customer.customer_name || '').slice(0,160),
+            email:String(customer.customer_email || '').slice(0,254),
+            phone:String(customer.customer_phone || '').slice(0,24)
+          } : null
+        });
+      } else if (path==='/api/v1/subscriptions/status') {
         const row=(await pool.query('SELECT status,expires_at,trial_started_at FROM devices WHERE device_id=$1',[deviceId])).rows[0];
         const paid=await tapPayments.statusForDevice(deviceId).catch(()=>null);
         const zidPurchasesAvailable=zidPayments.selected ? await zidPayments.hasPurchasesAvailable() : false;
