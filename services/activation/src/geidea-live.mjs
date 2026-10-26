@@ -72,11 +72,13 @@ export function verifiedPayment(provider, order, config) {
     // Never grant a BLOFY entitlement for Apple Pay / Google Pay / Samsung Pay or another wallet.
     // Provider read is authoritative. Missing card evidence fails closed.
     if (provider.paymentMethod?.type!=='Card' || provider.paymentMethod.wallet != null ||
+        !['mada','visa','mastercard'].includes(String(provider.paymentMethod?.brand||'').toLowerCase()) ||
         minor(provider.totalCapturedAmount)!==Number(order.amount_minor) ||
         minor(provider.totalRefundedAmount)!==0 || provider.paymentOperation!=='Pay' ||
         !Array.isArray(provider.transactions) || !provider.transactions.some(tx =>
           tx.type==='Pay' && tx.status==='Success' && tx.currency==='SAR' &&
           tx.paymentMethod?.type==='Card' && tx.paymentMethod.wallet == null &&
+          ['mada','visa','mastercard'].includes(String(tx.paymentMethod?.brand||'').toLowerCase()) &&
           minor(tx.amount)===Number(order.amount_minor) &&
           tx.codes?.responseCode==='000' && tx.codes?.detailedResponseCode==='000'))
       throw error('geidea_capture_not_verified',409);
