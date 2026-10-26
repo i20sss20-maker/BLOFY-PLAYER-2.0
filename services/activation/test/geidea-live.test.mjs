@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import {minor,plansFromConfig,createSignature,verifyGeideaCallback,verifiedPayment} from '../src/geidea-live.mjs';
+import {minor,plansFromConfig,createSignature,verifyGeideaCallback,verifiedPayment,CARD_ONLY_WALLETS} from '../src/geidea-live.mjs';
 
 const publicKey='12345678-1234-4234-8234-123456789abc';
 const password='a-private-test-password-not-real';
@@ -15,7 +15,9 @@ function payment() {
     amount:12.5,totalAmount:12.5,currency:'SAR',isTest:false,
     status:'Success',detailedStatus:'Paid',paymentOperation:'Pay',
     totalCapturedAmount:12.5,totalRefundedAmount:0,
-    transactions:[{type:'Pay',status:'Success',currency:'SAR',amount:12.5,codes:{responseCode:'000',detailedResponseCode:'000'}}]
+    paymentMethod:{type:'Card',brand:'mada',wallet:null},
+    transactions:[{type:'Pay',status:'Success',currency:'SAR',amount:12.5,
+      paymentMethod:{type:'Card',brand:'mada',wallet:null},codes:{responseCode:'000',detailedResponseCode:'000'}}]
   };
 }
 function callback(p=payment()) {
@@ -47,11 +49,20 @@ test('live signed callback checks signature, amount, merchant, order and test fl
   assert.throws(()=>verifyGeideaCallback(callback({...payment(),merchantPublicKey:crypto.randomUUID()}),order,config));
   assert.throws(()=>verifyGeideaCallback(callback({...payment(),amount:13}),order,config));
 });
+test('card-only session hides all provider wallets',()=>{
+  assert.deepEqual([...CARD_ONLY_WALLETS],['apple-pay','google-pay','samsung-pay']);
+});
 test('paid only after actual captured Pay and no refunds',()=>{
   assert.equal(verifiedPayment(payment(),order,config),'paid');
   assert.equal(verifiedPayment({...payment(),status:'Failed',detailedStatus:'OrderFailed'},order,config),'failed');
   assert.equal(verifiedPayment({...payment(),status:'InProgress',detailedStatus:'PayFailed'},order,config),'pending');
   assert.throws(()=>verifiedPayment({...payment(),isTest:true},order,config));
+  assert.throws(()=>verifiedPayment({...payment(),paymentMethod:{type:'Card',brand:'visa',wallet:'ApplePay'}},order,config));
+  assert.throws(()=>verifiedPayment({...payment(),paymentMethod:{type:'Wallet',wallet:'GooglePay'}},order,config));
+  assert.throws(()=>verifiedPayment({...payment(),paymentMethod:null},order,config));
+  assert.throws(()=>verifiedPayment({...payment(),transactions:[{
+    ...payment().transactions[0],paymentMethod:{type:'Card',wallet:'SamsungPay'}
+  }]},order,config));
   assert.throws(()=>verifiedPayment({...payment(),totalRefundedAmount:1},order,config));
   assert.throws(()=>verifiedPayment({...payment(),totalCapturedAmount:1},order,config));
   assert.throws(()=>verifiedPayment({...payment(),transactions:[]},order,config));
