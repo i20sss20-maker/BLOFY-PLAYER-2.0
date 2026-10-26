@@ -42,6 +42,18 @@ test('Geidea live plans reuse exact configured prices, never invent a plan',()=>
   assert.throws(()=>plansFromConfig(JSON.stringify([{planKey:'tap-live-test',name:'x',priceMinor:1,currency:'SAR'}])));
   assert.throws(()=>plansFromConfig(JSON.stringify([{planKey:'tap-live-foo',name:'x',priceMinor:1000,currency:'USD'}])));
 });
+
+test('BLOFY public tariffs remain exact when mapped to Geidea Live',()=>{
+ const rows=[
+  {planKey:'geidea-live-3months',name:'BLOFY PLAYER — 3 شهور',priceMinor:1000,durationDays:90},
+  {planKey:'geidea-live-6months',name:'BLOFY PLAYER — 6 شهور',priceMinor:2000,durationDays:180},
+  {planKey:'geidea-live-year',name:'BLOFY PLAYER — سنة',priceMinor:2500,durationDays:365},
+  {planKey:'geidea-live-lifetime',name:'BLOFY PLAYER — مدى الحياة',priceMinor:4500,durationDays:null}
+ ];
+ const plans=plansFromConfig(JSON.stringify(rows));
+ assert.deepEqual(plans.map(p=>[p.priceMinor,p.durationDays,p.currency,p.maxDevices]),[
+  [1000,90,'SAR',1],[2000,180,'SAR',1],[2500,365,'SAR',1],[4500,null,'SAR',1]]);
+});
 test('live signed callback checks signature, amount, merchant, order and test flag',()=>{
   assert.equal(verifyGeideaCallback(callback(),order,config),orderId);
   assert.throws(()=>verifyGeideaCallback({...callback(),signature:'A'.repeat(43)+'='},order,config));
@@ -54,6 +66,16 @@ test('card-only session hides all provider wallets',()=>{
 });
 test('paid only after actual captured Pay and no refunds',()=>{
   assert.equal(verifiedPayment(payment(),order,config),'paid');
+  for (const brand of ['mada','visa','mastercard']) {
+    const p=payment();
+    p.paymentMethod.brand=brand;
+    p.transactions[0].paymentMethod.brand=brand;
+    assert.equal(verifiedPayment(p,order,config),'paid');
+  }
+  assert.throws(()=>verifiedPayment({...payment(),paymentMethod:{type:'Card',brand:'amex',wallet:null}},order,config));
+  assert.throws(()=>verifiedPayment({...payment(),transactions:[{
+    ...payment().transactions[0],paymentMethod:{type:'Card',brand:'amex',wallet:null}
+  }]},order,config));
   assert.equal(verifiedPayment({...payment(),status:'Failed',detailedStatus:'OrderFailed'},order,config),'failed');
   assert.equal(verifiedPayment({...payment(),status:'InProgress',detailedStatus:'PayFailed'},order,config),'pending');
   assert.throws(()=>verifiedPayment({...payment(),isTest:true},order,config));
