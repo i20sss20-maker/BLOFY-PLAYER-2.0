@@ -298,14 +298,11 @@ test('runtime: ordinary Xtream saves retain the original event handler', async (
   assert.equal(h.requests.length,0); assert.equal(h.legacyCount(),1);
 });
 
-test('runtime: renewal opens WhatsApp without sending private device credentials', async () => {
+test('runtime: renewal opens official payment page without sending private credentials', async () => {
   const h=harness(); await h.n('blofyRenewBtn').click();
   assert.equal(h.opened.length,1);
   const [url]=h.opened[0];
-  assert.match(url,/^https:\/\/wa\.me\/966568941484\?text=/);
-  const destination=new URL(url);
-  assert.match(destination.searchParams.get('text'),/تجديد تفعيل BLOFY PLAYER/);
-  assert.match(destination.searchParams.get('text'),/رقم الجهاز:/);
+  assert.equal(url,'/pay');
   assert.doesNotMatch(url,/test-only-pin|typed-test-password|BLOFY-TEST-0001|activationCode|deviceId/);
 });
 

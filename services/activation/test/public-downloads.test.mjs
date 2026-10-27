@@ -46,12 +46,13 @@ test('Google Play remains the primary public install path even without an APK ca
   }
 });
 
-test('temporary WhatsApp support and manual renewal remain visible when releases are unavailable', () => {
+test('downloads direct renewal to /pay while WhatsApp stays technical support only', () => {
   for (const mode of [{}, {unavailable: true}]) {
     const html = renderPublicDownloads([], mode);
     assert.match(html, /wa\.me\/966568941484/);
     assert.match(html, /الدعم الفني عبر واتساب/);
-    assert.match(html, /تجديد التفعيل عبر واتساب/);
+    assert.match(html, /href="\/pay">♻ تجديد التفعيل والدفع بالبطاقات/);
+    assert.doesNotMatch(html, /href="https:\/\/wa\.me[^"]*">[^<]*تجديد/);
     assert.doesNotMatch(html, /wa\.me\/966568941484[^"]*activationCode/);
     assert.doesNotMatch(html, /wa\.me\/966568941484[^"]*code%3D/);
   }

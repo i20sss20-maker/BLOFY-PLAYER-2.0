@@ -34,12 +34,13 @@ test('English landing promotes the REAL Play listing and official APK without pr
   assert.doesNotMatch(page, /<script src="https?:\/\//);
 });
 
-test('Sharing targets WhatsApp, Telegram and X with separately attributed campaign links', () => {
-  assert.match(page, /https:\/\/api\.whatsapp\.com\/send\?text=/);
+test('English page routes renewal to Geidea while sharing via Telegram and X', () => {
+  assert.match(page, /href="\/pay">Renew activation & pay<\/a>/);
+  assert.doesNotMatch(page, /https:\/\/api\.whatsapp\.com\/send\?text=/);
   assert.match(page, /https:\/\/t\.me\/share\/url\?/);
   assert.match(page, /https:\/\/twitter\.com\/intent\/tweet\?/);
   assert.match(page, /utm_campaign%3Dglobal_launch_202610/);
-  for (const src of ['whatsapp','telegram','x']) assert.match(page, new RegExp('utm_source%3D' + src));
+  for (const src of ['telegram','x']) assert.match(page, new RegExp('utm_source%3D' + src));
   assert.match(analytics, /'\/en'/);
   assert.match(analytics, /telegram_share_click/);
   assert.match(analytics, /x_share_click/);

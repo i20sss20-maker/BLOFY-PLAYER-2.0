@@ -134,12 +134,12 @@ test('pairing form has crawler noindex but home remains indexable', () => {
   assert.doesNotMatch(home, /<meta name="robots" content="noindex/);
 });
 
-test('support and WhatsApp renewal hub is an accessible canonical Arabic public page', () => {
+test('support separates technical WhatsApp from payment renewal on canonical Arabic page', () => {
   const support = readFileSync(new URL('../web/support.html', import.meta.url), 'utf8');
   assert.match(support, /<html lang="ar" dir="rtl">/);
-  assert.match(attribute(support, /<title>([^<]+)<\/title>/), /دعم BLOFY PLAYER/);
+  assert.match(attribute(support, /<title>([^<]+)<\/title>/), /الدعم وتجديد BLOFY PLAYER/);
   assert.equal(attribute(support, /<link rel="canonical" href="([^"]+)"/), 'https://blofyplayer.com/support');
-  assert.match(attribute(support, /<meta name="description" content="([^"]+)"/), /واتساب/);
+  assert.match(attribute(support, /<meta name="description" content="([^"]+)"/), /بوابة الدفع/);
   assert.match(support, /<h1>الدعم الفني وتجديد تفعيل بلوفي بلاير<\/h1>/);
   assert.match(support, /href="https:\/\/wa\.me\/966568941484\?text=/);
   assert.match(support, /تفعيل تطبيق BLOFY PLAYER منفصل عن اشتراك محتوى البث/);
@@ -152,10 +152,13 @@ test('support and WhatsApp renewal hub is an accessible canonical Arabic public 
   assert.ok(crumbs);
   assert.deepEqual(crumbs.itemListElement.map(item => item.item),
     ['https://blofyplayer.com/', 'https://blofyplayer.com/support']);
-  assert.match(home, /<a href="\/support">الدعم والتجديد<\/a>/);
-  assert.match(downloads, /<a href="\/support">الدعم والتجديد<\/a>/);
+  assert.match(home, /<a href="\/support">مركز الدعم<\/a>/);
+  assert.match(home, /href="\/pay">تجديد التفعيل والدفع/);
+  assert.match(downloads, /<a href="\/support">مركز الدعم<\/a>/);
+  assert.match(downloads, /href="\/pay">تجديد التفعيل/);
   const guide = readFileSync(new URL('../web/guide.html', import.meta.url), 'utf8');
-  assert.match(guide, /<a href="\/support">الدعم والتجديد<\/a>/);
+  assert.match(guide, /<a href="\/support">الدعم الفني<\/a>/);
+  assert.match(guide, /href="\/pay">تجديد التفعيل/);
 });
 
 test('support page is served explicitly and sitemap includes it but still excludes private pairing', () => {
@@ -186,18 +189,16 @@ test('home has one public heading and keeps the logged-in dashboard style', () =
   assert.doesNotMatch(home, /\.dashboard-title-wrap h1 \{/);
 });
 
-test('downloads page remains server-rendered and has a genuine WhatsApp share link', () => {
+test('downloads page remains server rendered with payment renewal and support only WhatsApp', () => {
   assert.match(downloads, /<script src="\/public-analytics\.js" defer><\/script>/i);
-  // Content, links, and SEO metadata are still present without executing JavaScript.
   assert.doesNotMatch(downloads, /<script\b(?![^>]*src="\/public-analytics\.js")/i);
-  const shareMatch = downloads.match(/<a class="btn" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="مشاركة BLOFY PLAYER على واتساب">/);
-  assert.ok(shareMatch);
-  const link = new URL(shareMatch[1]);
-  assert.equal(link.origin, 'https://api.whatsapp.com');
-  assert.match(link.searchParams.get('text'), /https:\/\/blofyplayer.com\/downloads/);
-  assert.match(link.searchParams.get('text'), /لا يوفّر اشتراك محتوى/);
+  assert.match(downloads, /<a class="wa-contact-renew" href="\/pay">/);
+  assert.match(downloads, /<a class="wa-contact-support" href="https:\/\/wa\.me\/966568941484\?text=/);
+  assert.doesNotMatch(downloads, /https:\/\/api\.whatsapp\.com\/send\?text=/);
+  assert.doesNotMatch(downloads, /تجديد التفعيل عبر واتساب/);
   const guide = readFileSync(new URL('../web/guide.html', import.meta.url), 'utf8');
-  assert.match(guide, /شارك التطبيق عبر واتساب/);
+  assert.match(guide, /href="\/pay">تجديد التفعيل/);
+  assert.doesNotMatch(guide, /شارك التطبيق عبر واتساب/);
   assert.equal((guide.match(/<h1>/g) || []).length, 1);
   assert.ok((guide.match(/<title>([^<]+)/)?.[1] || '').length <= 60);
   assert.ok((guide.match(/<meta name="description" content="([^"]+)"/)?.[1] || '').length <= 160);

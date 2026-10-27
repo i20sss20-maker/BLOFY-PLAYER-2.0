@@ -52,11 +52,11 @@ test('malformed campaign labels are rejected and Google is not loaded before con
   assert.equal(no.options, undefined);
 });
 
-test('public home has an organic WhatsApp share CTA with an official tracked URL and accurate disclaimer', () => {
-  const link = homeSource.match(/<a class="play-store-apk" href="(https:\/\/api\.whatsapp\.com\/send\?text=[^"]+)" target="_blank" rel="noopener noreferrer" aria-label="شارك رابط BLOFY PLAYER الرسمي عبر واتساب">/);
-  assert.ok(link, 'Missing organic homepage share link');
-  const sharedText = new URL(link[1]).searchParams.get('text');
-  assert.match(sharedText, /https:\/\/blofyplayer\.com\/\?utm_source=whatsapp&utm_medium=organic_share&utm_campaign=launch2026/);
-  assert.match(sharedText, /لا يوفر قنوات أو اشتراكات محتوى/);
+test('public home offers a tracked official Play link and direct renewal without WhatsApp checkout', () => {
+  assert.match(homeSource, /href="\/pay">تجديد التفعيل والدفع/);
+  assert.match(homeSource, /href="\/pay">♻ تجديد التفعيل والدفع بالبطاقات/);
+  assert.doesNotMatch(homeSource, /href="https:\/\/wa\.me[^"]*">تجديد التفعيل/);
+  assert.doesNotMatch(homeSource, /https:\/\/api\.whatsapp\.com\/send\?text=/);
   assert.match(homeSource, /play\.google\.com\/store\/apps\/details\?id=tv\.blofy\.player\.v2/);
+  assert.match(homeSource, /BLOFY PLAYER مشغل وسائط عام ولا يوفر أو يبيع قوائم تشغيل/);
 });
