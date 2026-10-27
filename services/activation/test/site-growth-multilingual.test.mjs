@@ -48,12 +48,13 @@ test('every translated entry advertises reciprocal hreflang and canonical links'
   }
 });
 
-test('Spanish and French share official marketing URLs without bundled content promises', () => {
+test('Spanish and French provide renewal and marketing links without WhatsApp share', () => {
   for (const body of [spanish, french]) {
-    assert.match(body, /https:\/\/api\.whatsapp\.com\/send\?text=/);
+    assert.match(body, /href="\/pay"/);
+    assert.doesNotMatch(body, /https:\/\/api\.whatsapp\.com\/send\?text=/);
     assert.match(body, /https:\/\/t\.me\/share\/url\?/);
     assert.match(body, /https:\/\/twitter\.com\/intent\/tweet/);
-    for (const source of ['whatsapp', 'telegram', 'x']) {
+    for (const source of ['telegram', 'x']) {
       assert.ok(body.includes('utm_source%3D' + source), 'Missing attributed ' + source + ' share');
     }
     assert.match(body, /id="faq"/);
