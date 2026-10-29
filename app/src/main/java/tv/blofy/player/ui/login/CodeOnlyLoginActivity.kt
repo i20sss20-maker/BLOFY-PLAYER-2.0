@@ -153,15 +153,32 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             submit.isEnabled = false
             showStatus("جاري التحقق من الكود...")
             try {
+                // Always confirm the code with the host before granting access.
                 val provider = CodeHostClient.login(applicationContext, BuildConfig.CODE_AUTH_BASE_URL, value)
-                withContext(Dispatchers.IO) {
-                    BlofyDatabase.get(applicationContext).dao().saveAndActivateProvider(provider)
+                val cached = withContext(Dispatchers.IO) {
+                    val dao = BlofyDatabase.get(applicationContext).dao()
+                    val old = dao.provider(provider.id)
+                    val sameSource = old != null &&
+                        old.baseUrl == provider.baseUrl &&
+                        old.username == provider.username &&
+                        old.password == provider.password &&
+                        old.providerType == provider.providerType
+                    val ready = sameSource &&
+                        CatalogSyncState.isReady(applicationContext, provider.id) &&
+                        dao.hasStreamsForProvider(provider.id)
+                    dao.saveAndActivateProvider(provider)
+                    ready
                 }
-                // The access code is never saved locally.
-                CatalogSyncState.markPending(applicationContext, provider.id)
-                showStatus("تم الدخول • جاري تجهيز المكتبة")
-                startActivity(Intent(this@CodeOnlyLoginActivity, CatalogLoadingActivity::class.java)
-                    .putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
+                // Never store the access code. Reuse the catalog on subsequent verified logins.
+                if (cached) {
+                    showStatus("تم الدخول")
+                    startActivity(Intent(this@CodeOnlyLoginActivity, tv.blofy.player.ui.home.HomeActivity::class.java))
+                } else {
+                    CatalogSyncState.markPending(applicationContext, provider.id)
+                    showStatus("تم الدخول • جاري تجهيز المكتبة")
+                    startActivity(Intent(this@CodeOnlyLoginActivity, CatalogLoadingActivity::class.java)
+                        .putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
+                }
                 finish()
             } catch (cancelled: CancellationException) {
                 throw cancelled
