@@ -1,0 +1,78 @@
+name: BLOFY Code-only Edition APK
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/blofy-code-only-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-code-edition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses >/dev/null || true
+          "$sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Test and build independent code-only APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gradle --no-daemon \
+            -PBLOFY_CODE_ONLY_EDITION=true \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testDebugUnitTest
+          gradle --no-daemon \
+            -PBLOFY_CODE_ONLY_EDITION=true \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
+            -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
+            lintDebug assembleDebug
+      - name: Identify development-only APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          mkdir -p code-only-artifacts
+          cp "$APK" code-only-artifacts/BLOFY-PLAYER-CODE-ONLY-DEMO-UNCONFIGURED.apk
+          sha256sum code-only-artifacts/*.apk > code-only-artifacts/SHA256SUMS
+          cat > code-only-artifacts/README.txt <<EOF
+          BLOFY PLAYER code-only edition - DEMO, host unconfigured
+          Package: tv.blofy.player.v2.code
+          Commit: $GITHUB_SHA
+          This is a debug-signed APK only for verifying UI/remote focus.
+          The access code cannot authenticate until a real HTTPS gateway is configured.
+          No customer activation server or media playlist is bundled in this APK.
+          Not for public distribution.
+          EOF
+      - name: Upload test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-CODE-ONLY-DEMO-${{ github.sha }}
+          path: code-only-artifacts/
+          if-no-files-found: error
+          retention-days: 14
