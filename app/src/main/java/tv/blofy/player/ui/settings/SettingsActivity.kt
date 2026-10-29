@@ -30,6 +30,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.login.CatalogLoadingActivity
+import tv.blofy.player.ui.login.CodeOnlyLoginActivity
 import tv.blofy.player.ui.login.LoginActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 
@@ -132,9 +133,15 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting("▶  الحلقة التالية", KEY_AUTO_NEXT, arrayOf("ask", "on", "off"), arrayOf("اسألني", "تلقائي", "إيقاف")))
         addCard(cycleSetting("✦  حركة الواجهة", KEY_MOTION, arrayOf("smooth", "reduced"), arrayOf("سلسة", "خفيفة")))
         addCard(actionCard("🌐  لغة التطبيق", currentLanguageLabel()) { chooseLanguage() })
-        addCard(actionCard("▣  ربط الجهاز", "QR ورقم الجهاز ورمز الربط") { startActivity(Intent(this, LoginActivity::class.java)) })
+        if (BuildConfig.CODE_ONLY_EDITION) {
+            addCard(actionCard("▣  رمز الدخول", "باركود الجهاز وتسجيل الدخول بالكود") { startActivity(Intent(this, CodeOnlyLoginActivity::class.java)) })
+        } else {
+            addCard(actionCard("▣  ربط الجهاز", "QR ورقم الجهاز ورمز الربط") { startActivity(Intent(this, LoginActivity::class.java)) })
+        }
         addCard(actionCard("⇧  فحص التحديث", "تحقق من آخر إصدار رسمي") { checkForUpdate() })
-        addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
+        if (!BuildConfig.CODE_ONLY_EDITION) {
+            addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
+        }
         addCard(actionCard("↻  تحديث المحتوى", "يدوي عند الحاجة فقط") { refreshLibrary() })
         storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
         addCard(storageCard)
