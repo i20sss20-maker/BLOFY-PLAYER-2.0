@@ -45,6 +45,7 @@ import java.util.UUID
 class PlaylistActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.CODE_ONLY_EDITION) { finish(); return }
         val editingProviderId = intent.getStringExtra(EXTRA_PROVIDER_ID)
         if (editingProviderId == null && !intent.getBooleanExtra(EXTRA_DIRECT_FORM, false)) {
             startActivity(Intent(this, ProviderManagerActivity::class.java)); finish(); return
