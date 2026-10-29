@@ -134,7 +134,7 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting("✦  حركة الواجهة", KEY_MOTION, arrayOf("smooth", "reduced"), arrayOf("سلسة", "خفيفة")))
         addCard(actionCard("🌐  لغة التطبيق", currentLanguageLabel()) { chooseLanguage() })
         if (BuildConfig.CODE_ONLY_EDITION) {
-            addCard(actionCard("▣  رمز الدخول", "باركود الجهاز وتسجيل الدخول بالكود") { startActivity(Intent(this, CodeOnlyLoginActivity::class.java)) })
+            addCard(actionCard("▣  دخول بالكود", "إدخال كود الاشتراك فقط") { startActivity(Intent(this, CodeOnlyLoginActivity::class.java)) })
         } else {
             addCard(actionCard("▣  ربط الجهاز", "QR ورقم الجهاز ورمز الربط") { startActivity(Intent(this, LoginActivity::class.java)) })
         }
