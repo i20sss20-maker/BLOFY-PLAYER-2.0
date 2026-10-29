@@ -15,8 +15,6 @@ val updateBaseUrlEscaped = updateBaseUrl.replace("\\", "\\\\").replace("\"", "\\
 val codeOnlyEdition = providers.gradleProperty("BLOFY_CODE_ONLY_EDITION").orElse("false").get().equals("true", true)
 val codeAuthBaseUrl = providers.gradleProperty("BLOFY_CODE_AUTH_BASE_URL").orElse("").get().trim()
 val codeAuthBaseUrlEscaped = codeAuthBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
-val codePairUrl = providers.gradleProperty("BLOFY_CODE_PAIR_URL").orElse("").get().trim()
-val codePairUrlEscaped = codePairUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val buildSha = providers.gradleProperty("BLOFY_BUILD_SHA")
     .orElse(providers.environmentVariable("GITHUB_SHA"))
     .orElse("local").get().trim().ifBlank { "local" }
@@ -44,7 +42,6 @@ android {
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("boolean", "CODE_ONLY_EDITION", codeOnlyEdition.toString())
         buildConfigField("String", "CODE_AUTH_BASE_URL", "\"$codeAuthBaseUrlEscaped\"")
-        buildConfigField("String", "CODE_PAIR_URL", "\"$codePairUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
         buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())
