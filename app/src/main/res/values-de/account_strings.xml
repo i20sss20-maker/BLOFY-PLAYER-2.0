@@ -4,7 +4,7 @@
     <string name="privacy_summary">Wir verwenden eine Installationskennung und einen Hash der Android-ID zur Verwaltung der Aktivierung und Testdauer. Telefonnummer und IMEI werden dafür nicht verwendet. Einzelheiten zu Daten und Löschung stehen in der Datenschutzerklärung.</string>
     <string name="privacy_diagnostics">Wiedergabediagnose zur Verbesserung der Stabilität teilen (optional)</string>
     <string name="license_recovery_title">Lizenz wiederherstellen</string>
-    <string name="license_recovery_hint">Speichere vor der Deinstallation einen Wiederherstellungsschlüssel außerhalb dieses Geräts. Er überträgt nur die bezahlte Lizenz; Wiedergabelisten und Passwörter werden nicht automatisch importiert.</string>
+    <string name="license_recovery_hint">Speichere vor einem Zurücksetzen oder einer Neuinstallation einen Wiederherstellungsschlüssel außerhalb des Geräts. Er stellt die ursprüngliche BLOFY-Nummer und das bisherige Ablaufdatum wieder her; auf dem Server gespeicherte Playlists bleiben erhalten. Die Testphase beginnt nicht erneut.</string>
     <string name="license_create_key">Wiederherstellungsschlüssel erstellen</string>
     <string name="license_create_warning">Ein bisheriger Wiederherstellungsschlüssel wird ungültig. Speichere den neuen Schlüssel, bevor du diese Seite verlässt.</string>
     <string name="license_enter_key">Wiederherstellungsschlüssel</string>
@@ -12,7 +12,7 @@
     <string name="license_restore_warning">Die verbleibende Lizenzdauer wird auf dieses Gerät übertragen und das vorherige Gerät deaktiviert. Fortfahren?</string>
     <string name="license_invalid_key">Der Schlüssel ist ungültig oder bereits verwendet, oder die Lizenz ist abgelaufen oder gesperrt.</string>
     <string name="license_restored">Lizenz wiederhergestellt. Kehre zur Anmeldung zurück und aktualisiere den Status.</string>
-    <string name="license_paid_required">Zum Erstellen eines Wiederherstellungsschlüssels ist eine gültige bezahlte Lizenz erforderlich.</string>
+    <string name="license_paid_required">Für diese Lizenz kann kein Wiederherstellungsschlüssel erstellt werden.</string>
     <string name="license_same_device">Diese Lizenz gehört bereits zu diesem Gerät.</string>
     <string name="license_already_active">Dieses Gerät hat bereits eine gültige Lizenz; sie wurde nicht ersetzt.</string>
     <string name="license_keep_key">Bewahre diesen Schlüssel sicher auf und teile ihn nicht. Er wird nicht erneut angezeigt.</string>
