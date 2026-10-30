@@ -47,3 +47,12 @@ test('admin customer list shows stored phone numbers and can filter contacts mis
   assert.match(js, /count\.with_phone/);
   assert.match(js, /count\.without_phone/);
 });
+
+test('admin contact directory provides registered-phone shortcut and editable search field',async()=>{
+ const html=await web('admin.html');
+ const js=await web('experience.js');
+ for(const id of ['show-phone-customers','show-all-customers','customer-lookup'])assert.match(html,new RegExp('id="'+id+'"'));
+ assert.match(html,/دليل العملاء المسجلين بأرقام جوال/);
+ assert.match(js,/filter.value=onlyContacts\?'withPhone':'all'/);
+ assert.match(js,/navigator.clipboard.writeText\(item.phone\)/);
+});
