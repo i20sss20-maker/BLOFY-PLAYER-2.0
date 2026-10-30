@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDeviceAdmin, deviceView, deviceFilters, validateDeviceProfile, DeviceAdminError } from '../src/device-admin.mjs';
+import { createDeviceAdmin, deviceView, deviceFilters, normalizeSaudiPhoneSearch, validateDeviceProfile, DeviceAdminError } from '../src/device-admin.mjs';
 const now=Date.UTC(2026,8,13,1);
 const row={device_id:'BLOFY-TEST-ABCD',status:'trial',created_at:new Date(now-3600000),last_seen_at:new Date(now-60000),expires_at:new Date(now+86400000),playlist_count:2};
 test('new badge measures first registration, never claims install time or live presence',()=>{
@@ -53,4 +53,12 @@ test('invalid path/filter fails before database access',async()=>{
  const out=[];const handler=createDeviceAdmin({pool:{connect:()=>{throw Error('DB called');}},json:(_res,code,body)=>out.push([code,body]),requireAdmin:()=>true});
  for(const path of ['/api/v1/admin/device-insights?filter=oops','/api/v1/admin/device-insights/%ZZ','/api/v1/admin/device-insights/not-device'])await handler({method:'GET'},{},new URL('http://test'+path));
  assert.deepEqual(out.map(x=>x[0]),[400,400,400]);
+});
+
+test('Saudi phone search normalizes local and international numbers and accepts Arabic digits',()=>{
+ for (const v of ['0551234567','551234567','966551234567','+966551234567','٠٥٥١٢٣٤٥٦٧']) assert.equal(normalizeSaudiPhoneSearch(v),'+966551234567');
+ assert.equal(normalizeSaudiPhoneSearch('05'),'+9665');
+ assert.equal(normalizeSaudiPhoneSearch('عميل'),'');
+ assert.equal(normalizeSaudiPhoneSearch('05%'),'');
+ assert.equal(deviceFilters(new URLSearchParams('filter=withPhone')).filter,'withPhone');
 });
