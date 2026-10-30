@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-tv-play-2000074-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   tv9-emulator-review:
     runs-on: ubuntu-latest
@@ -56,3 +60,107 @@ jobs:
           name: android-tv9-review-${{ github.sha }}
           path: tv-review-test-results.txt
           if-no-files-found: ignore
+
+  signed-play-candidate:
+    name: Verify and sign AAB 2000074 after TV emulator passes
+    needs: [tv9-emulator-review]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: production
+    env:
+      EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+      NDK_VERSION: "28.0.13004108"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Validate source, package and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000074' app/build.gradle.kts
+          test -s app/src/main/res/drawable-xhdpi/blofy_tv_banner.png
+          test -s app/src/main/res/mipmap-nodpi/blofy_tv_icon.png
+          test ! -e app/src/main/res/drawable/blofy_tv_banner.xml
+      - name: Install native SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0" "ndk;$NDK_VERSION" "cmake;3.22.1"
+          command -v ninja >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y ninja-build; }
+      - name: Decode original signing identity
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 --decode > "$RUNNER_TEMP/blofy-upload.keystore"
+          keytool -list -keystore "$RUNNER_TEMP/blofy-upload.keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          actual="$(keytool -exportcert -keystore "$RUNNER_TEMP/blofy-upload.keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')"
+          test "$actual" = "$EXPECTED_CERT_SHA256"
+      - name: Build pinned FFmpeg native extension
+        shell: bash
+        env:
+          ENABLED_DECODERS: ac3 eac3 dca truehd aac mp3 opus vorbis flac
+        run: |
+          set -euo pipefail
+          export NDK_PATH="$ANDROID_HOME/ndk/$NDK_VERSION"
+          export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"
+          chmod +x tools/build_media3_ffmpeg.sh
+          tools/build_media3_ffmpeg.sh
+          test -s build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar
+      - name: Lint, R8, production-sign Google Play candidate
+        shell: bash
+        env:
+          BLOFY_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/blofy-upload.keystore
+          BLOFY_RELEASE_STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          BLOFY_RELEASE_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          BLOFY_RELEASE_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2048m
+        run: |
+          set -euo pipefail
+          aar="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
+          gradle --no-daemon --max-workers=2 -PBLOFY_DISTRIBUTION=play -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$aar" lintRelease assembleRelease bundleRelease
+      - name: Verify signed AAB and preserve owner artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p candidate
+          apk=app/build/outputs/apk/release/app-release.apk
+          aab=app/build/outputs/bundle/release/app-release.aab
+          test -s "$apk" && test -s "$aab"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/aapt" dump badging "$apk" | tee candidate/badging.txt
+          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000074' versionName='2.0.0-rc07.55.6-tv-review'" candidate/badging.txt
+          "$tools/apksigner" verify --print-certs "$apk" > candidate/signature.txt
+          actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$actual" = "$EXPECTED_CERT_SHA256"
+          "$tools/zipalign" -c -P 16 -v 4 "$apk"
+          jarsigner -verify "$aab" >/dev/null
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/native-files.txt"
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\.so$" "$RUNNER_TEMP/native-files.txt"
+          done
+          cp "$aab" candidate/BLOFY-PLAYER-AndroidTV-review-v2000074.aab
+          printf 'source_sha=%s\npackage=tv.blofy.player.v2\nversionCode=2000074\nactivation=https://api.blofyplayer.com\nupdates=https://updates.blofyplayer.com\nffmpeg=true\nr8=true\nproduction_signed=true\npublished=false\n' "$GITHUB_SHA" > candidate/build-info.txt
+          (cd candidate && sha256sum *.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
+      - name: Upload signed AAB (owner review; NOT a Play publication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-ANDROID-TV-REVIEW-2000074-SIGNED-${{ github.sha }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
