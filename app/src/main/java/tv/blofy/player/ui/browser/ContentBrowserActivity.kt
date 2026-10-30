@@ -157,6 +157,8 @@ class ContentBrowserActivity : AppCompatActivity() {
                     val saved = savedCategoryId()
                     val initial = items.firstOrNull { it.remoteId == saved }?.remoteId ?: items.first().remoteId
                     if (currentCategoryId != initial) loadStreams(initial)
+                    // Live needs an initial remote-focus target just like Movies and Series.
+                    requestInitialCatalogFocus()
                 }
             }
         }
@@ -313,7 +315,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun requestInitialCatalogFocus() {
-        if (phoneMode || kind == KIND_LIVE || categoryList.hasFocus() || streamList.hasFocus()) return
+        if (phoneMode || categoryList.hasFocus() || streamList.hasFocus()) return
         categoryList.post {
             categoryList.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
                 ?: categoryList.post { categoryList.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
