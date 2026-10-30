@@ -114,6 +114,41 @@ object DeviceIdentity {
         ) { "Unable to adopt recovered BLOFY identity" }
     }
 
+    /**
+     * Completes a recovery-code or administrator-approved transfer.
+     * The caller must have already received a verified success response from the
+     * trusted activation service. No Android ID comparison is required because a
+     * factory reset may have changed that identifier (or it may be unavailable).
+     *
+     * The Room record must be committed first by ActivationManager so a process
+     * crash between writes cannot restore the disposable trial as the authority.
+     */
+    @Synchronized
+    internal fun adoptServerVerifiedRecovery(
+        context: Context,
+        temporaryDeviceId: String,
+        canonicalDeviceId: String,
+        recoveryActivationCode: String
+    ) {
+        require(validDeviceId(temporaryDeviceId) && validDeviceId(canonicalDeviceId))
+        require(validActivationCode(recoveryActivationCode))
+        val preferences = preferences(context)
+        check(preferences.getString(DEVICE_ID, null) == temporaryDeviceId) {
+            "Device identity changed during recovery"
+        }
+        check(preferences.getString(ACTIVE_CODE, null) == recoveryActivationCode) {
+            "Activation credential changed during recovery"
+        }
+        check(
+            preferences.edit()
+                .putString(DEVICE_ID, canonicalDeviceId)
+                .putString(ACTIVE_CODE, recoveryActivationCode)
+                .putString(STABLE_ALIAS_BOUND_TO, canonicalDeviceId)
+                .remove(PENDING_CODE)
+                .commit()
+        ) { "Unable to store recovered canonical identity" }
+    }
+
     /** Commits a server-approved canonical identity recovery after a clean reinstall. */
     @Synchronized
     internal fun commitStableIdentity(context: Context, deviceId: String, activationCode: String) {
