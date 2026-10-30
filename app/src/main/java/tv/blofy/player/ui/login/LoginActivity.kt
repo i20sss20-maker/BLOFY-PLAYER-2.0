@@ -482,6 +482,8 @@ class LoginActivity : AppCompatActivity() {
         row.removeAllViews()
         if (providers.isEmpty()) {
             row.addView(emptyPlaylistView(getString(R.string.login_no_playlists)), LinearLayout.LayoutParams(-1, dp(86)))
+            // If the selected card disappeared after portal sync, restore a usable focus target.
+            if (deviceKind == DeviceClass.Kind.TV && focusedId != null) addPlaylist.requestFocus()
             if (deviceKind == DeviceClass.Kind.TV) {
                 refreshCodeButton.nextFocusDownId = addPlaylist.id
                 addPlaylist.nextFocusUpId = refreshCodeButton.id
@@ -504,7 +506,9 @@ class LoginActivity : AppCompatActivity() {
             addPlaylist.nextFocusUpId = cards.last().id
             connectButton.nextFocusUpId = cards.last().id
         }
-        if (focusedId != null) row.findViewWithTag<View>(focusedId)?.requestFocus()
+        if (focusedId != null && row.findViewWithTag<View>(focusedId)?.requestFocus() != true) {
+            cards.firstOrNull()?.requestFocus() ?: addPlaylist.requestFocus()
+        }
     }
 
     private fun playlistCard(provider: ProviderEntity) = LinearLayout(this).apply {
