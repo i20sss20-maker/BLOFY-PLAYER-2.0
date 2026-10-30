@@ -35,6 +35,19 @@ CREATE TABLE IF NOT EXISTS device_identity_aliases (
 CREATE INDEX IF NOT EXISTS idx_device_identity_aliases_canonical
   ON device_identity_aliases(canonical_device_id);
 
+-- One-time recovery secret survives Android factory reset because only its HMAC is stored
+-- on the server. Never associate a fresh trial device with another license without
+-- the secret or explicit administrator-verified proof of ownership.
+CREATE TABLE IF NOT EXISTS license_recovery_codes (
+  device_id TEXT PRIMARY KEY REFERENCES devices(device_id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_license_recovery_expiry
+  ON license_recovery_codes(expires_at) WHERE used_at IS NULL;
+
 -- Customer records initialize with the shared schema, after their devices parent table.
 -- Startup waits for this schema before accepting requests through any HTTP hook.
 CREATE TABLE IF NOT EXISTS device_customers (
