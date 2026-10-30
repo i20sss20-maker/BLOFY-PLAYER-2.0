@@ -44,7 +44,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
-            gradle --no-daemon -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 assembleDebug assembleDebugAndroidTest
+            gradle --no-daemon -PBLOFY_DISTRIBUTION=play -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 assembleDebug assembleDebugAndroidTest
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb shell am instrument -w -e class tv.blofy.player.ui.AndroidTvReviewDpadTest -e tvReview true tv.blofy.player.v2.test/androidx.test.runner.AndroidJUnitRunner | tee tv-review-test-results.txt
