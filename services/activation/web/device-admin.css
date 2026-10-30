@@ -48,3 +48,15 @@ body[data-page="admin"]{background:radial-gradient(circle at 85% 0,rgba(126,87,1
 #customer-rows tr.is-inactive td:first-child{box-shadow:inset -2px 0 0 #5d4b37}
 #customer-rows tr.is-inactive{background:linear-gradient(90deg,rgba(97,77,50,.08),transparent 55%)}
 @media(max-width:680px){.device-row-actions{min-width:124px}.device-row-actions>*{flex:1 1 auto}.active-playlist-caption{max-width:150px}}
+
+/* Saved customer contact quick-search; loaded from the CSP-authorized stylesheet. */
+.contact-directory-quick{margin:14px 0;padding:17px;border-radius:15px;border:1px solid #513b69;background:linear-gradient(120deg,#231830,#16131d)}
+.contact-directory-title{display:block;margin:0 0 9px;color:#eadbff;font-size:17px}
+.contact-directory-description{margin:0 0 12px!important;line-height:1.8}
+.contact-directory-warning{margin:12px 0 0!important;font-size:12px;line-height:1.8;color:#baa7cf}
+.contact-directory-quick button{min-height:42px;margin:0 0 5px 7px;border-radius:12px}
+#customer-lookup{min-width:240px;flex:2}
+#customer-search>label[for="customer-lookup"]{align-self:center}
+.customer-phone-available strong{display:block;direction:ltr;white-space:nowrap;font-variant-numeric:tabular-nums}
+.copy-customer-phone{margin:6px 3px;font-size:11px!important;padding:6px 10px!important}
+@media(max-width:680px){.contact-directory-quick button{width:100%;margin:0 0 8px}#customer-lookup{min-width:0;flex-basis:100%}}
