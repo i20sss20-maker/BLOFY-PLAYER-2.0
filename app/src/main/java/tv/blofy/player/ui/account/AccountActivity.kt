@@ -83,9 +83,21 @@ class AccountActivity : AppCompatActivity() {
             confirm(getString(R.string.license_restore_warning)) {
                 perform {
                     refreshActivation()
-                    AccountClient.post(applicationContext, "/api/v1/license/recovery/restore", JSONObject().put("recoveryCode", code))
+                    val response = AccountClient.post(
+                        applicationContext, "/api/v1/license/recovery/restore",
+                        JSONObject().put("recoveryCode", code)
+                    )
+                    val canonicalId = response.optString("canonicalDeviceId")
+                    if (canonicalId.isBlank()) throw AccountClient.Failure("recovery_unavailable")
+                    // After a factory reset, the server sends the original BLOFY ID.
+                    // Never display "restored" while Room still holds the disposable trial.
+                    refreshActivation()
+                    val actual = withContext(Dispatchers.IO) {
+                        ActivationManager(applicationContext, BlofyDatabase.get(applicationContext).dao())
+                            .ensureIdentity().deviceId
+                    }
+                    if (actual != canonicalId) throw AccountClient.Failure("recovery_sync_required")
                     input.text.clear()
-                    try { refreshActivation() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { }
                     status.setText(R.string.license_restored)
                 }
             }
