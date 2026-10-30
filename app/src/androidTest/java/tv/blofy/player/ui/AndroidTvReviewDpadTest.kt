@@ -72,6 +72,21 @@ class AndroidTvReviewDpadTest {
                 )
                 assertTrue("Focused login button is enabled", activity.currentFocus?.isEnabled == true)
             }
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
+            val towardAccount = if (context.resources.configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL) {
+                KeyEvent.KEYCODE_DPAD_LEFT
+            } else {
+                KeyEvent.KEYCODE_DPAD_RIGHT
+            }
+            instrumentation.sendKeyDownUpSync(towardAccount)
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                assertEquals(
+                    "Account must be reachable from the header by a real D-pad key",
+                    activity.getString(R.string.account_title),
+                    (activity.currentFocus as? Button)?.text?.toString()
+                )
+            }
         }
     }
 }
