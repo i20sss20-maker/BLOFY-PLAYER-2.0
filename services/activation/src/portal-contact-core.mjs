@@ -49,13 +49,6 @@ export function injectPortalContactUi(html) {
 (function () {
   var contactState = { required: false, masked: '', checkedDevice: '' };
   function el(id) { return document.getElementById(id); }
-  function contactStorageKey(deviceId) { return 'blofy.contact.complete.v1:' + String(deviceId || '').toUpperCase(); }
-  function hasRememberedContact(deviceId) {
-    try { return localStorage.getItem(contactStorageKey(deviceId)) === '1'; } catch (_) { return false; }
-  }
-  function rememberContact(deviceId) {
-    try { if (deviceId) localStorage.setItem(contactStorageKey(deviceId), '1'); } catch (_) {}
-  }
   function currentAuth() {
     var state = typeof auth !== 'undefined' && auth;
     return { deviceId: String(state && state.deviceId || '').trim(), activationCode: String(state && state.activationCode || '').trim() };
@@ -65,12 +58,12 @@ export function injectPortalContactUi(html) {
     if (lang === 'ar') return {
       title: 'أكمل بيانات التواصل', text: 'أضف رقم جوالك مرة واحدة للدعم واسترجاع الوصول والتواصل المهم بخصوص حساب BLOFY PLAYER.',
       label: 'رقم الجوال', placeholder: '05XXXXXXXX', save: 'حفظ الرقم', cancel: 'إلغاء', edit: 'تحديث الجوال',
-      note: 'يُحفظ الرقم بشكل خاص على جهازك ولا يظهر للمستخدمين الآخرين.', invalid: 'أدخل رقم جوال صحيحًا.', failed: 'تعذر حفظ الرقم. حاول مرة أخرى.'
+      note: 'يُحفظ الرقم بشكل آمن في حساب الجهاز، ويظهر للمشرف المخوّل بخدمة العملاء فقط.', invalid: 'أدخل رقم جوال صحيحًا.', failed: 'تعذر حفظ الرقم. حاول مرة أخرى.'
     };
     return {
       title: 'Add your contact number', text: 'Add your mobile number once for support, account recovery and important BLOFY PLAYER account communication.',
       label: 'Mobile number', placeholder: '+9665XXXXXXXX', save: 'Save number', cancel: 'Cancel', edit: 'Update mobile',
-      note: 'Your number is stored privately for this device and is not shown to other users.', invalid: 'Enter a valid mobile number.', failed: 'Could not save the number. Try again.'
+      note: 'Your number is stored with your device account and is available only to authorized support administrators.', invalid: 'Enter a valid mobile number.', failed: 'Could not save the number. Try again.'
     };
   }
   async function contactApi(path, body) {
@@ -108,7 +101,7 @@ export function injectPortalContactUi(html) {
     var button = el('blofyContactSave'); button.disabled = true; el('blofyContactStatus').textContent = '';
     try {
       var result = await contactApi('/api/v1/portal/contact', { deviceId: state.deviceId, activationCode: state.activationCode, phone: phone });
-      contactState.required = false; contactState.masked = result.maskedPhone || ''; contactState.checkedDevice = state.deviceId; rememberContact(state.deviceId); modal().classList.add('hidden'); installButton();
+      contactState.required = false; contactState.masked = result.maskedPhone || ''; contactState.checkedDevice = state.deviceId; modal().classList.add('hidden'); installButton();
     } catch (_) { el('blofyContactStatus').textContent = c.failed; }
     finally { button.disabled = false; }
   }
@@ -121,19 +114,17 @@ export function injectPortalContactUi(html) {
   async function ensureContact() {
     var state = currentAuth(); if (!state.deviceId || !state.activationCode) return;
     if (contactState.checkedDevice === state.deviceId) { installButton(); return; }
-    var remembered = hasRememberedContact(state.deviceId);
     try {
       var status = await contactApi('/api/v1/portal/contact/status', state);
       contactState.checkedDevice = state.deviceId; contactState.masked = status.maskedPhone || '';
-      if (status.hasPhone) rememberContact(state.deviceId);
-      contactState.required = !status.hasPhone && !remembered;
+      contactState.required = !status.hasPhone;
       installButton(); if (contactState.required) openModal(true);
     } catch (_) {
-      if (remembered) {
-        contactState.checkedDevice = state.deviceId;
-        contactState.required = false;
-        installButton();
-      }
+      contactState.checkedDevice = state.deviceId;
+      contactState.required = true;
+      installButton();
+      openModal(true);
+      el('blofyContactStatus').textContent = copy().failed;
     }
   }
   function watchLogin() {

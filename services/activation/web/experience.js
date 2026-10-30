@@ -104,7 +104,7 @@ if(page==='admin'){
   let devicePage=1, deviceItems=[];
   const searchForm=$('customer-search');
   const filterLabel=node('label','عرض الأجهزة'); const filter=node('select');filter.name='filter';
-  for(const [value,text] of [['all','كل الأجهزة'],['new24h','جديد خلال 24 ساعة'],['new7d','جديد خلال 7 أيام'],['trial','تجربة'],['active','ساري'],['expired','منتهي'],['blocked','موقوف'],['noPlaylists','بدون قوائم'],['recent','تواصل خلال 10 دقائق'],['inactive7d','لم يتواصل منذ 7 أيام'],['expiring7d','تنتهي خلال 7 أيام']]){const option=node('option',text);option.value=value;filter.append(option);}filterLabel.append(filter);
+  for(const [value,text] of [['all','كل الأجهزة'],['withPhone','لديهم رقم جوال'],['withoutPhone','بدون رقم جوال'],['new24h','جديد خلال 24 ساعة'],['new7d','جديد خلال 7 أيام'],['trial','تجربة'],['active','ساري'],['expired','منتهي'],['blocked','موقوف'],['noPlaylists','بدون قوائم'],['recent','تواصل خلال 10 دقائق'],['inactive7d','لم يتواصل منذ 7 أيام'],['expiring7d','تنتهي خلال 7 أيام']]){const option=node('option',text);option.value=value;filter.append(option);}filterLabel.append(filter);
   const sortLabel=node('label','الترتيب');const sort=node('select');sort.name='sort';
   for(const [value,text]of [['newest','الأحدث تسجيلًا'],['seen','آخر تواصل'],['expiry','الأقرب انتهاءً']]){const option=node('option',text);option.value=value;sort.append(option);}sortLabel.append(sort);
   const versionLabel=node('label','نسخة العميل');const version=node('input');version.name='version';version.placeholder='مثل 2.0.0-rc07.40';version.dir='ltr';versionLabel.append(version);
@@ -120,7 +120,7 @@ if(page==='admin'){
     const url=URL.createObjectURL(new Blob(['\ufeff'+rows.map(row=>row.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));const link=node('a');link.href=url;link.download='blofy-devices-page-'+devicePage+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
   async function customers(){const current=++customerGeneration;setStatus('admin-status','جارٍ تحديث الأجهزة…');previous.disabled=next.disabled=true;exportButton.disabled=true;
     try{const params=new URLSearchParams(new FormData(searchForm));params.set('page',String(devicePage));const data=await api('/api/v1/admin/device-insights?'+params);if(current!==customerGeneration)return;deviceItems=data.items||[];$('customer-rows').replaceChildren();
-      const count=data.counts||{};counters.textContent='أول تسجيل خلال 24 ساعة: '+(count.new24h||0)+' · خلال 7 أيام: '+(count.new7d||0)+' · تواصل حديثًا: '+(count.recent||0)+' · كل الأجهزة: '+(count.total||0);
+      const count=data.counts||{};counters.textContent='أول تسجيل خلال 24 ساعة: '+(count.new24h||0)+' · خلال 7 أيام: '+(count.new7d||0)+' · تواصل حديثًا: '+(count.recent||0)+' · كل الأجهزة: '+(count.total||0)+' · جوالات محفوظة: '+(count.with_phone||0)+' · بدون جوال: '+(count.without_phone||0);
       for(const item of deviceItems){const row=node('tr');const name=node('td');name.append(node('strong',item.name||item.deviceId));if(item.name)name.append(node('div',item.deviceId,'caption'));
         if(item.isNew)name.append(node('span','جديد · 24 ساعة','badge active'));
         name.append(node('div','أول تسجيل: '+date(item.firstSeenAt),'caption'),node('div','القوائم: '+item.playlistCount,'caption'));
@@ -135,8 +135,9 @@ if(page==='admin'){
         const copyButton=node('button','نسخ ID','ghost copy-device-id');copyButton.type='button';copyButton.setAttribute('aria-label','نسخ رقم الجهاز '+item.deviceId);
         copyButton.onclick=async()=>{try{await navigator.clipboard.writeText(item.deviceId);copyButton.textContent='تم النسخ';setTimeout(()=>{copyButton.textContent='نسخ ID';},1200);}catch{setStatus('admin-status','رقم الجهاز: '+item.deviceId);}};
         actions.append(button,copyButton);action.append(actions);
-        row.append(name,state,node('td',expiry(item.expiresAt,item.status)),lastSeen,versionCell,action);$('customer-rows').append(row);}
-      if(!deviceItems.length){const row=node('tr'),cell=node('td','لا توجد أجهزة مطابقة.','empty');cell.colSpan=6;row.append(cell);$('customer-rows').append(row);}
+        const phoneCell=node('td',item.phone||'غير مسجّل',item.phone?'customer-phone-available':'customer-phone-missing');phoneCell.dir='ltr';
+        row.append(name,state,node('td',expiry(item.expiresAt,item.status)),lastSeen,versionCell,phoneCell,action);$('customer-rows').append(row);}
+      if(!deviceItems.length){const row=node('tr'),cell=node('td','لا توجد أجهزة مطابقة.','empty');cell.colSpan=7;row.append(cell);$('customer-rows').append(row);}
       pageInfo.textContent='صفحة '+data.page+' · '+data.total+' نتيجة';previous.disabled=devicePage<=1;next.disabled=devicePage*data.pageSize>=data.total;exportButton.disabled=!deviceItems.length;setStatus('admin-status','');
     }catch(error){if(current===customerGeneration){previous.disabled=devicePage<=1;setStatus('admin-status',error.message,true);}}}
   const extra=node('section',null,'card device-insights');extra.id='device-insights';$('record-summary').parentElement.after(extra);

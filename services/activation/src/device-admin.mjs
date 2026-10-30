@@ -25,7 +25,7 @@ export function deviceView(row, now = Date.now()) {
     playlistUpdatedAt: millis(row.playlist_updated_at), authLockedUntil: millis(row.auth_locked_until) };
 }
 export function deviceFilters(params) {
-  const allowed = ['all','new24h','new7d','pending','trial','active','expired','blocked','noPlaylists','recent','inactive7d','expiring7d'];
+  const allowed = ['all','withPhone','withoutPhone','new24h','new7d','pending','trial','active','expired','blocked','noPlaylists','recent','inactive7d','expiring7d'];
   const filter = params.get('filter') || 'all', sort = params.get('sort') || 'newest';
   if (!allowed.includes(filter) || !['newest','seen','expiry'].includes(sort)) throw new DeviceAdminError('invalid_filter');
   const page = Number(params.get('page') || 1);
@@ -63,7 +63,7 @@ export function createDeviceAdmin({ pool, requireAdmin, readJson, json, ensureAd
   }
   async function list(params) {
     const f = deviceFilters(params);
-    const clause = { all:'TRUE', new24h:"d.created_at BETWEEN NOW()-INTERVAL '24 hours' AND NOW()", new7d:"d.created_at BETWEEN NOW()-INTERVAL '7 days' AND NOW()",
+    const clause = { all:'TRUE', withPhone:"NULLIF(BTRIM(c.customer_phone),'') IS NOT NULL", withoutPhone:"NULLIF(BTRIM(c.customer_phone),'') IS NULL", new24h:"d.created_at BETWEEN NOW()-INTERVAL '24 hours' AND NOW()", new7d:"d.created_at BETWEEN NOW()-INTERVAL '7 days' AND NOW()",
       pending:`(${statusSql})='pending'`, trial:`(${statusSql})='trial'`, active:`(${statusSql})='active'`, expired:`(${statusSql})='expired'`, blocked:"d.status='blocked'",
       noPlaylists:'NOT EXISTS(SELECT 1 FROM device_playlists p WHERE p.device_id=d.device_id)', recent:"d.last_seen_at BETWEEN NOW()-INTERVAL '10 minutes' AND NOW()",
       expiring7d:"d.status IN ('active','trial') AND d.expires_at>NOW() AND d.expires_at<=NOW()+INTERVAL '7 days'",
@@ -73,9 +73,13 @@ export function createDeviceAdmin({ pool, requireAdmin, readJson, json, ensureAd
     const values = [f.q, '%' + f.q.replace(/[\\%_]/g, '\\$&') + '%', f.version];
     const result = await pool.query(`SELECT ${columns} ${joins} ${where} ORDER BY ${order} LIMIT $4 OFFSET $5`, [...values,f.limit,(f.page-1)*f.limit]);
     const total = await pool.query(`SELECT COUNT(*)::int AS total ${joins} ${where}`, values);
-    const counts = await pool.query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER(WHERE created_at BETWEEN NOW()-INTERVAL '24 hours' AND NOW())::int AS new24h,
-     COUNT(*) FILTER(WHERE created_at BETWEEN NOW()-INTERVAL '7 days' AND NOW())::int AS new7d,
-     COUNT(*) FILTER(WHERE last_seen_at BETWEEN NOW()-INTERVAL '10 minutes' AND NOW())::int AS recent FROM devices`);
+    const counts = await pool.query(`SELECT COUNT(*)::int AS total,
+     COUNT(*) FILTER(WHERE NULLIF(BTRIM(c.customer_phone),'') IS NOT NULL)::int AS with_phone,
+     COUNT(*) FILTER(WHERE NULLIF(BTRIM(c.customer_phone),'') IS NULL)::int AS without_phone,
+     COUNT(*) FILTER(WHERE d.created_at BETWEEN NOW()-INTERVAL '24 hours' AND NOW())::int AS new24h,
+     COUNT(*) FILTER(WHERE d.created_at BETWEEN NOW()-INTERVAL '7 days' AND NOW())::int AS new7d,
+     COUNT(*) FILTER(WHERE d.last_seen_at BETWEEN NOW()-INTERVAL '10 minutes' AND NOW())::int AS recent
+     FROM devices d LEFT JOIN device_customers c ON c.device_id=d.device_id`);
     const now = Date.now();
     return { items:result.rows.map(row=>deviceView(row,now)),total:total.rows[0].total,page:f.page,pageSize:f.limit,counts:counts.rows[0],serverTime:now };
   }

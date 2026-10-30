@@ -37,3 +37,13 @@ test('renewal confirmation includes the customer phone from the opened record', 
   assert.match(js, /\['الجوال',recordState\?\.customer\?\.phone\|\|'غير مسجل'\]/);
   assert.match(js, /\['العميل',recordState\?\.customer\?\.name\|\|'غير مسجل'\]/);
 });
+
+test('admin customer list shows stored phone numbers and can filter contacts missing numbers', async () => {
+  const html = await web('admin.html');
+  const js = await web('experience.js');
+  assert.match(html, /<th>رقم الجوال<\/th>/);
+  assert.match(js, /item\.phone\|\|'غير مسجّل'/);
+  assert.match(js, /withoutPhone/);
+  assert.match(js, /count\.with_phone/);
+  assert.match(js, /count\.without_phone/);
+});

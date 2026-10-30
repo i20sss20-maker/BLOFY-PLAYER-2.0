@@ -24,7 +24,7 @@ test('masks stored numbers before returning them to the browser', () => {
   assert.equal(maskPortalPhone('+966551234567'), '+966••••4567');
 });
 
-test('injects contact UI once, remembers completion, and keeps contact secrets out of browser storage', () => {
+test('injects contact UI once, requires server-confirmed phone, and keeps contact secrets out of browser storage', () => {
   const html = '<html><body><div id="app"></div></body></html>';
   const injected = injectPortalContactUi(html);
   assert.match(injected, /data-blofy-contact-ui="1"/);
@@ -33,8 +33,8 @@ test('injects contact UI once, remembers completion, and keeps contact secrets o
   assert.match(injected, /class="blofy-modal-brand"/);
   assert.match(injected, /BLOFY PLAYER/);
   assert.match(injected, /ACCOUNT/);
-  assert.match(injected, /blofy\.contact\.complete\.v1:/);
-  assert.match(injected, /rememberContact\(state\.deviceId\)/);
+  assert.match(injected, /contactState\.required = !status\.hasPhone/);
+  assert.doesNotMatch(injected, /hasRememberedContact|rememberContact|localStorage/);
   assert.doesNotMatch(injected, /localStorage\.setItem\([^\n]*(?:activationCode|maskedPhone|phone)/);
   assert.doesNotMatch(injected, /sessionStorage.*(?:activationCode|maskedPhone|phone)/);
   assert.equal(injectPortalContactUi(injected), injected);
