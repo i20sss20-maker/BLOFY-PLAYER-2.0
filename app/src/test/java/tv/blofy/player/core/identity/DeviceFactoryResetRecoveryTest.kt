@@ -1,7 +1,6 @@
 package tv.blofy.player.core.identity
 
 import android.content.Context
-import android.provider.Settings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
@@ -11,29 +10,36 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/** A factory reset can change ANDROID_ID; verified recovery must not depend on it. */
+/**
+ * Recovery is driven by a validated server response, not by a particular
+ * Android ID. Android's secure settings are cached differently by TV/OEM
+ * devices and Robolectric: inject both derived identities instead of assuming
+ * writing Settings.Secure changes the OS's app-scoped ANDROID_ID.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class DeviceFactoryResetRecoveryTest {
+    private fun freshContext(): Context {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("blofy_device_identity", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        return context
+    }
+
     @Test
     fun originalBlofyIdCanBeReattachedAfterAndroidIdChanges() {
-        val context = RuntimeEnvironment.getApplication()
-        val preferences = context.getSharedPreferences("blofy_device_identity", Context.MODE_PRIVATE)
-        preferences.edit().clear().commit()
-
-        Settings.Secure.putString(context.contentResolver, Settings.Secure.ANDROID_ID, "0123456789abcdef")
-        val old = DeviceIdentity.deviceId(context)
-        assertEquals(old, DeviceIdentity.deriveDeviceId("0123456789abcdef"))
-
-        // Simulate lost local preferences and a *different* Android ID after reset.
-        preferences.edit().clear().commit()
-        Settings.Secure.putString(context.contentResolver, Settings.Secure.ANDROID_ID, "fedcba9876543210")
-        val temporary = DeviceIdentity.deviceId(context)
-        val temporaryPin = DeviceIdentity.activationCode(context)
+        val context = freshContext()
+        val old = DeviceIdentity.deriveDeviceId("old-android-id-before-reset")
+        val temporary = DeviceIdentity.deriveDeviceId("new-android-id-after-reset")
         assertNotEquals(old, temporary)
 
-        // The real app may call this ONLY after the trusted server validates
-        // the one-time backup credential or operator ownership verification.
+        // Simulate the new installation after wiping the old app state.
+        DeviceIdentity.preserveExistingDeviceId(context, temporary)
+        val temporaryPin = DeviceIdentity.activationCode(context)
+        assertEquals(temporary, DeviceIdentity.deviceId(context))
+
+        // The server must have verified the one-time key or administrator-
+        // confirmed ownership before this operation is allowed.
         DeviceIdentity.adoptServerVerifiedRecovery(context, temporary, old, temporaryPin)
         assertEquals(old, DeviceIdentity.deviceId(context))
         assertEquals(temporaryPin, DeviceIdentity.activationCode(context))
@@ -41,13 +47,13 @@ class DeviceFactoryResetRecoveryTest {
 
     @Test
     fun recoveryRejectsWrongTemporaryDeviceOrPin() {
-        val context = RuntimeEnvironment.getApplication()
-        val preferences = context.getSharedPreferences("blofy_device_identity", Context.MODE_PRIVATE)
-        preferences.edit().clear().commit()
-        Settings.Secure.putString(context.contentResolver, Settings.Secure.ANDROID_ID, "1234567890abcdef")
-        val temporary = DeviceIdentity.deviceId(context)
+        val context = freshContext()
+        val temporary = DeviceIdentity.deriveDeviceId("fresh-android-device")
+        val canonical = DeviceIdentity.deriveDeviceId("previous-android-device")
+        DeviceIdentity.preserveExistingDeviceId(context, temporary)
         val pin = DeviceIdentity.activationCode(context)
-        val canonical = DeviceIdentity.deriveDeviceId("abcdef1234567890")
+        assertNotEquals(canonical, temporary)
+
         assertThrows(IllegalStateException::class.java) {
             DeviceIdentity.adoptServerVerifiedRecovery(context, "BLOFY-AAAA-AAAA", canonical, pin)
         }
@@ -56,5 +62,6 @@ class DeviceFactoryResetRecoveryTest {
             DeviceIdentity.adoptServerVerifiedRecovery(context, temporary, canonical, incorrect)
         }
         assertEquals(temporary, DeviceIdentity.deviceId(context))
+        assertEquals(pin, DeviceIdentity.activationCode(context))
     }
 }
