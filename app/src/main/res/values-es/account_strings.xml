@@ -4,7 +4,7 @@
     <string name="privacy_summary">Usamos un identificador de instalación y un resumen del ID de Android para gestionar la activación y el período de prueba. No usamos tu número de teléfono ni IMEI. Consulta la política de privacidad para conocer los datos y su eliminación.</string>
     <string name="privacy_diagnostics">Compartir diagnósticos de reproducción para mejorar la estabilidad (opcional)</string>
     <string name="license_recovery_title">Recuperación de licencia</string>
-    <string name="license_recovery_hint">Guarda una clave de recuperación fuera de este dispositivo antes de desinstalar. Solo transfiere la licencia de pago; las listas y contraseñas no se importan automáticamente.</string>
+    <string name="license_recovery_hint">Guarda una clave de recuperación fuera del dispositivo antes de restablecerlo o reinstalar la aplicación. Permite recuperar el número BLOFY original y su fecha de caducidad, y conservar las listas guardadas en el servidor. No reinicia la prueba.</string>
     <string name="license_create_key">Crear clave de recuperación</string>
     <string name="license_create_warning">Cualquier clave de recuperación anterior dejará de funcionar. Guarda la nueva clave antes de salir de esta pantalla.</string>
     <string name="license_enter_key">Clave de recuperación</string>
@@ -12,7 +12,7 @@
     <string name="license_restore_warning">El tiempo restante de la licencia se transferirá a este dispositivo y se desactivará el anterior. ¿Continuar?</string>
     <string name="license_invalid_key">La clave no es válida o ya se usó, o la licencia ha caducado o está bloqueada.</string>
     <string name="license_restored">Licencia restaurada. Vuelve al inicio de sesión y actualiza el estado.</string>
-    <string name="license_paid_required">Se necesita una licencia de pago vigente para crear una clave de recuperación.</string>
+    <string name="license_paid_required">No se puede crear una clave de recuperación para esta licencia.</string>
     <string name="license_same_device">Esta licencia ya pertenece a este dispositivo.</string>
     <string name="license_already_active">Este dispositivo ya tiene una licencia válida; no se ha reemplazado.</string>
     <string name="license_keep_key">Guarda esta clave en un lugar seguro y no la compartas. No se volverá a mostrar.</string>
