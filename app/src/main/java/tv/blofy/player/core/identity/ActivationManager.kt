@@ -99,13 +99,20 @@ class ActivationManager(
 
         val canonical = response.canonicalDeviceId
             ?.takeIf { it.isNotBlank() && it != current.deviceId }
-        if (canonical != null) {
-            DeviceIdentity.adoptRecoveredCanonicalIdentity(context, canonical, current.activationCode)
+        if (canonical != null && response.recovered) {
+            // The activation server verified this installation's alias credential.
+            // Recovery can be from a factory reset with a changed ANDROID_ID or a
+            // device that does not expose a stable Android identity at all.
+            // Persist the authoritative Room row first so crashes are recoverable.
+            val temporaryId = current.deviceId
             current = current.copy(
                 deviceId = canonical,
                 lastCheckAt = System.currentTimeMillis()
             )
             dao.replaceActivation(current)
+            DeviceIdentity.adoptServerVerifiedRecovery(
+                context, temporaryId, canonical, current.activationCode
+            )
         }
 
         if (response.canUse()) rotatePendingCode(api, current)
