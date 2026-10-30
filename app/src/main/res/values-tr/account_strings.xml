@@ -4,7 +4,7 @@
     <string name="privacy_summary">Etkinleştirmeyi ve deneme süresini yönetmek için kurulum kimliği ile Android kimliğinin özetini kullanırız. Telefon numaranızı veya IMEI bilgilerinizi kullanmayız. Veri ve silme ayrıntıları için gizlilik politikasını okuyun.</string>
     <string name="privacy_diagnostics">Kararlılığı iyileştirmek için oynatma tanılarını paylaş (isteğe bağlı)</string>
     <string name="license_recovery_title">Lisans kurtarma</string>
-    <string name="license_recovery_hint">Uygulamayı kaldırmadan önce kurtarma anahtarını bu cihazın dışında saklayın. Yalnızca ücretli lisansınızı aktarır; listeler ve parolalar otomatik olarak içe aktarılmaz.</string>
+    <string name="license_recovery_hint">Sıfırlama veya yeniden yükleme öncesinde kurtarma anahtarını cihaz dışında saklayın. Bu anahtar eski BLOFY numaranızı ve mevcut bitiş tarihini geri getirir; sunucuda kayıtlı listeler korunur. Deneme süresi yeniden başlamaz.</string>
     <string name="license_create_key">Kurtarma anahtarı oluştur</string>
     <string name="license_create_warning">Önceki kurtarma anahtarları geçersiz olacaktır. Bu ekrandan ayrılmadan önce yeni anahtarı kaydedin.</string>
     <string name="license_enter_key">Kurtarma anahtarı</string>
@@ -12,7 +12,7 @@
     <string name="license_restore_warning">Kalan lisans süresi bu cihaza aktarılacak ve önceki cihaz devre dışı bırakılacaktır. Devam edilsin mi?</string>
     <string name="license_invalid_key">Anahtar geçersiz veya kullanılmış ya da lisansın süresi dolmuş veya engellenmiş.</string>
     <string name="license_restored">Lisans geri yüklendi. Giriş ekranına dönüp durumu yenileyin.</string>
-    <string name="license_paid_required">Kurtarma anahtarı oluşturmak için geçerli bir ücretli lisans gerekir.</string>
+    <string name="license_paid_required">Bu lisans için kurtarma anahtarı oluşturulamıyor.</string>
     <string name="license_same_device">Bu lisans zaten bu cihaza ait.</string>
     <string name="license_already_active">Bu cihazın zaten geçerli bir lisansı var; değiştirilmedi.</string>
     <string name="license_keep_key">Bu anahtarı güvenli bir yerde saklayın ve paylaşmayın. Bir daha gösterilmeyecektir.</string>
