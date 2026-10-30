@@ -9,7 +9,7 @@ async function handler(dependencies = {}) {
   const end = source.indexOf('\n\nasync function start()', begin);
   const callback = source.slice(begin, end).trim().replace(/\);$/, '');
   return vm.runInNewContext(`(${callback})`, {
-    URL, experience:{async handle(){return false;}}, console: { error() {} }, safeErrorSummary: () => ({}), RateLimitError: class extends Error {},
+    URL, experience:{async handle(){return false;}}, licenseRecovery:{async handle(){return false;}}, console: { error() {} }, safeErrorSummary: () => ({}), RateLimitError: class extends Error {},
     json() { throw new Error('attempted a second HTTP response'); }, ...dependencies
   });
 }
