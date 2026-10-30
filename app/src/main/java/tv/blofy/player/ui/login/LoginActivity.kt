@@ -116,6 +116,7 @@ class LoginActivity : AppCompatActivity() {
         status.apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(BlofyTvDesign.TextSecondary); background = statusBackground(); setPadding(dp(12),0,dp(12),0) }
         activation.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { topMargin = dp(10) })
         refreshCodeButton = actionButton("↻  فحص الآن") { lifecycleScope.launch { refreshIdentityAndProvider() } }
+        refreshCodeButton.id = View.generateViewId()
         activation.addView(refreshCodeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(10) })
 
         val playlistsPanel = LinearLayout(this).apply {
@@ -144,6 +145,14 @@ class LoginActivity : AppCompatActivity() {
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; gravity = Gravity.CENTER; setPadding(0,dp(10),0,0) }
         addPlaylist = primaryActionButton("＋  إضافة / إدارة") { startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java)) }
         connectButton = actionButton("▶  اتصال بالنشطة") { startOrCancelConnect() }
+        addPlaylist.id = View.generateViewId()
+        connectButton.id = View.generateViewId()
+        // Physical layout: activation on the left; connect and manage on the right.
+        // Explicit links avoid getting stranded between the two TV panels.
+        refreshCodeButton.nextFocusRightId = connectButton.id
+        connectButton.nextFocusLeftId = refreshCodeButton.id
+        connectButton.nextFocusRightId = addPlaylist.id
+        addPlaylist.nextFocusLeftId = connectButton.id
         actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(56), 1f).apply { marginStart = dp(8) })
         actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(56), 1f))
         playlistsPanel.addView(actions)
@@ -286,13 +295,26 @@ class LoginActivity : AppCompatActivity() {
             )
             return
         }
+        val focusableCards = mutableListOf<View>()
         sorted.forEach { provider ->
+            val card = playlistCard(provider).apply { id = View.generateViewId() }
             row.addView(
-                playlistCard(provider),
+                card,
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)).apply {
                     bottomMargin = dp(8)
                 }
             )
+            focusableCards.add(card)
+        }
+        if (deviceKind == DeviceClass.Kind.TV && focusableCards.isNotEmpty()) {
+            focusableCards.forEachIndexed { index, card ->
+                card.nextFocusLeftId = refreshCodeButton.id
+                card.nextFocusUpId = focusableCards.getOrNull(index - 1)?.id ?: card.id
+                card.nextFocusDownId = focusableCards.getOrNull(index + 1)?.id ?: connectButton.id
+            }
+            addPlaylist.nextFocusUpId = focusableCards.last().id
+            connectButton.nextFocusUpId = focusableCards.last().id
+            refreshCodeButton.nextFocusRightId = focusableCards.first().id
         }
     }
 
