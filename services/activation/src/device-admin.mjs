@@ -24,6 +24,17 @@ export function deviceView(row, now = Date.now()) {
     playlistCount: Number(row.playlist_count || 0), activePlaylist: row.active_playlist || null,
     playlistUpdatedAt: millis(row.playlist_updated_at), authLockedUntil: millis(row.auth_locked_until) };
 }
+export function normalizeSaudiPhoneSearch(value) {
+  const cleaned=String(value||'').trim()
+    .replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[\s().-]+/g,'');
+  if(/^05\d{0,8}$/.test(cleaned))return '+966'+cleaned.slice(1);
+  if(/^5\d{0,8}$/.test(cleaned))return '+966'+cleaned;
+  if(/^9665\d{0,8}$/.test(cleaned))return '+'+cleaned;
+  if(/^\+9665\d{0,8}$/.test(cleaned))return cleaned;
+  return '';
+}
 export function deviceFilters(params) {
   const allowed = ['all','withPhone','withoutPhone','new24h','new7d','pending','trial','active','expired','blocked','noPlaylists','recent','inactive7d','expiring7d'];
   const filter = params.get('filter') || 'all', sort = params.get('sort') || 'newest';
@@ -69,9 +80,9 @@ export function createDeviceAdmin({ pool, requireAdmin, readJson, json, ensureAd
       expiring7d:"d.status IN ('active','trial') AND d.expires_at>NOW() AND d.expires_at<=NOW()+INTERVAL '7 days'",
       inactive7d:"(d.last_seen_at IS NULL OR d.last_seen_at<NOW()-INTERVAL '7 days')" }[f.filter];
     const order = { newest:'d.created_at DESC,d.device_id',seen:'d.last_seen_at DESC NULLS LAST,d.device_id',expiry:'d.expires_at ASC NULLS LAST,d.device_id' }[f.sort];
-    const where = `WHERE ($1='' OR d.device_id ILIKE $2 OR c.customer_name ILIKE $2 OR c.customer_phone ILIKE $2) AND ($3='' OR d.last_app_version=$3) AND ${clause}`;
-    const values = [f.q, '%' + f.q.replace(/[\\%_]/g, '\\$&') + '%', f.version];
-    const result = await pool.query(`SELECT ${columns} ${joins} ${where} ORDER BY ${order} LIMIT $4 OFFSET $5`, [...values,f.limit,(f.page-1)*f.limit]);
+    const where = `WHERE ($1='' OR d.device_id ILIKE $2 OR c.customer_name ILIKE $2 OR c.customer_phone ILIKE $2 OR ($4<>'' AND c.customer_phone ILIKE '%' || $4 || '%')) AND ($3='' OR d.last_app_version=$3) AND ${clause}`;
+    const values = [f.q, '%' + f.q.replace(/[\\%_]/g, '\\$&') + '%', f.version, normalizeSaudiPhoneSearch(f.q)];
+    const result = await pool.query(`SELECT ${columns} ${joins} ${where} ORDER BY ${order} LIMIT $5 OFFSET $6`, [...values,f.limit,(f.page-1)*f.limit]);
     const total = await pool.query(`SELECT COUNT(*)::int AS total ${joins} ${where}`, values);
     const counts = await pool.query(`SELECT COUNT(*)::int AS total,
      COUNT(*) FILTER(WHERE NULLIF(BTRIM(c.customer_phone),'') IS NOT NULL)::int AS with_phone,
