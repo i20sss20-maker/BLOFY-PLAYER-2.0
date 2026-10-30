@@ -24,3 +24,12 @@ This rejection cannot be solved with UI assets alone. Before submission, provisi
 - Verify the app has no regression in activation, playback, network access, playlist import, Arabic/English focus, and Android TV 9.
 - Ensure the candidate versionCode exceeds the highest code already in Play Console in every relevant track (2000074 is a candidate, not a claim about Console state).
 - Do not submit until QA and login are complete; keep all existing production installs unaffected.
+
+## Automated review checks and signed candidate gate (October 30, 2026)
+
+- Android TV API 28 (Android 9) hardware-emulator test runner: `.github/workflows/android-tv-review-ci.yml`.
+- The runner uses the **Play** manifest variant with network endpoints routed to localhost for isolated tests. It checks packaged banner (320×180), packaged icon (512×512), and physical D-pad navigation between key login controls including Account, in the app's active locale.
+- The workflow deliberately **does not generate any signed upload** until its TV emulator job succeeds.
+- Only after the emulator job passes, the production-environment signing job validates the original certificate fingerprint, builds FFmpeg and the Play/R8 variant, verifies AAB/APK identity, and stores an owner-access artifact. `published=false` is stamped in its metadata. It does **not** submit anything to Google Play automatically.
+- The reviewer account instructions and access checklist are in `docs/google-play-android-tv-reviewer-access.md`. They are not complete until a global, reusable account and independent TV activation have been verified.
+- The PR intentionally stays in **draft** while emulator results, a real reviewer account, and physical TV/Google TV acceptance remain incomplete.
