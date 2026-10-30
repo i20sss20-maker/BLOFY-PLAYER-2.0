@@ -4,7 +4,7 @@
     <string name="privacy_summary">Usamos um identificador de instalação e um resumo do ID do Android para gerenciar a ativação e o período de teste. Não usamos seu número de telefone ou IMEI. Consulte a política de privacidade para obter detalhes sobre dados e exclusão.</string>
     <string name="privacy_diagnostics">Compartilhar diagnósticos de reprodução para melhorar a estabilidade (opcional)</string>
     <string name="license_recovery_title">Recuperação de licença</string>
-    <string name="license_recovery_hint">Salve uma chave de recuperação fora deste dispositivo antes de desinstalar. Ela transfere apenas a licença paga; listas e senhas não são importadas automaticamente.</string>
+    <string name="license_recovery_hint">Guarde uma chave de recuperação fora do dispositivo antes de restaurá-lo ou reinstalar o aplicativo. Ela recupera o número BLOFY e a data de expiração originais e mantém as listas salvas no servidor. O teste não recomeça.</string>
     <string name="license_create_key">Criar chave de recuperação</string>
     <string name="license_create_warning">Qualquer chave de recuperação anterior deixará de funcionar. Salve a nova chave antes de sair desta tela.</string>
     <string name="license_enter_key">Chave de recuperação</string>
@@ -12,7 +12,7 @@
     <string name="license_restore_warning">O tempo restante da licença será transferido para este dispositivo e o anterior será desativado. Continuar?</string>
     <string name="license_invalid_key">A chave é inválida ou já foi usada, ou a licença expirou ou está bloqueada.</string>
     <string name="license_restored">Licença restaurada. Volte ao login e atualize o status.</string>
-    <string name="license_paid_required">É necessária uma licença paga vigente para criar uma chave de recuperação.</string>
+    <string name="license_paid_required">Não é possível criar uma chave de recuperação para esta licença.</string>
     <string name="license_same_device">Esta licença já pertence a este dispositivo.</string>
     <string name="license_already_active">Este dispositivo já possui uma licença válida; ela não foi substituída.</string>
     <string name="license_keep_key">Guarde esta chave em um local seguro e não a compartilhe. Ela não será exibida novamente.</string>
