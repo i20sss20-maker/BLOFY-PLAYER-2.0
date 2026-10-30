@@ -77,15 +77,15 @@ function createFixture({ originalStatus='active',targetStatus='trial',freshLinke
   };
   return {state,request};
 }
-test('generates one-time 32-character proof only for active licenses',async()=>{
+test('generates one-time 32-character proof for active licenses and trials',async()=>{
   const f=createFixture();
   const a=await f.request('/api/v1/license/recovery/create',{deviceId:originalId,activationCode:originalPin});
   assert.equal(a.status,200);
   assert.match(a.body.recoveryCode,/^[A-Za-z0-9_-]{32}$/);
   assert.ok(f.state.tokens.has(originalId));
   const trial=await f.request('/api/v1/license/recovery/create',{deviceId:newId,activationCode:newPin});
-  assert.equal(trial.status,403);
-  assert.equal(trial.body.error,'paid_license_required');
+  assert.equal(trial.status,200);
+  assert.match(trial.body.recoveryCode,/^[A-Za-z0-9_-]{32}$/);
 });
 test('factory-reset restore retains canonical ID, original expiry and subscriptions',async()=>{
   const f=createFixture();
@@ -128,4 +128,19 @@ test('admin recovery requires explicit ownership confirmation and live target pr
   assert.equal(success.status,200);
   assert.equal(success.body.canonicalDeviceId,originalId);
   assert.equal(f.state.audits.at(-1).actor,'admin');
+});
+
+test('original trial stays a trial with the original expiry after reset',async()=>{
+  const f=createFixture({originalStatus:'trial'});
+  const key=(await f.request('/api/v1/license/recovery/create',{deviceId:originalId,activationCode:originalPin})).body.recoveryCode;
+  const result=await f.request('/api/v1/license/recovery/restore',{deviceId:newId,activationCode:newPin,recoveryCode:key});
+  assert.equal(result.status,200);
+  assert.equal(f.state.devices.get(originalId).status,'trial');
+  assert.equal(f.state.devices.get(originalId).expires_at,'2030-01-01T00:00:00Z');
+});
+test('blocked identity cannot create backup or recover',async()=>{
+  const f=createFixture({originalStatus:'blocked'});
+  const token=await f.request('/api/v1/license/recovery/create',{deviceId:originalId,activationCode:originalPin});
+  assert.equal(token.status,403);
+  assert.equal(token.body.error,'recovery_unavailable');
 });
