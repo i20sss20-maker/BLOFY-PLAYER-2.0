@@ -42,7 +42,7 @@ export function createLicenseRecoveryHandlers({
     return json(res,200,{recoveryCode:code,expiresAt:new Date(result.rows[0].expires_at).getTime()});
   }
 
-  async function transfer(sourceId,targetId,targetPin,kind) {
+  async function transfer(sourceId,targetId,targetPin,kind,expectedCodeHash) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -54,6 +54,17 @@ export function createLicenseRecoveryHandlers({
       const old = originalResult.rows[0];
       if (!old || !['active','expired'].includes(old.status)) {
         await client.query('ROLLBACK'); return {status:404,error:'recovery_unavailable'};
+      }
+      // Re-check and lock the token inside the same transaction. Concurrent
+      // restore requests cannot spend the same one-time code twice.
+      if (kind === 'self-service') {
+        const token = await client.query(
+          'SELECT code_hash FROM license_recovery_codes WHERE device_id=$1 AND used_at IS NULL AND expires_at>NOW() FOR UPDATE',
+          [sourceId]
+        );
+        if (token.rows[0]?.code_hash !== expectedCodeHash) {
+          await client.query('ROLLBACK'); return {status:403,error:'recovery_code_used'};
+        }
       }
       // This is license reattachment, not a new trial. Original dates/status
       // and every subscription/order/playlist row remain untouched.
@@ -127,6 +138,7 @@ export function createLicenseRecoveryHandlers({
     if (!isAdmin) consumeDeviceAuthAttempt(req,targetId);
 
     let sourceId;
+    let expectedCodeHash = null;
     if (isAdmin) {
       if (body.confirmedOwnership !== true || String(body.reason||'').trim().length < 12)
         return error(res,400,'ownership_verification_required');
@@ -135,17 +147,18 @@ export function createLicenseRecoveryHandlers({
     } else {
       const code = String(body.recoveryCode||'').trim();
       if (!/^[A-Za-z0-9_-]{32}$/.test(code)) return error(res,400,'invalid_recovery_code');
+      expectedCodeHash = hash(code);
       const matched = await pool.query(
         `SELECT device_id FROM license_recovery_codes
          WHERE code_hash=$1 AND used_at IS NULL AND expires_at>NOW()`,
-        [hash(code)]
+        [expectedCodeHash]
       );
       sourceId = matched.rows[0]?.device_id;
       if (!sourceId) return error(res,403,'invalid_recovery_code');
     }
     if (sourceId===targetId) return error(res,409,'same_device_recovery');
 
-    const result = await transfer(sourceId,targetId,targetPin,isAdmin?'admin':'self-service');
+    const result = await transfer(sourceId,targetId,targetPin,isAdmin?'admin':'self-service',expectedCodeHash);
     return result.error ? error(res,result.status,result.error) : json(res,200,result);
   }
   return {
