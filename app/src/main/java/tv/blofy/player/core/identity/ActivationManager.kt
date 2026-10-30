@@ -137,6 +137,37 @@ class ActivationManager(
         return updated
     }
 
+    /**
+     * Only call after a successful one-time recovery or verified administrator
+     * transfer response from the activation server. The server already rotated
+     * the canonical PIN and revoked the previous installation credentials.
+     */
+    suspend fun adoptServerVerifiedRecovery(
+        temporaryDeviceId: String,
+        canonicalDeviceId: String
+    ): ActivationEntity {
+        val current = ensureIdentity()
+        require(current.deviceId == temporaryDeviceId) {
+            "The device identity changed while restoring the license"
+        }
+        require(canonicalDeviceId.matches(Regex("BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}"))) {
+            "Invalid original BLOFY device ID"
+        }
+        if (canonicalDeviceId == current.deviceId) return current
+        // Room is authoritative on restart: save it before touching preferences.
+        val restored = current.copy(
+            deviceId = canonicalDeviceId,
+            activated = false,
+            expiresAt = null,
+            lastCheckAt = 0L
+        )
+        dao.replaceActivation(restored)
+        DeviceIdentity.adoptServerVerifiedRecovery(
+            context, temporaryDeviceId, canonicalDeviceId, current.activationCode
+        )
+        return restored
+    }
+
     suspend fun applyRemoteStatus(activated: Boolean, expiresAt: Long?): ActivationEntity {
         val current = ensureIdentity()
         val updated = current.copy(
