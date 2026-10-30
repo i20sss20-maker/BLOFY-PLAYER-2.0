@@ -1,0 +1,65 @@
+name: Android TV 9 - Google Play rejection review
+on:
+  push:
+    branches: [fix/android-tv-play-2000074]
+    paths:
+      - 'app/**'
+      - '.github/workflows/android-tv-review-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tv9-emulator-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Enable KVM for Android TV emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install application compile SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Android TV 9 hardware D-pad smoke tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          target: android-tv
+          arch: x86
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            set -euo pipefail
+            gradle --no-daemon \
+              -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+              -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+              assembleDebug assembleDebugAndroidTest
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w \
+              -e class tv.blofy.player.ui.AndroidTvReviewDpadTest \
+              -e tvReview true \
+              tv.blofy.player.v2.test/androidx.test.runner.AndroidJUnitRunner | tee tv-review-test-results.txt
+            grep -q 'OK (2 tests)' tv-review-test-results.txt
+      - name: Upload TV review results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-tv9-review-${{ github.sha }}
+          path: tv-review-test-results.txt
+          if-no-files-found: ignore
