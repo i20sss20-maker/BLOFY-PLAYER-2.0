@@ -27,8 +27,10 @@ export function createLicenseRecoveryHandlers({
     if (!validIdentity(id,pin)) return error(res,400,'invalid_device_identity');
     const device = await authorizedDevice(id,pin,req,false);
     if (!device) return error(res,403,'unauthorized_device');
-    if (device.status !== 'active' || (expiry(device) !== null && expiry(device) <= Date.now()))
-      return error(res,403,'paid_license_required');
+    // Trial and expired accounts can also preserve their *original* expiry.
+    // Recovery must never extend a trial or convert it into a paid license.
+    if (device.status === 'blocked' || !['active','trial','expired'].includes(device.status))
+      return error(res,403,'recovery_unavailable');
 
     const code = crypto.randomBytes(24).toString('base64url'); // 32 chars; shown once
     const digest = hash(code);
@@ -52,7 +54,7 @@ export function createLicenseRecoveryHandlers({
       }
       const originalResult = await client.query('SELECT * FROM devices WHERE device_id=$1 FOR UPDATE',[sourceId]);
       const old = originalResult.rows[0];
-      if (!old || !['active','expired'].includes(old.status)) {
+      if (!old || !['active','trial','expired'].includes(old.status)) {
         await client.query('ROLLBACK'); return {status:404,error:'recovery_unavailable'};
       }
       // Re-check and lock the token inside the same transaction. Concurrent
