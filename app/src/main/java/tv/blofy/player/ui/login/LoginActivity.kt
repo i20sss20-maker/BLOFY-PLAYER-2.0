@@ -112,7 +112,15 @@ class LoginActivity : AppCompatActivity() {
         }
         refreshCodeButton.id = View.generateViewId()
         header.addView(refreshCodeButton, LinearLayout.LayoutParams(dp(196), dp(44)).apply { marginStart = dp(16) })
-        header.addView(accountButton(), LinearLayout.LayoutParams(dp(176), dp(44)).apply { marginStart = dp(8) })
+        val accountEntry = accountButton().apply { id = View.generateViewId() }
+        header.addView(accountEntry, LinearLayout.LayoutParams(dp(176), dp(44)).apply { marginStart = dp(8) })
+        if (direction == View.LAYOUT_DIRECTION_RTL) {
+            refreshCodeButton.nextFocusLeftId = accountEntry.id
+            accountEntry.nextFocusRightId = refreshCodeButton.id
+        } else {
+            refreshCodeButton.nextFocusRightId = accountEntry.id
+            accountEntry.nextFocusLeftId = refreshCodeButton.id
+        }
         root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
 
         val shortTv = resources.configuration.screenHeightDp <= 600
@@ -240,7 +248,8 @@ class LoginActivity : AppCompatActivity() {
         // Every actionable control must have a predictable D-pad path.
         refreshCodeButton.nextFocusDownId = addPlaylist.id
         addPlaylist.nextFocusUpId = refreshCodeButton.id
-        connectButton.nextFocusUpId = refreshCodeButton.id
+        connectButton.nextFocusUpId = accountEntry.id
+        accountEntry.nextFocusDownId = connectButton.id
         actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(12) })
         actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(48), 1f))
         playlists.addView(actions)
