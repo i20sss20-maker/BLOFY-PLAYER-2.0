@@ -117,7 +117,9 @@ export function createLicenseRecoveryHandlers({
          WHERE device_id=$1`,
         [sourceId,activationCredentials.proof(sourceId,targetPin)]
       );
-      if (kind === 'self-service') await client.query(
+      // An admin-assisted recovery also invalidates previously issued self-service
+      // tokens; otherwise a stolen old code could claim the subscription again.
+      await client.query(
         'UPDATE license_recovery_codes SET used_at=NOW() WHERE device_id=$1',[sourceId]
       );
       await client.query(
