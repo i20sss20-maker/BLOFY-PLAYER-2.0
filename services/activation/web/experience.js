@@ -147,7 +147,7 @@ if(page==='admin'){
         const phoneCell=node('td',null,item.phone?'customer-phone-available':'customer-phone-missing');phoneCell.dir='ltr';
         if(item.phone){
           phoneCell.append(node('strong',item.phone));
-          const copyNumber=node('button','نسخ الجوال','ghost');copyNumber.type='button';copyNumber.style.margin='6px';copyNumber.style.fontSize='11px';
+          const copyNumber=node('button','نسخ الجوال','ghost copy-customer-phone');copyNumber.type='button';
           copyNumber.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(item.phone);copyNumber.textContent='تم النسخ';setTimeout(()=>{copyNumber.textContent='نسخ الجوال';},1200);}catch{setStatus('admin-status','تعذر نسخ الرقم تلقائيًا: '+item.phone,true);}});
           phoneCell.append(copyNumber);
         }else phoneCell.append(node('span','غير مسجّل','caption'));
