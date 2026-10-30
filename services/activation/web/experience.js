@@ -110,6 +110,15 @@ if(page==='admin'){
   const versionLabel=node('label','نسخة العميل');const version=node('input');version.name='version';version.placeholder='مثل 2.0.0-rc07.40';version.dir='ltr';versionLabel.append(version);
   searchForm.append(filterLabel,sortLabel,versionLabel);
   filter.onchange=sort.onchange=()=>{devicePage=1;customers();};
+  function displayContactDirectory(onlyContacts){
+    filter.value=onlyContacts?'withPhone':'all';
+    searchForm.elements.q.value='';
+    version.value='';
+    devicePage=1;
+    customers();
+  }
+  $('show-phone-customers').addEventListener('click',()=>displayContactDirectory(true));
+  $('show-all-customers').addEventListener('click',()=>displayContactDirectory(false));
   const counters=node('p','','notice');counters.id='device-insights-counts';searchForm.before(counters);
   const pager=node('div',null,'actions');const previous=node('button','السابق'),next=node('button','التالي'),exportButton=node('button','تصدير الصفحة CSV'),pageInfo=node('span','','caption');
   previous.type=next.type=exportButton.type='button';pager.append(previous,pageInfo,next,exportButton);$('customers').append(pager);
@@ -135,7 +144,13 @@ if(page==='admin'){
         const copyButton=node('button','نسخ ID','ghost copy-device-id');copyButton.type='button';copyButton.setAttribute('aria-label','نسخ رقم الجهاز '+item.deviceId);
         copyButton.onclick=async()=>{try{await navigator.clipboard.writeText(item.deviceId);copyButton.textContent='تم النسخ';setTimeout(()=>{copyButton.textContent='نسخ ID';},1200);}catch{setStatus('admin-status','رقم الجهاز: '+item.deviceId);}};
         actions.append(button,copyButton);action.append(actions);
-        const phoneCell=node('td',item.phone||'غير مسجّل',item.phone?'customer-phone-available':'customer-phone-missing');phoneCell.dir='ltr';
+        const phoneCell=node('td',null,item.phone?'customer-phone-available':'customer-phone-missing');phoneCell.dir='ltr';
+        if(item.phone){
+          phoneCell.append(node('strong',item.phone));
+          const copyNumber=node('button','نسخ الجوال','ghost');copyNumber.type='button';copyNumber.style.margin='6px';copyNumber.style.fontSize='11px';
+          copyNumber.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(item.phone);copyNumber.textContent='تم النسخ';setTimeout(()=>{copyNumber.textContent='نسخ الجوال';},1200);}catch{setStatus('admin-status','تعذر نسخ الرقم تلقائيًا: '+item.phone,true);}});
+          phoneCell.append(copyNumber);
+        }else phoneCell.append(node('span','غير مسجّل','caption'));
         row.append(name,state,node('td',expiry(item.expiresAt,item.status)),lastSeen,versionCell,phoneCell,action);$('customer-rows').append(row);}
       if(!deviceItems.length){const row=node('tr'),cell=node('td','لا توجد أجهزة مطابقة.','empty');cell.colSpan=7;row.append(cell);$('customer-rows').append(row);}
       pageInfo.textContent='صفحة '+data.page+' · '+data.total+' نتيجة';previous.disabled=devicePage<=1;next.disabled=devicePage*data.pageSize>=data.total;exportButton.disabled=!deviceItems.length;setStatus('admin-status','');
