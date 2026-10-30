@@ -13,6 +13,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.ui.login.LoginActivity
@@ -26,6 +27,7 @@ class AndroidTvReviewDpadTest {
     @Before fun onlyRunOnTvReviewDevice() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("tvReview") == "true")
         assumeTrue(DeviceClass.isTv(context))
+        assertTrue("Must test the manifest shipped in Google Play", BuildConfig.IS_GOOGLE_PLAY)
     }
 
     @Test fun launcherResourcesMatchTvPolicy() {
