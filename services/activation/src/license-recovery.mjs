@@ -90,7 +90,9 @@ export function createLicenseRecoveryHandlers({
           (SELECT COUNT(*)::int FROM device_playlists WHERE device_id=$1) AS playlists,
           (SELECT COUNT(*)::int FROM device_subscriptions WHERE device_id=$1) AS subscriptions,
           (SELECT COUNT(*)::int FROM subscription_orders WHERE device_id=$1) AS orders,
-          (SELECT COUNT(*)::int FROM device_customers WHERE device_id=$1) AS customers`,
+          (SELECT COUNT(*)::int FROM device_customers WHERE device_id=$1) AS customers,
+          (SELECT COUNT(*)::int FROM profile_cloud_snapshots WHERE device_id=$1) AS profiles,
+          (SELECT COUNT(*)::int FROM support_tickets WHERE device_id=$1) AS tickets`,
         [targetId]
       );
       if (Object.values(linked.rows[0]).some(n => Number(n)>0)) {
