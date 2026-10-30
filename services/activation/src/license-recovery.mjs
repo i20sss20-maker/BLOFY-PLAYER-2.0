@@ -96,6 +96,9 @@ export function createLicenseRecoveryHandlers({
       if (Object.values(linked.rows[0]).some(n => Number(n)>0)) {
         await client.query('ROLLBACK'); return {status:409,error:'target_contains_customer_data'};
       }
+      // A previous reinstall alias must be revoked as well; otherwise a stale
+      // alias credential could rotate the recovered canonical account back.
+      await client.query('DELETE FROM device_identity_aliases WHERE canonical_device_id=$1',[sourceId]);
       // Temporary trial row may have existed since first login after reset.
       // Only delete it if it has no independent customer/paid/playlist records.
       await client.query('DELETE FROM devices WHERE device_id=$1',[targetId]);
