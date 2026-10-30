@@ -114,12 +114,25 @@ class LoginActivity : AppCompatActivity() {
         header.addView(refreshCodeButton, LinearLayout.LayoutParams(dp(196), dp(44)).apply { marginStart = dp(16) })
         val accountEntry = accountButton().apply { id = View.generateViewId() }
         header.addView(accountEntry, LinearLayout.LayoutParams(dp(176), dp(44)).apply { marginStart = dp(8) })
+        val toAccount = if (direction == View.LAYOUT_DIRECTION_RTL)
+            android.view.KeyEvent.KEYCODE_DPAD_LEFT else android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+        val toRefresh = if (direction == View.LAYOUT_DIRECTION_RTL)
+            android.view.KeyEvent.KEYCODE_DPAD_RIGHT else android.view.KeyEvent.KEYCODE_DPAD_LEFT
         if (direction == View.LAYOUT_DIRECTION_RTL) {
             refreshCodeButton.nextFocusLeftId = accountEntry.id
             accountEntry.nextFocusRightId = refreshCodeButton.id
         } else {
             refreshCodeButton.nextFocusRightId = accountEntry.id
             accountEntry.nextFocusLeftId = refreshCodeButton.id
+        }
+        // Force an actual focus transition even if OEM firmware ignores a nextFocus hint.
+        refreshCodeButton.setOnKeyListener { _, keyCode, event ->
+            event.action == android.view.KeyEvent.ACTION_DOWN && keyCode == toAccount &&
+                accountEntry.requestFocus()
+        }
+        accountEntry.setOnKeyListener { _, keyCode, event ->
+            event.action == android.view.KeyEvent.ACTION_DOWN && keyCode == toRefresh &&
+                refreshCodeButton.requestFocus()
         }
         root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
 
