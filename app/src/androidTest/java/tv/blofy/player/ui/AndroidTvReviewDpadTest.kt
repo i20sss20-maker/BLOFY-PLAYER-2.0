@@ -24,7 +24,7 @@ class AndroidTvReviewDpadTest {
     private val context get() = instrumentation.targetContext
 
     @Before fun onlyRunOnTvReviewDevice() {
-        assumeTrue(instrumentation.arguments.getString("tvReview") == "true")
+        assumeTrue(InstrumentationRegistry.getArguments().getString("tvReview") == "true")
         assumeTrue(DeviceClass.isTv(context))
     }
 
