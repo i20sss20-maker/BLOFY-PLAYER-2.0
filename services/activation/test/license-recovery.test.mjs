@@ -38,6 +38,10 @@ function createFixture({ originalStatus='active',targetStatus='trial',freshLinke
     if (sql.includes('SELECT * FROM devices')) {
       return {rows:state.devices.has(params[0])?[state.devices.get(params[0])]:[]};
     }
+    if (sql.includes('DELETE FROM device_identity_aliases')) {
+      for(const [alias,info] of state.aliases) if(info.canonical===params[0]) state.aliases.delete(alias);
+      return {rows:[]};
+    }
     if (sql.includes('FROM device_identity_aliases')) {
       return {rows:state.aliases.has(params[0])?[{canonical_device_id:state.aliases.get(params[0]).canonical}]:[]};
     }
@@ -143,4 +147,14 @@ test('blocked identity cannot create backup or recover',async()=>{
   const token=await f.request('/api/v1/license/recovery/create',{deviceId:originalId,activationCode:originalPin});
   assert.equal(token.status,403);
   assert.equal(token.body.error,'recovery_unavailable');
+});
+
+test('recovery revokes stale aliases so older installations cannot take back the license',async()=>{
+  const f=createFixture();
+  f.state.aliases.set('BLOFY-ZZZZ-0000',{canonical:originalId,proof:'obsolete'});
+  const key=(await f.request('/api/v1/license/recovery/create',{deviceId:originalId,activationCode:originalPin})).body.recoveryCode;
+  const result=await f.request('/api/v1/license/recovery/restore',{deviceId:newId,activationCode:newPin,recoveryCode:key});
+  assert.equal(result.status,200);
+  assert.equal(f.state.aliases.has('BLOFY-ZZZZ-0000'),false);
+  assert.equal(f.state.aliases.get(newId).canonical,originalId);
 });
