@@ -75,10 +75,15 @@ class AndroidTvReviewDpadTest {
                 assertTrue("Focused login button is enabled", activity.currentFocus?.isEnabled == true)
             }
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
-            val towardAccount = if (context.resources.configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL) {
-                KeyEvent.KEYCODE_DPAD_LEFT
-            } else {
-                KeyEvent.KEYCODE_DPAD_RIGHT
+            // AppCompat may apply the app locale independently of targetContext's system locale.
+            // Read the actual Activity layoutDirection, otherwise tests send the wrong physical key.
+            var towardAccount = KeyEvent.KEYCODE_DPAD_RIGHT
+            scenario.onActivity { activity ->
+                towardAccount = if (activity.resources.configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL) {
+                    KeyEvent.KEYCODE_DPAD_LEFT
+                } else {
+                    KeyEvent.KEYCODE_DPAD_RIGHT
+                }
             }
             instrumentation.sendKeyDownUpSync(towardAccount)
             instrumentation.waitForIdleSync()
