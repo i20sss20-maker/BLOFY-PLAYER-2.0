@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  actions: read
 concurrency:
   group: blofy-website-apk-2000075
   cancel-in-progress: false
@@ -58,17 +59,25 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 --decode > "$RUNNER_TEMP/blofy-upload.keystore"
           actual="$(keytool -exportcert -keystore "$RUNNER_TEMP/blofy-upload.keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')"
           test "$actual" = "$EXPECTED_CERT_SHA256"
-      - name: Build verified FFmpeg decoders
+      - name: Reuse verified FFmpeg native AAR from successful BLOFY FFmpeg CI
         shell: bash
         env:
-          ENABLED_DECODERS: ac3 eac3 dca truehd aac mp3 opus vorbis flac
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: i20sss20-maker/BLOFY-PLAYER-2.0
         run: |
           set -euo pipefail
-          export NDK_PATH="$ANDROID_HOME/ndk/$NDK_VERSION"
-          export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"
-          chmod +x tools/build_media3_ffmpeg.sh
-          tools/build_media3_ffmpeg.sh
-          test -s build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar
+          # Same Media3 1.6.1 module and decoder set, from green native CI on this release branch.
+          mkdir -p build/ffmpeg-native
+          gh run download 41180250502 --name media3-ffmpeg-1.6.1-aar-7c663cb94e750b962038b14fcf0eca0ac7322218 --dir build/ffmpeg-native
+          aar=build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar
+          test -s "$aar"
+          expected="$(awk 'NR==1{print $1}' build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar.sha256)"
+          actual="$(sha256sum "$aar" | awk '{print $1}')"
+          test "$expected" = "$actual"
+          unzip -t "$aar" >/dev/null
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            unzip -Z1 "$aar" | grep -Fxq "jni/$abi/libffmpegJNI.so"
+          done
       - name: Build signed website APK with in-app update installer
         shell: bash
         env:
