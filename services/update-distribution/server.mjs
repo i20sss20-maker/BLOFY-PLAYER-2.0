@@ -970,6 +970,13 @@ const server = http.createServer(async (req, res) => {
 
     const localReleaseMatch = pathname.match(/^\/files\/releases\/([a-z0-9._-]+\.apk)$/i);
     if (localReleaseMatch) {
+      // Legacy links (including blofyplayer.com/apk) can still point to an archived
+      // v73 file directly. Never serve retired APK bytes while BLOFY 75 is active.
+      // Redirect at the file serving layer so every previously shared URL also
+      // installs 75, without deleting archived release blobs or download counts.
+      if (BLOFY_ONLY_75 && ['GET', 'HEAD'].includes(method)) {
+        return redirect(res, '/download/latest.apk');
+      }
       if (!['GET', 'HEAD'].includes(method)) {
         res.writeHead(405, { ...securityHeaders, allow: 'GET, HEAD', 'cache-control': 'no-store' });
         return res.end();
