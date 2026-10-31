@@ -49,7 +49,7 @@ jobs:
           # Updates service deliberately streams/proxies the APK through its own stable URL.
           # The immutable GitHub asset is asserted in /release.json instead of the final URL.
           grep -Eiq '^content-type: application/(vnd.android.package-archive|octet-stream)' /tmp/apk-head.txt
-          grep -Eiq '^content-disposition: attachment; filename="BLOFY-PLAYER-2.0-rc07.55.7-identity-recovery.apk"' /tmp/apk-head.txt
+          grep -Eiq '^content-disposition: attachment; filename="BLOFY-PLAYER-2.0.0-rc07.55.7-identity-recovery.apk"' /tmp/apk-head.txt
           curl -sSI --connect-timeout 8 --max-time 20 "$portal/apk" > /tmp/portal-apk-head.txt
           cat /tmp/portal-apk-head.txt
           grep -Eiq '^location: https://updates.blofyplayer.com/download/latest.apk' /tmp/portal-apk-head.txt
