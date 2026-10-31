@@ -1,6 +1,14 @@
 import { withPublicAnalytics, PUBLIC_ANALYTICS_CSP } from './public-analytics.mjs';
 /** Public downloads are server-rendered: no JavaScript, fetch or WebView feature is required. */
 const PATHS = new Set(['/downloads', '/downloads/', '/releases', '/releases/']);
+const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true';
+const ONLY_75 = {
+  versionCode: 2000075,
+  versionName: '2.0.0-rc07.55.7-identity-recovery',
+  downloadUrl: 'https://updates.blofyplayer.com/download/latest.apk',
+  releaseNotes: 'BLOFY PLAYER 75 — دعم Android TV 9، وتحسين التنقل بالريموت، وبانر وأيقونة التلفزيون، وربط الأجهزة والتحديث الداخلي لنسخ الموقع.',
+  isPrimary: true
+};
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[ch]);
@@ -15,7 +23,7 @@ function apkUrl(value) {
 }
 
 export function renderPublicDownloads(items = [], { unavailable = false } = {}) {
-  const releases = (Array.isArray(items) ? items : []).filter(item => item &&
+  const releases = (BLOFY_ONLY_75 ? [ONLY_75] : (Array.isArray(items) ? items : [])).filter(item => item &&
     Number.isSafeInteger(Number(item.versionCode)) && Number(item.versionCode) > 0 &&
     typeof item.versionName === 'string' && item.versionName.length > 0 && item.versionName.length <= 64 && apkUrl(item.downloadUrl))
     .slice(0, 200).sort((a, b) => Number(b.isPrimary === true) - Number(a.isPrimary === true) || Number(b.versionCode) - Number(a.versionCode));
@@ -33,18 +41,18 @@ export function renderPublicDownloads(items = [], { unavailable = false } = {}) 
   return withPublicAnalytics(`<!doctype html>
 <html lang="ar" dir="rtl"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#07070d">
-<meta name="description" content="تحميل BLOFY PLAYER (بلوفي بلاير) لأجهزة أندرويد من Google Play أو APK. مشغل وسائط يدعم قوائم M3U وXtream Codes الخاصة بك، مع دليل التثبيت وربط الجهاز."><link rel="canonical" href="https://blofyplayer.com/downloads"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta property="og:type" content="website"><meta property="og:site_name" content="BLOFY PLAYER"><meta property="og:title" content="تحميل BLOFY PLAYER (بلوفي بلاير) للأندرويد"><meta property="og:description" content="التحميل الرسمي من Google Play أو APK لأجهزة أندرويد، مع طريقة التثبيت والدعم وربط الجهاز."><meta property="og:url" content="https://blofyplayer.com/downloads"><meta property="og:image" content="https://blofyplayer.com/blofy-logo.png"><meta property="og:locale" content="ar_SA"><meta property="og:image:alt" content="شعار BLOFY PLAYER"><meta name="twitter:card" content="summary"><title>تحميل BLOFY PLAYER (بلوفي بلاير) لأندرويد | Google Play وAPK</title><link rel="stylesheet" href="/premium.css"><link rel="stylesheet" href="/release-manager.css"><link rel="stylesheet" href="/site-polish.css">
+<meta name="description" content="تحميل BLOFY PLAYER (بلوفي بلاير) لأجهزة أندرويد من Google Play أو APK. مشغل وسائط يدعم حسابات Xtream Codes الخاصة بك، مع دليل التثبيت وربط الجهاز."><link rel="canonical" href="https://blofyplayer.com/downloads"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta property="og:type" content="website"><meta property="og:site_name" content="BLOFY PLAYER"><meta property="og:title" content="تحميل BLOFY PLAYER (بلوفي بلاير) للأندرويد"><meta property="og:description" content="التحميل الرسمي من Google Play أو APK لأجهزة أندرويد، مع طريقة التثبيت والدعم وربط الجهاز."><meta property="og:url" content="https://blofyplayer.com/downloads"><meta property="og:image" content="https://blofyplayer.com/blofy-logo.png"><meta property="og:locale" content="ar_SA"><meta property="og:image:alt" content="شعار BLOFY PLAYER"><meta name="twitter:card" content="summary"><title>تحميل BLOFY PLAYER (بلوفي بلاير) لأندرويد | Google Play وAPK</title><link rel="stylesheet" href="/premium.css"><link rel="stylesheet" href="/release-manager.css"><link rel="stylesheet" href="/site-polish.css">
 </head><body data-page="downloads-static"><div class="wrap">
 <header class="nav"><a class="brand" href="/"><img src="/blofy-logo.png" alt="">BLOFY PLAYER</a><nav class="nav-links" aria-label="روابط الموقع"><a href="/">الرئيسية</a><a href="/guide">دليل التثبيت</a><a href="/en" lang="en">English</a><a href="/es" lang="es">Español</a><a href="/fr" lang="fr">Français</a><a href="/pay">تجديد التفعيل</a><a href="/support">مركز الدعم</a><a href="/connect">ربط جهازك</a><a href="/privacy">الخصوصية</a><a href="/status">حالة الخدمات</a><a href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%AD%D8%AA%D8%A7%D8%AC%20%D8%AF%D8%B9%D9%85%20%D9%81%D9%86%D9%8A%20%D9%84%D8%AA%D8%B7%D8%A8%D9%8A%D9%82%20BLOFY%20PLAYER." rel="noopener noreferrer">الدعم</a><a class="btn primary" href="https://updates.blofyplayer.com" rel="noopener">آخر إصدار</a></nav></header>
 <main class="download-page"><section class="download-hero" aria-labelledby="download-title"><span class="eyebrow">OFFICIAL DOWNLOAD CENTER</span>
-<h1 id="download-title">تحميل BLOFY PLAYER (بلوفي بلاير) لأندرويد</h1><p class="download-intro">BLOFY PLAYER مشغل وسائط لأجهزة أندرويد، يدعم قوائم M3U وXtream Codes التي يضيفها المستخدم. حمّله رسميًا من Google Play، أو اختر ملف APK للتثبيت المباشر على أجهزة أندرويد المتوافقة.</p>
+<h1 id="download-title">تحميل BLOFY PLAYER (بلوفي بلاير) لأندرويد</h1><p class="download-intro">BLOFY PLAYER مشغل وسائط لأجهزة أندرويد، يدعم حسابات Xtream Codes التي يضيفها المستخدم. حمّله رسميًا من Google Play، أو اختر ملف APK للتثبيت المباشر على أجهزة أندرويد المتوافقة.</p>
 <div class="official-store-links"><a class="btn primary" id="google-play-primary" href="https://play.google.com/store/apps/details?id=tv.blofy.player.v2" rel="noopener noreferrer">التثبيت الرسمي من Google Play ↗</a><a class="btn" href="#versions-title">تحميل APK بديل</a><a class="btn" href="/pay">تجديد التفعيل</a></div>
 <div class="wa-contact-actions"><a class="wa-contact-support" href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%AD%D8%AA%D8%A7%D8%AC%20%D8%AF%D8%B9%D9%85%20%D9%81%D9%86%D9%8A%20%D9%84%D8%AA%D8%B7%D8%A8%D9%8A%D9%82%20BLOFY%20PLAYER." rel="noopener noreferrer">💬 الدعم الفني عبر واتساب</a><a class="wa-contact-renew" href="/pay">♻ تجديد التفعيل والدفع بالبطاقات</a></div>
 <p class="wa-payment-note">لتجديد تفعيل BLOFY PLAYER افتح بوابة الدفع الآمنة واختر باقتك. واتساب للدعم الفني فقط، ولا ترسل رمز ربط جهازك لأي شخص.</p>
 ${primary && !unavailable ? `<a id="download-primary" class="btn download-main" href="/download/latest.apk"><span>تنزيل APK مباشر</span><span class="download-version" dir="ltr">${escapeHtml(primary.versionName)} · APK</span></a><p class="download-assurance">للتحديث: ثبّت فوق النسخة الحالية ولا تحذف التطبيق القديم.</p><p class="download-assurance">للـ Downloader استخدم الرابط السريع: <strong dir="ltr">blofyplayer.com/apk</strong></p>` : ''}
 </section>
 <section class="download-steps" aria-label="خطوات التثبيت"><article><strong>01</strong><div><h2>نزّل الإصدار</h2><p>التثبيت الموصى به من Google Play، أو استخدم رابط APK البديل عند الحاجة.</p></div></article><article><strong>02</strong><div><h2>ثبّت أو حدّث</h2><p>اسمح بالتثبيت من مصدر التنزيل عند الطلب.</p></div></article><article><strong>03</strong><div><h2>اربط جهازك</h2><p>افتح BLOFY ثم استخدم رقم الجهاز ورمز الربط.</p></div></article></section>
-<section class="section" aria-label="BLOFY PLAYER 74 السينمائي">
+${BLOFY_ONLY_75 ? '' : `<section class="section" aria-label="BLOFY PLAYER 74 السينمائي">
   <article class="card download-card available" data-cinematic-v74="true">
     <span class="badge">ANDROID TV • BLOFY 74</span>
     <h2>بلوفي بلاير 74 — الواجهة السينمائية الجديدة</h2>
@@ -55,7 +63,7 @@ ${primary && !unavailable ? `<a id="download-primary" class="btn download-main" 
       <a class="btn" href="https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/v74-cinematic-approved-20261024/BLOFY-PLAYER-Android-TV-v74-CINEMATIC-SIGNED.apk.sha256" rel="noopener noreferrer">التحقق من بصمة SHA-256</a>
     </div>
   </article>
-</section>
+</section>`}
 <section class="download-release-section" aria-labelledby="versions-title"><div class="download-section-head"><span class="eyebrow">AVAILABLE BUILDS</span><h2 id="versions-title">الإصدارات المتاحة</h2></div><div id="releases" data-server-rendered="true">${unavailable ? empty : cards || empty}</div></section>
 <section class="section install-section" aria-labelledby="install-title"><div class="download-section-head"><span class="eyebrow">INSTALL GUIDE</span><h2 id="install-title">طريقة التثبيت حسب جهازك</h2></div>
 <nav class="actions" aria-label="تعليمات التثبيت"><a class="btn" href="#install-tv">تلفزيون / رسيفر</a><a class="btn" href="#install-phone">جوال / تابلت</a><a class="btn" href="#install-computer">كمبيوتر</a></nav>
