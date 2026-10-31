@@ -40,6 +40,7 @@ jobs:
             ! grep -Fq 'data-cinematic-v74=' "$page"
             ! grep -Fq 'class="previous-releases"' "$page"
           done
+          grep -Fq 'href="https://updates.blofyplayer.com/d/blofy"' /tmp/portal.html
           # Redirect /apk and /download/latest.apk to signed 75, including old Downloader clients.
           curl -sS --head --location --max-redirs 6 --connect-timeout 8 --max-time 30 -o /tmp/apk-head.txt \
             -w 'LATEST_APK_STATUS=%{http_code} LATEST_APK_URL=%{url_effective}\n' \
@@ -51,7 +52,10 @@ jobs:
           grep -Eiq '^content-type: application/(vnd.android.package-archive|octet-stream)' /tmp/apk-head.txt
           grep -Eiq '^content-disposition: attachment; filename="BLOFY-PLAYER-2.0.0-rc07.55.7-identity-recovery.apk"' /tmp/apk-head.txt
           curl -sSI --connect-timeout 8 --max-time 20 "$portal/apk" > /tmp/portal-apk-head.txt
+          echo "Custom host APK route:"
           cat /tmp/portal-apk-head.txt
+          echo "Railway service host APK route:"
+          curl -sSI --connect-timeout 8 --max-time 20 'https://blofy-activation-portal-production.up.railway.app/apk' || true
           grep -Eiq '^location: https://updates.blofyplayer.com/download/latest.apk' /tmp/portal-apk-head.txt
           curl -fsSL --connect-timeout 8 --max-time 20 "$updates/health" | \
             jq -e '.release.app.versionCode==2000075'
