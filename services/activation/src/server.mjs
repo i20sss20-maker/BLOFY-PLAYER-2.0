@@ -745,7 +745,7 @@ const server = http.createServer(async (req, res) => {
     }
     // Stable Downloader links must serve the same verified website APK as the update feed.
     // Do not change the Google Play in-app updater: Play installs update through Google Play.
-    if (BLOFY_ONLY_75 && ['GET', 'HEAD'].includes(req.method || '') &&
+    if (['GET', 'HEAD'].includes(req.method || '') &&
         ['/apk', '/latest.apk', '/download/latest.apk'].includes(requestUrl.pathname)) {
       res.writeHead(302, {
         location: 'https://updates.blofyplayer.com/download/latest.apk',
