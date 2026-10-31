@@ -686,6 +686,7 @@ async function adminProviderProfileUpdate(req, res, providerKey) {
   });
 }
 
+const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true';
 const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
@@ -741,6 +742,17 @@ const server = http.createServer(async (req, res) => {
         }
       } catch { /* A failed external lookup must never prevent normal site access. */ }
       return json(res, 200, { ready: false });
+    }
+    // Stable Downloader links must serve the same verified website APK as the update feed.
+    // Do not change the Google Play in-app updater: Play installs update through Google Play.
+    if (BLOFY_ONLY_75 && ['GET', 'HEAD'].includes(req.method || '') &&
+        ['/apk', '/latest.apk', '/download/latest.apk'].includes(requestUrl.pathname)) {
+      res.writeHead(302, {
+        location: 'https://updates.blofyplayer.com/download/latest.apk',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff'
+      });
+      return res.end();
     }
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
