@@ -60,8 +60,9 @@ jobs:
           curl -sSI -H 'Cache-Control: no-cache' --connect-timeout 8 --max-time 20 "$portal/apk?version=2000075" || true
           echo "Alternative /latest.apk:"
           curl -sSI --connect-timeout 8 --max-time 20 "$portal/latest.apk" || true
-          # Legacy /apk route may be intercepted by an upstream redirect cache.
-          # The visible 75 download CTA uses the verified update-service direct URL.
+          # The previously distributed Downloader URL must never offer version 73.
+          ! grep -Fq 'rc07.55.5-PRODUCTION-SIGNED.apk' /tmp/portal-apk-head.txt
+          grep -Fqi 'location: https://updates.blofyplayer.com/download/latest.apk' /tmp/portal-apk-head.txt
           grep -Fq 'href="https://updates.blofyplayer.com/d/blofy"' /tmp/portal.html
           curl -fsSL --connect-timeout 8 --max-time 20 "$updates/health" | \
             jq -e '.release.app.versionCode==2000075'
