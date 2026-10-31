@@ -1,0 +1,51 @@
+name: Verify live BLOFY 2000075 download sites
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-blofy-75-download-sites.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Confirm version 2000075 is the sole advertised BLOFY APK and in-app update feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          portal=https://blofyplayer.com
+          updates=https://updates.blofyplayer.com
+          for try in $(seq 1 12); do
+            if curl -fsSL --connect-timeout 8 --max-time 20 "$updates/release.json" > /tmp/blofy-release.json 2>/dev/null \
+              && jq -e '.ok==true and .release.app.versionCode==2000075 and .release.app.minSupportedVersionCode<=2000075 and .release.app.versionName=="2.0.0-rc07.55.7-identity-recovery" and (.release.app.downloadUrl|endswith("BLOFY-PLAYER-v2000075-WEBSITE-SIGNED.apk"))' /tmp/blofy-release.json \
+              && curl -fsSL --connect-timeout 8 --max-time 25 "$updates/downloads" > /tmp/updates.html \
+              && curl -fsSL --connect-timeout 8 --max-time 25 "$portal/downloads" > /tmp/portal.html; then
+                break
+            fi
+            if [ "$try" = 12 ]; then
+              echo "Live endpoint not ready after retries" >&2
+              cat /tmp/blofy-release.json 2>/dev/null || true
+              exit 1
+            fi
+            sleep 5
+          done
+          for page in /tmp/updates.html /tmp/portal.html; do
+            grep -Fq 'BLOFY PLAYER' "$page"
+            grep -Fq '2.0.0-rc07.55.7-identity-recovery' "$page"
+            ! grep -Fq 'BLOFY PLAYER Xiaomi 74' "$page"
+            ! grep -Fq 'BLOFY PLAYER 74 السينمائية' "$page"
+            ! grep -Fq 'data-cinematic-v74=' "$page"
+            ! grep -Fq 'class="previous-releases"' "$page"
+          done
+          # Redirect /apk and /download/latest.apk to signed 75, including old Downloader clients.
+          curl -sS --head --location --max-redirs 6 --connect-timeout 8 --max-time 30 -o /tmp/apk-head.txt \
+            -w 'LATEST_APK_STATUS=%{http_code} LATEST_APK_URL=%{url_effective}\n' \
+            "$updates/download/latest.apk" | tee /tmp/latest-result
+          grep -Fq '200' /tmp/latest-result
+          grep -Fq 'BLOFY-PLAYER-v2000075-WEBSITE-SIGNED.apk' /tmp/latest-result
+          curl -fsSL --connect-timeout 8 --max-time 20 "$updates/health" | \
+            jq -e '.release.app.versionCode==2000075'
+          echo 'LIVE_BLOFY_75_WEBSITE_AND_INTERNAL_UPDATE=PASS'
