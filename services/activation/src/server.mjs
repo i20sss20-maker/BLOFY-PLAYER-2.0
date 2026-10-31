@@ -745,10 +745,12 @@ const server = http.createServer(async (req, res) => {
     }
     // Stable Downloader links must serve the same verified website APK as the update feed.
     // Do not change the Google Play in-app updater: Play installs update through Google Play.
+    if (requestUrl.pathname === '/apk') console.info('BLOFY_APK_ROUTE_ENTRY', String(req.method || ''), 'site75', BLOFY_ONLY_75);
     if (['GET', 'HEAD'].includes(req.method || '') &&
         ['/apk', '/latest.apk', '/download/latest.apk'].includes(requestUrl.pathname)) {
       res.writeHead(302, {
         location: 'https://updates.blofyplayer.com/download/latest.apk',
+        'x-blofy-apk-release': '2000075',
         'cache-control': 'no-store',
         'x-content-type-options': 'nosniff'
       });
