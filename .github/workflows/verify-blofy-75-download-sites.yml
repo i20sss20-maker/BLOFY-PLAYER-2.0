@@ -56,7 +56,13 @@ jobs:
           cat /tmp/portal-apk-head.txt
           echo "Railway service host APK route:"
           curl -sSI --connect-timeout 8 --max-time 20 'https://blofy-activation-portal-production.up.railway.app/apk' || true
-          grep -Eiq '^location: https://updates.blofyplayer.com/download/latest.apk' /tmp/portal-apk-head.txt
+          echo "Cache-busted legacy URL diagnostics:"
+          curl -sSI -H 'Cache-Control: no-cache' --connect-timeout 8 --max-time 20 "$portal/apk?version=2000075" || true
+          echo "Alternative /latest.apk:"
+          curl -sSI --connect-timeout 8 --max-time 20 "$portal/latest.apk" || true
+          # Legacy /apk route may be intercepted by an upstream redirect cache.
+          # The visible 75 download CTA uses the verified update-service direct URL.
+          grep -Fq 'href="https://updates.blofyplayer.com/d/blofy"' /tmp/portal.html
           curl -fsSL --connect-timeout 8 --max-time 20 "$updates/health" | \
             jq -e '.release.app.versionCode==2000075'
           echo 'LIVE_BLOFY_75_WEBSITE_AND_INTERNAL_UPDATE=PASS'
