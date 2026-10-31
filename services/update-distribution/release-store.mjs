@@ -13,6 +13,17 @@ const pool = new Pool({
   ssl: String(process.env.PGSSLMODE || '').toLowerCase() === 'require' ? { rejectUnauthorized: false } : undefined
 });
 
+// Activated only after the independently signed APK and its permanent release URL are verified.
+const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true';
+const ONLY_75_RELEASE = {
+  versionCode: 2000075,
+  versionName: '2.0.0-rc07.55.7-identity-recovery',
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000075-website/BLOFY-PLAYER-v2000075-WEBSITE-SIGNED.apk',
+  releaseNotes: 'BLOFY PLAYER 75 — تحسين توافق Android TV 9، وأيقونة وبانر التلفزيون، والتنقل بالريموت، وإصلاح ربط الأجهزة. يتضمن فحص تحديثات داخل التطبيق للنسخ المثبتة من الموقع. لا تحذف بيانات التطبيق عند التحديث.',
+  minSupportedVersionCode: 1,
+  stage: 'public'
+};
+
 const DEFAULT_RELEASE = {
   versionCode: 2000060,
   versionName: '2.0.0-rc07.49',
@@ -237,7 +248,19 @@ export async function initReleaseStore() {
     };
   }
 
-  if (seedRc0750Once()) needsSave = true;
+  if (BLOFY_ONLY_75) {
+    // Remove every previous advertised build, including auto-seeded versions.
+    // Keep download statistics in separate tables; preserve old APK blobs as rollback assets.
+    const release = cleanRelease(ONLY_75_RELEASE, 'public');
+    const alreadyOnly75 = state.activeVersionCode === release.versionCode &&
+      state.releases.length === 1 &&
+      JSON.stringify(state.releases[0]) === JSON.stringify(release);
+    state.activeVersionCode = release.versionCode;
+    state.releases = [release];
+    if (!alreadyOnly75) needsSave = true;
+  } else if (seedRc0750Once()) {
+    needsSave = true;
+  }
   if (needsSave) await save();
 }
 
