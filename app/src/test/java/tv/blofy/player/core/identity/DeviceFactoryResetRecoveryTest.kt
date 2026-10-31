@@ -1,5 +1,6 @@
 package tv.blofy.player.core.identity
 
+import android.app.Application
 import android.content.Context
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -17,7 +18,7 @@ import org.robolectric.annotation.Config
  * writing Settings.Secure changes the OS's app-scoped ANDROID_ID.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [28], application = Application::class)
 class DeviceFactoryResetRecoveryTest {
     private fun freshContext(): Context {
         val context = RuntimeEnvironment.getApplication()
