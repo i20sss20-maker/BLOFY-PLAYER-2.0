@@ -1,0 +1,119 @@
+package tv.blofy.player.ui
+
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.view.KeyEvent
+import android.widget.Button
+import androidx.test.core.app.ActivityScenario
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.R
+import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.ui.login.LoginActivity
+
+/** Physical DPAD/navigation review, intended for Android TV emulator/device; not a phone test. */
+@RunWith(AndroidJUnit4::class)
+class AndroidTvReviewDpadTest {
+    private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
+    private val context get() = instrumentation.targetContext
+
+    @Before fun onlyRunOnTvReviewDevice() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("tvReview") == "true")
+        assumeTrue(DeviceClass.isTv(context))
+        assertTrue("Must test the manifest shipped in Google Play", BuildConfig.IS_GOOGLE_PLAY)
+    }
+
+    @Test fun launcherResourcesMatchTvPolicy() {
+        val options = BitmapFactory.Options().apply { inScaled = false }
+        val banner = BitmapFactory.decodeResource(context.resources, R.drawable.blofy_tv_banner, options)
+        assertNotNull("TV launcher banner must be packaged into the app, not just Play listing", banner)
+        assertEquals("TV xhdpi banner width", 320, banner.width)
+        assertEquals("TV xhdpi banner height", 180, banner.height)
+        assertOpaqueFullCanvas(banner, "TV banner")
+        banner.recycle()
+
+        val icon = BitmapFactory.decodeResource(context.resources, R.mipmap.blofy_tv_icon, options)
+        assertNotNull("TV icon must be bundled with the app", icon)
+        assertEquals("TV icon width", 512, icon.width)
+        assertEquals("TV icon height", 512, icon.height)
+        assertOpaqueFullCanvas(icon, "TV icon")
+        icon.recycle()
+
+        assertEquals("The Play manifest must actually select the verified banner",
+            R.drawable.blofy_tv_banner, context.applicationInfo.banner)
+        assertEquals("The Play manifest must actually select the verified icon",
+            R.mipmap.blofy_tv_icon, context.applicationInfo.icon)
+    }
+
+    private fun assertOpaqueFullCanvas(bitmap: Bitmap, label: String) {
+        val row = IntArray(bitmap.width)
+        for (y in 0 until bitmap.height) {
+            bitmap.getPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
+            for (x in row.indices) {
+                assertEquals("$label must fill every pixel; transparent at ($x,$y)",
+                    255, Color.alpha(row[x]))
+            }
+        }
+    }
+
+    @Test fun loginFocusCanReachHeaderByRemoteAndReturnToPlaylistActions() {
+        ActivityScenario.launch(LoginActivity::class.java).use { scenario ->
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                assertEquals(
+                    "Login must start focused on a D-pad actionable control",
+                    activity.getString(R.string.login_add_playlist),
+                    (activity.currentFocus as? Button)?.text?.toString()
+                )
+            }
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                assertEquals(
+                    "UP must reach remote-reachable refresh in the header",
+                    activity.getString(R.string.refresh_from_website),
+                    (activity.currentFocus as? Button)?.text?.toString()
+                )
+            }
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN)
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                assertEquals(
+                    "DOWN must return to playlist action controls",
+                    activity.getString(R.string.login_add_playlist),
+                    (activity.currentFocus as? Button)?.text?.toString()
+                )
+                assertTrue("Focused login button is enabled", activity.currentFocus?.isEnabled == true)
+            }
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
+            // AppCompat may apply the app locale independently of targetContext's system locale.
+            // Read the actual Activity layoutDirection, otherwise tests send the wrong physical key.
+            var towardAccount = KeyEvent.KEYCODE_DPAD_RIGHT
+            scenario.onActivity { activity ->
+                towardAccount = if (activity.resources.configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL) {
+                    KeyEvent.KEYCODE_DPAD_LEFT
+                } else {
+                    KeyEvent.KEYCODE_DPAD_RIGHT
+                }
+            }
+            instrumentation.sendKeyDownUpSync(towardAccount)
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                assertEquals(
+                    "Account must be reachable from the header by a real D-pad key",
+                    activity.getString(R.string.account_title),
+                    (activity.currentFocus as? Button)?.text?.toString()
+                )
+            }
+        }
+    }
+}

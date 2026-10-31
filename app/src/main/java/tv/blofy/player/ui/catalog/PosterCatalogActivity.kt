@@ -389,10 +389,18 @@ class PosterCatalogActivity : AppCompatActivity() {
     }
 
     private fun requestInitialContentFocus() {
-        if (initialFocusRequested || !DeviceClass.isTv(this) || loadedItems.isEmpty()) return
+        if (initialFocusRequested || !DeviceClass.isTv(this)) return
+        // A new or temporarily empty library must still offer an actionable DPAD target.
+        // The root intentionally holds focus during loading; transfer it to the category rail
+        // as soon as categories arrive, even if no posters have loaded yet.
+        if (loadedItems.isEmpty() && categoryAdapter.itemCount == 0) return
         initialFocusRequested = true
         posterGrid.post {
-            if (!requestPosterFocus()) requestSelectedCategoryFocus()
+            val moved = if (loadedItems.isNotEmpty()) requestPosterFocus() else false
+            if (!moved && !requestSelectedCategoryFocus()) {
+                // Do not let the non-clickable root trap TV navigation.
+                searchBar.requestFocus()
+            }
         }
     }
 

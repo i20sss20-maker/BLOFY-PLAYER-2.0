@@ -70,12 +70,14 @@ class ProfilesManagementGateTest {
         clickAndIdle(prompt.getButton(AlertDialog.BUTTON_POSITIVE))
     }
     private fun tapProfile(name: String) {
-        val title = views(activity.window.decorView).filterIsInstance<TextView>()
-            .single {
-                it.text.toString().contains(name) &&
-                    (it.parent as? View)?.isClickable == true
+        // The card has both a title and descriptive text. On translated layouts,
+        // both text nodes can contain the profile name; target the card itself.
+        val card = views(activity.window.decorView).filterIsInstance<android.widget.LinearLayout>()
+            .single { view ->
+                view.isClickable &&
+                    (view.getChildAt(0) as? TextView)?.text?.toString()?.contains(name) == true
             }
-        clickAndIdle(title.parent as View)
+        clickAndIdle(card)
     }
 
     @Test fun contentPinCannotBeClearedWithoutItsCurrentPin() {

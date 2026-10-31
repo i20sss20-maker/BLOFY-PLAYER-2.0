@@ -99,13 +99,20 @@ class ActivationManager(
 
         val canonical = response.canonicalDeviceId
             ?.takeIf { it.isNotBlank() && it != current.deviceId }
-        if (canonical != null) {
-            DeviceIdentity.adoptRecoveredCanonicalIdentity(context, canonical, current.activationCode)
+        if (canonical != null && response.recovered) {
+            // The activation server verified this installation's alias credential.
+            // Recovery can be from a factory reset with a changed ANDROID_ID or a
+            // device that does not expose a stable Android identity at all.
+            // Persist the authoritative Room row first so crashes are recoverable.
+            val temporaryId = current.deviceId
             current = current.copy(
                 deviceId = canonical,
                 lastCheckAt = System.currentTimeMillis()
             )
             dao.replaceActivation(current)
+            DeviceIdentity.adoptServerVerifiedRecovery(
+                context, temporaryId, canonical, current.activationCode
+            )
         }
 
         if (response.canUse()) rotatePendingCode(api, current)
@@ -135,6 +142,37 @@ class ActivationManager(
         dao.upsertActivation(updated)
         DeviceIdentity.commitActivationCodeRotation(context, pending)
         return updated
+    }
+
+    /**
+     * Only call after a successful one-time recovery or verified administrator
+     * transfer response from the activation server. The server already rotated
+     * the canonical PIN and revoked the previous installation credentials.
+     */
+    suspend fun adoptServerVerifiedRecovery(
+        temporaryDeviceId: String,
+        canonicalDeviceId: String
+    ): ActivationEntity {
+        val current = ensureIdentity()
+        require(current.deviceId == temporaryDeviceId) {
+            "The device identity changed while restoring the license"
+        }
+        require(canonicalDeviceId.matches(Regex("BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}"))) {
+            "Invalid original BLOFY device ID"
+        }
+        if (canonicalDeviceId == current.deviceId) return current
+        // Room is authoritative on restart: save it before touching preferences.
+        val restored = current.copy(
+            deviceId = canonicalDeviceId,
+            activated = false,
+            expiresAt = null,
+            lastCheckAt = 0L
+        )
+        dao.replaceActivation(restored)
+        DeviceIdentity.adoptServerVerifiedRecovery(
+            context, temporaryDeviceId, canonicalDeviceId, current.activationCode
+        )
+        return restored
     }
 
     suspend fun applyRemoteStatus(activated: Boolean, expiresAt: Long?): ActivationEntity {

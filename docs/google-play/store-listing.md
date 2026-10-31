@@ -1,6 +1,6 @@
 # مسودة وصف المتجر
 
-مسودة جاهزة للمراجعة مع بناء Play بنظام الاستهلاك فقط. تُرفق بلقطات النسخة الفعلية وبيانات الدعم قبل نشرها؛ لا تعدّ رفعًا إلى المتجر.
+مسودة جاهزة للمراجعة مع بناء Play بنظام الاستهلاك فقط. هذه النسخة تدعم Xtream Codes؛ لا تعلن دعم M3U قبل تنفيذه واختباره فعليًا. تُرفق بلقطات النسخة الفعلية وبيانات الدعم قبل نشرها؛ لا تعدّ رفعًا إلى المتجر.
 
 ## العربية
 
@@ -12,7 +12,7 @@
 
 BLOFY PLAYER يساعدك على تنظيم وتشغيل مصادر الوسائط التي تضيفها بنفسك على أجهزة Android والهاتف والتلفزيون.
 
-- إضافة قوائم بصيغة M3U وروابط مزودي Xtream المدعومين.
+- إضافة حسابات مزوّدي Xtream Codes المدعومين وإدارة قوائمها.
 - تصفح البث والأفلام والمسلسلات والبحث داخل قائمتك.
 - حفظ المفضلة واستئناف مشاهدة الأفلام والحلقات.
 - عرض الوصف والتقييمات وطاقم العمل عندما يوفرها مصدر المحتوى.
@@ -33,7 +33,7 @@ Description:
 
 BLOFY PLAYER organizes and plays media sources you add on Android phones and TVs.
 
-- Add M3U playlists and supported Xtream providers.
+- Connect supported Xtream Codes providers and organize their libraries.
 - Browse live streams, movies and series, and search your library.
 - Save favorites and resume movies and episodes.
 - View descriptions, ratings and cast information when supplied by your provider.

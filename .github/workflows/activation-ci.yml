@@ -86,6 +86,10 @@ jobs:
         env:
           BLOFY_E2E_BASE_URL: http://127.0.0.1:8080
         run: node test/portal-playlist-sync.e2e.mjs
+      - name: Factory-reset recovery with isolated PostgreSQL
+        env:
+          BLOFY_E2E_BASE_URL: http://127.0.0.1:8080
+        run: node test/factory-reset-recovery.e2e.mjs
       - name: PostgreSQL commercial integrity regressions
         env:
           BLOFY_E2E_BASE_URL: http://127.0.0.1:8080

@@ -110,8 +110,30 @@ class LoginActivity : AppCompatActivity() {
         refreshCodeButton = actionButton(getString(R.string.refresh_from_website)) { requestIdentityRefresh(true) }.apply {
             textSize = 12f
         }
+        refreshCodeButton.id = View.generateViewId()
         header.addView(refreshCodeButton, LinearLayout.LayoutParams(dp(196), dp(44)).apply { marginStart = dp(16) })
-        header.addView(accountButton(), LinearLayout.LayoutParams(dp(176), dp(44)).apply { marginStart = dp(8) })
+        val accountEntry = accountButton().apply { id = View.generateViewId() }
+        header.addView(accountEntry, LinearLayout.LayoutParams(dp(176), dp(44)).apply { marginStart = dp(8) })
+        val toAccount = if (direction == View.LAYOUT_DIRECTION_RTL)
+            android.view.KeyEvent.KEYCODE_DPAD_LEFT else android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+        val toRefresh = if (direction == View.LAYOUT_DIRECTION_RTL)
+            android.view.KeyEvent.KEYCODE_DPAD_RIGHT else android.view.KeyEvent.KEYCODE_DPAD_LEFT
+        if (direction == View.LAYOUT_DIRECTION_RTL) {
+            refreshCodeButton.nextFocusLeftId = accountEntry.id
+            accountEntry.nextFocusRightId = refreshCodeButton.id
+        } else {
+            refreshCodeButton.nextFocusRightId = accountEntry.id
+            accountEntry.nextFocusLeftId = refreshCodeButton.id
+        }
+        // Force an actual focus transition even if OEM firmware ignores a nextFocus hint.
+        refreshCodeButton.setOnKeyListener { _, keyCode, event ->
+            event.action == android.view.KeyEvent.ACTION_DOWN && keyCode == toAccount &&
+                accountEntry.requestFocus()
+        }
+        accountEntry.setOnKeyListener { _, keyCode, event ->
+            event.action == android.view.KeyEvent.ACTION_DOWN && keyCode == toRefresh &&
+                refreshCodeButton.requestFocus()
+        }
         root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
 
         val shortTv = resources.configuration.screenHeightDp <= 600
@@ -234,6 +256,13 @@ class LoginActivity : AppCompatActivity() {
             startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java))
         }.apply { textSize = 14f }
         connectButton = actionButton(getString(R.string.login_enter_blofy)) { startOrCancelConnect() }.apply { textSize = 14f }
+        addPlaylist.id = View.generateViewId()
+        connectButton.id = View.generateViewId()
+        // Every actionable control must have a predictable D-pad path.
+        refreshCodeButton.nextFocusDownId = addPlaylist.id
+        addPlaylist.nextFocusUpId = refreshCodeButton.id
+        connectButton.nextFocusUpId = accountEntry.id
+        accountEntry.nextFocusDownId = connectButton.id
         actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(12) })
         actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(48), 1f))
         playlists.addView(actions)
@@ -466,12 +495,33 @@ class LoginActivity : AppCompatActivity() {
         row.removeAllViews()
         if (providers.isEmpty()) {
             row.addView(emptyPlaylistView(getString(R.string.login_no_playlists)), LinearLayout.LayoutParams(-1, dp(86)))
+            // If the selected card disappeared after portal sync, restore a usable focus target.
+            if (deviceKind == DeviceClass.Kind.TV && focusedId != null) addPlaylist.requestFocus()
+            if (deviceKind == DeviceClass.Kind.TV) {
+                refreshCodeButton.nextFocusDownId = addPlaylist.id
+                addPlaylist.nextFocusUpId = refreshCodeButton.id
+                connectButton.nextFocusUpId = refreshCodeButton.id
+            }
             return
         }
-        providers.forEach { provider ->
-            row.addView(playlistCard(provider), LinearLayout.LayoutParams(-1, dp(80)).apply { bottomMargin = dp(9) })
+        val cards = providers.map { provider ->
+            playlistCard(provider).apply { id = View.generateViewId() }
         }
-        if (focusedId != null) row.findViewWithTag<View>(focusedId)?.requestFocus()
+        cards.forEach { card ->
+            row.addView(card, LinearLayout.LayoutParams(-1, dp(80)).apply { bottomMargin = dp(9) })
+        }
+        if (deviceKind == DeviceClass.Kind.TV) {
+            cards.forEachIndexed { index, card ->
+                card.nextFocusUpId = cards.getOrNull(index - 1)?.id ?: refreshCodeButton.id
+                card.nextFocusDownId = cards.getOrNull(index + 1)?.id ?: addPlaylist.id
+            }
+            refreshCodeButton.nextFocusDownId = cards.first().id
+            addPlaylist.nextFocusUpId = cards.last().id
+            connectButton.nextFocusUpId = cards.last().id
+        }
+        if (focusedId != null && row.findViewWithTag<View>(focusedId)?.requestFocus() != true) {
+            cards.firstOrNull()?.requestFocus() ?: addPlaylist.requestFocus()
+        }
     }
 
     private fun playlistCard(provider: ProviderEntity) = LinearLayout(this).apply {

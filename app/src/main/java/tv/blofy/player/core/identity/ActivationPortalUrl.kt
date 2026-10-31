@@ -12,9 +12,10 @@ object ActivationPortalUrl {
         val activationEndpoint = baseUrl.trim().toHttpUrlOrNull() ?: return null
         if (!activationEndpoint.isHttps) return null
 
-        // The API and portal share the same production origin. Resolving `/` avoids
-        // accidentally encoding an API path or stale query from the build setting.
-        val portal = activationEndpoint.resolve(if (tv.blofy.player.BuildConfig.IS_GOOGLE_PLAY) "/connect" else "/") ?: return null
+        // The activation API serves the actual device pairing form at /portal.
+        // Its root can instead show the landing page, and /connect is not a
+        // registered API route. Use the same verified pairing URL for Play and APK.
+        val portal = activationEndpoint.resolve("/portal") ?: return null
         val activationFragment = buildString {
             append("deviceId=")
             append(normalizedDeviceId)
@@ -22,7 +23,7 @@ object ActivationPortalUrl {
             append(normalizedCode)
         }
         return portal.newBuilder()
-            // A fragment is never sent to Vercel or included in HTTP access logs.
+            // A fragment is client-side only and is not included in portal HTTP requests or access logs.
             .fragment(activationFragment)
             .build()
             .toString()

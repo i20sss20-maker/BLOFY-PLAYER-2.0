@@ -21,6 +21,7 @@ import {
 } from './diagnostics-sanitizer.mjs';
 import { activationReleaseMetadata, publishedAppRelease } from './release-metadata.mjs';
 import { createExperienceHandlers } from './experience-handlers.mjs';
+import { createLicenseRecoveryHandlers } from './license-recovery.mjs';
 
 const { Pool } = pg;
 const PORT = Number(process.env.PORT || 8080);
@@ -168,6 +169,10 @@ async function authorizedDevice(deviceId, activationCode, req, requireActive = t
 const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
 const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice,
   authorizedAccountDevice: (id, code, req) => authorizedDevice(id, code, req, false) });
+const licenseRecovery = createLicenseRecoveryHandlers({
+  pool, json, readJson, requireAdmin, authorizedDevice, verifyDeviceCredential,
+  activationCredentials, consumeDeviceAuthAttempt, keyHex: PLAYLIST_ENCRYPTION_KEY
+});
 
 async function initializeDatabase() {
   const schemaUrl = new URL('../schema.sql', import.meta.url);
@@ -776,6 +781,7 @@ const server = http.createServer(async (req, res) => {
   if (res.writableEnded || res.destroyed) return;
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
+    if (await licenseRecovery.handle(req,res,requestUrl.pathname)) return;
     if (await experience.handle(req,res,requestUrl)) return;
     if (req.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);

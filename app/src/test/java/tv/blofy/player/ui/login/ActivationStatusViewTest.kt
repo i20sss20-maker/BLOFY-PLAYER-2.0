@@ -30,7 +30,7 @@ class ActivationStatusViewTest {
         assertEquals(context.getString(R.string.trial_time_remaining, 0L, 0L, 1L), detail(view))
         view.render(snapshot, now + 60_000L)
         assertEquals(context.getString(R.string.trial_ended), title(view))
-        assertEquals(context.getString(R.string.trial_renew_qr), detail(view))
+        assertEquals(context.getString(if (tv.blofy.player.BuildConfig.IS_GOOGLE_PLAY) R.string.play_license_expired else R.string.trial_renew_qr), detail(view))
         assertEquals(0L, snapshot.remainingMinutes(now + 999_999L))
     }
 
